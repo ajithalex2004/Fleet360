@@ -6,33 +6,26 @@ import { MaintenanceStatus, EnhancedMaintenanceRequest } from '@/types/maintenan
  */
 
 // Define valid status transitions
+// Define valid status transitions
 const STATUS_TRANSITIONS: Record<MaintenanceStatus, MaintenanceStatus[]> = {
-    [MaintenanceStatus.DRAFT]: [MaintenanceStatus.SUBMITTED],
-    [MaintenanceStatus.SUBMITTED]: [MaintenanceStatus.PENDING_OPERATIONS_ACK],
-    [MaintenanceStatus.PENDING_OPERATIONS_ACK]: [MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL],
-    [MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL]: [
-        MaintenanceStatus.UNDER_ESTIMATION,
-        MaintenanceStatus.REJECTED_BY_MAINTENANCE
+    [MaintenanceStatus.REQUESTED]: [
+        MaintenanceStatus.ACCEPTED,
+        MaintenanceStatus.REJECTED,
+        MaintenanceStatus.RE_ASSIGN
     ],
-    [MaintenanceStatus.REJECTED_BY_MAINTENANCE]: [], // Terminal state
+    [MaintenanceStatus.ACCEPTED]: [MaintenanceStatus.UNDER_ESTIMATION],
+    [MaintenanceStatus.RE_ASSIGN]: [MaintenanceStatus.REQUESTED],
+    [MaintenanceStatus.REJECTED]: [], // Terminal state
     [MaintenanceStatus.UNDER_ESTIMATION]: [MaintenanceStatus.PENDING_ESTIMATION_APPROVAL],
     [MaintenanceStatus.PENDING_ESTIMATION_APPROVAL]: [
-        MaintenanceStatus.ESTIMATION_APPROVED,
+        MaintenanceStatus.UNDER_MAINTENANCE,
         MaintenanceStatus.UNDER_ESTIMATION // Back to estimation if rejected
     ],
-    [MaintenanceStatus.ESTIMATION_APPROVED]: [MaintenanceStatus.UNDER_MAINTENANCE],
     [MaintenanceStatus.UNDER_MAINTENANCE]: [MaintenanceStatus.MAINTENANCE_COMPLETED],
     [MaintenanceStatus.MAINTENANCE_COMPLETED]: [MaintenanceStatus.PENDING_INVOICE],
     [MaintenanceStatus.PENDING_INVOICE]: [MaintenanceStatus.INVOICE_SUBMITTED],
     [MaintenanceStatus.INVOICE_SUBMITTED]: [MaintenanceStatus.CLOSED],
     [MaintenanceStatus.CLOSED]: [], // Terminal state
-
-    // Legacy statuses (for backward compatibility)
-    [MaintenanceStatus.REQUESTED]: [MaintenanceStatus.APPROVED, MaintenanceStatus.REJECTED],
-    [MaintenanceStatus.AWAITING_APPROVAL]: [MaintenanceStatus.APPROVED, MaintenanceStatus.REJECTED],
-    [MaintenanceStatus.APPROVED]: [MaintenanceStatus.UNDER_ESTIMATION],
-    [MaintenanceStatus.COMPLETED]: [MaintenanceStatus.CLOSED],
-    [MaintenanceStatus.REJECTED]: [], // Terminal state
 };
 
 /**
@@ -63,17 +56,15 @@ export function isTerminalStatus(status: MaintenanceStatus): boolean {
  */
 export function getStatusColor(status: MaintenanceStatus): string {
     switch (status) {
-        case MaintenanceStatus.DRAFT:
-            return 'bg-slate-100 text-slate-700 border-slate-300';
-        case MaintenanceStatus.SUBMITTED:
-        case MaintenanceStatus.PENDING_OPERATIONS_ACK:
-        case MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL:
+        case MaintenanceStatus.REQUESTED:
             return 'bg-blue-100 text-blue-700 border-blue-300';
+        case MaintenanceStatus.ACCEPTED:
+            return 'bg-green-100 text-green-700 border-green-300';
+        case MaintenanceStatus.RE_ASSIGN:
+            return 'bg-orange-100 text-orange-700 border-orange-300';
         case MaintenanceStatus.UNDER_ESTIMATION:
         case MaintenanceStatus.PENDING_ESTIMATION_APPROVAL:
             return 'bg-yellow-100 text-yellow-700 border-yellow-300';
-        case MaintenanceStatus.ESTIMATION_APPROVED:
-            return 'bg-green-100 text-green-700 border-green-300';
         case MaintenanceStatus.UNDER_MAINTENANCE:
             return 'bg-purple-100 text-purple-700 border-purple-300';
         case MaintenanceStatus.MAINTENANCE_COMPLETED:
@@ -82,7 +73,6 @@ export function getStatusColor(status: MaintenanceStatus): string {
             return 'bg-indigo-100 text-indigo-700 border-indigo-300';
         case MaintenanceStatus.CLOSED:
             return 'bg-gray-100 text-gray-700 border-gray-300';
-        case MaintenanceStatus.REJECTED_BY_MAINTENANCE:
         case MaintenanceStatus.REJECTED:
             return 'bg-red-100 text-red-700 border-red-300';
         default:
@@ -119,7 +109,7 @@ export async function transitionStatus(
 
     // Update request
     let workOrderNo = request.workOrderNo;
-    if (newStatus === MaintenanceStatus.APPROVED && !workOrderNo) {
+    if (newStatus === MaintenanceStatus.UNDER_MAINTENANCE && !workOrderNo) {
         const date = new Date();
         const month = (date.getMonth() + 1).toString().padStart(2, '0');
         // const year = date.getFullYear(); // Removed year as per new requirement
@@ -151,11 +141,7 @@ async function handleStatusChange(
     newStatus: MaintenanceStatus
 ): Promise<void> {
     switch (newStatus) {
-        case MaintenanceStatus.PENDING_OPERATIONS_ACK:
-            await notifyOperationsTeam(request);
-            break;
-
-        case MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL:
+        case MaintenanceStatus.REQUESTED:
             await notifyMaintenanceTeam(request);
             break;
 
@@ -225,13 +211,11 @@ async function sendJobClosureNotifications(request: EnhancedMaintenanceRequest):
  */
 export function getWorkflowProgress(status: MaintenanceStatus): number {
     const statusOrder = [
-        MaintenanceStatus.DRAFT,
-        MaintenanceStatus.SUBMITTED,
-        MaintenanceStatus.PENDING_OPERATIONS_ACK,
-        MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL,
+        MaintenanceStatus.REQUESTED,
+        MaintenanceStatus.ACCEPTED,
+        MaintenanceStatus.RE_ASSIGN,
         MaintenanceStatus.UNDER_ESTIMATION,
         MaintenanceStatus.PENDING_ESTIMATION_APPROVAL,
-        MaintenanceStatus.ESTIMATION_APPROVED,
         MaintenanceStatus.UNDER_MAINTENANCE,
         MaintenanceStatus.MAINTENANCE_COMPLETED,
         MaintenanceStatus.PENDING_INVOICE,
@@ -249,13 +233,10 @@ export function getWorkflowProgress(status: MaintenanceStatus): number {
  * Get workflow stage name
  */
 export function getWorkflowStage(status: MaintenanceStatus): string {
-    if ([MaintenanceStatus.DRAFT, MaintenanceStatus.SUBMITTED].includes(status)) {
-        return 'Submission';
-    }
-    if ([MaintenanceStatus.PENDING_OPERATIONS_ACK, MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL].includes(status)) {
+    if ([MaintenanceStatus.REQUESTED, MaintenanceStatus.ACCEPTED, MaintenanceStatus.RE_ASSIGN].includes(status)) {
         return 'Approval';
     }
-    if ([MaintenanceStatus.UNDER_ESTIMATION, MaintenanceStatus.PENDING_ESTIMATION_APPROVAL, MaintenanceStatus.ESTIMATION_APPROVED].includes(status)) {
+    if ([MaintenanceStatus.UNDER_ESTIMATION, MaintenanceStatus.PENDING_ESTIMATION_APPROVAL].includes(status)) {
         return 'Estimation';
     }
     if ([MaintenanceStatus.UNDER_MAINTENANCE, MaintenanceStatus.MAINTENANCE_COMPLETED].includes(status)) {

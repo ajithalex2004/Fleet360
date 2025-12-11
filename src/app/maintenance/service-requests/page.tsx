@@ -1,107 +1,146 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { mockVehicles, mockDrivers, createMaintenanceRequest, getMaintenanceRequests } from '@/services/mockData';
-import { MaintenanceRequest, MaintenanceStatus } from '@/types/maintenance';
+import { useRouter } from 'next/navigation';
+import { createMaintenanceRequest, getMaintenanceRequests, getServiceRequests, createServiceRequest, updateServiceRequest, sendEmailNotification, getVehicles, getDrivers } from '@/services/mockData';
+import { MaintenanceRequest, MaintenanceStatus, ServiceRequest, AttachmentType } from '@/types/maintenance';
 import FilterBar from '@/components/Maintenance/FilterBar';
-
-interface ServiceRequest {
-    id: string;
-    requestorId: string;
-    serviceType: string;
-    vehicleId: string;
-    priority: 'Low' | 'Medium' | 'High';
-    description: string;
-    date: string;
-    status: 'Pending' | 'In Progress' | 'Completed' | 'Rejected' | 'Acknowledged' | 'Assigned' | 'Escalated' | 'Resolved';
-    maintenanceRequestId?: string; // Link to Maintenance Request
-    assignedTo?: string;
-}
-
-const initialRequests: ServiceRequest[] = [
-    {
-        id: 'SR-1001',
-        requestorId: 'd1',
-        serviceType: 'Vehicle Maintenance Service',
-        vehicleId: 'v1',
-        priority: 'High',
-        description: 'Brake pads need replacement immediately.',
-        date: '2025-11-24',
-        status: 'Pending',
-    },
-    {
-        id: 'SR-1002',
-        requestorId: 'd2',
-        serviceType: 'Driver License Renewal Service',
-        vehicleId: '',
-        priority: 'Medium',
-        description: 'License expiring next month.',
-        date: '2025-11-23',
-        status: 'In Progress',
-    },
-];
+import AssignmentModal from '@/components/Maintenance/AssignmentModal';
 
 export default function ServiceRequestPage() {
+    const router = useRouter();
     const currentUser = {
-        id: 'u1',
-        name: 'John Doe',
+        id: 'd2',
+        name: 'John Smith',
         licenseNumber: 'N/A',
         licenseExpiry: '',
         assignedVehicleId: '',
         contactNumber: '+971500000000',
     };
 
-    const [requests, setRequests] = useState<ServiceRequest[]>(initialRequests);
-    const [filteredRequests, setFilteredRequests] = useState<ServiceRequest[]>(initialRequests);
+    const [requests, setRequests] = useState<ServiceRequest[]>([]);
+    const [filteredRequests, setFilteredRequests] = useState<ServiceRequest[]>([]);
     const [maintenanceRequests, setMaintenanceRequests] = useState<MaintenanceRequest[]>([]);
+    const [vehicles, setVehicles] = useState<any[]>([]);
+    const [drivers, setDrivers] = useState<any[]>([]);
+
+    // Filter State
+    // Use local date to avoid timezone issues
+    const getLocalDate = (date: Date) => {
+        const offset = date.getTimezoneOffset();
+        const localDate = new Date(date.getTime() - (offset * 60 * 1000));
+        return localDate.toISOString().split('T')[0];
+    };
+
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const todayStr = getLocalDate(today);
+    const yesterdayStr = getLocalDate(yesterday);
+
+    const [searchTerm, setSearchTerm] = useState('');
+    const [dateRange, setDateRange] = useState({ start: yesterdayStr, end: todayStr });
+    const [statusFilter, setStatusFilter] = useState<string[]>([]);
+
+    // Modal State
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [modalAction, setModalAction] = useState<'Assign' | 'Escalate'>('Assign');
+    const [selectedRequestForAction, setSelectedRequestForAction] = useState<ServiceRequest | null>(null);
+
     const [formData, setFormData] = useState({
         requestorId: currentUser.id,
         serviceType: 'Vehicle Maintenance Service',
         vehicleId: '',
+        relatedDriverId: '',
         priority: 'Medium' as 'Low' | 'Medium' | 'High',
         description: '',
-        date: new Date().toISOString().split('T')[0],
+        date: getLocalDate(new Date()),
     });
 
-    // Fetch maintenance requests to sync status
+    // Attachments State
+    const [attachments, setAttachments] = useState<{ type: string; file: File | null }[]>([
+        { type: AttachmentType.IMAGE, file: null }
+    ]);
+
+    const [error, setError] = useState<string | null>(null);
+
+    // Fetch data
     useEffect(() => {
-        const fetchMaintenanceRequests = async () => {
-            const reqs = await getMaintenanceRequests();
-            setMaintenanceRequests(reqs);
+        const loadData = async () => {
+            try {
+                const [sReqs, mReqs, vehs, drvs] = await Promise.all([
+                    getServiceRequests(),
+                    getMaintenanceRequests(),
+                    getVehicles(),
+                    getDrivers()
+                ]);
+
+                // Filter out Closed requests for the main view (check both SR status and linked MR status)
+                const activeRequests = sReqs.filter(r => {
+                    const isDirectlyClosed = ['Resolved', 'Completed', 'Rejected', 'Closed'].includes(r.status);
+                    if (isDirectlyClosed) return false;
+
+                    // Check linked Maintenance Request status if applicable
+                    if (r.maintenanceRequestId) {
+                        const linkedMr = mReqs.find((mr: MaintenanceRequest) => mr.id === r.maintenanceRequestId);
+                        if (linkedMr && [MaintenanceStatus.CLOSED, MaintenanceStatus.MAINTENANCE_COMPLETED, MaintenanceStatus.REJECTED].includes(linkedMr.status)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                });
+                setRequests(activeRequests);
+                setMaintenanceRequests(mReqs);
+                setVehicles(vehs);
+                setDrivers(drvs);
+                // Initial filtering will be handled by useEffect
+                // setFilteredRequests(activeRequests); 
+            } catch (err: any) {
+                console.error("Failed to fetch data:", err);
+                setError("Unable to load service requests. The server might be offline.");
+            }
         };
-        fetchMaintenanceRequests();
-    }, [requests]); // Re-fetch when local requests change (e.g. after submission)
+        loadData();
+    }, []);
 
     // Filter Logic
-    const handleFilter = (term: string, dateRange: { start: string, end: string }, statuses: string[]) => {
+    // Filter Logic
+    useEffect(() => {
         let result = requests;
 
         // Search
-        if (term) {
-            const lowerTerm = term.toLowerCase();
+        if (searchTerm) {
+            const lowerTerm = searchTerm.toLowerCase();
             result = result.filter(r =>
                 r.id.toLowerCase().includes(lowerTerm) ||
                 r.serviceType.toLowerCase().includes(lowerTerm) ||
                 r.description.toLowerCase().includes(lowerTerm) ||
-                mockDrivers.find(d => d.id === r.requestorId)?.name.toLowerCase().includes(lowerTerm)
+                drivers.find(d => d.id === r.requestorId)?.name.toLowerCase().includes(lowerTerm)
             );
         }
 
         // Date Range
         if (dateRange.start) {
-            result = result.filter(r => r.date >= dateRange.start);
+            result = result.filter(r => {
+                const requestDate = r.createdAt ? r.createdAt.split('T')[0] : r.date;
+                return requestDate >= dateRange.start;
+            });
         }
         if (dateRange.end) {
-            result = result.filter(r => r.date <= dateRange.end);
+            result = result.filter(r => {
+                const requestDate = r.createdAt ? r.createdAt.split('T')[0] : r.date;
+                return requestDate <= dateRange.end;
+            });
         }
 
         // Status
-        if (statuses.length > 0) {
-            result = result.filter(r => statuses.includes(r.status));
+        if (statusFilter.length > 0) {
+            result = result.filter(r => statusFilter.includes(r.status));
         }
 
         setFilteredRequests(result);
-    };
+    }, [requests, searchTerm, dateRange, statusFilter]);
 
     const serviceTypes = [
         'Vehicle Maintenance Service',
@@ -118,15 +157,50 @@ export default function ServiceRequestPage() {
         e.preventDefault();
 
         const newRequest: ServiceRequest = {
-            id: `SR-${1000 + requests.length + 1}`,
+            id: '', // Backend will generate ID (SR-YY1001)
             ...formData,
             status: 'Pending',
+            createdAt: new Date().toISOString(),
+            attachments: attachments
+                .filter(a => a.file)
+                .map(a => ({
+                    id: crypto.randomUUID(),
+                    type: a.type as AttachmentType,
+                    fileName: a.file?.name || 'unknown',
+                    url: `mock://${a.file?.name}`,
+                    uploadedAt: new Date().toISOString()
+                }))
         };
 
-        const updatedRequests = [newRequest, ...requests];
-        setRequests(updatedRequests);
-        setFilteredRequests(updatedRequests); // Update filtered list too
+        await createServiceRequest(newRequest);
+
+        // Refresh list
+        const allRequests = await getServiceRequests();
+        const allMaintenanceRequests = await getMaintenanceRequests();
+        const activeRequests = allRequests.filter(r => {
+            const isDirectlyClosed = ['Resolved', 'Completed', 'Rejected', 'Closed'].includes(r.status);
+            if (isDirectlyClosed) return false;
+
+            if (r.maintenanceRequestId) {
+                const linkedMr = allMaintenanceRequests.find((mr: MaintenanceRequest) => mr.id === r.maintenanceRequestId);
+                if (linkedMr && [MaintenanceStatus.CLOSED, MaintenanceStatus.MAINTENANCE_COMPLETED, MaintenanceStatus.REJECTED].includes(linkedMr.status)) {
+                    return false;
+                }
+            }
+            return true;
+        });
+        setRequests(activeRequests);
+        setFilteredRequests(activeRequests);
+
         console.log('Submitted Request:', newRequest);
+
+        // Notify Operations Team
+        await sendEmailNotification(
+            'operations@gravity.com',
+            `New Service Request: ${newRequest.id}`,
+            `A new service request has been submitted by ${currentUser.name}.\n\nType: ${newRequest.serviceType}\nPriority: ${newRequest.priority}\nDescription: ${newRequest.description}`
+        );
+
         alert('Service Request Submitted Successfully!');
 
         // Reset form
@@ -134,73 +208,190 @@ export default function ServiceRequestPage() {
             requestorId: currentUser.id,
             serviceType: 'Vehicle Maintenance Service',
             vehicleId: '',
+            relatedDriverId: '',
             priority: 'Medium',
             description: '',
-            date: new Date().toISOString().split('T')[0],
+            date: getLocalDate(new Date()),
         });
+
+        // Reset filters to ensure new request is visible
+        setSearchTerm('');
+        setDateRange({ start: '', end: '' }); // Clear date filter to show all (or at least the new one)
+        setStatusFilter([]);
+        setAttachments([{ type: AttachmentType.IMAGE, file: null }]);
     };
 
     const handleStatusChange = async (id: string, newStatus: ServiceRequest['status']) => {
         const request = requests.find(r => r.id === id);
         if (!request) return;
 
+        // Open Modal for Assign or Escalate
+        if (newStatus === 'Assigned' || newStatus === 'Escalated') {
+            setSelectedRequestForAction(request);
+            setModalAction(newStatus === 'Assigned' ? 'Assign' : 'Escalate');
+            setIsModalOpen(true);
+            return;
+        }
+
         // Special logic for Vehicle Maintenance Service on Acknowledge
         if (request.serviceType === 'Vehicle Maintenance Service' && newStatus === 'Acknowledged') {
             try {
+                // Validate Vehicle ID
+                if (!request.vehicleId) {
+                    alert('Cannot create Maintenance Request: No vehicle assigned to this service request.');
+                    return;
+                }
+
+                // Fix for legacy data: map 'u1' to a valid driver 'd2'
+                const validDriverId = request.requestorId === 'u1' ? 'd2' : request.requestorId;
+
                 // Create the formal Maintenance Request
                 const mr = await createMaintenanceRequest({
                     vehicleId: request.vehicleId,
-                    driverId: request.requestorId,
-                    requestDate: request.date, // Use request date
+                    driverId: validDriverId,
+                    requestDate: new Date(request.date).toISOString(), // Ensure ISO format
                     description: request.description,
                     estimatedCost: 0,
-                    garageId: '',
                 });
-                console.log('Created linked Maintenance Request:', mr.id);
-                alert(`Maintenance Request #${mr.id} created. Service Request removed from list.`);
 
-                // Remove from Service Request list (it "moves" to Maintenance Requests)
-                const updated = requests.filter(req => req.id !== id);
-                setRequests(updated);
-                setFilteredRequests(updated); // Update filtered list
+                // Update Service Request to link to Maintenance Request
+                await updateServiceRequest({
+                    ...request,
+                    status: 'Acknowledged',
+                    maintenanceRequestId: mr.id,
+                    date: new Date(request.date).toISOString()
+                });
+
+                console.log('Created linked Maintenance Request:', mr.id);
+                alert(`Maintenance Request #${mr.id} created.`);
+
+                // Refresh list
+                const allRequests = await getServiceRequests();
+                const allMaintenanceRequests = await getMaintenanceRequests();
+                const activeRequests = allRequests.filter(r => {
+                    const isDirectlyClosed = ['Resolved', 'Completed', 'Rejected', 'Closed'].includes(r.status);
+                    if (isDirectlyClosed) return false;
+
+                    if (r.maintenanceRequestId) {
+                        const linkedMr = allMaintenanceRequests.find((mr: MaintenanceRequest) => mr.id === r.maintenanceRequestId);
+                        if (linkedMr && [MaintenanceStatus.CLOSED, MaintenanceStatus.MAINTENANCE_COMPLETED, MaintenanceStatus.REJECTED].includes(linkedMr.status)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                });
+                setRequests(activeRequests);
+                setFilteredRequests(activeRequests);
                 return;
 
             } catch (error) {
                 console.error('Failed to create maintenance request', error);
-                alert('Failed to create maintenance request. Status not updated.');
+                alert(`Failed to create maintenance request: ${(error as Error).message}`);
                 return;
             }
         }
 
-        // Standard status update for other cases
-        const updated = requests.map(req =>
-            req.id === id ? { ...req, status: newStatus } : req
-        );
-        setRequests(updated);
-        setFilteredRequests(updated); // Update filtered list
+        // Standard status update for other cases (Acknowledge, Resolve, etc.)
+        await updateServiceRequest({
+            ...request,
+            status: newStatus,
+            date: new Date(request.date).toISOString()
+        });
+
+        // Refresh list
+        const allRequests = await getServiceRequests();
+        const allMaintenanceRequests = await getMaintenanceRequests();
+        const activeRequests = allRequests.filter(r => {
+            const isDirectlyClosed = ['Resolved', 'Completed', 'Rejected', 'Closed'].includes(r.status);
+            if (isDirectlyClosed) return false;
+
+            if (r.maintenanceRequestId) {
+                const linkedMr = allMaintenanceRequests.find((mr: MaintenanceRequest) => mr.id === r.maintenanceRequestId);
+                if (linkedMr && [MaintenanceStatus.CLOSED, MaintenanceStatus.MAINTENANCE_COMPLETED, MaintenanceStatus.REJECTED].includes(linkedMr.status)) {
+                    return false;
+                }
+            }
+            return true;
+        });
+        setRequests(activeRequests);
+        setFilteredRequests(activeRequests);
+    };
+
+    const handleModalConfirm = async (email: string) => {
+        if (!selectedRequestForAction) return;
+
+        const newStatus = modalAction === 'Assign' ? 'Assigned' : 'Escalated';
+
+        await updateServiceRequest({
+            ...selectedRequestForAction,
+            status: newStatus,
+            assignedTo: email,
+            date: new Date(selectedRequestForAction.date).toISOString()
+        });
+
+        // Send Email Notification
+        const subject = `Service Request ${modalAction === 'Assign' ? 'Assigned' : 'Escalated'}: ${selectedRequestForAction.id}`;
+        const body = `
+            Dear User,
+            
+            The Service Request ${selectedRequestForAction.id} (${selectedRequestForAction.serviceType}) has been ${modalAction === 'Assign' ? 'assigned' : 'escalated'} to you.
+            
+            Description: ${selectedRequestForAction.description}
+            Priority: ${selectedRequestForAction.priority}
+            
+            Please take the necessary actions.
+        `;
+
+        await sendEmailNotification(email, subject, body);
+        alert(`Email sent to ${email}`);
+
+        setIsModalOpen(false);
+        setSelectedRequestForAction(null);
+
+        // Refresh list
+        const allRequests = await getServiceRequests();
+        const allMaintenanceRequests = await getMaintenanceRequests();
+        const activeRequests = allRequests.filter(r => {
+            const isDirectlyClosed = ['Resolved', 'Completed', 'Rejected', 'Closed'].includes(r.status);
+            if (isDirectlyClosed) return false;
+
+            if (r.maintenanceRequestId) {
+                const linkedMr = allMaintenanceRequests.find((mr: MaintenanceRequest) => mr.id === r.maintenanceRequestId);
+                if (linkedMr && [MaintenanceStatus.CLOSED, MaintenanceStatus.MAINTENANCE_COMPLETED, MaintenanceStatus.REJECTED].includes(linkedMr.status)) {
+                    return false;
+                }
+            }
+            return true;
+        });
+        setRequests(activeRequests);
+        setFilteredRequests(activeRequests);
     };
 
     const getStatusColor = (status: string) => {
         switch (status) {
             case 'Pending':
             case MaintenanceStatus.REQUESTED:
-            case MaintenanceStatus.AWAITING_APPROVAL:
                 return 'bg-yellow-500/20 text-yellow-600 border-yellow-500/50';
 
             case 'In Progress':
             case 'Acknowledged':
             case 'Assigned':
-            case MaintenanceStatus.APPROVED:
+            case MaintenanceStatus.ACCEPTED:
             case MaintenanceStatus.UNDER_ESTIMATION:
-            case MaintenanceStatus.UNDER_MAINTENANCE:
+            case MaintenanceStatus.PENDING_ESTIMATION_APPROVAL:
                 return 'bg-blue-500/20 text-blue-600 border-blue-500/50';
 
             case 'Escalated':
+            case MaintenanceStatus.RE_ASSIGN:
                 return 'bg-orange-500/20 text-orange-600 border-orange-500/50';
 
             case 'Completed':
             case 'Resolved':
-            case MaintenanceStatus.COMPLETED:
+            case MaintenanceStatus.UNDER_MAINTENANCE:
+            case MaintenanceStatus.MAINTENANCE_COMPLETED:
+            case MaintenanceStatus.PENDING_INVOICE:
+            case MaintenanceStatus.INVOICE_SUBMITTED:
+            case MaintenanceStatus.CLOSED:
                 return 'bg-green-500/20 text-green-600 border-green-500/50';
 
             case 'Rejected':
@@ -220,33 +411,51 @@ export default function ServiceRequestPage() {
         }
     };
 
+
     return (
         <div className="space-y-8">
             {/* Service Requests List (Moved to Top) */}
+            {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                    <strong className="font-bold">Error! </strong>
+                    <span className="block sm:inline">{error}</span>
+                </div>
+            )}
             <div>
                 <div className="flex items-center justify-between mb-6">
                     <div>
-                        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Service Requests</h1>
+                        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Service Requests</h1>
                         <p className="mt-1 text-slate-500">Manage and track service requests.</p>
                     </div>
+                    <button
+                        onClick={() => router.push('/maintenance/service-requests/history')}
+                        className="text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                    >
+                        View History
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                        </svg>
+                    </button>
                 </div>
 
                 {/* Filter Bar */}
                 <div className="mb-6">
                     <FilterBar
-                        onSearch={(term) => handleFilter(term, { start: '', end: '' }, [])} // Simplified for now, real implementation needs state
-                        onDateRangeChange={(start, end) => handleFilter('', { start, end }, [])}
-                        onStatusChange={(statuses) => handleFilter('', { start: '', end: '' }, statuses)}
-                        statusOptions={['Pending', 'In Progress', 'Acknowledged', 'Assigned', 'Escalated', 'Resolved', 'Completed', 'Rejected']}
+                        onSearch={setSearchTerm}
+                        onDateRangeChange={(start, end) => setDateRange({ start, end })}
+                        onStatusChange={setStatusFilter}
+                        statusOptions={['Pending', 'In Progress', 'Acknowledged', 'Assigned', 'Escalated', 'Rejected']}
                         placeholder="Search requests..."
+                        defaultStartDate={yesterdayStr}
+                        defaultEndDate={todayStr}
                     />
                 </div>
 
                 <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {filteredRequests.map((request) => {
-                        const driver = mockDrivers.find(d => d.id === request.requestorId);
+                        const driver = drivers.find(d => d.id === request.requestorId);
                         const requestorName = request.requestorId === currentUser.id ? currentUser.name : (driver?.name || 'Unknown');
-                        const vehicle = mockVehicles.find(v => v.id === request.vehicleId);
+                        const vehicle = vehicles.find(v => v.id === request.vehicleId);
 
                         // Sync status if linked to a maintenance request (legacy support)
                         let displayStatus: string = request.status;
@@ -255,7 +464,7 @@ export default function ServiceRequestPage() {
                             const linkedMr = maintenanceRequests.find(mr => mr.id === request.maintenanceRequestId);
                             if (linkedMr) {
                                 displayStatus = linkedMr.status;
-                                linkedMrId = linkedMr.id;
+                                linkedMrId = linkedMr.readableId || linkedMr.id;
                             }
                         }
 
@@ -290,21 +499,33 @@ export default function ServiceRequestPage() {
                                             <span className="text-slate-500">Requestor:</span>
                                             <span className="text-slate-700 font-medium truncate max-w-[100px]">{requestorName}</span>
                                         </div>
-                                        {vehicle && (
-                                            <>
+                                        {/* Dynamic Details: Vehicle or Driver */}
+                                        {request.serviceType.includes('Driver') ? (
+                                            request.relatedDriverId && (
                                                 <div className="flex justify-between">
-                                                    <span className="text-slate-500">Vehicle ID:</span>
-                                                    <span className="text-slate-700 font-mono text-[10px]">{vehicle.id}</span>
+                                                    <span className="text-slate-500">Driver Subject:</span>
+                                                    <span className="text-slate-700 truncate max-w-[100px]">
+                                                        {drivers.find(d => d.id === request.relatedDriverId)?.name || 'Unknown'}
+                                                    </span>
                                                 </div>
-                                                <div className="flex justify-between">
-                                                    <span className="text-slate-500">Vehicle:</span>
-                                                    <span className="text-slate-700 truncate max-w-[100px]">{vehicle.make} {vehicle.model}</span>
-                                                </div>
-                                            </>
+                                            )
+                                        ) : (
+                                            vehicle && (
+                                                <>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-slate-500">Vehicle ID:</span>
+                                                        <span className="text-slate-700 font-mono text-[10px]">{vehicle.id}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-slate-500">Vehicle:</span>
+                                                        <span className="text-slate-700 truncate max-w-[100px]">{vehicle.make} {vehicle.model}</span>
+                                                    </div>
+                                                </>
+                                            )
                                         )}
                                         <div className="flex justify-between">
-                                            <span className="text-slate-500">Date:</span>
-                                            <span className="text-slate-700">{request.date}</span>
+                                            <span className="text-slate-500">Service Needed:</span>
+                                            <span className="text-slate-700 font-medium">{request.date}</span>
                                         </div>
                                         <div className="flex justify-between items-center pt-1">
                                             <span className="text-slate-500">Priority:</span>
@@ -312,6 +533,14 @@ export default function ServiceRequestPage() {
                                                 {request.priority}
                                             </span>
                                         </div>
+                                        {request.assignedTo && (
+                                            <div className="flex justify-between items-center pt-1">
+                                                <span className="text-slate-500">Assigned To:</span>
+                                                <span className="text-slate-700 truncate max-w-[100px]" title={request.assignedTo}>
+                                                    {request.assignedTo}
+                                                </span>
+                                            </div>
+                                        )}
                                         {linkedMrId && (
                                             <div className="mt-1 pt-1 border-t border-slate-100 text-[10px] text-blue-600 flex items-center gap-1">
                                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
@@ -325,7 +554,7 @@ export default function ServiceRequestPage() {
 
                                 {/* Workflow Actions for ALL Requests */}
                                 <div className="relative z-10 mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2">
-                                    {/* Acknowledge */}
+                                    {/* Acknowledge - Only for Pending */}
                                     {request.status === 'Pending' && (
                                         <button
                                             onClick={() => handleStatusChange(request.id, 'Acknowledged')}
@@ -335,28 +564,26 @@ export default function ServiceRequestPage() {
                                         </button>
                                     )}
 
-                                    {/* Assign */}
-                                    {(request.status === 'Acknowledged' || request.status === 'Pending') && (
-                                        <button
-                                            onClick={() => handleStatusChange(request.id, 'Assigned')}
-                                            className="rounded bg-indigo-50 border border-indigo-200 px-2 py-1.5 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
-                                        >
-                                            Assign
-                                        </button>
+                                    {/* Assign & Escalate - Only for Acknowledged (and NOT Vehicle Maintenance Service) */}
+                                    {request.status === 'Acknowledged' && request.serviceType !== 'Vehicle Maintenance Service' && (
+                                        <>
+                                            <button
+                                                onClick={() => handleStatusChange(request.id, 'Assigned')}
+                                                className="rounded bg-indigo-50 border border-indigo-200 px-2 py-1.5 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
+                                            >
+                                                Assign
+                                            </button>
+                                            <button
+                                                onClick={() => handleStatusChange(request.id, 'Escalated')}
+                                                className="rounded bg-orange-50 border border-orange-200 px-2 py-1.5 text-[10px] font-medium text-orange-700 hover:bg-orange-100 transition-colors"
+                                            >
+                                                Escalate
+                                            </button>
+                                        </>
                                     )}
 
-                                    {/* Escalate */}
-                                    {(request.status !== 'Resolved' && request.status !== 'Completed' && request.status !== 'Rejected' && request.status !== 'Escalated') && (
-                                        <button
-                                            onClick={() => handleStatusChange(request.id, 'Escalated')}
-                                            className="rounded bg-orange-50 border border-orange-200 px-2 py-1.5 text-[10px] font-medium text-orange-700 hover:bg-orange-100 transition-colors"
-                                        >
-                                            Escalate
-                                        </button>
-                                    )}
-
-                                    {/* Resolve */}
-                                    {(request.status !== 'Resolved' && request.status !== 'Completed' && request.status !== 'Rejected') && (
+                                    {/* Resolve - Only for Assigned or Escalated */}
+                                    {(request.status === 'Assigned' || request.status === 'Escalated') && (
                                         <button
                                             onClick={() => handleStatusChange(request.id, 'Resolved')}
                                             className="col-span-2 rounded bg-green-50 border border-green-200 px-2 py-1.5 text-[10px] font-medium text-green-700 hover:bg-green-100 transition-colors"
@@ -381,9 +608,9 @@ export default function ServiceRequestPage() {
                 <div className="bg-white rounded-xl p-6 relative overflow-hidden border border-slate-200 shadow-sm">
                     <form onSubmit={handleSubmit} className="space-y-4 relative z-10">
                         {/* Compact Grid Layout */}
-                        <div className="grid gap-4 md:grid-cols-4">
+                        <div className="grid gap-4 md:grid-cols-12">
                             {/* Requestor */}
-                            <div className="md:col-span-1">
+                            <div className="md:col-span-4">
                                 <label className="block text-xs font-medium text-slate-700 mb-1">Requestor</label>
                                 <select
                                     required
@@ -395,16 +622,16 @@ export default function ServiceRequestPage() {
                                     <option value={currentUser.id} className="text-slate-900">
                                         {currentUser.name} (Me)
                                     </option>
-                                    {mockDrivers.map(driver => (
-                                        <option key={driver.id} value={driver.id} className="text-slate-900">
-                                            {driver.name} ({driver.licenseNumber})
+                                    {drivers.map((driver, index) => (
+                                        <option key={driver.id || index} value={driver.id} className="text-slate-900">
+                                            {driver.name}
                                         </option>
                                     ))}
                                 </select>
                             </div>
 
                             {/* Service Type */}
-                            <div className="md:col-span-1">
+                            <div className="md:col-span-4">
                                 <label className="block text-xs font-medium text-slate-700 mb-1">Service Type</label>
                                 <select
                                     required
@@ -412,98 +639,182 @@ export default function ServiceRequestPage() {
                                     value={formData.serviceType}
                                     onChange={(e) => setFormData({ ...formData, serviceType: e.target.value })}
                                 >
-                                    {serviceTypes.map(type => (
-                                        <option key={type} value={type} className="text-slate-900">{type}</option>
+                                    {serviceTypes.map((type, index) => (
+                                        <option key={type || index} value={type}>{type}</option>
                                     ))}
                                 </select>
                             </div>
 
-                            {/* Vehicle */}
-                            <div className="md:col-span-1">
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Vehicle</label>
+                            {/* Priority - Moved here for better layout */}
+                            <div className="md:col-span-4">
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Priority</label>
                                 <select
                                     className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
-                                    value={formData.vehicleId}
-                                    onChange={(e) => setFormData({ ...formData, vehicleId: e.target.value })}
+                                    value={formData.priority}
+                                    onChange={(e) => setFormData({ ...formData, priority: e.target.value as any })}
                                 >
-                                    <option value="" className="text-slate-500">Select Vehicle</option>
-                                    {mockVehicles.map(vehicle => (
-                                        <option key={vehicle.id} value={vehicle.id} className="text-slate-900">
-                                            {vehicle.make} {vehicle.model} - {vehicle.licensePlate}
-                                        </option>
-                                    ))}
+                                    <option value="Low">Low</option>
+                                    <option value="Medium">Medium</option>
+                                    <option value="High">High</option>
                                 </select>
                             </div>
 
-                            {/* Date */}
-                            <div className="md:col-span-1">
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Date Required</label>
+                            {/* Dynamic Field: Vehicle or Driver based on Service Type */}
+                            <div className="md:col-span-8">
+                                {formData.serviceType.includes('Driver') ? (
+                                    <>
+                                        <label className="block text-xs font-medium text-slate-700 mb-1">Driver Subject</label>
+                                        <select
+                                            className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+                                            value={formData.relatedDriverId}
+                                            onChange={(e) => setFormData({ ...formData, relatedDriverId: e.target.value, vehicleId: '' })}
+                                        >
+                                            <option value="">Select Driver</option>
+                                            {drivers.map((driver, index) => (
+                                                <option key={driver.id || index} value={driver.id}>
+                                                    {driver.name} ({driver.licenseNumber})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </>
+                                ) : (
+                                    <>
+                                        <label className="block text-xs font-medium text-slate-700 mb-1">Vehicle</label>
+                                        <select
+                                            required
+                                            className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+                                            value={formData.vehicleId}
+                                            onChange={(e) => setFormData({ ...formData, vehicleId: e.target.value, relatedDriverId: '' })}
+                                        >
+                                            <option value="">No Vehicle</option>
+                                            {vehicles.map((vehicle, index) => (
+                                                <option key={vehicle.id || index} value={vehicle.id}>
+                                                    {vehicle.make} {vehicle.model} ({vehicle.licensePlate})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </>
+                                )}
+                            </div>
+
+
+
+                            {/* Service Needed Date */}
+                            <div className="md:col-span-4">
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Service Needed Date</label>
                                 <input
                                     type="date"
                                     required
-                                    min={new Date().toISOString().split('T')[0]}
-                                    className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+                                    className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
                                     value={formData.date}
                                     onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                                 />
                             </div>
-                        </div>
 
-                        <div className="grid gap-4 md:grid-cols-4">
-                            {/* Priority */}
-                            <div className="md:col-span-1">
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Priority</label>
-                                <div className="flex gap-2">
-                                    {['Low', 'Medium', 'High'].map((p) => (
-                                        <label key={p} className={`flex-1 cursor-pointer rounded-lg border px-2 py-2 text-center text-xs font-medium transition-all ${formData.priority === p
-                                            ? p === 'High' ? 'bg-red-50 border-red-200 text-red-700'
-                                                : p === 'Medium' ? 'bg-yellow-50 border-yellow-200 text-yellow-700'
-                                                    : 'bg-green-50 border-green-200 text-green-700'
-                                            : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
-                                            }`}>
-                                            <input
-                                                type="radio"
-                                                name="priority"
-                                                value={p}
-                                                checked={formData.priority === p}
-                                                onChange={(e) => setFormData({ ...formData, priority: e.target.value as 'Low' | 'Medium' | 'High' })}
-                                                className="sr-only"
-                                            />
-                                            {p}
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Description */}
-                            <div className="md:col-span-3">
+                            {/* Description - Full Width */}
+                            <div className="md:col-span-12">
                                 <label className="block text-xs font-medium text-slate-700 mb-1">Description</label>
-                                <input
-                                    type="text"
+                                <textarea
                                     required
-                                    className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors placeholder-slate-400"
-                                    placeholder="Brief description of the service required..."
+                                    rows={2}
+                                    className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                    placeholder="Describe the issue or service required..."
                                 />
+                            </div>
+
+                            {/* Attachments Section */}
+                            <div className="md:col-span-4 border-t border-slate-100 pt-4 mt-2">
+                                <h4 className="text-sm font-medium text-slate-900 mb-3">Attachments</h4>
+                                <div className="space-y-3">
+                                    {attachments.map((att, index) => (
+                                        <div key={index} className="flex items-end gap-3 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                            <div className="w-1/3">
+                                                <label className="block text-xs font-medium text-slate-500 mb-1">Type</label>
+                                                <select
+                                                    className="block w-full rounded-md border-slate-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                    value={att.type}
+                                                    onChange={(e) => {
+                                                        const newAtts = [...attachments];
+                                                        newAtts[index].type = e.target.value;
+                                                        setAttachments(newAtts);
+                                                    }}
+                                                >
+                                                    {Object.values(AttachmentType).map((t) => (
+                                                        <option key={t} value={t}>{t}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="flex-1">
+                                                <label className="block text-xs font-medium text-slate-500 mb-1">File</label>
+                                                <input
+                                                    type="file"
+                                                    className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0] || null;
+                                                        const newAtts = [...attachments];
+                                                        newAtts[index].file = file;
+                                                        setAttachments(newAtts);
+                                                    }}
+                                                />
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const newAtts = attachments.filter((_, i) => i !== index);
+                                                    setAttachments(newAtts);
+                                                }}
+                                                className="p-1.5 text-red-500 hover:bg-red-100 rounded-md transition-colors"
+                                                disabled={attachments.length === 1}
+                                                title="Remove Attachment"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    ))}
+                                    <button
+                                        type="button"
+                                        onClick={() => setAttachments([...attachments, { type: AttachmentType.IMAGE, file: null }])}
+                                        className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 mt-2"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                        </svg>
+                                        Add Another Attachment
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
-                        {/* Submit Button */}
                         <div className="flex justify-end pt-2">
                             <button
                                 type="submit"
-                                className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-bold text-white shadow-md shadow-blue-500/20 transition-all hover:bg-blue-700 hover:scale-105"
+                                className="inline-flex justify-center rounded-lg bg-blue-600 px-6 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 transition-colors"
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
-                                </svg>
                                 Submit Request
                             </button>
                         </div>
                     </form>
                 </div>
             </div>
+
+            {/* Assignment/Escalation Modal */}
+            {selectedRequestForAction && (
+                <AssignmentModal
+                    isOpen={isModalOpen}
+                    onClose={() => {
+                        setIsModalOpen(false);
+                        setSelectedRequestForAction(null);
+                    }}
+                    onConfirm={handleModalConfirm}
+                    title={modalAction === 'Assign' ? 'Assign Request' : 'Escalate Request'}
+                    request={selectedRequestForAction}
+                    actionLabel={modalAction === 'Assign' ? 'Assign Request' : 'Escalate Request'}
+                />
+            )}
         </div>
     );
 }

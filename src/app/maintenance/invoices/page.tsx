@@ -8,11 +8,17 @@ import {
     InvoiceCategory,
     MaintenanceRequest,
     Garage,
-    WorkOrder
+    MaintenanceStatus,
+    WorkOrder,
+    Attachment,
+    AttachmentType
 } from '@/types/maintenance';
 import {
     getMaintenanceRequests,
-    getGarages
+    getGarages,
+    getInvoices,
+    createInvoice,
+    updateMaintenanceRequest
 } from '@/services/mockData';
 
 export default function InvoicesPage() {
@@ -24,90 +30,42 @@ export default function InvoicesPage() {
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [paymentAmount, setPaymentAmount] = useState(0);
 
-    // Mock invoice data
-    const mockInvoices: Invoice[] = [
-        {
-            id: 'inv-001',
-            invoiceNumber: 'INV-2024-001',
-            requestId: 'req-001',
-            workOrderId: 'wo-001',
-            garageId: 'g1',
-            invoiceDate: '2024-11-20',
-            dueDate: '2024-12-05',
-            laborCost: 450,
-            partsCost: 320,
-            taxAmount: 77,
-            discountAmount: 0,
-            totalAmount: 847,
-            paidAmount: 847,
-            paymentStatus: PaymentStatus.PAID,
-            paymentDate: '2024-11-22',
-            lineItems: [
-                { id: 'li-1', description: 'Engine Diagnostic', quantity: 2, unitPrice: 150, totalPrice: 300, category: InvoiceCategory.LABOR },
-                { id: 'li-2', description: 'Oil Change', quantity: 1, unitPrice: 150, totalPrice: 150, category: InvoiceCategory.LABOR },
-                { id: 'li-3', description: 'Oil Filter', quantity: 2, unitPrice: 25, totalPrice: 50, category: InvoiceCategory.PARTS },
-                { id: 'li-4', description: 'Engine Oil (5L)', quantity: 2, unitPrice: 135, totalPrice: 270, category: InvoiceCategory.PARTS }
-            ],
-            attachments: []
-        },
-        {
-            id: 'inv-002',
-            invoiceNumber: 'INV-2024-002',
-            requestId: 'req-002',
-            workOrderId: 'wo-002',
-            garageId: 'g2',
-            invoiceDate: '2024-11-22',
-            dueDate: '2024-12-07',
-            laborCost: 600,
-            partsCost: 1200,
-            taxAmount: 180,
-            discountAmount: 100,
-            totalAmount: 1880,
-            paidAmount: 0,
-            paymentStatus: PaymentStatus.UNPAID,
-            lineItems: [
-                { id: 'li-5', description: 'Brake System Repair', quantity: 4, unitPrice: 150, totalPrice: 600, category: InvoiceCategory.LABOR },
-                { id: 'li-6', description: 'Brake Pads (Set)', quantity: 2, unitPrice: 400, totalPrice: 800, category: InvoiceCategory.PARTS },
-                { id: 'li-7', description: 'Brake Discs (Pair)', quantity: 1, unitPrice: 400, totalPrice: 400, category: InvoiceCategory.PARTS }
-            ],
-            attachments: []
-        },
-        {
-            id: 'inv-003',
-            invoiceNumber: 'INV-2024-003',
-            requestId: 'req-003',
-            workOrderId: 'wo-003',
-            garageId: 'g1',
-            invoiceDate: '2024-11-15',
-            dueDate: '2024-11-30',
-            laborCost: 300,
-            partsCost: 450,
-            taxAmount: 75,
-            discountAmount: 0,
-            totalAmount: 825,
-            paidAmount: 400,
-            paymentStatus: PaymentStatus.PARTIALLY_PAID,
-            lineItems: [
-                { id: 'li-8', description: 'AC Service', quantity: 2, unitPrice: 150, totalPrice: 300, category: InvoiceCategory.LABOR },
-                { id: 'li-9', description: 'AC Refrigerant', quantity: 3, unitPrice: 150, totalPrice: 450, category: InvoiceCategory.PARTS }
-            ],
-            attachments: []
-        }
-    ];
+    // Add Invoice State
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [maintenanceRequests, setMaintenanceRequests] = useState<MaintenanceRequest[]>([]);
+    const [newInvoiceData, setNewInvoiceData] = useState({
+        invoiceNumber: '',
+        garageId: '',
+        requestId: '',
+        invoiceDate: new Date().toISOString().split('T')[0],
+        dueDate: '',
+        laborCost: 0,
+        partsCost: 0,
+        taxAmount: 0,
+        discountAmount: 0,
+        attachments: [] as Attachment[]
+    });
+
+
 
     useEffect(() => {
         const fetchData = async () => {
-            const allGarages = await getGarages();
+            const [allGarages, allInvoices, allRequests] = await Promise.all([
+                getGarages(),
+                getInvoices(),
+                getMaintenanceRequests()
+            ]);
 
             const garMap = allGarages.reduce((acc, g) => {
                 acc[g.id] = g;
                 return acc;
             }, {} as Record<string, Garage>);
             setGarages(garMap);
+            setMaintenanceRequests(allRequests);
 
             // Check for overdue invoices
             const today = new Date();
-            const invoicesWithStatus = mockInvoices.map(inv => {
+            const invoicesWithStatus = allInvoices.map(inv => {
                 if (inv.paymentStatus === PaymentStatus.UNPAID && new Date(inv.dueDate) < today) {
                     return { ...inv, paymentStatus: PaymentStatus.OVERDUE };
                 }
@@ -119,6 +77,69 @@ export default function InvoicesPage() {
         };
         fetchData();
     }, []);
+
+    const handleAddInvoice = async () => {
+        if (!newInvoiceData.invoiceNumber || !newInvoiceData.garageId || !newInvoiceData.requestId) {
+            alert('Please fill in all required fields');
+            return;
+        }
+
+        const totalAmount = newInvoiceData.laborCost + newInvoiceData.partsCost + newInvoiceData.taxAmount - newInvoiceData.discountAmount;
+
+        const newInvoice: Invoice = {
+            id: `inv-${Date.now()}`,
+            invoiceNumber: newInvoiceData.invoiceNumber,
+            requestId: newInvoiceData.requestId,
+            workOrderId: `wo-${Date.now()}`, // Placeholder
+            garageId: newInvoiceData.garageId,
+            invoiceDate: newInvoiceData.invoiceDate,
+            dueDate: newInvoiceData.dueDate,
+            laborCost: newInvoiceData.laborCost,
+            partsCost: newInvoiceData.partsCost,
+            taxAmount: newInvoiceData.taxAmount,
+            discountAmount: newInvoiceData.discountAmount,
+            totalAmount: totalAmount,
+            paidAmount: 0,
+            paymentStatus: PaymentStatus.UNPAID,
+            paidAmount: 0,
+            paymentStatus: PaymentStatus.UNPAID,
+            lineItems: [], // Simplified for now
+            attachments: newInvoiceData.attachments // Use selected attachments
+        };
+
+        await createInvoice(newInvoice);
+
+        // Update Maintenance Request Status
+        await updateMaintenanceRequest(newInvoiceData.requestId, {
+            status: MaintenanceStatus.INVOICE_SUBMITTED
+        });
+
+        // Refresh Data
+        const allInvoices = await getInvoices();
+        const today = new Date();
+        const invoicesWithStatus = allInvoices.map(inv => {
+            if (inv.paymentStatus === PaymentStatus.UNPAID && new Date(inv.dueDate) < today) {
+                return { ...inv, paymentStatus: PaymentStatus.OVERDUE };
+            }
+            return inv;
+        });
+        setInvoices(invoicesWithStatus);
+
+        setShowAddModal(false);
+        setNewInvoiceData({
+            invoiceNumber: '',
+            garageId: '',
+            requestId: '',
+            invoiceDate: new Date().toISOString().split('T')[0],
+            dueDate: '',
+            laborCost: 0,
+            partsCost: 0,
+            taxAmount: 0,
+            discountAmount: 0,
+            attachments: []
+        });
+        alert('Invoice added successfully!');
+    };
 
     const handleRecordPayment = () => {
         if (!selectedInvoice || paymentAmount <= 0) {
@@ -182,7 +203,18 @@ export default function InvoicesPage() {
             {/* Header */}
             <div>
                 <h1 className="text-2xl font-bold text-slate-900">Invoice Management</h1>
-                <p className="mt-1 text-slate-500">Track and manage maintenance invoices and payments</p>
+                <div className="flex justify-between items-center mt-1">
+                    <p className="text-slate-500">Track and manage maintenance invoices and payments</p>
+                    <button
+                        onClick={() => setShowAddModal(true)}
+                        className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 flex items-center gap-2"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        Add Invoice
+                    </button>
+                </div>
             </div>
 
             {/* Stats Cards */}
@@ -435,6 +467,194 @@ export default function InvoicesPage() {
                                 className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700"
                             >
                                 Record Payment
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Add Invoice Modal */}
+            {showAddModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="p-6 border-b border-slate-200">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-lg font-bold text-slate-900">Add New Invoice</h3>
+                                <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Invoice Number</label>
+                                    <input
+                                        type="text"
+                                        value={newInvoiceData.invoiceNumber}
+                                        onChange={(e) => setNewInvoiceData({ ...newInvoiceData, invoiceNumber: e.target.value })}
+                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                        placeholder="INV-..."
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Garage</label>
+                                    <select
+                                        value={newInvoiceData.garageId}
+                                        onChange={(e) => setNewInvoiceData({ ...newInvoiceData, garageId: e.target.value })}
+                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    >
+                                        <option value="">Select Garage</option>
+                                        {Object.values(garages).map(g => (
+                                            <option key={g.id} value={g.id}>{g.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Work Order</label>
+                                <select
+                                    value={newInvoiceData.requestId}
+                                    onChange={(e) => {
+                                        const reqId = e.target.value;
+                                        const selectedReq = maintenanceRequests.find(r => r.id === reqId);
+
+                                        // Calculate Tax (Total - Parts - Labor - Other) or default 0
+                                        const parts = selectedReq?.actualPartsCost || 0;
+                                        const labor = selectedReq?.actualLaborCost || 0;
+                                        const other = selectedReq?.actualOtherCost || 0;
+                                        const total = selectedReq?.actualCost || 0;
+                                        const tax = Math.max(0, total - parts - labor - other);
+
+                                        // Find Invoice Attachment - strictly look for INVOICE type
+                                        // The backend logic for SUBMIT_INVOICE ensures the attachment is synced to request.attachments
+                                        const invoiceAttachment = selectedReq?.attachments?.find(att => att.type === 'INVOICE');
+
+                                        setNewInvoiceData({
+                                            ...newInvoiceData,
+                                            requestId: reqId,
+                                            garageId: selectedReq?.garageId || newInvoiceData.garageId || '',
+                                            laborCost: labor,
+                                            partsCost: parts,
+                                            taxAmount: tax,
+                                            attachments: invoiceAttachment ? [invoiceAttachment] : []
+                                        });
+                                    }}
+                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                >
+                                    <option value="">Select Work Order</option>
+                                    {maintenanceRequests
+                                        .filter(r => r.status === MaintenanceStatus.INVOICE_SUBMITTED)
+                                        .map(r => (
+                                            <option key={r.id} value={r.id}>
+                                                {r.workOrderNo || r.id}
+                                            </option>
+                                        ))}
+                                </select>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Invoice Date</label>
+                                    <input
+                                        type="date"
+                                        value={newInvoiceData.invoiceDate}
+                                        onChange={(e) => setNewInvoiceData({ ...newInvoiceData, invoiceDate: e.target.value })}
+                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Due Date</label>
+                                    <input
+                                        type="date"
+                                        value={newInvoiceData.dueDate}
+                                        onChange={(e) => setNewInvoiceData({ ...newInvoiceData, dueDate: e.target.value })}
+                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="border-t border-slate-200 pt-4">
+                                <h4 className="text-sm font-medium text-slate-900 mb-3">Cost Breakdown</h4>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs text-slate-500 mb-1">Labor Cost</label>
+                                        <input
+                                            type="number"
+                                            value={newInvoiceData.laborCost}
+                                            onChange={(e) => setNewInvoiceData({ ...newInvoiceData, laborCost: Number(e.target.value) })}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-slate-500 mb-1">Parts Cost</label>
+                                        <input
+                                            type="number"
+                                            value={newInvoiceData.partsCost}
+                                            onChange={(e) => setNewInvoiceData({ ...newInvoiceData, partsCost: Number(e.target.value) })}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-slate-500 mb-1">Tax Amount</label>
+                                        <input
+                                            type="number"
+                                            value={newInvoiceData.taxAmount}
+                                            onChange={(e) => setNewInvoiceData({ ...newInvoiceData, taxAmount: Number(e.target.value) })}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-slate-500 mb-1">Discount</label>
+                                        <input
+                                            type="number"
+                                            value={newInvoiceData.discountAmount}
+                                            onChange={(e) => setNewInvoiceData({ ...newInvoiceData, discountAmount: Number(e.target.value) })}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-slate-50 p-4 rounded-lg flex justify-between items-center">
+                                <span className="font-medium text-slate-700">Total Amount</span>
+                                <span className="text-xl font-bold text-slate-900">
+                                    AED {(newInvoiceData.laborCost + newInvoiceData.partsCost + newInvoiceData.taxAmount - newInvoiceData.discountAmount).toLocaleString()}
+                                </span>
+                            </div>
+
+                            {/* Attachments Section */}
+                            <div className="border-t border-slate-200 pt-4">
+                                <h4 className="text-sm font-medium text-slate-900 mb-2">Attachments</h4>
+                                {newInvoiceData.attachments && newInvoiceData.attachments.length > 0 ? (
+                                    <div className="flex gap-2">
+                                        {newInvoiceData.attachments.map(att => (
+                                            <div key={att.id} className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-blue-600">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
+                                                </svg>
+                                                <a href={att.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline truncate max-w-[200px]">
+                                                    {att.fileName}
+                                                </a>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-slate-500 italic">No invoice attachment found.</p>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+                            <button
+                                onClick={() => setShowAddModal(false)}
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleAddInvoice}
+                                className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                            >
+                                Create Invoice
                             </button>
                         </div>
                     </div>

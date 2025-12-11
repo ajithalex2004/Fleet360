@@ -110,6 +110,8 @@ export default function MaintenanceRequestsPage() {
     const [vehicles, setVehicles] = useState<Record<string, Vehicle>>({});
     const [loading, setLoading] = useState(true);
 
+
+
     // Modal State
     const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
     const [selectedRequest, setSelectedRequest] =
@@ -118,22 +120,41 @@ export default function MaintenanceRequestsPage() {
     // Action Menu State
     const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
 
+    // Filter State
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const todayStr = today.toISOString().split('T')[0];
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    const [searchTerm, setSearchTerm] = useState('');
+    const [dateRange, setDateRange] = useState({ start: yesterdayStr, end: todayStr });
+    const [statusFilter, setStatusFilter] = useState<string[]>([]);
+
     useEffect(() => {
         const fetchData = async () => {
-            const [reqs, vehs] = await Promise.all([
-                getMaintenanceRequests(),
-                getVehicles(),
-            ]);
-            setRequests(reqs);
-            setFilteredRequests(reqs);
+            try {
+                const [reqs, vehs] = await Promise.all([
+                    getMaintenanceRequests() as Promise<MaintenanceRequest[]>,
+                    getVehicles() as Promise<Vehicle[]>,
+                ]);
+                const activeReqs = reqs.filter((r) =>
+                    r.status !== MaintenanceStatus.CLOSED &&
+                    r.status !== MaintenanceStatus.REJECTED
+                );
+                setRequests(activeReqs);
 
-            const vehMap = vehs.reduce((acc, v) => {
-                acc[v.id] = v;
-                return acc;
-            }, {} as Record<string, Vehicle>);
-            setVehicles(vehMap);
-
-            setLoading(false);
+                const vehMap = vehs.reduce((acc, v) => {
+                    acc[v.id] = v;
+                    return acc;
+                }, {} as Record<string, Vehicle>);
+                setVehicles(vehMap);
+            } catch (err) {
+                console.error('Failed to load requests:', err);
+                setError('Failed to load requests');
+            } finally {
+                setLoading(false);
+            }
         };
         fetchData();
     }, []);
@@ -153,12 +174,12 @@ export default function MaintenanceRequestsPage() {
         };
     }, []);
 
-    const handleFilter = (term: string, dateRange: { start: string, end: string }, statuses: string[]) => {
+    useEffect(() => {
         let result = requests;
 
         // Search
-        if (term) {
-            const lowerTerm = term.toLowerCase();
+        if (searchTerm) {
+            const lowerTerm = searchTerm.toLowerCase();
             result = result.filter(r =>
                 r.id.toLowerCase().includes(lowerTerm) ||
                 r.description.toLowerCase().includes(lowerTerm) ||
@@ -171,16 +192,19 @@ export default function MaintenanceRequestsPage() {
             result = result.filter(r => r.requestDate >= dateRange.start);
         }
         if (dateRange.end) {
-            result = result.filter(r => r.requestDate <= dateRange.end);
+            // Append time to end date to include the full day
+            const endDate = new Date(dateRange.end);
+            endDate.setHours(23, 59, 59, 999);
+            result = result.filter(r => new Date(r.requestDate) <= endDate);
         }
 
         // Status
-        if (statuses.length > 0) {
-            result = result.filter(r => statuses.includes(r.status));
+        if (statusFilter.length > 0) {
+            result = result.filter(r => statusFilter.includes(r.status));
         }
 
         setFilteredRequests(result);
-    };
+    }, [requests, searchTerm, dateRange, statusFilter, vehicles]);
 
     const handleStatusClick = (request: MaintenanceRequest) => {
         setSelectedRequest(request);
@@ -191,17 +215,31 @@ export default function MaintenanceRequestsPage() {
         if (!selectedRequest) return;
 
         try {
+            // Create history entry
+            const historyEntry = {
+                status: newStatus,
+                date: new Date().toISOString(),
+                note: `Status updated to ${newStatus}`,
+                actor: 'System'
+            };
+            const updatedHistory = [...(selectedRequest.history || []), historyEntry];
+
             const updatedRequest = await updateMaintenanceRequest(selectedRequest.id, {
                 status: newStatus,
+                history: updatedHistory,
             });
 
-            setRequests((prev) =>
-                prev.map((r) => (r.id === updatedRequest.id ? updatedRequest : r))
-            );
-            // Re-apply filters (simplified: just update filtered list too)
-            setFilteredRequests((prev) =>
-                prev.map((r) => (r.id === updatedRequest.id ? updatedRequest : r))
-            );
+            if (newStatus === MaintenanceStatus.CLOSED || newStatus === MaintenanceStatus.REJECTED) {
+                setRequests((prev) => prev.filter((r) => r.id !== updatedRequest.id));
+                setFilteredRequests((prev) => prev.filter((r) => r.id !== updatedRequest.id));
+            } else {
+                setRequests((prev) =>
+                    prev.map((r) => (r.id === updatedRequest.id ? updatedRequest : r))
+                );
+                setFilteredRequests((prev) =>
+                    prev.map((r) => (r.id === updatedRequest.id ? updatedRequest : r))
+                );
+            }
         } catch (error) {
             console.error('Failed to update status:', error);
             alert('Failed to update status. Please try again.');
@@ -236,11 +274,13 @@ export default function MaintenanceRequestsPage() {
             </div>
 
             <FilterBar
-                onSearch={(term) => handleFilter(term, { start: '', end: '' }, [])}
-                onDateRangeChange={(start, end) => handleFilter('', { start, end }, [])}
-                onStatusChange={(statuses) => handleFilter('', { start: '', end: '' }, statuses)}
+                onSearch={setSearchTerm}
+                onDateRangeChange={(start, end) => setDateRange({ start, end })}
+                onStatusChange={setStatusFilter}
                 statusOptions={Object.values(MaintenanceStatus)}
                 placeholder="Search requests..."
+                defaultStartDate={yesterdayStr}
+                defaultEndDate={todayStr}
             />
 
             {/* Removed overflow-hidden to allow dropdowns to spill out */}
@@ -267,7 +307,7 @@ export default function MaintenanceRequestsPage() {
                                                 href={`/maintenance/requests/${encodeURIComponent(request.id)}`}
                                                 className="hover:text-blue-600 hover:underline"
                                             >
-                                                {request.id}
+                                                {request.readableId || request.id}
                                             </Link>
                                         </td>
                                         <td className="px-6 py-4 text-slate-700">
@@ -281,7 +321,13 @@ export default function MaintenanceRequestsPage() {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-slate-600">
-                                            {request.requestDate}
+                                            {new Date(request.requestDate).toLocaleString('en-US', {
+                                                year: 'numeric',
+                                                month: 'short',
+                                                day: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit'
+                                            })}
                                         </td>
                                         <td className="px-6 py-4">
                                             <div

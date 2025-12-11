@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   description: "Generative UI App powered by Thesys C1",
 };
 
+import ToastProvider from "@/components/providers/ToastProvider";
 import ChatWidget from "@/components/Communication/ChatWidget";
 
 export default function RootLayout({
@@ -21,8 +22,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.className} antialiased`}>
-        {children}
-        <ChatWidget />
+        <ToastProvider>
+          {children}
+          <ChatWidget />
+        </ToastProvider>
       </body>
     </html>
   );

@@ -152,7 +152,7 @@ export default function RequestDetailsPage({ params }: { params: Promise<{ id: s
                     <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                         <h2 className="mb-4 text-lg font-semibold text-slate-900">Actions</h2>
                         <div className="flex flex-col gap-4">
-                            {request.status === MaintenanceStatus.APPROVED && (
+                            {request.status === MaintenanceStatus.UNDER_ESTIMATION && (
                                 <div className="w-full">
                                     <label className="block text-sm font-medium text-slate-700 mb-2">Select Garages for Estimation</label>
 
@@ -250,40 +250,56 @@ export default function RequestDetailsPage({ params }: { params: Promise<{ id: s
                             )}
 
                             <div className="flex gap-3 flex-wrap">
-                                {request.status === MaintenanceStatus.REQUESTED && (
+                                {request.status === MaintenanceStatus.SUBMITTED && (
                                     <button
-                                        onClick={() => handleStatusUpdate(MaintenanceStatus.AWAITING_APPROVAL)}
+                                        onClick={() => handleStatusUpdate(MaintenanceStatus.PENDING_OPERATIONS_ACK)}
+                                        className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                                    >
+                                        Acknowledge
+                                    </button>
+                                )}
+                                {request.status === MaintenanceStatus.PENDING_OPERATIONS_ACK && (
+                                    <button
+                                        onClick={() => handleStatusUpdate(MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL)}
                                         className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
                                     >
                                         Submit for Approval
                                     </button>
                                 )}
-                                {request.status === MaintenanceStatus.AWAITING_APPROVAL && (
+                                {request.status === MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL && (
                                     <>
                                         <button
-                                            onClick={() => handleStatusUpdate(MaintenanceStatus.APPROVED)}
+                                            onClick={() => handleStatusUpdate(MaintenanceStatus.UNDER_ESTIMATION)}
                                             className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
                                         >
                                             Approve Request
                                         </button>
                                         <button
-                                            onClick={() => handleStatusUpdate(MaintenanceStatus.REJECTED)}
+                                            onClick={() => handleStatusUpdate(MaintenanceStatus.REJECTED_BY_MAINTENANCE)}
                                             className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
                                         >
                                             Reject
                                         </button>
                                     </>
                                 )}
-                                {request.status === MaintenanceStatus.APPROVED && (
+                                {request.status === MaintenanceStatus.UNDER_ESTIMATION && (
                                     <button
-                                        onClick={() => handleStatusUpdate(MaintenanceStatus.UNDER_ESTIMATION)}
+                                        onClick={() => handleStatusUpdate(MaintenanceStatus.PENDING_ESTIMATION_APPROVAL)}
                                         disabled={selectedGarages.length === 0}
                                         className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                        Start Estimation
+                                        Submit Estimate
                                     </button>
                                 )}
-                                {request.status === MaintenanceStatus.UNDER_ESTIMATION && (
+                                {request.status === MaintenanceStatus.PENDING_ESTIMATION_APPROVAL && (
+                                    <button
+                                        onClick={() => handleStatusUpdate(MaintenanceStatus.ESTIMATION_APPROVED)}
+                                        className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+                                    >
+                                        Approve Estimate
+                                    </button>
+                                )}
+                                {request.status === MaintenanceStatus.ESTIMATION_APPROVED && (
                                     <button
                                         onClick={() => handleStatusUpdate(MaintenanceStatus.UNDER_MAINTENANCE)}
                                         className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
@@ -293,14 +309,33 @@ export default function RequestDetailsPage({ params }: { params: Promise<{ id: s
                                 )}
                                 {request.status === MaintenanceStatus.UNDER_MAINTENANCE && (
                                     <button
-                                        onClick={() => handleStatusUpdate(MaintenanceStatus.COMPLETED)}
+                                        onClick={() => handleStatusUpdate(MaintenanceStatus.MAINTENANCE_COMPLETED)}
                                         className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
                                     >
                                         Complete Job
                                     </button>
                                 )}
-                                {request.status === MaintenanceStatus.COMPLETED && (
-                                    <p className="text-sm text-green-600 font-medium">Maintenance Completed</p>
+                                {request.status === MaintenanceStatus.MAINTENANCE_COMPLETED && (
+                                    <button
+                                        onClick={() => handleStatusUpdate(MaintenanceStatus.PENDING_INVOICE)}
+                                        className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700"
+                                    >
+                                        Request Invoice
+                                    </button>
+                                )}
+                                {request.status === MaintenanceStatus.PENDING_INVOICE && (
+                                    <p className="text-sm text-orange-600 font-medium">Pending Invoice</p>
+                                )}
+                                {request.status === MaintenanceStatus.INVOICE_SUBMITTED && (
+                                    <button
+                                        onClick={() => handleStatusUpdate(MaintenanceStatus.CLOSED)}
+                                        className="rounded-lg bg-gray-600 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700"
+                                    >
+                                        Close Request
+                                    </button>
+                                )}
+                                {request.status === MaintenanceStatus.CLOSED && (
+                                    <p className="text-sm text-gray-600 font-medium">Request Closed</p>
                                 )}
                             </div>
                         </div>

@@ -16,7 +16,9 @@ import {
     MaintenanceStatus,
     MaintenanceType,
     Attachment,
-    AttachmentType
+    Attachment,
+    AttachmentType,
+    QuotationStatus
 } from '@/types/maintenance';
 import {
     getMaintenanceRequests,
@@ -26,10 +28,12 @@ import {
 } from '@/services/mockData';
 import { formatCurrency } from '@/utils/currency';
 import { Permission, hasPermission, getCurrentUserRole } from '@/services/rbac';
+import { useToast } from '@/contexts/ToastContext';
 
 export default function WorkOrderPage() {
     const params = useParams();
     const router = useRouter();
+    const { addToast } = useToast();
     // In our list view, we link to /maintenance/work-orders/[requestId]
     // So params.id is actually the requestId
     const requestId = decodeURIComponent(params?.id as string);
@@ -143,17 +147,18 @@ export default function WorkOrderPage() {
                         assignedTechnicians: [], // Would come from DB
                         startDate: foundRequest.requestDate,
                         estimatedCompletionDate: foundRequest.expectedEndDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-                        workLog: [],
-                        partsUsed: [],
-                        totalLaborHours: 0,
+                        workLog: foundRequest.workLog || [],
+                        partsUsed: foundRequest.partsUsed || [],
+                        totalLaborHours: (foundRequest.workLog || []).reduce((sum, log) => sum + log.hoursSpent, 0),
                         status: mapMaintenanceStatusToWorkOrderStatus(foundRequest.status),
-                        checklistItems: [
+                        checklistItems: foundRequest.checklistItems || [
                             { id: 'check-1', task: 'Initial Inspection', completed: false },
                             { id: 'check-2', task: 'Diagnostic Test', completed: false },
                             { id: 'check-3', task: 'Parts Replacement', completed: false },
                             { id: 'check-4', task: 'Test Drive', completed: false },
                             { id: 'check-5', task: 'Quality Check', completed: false }
-                        ]
+                        ],
+                        actualCosts: foundRequest.actualCosts
                     };
                     setWorkOrder(generatedWorkOrder);
 
@@ -199,15 +204,16 @@ export default function WorkOrderPage() {
 
     const handleAddWorkLog = () => {
         if (!workOrder || !logForm.technicianId || !logForm.activity) {
-            alert('Please fill in all required fields');
+            addToast('Please fill in all required fields', 'error');
             return;
         }
 
         const selectedTech = availableTechnicians.find(t => t.id === logForm.technicianId);
 
+        let newWorkLog = [...workOrder.workLog];
         if (editingLogId) {
             // Update existing log
-            const updatedLogs = workOrder.workLog.map(log => {
+            newWorkLog = newWorkLog.map(log => {
                 if (log.id === editingLogId) {
                     return {
                         ...log,
@@ -220,17 +226,6 @@ export default function WorkOrderPage() {
                 }
                 return log;
             });
-
-            // Recalculate total hours
-            const totalHours = updatedLogs.reduce((sum, log) => sum + log.hoursSpent, 0);
-
-            setWorkOrder({
-                ...workOrder,
-                workLog: updatedLogs,
-                totalLaborHours: totalHours
-            });
-
-            setEditingLogId(null);
         } else {
             // Add new log
             const newLog: WorkLogEntry = {
@@ -243,15 +238,27 @@ export default function WorkOrderPage() {
                 notes: logForm.notes,
                 photos: []
             };
+            newWorkLog.push(newLog);
+        }
 
-            setWorkOrder({
-                ...workOrder,
-                workLog: [...workOrder.workLog, newLog],
-                totalLaborHours: workOrder.totalLaborHours + logForm.hoursSpent
-            });
+        // Recalculate total hours
+        const totalHours = newWorkLog.reduce((sum, log) => sum + log.hoursSpent, 0);
+
+        // Update local state
+        setWorkOrder({
+            ...workOrder,
+            workLog: newWorkLog,
+            totalLaborHours: totalHours
+        });
+
+        // Persist to backend
+        if (request) {
+            updateMaintenanceRequest(request.id, { workLog: newWorkLog })
+                .catch(err => console.error('Failed to persist work log:', err));
         }
 
         setShowAddLogModal(false);
+        setEditingLogId(null);
         setLogForm({ technicianId: '', technicianName: '', activity: '', hoursSpent: 0, notes: '' });
     };
 
@@ -269,13 +276,14 @@ export default function WorkOrderPage() {
 
     const handleAddPart = () => {
         if (!workOrder || !partForm.partName) {
-            alert('Please fill in all required fields');
+            addToast('Please fill in all required fields', 'error');
             return;
         }
 
+        let newPartsUsed = [...workOrder.partsUsed];
         if (editingPartId) {
             // Update existing part
-            const updatedParts = workOrder.partsUsed.map(part => {
+            newPartsUsed = newPartsUsed.map(part => {
                 if (part.id === editingPartId) {
                     return {
                         ...part,
@@ -289,13 +297,6 @@ export default function WorkOrderPage() {
                 }
                 return part;
             });
-
-            setWorkOrder({
-                ...workOrder,
-                partsUsed: updatedParts
-            });
-
-            setEditingPartId(null);
         } else {
             // Add new part
             const newPart: PartUsage = {
@@ -308,14 +309,23 @@ export default function WorkOrderPage() {
                 totalCost: partForm.quantityUsed * partForm.unitCost,
                 source: partForm.source
             };
+            newPartsUsed.push(newPart);
+        }
 
-            setWorkOrder({
-                ...workOrder,
-                partsUsed: [...workOrder.partsUsed, newPart]
-            });
+        // Update local state
+        setWorkOrder({
+            ...workOrder,
+            partsUsed: newPartsUsed
+        });
+
+        // Persist to backend
+        if (request) {
+            updateMaintenanceRequest(request.id, { partsUsed: newPartsUsed })
+                .catch(err => console.error('Failed to persist parts used:', err));
         }
 
         setShowAddPartModal(false);
+        setEditingPartId(null);
         setPartForm({ partName: '', partNumber: '', quantityUsed: 1, unitCost: 0, source: PartSource.STOCK });
     };
 
@@ -337,20 +347,34 @@ export default function WorkOrderPage() {
 
         const totalActualCost = costForm.actualPartsCost + costForm.actualLaborCost + costForm.actualOtherCharges;
 
+        const actualCosts = {
+            parts: costForm.actualPartsCost,
+            labor: costForm.actualLaborCost,
+            other: costForm.actualOtherCharges,
+            total: totalActualCost
+        };
+
         // Update work order with actual costs
         const updatedWorkOrder = {
             ...workOrder,
-            actualCosts: {
-                parts: costForm.actualPartsCost,
-                labor: costForm.actualLaborCost,
-                other: costForm.actualOtherCharges,
-                total: totalActualCost
-            }
+            actualCosts
         };
         setWorkOrder(updatedWorkOrder);
 
+        // Persist to backend
+        if (request) {
+            updateMaintenanceRequest(request.id, {
+                actualCosts,
+                // Also update flat fields for compatibility with Request Details page
+                actualPartsCost: costForm.actualPartsCost,
+                actualLaborCost: costForm.actualLaborCost,
+                actualOtherCost: costForm.actualOtherCharges,
+                actualCost: totalActualCost
+            }).catch(err => console.error('Failed to persist actual costs:', err));
+        }
+
         setShowCostEntryModal(false);
-        alert('Actual costs recorded successfully!');
+        addToast('Actual costs recorded successfully!', 'success');
     };
 
     // TRIPEXL: Handle Details Update
@@ -373,13 +397,13 @@ export default function WorkOrderPage() {
         });
 
         setIsEditingDetails(false);
-        alert('Work order details updated successfully');
+        addToast('Work order details updated successfully', 'success');
     };
 
     // TRIPEXL: Handle Add New Technician
     const handleAddTechnician = () => {
         if (!newTechnicianForm.name || !newTechnicianForm.specialization) {
-            alert('Please fill in all fields');
+            addToast('Please fill in all fields', 'error');
             return;
         }
 
@@ -412,30 +436,36 @@ export default function WorkOrderPage() {
 
     // TRIPEXL: Handle Work Order Completion
     const handleCompleteWorkOrder = async () => {
-        if (!workOrder || !request) return;
+        console.log('handleCompleteWorkOrder called');
+        if (!workOrder || !request) {
+            console.error('Missing workOrder or request', { workOrder, request });
+            return;
+        }
 
         // Check if all checklist items are completed
-        const allCompleted = workOrder.checklistItems.every(item => item.completed);
+        const allCompleted = workOrder.checklistItems?.every(item => item.completed) ?? false;
         if (!allCompleted) {
-            alert('Please complete all checklist items before closing the work order');
+            addToast('Please complete all checklist items before closing the work order', 'error');
             return;
         }
 
         // Check if costs are entered
         if (!workOrder.actualCosts) {
-            alert('Please enter actual costs before completing the work order');
+            addToast('Please enter actual costs before completing the work order', 'error');
             return;
         }
 
         // Check Work Log
-        if (workOrder.workLog.length === 0) {
-            alert('Please add at least one Work Log entry before completing the work order.');
+        if (!workOrder.workLog || workOrder.workLog.length === 0) {
+            console.warn('Work log is empty');
+            addToast('Please add at least one Work Log entry before completing the work order.', 'error');
             return;
         }
 
         // Check Parts Used
-        if (workOrder.partsUsed.length === 0) {
-            const confirmNoParts = confirm('No parts have been used. Are you sure you want to complete without parts?');
+        if (!workOrder.partsUsed || workOrder.partsUsed.length === 0) {
+            console.log('No parts used, asking for confirmation');
+            const confirmNoParts = window.confirm('No parts have been used. Are you sure you want to complete without parts?');
             if (!confirmNoParts) return;
         }
 
@@ -467,8 +497,35 @@ export default function WorkOrderPage() {
             actualCompletionDate: completionDate
         });
 
-        // TODO: Save to backend
-        alert('Work order completed successfully! Request status updated to Maintenance Completed.');
+        // Trigger Email Notification if requested
+        if (completionForm.customerNotified) {
+            console.group('📧 CUSTOMER NOTIFICATION TRIGGERED');
+            console.log(`To: Customer (Vehicle Owner)`);
+            console.log(`Subject: Work Order ${workOrder.workOrderNo || workOrder.id} Completed`);
+            console.log(`Body: Dear Customer, your vehicle maintenance has been completed. Details:`);
+            console.log(`- Total Cost: ${formatCurrency(workOrder.actualCosts?.total || 0)}`);
+            console.log(`- Completion Notes: ${completionForm.completionNotes}`);
+            console.groupEnd();
+
+            // Simulate API latency
+            await new Promise(resolve => setTimeout(resolve, 500));
+            addToast('Customer notification email sent successfully!', 'success');
+        }
+
+        // Save to backend
+        try {
+            await updateMaintenanceRequest(request.id, {
+                status: MaintenanceStatus.MAINTENANCE_COMPLETED,
+                actualCompletionDate: completionDate,
+                history: [...(request.history || []), statusTransition]
+            });
+            console.log('Backend updated successfully');
+        } catch (error) {
+            console.error('Failed to update backend status', error);
+            addToast('Failed to update status on server, but local state updated.', 'warning');
+        }
+
+        addToast('Work order completed successfully! Request status updated to Maintenance Completed.', 'success');
         setShowCompletionModal(false);
     };
 
@@ -488,6 +545,12 @@ export default function WorkOrderPage() {
         });
 
         setWorkOrder({ ...workOrder, checklistItems: updatedItems });
+
+        // Persist to backend
+        if (request) {
+            updateMaintenanceRequest(request.id, { checklistItems: updatedItems })
+                .catch(err => console.error('Failed to persist checklist:', err));
+        }
     };
 
     const updateWorkOrderStatus = async (newStatus: WorkOrderStatus) => {
@@ -502,19 +565,19 @@ export default function WorkOrderPage() {
                 const preQcItems = workOrder.checklistItems.slice(0, qcIndex);
                 const allPreQcCompleted = preQcItems.every(i => i.completed);
                 if (!allPreQcCompleted) {
-                    alert('Please complete all checklist items (Inspection, Diagnostics, Repairs, Test Drive) before moving to Quality Check.');
+                    addToast('Please complete all checklist items (Inspection, Diagnostics, Repairs, Test Drive) before moving to Quality Check.', 'error');
                     return;
                 }
             }
 
             // Validate Work Log and Parts Used
             if (!workOrder.workLog || workOrder.workLog.length === 0) {
-                alert('Please add at least one Work Log entry before moving to Quality Check.');
+                addToast('Please add at least one Work Log entry before moving to Quality Check.', 'error');
                 return;
             }
 
             if (!workOrder.partsUsed || workOrder.partsUsed.length === 0) {
-                alert('Please add at least one Part Used entry before moving to Quality Check.');
+                addToast('Please add at least one Part Used entry before moving to Quality Check.', 'error');
                 return;
             }
         }
@@ -522,7 +585,7 @@ export default function WorkOrderPage() {
         // Validation for SUBMIT_INVOICE
         if (newStatus === WorkOrderStatus.SUBMIT_INVOICE) {
             if (!workOrder.invoiceAttachments || workOrder.invoiceAttachments.length === 0) {
-                alert('Please attach an invoice before submitting.');
+                addToast('Please attach an invoice before submitting.', 'error');
                 return;
             }
 
@@ -544,7 +607,7 @@ export default function WorkOrderPage() {
                     }
                 } catch (error) {
                     console.error('Failed to sync invoice to request:', error);
-                    alert('Failed to sync invoice to request. Please try again.');
+                    addToast('Failed to sync invoice to request. Please try again.', 'error');
                     return;
                 }
             }
@@ -555,7 +618,7 @@ export default function WorkOrderPage() {
             // Reuse validation logic or call handleCompleteWorkOrder if appropriate
             // For now, simple check
             if (workOrder.workLog.length === 0) {
-                alert('Please add at least one Work Log entry before completing.');
+                addToast('Please add at least one Work Log entry before completing.', 'error');
                 return;
             }
         }
@@ -567,31 +630,62 @@ export default function WorkOrderPage() {
         }
 
         setWorkOrder({ ...workOrder, ...updates });
-        alert(`Work order status updated to ${newStatus}`);
+        addToast(`Work order status updated to ${newStatus}`, 'success');
+    };
+
+    const handleSaveProgress = async () => {
+        if (!request || !workOrder) return;
+        try {
+            await updateMaintenanceRequest(request.id, {
+                workLog: workOrder.workLog,
+                partsUsed: workOrder.partsUsed,
+                checklistItems: workOrder.checklistItems,
+                actualCosts: workOrder.actualCosts,
+                assignedTechnicians: workOrder.assignedTechnicians
+                // Note: We don't update status here to avoid state machine conflicts
+            });
+            addToast('Work order progress saved successfully', 'success');
+        } catch (error) {
+            console.error('Failed to save progress:', error);
+            addToast('Failed to save work order progress', 'error');
+        }
     };
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!workOrder || !e.target.files || e.target.files.length === 0) return;
 
         const file = e.target.files[0];
-        const newAttachment: Attachment = {
-            id: `att-${Date.now()}`,
-            type: AttachmentType.INVOICE,
-            fileName: file.name,
-            url: URL.createObjectURL(file), // Mock URL
-            uploadedAt: new Date().toISOString()
+
+        // Helper to convert file to base64
+        const fileToBase64 = (file: File): Promise<string> => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result as string);
+                reader.onerror = error => reject(error);
+            });
         };
 
-        const updatedInvoiceAttachments = [...(workOrder.invoiceAttachments || []), newAttachment];
+        try {
+            const base64Url = await fileToBase64(file);
 
-        setWorkOrder({
-            ...workOrder,
-            invoiceAttachments: updatedInvoiceAttachments
-        });
+            const newAttachment: Attachment = {
+                id: `att-${Date.now()}`,
+                type: AttachmentType.INVOICE,
+                fileName: file.name,
+                url: base64Url,
+                uploadedAt: new Date().toISOString()
+            };
 
-        // Sync if in SUBMIT_INVOICE status
-        if (workOrder.status === WorkOrderStatus.SUBMIT_INVOICE && request) {
-            try {
+            const updatedInvoiceAttachments = [...(workOrder.invoiceAttachments || []), newAttachment];
+
+            setWorkOrder({
+                ...workOrder,
+                invoiceAttachments: updatedInvoiceAttachments
+            });
+
+            // Sync if in SUBMIT_INVOICE status
+            if (workOrder.status === WorkOrderStatus.SUBMIT_INVOICE && request) {
                 const existingAttachments = request.attachments || [];
                 // Add to request attachments
                 const updatedRequestAttachments = [...existingAttachments, newAttachment];
@@ -600,10 +694,10 @@ export default function WorkOrderPage() {
                     attachments: updatedRequestAttachments
                 });
                 setRequest({ ...request, attachments: updatedRequestAttachments });
-            } catch (error) {
-                console.error('Failed to sync invoice upload:', error);
-                alert('Failed to sync invoice upload.');
             }
+        } catch (error) {
+            console.error('Failed to process invoice upload:', error);
+            addToast('Failed to process invoice upload.', 'error');
         }
     };
 
@@ -640,7 +734,7 @@ export default function WorkOrderPage() {
                 }
             } catch (error) {
                 console.error('Failed to sync invoice removal:', error);
-                alert('Failed to sync invoice removal.');
+                addToast('Failed to sync invoice removal.', 'error');
             }
         }
     };
@@ -675,9 +769,29 @@ export default function WorkOrderPage() {
     };
 
     const getEstimatedCosts = () => {
-        // In a real app, we would get this from the approved quotation
-        // For now, return 0 or mock values
-        return { parts: 0, labor: 0, other: 0, total: 0 };
+        if (!request || !request.quotations) return { parts: 0, labor: 0, other: 0, total: 0 };
+
+        // Find the approved quotation
+        const approvedQuote = request.quotations.find(q =>
+            q.id === request.selectedQuotationId ||
+            q.status === QuotationStatus.APPROVED
+        );
+
+        if (!approvedQuote) return { parts: 0, labor: 0, other: 0, total: 0 };
+
+        // Calculate 'Other' as Consumables + VAT
+        const parts = approvedQuote.partsCost || 0;
+        const labor = approvedQuote.laborCost || 0;
+        const consumables = approvedQuote.consumablesCost || 0;
+        const vat = approvedQuote.vatAmount || 0;
+
+        // 'Other' includes Consumables and VAT
+        const other = consumables + vat;
+
+        // Use grandTotal if available, otherwise calculate
+        const total = approvedQuote.grandTotal || (parts + labor + other);
+
+        return { parts, labor, other, total };
     };
 
     if (loading) return <div className="p-8 text-center text-slate-500">Loading work order...</div>;
@@ -689,8 +803,22 @@ export default function WorkOrderPage() {
 
     return (
         <div className="mx-auto max-w-7xl pb-12 space-y-8">
+            {/* Print Header */}
+            <div className="hidden print:block mb-8 border-b-2 border-slate-900 pb-4">
+                <div className="flex justify-between items-start">
+                    <div>
+                        <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-wider">Work Order Details</h1>
+                        <p className="text-sm text-slate-600 mt-1">ID: <span className="font-mono font-bold">{workOrder.id.toUpperCase()}</span></p>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-sm font-bold text-slate-900">{garage?.name}</p>
+                        <p className="text-xs text-slate-500">Date: {new Date().toLocaleDateString()}</p>
+                    </div>
+                </div>
+            </div>
+
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between print:hidden">
                 <div>
                     <div className="flex items-center gap-3 mb-1">
                         <Link href="/maintenance/work-orders" className="text-slate-400 hover:text-slate-600">
@@ -698,7 +826,7 @@ export default function WorkOrderPage() {
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
                             </svg>
                         </Link>
-                        <h1 className="text-2xl font-bold text-slate-900">Work Order #{workOrder.id.toUpperCase()}</h1>
+                        <h1 className="text-lg font-bold text-slate-900">Work Order #{workOrder.id.toUpperCase()}</h1>
                         <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium border ${getStatusColor(workOrder.status)}`}>
                             {workOrder.status}
                         </span>
@@ -708,11 +836,17 @@ export default function WorkOrderPage() {
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
+                    <button
+                        onClick={handleSaveProgress}
+                        className="rounded-lg bg-white border border-slate-300 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 shadow-sm transition-colors"
+                    >
+                        Save Progress
+                    </button>
                     {workOrder.status === WorkOrderStatus.IN_PROGRESS && allChecklistCompleted && !workOrder.actualCosts && (
                         <button
                             onClick={() => setShowCostEntryModal(true)}
                             disabled={viewMode !== 'GARAGE'}
-                            className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${viewMode === 'GARAGE' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-300 cursor-not-allowed opacity-50'}`}
+                            className={`rounded-lg px-4 py-2 text-xs font-medium text-white ${viewMode === 'GARAGE' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-300 cursor-not-allowed opacity-50'}`}
                         >
                             Enter Actual Costs
                         </button>
@@ -720,7 +854,7 @@ export default function WorkOrderPage() {
                     {workOrder.actualCosts && allChecklistCompleted && canCompleteWorkOrder && workOrder.status === WorkOrderStatus.IN_PROGRESS && (
                         <button
                             onClick={() => setShowCompletionModal(true)}
-                            className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+                            className="rounded-lg bg-green-600 px-4 py-2 text-xs font-medium text-white hover:bg-green-700"
                         >
                             Complete Work Order
                         </button>
@@ -728,7 +862,7 @@ export default function WorkOrderPage() {
                     {workOrder.status === WorkOrderStatus.COMPLETED && (
                         <button
                             onClick={() => updateWorkOrderStatus(WorkOrderStatus.SUBMIT_INVOICE)}
-                            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                            className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white hover:bg-indigo-700"
                         >
                             Submit Invoice
                         </button>
@@ -761,11 +895,130 @@ export default function WorkOrderPage() {
                             <option key={status} value={status}>{status}</option>
                         ))}
                     </select>
+                    <button
+                        onClick={() => window.print()}
+                        className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 print:hidden"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5Zm-3 0h.008v.008H15V10.5Z" />
+                        </svg>
+                        Print
+                    </button>
                 </div>
             </div>
 
+            <style jsx global>{`
+                @media print {
+                    @page {
+                        size: A4;
+                        margin: 10mm;
+                    }
+                    body {
+                        background: white;
+                        font-size: 10pt;
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                    }
+                    
+                    /* Hide Navigation and UI Elements */
+                    nav, aside, .glass-panel, .print\\:hidden {
+                        display: none !important;
+                    }
+                    
+                    /* Hide ALL Buttons and Inputs */
+                    button, input[type="file"], .btn {
+                        display: none !important;
+                    }
+                    
+                    /* Reset Layout */
+                    main {
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        width: 100% !important;
+                        max-width: none !important;
+                    }
+                    
+                    /* Linearize Grid Layouts */
+                    .grid {
+                        display: block !important;
+                    }
+                    .lg\\:grid-cols-3, .md\\:grid-cols-2, .grid-cols-4 {
+                        display: block !important;
+                    }
+                    .lg\\:col-span-2 {
+                        width: 100% !important;
+                    }
+                    
+                    /* Spacing Adjustments */
+                    .space-y-8 > :not([hidden]) ~ :not([hidden]) {
+                        margin-top: 1rem !important;
+                    }
+                    .gap-8, .gap-6, .gap-4 {
+                        gap: 0 !important;
+                    }
+                    
+                    /* Card Styling Removal */
+                    .rounded-xl, .rounded-lg {
+                        border-radius: 0 !important;
+                        border: none !important;
+                        box-shadow: none !important;
+                        background: transparent !important;
+                        padding: 0 !important;
+                        margin-bottom: 1.5rem !important;
+                    }
+                    .shadow-sm {
+                        box-shadow: none !important;
+                    }
+                    
+                    /* Typography */
+                    h1 { font-size: 24pt !important; margin-bottom: 0.5rem !important; }
+                    h3 { 
+                        font-size: 14pt !important; 
+                        border-bottom: 1px solid #000; 
+                        padding-bottom: 0.25rem; 
+                        margin-bottom: 0.5rem !important;
+                        color: #000 !important;
+                    }
+                    p, td, th, li, span, div, label {
+                        color: #000 !important;
+                    }
+                    
+                    /* Table Styling */
+                    table {
+                        width: 100% !important;
+                        border-collapse: collapse !important;
+                        margin-top: 0.5rem !important;
+                    }
+                    th {
+                        background-color: #f3f4f6 !important;
+                        border-bottom: 1px solid #000 !important;
+                        font-weight: bold !important;
+                        color: #000 !important;
+                    }
+                    td {
+                        border-bottom: 1px solid #eee !important;
+                    }
+                    
+                    /* Specific Section Visibility */
+                    /* Ensure Sidebar content (Timeline, Checklist, Techs) is visible and flows naturally */
+                    .lg\\:col-span-2 + div {
+                        margin-top: 1rem !important;
+                    }
+                    
+                    /* Hide "Edit Details" or other interactive text links */
+                    a, .text-blue-600 {
+                        text-decoration: none !important;
+                        color: #000 !important;
+                    }
+                    
+                    /* Specific Hiding */
+                    /* Hide "Add Entry", "Add Part" buttons which might be just text in some contexts */
+                    button { display: none !important; }
+                }
+            `}</style>
+
             {/* Progress Bar */}
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm print:hidden">
                 <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-slate-700">Overall Progress</span>
                     <span className="text-sm font-bold text-blue-600">{progress}%</span>
@@ -808,6 +1061,12 @@ export default function WorkOrderPage() {
                         <div>
                             <label className="block text-xs text-slate-500">Current Mileage</label>
                             <p className="text-sm font-medium text-slate-900">{vehicle?.currentMileage.toLocaleString()} km</p>
+                        </div>
+                        <div>
+                            <label className="block text-xs text-slate-500">Estimation Approved By</label>
+                            <p className="text-sm font-medium text-slate-900">
+                                {request?.estimateApproval?.approvedByName || 'N/A'}
+                            </p>
                         </div>
                     </div>
 
@@ -1227,7 +1486,7 @@ export default function WorkOrderPage() {
                                 <label className="block text-xs font-medium text-slate-700 mb-1">Hours Spent</label>
                                 <input
                                     type="number"
-                                    value={logForm.hoursSpent}
+                                    value={isNaN(logForm.hoursSpent) ? '' : logForm.hoursSpent}
                                     onChange={(e) => setLogForm({ ...logForm, hoursSpent: parseFloat(e.target.value) })}
                                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                                     step="0.5"
@@ -1295,7 +1554,7 @@ export default function WorkOrderPage() {
                                     <label className="block text-xs font-medium text-slate-700 mb-1">Quantity</label>
                                     <input
                                         type="number"
-                                        value={partForm.quantityUsed}
+                                        value={isNaN(partForm.quantityUsed) ? '' : partForm.quantityUsed}
                                         onChange={(e) => setPartForm({ ...partForm, quantityUsed: parseInt(e.target.value) })}
                                         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                                         min="1"
@@ -1305,7 +1564,7 @@ export default function WorkOrderPage() {
                                     <label className="block text-xs font-medium text-slate-700 mb-1">Unit Cost</label>
                                     <input
                                         type="number"
-                                        value={partForm.unitCost}
+                                        value={isNaN(partForm.unitCost) ? '' : partForm.unitCost}
                                         onChange={(e) => setPartForm({ ...partForm, unitCost: parseFloat(e.target.value) })}
                                         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                                         min="0"
@@ -1358,7 +1617,7 @@ export default function WorkOrderPage() {
                                 <label className="block text-xs font-medium text-slate-700 mb-1">Actual Parts Cost</label>
                                 <input
                                     type="number"
-                                    value={costForm.actualPartsCost}
+                                    value={isNaN(costForm.actualPartsCost) ? '' : costForm.actualPartsCost}
                                     onChange={(e) => setCostForm({ ...costForm, actualPartsCost: parseFloat(e.target.value) })}
                                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                                     min="0"
@@ -1369,7 +1628,7 @@ export default function WorkOrderPage() {
                                 <label className="block text-xs font-medium text-slate-700 mb-1">Actual Labor Cost</label>
                                 <input
                                     type="number"
-                                    value={costForm.actualLaborCost}
+                                    value={isNaN(costForm.actualLaborCost) ? '' : costForm.actualLaborCost}
                                     onChange={(e) => setCostForm({ ...costForm, actualLaborCost: parseFloat(e.target.value) })}
                                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                                     min="0"
@@ -1380,7 +1639,7 @@ export default function WorkOrderPage() {
                                 <label className="block text-xs font-medium text-slate-700 mb-1">Other Charges</label>
                                 <input
                                     type="number"
-                                    value={costForm.actualOtherCharges}
+                                    value={isNaN(costForm.actualOtherCharges) ? '' : costForm.actualOtherCharges}
                                     onChange={(e) => setCostForm({ ...costForm, actualOtherCharges: parseFloat(e.target.value) })}
                                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                                     min="0"

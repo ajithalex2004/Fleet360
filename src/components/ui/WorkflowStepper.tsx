@@ -2,16 +2,16 @@ import { MaintenanceStatus } from '@/types/maintenance';
 
 const steps = [
     { id: MaintenanceStatus.REQUESTED, label: 'Requested' },
-    { id: MaintenanceStatus.AWAITING_APPROVAL, label: 'Awaiting Approval' },
-    { id: MaintenanceStatus.APPROVED, label: 'Approved' },
+    { id: MaintenanceStatus.ACCEPTED, label: 'Accepted' },
     { id: MaintenanceStatus.UNDER_ESTIMATION, label: 'Estimation' },
     { id: MaintenanceStatus.UNDER_MAINTENANCE, label: 'Maintenance' },
-    { id: MaintenanceStatus.COMPLETED, label: 'Completed' },
+    { id: MaintenanceStatus.INVOICE_SUBMITTED, label: 'Invoice' },
+    { id: MaintenanceStatus.CLOSED, label: 'Closed' },
 ];
 
 interface WorkflowStepperProps {
     currentStatus: MaintenanceStatus;
-    statusTimeline?: Record<MaintenanceStatus, string>;
+    statusTimeline?: Partial<Record<MaintenanceStatus, string>>;
 }
 
 export default function WorkflowStepper({ currentStatus, statusTimeline }: WorkflowStepperProps) {

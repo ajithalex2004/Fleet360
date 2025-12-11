@@ -9,300 +9,198 @@ import {
     AlertType,
     ActionStatus,
     ServiceSchedule,
+    Invoice,
+    PaymentStatus,
+    InvoiceCategory,
+    ServiceRequest,
+    QuotationStatus,
+    Quotation,
 } from '../types/maintenance';
 
-// Mock Vehicles
-export const mockVehicles: Vehicle[] = [
-    {
-        id: 'v1',
-        make: 'Toyota',
-        model: 'Hilux',
-        type: 'Pickup Truck',
-        year: 2022,
-        licensePlate: 'DXB-12345',
-        vin: 'JTE1234567890',
-        currentMileage: 45000,
-        status: 'Active',
-        registrationExpiry: '2025-12-01',
-        insuranceExpiry: '2025-12-01',
-    },
-    {
-        id: 'v2',
-        make: 'Nissan',
-        model: 'Urvan',
-        type: 'Van',
-        year: 2021,
-        licensePlate: 'DXB-67890',
-        vin: 'JN11234567890',
-        currentMileage: 82000,
-        status: 'In Service',
-        registrationExpiry: '2024-06-15',
-        insuranceExpiry: '2024-06-15',
-    },
-    {
-        id: 'v3',
-        make: 'Ford',
-        model: 'Transit',
-        type: 'Van',
-        year: 2023,
-        licensePlate: 'DXB-54321',
-        vin: 'WF01234567890',
-        currentMileage: 12000,
-        status: 'Active',
-        registrationExpiry: '2026-01-20',
-        insuranceExpiry: '2026-01-20',
-    },
-];
+// DEPRECATED: These arrays are kept for backward compatibility during migration.
+// Use the async functions (getVehicles, etc.) instead.
+export const mockVehicles: Vehicle[] = [];
+export const mockDrivers: Driver[] = [];
+export const mockGarages: Garage[] = [];
+export const mockMaintenanceRequests: MaintenanceRequest[] = [];
+export const mockAlerts: Alert[] = [];
+export const mockSchedules: ServiceSchedule[] = [];
+export const mockInvoices: Invoice[] = [];
+export let mockServiceRequests: ServiceRequest[] = [];
+export const mockAlertConfigs: any[] = []; // Placeholder
 
-// Mock Drivers
-export const mockDrivers: Driver[] = [
-    {
-        id: 'd1',
-        name: 'Ahmed Al-Farsi',
-        licenseNumber: 'UAE-1234567',
-        licenseExpiry: '2026-05-10',
-        assignedVehicleId: 'v1',
-        contactNumber: '+971501234567',
+// API Helpers
+export const api = {
+    get: async (endpoint: string) => {
+        const res = await fetch(`/api/${endpoint}`, { cache: 'no-store' });
+        if (!res.ok) {
+            let errorDetails = `Status: ${res.status}`;
+            try {
+                const text = await res.text();
+                if (text) errorDetails += `, Details: ${text}`;
+            } catch (e) {
+                // Ignore text reading error
+            }
+            throw new Error(`Failed to fetch ${endpoint} (${errorDetails})`);
+        }
+        return res.json();
     },
-    {
-        id: 'd2',
-        name: 'John Smith',
-        licenseNumber: 'UAE-7654321',
-        licenseExpiry: '2024-08-22',
-        assignedVehicleId: 'v2',
-        contactNumber: '+971559876543',
+    post: async (endpoint: string, data: any) => {
+        const response = await fetch(`/api/${endpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to POST ${endpoint}: ${errorText}`);
+        }
+        return response.json();
     },
-];
+    delete: async (endpoint: string) => {
+        const response = await fetch(`/api/${endpoint}`, {
+            method: 'DELETE',
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to DELETE ${endpoint}: ${errorText}`);
+        }
+        return response.json();
+    },
+    patch: async (endpoint: string, data: any) => {
+        const response = await fetch(`/api/${endpoint}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to PATCH ${endpoint}: ${errorText}`);
+        }
+        return response.json();
+    },
+    put: async (endpoint: string, data: any) => {
+        const response = await fetch(`/api/${endpoint}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to PUT ${endpoint}: ${errorText}`);
+        }
+        return response.json();
+    },
+};
+// Vehicles
+export const getVehicles = () => api.get('vehicles');
+export const getVehicleById = async (id: string) => api.get(`vehicles/${id}`);
+export const createVehicle = (vehicle: any) => api.post('vehicles', vehicle);
+export const updateVehicle = (id: string, updates: any) => api.patch(`vehicles/${id}`, updates);
+export const deleteVehicle = (id: string) => api.delete(`vehicles/${id}`);
 
-// Mock Garages
-export const mockGarages: Garage[] = [
-    {
-        id: 'g1',
-        name: 'AutoPro Service Center',
-        location: 'Al Quoz, Dubai',
-        contactPerson: 'Mohammed Ali',
-        designation: 'Service Manager',
-        email: 'mohammed.ali@autopro.ae',
-        contactNumber: '+97141234567',
-        specialties: ['General Service', 'Tires', 'AC', 'Oil Change', 'Filter Replacement', 'Tire Rotation', 'Brake Inspection', 'AC System'],
-        isInternal: false,
-    },
-    {
-        id: 'g2',
-        name: 'Dynatrade',
-        location: 'Nadd Al Hamar, Dubai',
-        contactPerson: 'Suresh Kumar',
-        designation: 'Operations Head',
-        email: 'suresh@dynatrade.ae',
-        contactNumber: '+97149876543',
-        specialties: ['Preventive', 'Corrective', 'Emergency', 'Inspection'],
-        isInternal: false,
-    },
-];
+// Drivers
+export const getDrivers = () => api.get('drivers');
+export const getDriverById = async (id: string) => api.get(`drivers/${id}`);
+export const createDriver = (driver: any) => api.post('drivers', driver);
+export const updateDriver = (id: string, updates: any) => api.patch(`drivers/${id}`, updates);
+export const deleteDriver = (id: string) => api.delete(`drivers/${id}`);
 
-// Mock Maintenance Requests
-export const mockMaintenanceRequests: MaintenanceRequest[] = [
-    {
-        id: 'MR#241001',
-        vehicleId: 'v2',
-        driverId: 'd2',
-        requestDate: '2024-05-20T09:00:00Z',
-        description: 'Engine making strange rattling noise when accelerating.',
-        status: MaintenanceStatus.UNDER_MAINTENANCE,
-        garageId: 'g2',
-        estimatedCost: 1500,
-        statusTimeline: {
-            [MaintenanceStatus.REQUESTED]: '2024-05-20T09:00:00Z',
-            [MaintenanceStatus.AWAITING_APPROVAL]: '2024-05-20T10:30:00Z',
-            [MaintenanceStatus.APPROVED]: '2024-05-20T14:15:00Z',
-            [MaintenanceStatus.UNDER_ESTIMATION]: '2024-05-21T09:00:00Z',
-            [MaintenanceStatus.UNDER_MAINTENANCE]: '2024-05-22T08:30:00Z',
-        } as Record<MaintenanceStatus, string>,
-        comments: [
-            {
-                id: 'c1',
-                author: 'John Smith',
-                text: 'Noise started this morning.',
-                timestamp: '2024-05-20T09:05:00Z',
-            },
-            {
-                id: 'c2',
-                author: 'Fleet Manager',
-                text: 'Approved for inspection at Dynatrade.',
-                timestamp: '2024-05-20T10:00:00Z',
-            },
-        ],
-    },
-    {
-        id: 'MR#241002',
-        vehicleId: 'v1',
-        driverId: 'd1',
-        requestDate: '2024-05-24T14:30:00Z',
-        description: 'Periodic maintenance due (50k service).',
-        status: MaintenanceStatus.UNDER_ESTIMATION,
-        comments: [],
-    },
-    {
-        id: 'MR#241003',
-        vehicleId: 'v3',
-        driverId: 'd2',
-        requestDate: '2024-05-10T08:00:00Z',
-        description: 'Brake pad replacement',
-        status: MaintenanceStatus.MAINTENANCE_COMPLETED,
-        garageId: 'g1',
-        estimatedCost: 600,
-        actualCost: 650,
-        completionDate: '2024-05-15T16:00:00Z',
-        statusTimeline: {
-            [MaintenanceStatus.REQUESTED]: '2024-05-10T08:00:00Z',
-            [MaintenanceStatus.APPROVED]: '2024-05-10T10:00:00Z',
-            [MaintenanceStatus.UNDER_MAINTENANCE]: '2024-05-11T09:00:00Z',
-            [MaintenanceStatus.MAINTENANCE_COMPLETED]: '2024-05-15T16:00:00Z',
-        } as Record<MaintenanceStatus, string>,
-        comments: [],
-    },
-    {
-        id: 'MR#241004',
-        vehicleId: 'v2',
-        driverId: 'd2',
-        requestDate: '2024-05-25T10:00:00Z',
-        description: 'AC not cooling properly.',
-        status: MaintenanceStatus.UNDER_ESTIMATION,
-        comments: [],
-    }
-];
+// Users
+export const getUsers = () => api.get('users');
+export const createUser = (user: any) => api.post('users', user);
+export const updateUser = (id: string, updates: any) => api.patch(`users/${id}`, updates);
+export const deleteUser = (id: string) => api.delete(`users/${id}`);
 
-// Mock Alerts
-export const mockAlerts: Alert[] = [
-    {
-        id: 'a1',
-        type: AlertType.REGISTRATION_RENEWAL,
-        title: 'Vehicle Registration Expiring Soon',
-        description: 'Registration for Nissan Urvan (DXB-67890) expires in 25 days.',
-        severity: AlertSeverity.HIGH,
-        dateCreated: '2024-05-21T08:00:00Z',
-        relatedEntityId: 'v2',
-        status: ActionStatus.PENDING,
-    },
-    {
-        id: 'a2',
-        type: AlertType.LICENSE_RENEWAL,
-        title: 'Driver License Expiry Warning',
-        description: 'License for John Smith expires in 3 months.',
-        severity: AlertSeverity.MEDIUM,
-        dateCreated: '2024-05-22T08:00:00Z',
-        relatedEntityId: 'd2',
-        status: ActionStatus.ACKNOWLEDGED,
-        assignedTo: 'HR Manager',
-    },
-    {
-        id: 'a3',
-        type: AlertType.PREVENTIVE_MAINTENANCE,
-        title: 'Service Due: Toyota Hilux',
-        description: '50,000km service due for DXB-12345.',
-        severity: AlertSeverity.MEDIUM,
-        dateCreated: '2024-05-24T08:00:00Z',
-        relatedEntityId: 'v1',
-        status: ActionStatus.PENDING,
-    },
-];
+// Garages
+export const getGarages = () => api.get('garages');
+export const createGarage = (garage: Garage) => api.post('garages', garage);
+export const updateGarage = (id: string, garage: Garage) => api.put(`garages/${id}`, garage);
+export const deleteGarage = (id: string) => api.delete(`garages/${id}`);
 
-// Mock Service Schedules
-export const mockSchedules: ServiceSchedule[] = [
-    {
-        id: 's1',
-        vehicleId: 'v1',
-        serviceType: 'Regular Service (10k)',
-        intervalMonths: 6,
-        intervalMileage: 10000,
-        lastServiceDate: '2023-12-01',
-        lastServiceMileage: 40000,
-        nextServiceDate: '2024-06-01',
-        nextServiceMileage: 50000,
-    },
-    {
-        id: 's2',
-        vehicleId: 'v2',
-        serviceType: 'Major Service (40k)',
-        intervalMonths: 12,
-        intervalMileage: 40000,
-        lastServiceDate: '2023-06-15',
-        lastServiceMileage: 40000,
-        nextServiceDate: '2024-06-15',
-        nextServiceMileage: 80000,
-    },
-];
 
-// Alert Configuration Interface
-export interface AlertConfig {
-    id: string;
-    alertType: string;
-    alertFor: 'Vehicle' | 'Driver';
-    thresholdType: 'Odometer' | 'Date';
-    thresholdValue: number;
-    notificationEnabled: boolean;
-    whatsappEnabled?: boolean;
-    assignedIds: string[];
-}
 
-// Mock Alert Configurations
-export const mockAlertConfigs: AlertConfig[] = [
-    {
-        id: 'ac1',
-        alertType: 'Maintenance Service',
-        alertFor: 'Vehicle',
-        thresholdType: 'Odometer',
-        thresholdValue: 1000, // Alert 1000km before due
-        notificationEnabled: true,
-        whatsappEnabled: true,
-        assignedIds: ['v1', 'v2'],
-    },
-    {
-        id: 'ac2',
-        alertType: 'License Expiry',
-        alertFor: 'Driver',
-        thresholdType: 'Date',
-        thresholdValue: 30, // Alert 30 days before expiry
-        notificationEnabled: true,
-        whatsappEnabled: false,
-        assignedIds: ['d1'],
-    },
-];
+// Maintenance Requests
+export const getMaintenanceRequests = () => api.get('maintenance-requests');
+export const getMaintenanceRequestById = (id: string) => api.get(`maintenance-requests/${id}`);
+export const createMaintenanceRequest = (request: Omit<MaintenanceRequest, 'id' | 'status' | 'comments'>) => api.post('maintenance-requests', request);
+export const updateMaintenanceRequest = (id: string, updates: Partial<MaintenanceRequest>) => api.patch(`maintenance-requests/${id}`, updates);
 
-// Helper functions to simulate API calls
-export const getVehicles = () => Promise.resolve(mockVehicles);
-export const getVehicleById = (id: string) => Promise.resolve(mockVehicles.find((v) => v.id === id));
-export const getDrivers = () => Promise.resolve(mockDrivers);
-export const getDriverById = (id: string) => Promise.resolve(mockDrivers.find((d) => d.id === id));
-export const getMaintenanceRequests = () => Promise.resolve(mockMaintenanceRequests);
-export const getAlerts = () => Promise.resolve(mockAlerts);
-export const getGarages = () => Promise.resolve(mockGarages);
+// Quotations
+export const createQuotation = (quotation: any) => api.post('quotations', quotation);
+export const updateQuotation = (id: string, updates: any) => api.patch(`quotations/${id}`, updates);
+
+// Work Orders
+export const createWorkOrder = (workOrder: any) => api.post('work-orders', workOrder);
+
+// Alerts
+export const getAlerts = () => api.get('alerts');
+export const createAlert = (alert: any) => api.post('alerts', alert);
+export const updateAlert = (id: string, updates: Partial<Alert>) => api.patch(`alerts/${id}`, updates);
+
+// Invoices (Mock for now)
+export const getInvoices = () => Promise.resolve(mockInvoices);
+export const createInvoice = (invoice: Invoice) => {
+    mockInvoices.push(invoice);
+    return Promise.resolve(invoice);
+};
+
+// Service Requests
+export const getServiceRequests = async () => {
+    const requests: ServiceRequest[] = await api.get('service-requests');
+    return requests.map(r => ({
+        ...r,
+        date: r.date.toString().split('T')[0]
+    }));
+};
+
+export const createServiceRequest = (request: ServiceRequest) => {
+    const payload = {
+        ...request,
+        date: new Date(request.date).toISOString()
+    };
+    return api.post('service-requests', payload);
+};
+
+export const updateServiceRequest = (updatedRequest: ServiceRequest) => {
+    const payload = {
+        ...updatedRequest,
+        date: new Date(updatedRequest.date).toISOString()
+    };
+    return api.patch(`service-requests/${updatedRequest.id}`, payload);
+};
+
+
+// Schedules (Mock for now)
 export const getSchedules = () => Promise.resolve(mockSchedules);
 
 
-export const createMaintenanceRequest = (request: Omit<MaintenanceRequest, 'id' | 'status' | 'comments'>) => {
-    const currentYear = new Date().getFullYear().toString().slice(-2);
-    const nextIdNumber = 1001 + mockMaintenanceRequests.length;
-    const newId = `MR#${currentYear}${nextIdNumber}`;
+import { sendNotification } from '../utils/notifications';
 
-    const newRequest: MaintenanceRequest = {
-        ...request,
-        id: newId,
-        status: MaintenanceStatus.REQUESTED,
-        comments: [],
-    };
-    mockMaintenanceRequests.push(newRequest);
-    return Promise.resolve(newRequest);
+export const sendEmailNotification = async (to: string, subject: string, body: string) => {
+    console.log(`[EMAIL-MOCK-OVERRIDE] To: ${to}, Subject: ${subject}`);
+    await sendNotification(to, subject, body, 'Email', 'Service Request Update');
+    return Promise.resolve();
 };
 
-export const updateMaintenanceRequest = (id: string, updates: Partial<MaintenanceRequest>) => {
-    console.log('updateMaintenanceRequest called with:', { id, updates });
-    console.log('Available request IDs:', mockMaintenanceRequests.map(r => r.id));
-    const index = mockMaintenanceRequests.findIndex((r) => r.id === id);
-    console.log('Found index:', index);
-    if (index !== -1) {
-        mockMaintenanceRequests[index] = { ...mockMaintenanceRequests[index], ...updates };
-        return Promise.resolve(mockMaintenanceRequests[index]);
+// Alert Configs
+export const getAlertConfigs = () => api.get('alert-configs');
+export const createAlertConfig = (config: any) => api.post('alert-configs', config);
+export const updateAlertConfig = (id: string, updates: any) => api.patch(`alert-configs/${id}`, updates);
+export const deleteAlertConfig = (id: string) => api.delete(`alert-configs/${id}`);
+// File Upload
+export const uploadFile = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`/api/upload`, {
+        method: 'POST',
+        body: formData,
+    });
+
+    if (!response.ok) {
+        throw new Error('File upload failed');
     }
-    return Promise.reject(new Error('Request not found'));
+
+    return response.json();
 };

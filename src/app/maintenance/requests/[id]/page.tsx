@@ -17,14 +17,19 @@ import {
 } from '@/types/maintenance';
 import {
     getMaintenanceRequests,
+    getMaintenanceRequestById,
     getVehicles,
     getGarages,
-    updateMaintenanceRequest
+    updateMaintenanceRequest,
+    createQuotation,
+    createGarage
 } from '@/services/mockData';
+import { sendNotification } from '@/utils/notifications';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { getNextStatuses } from '@/services/workflowStateMachine';
 import { matchGarages } from '@/services/garageMatching';
 import { EnhancedGarage } from '@/types/maintenance';
+import { useToast } from '@/contexts/ToastContext';
 
 // Comprehensive Maintenance Jobs Database
 const MAINTENANCE_JOBS_DATABASE = {
@@ -134,6 +139,7 @@ const MAINTENANCE_JOBS_DATABASE = {
 
 export default function RequestDetailsPage() {
     const router = useRouter();
+    const { addToast } = useToast();
     const params = useParams();
     const rawId = params?.id as string;
     // Ensure ID is decoded (Next.js might return it encoded)
@@ -163,6 +169,18 @@ export default function RequestDetailsPage() {
     const [showHistoryModal, setShowHistoryModal] = useState(false);
     const [historyGarageId, setHistoryGarageId] = useState<string | null>(null);
 
+    // Garage Picker State
+    const [showGaragePicker, setShowGaragePicker] = useState(false);
+    const [garageSearchTerm, setGarageSearchTerm] = useState('');
+
+    const handleAddGarageToShortlist = (garageId: string) => {
+        if (!candidateGarageIds.includes(garageId)) {
+            setCandidateGarageIds(prev => [...prev, garageId]);
+            addToast('Garage added to shortlist', 'success');
+        }
+        setShowGaragePicker(false);
+    };
+
     const handleViewHistory = (garageId: string) => {
         setHistoryGarageId(garageId);
         setShowHistoryModal(true);
@@ -170,71 +188,85 @@ export default function RequestDetailsPage() {
 
     useEffect(() => {
         const fetchData = async () => {
-            const [allRequests, allVehicles, allGarages] = await Promise.all([
-                getMaintenanceRequests(),
-                getVehicles(),
-                getGarages()
-            ]);
+            try {
+                const [requestData, allVehicles, allGarages] = await Promise.all([
+                    getMaintenanceRequestById(id),
+                    getVehicles(),
+                    getGarages()
+                ]);
 
-            const foundRequest = allRequests.find(r => r.id === id);
-            if (foundRequest) {
-                setRequest(foundRequest);
-                const foundVehicle = allVehicles.find(v => v.id === foundRequest.vehicleId);
-                setVehicle(foundVehicle || null);
+                if (requestData) {
+                    setRequest(requestData);
+                    const foundVehicle = allVehicles.find((v: Vehicle) => v.id === requestData.vehicleId);
+                    setVehicle(foundVehicle || null);
 
-                // Initialize candidate garages if they exist
-                if (foundRequest.candidateGarageIds) {
-                    setCandidateGarageIds(foundRequest.candidateGarageIds);
-                }
+                    // Initialize candidate garages if they exist (Cleanse stale IDs)
+                    if (requestData.candidateGarageIds) {
+                        const validGarageIds = allGarages.map((g: Garage) => g.id);
+                        const cleanIds = requestData.candidateGarageIds.filter((id: string) => validGarageIds.includes(id));
+                        setCandidateGarageIds(cleanIds);
 
-                // Initialize quotations if they exist
-                if (foundRequest.quotations) {
-                    const initialQuotations: { [garageId: string]: { amount: number, attachmentUrl?: string, attachmentName?: string, estimatedDate?: string } } = {};
-                    foundRequest.quotations.forEach(q => {
-                        initialQuotations[q.garageId] = {
-                            amount: q.totalCost,
-                            attachmentUrl: q.attachments?.[0]?.url,
-                            attachmentName: q.attachments?.[0]?.fileName,
-                            estimatedDate: q.estimatedCompletionDate ? q.estimatedCompletionDate.split('T')[0] : ''
-                        };
-                    });
-                    setQuotations(initialQuotations);
-                }
+                        // If we cleaned any IDs, we should probably update the backend to clear the rot, but for now just accessing clean state is enough to fix the crash.
+                        if (cleanIds.length !== requestData.candidateGarageIds.length) {
+                            console.warn('Found and removed stale Garage IDs:', requestData.candidateGarageIds.length - cleanIds.length);
+                        }
+                    }
 
-                // Auto-select garages if status is APPROVED (Accepted) and no candidates selected
-                if (foundRequest.status === MaintenanceStatus.APPROVED && (!foundRequest.candidateGarageIds || foundRequest.candidateGarageIds.length === 0)) {
-                    const matches = matchGarages(foundRequest, allGarages as EnhancedGarage[]);
-                    const topMatches = matches.slice(0, 5).map(m => m.garageId);
-                    setCandidateGarageIds(topMatches);
-                    if (topMatches.length > 0) {
-                        console.log(`Auto-selected ${topMatches.length} garages for Accepted request.`);
+                    // Initialize quotations if they exist
+                    if (requestData.quotations) {
+                        const initialQuotations: { [garageId: string]: any } = {};
+                        requestData.quotations.forEach((q: Quotation) => {
+                            initialQuotations[q.garageId] = {
+                                amount: q.totalCost,
+                                partsCost: q.partsCost,
+                                laborCost: q.laborCost,
+                                attachmentUrl: q.attachments?.[0]?.url,
+                                attachmentName: q.attachments?.[0]?.fileName,
+                                estimatedDate: q.estimatedCompletionDate ? q.estimatedCompletionDate.split('T')[0] : ''
+                            };
+                        });
+                        setQuotations(initialQuotations);
                     }
                 }
+                setGarages(allGarages || []);
+            } catch (error) {
+                console.error("Error fetching request details:", error);
+                addToast("Failed to load request details", "error");
+            } finally {
+                setLoading(false);
             }
-            setGarages(allGarages);
-            setLoading(false);
         };
         fetchData();
-    }, [id]);
+    }, [id, addToast]);
+
 
     const handleStatusUpdate = async (newStatus: MaintenanceStatus) => {
         if (!request) return;
         try {
             const updates: Partial<MaintenanceRequest> = { status: newStatus };
 
-            // Generate Work Order Number if moving to APPROVED (Accepted)
-            if (newStatus === MaintenanceStatus.APPROVED && !request.workOrderNo) {
+            // Generate Work Order Number if moving to ESTIMATION_APPROVED
+            if (newStatus === MaintenanceStatus.ESTIMATION_APPROVED && !request.workOrderNo) {
                 const date = new Date();
                 const month = (date.getMonth() + 1).toString().padStart(2, '0');
                 updates.workOrderNo = `WO-${month}-${request.id}`;
             }
 
+            // Add History
+            const historyEntry = {
+                status: newStatus,
+                date: new Date().toISOString(),
+                note: `Status updated to ${newStatus}`,
+                actor: 'System'
+            };
+            updates.history = [...(request.history || []), historyEntry];
+
             await updateMaintenanceRequest(request.id, updates);
             setRequest({ ...request, ...updates });
-            alert(`Status updated to ${newStatus}`);
+            addToast(`Status updated to ${newStatus}`, 'success');
         } catch (error) {
             console.error('Failed to update status', error);
-            alert('Failed to update status');
+            addToast('Failed to update status', 'error');
         }
     };
 
@@ -263,10 +295,10 @@ export default function RequestDetailsPage() {
             setRequest({ ...request, ...editedFields });
             setIsEditMode(false);
             setEditedFields({});
-            alert('Changes saved successfully');
+            addToast('Changes saved successfully', 'success');
         } catch (error) {
             console.error('Failed to save changes', error);
-            alert('Failed to save changes');
+            addToast('Failed to save changes', 'error');
         }
     };
 
@@ -373,20 +405,31 @@ export default function RequestDetailsPage() {
     };
 
     const handleSendRFQ = async () => {
-        if (candidateGarageIds.length === 0) {
-            alert('Please select at least one garage to send RFQ.');
+        console.log('handleSendRFQ called');
+        if (!request) {
+            console.log('Request is null');
             return;
         }
-        if (!request) return;
+        console.log('Current Request:', request);
+        console.log('Validation Check:', {
+            odometer: request.odometer,
+            type: request.maintenanceType,
+            jobs: request.maintenanceJobs
+        });
 
         // Validation: Check for required fields
         const missingFields = [];
-        if (!request.odometer) missingFields.push('Odometer Reading');
+        if (request.odometer === undefined || request.odometer === null) missingFields.push('Odometer Reading');
         if (!request.maintenanceType) missingFields.push('Maintenance Type');
         if (!request.maintenanceJobs || request.maintenanceJobs.length === 0) missingFields.push('Maintenance Jobs');
 
         if (missingFields.length > 0) {
-            alert(`Please provide the following details before sending RFQ:\n- ${missingFields.join('\n- ')}`);
+            addToast(`Please provide the following details before sending RFQ: ${missingFields.join(', ')}`, 'error');
+            return;
+        }
+
+        if (candidateGarageIds.length === 0) {
+            addToast('Please select at least one garage to send RFQ.', 'error');
             return;
         }
 
@@ -400,19 +443,42 @@ export default function RequestDetailsPage() {
         console.groupEnd();
 
         // Save the selected candidates to the request and update status
+        const historyEntry = {
+            status: MaintenanceStatus.UNDER_ESTIMATION,
+            date: new Date().toISOString(),
+            note: `RFQ sent to ${selectedGarages.length} garage(s)`,
+            actor: 'System'
+        };
+        const updatedHistory = [...(request.history || []), historyEntry];
+
         await updateMaintenanceRequest(request.id, {
             candidateGarageIds,
-            status: MaintenanceStatus.UNDER_ESTIMATION
+            status: MaintenanceStatus.UNDER_ESTIMATION,
+            history: updatedHistory
         });
-        setRequest({ ...request, status: MaintenanceStatus.UNDER_ESTIMATION });
+        setRequest({ ...request, status: MaintenanceStatus.UNDER_ESTIMATION, history: updatedHistory });
 
-        alert(`RFQ sent successfully to ${selectedGarages.length} garage(s)!\nStatus updated to Under Estimation.\nCheck console for email content.`);
+        addToast(`RFQ sent successfully to ${selectedGarages.length} garage(s)! Status updated to Under Estimation.`, 'success');
     };
 
     // Quotation Management State
-    const [quotations, setQuotations] = useState<{ [garageId: string]: { amount: number, attachmentUrl?: string, attachmentName?: string, estimatedDate?: string } }>({});
+    const [quotations, setQuotations] = useState<{
+        [garageId: string]: {
+            amount: number;
+            partsCost?: number;
+            laborCost?: number;
+            totalCost?: number;
+            attachmentUrl?: string;
+            attachmentName?: string;
+            estimatedDate?: string;
+            parts?: any[];
+            labor?: any[];
+            notes?: string;
+            validUntil?: string;
+        }
+    }>({});
 
-    const handleQuotationChange = (garageId: string, field: 'amount' | 'attachmentUrl' | 'attachmentName' | 'estimatedDate', value: any) => {
+    const handleQuotationChange = (garageId: string, field: string, value: any) => {
         setQuotations(prev => ({
             ...prev,
             [garageId]: {
@@ -433,8 +499,13 @@ export default function RequestDetailsPage() {
     const handleSaveQuotation = async (garageId: string) => {
         if (!request) return;
         const quote = quotations[garageId];
-        if (!quote || !quote.amount) {
-            alert('Please enter an amount before saving.');
+
+        const parts = quote?.partsCost || 0;
+        const labor = quote?.laborCost || 0;
+        const total = parts + labor;
+
+        if (!quote || total <= 0) {
+            addToast('Please enter an amount (Parts or Labor) before saving.', 'error');
             return;
         }
 
@@ -446,35 +517,39 @@ export default function RequestDetailsPage() {
             garageId,
             garageName: garages.find(g => g.id === garageId)?.name || 'Unknown Garage',
             quotationDate: new Date().toISOString(),
-            validUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
-            laborCost: 0,
-            partsCost: quote.amount,
-            totalCost: quote.amount,
-            currency: 'AED',
-            parts: [],
-            estimatedDuration: 0,
-            estimatedCompletionDate: quote.estimatedDate,
+            validUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            laborCost: labor,
+            partsCost: parts,
+            totalCost: total,
+            consumablesCost: 0,
+            vatAmount: total * 0.05,
+            grandTotal: total * 1.05, // Assuming 5% VAT
+            estimatedDuration: 24, // Default fallback
+            estimatedCompletionDate: quote.estimatedDate ? new Date(quote.estimatedDate).toISOString() : undefined,
             status: QuotationStatus.PENDING,
-            submittedBy: 'Vendor',
+            submittedBy: 'Fleet Manager (Manual)',
+            parts: [], // Manual entry doesn't have detailed parts list yet
+            labor: [],
             attachments: quote.attachmentUrl ? [{
                 id: `att-${Date.now()}`,
                 type: AttachmentType.QUOTATION,
-                fileName: quote.attachmentName || 'Quotation.pdf',
+                fileName: quote.attachmentName || 'quotation.pdf',
                 url: quote.attachmentUrl,
                 uploadedAt: new Date().toISOString()
             }] : []
         };
 
-        // Append new quotation to history (do not remove existing)
-        const updatedQuotations = [...(request.quotations || []), newQuotation];
-
+        // Create quotation
         try {
-            await updateMaintenanceRequest(request.id, { quotations: updatedQuotations });
+            const { garageName, ...payload } = newQuotation;
+            await createQuotation(payload);
+
+            const updatedQuotations = [...(request.quotations || []), newQuotation];
             setRequest({ ...request, quotations: updatedQuotations });
-            alert('Quotation saved successfully!');
+            addToast('Quotation saved successfully!', 'success');
         } catch (error) {
             console.error('Failed to save quotation:', error);
-            alert('Failed to save quotation.');
+            addToast('Failed to save quotation.', 'error');
         }
     };
 
@@ -482,11 +557,12 @@ export default function RequestDetailsPage() {
         const quotationSummary = candidateGarageIds.map(garageId => {
             const garage = garages.find(g => g.id === garageId);
             const quote = quotations[garageId];
-            if (!quote || !quote.amount) return '';
+            const total = quote?.totalCost || quote?.amount || ((quote?.partsCost || 0) + (quote?.laborCost || 0));
+            if (!quote || total <= 0) return '';
 
             return `
                 <p>
-                    <strong>${garage?.name}</strong> – AED ${quote.amount.toFixed(2)} – ETA: ${quote.estimatedDate ? new Date(quote.estimatedDate).toLocaleDateString() : 'N/A'}
+                    <strong>${garage?.name}</strong> – AED ${total.toFixed(2)} – ETA: ${quote.estimatedDate ? new Date(quote.estimatedDate).toLocaleDateString() : 'N/A'}
                 </p>
             `;
         }).join('');
@@ -521,9 +597,13 @@ export default function RequestDetailsPage() {
 
     const handleSendForApproval = async () => {
         if (!request) return;
-        const hasQuotes = candidateGarageIds.some(id => quotations[id]?.amount > 0);
+        const hasQuotes = candidateGarageIds.some(id => {
+            const q = quotations[id];
+            const total = q?.totalCost || q?.amount || ((q?.partsCost || 0) + (q?.laborCost || 0));
+            return total > 0;
+        });
         if (!hasQuotes) {
-            alert('Please enter at least one quotation amount before sending for approval.');
+            addToast('Please enter at least one quotation amount before sending for approval.', 'error');
             return;
         }
 
@@ -536,9 +616,19 @@ export default function RequestDetailsPage() {
 
         // Construct full Quotation objects
         const finalQuotations: Quotation[] = candidateGarageIds
-            .filter(id => quotations[id]?.amount > 0)
+            .filter(id => {
+                const q = quotations[id];
+                const total = q?.totalCost || q?.amount || ((q?.partsCost || 0) + (q?.laborCost || 0));
+                return total > 0;
+            })
             .map(id => {
                 const quote = quotations[id];
+                const parts = quote.partsCost || 0;
+                const labor = quote.laborCost || 0;
+                // Fallback to amount if neither parts nor labor is set (legacy behavior)
+                const effectiveParts = (parts === 0 && labor === 0 && quote.amount > 0) ? quote.amount : parts;
+                const total = effectiveParts + labor;
+
                 return {
                     id: `q-${Date.now()}-${id}`,
                     requestId: request.id,
@@ -546,13 +636,17 @@ export default function RequestDetailsPage() {
                     garageName: garages.find(g => g.id === id)?.name || 'Unknown',
                     quotationDate: new Date().toISOString(),
                     validUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-                    laborCost: 0,
-                    partsCost: quote.amount,
-                    totalCost: quote.amount,
+                    laborCost: labor,
+                    partsCost: effectiveParts,
+                    totalCost: total,
+                    consumablesCost: 0,
+                    vatAmount: total * 0.05,
+                    grandTotal: total * 1.05,
                     currency: 'AED',
                     parts: [],
+                    labor: [],
                     estimatedDuration: 0,
-                    estimatedCompletionDate: quote.estimatedDate,
+                    estimatedCompletionDate: quote.estimatedDate ? new Date(quote.estimatedDate).toISOString() : undefined,
                     status: QuotationStatus.PENDING,
                     submittedBy: 'Vendor',
                     attachments: quote.attachmentUrl ? [{
@@ -569,19 +663,36 @@ export default function RequestDetailsPage() {
             // Append new quotations to history
             const updatedQuotations = [...(request.quotations || []), ...finalQuotations];
 
+            // Create quotations individually
+            for (const quote of finalQuotations) {
+                const { garageName, ...payload } = quote;
+                await createQuotation(payload);
+            }
+
+            const historyEntry = {
+                status: MaintenanceStatus.PENDING_ESTIMATION_APPROVAL,
+                date: new Date().toISOString(),
+                note: 'Sent for estimation approval',
+                actor: 'System'
+            };
+            const updatedHistory = [...(request.history || []), historyEntry];
+
+            // Update request status only
             await updateMaintenanceRequest(request.id, {
                 status: MaintenanceStatus.PENDING_ESTIMATION_APPROVAL,
-                quotations: updatedQuotations
+                history: updatedHistory
             });
             setRequest({
                 ...request,
                 status: MaintenanceStatus.PENDING_ESTIMATION_APPROVAL,
-                quotations: updatedQuotations
+                quotations: updatedQuotations,
+                history: updatedHistory
             });
-            alert('Comparison email sent to authorities!\nStatus updated to Pending Estimation Approval.');
+
+            addToast('Comparison email sent to authorities! Status updated to Pending Estimation Approval.', 'success');
         } catch (error) {
             console.error('Failed to send for approval:', error);
-            alert('Failed to send for approval.');
+            addToast('Failed to send for approval.', 'error');
         }
     };
 
@@ -596,17 +707,26 @@ export default function RequestDetailsPage() {
         input.onchange = async (e) => {
             const file = (e.target as HTMLInputElement).files?.[0];
             if (file && request) {
-                const newAttachment: Attachment = {
-                    id: `att${Date.now()}`,
-                    type: selectedAttachmentType,
-                    fileName: file.name,
-                    url: URL.createObjectURL(file),
-                    uploadedAt: new Date().toISOString(),
-                };
-                const updatedAttachments = [...(request.attachments || []), newAttachment];
-                await updateMaintenanceRequest(request.id, { attachments: updatedAttachments });
-                setRequest({ ...request, attachments: updatedAttachments });
-                setShowAttachmentModal(false);
+                try {
+                    addToast('Uploading attachment...', 'info');
+                    const uploadRes = await uploadFile(file);
+
+                    const newAttachment: Attachment = {
+                        id: `att${Date.now()}`,
+                        type: selectedAttachmentType,
+                        fileName: file.name,
+                        url: uploadRes.url,
+                        uploadedAt: new Date().toISOString(),
+                    };
+                    const updatedAttachments = [...(request.attachments || []), newAttachment];
+                    await updateMaintenanceRequest(request.id, { attachments: updatedAttachments });
+                    setRequest({ ...request, attachments: updatedAttachments });
+                    setShowAttachmentModal(false);
+                    addToast('Attachment uploaded successfully', 'success');
+                } catch (error) {
+                    console.error('Failed to upload:', error);
+                    addToast('Failed to upload attachment', 'error');
+                }
             }
         };
         input.click();
@@ -627,7 +747,7 @@ export default function RequestDetailsPage() {
 
     const handleApproveEstimate = async () => {
         if (!selectedGarageForApproval) {
-            alert('Please select a garage to approve.');
+            addToast('Please select a garage to approve.', 'error');
             return;
         }
         if (!request) return;
@@ -646,7 +766,9 @@ export default function RequestDetailsPage() {
             // If we are here, it means we might be approving a manually entered quote that hasn't been saved as a full object yet? 
             // But the flow requires "Send for Approval" which saves them.
             // Let's assume we must have a saved quotation object.
-            alert("No quotation found for this garage. Please ensure 'Send for Approval' was clicked.");
+            // But the flow requires "Send for Approval" which saves them.
+            // Let's assume we must have a saved quotation object.
+            addToast("No quotation found for this garage. Please ensure 'Send for Approval' was clicked.", 'error');
             return;
         }
 
@@ -688,25 +810,47 @@ export default function RequestDetailsPage() {
                 console.warn('No attachment found for selected quote.');
             }
 
+            console.log('Selected Quote for Approval:', selectedQuote);
+            console.log('Setting ExpectedEndDate to:', selectedQuote.estimatedCompletionDate);
+
             // Update the specific quotation status to ACCEPTED
             const updatedQuotations = request.quotations?.map(q => {
                 if (q.id === selectedQuote.id) {
-                    return { ...q, status: QuotationStatus.ACCEPTED };
+                    return { ...q, status: QuotationStatus.APPROVED };
                 }
                 return q;
             }) || [];
+
+            // Add History Entry
+            const newHistoryEntry = {
+                status: MaintenanceStatus.ESTIMATION_APPROVED,
+                date: new Date().toISOString(),
+                note: 'Estimation approved by Maintenance Manager',
+                actor: 'Maintenance Manager'
+            };
+            const updatedHistory = [...(request.history || []), newHistoryEntry];
+
+            // Derive Maintenance Jobs from Quote Parts/Labor if not already set
+            let finalMaintenanceJobs = request.maintenanceJobs || [];
+            if (finalMaintenanceJobs.length === 0 && selectedQuote.parts) {
+                finalMaintenanceJobs = selectedQuote.parts.map(p => p.name);
+            }
 
             await updateMaintenanceRequest(request.id, {
                 status: MaintenanceStatus.UNDER_MAINTENANCE,
                 garageId: selectedGarageForApproval,
                 selectedQuotationId: selectedQuote.id, // Use the actual Quotation ID
-                actualPartsCost: selectedQuote.totalCost, // Use total cost from quote object
-                actualLaborCost: 0,
-                actualOtherCost: 0,
+                actualPartsCost: selectedQuote.partsCost || 0,
+                actualLaborCost: selectedQuote.laborCost || 0,
+                actualOtherCost: selectedQuote.consumablesCost || 0,
                 actualCost: selectedQuote.totalCost,
                 workOrderNo: workOrderNo,
+                expectedEndDate: selectedQuote.estimatedCompletionDate,
                 attachments: updatedAttachments,
-                quotations: updatedQuotations
+                quotations: updatedQuotations,
+                maintenanceType: request.maintenanceType || MaintenanceType.CORRECTIVE, // Ensure type is set
+                maintenanceJobs: finalMaintenanceJobs, // Ensure jobs are set
+                history: updatedHistory
             });
             setRequest({
                 ...request,
@@ -714,8 +858,10 @@ export default function RequestDetailsPage() {
                 garageId: selectedGarageForApproval,
                 selectedQuotationId: selectedQuote.id,
                 workOrderNo: workOrderNo,
+                expectedEndDate: selectedQuote.estimatedCompletionDate,
                 attachments: updatedAttachments,
-                quotations: updatedQuotations
+                quotations: updatedQuotations,
+                history: updatedHistory
             });
 
             // Simulate Notifications
@@ -729,26 +875,52 @@ export default function RequestDetailsPage() {
             console.log(`Message: Estimate approved for ${request.id.toUpperCase()}. Work can start.`);
             console.groupEnd();
 
-            alert('Estimate approved! Work Order is now Under Maintenance.\nNotifications sent to Garage and Team.');
+            // REAL NOTIFICATION: To Garage
+            await sendNotification(
+                garages.find(g => g.id === selectedGarageForApproval)?.email || 'test-garage@example.com',
+                `Work Order Approved - ${workOrderNo}`,
+                `Dear Vendor,\n\nYour quotation for Vehicle ${vehicle?.licensePlate} has been APPROVED.\n\nWork Order No: ${workOrderNo}\nApproved Amount: AED ${selectedQuote.totalCost}\n\nPlease proceed with the work immediately.`,
+                'Email',
+                'Garage Work Order Assignment'
+            );
+
+            // REAL NOTIFICATION: To Operations
+            await sendNotification(
+                'operations@gravity.com',
+                `Estimate Approved: ${workOrderNo}`,
+                `Maintenance Manager has approved the estimate for ${vehicle?.licensePlate}.\nGarage: ${garageName}\nAmount: AED ${selectedQuote.totalCost}`,
+                'Email',
+                'Internal Notification'
+            );
+
+            addToast('Estimate approved! Work Order is now Under Maintenance.', 'success');
         } catch (error) {
             console.error('Failed to approve estimate:', error);
-            alert('Failed to approve estimate.');
+            addToast('Failed to approve estimate.', 'error');
         }
     };
 
     const handleRejectEstimate = async () => {
         if (!request) return;
         try {
+            const historyEntry = {
+                status: MaintenanceStatus.UNDER_ESTIMATION,
+                date: new Date().toISOString(),
+                note: 'Estimate rejected',
+                actor: 'System'
+            };
+            const updatedHistory = [...(request.history || []), historyEntry];
+
             await updateMaintenanceRequest(request.id, {
-                status: MaintenanceStatus.UNDER_ESTIMATION
+                status: MaintenanceStatus.UNDER_ESTIMATION,
+                history: updatedHistory
             });
-            setRequest({ ...request, status: MaintenanceStatus.UNDER_ESTIMATION });
-            setShowRejectModal(false);
+            setRequest({ ...request, status: MaintenanceStatus.UNDER_ESTIMATION, history: updatedHistory });
             setRejectionReason('');
-            alert('Estimate rejected. Request returned to Under Estimation.');
+            addToast('Estimate rejected. Request returned to Under Estimation.', 'success');
         } catch (error) {
             console.error('Failed to reject estimate:', error);
-            alert('Failed to reject estimate.');
+            addToast('Failed to reject estimate.', 'error');
         }
     };
 
@@ -1024,11 +1196,30 @@ export default function RequestDetailsPage() {
                         {/* Send RFQ Section */}
                         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-lg font-bold text-slate-900">Select Garages for RFQ</h3>
+                                <div className="flex items-center gap-3">
+                                    <h3 className="text-lg font-bold text-slate-900">Candidate Garages</h3>
+                                    <button
+                                        onClick={() => setShowGaragePicker(true)}
+                                        className="text-xs bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 px-2 py-1 rounded-md transition-colors flex items-center gap-1"
+                                        title="Add a garage from the master list"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                                            <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+                                        </svg>
+                                        Add Garage
+                                    </button>
+                                </div>
                                 <button
                                     onClick={handleSendRFQ}
-                                    disabled={candidateGarageIds.length === 0 || (request.status !== MaintenanceStatus.UNDER_ESTIMATION && request.status !== MaintenanceStatus.DRAFT && request.status !== MaintenanceStatus.REQUESTED && request.status !== MaintenanceStatus.APPROVED)}
-                                    className={`rounded-lg px-4 py-2 text-sm font-medium text-white shadow-sm ${candidateGarageIds.length > 0 && (request.status === MaintenanceStatus.UNDER_ESTIMATION || request.status === MaintenanceStatus.DRAFT || request.status === MaintenanceStatus.REQUESTED || request.status === MaintenanceStatus.APPROVED)
+                                    disabled={
+                                        (request.status !== MaintenanceStatus.UNDER_ESTIMATION &&
+                                            request.status !== MaintenanceStatus.REQUESTED &&
+                                            request.status !== MaintenanceStatus.ACCEPTED) ||
+                                        candidateGarageIds.length === 0
+                                    }
+                                    className={`rounded-lg px-4 py-2 text-sm font-medium text-white shadow-sm ${(request.status === MaintenanceStatus.UNDER_ESTIMATION ||
+                                        request.status === MaintenanceStatus.REQUESTED ||
+                                        request.status === MaintenanceStatus.ACCEPTED)
                                         ? 'bg-blue-600 hover:bg-blue-700'
                                         : 'bg-slate-400 cursor-not-allowed'
                                         }`}
@@ -1036,22 +1227,29 @@ export default function RequestDetailsPage() {
                                     Send RFQ ({candidateGarageIds.length})
                                 </button>
                             </div>
+
+                            {candidateGarageIds.length === 0 && (
+                                <div className="text-center py-8 bg-slate-50 rounded-lg border border-dashed border-slate-300">
+                                    <p className="text-slate-500">No garages selected based on criteria.</p>
+                                    <button onClick={() => setShowGaragePicker(true)} className="mt-2 text-blue-600 text-sm font-medium hover:underline">
+                                        Add a garage manually
+                                    </button>
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                                {garages.map((garage) => (
+                                {garages.filter(g => candidateGarageIds.includes(g.id)).map((garage) => (
                                     <div
                                         key={garage.id}
-                                        onClick={() => (request.status === MaintenanceStatus.UNDER_ESTIMATION || request.status === MaintenanceStatus.DRAFT || request.status === MaintenanceStatus.REQUESTED || request.status === MaintenanceStatus.APPROVED) && handleGarageToggle(garage.id)}
-                                        className={`cursor-pointer rounded-lg border p-4 transition-all ${candidateGarageIds.includes(garage.id)
-                                            ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-600'
-                                            : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
-                                            } ${(request.status !== MaintenanceStatus.UNDER_ESTIMATION && request.status !== MaintenanceStatus.DRAFT && request.status !== MaintenanceStatus.REQUESTED && request.status !== MaintenanceStatus.APPROVED) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                        onClick={() => (request.status === MaintenanceStatus.UNDER_ESTIMATION || request.status === MaintenanceStatus.REQUESTED || request.status === MaintenanceStatus.ACCEPTED) && handleGarageToggle(garage.id)}
+                                        className={`cursor-pointer rounded-lg border p-4 transition-all border-blue-600 bg-blue-50 ring-1 ring-blue-600`}
                                     >
                                         <div className="flex items-start gap-3">
                                             <div className="flex h-6 items-center">
                                                 <input
                                                     type="checkbox"
-                                                    checked={candidateGarageIds.includes(garage.id)}
-                                                    onChange={() => { }} // Handled by parent div click
+                                                    checked={true}
+                                                    onChange={() => { }}
                                                     className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-600"
                                                 />
                                             </div>
@@ -1080,7 +1278,6 @@ export default function RequestDetailsPage() {
                         {
                             (request.status === MaintenanceStatus.UNDER_ESTIMATION ||
                                 request.status === MaintenanceStatus.PENDING_ESTIMATION_APPROVAL ||
-                                request.status === MaintenanceStatus.ESTIMATION_APPROVED ||
                                 request.status === MaintenanceStatus.UNDER_MAINTENANCE ||
                                 request.status === MaintenanceStatus.MAINTENANCE_COMPLETED ||
                                 request.status === MaintenanceStatus.PENDING_INVOICE ||
@@ -1097,7 +1294,6 @@ export default function RequestDetailsPage() {
                                         </h3>
                                         {(request.status === MaintenanceStatus.UNDER_ESTIMATION ||
                                             request.status === MaintenanceStatus.PENDING_ESTIMATION_APPROVAL ||
-                                            request.status === MaintenanceStatus.ESTIMATION_APPROVED ||
                                             request.status === MaintenanceStatus.UNDER_MAINTENANCE ||
                                             request.status === MaintenanceStatus.MAINTENANCE_COMPLETED ||
                                             request.status === MaintenanceStatus.PENDING_INVOICE ||
@@ -1120,7 +1316,8 @@ export default function RequestDetailsPage() {
                                             <thead className="bg-slate-50">
                                                 <tr>
                                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Garage</th>
-                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Quotation Amount (AED)</th>
+                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Parts Est (AED)</th>
+                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Labor Est (AED)</th>
                                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Est. Completion Date</th>
                                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Attachment</th>
                                                     <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
@@ -1129,29 +1326,38 @@ export default function RequestDetailsPage() {
                                             <tbody className="bg-white divide-y divide-slate-200">
                                                 {candidateGarageIds.filter(garageId => {
                                                     if (request.status === MaintenanceStatus.UNDER_MAINTENANCE ||
-                                                        request.status === MaintenanceStatus.MAINTENANCE_COMPLETED ||
                                                         request.status === MaintenanceStatus.PENDING_INVOICE ||
-                                                        request.status === MaintenanceStatus.CLOSED) {
+                                                        request.status === MaintenanceStatus.MAINTENANCE_COMPLETED) {
                                                         // Find the accepted quotation for this garage
-                                                        const quote = request.quotations?.find(q => q.garageId === garageId && (q.status === QuotationStatus.ACCEPTED || q.id === request.selectedQuotationId));
+                                                        const quote = request.quotations?.find(q => q.garageId === garageId && (q.status === QuotationStatus.APPROVED || q.id === request.selectedQuotationId));
                                                         return !!quote;
                                                     }
                                                     return true;
                                                 }).map((garageId) => {
                                                     const garage = garages.find(g => g.id === garageId);
 
-                                                    // Determine which quote to show
-                                                    let displayQuote: any = quotations[garageId] || { amount: 0, attachmentUrl: '' };
+                                                    // Determine which quote to show (Prioritize backend data, then local Manual entry)
+                                                    const backendQuote = request.quotations?.find(q => q.garageId === garageId);
+                                                    let displayQuote: any = backendQuote ? {
+                                                        partsCost: backendQuote.partsCost,
+                                                        laborCost: backendQuote.laborCost,
+                                                        amount: backendQuote.totalCost,
+                                                        estimatedDate: backendQuote.estimatedCompletionDate ? new Date(backendQuote.estimatedCompletionDate).toISOString().split('T')[0] : '',
+                                                        attachmentUrl: backendQuote.attachments?.[0]?.url,
+                                                        attachmentName: backendQuote.attachments?.[0]?.fileName
+                                                    } : (quotations[garageId] || { partsCost: 0, laborCost: 0, amount: 0, attachmentUrl: '' });
 
                                                     if (request.status === MaintenanceStatus.UNDER_MAINTENANCE ||
                                                         request.status === MaintenanceStatus.MAINTENANCE_COMPLETED ||
                                                         request.status === MaintenanceStatus.PENDING_INVOICE ||
                                                         request.status === MaintenanceStatus.CLOSED) {
-                                                        const acceptedQuote = request.quotations?.find(q => q.garageId === garageId && (q.status === QuotationStatus.ACCEPTED || q.id === request.selectedQuotationId));
+                                                        const acceptedQuote = request.quotations?.find(q => q.garageId === garageId && (q.status === QuotationStatus.APPROVED || q.id === request.selectedQuotationId));
                                                         if (acceptedQuote) {
                                                             displayQuote = {
+                                                                partsCost: acceptedQuote.partsCost,
+                                                                laborCost: acceptedQuote.laborCost,
                                                                 amount: acceptedQuote.totalCost,
-                                                                estimatedDate: acceptedQuote.estimatedCompletionDate,
+                                                                estimatedDate: acceptedQuote.estimatedCompletionDate ? new Date(acceptedQuote.estimatedCompletionDate).toISOString().split('T')[0] : '',
                                                                 attachmentUrl: acceptedQuote.attachments?.[0]?.url,
                                                                 attachmentName: acceptedQuote.attachments?.[0]?.fileName
                                                             };
@@ -1172,10 +1378,22 @@ export default function RequestDetailsPage() {
                                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                                                                 <input
                                                                     type="number"
-                                                                    value={quote.amount || ''}
-                                                                    onChange={(e) => handleQuotationChange(garageId, 'amount', parseFloat(e.target.value))}
+                                                                    min="0"
+                                                                    value={quote.partsCost || ''}
+                                                                    onChange={(e) => handleQuotationChange(garageId, 'partsCost', parseFloat(e.target.value))}
                                                                     placeholder="0.00"
-                                                                    className="block w-32 rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                                    className="block w-24 rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                                    disabled={request.status !== MaintenanceStatus.UNDER_ESTIMATION}
+                                                                />
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                                                <input
+                                                                    type="number"
+                                                                    min="0"
+                                                                    value={quote.laborCost || ''}
+                                                                    onChange={(e) => handleQuotationChange(garageId, 'laborCost', parseFloat(e.target.value))}
+                                                                    placeholder="0.00"
+                                                                    className="block w-24 rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                                                                     disabled={request.status !== MaintenanceStatus.UNDER_ESTIMATION}
                                                                 />
                                                             </td>
@@ -1293,7 +1511,7 @@ export default function RequestDetailsPage() {
 
                         {/* Cost Summary - Only visible when completed */}
                         {
-                            (request.status === MaintenanceStatus.COMPLETED ||
+                            (request.status === MaintenanceStatus.CLOSED ||
                                 request.status === MaintenanceStatus.MAINTENANCE_COMPLETED) && (
                                 <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                                     <h3 className="text-sm font-bold text-slate-900 uppercase mb-4">Cost Summary</h3>
@@ -1332,13 +1550,56 @@ export default function RequestDetailsPage() {
                             (request.status === MaintenanceStatus.UNDER_MAINTENANCE ||
                                 request.status === MaintenanceStatus.UNDER_ESTIMATION ||
                                 request.status === MaintenanceStatus.MAINTENANCE_COMPLETED ||
-                                request.status === MaintenanceStatus.COMPLETED ||
-                                request.status === MaintenanceStatus.APPROVED) && request.workOrderNo && (
+                                request.status === MaintenanceStatus.CLOSED ||
+                                request.status === MaintenanceStatus.ESTIMATION_APPROVED) && request.workOrderNo && (
                                 <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                                    <h3 className="text-sm font-bold text-slate-900 uppercase mb-4">Work Order</h3>
-                                    <div>
-                                        <label className="block text-xs text-slate-500">Work Order No.</label>
-                                        <p className="text-lg font-bold text-blue-600">{request.workOrderNo}</p>
+                                    <h3 className="text-sm font-bold text-slate-900 uppercase mb-6">Work Order Details</h3>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <div className="space-y-6">
+                                            <div>
+                                                <label className="block text-xs text-slate-500">Work Order Number</label>
+                                                <p className="text-lg font-bold text-blue-600">{request.workOrderNo}</p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-slate-500">Vehicle</label>
+                                                <p className="text-sm font-medium text-slate-900">{vehicle?.make} {vehicle?.model} ({vehicle?.year})</p>
+                                                <p className="text-xs text-slate-500">{vehicle?.licensePlate} • VIN: {vehicle?.vin}</p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-slate-500">Current Mileage</label>
+                                                <p className="text-sm font-medium text-slate-900">{request.odometer?.toLocaleString()} km</p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-slate-500">Estimation Approved By</label>
+                                                <p className="text-sm font-medium text-slate-900">Maintenance Manager</p>
+                                                {/* <p className="text-sm font-medium text-slate-900">{request.estimateApproval?.approvedByName || 'N/A'}</p> */}
+                                                {/* {request.estimateApproval?.approvedAt && (
+                                                    <p className="text-xs text-slate-500">{new Date(request.estimateApproval.approvedAt).toLocaleDateString()}</p>
+                                                )} */}
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-6">
+                                            <div>
+                                                <label className="block text-xs text-slate-500">Maintenance Type</label>
+                                                <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10 mt-1">
+                                                    {request.maintenanceType || 'N/A'}
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-slate-500 mb-2">Maintenance Jobs</label>
+                                                {request.maintenanceJobs && request.maintenanceJobs.length > 0 ? (
+                                                    <ul className="list-disc pl-4 space-y-1">
+                                                        {request.maintenanceJobs.map((job) => (
+                                                            <li key={job} className="text-sm text-slate-700">{job}</li>
+                                                        ))}
+                                                    </ul>
+                                                ) : (
+                                                    <p className="text-sm text-slate-400 italic">No jobs listed</p>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             )
@@ -1348,7 +1609,7 @@ export default function RequestDetailsPage() {
                         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-sm font-bold text-slate-900 uppercase">Attachments</h3>
-                                {request.status !== MaintenanceStatus.COMPLETED && (
+                                {request.status !== MaintenanceStatus.MAINTENANCE_COMPLETED && (
                                     <button
                                         onClick={handleAddAttachment}
                                         className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800"
@@ -1392,218 +1653,290 @@ export default function RequestDetailsPage() {
                         </div>
                     </div>
                 </div>
-            </div>
+            </div >
 
             {/* Attachment Upload Modal */}
-            {showAttachmentModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-                        <h3 className="text-lg font-bold text-slate-900 mb-4">Upload Attachment</h3>
+            {
+                showAttachmentModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                        <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+                            <h3 className="text-lg font-bold text-slate-900 mb-4">Upload Attachment</h3>
 
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Attachment Type</label>
-                                <select
-                                    value={selectedAttachmentType}
-                                    onChange={(e) => setSelectedAttachmentType(e.target.value as AttachmentType)}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-slate-900"
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">Attachment Type</label>
+                                    <select
+                                        value={selectedAttachmentType}
+                                        onChange={(e) => setSelectedAttachmentType(e.target.value as AttachmentType)}
+                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-slate-900"
+                                    >
+                                        {Object.values(AttachmentType).map((type) => (
+                                            <option key={type} value={type} className="text-slate-900">
+                                                {type}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="rounded-lg border-2 border-dashed border-slate-300 p-6 text-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="mx-auto h-12 w-12 text-slate-400">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
+                                    </svg>
+                                    <p className="mt-2 text-sm text-slate-600">Click below to select a file</p>
+                                    <p className="text-xs text-slate-500 mt-1">PDF, JPG, PNG, DOC, DOCX, XLS, XLSX</p>
+                                </div>
+                            </div>
+
+                            <div className="mt-6 flex justify-end gap-3">
+                                <button
+                                    onClick={() => {
+                                        setShowAttachmentModal(false);
+                                        setSelectedAttachmentType(AttachmentType.INVOICE);
+                                    }}
+                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
                                 >
-                                    {Object.values(AttachmentType).map((type) => (
-                                        <option key={type} value={type} className="text-slate-900">
-                                            {type}
-                                        </option>
-                                    ))}
-                                </select>
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleFileSelect}
+                                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                                >
+                                    Select File
+                                </button>
                             </div>
-
-                            <div className="rounded-lg border-2 border-dashed border-slate-300 p-6 text-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="mx-auto h-12 w-12 text-slate-400">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
-                                </svg>
-                                <p className="mt-2 text-sm text-slate-600">Click below to select a file</p>
-                                <p className="text-xs text-slate-500 mt-1">PDF, JPG, PNG, DOC, DOCX, XLS, XLSX</p>
-                            </div>
-                        </div>
-
-                        <div className="mt-6 flex justify-end gap-3">
-                            <button
-                                onClick={() => {
-                                    setShowAttachmentModal(false);
-                                    setSelectedAttachmentType(AttachmentType.INVOICE);
-                                }}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleFileSelect}
-                                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                            >
-                                Select File
-                            </button>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Review Estimation Modal */}
-            {showReviewModal && selectedGarageForApproval && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-                        <h3 className="text-lg font-bold text-slate-900 mb-4">Review Estimation</h3>
+            {
+                showReviewModal && selectedGarageForApproval && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                        <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
+                            <h3 className="text-lg font-bold text-slate-900 mb-4">Review Estimation</h3>
 
-                        <div className="space-y-4">
-                            <div className="rounded-lg bg-slate-50 p-4 border border-slate-100">
-                                <h4 className="text-sm font-medium text-slate-900 mb-3">Quotation Summary</h4>
-                                <dl className="space-y-2 text-sm">
-                                    <div className="flex justify-between">
-                                        <dt className="text-slate-500">Garage:</dt>
-                                        <dd className="font-medium text-slate-900">
-                                            {garages.find(g => g.id === selectedGarageForApproval)?.name}
-                                        </dd>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <dt className="text-slate-500">Total Cost:</dt>
-                                        <dd className="font-medium text-blue-600">
-                                            AED {quotations[selectedGarageForApproval]?.amount?.toFixed(2) || '0.00'}
-                                        </dd>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <dt className="text-slate-500">Est. Completion:</dt>
-                                        <dd className="font-medium text-slate-900">
-                                            {quotations[selectedGarageForApproval]?.estimatedDate
-                                                ? new Date(quotations[selectedGarageForApproval]?.estimatedDate).toLocaleDateString()
-                                                : 'N/A'}
-                                        </dd>
-                                    </div>
-                                    <div className="flex justify-between items-center pt-2 border-t border-slate-200 mt-2">
-                                        <dt className="text-slate-500">Attachment:</dt>
-                                        <dd>
-                                            {quotations[selectedGarageForApproval]?.attachmentUrl ? (
-                                                <a
-                                                    href={quotations[selectedGarageForApproval].attachmentUrl}
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    className="text-blue-600 hover:underline flex items-center gap-1"
-                                                >
-                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
-                                                    </svg>
-                                                    View File
-                                                </a>
-                                            ) : (
-                                                <span className="text-slate-400 italic">No attachment</span>
-                                            )}
-                                        </dd>
-                                    </div>
-                                </dl>
+                            <div className="space-y-4">
+                                <div className="rounded-lg bg-slate-50 p-4 border border-slate-100">
+                                    <h4 className="text-sm font-medium text-slate-900 mb-3">Quotation Summary</h4>
+                                    <dl className="space-y-2 text-sm">
+                                        <div className="flex justify-between">
+                                            <dt className="text-slate-500">Garage:</dt>
+                                            <dd className="font-medium text-slate-900">
+                                                {garages.find(g => g.id === selectedGarageForApproval)?.name}
+                                            </dd>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <dt className="text-slate-500">Parts Cost:</dt>
+                                            <dd className="font-medium text-slate-900">
+                                                AED {(quotations[selectedGarageForApproval]?.partsCost || 0).toFixed(2)}
+                                            </dd>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <dt className="text-slate-500">Labor Cost:</dt>
+                                            <dd className="font-medium text-slate-900">
+                                                AED {(quotations[selectedGarageForApproval]?.laborCost || 0).toFixed(2)}
+                                            </dd>
+                                        </div>
+                                        <div className="flex justify-between border-t border-slate-200 pt-1 mt-1">
+                                            <dt className="text-slate-700 font-bold">Total Cost:</dt>
+                                            <dd className="font-bold text-blue-600">
+                                                AED {(quotations[selectedGarageForApproval]?.totalCost || quotations[selectedGarageForApproval]?.amount || 0).toFixed(2)}
+                                            </dd>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <dt className="text-slate-500">Est. Completion:</dt>
+                                            <dd className="font-medium text-slate-900">
+                                                {quotations[selectedGarageForApproval]?.estimatedDate
+                                                    ? new Date(quotations[selectedGarageForApproval]?.estimatedDate).toLocaleDateString()
+                                                    : 'N/A'}
+                                            </dd>
+                                        </div>
+                                        <div className="flex justify-between items-center pt-2 border-t border-slate-200 mt-2">
+                                            <dt className="text-slate-500">Attachment:</dt>
+                                            <dd>
+                                                {quotations[selectedGarageForApproval]?.attachmentUrl ? (
+                                                    <a
+                                                        href={quotations[selectedGarageForApproval].attachmentUrl}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="text-blue-600 hover:underline flex items-center gap-1"
+                                                    >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
+                                                        </svg>
+                                                        View File
+                                                    </a>
+                                                ) : (
+                                                    <span className="text-slate-400 italic">No attachment</span>
+                                                )}
+                                            </dd>
+                                        </div>
+                                    </dl>
+                                </div>
+
+                                <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-3">
+                                    <p className="text-xs text-yellow-800">
+                                        Approving this estimation will generate a Work Order and notify the garage to proceed.
+                                    </p>
+                                </div>
                             </div>
 
-                            <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-3">
-                                <p className="text-xs text-yellow-800">
-                                    Approving this estimation will generate a Work Order and notify the garage to proceed.
-                                </p>
+                            <div className="mt-6 flex justify-end gap-3">
+                                <button
+                                    onClick={() => setShowReviewModal(false)}
+                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        handleRejectEstimate();
+                                        setShowReviewModal(false);
+                                    }}
+                                    className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100"
+                                >
+                                    Reject
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        handleApproveEstimate();
+                                        setShowReviewModal(false);
+                                    }}
+                                    className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 shadow-sm"
+                                >
+                                    Approve Estimation
+                                </button>
                             </div>
-                        </div>
-
-                        <div className="mt-6 flex justify-end gap-3">
-                            <button
-                                onClick={() => setShowReviewModal(false)}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={() => {
-                                    handleRejectEstimate();
-                                    setShowReviewModal(false);
-                                }}
-                                className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100"
-                            >
-                                Reject
-                            </button>
-                            <button
-                                onClick={() => {
-                                    handleApproveEstimate();
-                                    setShowReviewModal(false);
-                                }}
-                                className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 shadow-sm"
-                            >
-                                Approve Estimation
-                            </button>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Quotation History Modal */}
-            {showHistoryModal && historyGarageId && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-xl font-bold text-slate-900">
-                                Quotation History - {garages.find(g => g.id === historyGarageId)?.name}
-                            </h2>
-                            <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-slate-600">
+            {
+                showHistoryModal && historyGarageId && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                        <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-xl font-bold text-slate-900">
+                                    Quotation History - {garages.find(g => g.id === historyGarageId)?.name}
+                                </h2>
+                                <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-slate-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                                {request?.quotations
+                                    ?.filter(q => q.garageId === historyGarageId)
+                                    .sort((a, b) => new Date(b.quotationDate).getTime() - new Date(a.quotationDate).getTime())
+                                    .map((quote, index) => (
+                                        <div key={quote.id} className="p-4 rounded-lg border border-slate-200 bg-slate-50">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="text-xs font-medium text-slate-500">
+                                                    {new Date(quote.quotationDate).toLocaleString()}
+                                                </span>
+                                                {index === 0 && (
+                                                    <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+                                                        Latest
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4 text-sm">
+                                                <div>
+                                                    <span className="text-slate-500">Total Cost:</span>
+                                                    <div className="font-medium">AED {quote.totalCost.toFixed(2)}</div>
+                                                </div>
+                                                <div>
+                                                    <span className="text-slate-500">Estimated Completion:</span>
+                                                    <div className="font-medium">{quote.estimatedCompletionDate ? new Date(quote.estimatedCompletionDate).toLocaleDateString() : 'N/A'}</div>
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <span className="text-slate-500">Attachment:</span>
+                                                    <div>
+                                                        {quote.attachments && quote.attachments.length > 0 ? (
+                                                            <a href={quote.attachments[0].url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+                                                                {quote.attachments[0].fileName || 'View Attachment'}
+                                                            </a>
+                                                        ) : (
+                                                            <span className="text-slate-400">No attachment</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                }
+                                {(!request?.quotations?.some(q => q.garageId === historyGarageId)) && (
+                                    <p className="text-center text-slate-500 py-4">No history available.</p>
+                                )}
+                            </div>
+
+                            <div className="mt-6 flex justify-end">
+                                <button
+                                    onClick={() => setShowHistoryModal(false)}
+                                    className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+            {showGaragePicker && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4">
+                    <div className="w-full max-w-lg bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+                        <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                            <h3 className="font-bold text-lg text-slate-800">Add Garage from Master</h3>
+                            <button onClick={() => setShowGaragePicker(false)} className="text-slate-400 hover:text-slate-600">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                                 </svg>
                             </button>
                         </div>
-
-                        <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-                            {request?.quotations
-                                ?.filter(q => q.garageId === historyGarageId)
-                                .sort((a, b) => new Date(b.quotationDate).getTime() - new Date(a.quotationDate).getTime())
-                                .map((quote, index) => (
-                                    <div key={quote.id} className="p-4 rounded-lg border border-slate-200 bg-slate-50">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <span className="text-xs font-medium text-slate-500">
-                                                {new Date(quote.quotationDate).toLocaleString()}
-                                            </span>
-                                            {index === 0 && (
-                                                <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
-                                                    Latest
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4 text-sm">
-                                            <div>
-                                                <span className="text-slate-500">Total Cost:</span>
-                                                <div className="font-medium">AED {quote.totalCost.toFixed(2)}</div>
-                                            </div>
-                                            <div>
-                                                <span className="text-slate-500">Estimated Completion:</span>
-                                                <div className="font-medium">{quote.estimatedCompletionDate ? new Date(quote.estimatedCompletionDate).toLocaleDateString() : 'N/A'}</div>
-                                            </div>
-                                            <div className="col-span-2">
-                                                <span className="text-slate-500">Attachment:</span>
-                                                <div>
-                                                    {quote.attachments && quote.attachments.length > 0 ? (
-                                                        <a href={quote.attachments[0].url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
-                                                            {quote.attachments[0].fileName || 'View Attachment'}
-                                                        </a>
-                                                    ) : (
-                                                        <span className="text-slate-400">No attachment</span>
-                                                    )}
-                                                </div>
+                        <div className="p-4 border-b border-slate-100">
+                            <input
+                                type="text"
+                                placeholder="Search garage name..."
+                                className="w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+                                value={garageSearchTerm}
+                                onChange={(e) => setGarageSearchTerm(e.target.value)}
+                                autoFocus
+                            />
+                        </div>
+                        <div className="overflow-y-auto p-4 space-y-2 flex-1">
+                            {garages
+                                .filter(g => !candidateGarageIds.includes(g.id))
+                                .filter(g => g.name.toLowerCase().includes(garageSearchTerm.toLowerCase()))
+                                .map(garage => (
+                                    <div key={garage.id} className="flex items-center justify-between p-3 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+                                        <div>
+                                            <h4 className="font-medium text-slate-900">{garage.name}</h4>
+                                            <div className="flex gap-2 text-xs text-slate-500">
+                                                <span>{garage.location}</span>
+                                                <span>•</span>
+                                                <span>•</span>
                                             </div>
                                         </div>
+                                        <button
+                                            onClick={() => handleAddGarageToShortlist(garage.id)}
+                                            className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md border border-blue-200 transition-colors"
+                                        >
+                                            Add
+                                        </button>
                                     </div>
                                 ))
                             }
-                            {(!request?.quotations?.some(q => q.garageId === historyGarageId)) && (
-                                <p className="text-center text-slate-500 py-4">No history available.</p>
+                            {garages.filter(g => !candidateGarageIds.includes(g.id) && g.name.toLowerCase().includes(garageSearchTerm.toLowerCase())).length === 0 && (
+                                <div className="text-center py-8">
+                                    <p className="text-slate-500">No matching garages found.</p>
+                                    <p className="text-xs text-slate-400 mt-1">Try adjusting your search terms.</p>
+                                </div>
                             )}
-                        </div>
-
-                        <div className="mt-6 flex justify-end">
-                            <button
-                                onClick={() => setShowHistoryModal(false)}
-                                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-                            >
-                                Close
-                            </button>
                         </div>
                     </div>
                 </div>

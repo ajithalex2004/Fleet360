@@ -10,10 +10,10 @@ import {
     AttachmentType
 } from '@/types/maintenance';
 import {
-    mockVehicles,
-    mockGarages,
+    getVehicles,
+    getGarages,
     createMaintenanceRequest,
-    mockDrivers
+    getDrivers
 } from '@/services/mockData';
 
 // Comprehensive Maintenance Jobs Database
@@ -126,8 +126,9 @@ const MAINTENANCE_JOBS_DATABASE = {
 
 export default function CreateRequestPage() {
     const router = useRouter();
-    const vehicles = mockVehicles;
-    const garages = mockGarages;
+    const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+    const [garages, setGarages] = useState<Garage[]>([]);
+    const [drivers, setDrivers] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
@@ -147,6 +148,16 @@ export default function CreateRequestPage() {
         workOrderNo: '',
         description: '',
     });
+
+    useEffect(() => {
+        const loadData = async () => {
+            const [v, g, d] = await Promise.all([getVehicles(), getGarages(), getDrivers()]);
+            setVehicles(v);
+            setGarages(g);
+            setDrivers(d);
+        };
+        loadData();
+    }, []);
 
     // Search States
     const [jobSearch, setJobSearch] = useState('');
@@ -254,9 +265,20 @@ export default function CreateRequestPage() {
         setSubmitting(true);
 
         try {
+            // Prepare attachments
+            const processedAttachments = attachments
+                .filter(a => a.file)
+                .map(a => ({
+                    id: crypto.randomUUID(), // Generate a temporary ID
+                    type: a.type as AttachmentType,
+                    fileName: a.file?.name || 'unknown',
+                    url: `mock://${a.file?.name}`, // Mock URL
+                    uploadedAt: new Date().toISOString()
+                }));
+
             const requestData = {
                 vehicleId: formData.vehicleId,
-                driverId: formData.driverId || mockDrivers[0].id,
+                driverId: formData.driverId || drivers[0]?.id,
                 requestDate: formData.startDate,
                 description: formData.description,
                 garageId: formData.candidateGarageIds[0] || garages[0].id,
@@ -269,12 +291,14 @@ export default function CreateRequestPage() {
                 candidateGarageIds: formData.candidateGarageIds,
                 workOrderNo: formData.workOrderNo,
                 expectedEndDate: formData.expectedEndDate,
+                attachments: processedAttachments,
             };
 
             await createMaintenanceRequest(requestData);
             alert('Maintenance request created successfully!');
             router.push('/maintenance/requests');
         } catch (error) {
+            console.error(error);
             alert('Failed to create maintenance request');
         } finally {
             setSubmitting(false);
@@ -503,7 +527,7 @@ export default function CreateRequestPage() {
                                 onChange={(e) => setFormData({ ...formData, driverId: e.target.value })}
                             >
                                 <option value="">Select Driver</option>
-                                {mockDrivers.map((d) => (
+                                {drivers.map((d) => (
                                     <option key={d.id} value={d.id}>{d.name}</option>
                                 ))}
                             </select>
@@ -527,6 +551,73 @@ export default function CreateRequestPage() {
                         />
                     </div>
                 </div>
+
+                <hr className="border-slate-200" />
+
+                {/* Section 5: Attachments */}
+                <div>
+                    <h3 className="mb-4 text-lg font-semibold text-slate-900">Attachments</h3>
+                    <div className="space-y-4">
+                        {attachments.map((att, index) => (
+                            <div key={index} className="flex items-end gap-4">
+                                <div className="flex-1">
+                                    <label className="block text-sm font-medium text-slate-700">Type</label>
+                                    <select
+                                        className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        value={att.type}
+                                        onChange={(e) => {
+                                            const newAtts = [...attachments];
+                                            newAtts[index].type = e.target.value;
+                                            setAttachments(newAtts);
+                                        }}
+                                    >
+                                        {Object.values(AttachmentType).map((t) => (
+                                            <option key={t} value={t}>{t}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="flex-[2]">
+                                    <label className="block text-sm font-medium text-slate-700">File</label>
+                                    <input
+                                        type="file"
+                                        className="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0] || null;
+                                            const newAtts = [...attachments];
+                                            newAtts[index].file = file;
+                                            setAttachments(newAtts);
+                                        }}
+                                    />
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const newAtts = attachments.filter((_, i) => i !== index);
+                                        setAttachments(newAtts);
+                                    }}
+                                    className="mb-1 p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                                    disabled={attachments.length === 1}
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                                    </svg>
+                                </button>
+                            </div>
+                        ))}
+                        <button
+                            type="button"
+                            onClick={() => setAttachments([...attachments, { type: AttachmentType.IMAGE, file: null }])}
+                            className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                            </svg>
+                            Add Another Attachment
+                        </button>
+                    </div>
+                </div>
+
+                <hr className="border-slate-200" />
 
                 {/* Submit Buttons */}
                 <div className="flex justify-end gap-3 pt-6 border-t border-slate-200">

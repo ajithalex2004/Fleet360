@@ -34,26 +34,59 @@ export function calculateMatchScore(
 ): number {
     let score = 0;
 
-    // 1. Match maintenance type (40 points)
+    // 0. Automatic Shortlist for "General Services" (80 points)
+    // If a garage offers General Services, it is capable of handling most requests.
+    const isGeneralService = garage.specialties?.some(s => s.toLowerCase().includes('general service'));
+    if (isGeneralService) {
+        score += 80;
+    }
+
+    // 1. Match maintenance type (20 points)
     if (request.maintenanceType && garage.services?.includes(request.maintenanceType)) {
-        score += 40;
+        score += 20;
     }
 
-    // 2. Match specialties from description (40 points)
+    // 2. Match Maintenance Jobs (50 points) - HIGH PRIORITY
+    // This looks for explicit job matches (e.g. "Oil Change") in the garage's specialties
+    if (request.maintenanceJobs && request.maintenanceJobs.length > 0) {
+        const garageSpecialties = (garage.specialties || []).map(s => s.toLowerCase());
+
+        const matchedJobs = request.maintenanceJobs.filter(job => {
+            const jobLower = job.toLowerCase();
+            // Check if garage has this job explicitly listed or as part of a specialty string
+            return garageSpecialties.some(specialty =>
+                specialty.includes(jobLower) || jobLower.includes(specialty)
+            );
+        });
+
+        const jobMatchRatio = matchedJobs.length / request.maintenanceJobs.length;
+        score += Math.round(jobMatchRatio * 50);
+    } else {
+        // Fallback if no jobs specified: use Maintenance Type score boost
+        // If type matches, give extra points to simulate job matching
+        if (request.maintenanceType && garage.services?.includes(request.maintenanceType)) {
+            score += 20;
+        }
+    }
+
+    // 3. Match specialties from description (10 points)
+    // Less weight now that we have explicit jobs
     const keywords = extractKeywords(request.description);
-    const matchedSpecialties = garage.specialties?.filter(specialty =>
-        keywords.some(keyword =>
-            specialty.toLowerCase().includes(keyword) ||
-            keyword.includes(specialty.toLowerCase())
-        )
-    ) || [];
+    if (keywords.length > 0) {
+        const matchedSpecialties = garage.specialties?.filter(specialty =>
+            keywords.some(keyword =>
+                specialty.toLowerCase().includes(keyword) ||
+                keyword.includes(specialty.toLowerCase())
+            )
+        ) || [];
 
-    if (garage.specialties?.length > 0) {
-        const specialtyMatchRatio = matchedSpecialties.length / garage.specialties.length;
-        score += specialtyMatchRatio * 40;
+        if (garage.specialties?.length > 0) {
+            const specialtyMatchRatio = matchedSpecialties.length / garage.specialties.length;
+            score += Math.round(specialtyMatchRatio * 10);
+        }
     }
 
-    // 3. Performance factors (20 points)
+    // 4. Performance factors (20 points)
     if (garage.rating && garage.rating >= 4) {
         score += 10;
     }

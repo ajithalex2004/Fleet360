@@ -1,0 +1,647 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+
+
+
+
+
+model ChecklistItem {
+  id          String    @id
+  task        String
+  completed   Boolean   @default(false)
+  completedBy String?
+  completedAt DateTime?
+  notes       String?
+  workOrderId String
+  WorkOrder   WorkOrder @relation(fields: [workOrderId], references: [id])
+}
+
+
+
+
+
+
+
+model IntegrationConfig {
+  id          String   @id
+  type        String   @unique
+  provider    String
+  host        String?
+  port        String?
+  username    String?
+  password    String?
+  apiKey      String?
+  apiSecret   String?
+  senderId    String?
+  senderEmail String?
+  fromName    String?
+  encryption  String?
+  accountSid  String?
+  authToken   String?
+  fromNumber  String?
+  isEnabled   Boolean  @default(true)
+  updatedAt   DateTime
+}
+
+
+
+
+
+
+
+model NotificationLog {
+  id            String   @id
+  recipient     String
+  type          String
+  subject       String?
+  body          String?
+  status        String
+  sentAt        DateTime @default(now())
+  triggerReason String?
+}
+
+model PartUsage {
+  id           String     @id
+  partName     String
+  quantityUsed Int
+  unitCost     Float
+  totalCost    Float
+  source       PartSource
+  workOrderId  String
+  WorkOrder    WorkOrder  @relation(fields: [workOrderId], references: [id])
+}
+
+
+
+
+
+
+
+model ServiceSchedule {
+  id                 String   @id
+  serviceType        String
+  intervalMonths     Int
+  intervalMileage    Int
+  lastServiceDate    DateTime
+  lastServiceMileage Int
+  nextServiceDate    DateTime
+  nextServiceMileage Int
+  vehicleId          String
+  Vehicle            Vehicle  @relation(fields: [vehicleId], references: [id])
+}
+
+
+
+model User {
+  id           String   @id
+  username     String   @unique
+  email        String   @unique
+  mobileNumber String?
+  hierarchy    String?
+  userType     String?
+  firstName    String?
+  lastName     String?
+  department   String?
+  position     String?
+  employeeId   String?  @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime
+}
+
+
+
+model WorkLog {
+  id             String    @id
+  timestamp      DateTime  @default(now())
+  technicianName String
+  activity       String
+  hoursSpent     Float
+  notes          String
+  workOrderId    String
+  WorkOrder      WorkOrder @relation(fields: [workOrderId], references: [id])
+}
+
+model WorkOrder {
+  id                      String             @id
+  startDate               DateTime
+  estimatedCompletionDate DateTime
+  actualCompletionDate    DateTime?
+  totalLaborHours         Float
+  status                  WorkOrderStatus
+  requestId               String             @unique
+  garageId                String
+  Attachment              Attachment[]
+  ChecklistItem           ChecklistItem[]
+  PartUsage               PartUsage[]
+  WorkLog                 WorkLog[]
+  Garage                  Garage             @relation(fields: [garageId], references: [id])
+  MaintenanceRequest      MaintenanceRequest @relation(fields: [requestId], references: [id])
+}
+
+model AlertConfig {
+  id                   String    @id @default(uuid())
+  createdAt            DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt            DateTime? @map("deleted_at") @db.Timestamptz(6)
+  alertFor             String?   @map("alert_for")
+  alertType            String?   @map("alert_type")
+  frequency            String?
+  frequencyValue       BigInt?   @map("frequency_value")
+  dueAlertThreshold    String?   @map("due_alert_threshold")
+  thresholdValue       BigInt?   @map("threshold_value")
+  notificationEnabled  Boolean?  @map("notification_enabled")
+  whatsappEnabled      Boolean?  @map("whatsapp_enabled")
+  assignedIds          String[]  @map("assigned_ids")
+
+  @@index([deletedAt], map: "idx_alert_configs_deleted_at")
+  @@map("alert_configs")
+}
+
+model Alert {
+  id                String    @id @default(uuid())
+  createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+  type              String?
+  title             String?
+  description       String?
+  severity          String?
+  dateCreated       DateTime? @map("date_created") @db.Timestamptz(6)
+  relatedEntityId   String?   @map("related_entity_id")
+  status            String?
+  assignedTo        String?   @map("assigned_to")
+
+  @@index([deletedAt], map: "idx_alerts_deleted_at")
+  @@map("alerts")
+}
+
+model Attachment {
+  id                     String                @id @default(uuid())
+  createdAt              DateTime?             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime?             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt              DateTime?             @map("deleted_at") @db.Timestamptz(6)
+  maintenanceRequestId   String?               @map("maintenance_request_id")
+  serviceRequestId       String?               @map("service_request_id")
+  quotationId            String?               @map("quotation_id")
+  workOrderId            String?               @map("work_order_id")
+  invoiceId              String?               @map("invoice_id")
+  type                   String?
+  fileName               String?               @map("file_name")
+  url                    String?
+  MaintenanceRequest     MaintenanceRequest?   @relation(fields: [maintenanceRequestId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_maintenance_requests_attachments")
+  Quotation              Quotation?            @relation(fields: [quotationId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_quotations_attachments")
+  ServiceRequest         ServiceRequest?       @relation(fields: [serviceRequestId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_service_requests_attachments")
+  Invoice                Invoice?              @relation(fields: [invoiceId], references: [id])
+  WorkOrder              WorkOrder?            @relation(fields: [workOrderId], references: [id])
+
+  @@index([deletedAt], map: "idx_attachments_deleted_at")
+  @@map("attachments")
+}
+
+model Comment {
+  id                     String                @id @default(uuid())
+  createdAt              DateTime?             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime?             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt              DateTime?             @map("deleted_at") @db.Timestamptz(6)
+  maintenanceRequestId   String?               @map("maintenance_request_id")
+  author                 String?
+  text                   String?
+  timestamp              DateTime?             @db.Timestamptz(6)
+  MaintenanceRequest     MaintenanceRequest?   @relation(fields: [maintenanceRequestId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_maintenance_requests_comments")
+
+  @@index([deletedAt], map: "idx_comments_deleted_at")
+  @@map("comments")
+}
+
+model Driver {
+  id                    String                 @id @default(uuid())
+  createdAt             DateTime?              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime?              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt             DateTime?              @map("deleted_at") @db.Timestamptz(6)
+  name                  String?
+  licenseNumber         String?                @unique(map: "idx_drivers_license_number") @map("license_number")
+  licenseExpiry         DateTime?              @map("license_expiry") @db.Timestamptz(6)
+  assignedVehicleId     String?                @map("assigned_vehicle_id")
+  contactNumber         String?                @map("contact_number")
+  email                 String?
+  
+  // New fields required by API
+  firstName             String?                @map("first_name")
+  lastName              String?                @map("last_name")
+  hierarchy             String?
+  driverType            String?                @map("driver_type")
+  nationality           String?
+  dob                   DateTime?              @db.Timestamptz(6)
+  emiratesId            String?                @map("emirates_id")
+  communicationLanguage String?                @map("communication_language")
+  dateOfJoin            DateTime?              @map("date_of_join") @db.Timestamptz(6)
+  dallasId              String?                @map("dallas_id")
+
+  maintenanceRequests   MaintenanceRequest[]
+
+  // Relations
+  assignedVehicle       Vehicle?               @relation(fields: [assignedVehicleId], references: [id])
+
+  @@index([deletedAt], map: "idx_drivers_deleted_at")
+  @@map("drivers")
+}
+
+model Garage {
+  id                   String                 @id @default(uuid())
+  createdAt            DateTime?              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime?              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt            DateTime?              @map("deleted_at") @db.Timestamptz(6)
+  name                 String?
+  location             String?
+  contactPerson        String?                @map("contact_person")
+  designation          String?
+  email                String?
+  contactNumber        String?                @map("contact_number")
+  specialties          String[]
+  isInternal           Boolean?               @map("is_internal")
+  maintenanceRequests  MaintenanceRequest[]
+  quotations           Quotation[]
+  workOrders           WorkOrder[]
+
+  @@index([deletedAt], map: "idx_garages_deleted_at")
+  @@map("garages")
+}
+
+model StatusHistory {
+  id                     String                @id @default(uuid())
+  createdAt              DateTime?             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime?             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt              DateTime?             @map("deleted_at") @db.Timestamptz(6)
+  maintenanceRequestId   String?               @map("maintenance_request_id")
+  serviceRequestId       String?               @map("service_request_id")
+  status                 String?
+  date                   DateTime?             @db.Timestamptz(6)
+  note                   String?
+  actor                  String?
+  MaintenanceRequest     MaintenanceRequest?   @relation(fields: [maintenanceRequestId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_maintenance_requests_history")
+  ServiceRequest         ServiceRequest?       @relation(fields: [serviceRequestId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_service_requests_history")
+
+  @@index([deletedAt], map: "idx_histories_deleted_at")
+  @@map("histories")
+}
+
+model InvoiceLineItem {
+  id          String    @id @default(uuid())
+  createdAt   DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  invoiceId   String?   @map("invoice_id")
+  description String?
+  quantity    BigInt?
+  unitPrice   Decimal?  @map("unit_price") @db.Decimal
+  totalPrice  Decimal?  @map("total_price") @db.Decimal
+  category    String?
+  Invoice     Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_invoices_line_items")
+
+  @@index([deletedAt], map: "idx_invoice_line_items_deleted_at")
+  @@map("invoice_line_items")
+}
+
+model Invoice {
+  id                 String            @id @default(uuid())
+  createdAt          DateTime?         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime?         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt          DateTime?         @map("deleted_at") @db.Timestamptz(6)
+  invoiceNumber      String?           @unique(map: "idx_invoices_invoice_number") @map("invoice_number")
+  requestId          String?           @map("request_id")
+  garageId           String?           @map("garage_id")
+  invoiceDate        DateTime?         @map("invoice_date") @db.Timestamptz(6)
+  dueDate            DateTime?         @map("due_date") @db.Timestamptz(6)
+  totalAmount        Decimal?          @map("total_amount") @db.Decimal
+  paidAmount         Decimal?          @map("paid_amount") @db.Decimal
+  paymentStatus      String?           @map("payment_status")
+  invoiceLineItems   InvoiceLineItem[]
+  attachments        Attachment[]
+
+  @@index([deletedAt], map: "idx_invoices_deleted_at")
+  @@map("invoices")
+}
+
+model MaintenanceRequest {
+  id                   String        @id @default(uuid())
+  createdAt            DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime?     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt            DateTime?     @map("deleted_at") @db.Timestamptz(6)
+  vehicleId            String?       @map("vehicle_id")
+  driverId             String?       @map("driver_id")
+  requestDate          DateTime?     @map("request_date") @db.Timestamptz(6)
+  description          String?
+  status               String?
+  expectedEndDate      DateTime?     @map("expected_end_date") @db.Timestamptz(6)
+  garageId             String?       @map("garage_id")
+  estimatedCost        Decimal?      @map("estimated_cost") @db.Decimal
+  actualCost           Decimal?      @map("actual_cost") @db.Decimal
+  actualPartsCost      Decimal?      @map("actual_parts_cost") @db.Decimal
+  actualLaborCost      Decimal?      @map("actual_labor_cost") @db.Decimal
+  actualOtherCost      Decimal?      @map("actual_other_cost") @db.Decimal
+  completionDate       DateTime?     @map("completion_date") @db.Timestamptz(6)
+  maintenanceType      String?       @map("maintenance_type")
+  priority             String?
+  workOrderNo          String?       @map("work_order_no")
+  odometer             BigInt?
+  candidateGarageIds   String?       @map("candidate_garage_ids")
+  maintenanceJobs      String[]      @map("maintenance_jobs")
+  estimateApproval     String?       @map("estimate_approval")
+  workLog              String?       @map("work_log")
+  partsUsed            String?       @map("parts_used")
+  checklistItems       String?       @map("checklist_items")
+  assignedTechnicians  String?       @map("assigned_technicians")
+  actualCostsData      String?       @map("actual_costs_data")
+  attachments          Attachment[]
+  comments             Comment[]
+  histories            StatusHistory[]
+  Driver               Driver?       @relation(fields: [driverId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_maintenance_requests_driver")
+  Garage               Garage?       @relation(fields: [garageId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_maintenance_requests_garage")
+  Vehicle              Vehicle?      @relation(fields: [vehicleId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_maintenance_requests_vehicle")
+  quotations           Quotation[]
+  WorkOrder            WorkOrder?
+
+  @@index([deletedAt], map: "idx_maintenance_requests_deleted_at")
+  @@map("maintenance_requests")
+}
+
+model QuotationLabor {
+  id            String    @id @default(uuid())
+  createdAt     DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+  description   String?
+  hours         Decimal?  @db.Decimal
+  ratePerHour   Decimal?  @map("rate_per_hour") @db.Decimal
+  totalPrice    Decimal?  @map("total_price") @db.Decimal
+  quotationId   String?   @map("quotation_id")
+  Quotation     Quotation? @relation(fields: [quotationId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_quotations_labor")
+
+  @@index([deletedAt], map: "idx_quotation_labors_deleted_at")
+  @@map("quotation_labors")
+}
+
+model QuotationPart {
+  id           String    @id @default(uuid())
+  createdAt    DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
+  name         String?
+  quantity     BigInt?
+  unitPrice    Decimal?  @map("unit_price") @db.Decimal
+  totalPrice   Decimal?  @map("total_price") @db.Decimal
+  quotationId  String?   @map("quotation_id")
+  Quotation    Quotation? @relation(fields: [quotationId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_quotations_parts")
+
+  @@index([deletedAt], map: "idx_quotation_parts_deleted_at")
+  @@map("quotation_parts")
+}
+
+model Quotation {
+  id                      String                @id @default(uuid())
+  createdAt               DateTime?             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime?             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt               DateTime?             @map("deleted_at") @db.Timestamptz(6)
+  quotationDate           DateTime?             @map("quotation_date") @db.Timestamptz(6)
+  validUntil              DateTime?             @map("valid_until") @db.Timestamptz(6)
+  laborCost               Decimal?              @map("labor_cost") @db.Decimal
+  partsCost               Decimal?              @map("parts_cost") @db.Decimal
+  consumablesCost         Decimal?              @map("consumables_cost") @db.Decimal
+  vatAmount               Decimal?              @map("vat_amount") @db.Decimal
+  totalCost               Decimal?              @map("total_cost") @db.Decimal
+  grandTotal              Decimal?              @map("grand_total") @db.Decimal
+  currency                String?               @default("AED")
+  estimatedDuration       BigInt?               @map("estimated_duration")
+  estimatedCompletionDate DateTime?             @map("estimated_completion_date") @db.Timestamptz(6)
+  status                  String?
+  submittedBy             String?               @map("submitted_by")
+  notes                   String?
+  maintenanceRequestId    String?               @map("maintenance_request_id")
+  garageId                String?               @map("garage_id")
+  revision                BigInt?               @default(0)
+  attachments             Attachment[]
+  quotationLabors         QuotationLabor[]
+  quotationParts          QuotationPart[]
+  MaintenanceRequest      MaintenanceRequest?   @relation(fields: [maintenanceRequestId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_maintenance_requests_quotations")
+  Garage                  Garage?               @relation(fields: [garageId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_quotations_garage")
+
+  @@index([deletedAt], map: "idx_quotations_deleted_at")
+  @@map("quotations")
+}
+
+model ServiceRequest {
+  id                   String        @id @default(uuid())
+  createdAt            DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime?     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt            DateTime?     @map("deleted_at") @db.Timestamptz(6)
+  requestorId          String?       @map("requestor_id")
+  serviceType          String?       @map("service_type")
+  vehicleId            String?       @map("vehicle_id")
+  priority             String?
+  description          String?
+  date                 DateTime?     @db.Timestamptz(6)
+  status               String?
+  maintenanceRequestId String?       @map("maintenance_request_id")
+  assignedTo           String?       @map("assigned_to")
+  relatedDriverId      String?       @map("related_driver_id")
+  attachments          Attachment[]
+  histories            StatusHistory[]
+
+  @@index([deletedAt], map: "idx_service_requests_deleted_at")
+  @@map("service_requests")
+}
+
+model Vehicle {
+  id                   String                 @id @default(uuid())
+  createdAt            DateTime?              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime?              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt            DateTime?              @map("deleted_at") @db.Timestamptz(6)
+  make                 String?
+  model                String?
+  type                 String?
+  year                 BigInt?
+  licensePlate         String?                @unique(map: "idx_vehicles_license_plate") @map("license_plate")
+  vin                  String?                @unique(map: "idx_vehicles_vin")
+  currentMileage       BigInt?                @map("current_mileage")
+  status               String?
+  registrationExpiry   DateTime?              @map("registration_expiry") @db.Timestamptz(6)
+  insuranceExpiry      DateTime?              @map("insurance_expiry") @db.Timestamptz(6)
+  maintenanceRequests  MaintenanceRequest[]
+
+  drivers              Driver[]
+  serviceSchedules     ServiceSchedule[]
+
+  @@index([deletedAt], map: "idx_vehicles_deleted_at")
+  @@map("vehicles")
+}
+
+enum ActionStatus {
+  PENDING
+  ACKNOWLEDGED
+  ASSIGNED
+  ESCALATED
+  RESOLVED
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AlertType {
+  PREVENTIVE_MAINTENANCE
+  REGISTRATION_RENEWAL
+  LICENSE_RENEWAL
+  PERMIT_RENEWAL
+  OTHER
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ESCALATED
+}
+
+enum AttachmentType {
+  INVOICE
+  REPORT
+  IMAGE
+  QUOTATION
+  WORK_ORDER
+  ESTIMATE
+  APPROVED_ESTIMATE
+  OTHER
+}
+
+enum InvoiceCategory {
+  LABOR
+  PARTS
+  SERVICE
+  OTHER
+}
+
+enum MaintenancePriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum MaintenanceStatus {
+  REQUESTED
+  ACCEPTED
+  REJECTED
+  RE_ASSIGN
+  UNDER_ESTIMATION
+  PENDING_ESTIMATION_APPROVAL
+  ESTIMATION_APPROVED
+  UNDER_MAINTENANCE
+  MAINTENANCE_COMPLETED
+  PENDING_INVOICE
+  INVOICE_SUBMITTED
+  CLOSED
+}
+
+enum MaintenanceType {
+  PREVENTIVE
+  CORRECTIVE
+  EMERGENCY
+  INSPECTION
+}
+
+enum PartSource {
+  STOCK
+  ORDERED
+  CUSTOMER_SUPPLIED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+}
+
+enum QuotationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum WorkOrderStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  ON_HOLD
+  QUALITY_CHECK
+  COMPLETED
+  INVOICE_SUBMITTED
+}
+
+enum NotificationEvent {
+  SR_CREATED
+  SR_ASSIGNED
+  SR_COMPLETED
+  MAINTENANCE_REQUESTED
+  MAINTENANCE_APPROVED
+  MAINTENANCE_REJECTED
+  MAINTENANCE_COMPLETED
+  QUOTATION_SUBMITTED
+  QUOTATION_APPROVED
+  QUOTATION_REJECTED
+  INVOICE_GENERATED
+  ALERT_TRIGGERED
+}
+
+enum RecipientType {
+  REQUESTER
+  ASSIGNEE
+  FLEET_MANAGER
+  ADMIN
+  CUSTOM
+}
+
+model NotificationTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  event       NotificationEvent
+  channel     String
+  subject     String?
+  body        String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  rules       NotificationRule[]
+
+  @@map("notification_templates")
+}
+
+model NotificationRule {
+  id          String   @id @default(uuid())
+  event       NotificationEvent @unique
+  channels    String[]
+  
+  recipientTypes RecipientType[]
+  specificRecipientIds String[]
+  
+  templateId  String?
+  template    NotificationTemplate? @relation(fields: [templateId], references: [id])
+  
+  isEnabled   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("notification_rules")
+}

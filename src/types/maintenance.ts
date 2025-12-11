@@ -1,9 +1,8 @@
 export enum MaintenanceStatus {
-    DRAFT = 'Draft',
-    SUBMITTED = 'Submitted',
-    PENDING_OPERATIONS_ACK = 'Pending Operations Acknowledgment',
-    PENDING_MAINTENANCE_APPROVAL = 'Pending Maintenance Approval',
-    REJECTED_BY_MAINTENANCE = 'Rejected by Maintenance',
+    REQUESTED = 'Requested',
+    ACCEPTED = 'Accepted',
+    REJECTED = 'Rejected',
+    RE_ASSIGN = 'Re-Assign',
     UNDER_ESTIMATION = 'Under Estimation',
     PENDING_ESTIMATION_APPROVAL = 'Pending Estimation Approval',
     ESTIMATION_APPROVED = 'Estimation Approved',
@@ -12,69 +11,63 @@ export enum MaintenanceStatus {
     PENDING_INVOICE = 'Pending Invoice',
     INVOICE_SUBMITTED = 'Invoice Submitted',
     CLOSED = 'Closed',
-    // Legacy statuses (for backward compatibility)
-    REQUESTED = 'Requested',
-    AWAITING_APPROVAL = 'Awaiting Approval',
-    APPROVED = 'Accepted',
-    COMPLETED = 'Completed',
-    REJECTED = 'Rejected',
 }
 
 
 export enum AlertSeverity {
-    LOW = 'Low',
-    MEDIUM = 'Medium',
-    HIGH = 'High',
-    CRITICAL = 'Critical',
+    LOW = 'LOW',
+    MEDIUM = 'MEDIUM',
+    HIGH = 'HIGH',
+    CRITICAL = 'CRITICAL',
 }
 
 export enum AlertType {
-    PREVENTIVE_MAINTENANCE = 'Preventive Maintenance',
-    REGISTRATION_RENEWAL = 'Registration Renewal',
-    LICENSE_RENEWAL = 'License Renewal',
-    PERMIT_RENEWAL = 'Permit Renewal',
-    OTHER = 'Other',
+    PREVENTIVE_MAINTENANCE = 'PREVENTIVE_MAINTENANCE',
+    REGISTRATION_RENEWAL = 'REGISTRATION_RENEWAL',
+    LICENSE_RENEWAL = 'LICENSE_RENEWAL',
+    PERMIT_RENEWAL = 'PERMIT_RENEWAL',
+    OTHER = 'OTHER',
 }
 
 export enum ActionStatus {
-    PENDING = 'Pending',
-    ACKNOWLEDGED = 'Acknowledged',
-    ASSIGNED = 'Assigned',
-    ESCALATED = 'Escalated',
-    RESOLVED = 'Resolved',
+    PENDING = 'PENDING',
+    ACKNOWLEDGED = 'ACKNOWLEDGED',
+    ASSIGNED = 'ASSIGNED',
+    ESCALATED = 'ESCALATED',
+    RESOLVED = 'RESOLVED',
 }
 
 export enum MaintenanceType {
-    PREVENTIVE = 'Preventive',
-    CORRECTIVE = 'Corrective',
-    EMERGENCY = 'Emergency',
-    INSPECTION = 'Inspection',
+    PREVENTIVE = 'PREVENTIVE',
+    CORRECTIVE = 'CORRECTIVE',
+    EMERGENCY = 'EMERGENCY',
+    INSPECTION = 'INSPECTION',
 }
 
 export enum MaintenancePriority {
-    LOW = 'Low',
-    MEDIUM = 'Medium',
-    HIGH = 'High',
-    CRITICAL = 'Critical',
+    LOW = 'LOW',
+    MEDIUM = 'MEDIUM',
+    HIGH = 'HIGH',
+    CRITICAL = 'CRITICAL',
 }
 
 export enum AttachmentType {
-    INVOICE = 'Invoice',
-    REPORT = 'Report',
-    IMAGE = 'Image',
-    QUOTATION = 'Quotation',
-    WORK_ORDER = 'Work Order',
-    ESTIMATE = 'Estimate',
-    APPROVED_ESTIMATE = 'Approved Estimate',
-    OTHER = 'Other',
+    INVOICE = 'INVOICE',
+    REPORT = 'REPORT',
+    IMAGE = 'IMAGE',
+    QUOTATION = 'QUOTATION',
+    WORK_ORDER = 'WORK_ORDER',
+    ESTIMATE = 'ESTIMATE',
+    APPROVED_ESTIMATE = 'APPROVED_ESTIMATE',
+    OTHER = 'OTHER',
 }
 
 // Quotation Management
 export enum QuotationStatus {
-    PENDING = 'Pending',
-    ACCEPTED = 'Accepted',
-    REJECTED = 'Rejected',
-    EXPIRED = 'Expired',
+    PENDING = 'PENDING',
+    APPROVED = 'APPROVED',
+    REJECTED = 'REJECTED',
+    EXPIRED = 'EXPIRED',
 }
 
 // Approval Workflow
@@ -143,6 +136,8 @@ export interface Vehicle {
     status: 'Active' | 'Inactive' | 'In Service';
     registrationExpiry: string; // ISO Date
     insuranceExpiry: string; // ISO Date
+    registrationLastRenewed?: string; // ISO Date
+    insuranceLastRenewed?: string; // ISO Date
 }
 
 export interface Driver {
@@ -153,6 +148,7 @@ export interface Driver {
     assignedVehicleId?: string;
     contactNumber: string;
     email?: string;
+    licenseLastRenewed?: string; // ISO Date
 }
 
 export interface Garage {
@@ -171,7 +167,9 @@ export interface Garage {
 
 export interface MaintenanceRequest {
     id: string;
+    readableId?: string;
     vehicleId: string;
+    vehicle?: Vehicle;
     driverId: string;
     requestDate: string; // ISO Date / Start Date
     expectedEndDate?: string; // ISO Date
@@ -200,6 +198,12 @@ export interface MaintenanceRequest {
 
     // Status Timeline
     statusTimeline?: Partial<Record<MaintenanceStatus, string>>; // ISO Date for each status
+    history?: {
+        status: MaintenanceStatus;
+        date: string;
+        note?: string;
+        actor?: string;
+    }[];
 
     // Advanced Features - Phase 1-5
     quotations?: Quotation[]; // All quotations received
@@ -232,6 +236,8 @@ export interface Alert {
     relatedEntityId?: string; // VehicleID, DriverID, etc.
     status: ActionStatus;
     assignedTo?: string;
+    assignedDate?: string; // ISO Date
+    assignmentNote?: string;
 }
 
 export interface ServiceSchedule {
@@ -259,6 +265,14 @@ export interface PartItem {
     totalPrice: number;
 }
 
+export interface LaborItem {
+    id: string;
+    description: string;
+    hours: number;
+    ratePerHour: number;
+    totalPrice: number;
+}
+
 export interface Quotation {
     id: string;
     requestId: string;
@@ -268,15 +282,20 @@ export interface Quotation {
     validUntil: string;
     laborCost: number;
     partsCost: number;
-    totalCost: number;
+    totalCost: number; // Subtotal (Parts + Labor)
     currency?: 'AED';
     parts: PartItem[];
+    labor: LaborItem[];
+    consumablesCost: number;
+    vatAmount: number;
+    grandTotal: number;
     estimatedDuration: number; // hours
     estimatedCompletionDate?: string; // ISO Date
     notes?: string;
     status: QuotationStatus;
     submittedBy: string;
     attachments?: Attachment[];
+    revision?: number;
 }
 
 // ============================================
@@ -832,5 +851,33 @@ export interface EnhancedMaintenanceRequest extends MaintenanceRequest {
 
     // Workflow History
     statusTransitions?: StatusTransition[];
+
+    // Active Work Order Progress (Persisted)
+    workLog?: WorkLogEntry[];
+    partsUsed?: PartUsage[];
+    checklistItems?: ChecklistItem[];
+    actualCosts?: ActualCosts;
+}
+
+export interface ServiceRequest {
+    id: string;
+    requestorId: string;
+    serviceType: string;
+    vehicleId: string;
+    priority: 'Low' | 'Medium' | 'High';
+    description: string;
+    date: string;
+    status: 'Pending' | 'In Progress' | 'Completed' | 'Rejected' | 'Acknowledged' | 'Assigned' | 'Escalated' | 'Resolved';
+    maintenanceRequestId?: string; // Link to Maintenance Request
+    assignedTo?: string;
+    relatedDriverId?: string; // For driver-related services
+    history?: {
+        status: string;
+        date: string; // ISO string
+        note?: string;
+        actor?: string; // Who performed the action
+    }[];
+    attachments?: Attachment[];
+    createdAt?: string; // ISO Date - Captured at submission
 }
 

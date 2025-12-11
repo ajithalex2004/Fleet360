@@ -77,7 +77,7 @@ export default function GarageWorkOrdersPage() {
             <main className="max-w-6xl mx-auto px-4 py-6">
                 <div className="space-y-4">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <h2 className="text-lg font-semibold text-slate-800">Work Orders</h2>
+                        <h2 className="text-2xl font-bold text-slate-800">Work Orders</h2>
                         <div className="flex flex-col sm:flex-row gap-2 text-sm">
                             <input
                                 type="text"
@@ -101,7 +101,7 @@ export default function GarageWorkOrdersPage() {
                                 <option value={MaintenanceStatus.UNDER_MAINTENANCE}>{MaintenanceStatus.UNDER_MAINTENANCE}</option>
                                 <option value={MaintenanceStatus.MAINTENANCE_COMPLETED}>{MaintenanceStatus.MAINTENANCE_COMPLETED}</option>
                                 <option value={MaintenanceStatus.PENDING_INVOICE}>{MaintenanceStatus.PENDING_INVOICE}</option>
-                                <option value={MaintenanceStatus.CLOSED}>{MaintenanceStatus.CLOSED}</option>
+                                <option value={MaintenanceStatus.CLOSED}>Closed</option>
                             </select>
                         </div>
                     </div>

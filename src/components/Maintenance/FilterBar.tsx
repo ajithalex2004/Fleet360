@@ -6,6 +6,8 @@ interface FilterBarProps {
     onStatusChange: (statuses: string[]) => void;
     statusOptions: string[];
     placeholder?: string;
+    defaultStartDate?: string;
+    defaultEndDate?: string;
 }
 
 export default function FilterBar({
@@ -13,11 +15,13 @@ export default function FilterBar({
     onDateRangeChange,
     onStatusChange,
     statusOptions,
-    placeholder = "Search..."
+    placeholder = "Search...",
+    defaultStartDate = '',
+    defaultEndDate = ''
 }: FilterBarProps) {
     const [searchTerm, setSearchTerm] = useState('');
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
+    const [startDate, setStartDate] = useState(defaultStartDate);
+    const [endDate, setEndDate] = useState(defaultEndDate);
     const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
     const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -164,11 +168,11 @@ export default function FilterBar({
                     type="button"
                     onClick={() => {
                         setSearchTerm('');
-                        setStartDate('');
-                        setEndDate('');
+                        setStartDate(defaultStartDate);
+                        setEndDate(defaultEndDate);
                         setSelectedStatuses([]);
                         onSearch('');
-                        onDateRangeChange('', '');
+                        onDateRangeChange(defaultStartDate, defaultEndDate);
                         onStatusChange([]);
                     }}
                     className="rounded-lg border border-slate-300 bg-white p-2 text-slate-500 hover:bg-slate-50 hover:text-slate-700"

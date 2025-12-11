@@ -19,7 +19,8 @@ import {
     getMaintenanceRequests,
     getVehicles,
     getGarages,
-    updateMaintenanceRequest
+    updateMaintenanceRequest,
+    updateQuotation
 } from '@/services/mockData';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { formatCurrency } from '@/utils/currency';
@@ -39,7 +40,7 @@ export default function ApprovalsPage() {
     const [showApprovalModal, setShowApprovalModal] = useState(false);
     const [showReviewModal, setShowReviewModal] = useState(false);
 
-    const [approvalAction, setApprovalAction] = useState<'approve' | 'reject'>('approve');
+    const [approvalAction, setApprovalAction] = useState<'approve' | 'reject' | 're-assign'>('approve');
     const [approvalComments, setApprovalComments] = useState('');
 
     // Tab State
@@ -93,7 +94,8 @@ export default function ApprovalsPage() {
         // Tab Filter
         if (activeTab === 'maintenance') {
             result = result.filter(r =>
-                r.status === MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL ||
+                r.status === MaintenanceStatus.REQUESTED ||
+                r.status === MaintenanceStatus.RE_ASSIGN ||
                 r.status === MaintenanceStatus.UNDER_ESTIMATION // Approved Maintenance
             );
         } else {
@@ -112,7 +114,8 @@ export default function ApprovalsPage() {
         // Apply Tab Filter first
         if (activeTab === 'maintenance') {
             result = result.filter(r =>
-                r.status === MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL ||
+                r.status === MaintenanceStatus.REQUESTED ||
+                r.status === MaintenanceStatus.RE_ASSIGN ||
                 r.status === MaintenanceStatus.UNDER_ESTIMATION
             );
         } else {
@@ -160,84 +163,81 @@ export default function ApprovalsPage() {
         let updatedQuotations = selectedRequest.quotations || [];
 
         if (approvalAction === 'approve') {
-            if (selectedRequest.status === MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL) {
-                newStatus = MaintenanceStatus.UNDER_ESTIMATION;
+            if (selectedRequest.status === MaintenanceStatus.REQUESTED || selectedRequest.status === MaintenanceStatus.RE_ASSIGN) {
+                newStatus = MaintenanceStatus.ACCEPTED;
+            } else {
+                // Estimation Approval
+                newStatus = MaintenanceStatus.UNDER_MAINTENANCE;
 
                 // Generate Work Order Number
                 const date = new Date();
                 const month = (date.getMonth() + 1).toString().padStart(2, '0');
                 const workOrderNo = `WO-${month}-${selectedRequest.id}`;
 
-                // Update Request with WO Number
-                await updateMaintenanceRequest(selectedRequest.id, {
-                    workOrderNo,
-                    status: newStatus
-                });
-
-                // Update local state
-                setRequests(prev => prev.map(r =>
-                    r.id === selectedRequest.id ? {
-                        ...r,
-                        workOrderNo,
-                        status: newStatus
-                    } : r
-                ));
-
-                setShowApprovalModal(false);
-                setSelectedRequest(null);
-                setApprovalComments('');
-
-                alert(`Request approved successfully! Work Order ${workOrderNo} generated.`);
-                return;
-
-            } else {
-                // Estimation Approval
-                newStatus = MaintenanceStatus.UNDER_MAINTENANCE;
-
                 // Update quotation statuses
                 if (selectedQuotationId) {
+                    // Update quotations individually via API
+                    const updatePromises = updatedQuotations.map(q => {
+                        const status = q.id === selectedQuotationId ? QuotationStatus.APPROVED : QuotationStatus.REJECTED;
+                        return updateQuotation(q.id, { status });
+                    });
+                    await Promise.all(updatePromises);
+
+                    // Update local state for UI
                     updatedQuotations = updatedQuotations.map(q => ({
                         ...q,
-                        status: q.id === selectedQuotationId ? QuotationStatus.ACCEPTED : QuotationStatus.REJECTED
+                        status: q.id === selectedQuotationId ? QuotationStatus.APPROVED : QuotationStatus.REJECTED
                     }));
 
                     const selectedQuote = updatedQuotations.find(q => q.id === selectedQuotationId);
                     if (selectedQuote) {
                         // Sync Approved Quotation as Attachment
-                        let updatedAttachments = selectedRequest.attachments || [];
+                        let newAttachment: Attachment | null = null;
                         if (selectedQuote.attachments && selectedQuote.attachments.length > 0) {
                             const quoteAttachment = selectedQuote.attachments[0];
-                            const newAttachment: Attachment = {
+                            newAttachment = {
                                 id: `att-quote-${Date.now()}`,
                                 type: AttachmentType.APPROVED_ESTIMATE,
                                 fileName: quoteAttachment.fileName,
                                 url: quoteAttachment.url,
                                 uploadedAt: new Date().toISOString()
                             };
-                            updatedAttachments = [...updatedAttachments, newAttachment];
                         }
 
-                        // Update Request fields (WO Number already exists)
+                        const attachmentsPayload = newAttachment ? {
+                            create: [newAttachment]
+                        } : undefined;
+
+                        // Update Request fields (excluding quotations array)
                         await updateMaintenanceRequest(selectedRequest.id, {
                             expectedEndDate: selectedQuote.estimatedCompletionDate,
                             garageId: selectedQuote.garageId,
                             selectedQuotationId: selectedQuotationId,
                             status: newStatus,
-                            quotations: updatedQuotations,
-                            attachments: updatedAttachments,
+                            workOrderNo,
+                            attachments: attachmentsPayload as any, // Cast to any to allow Prisma nested write
                             actualPartsCost: selectedQuote.totalCost,
                             actualCost: selectedQuote.totalCost
                         });
 
-                        // Skip the generic update below since we did it here
+                        // Update local state
+                        const updatedAttachments = selectedRequest.attachments || [];
+                        if (newAttachment) {
+                            updatedAttachments.push(newAttachment);
+                        }
+
+                        // Update local state
                         setRequests(prev => prev.map(r =>
                             r.id === selectedRequest.id ? {
                                 ...r,
                                 expectedEndDate: selectedQuote.estimatedCompletionDate,
                                 garageId: selectedQuote.garageId,
                                 status: newStatus,
+                                workOrderNo,
                                 quotations: updatedQuotations,
-                                selectedQuotationId: selectedQuotationId
+                                attachments: updatedAttachments,
+                                actualPartsCost: selectedQuote.totalCost,
+                                actualCost: selectedQuote.totalCost
                             } : r
                         ));
 
@@ -246,18 +246,18 @@ export default function ApprovalsPage() {
                         setSelectedRequest(null);
                         setApprovalComments('');
                         setSelectedQuotationId(null);
-
-                        alert(`Estimation approved successfully!`);
-                        return; // Exit early as we handled everything
+                        return;
                     }
                 }
             }
+        } else if (approvalAction === 're-assign') {
+            newStatus = MaintenanceStatus.RE_ASSIGN;
         } else {
             // Rejections
-            if (selectedRequest.status === MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL) {
-                newStatus = MaintenanceStatus.REJECTED_BY_MAINTENANCE;
+            if (selectedRequest.status === MaintenanceStatus.REQUESTED || selectedRequest.status === MaintenanceStatus.RE_ASSIGN) {
+                newStatus = MaintenanceStatus.REJECTED;
             } else {
-                newStatus = MaintenanceStatus.REJECTED_BY_MAINTENANCE; // Send back to maintenance for re-RFQ
+                newStatus = MaintenanceStatus.REJECTED;
             }
         }
 
@@ -266,23 +266,19 @@ export default function ApprovalsPage() {
             requestId: selectedRequest.id,
             approverRole: currentUser.role,
             approverName: currentUser.name,
-            approverEmail: 'user@example.com', // Mock email
+            approverEmail: 'user@example.com',
             requestedAt: new Date().toISOString(),
             respondedAt: new Date().toISOString(),
-            status: approvalAction === 'approve' ? ApprovalStatus.APPROVED : ApprovalStatus.REJECTED,
+            status: approvalAction === 'approve' ? ApprovalStatus.APPROVED : (approvalAction === 're-assign' ? ApprovalStatus.PENDING : ApprovalStatus.REJECTED),
             comments: approvalComments
         };
 
         try {
-            // Update request in backend (mock)
             await updateMaintenanceRequest(selectedRequest.id, {
                 status: newStatus,
-                quotations: updatedQuotations,
                 selectedQuotationId: selectedQuotationId || undefined
-                // In a real app, we'd append the approval record
             });
 
-            // Update local state
             setRequests(prev => prev.map(r =>
                 r.id === selectedRequest.id ? {
                     ...r,
@@ -298,14 +294,14 @@ export default function ApprovalsPage() {
             setApprovalComments('');
             setSelectedQuotationId(null);
 
-            alert(`Request ${approvalAction === 'approve' ? 'approved' : 'rejected'} successfully!`);
+            alert(`Request ${approvalAction === 'approve' ? 'approved' : (approvalAction === 're-assign' ? 're-assigned' : 'rejected')} successfully!`);
         } catch (error) {
             console.error('Failed to update request:', error);
             alert('Failed to process approval.');
         }
     };
 
-    const openApprovalModal = (request: EnhancedMaintenanceRequest, action: 'approve' | 'reject') => {
+    const openApprovalModal = (request: EnhancedMaintenanceRequest, action: 'approve' | 'reject' | 're-assign') => {
         setSelectedRequest(request);
         setApprovalAction(action);
         setShowApprovalModal(true);
@@ -362,7 +358,7 @@ export default function ApprovalsPage() {
                 onDateRangeChange={(start, end) => handleFilter('', { start, end }, [])}
                 onStatusChange={(statuses) => handleFilter('', { start: '', end: '' }, statuses)}
                 statusOptions={activeTab === 'maintenance'
-                    ? [MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL, "Approved Maintenance"]
+                    ? [MaintenanceStatus.REQUESTED, MaintenanceStatus.RE_ASSIGN, "Approved Maintenance"]
                     : [MaintenanceStatus.PENDING_ESTIMATION_APPROVAL, "Approved Estimate"]}
                 placeholder="Search approvals..."
             />
@@ -408,13 +404,19 @@ export default function ApprovalsPage() {
                                         <td className="px-6 py-4">
                                             <div className="flex gap-2">
                                                 {activeTab === 'maintenance' ? (
-                                                    request.status === MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL && (
+                                                    (request.status === MaintenanceStatus.REQUESTED || request.status === MaintenanceStatus.RE_ASSIGN) && (
                                                         <>
                                                             <button
                                                                 onClick={() => openApprovalModal(request, 'approve')}
                                                                 className="rounded bg-green-50 px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-100 border border-green-200"
                                                             >
                                                                 Approve
+                                                            </button>
+                                                            <button
+                                                                onClick={() => openApprovalModal(request, 're-assign')}
+                                                                className="rounded bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700 hover:bg-orange-100 border border-orange-200"
+                                                            >
+                                                                Re-Assign
                                                             </button>
                                                             <button
                                                                 onClick={() => openApprovalModal(request, 'reject')}
@@ -454,18 +456,20 @@ export default function ApprovalsPage() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
                     <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
                         <h3 className="text-lg font-bold text-slate-900">
-                            {approvalAction === 'approve' ? 'Approve Request' : 'Reject Request'}
+                            {approvalAction === 'approve' ? 'Approve Request' : (approvalAction === 're-assign' ? 'Re-Assign Request' : 'Reject Request')}
                         </h3>
                         <p className="mt-1 text-sm text-slate-500">
                             {approvalAction === 'approve'
                                 ? `Are you sure you want to approve request ${selectedRequest.id}?`
-                                : `Please provide a reason for rejecting request ${selectedRequest.id}.`
+                                : (approvalAction === 're-assign'
+                                    ? `Are you sure you want to re-assign request ${selectedRequest.id}?`
+                                    : `Please provide a reason for rejecting request ${selectedRequest.id}.`)
                             }
                         </p>
 
                         <div className="mt-4">
                             <label className="block text-sm font-medium text-slate-700 mb-2">
-                                Comments {approvalAction === 'reject' && '*'}
+                                Comments {approvalAction !== 'approve' && '*'}
                             </label>
                             <textarea
                                 rows={3}
@@ -485,13 +489,15 @@ export default function ApprovalsPage() {
                             </button>
                             <button
                                 onClick={handleApprovalAction}
-                                disabled={approvalAction === 'reject' && !approvalComments.trim()}
+                                disabled={approvalAction !== 'approve' && !approvalComments.trim()}
                                 className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${approvalAction === 'approve'
                                     ? 'bg-green-600 hover:bg-green-700'
-                                    : 'bg-red-600 hover:bg-red-700 disabled:opacity-50'
+                                    : (approvalAction === 're-assign'
+                                        ? 'bg-orange-600 hover:bg-orange-700 disabled:opacity-50'
+                                        : 'bg-red-600 hover:bg-red-700 disabled:opacity-50')
                                     }`}
                             >
-                                Confirm {approvalAction === 'approve' ? 'Approval' : 'Rejection'}
+                                Confirm {approvalAction === 'approve' ? 'Approval' : (approvalAction === 're-assign' ? 'Re-Assignment' : 'Rejection')}
                             </button>
                         </div>
                     </div>
@@ -529,7 +535,8 @@ export default function ApprovalsPage() {
                                 <h4 className="font-medium text-slate-900 mb-2">Select Quotation to Approve</h4>
                                 {selectedRequest.quotations && selectedRequest.quotations.length > 0 ? (
                                     <div className="space-y-3">
-                                        {selectedRequest.quotations.map((quote) => (
+                                        {/* Deduplicate quotations by Garage ID (show latest per garage) */}
+                                        {Array.from(new Map(selectedRequest.quotations.map(q => [q.garageId, q])).values()).map((quote) => (
                                             <label
                                                 key={quote.id}
                                                 className={`flex items-center justify-between bg-white p-3 rounded border cursor-pointer transition-all ${selectedQuotationId === quote.id
@@ -547,8 +554,8 @@ export default function ApprovalsPage() {
                                                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300"
                                                     />
                                                     <div>
-                                                        <div className="font-medium text-slate-900">{quote.garageName}</div>
-                                                        <div className="text-xs text-slate-500">ETA: {quote.estimatedCompletionDate ? new Date(quote.estimatedCompletionDate).toLocaleDateString() : 'N/A'}</div>
+                                                        <div className="font-medium text-slate-900">{garages[quote.garageId]?.name || 'Unknown Garage'}</div>
+                                                        <div className="text-xs text-slate-500">ETC: {quote.estimatedCompletionDate ? new Date(quote.estimatedCompletionDate).toLocaleDateString() : 'N/A'}</div>
                                                     </div>
                                                 </div>
                                                 <div className="text-right">

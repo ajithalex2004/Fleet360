@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Garage } from '@/types/maintenance';
-import { getGarages } from '@/services/mockData';
+import { getGarages, createGarage, updateGarage } from '@/services/mockData';
 
 export default function GaragePage() {
     const [garages, setGarages] = useState<Garage[]>([]);
@@ -69,51 +69,45 @@ export default function GaragePage() {
             designation: garage.designation,
             email: garage.email,
             contactNumber: garage.contactNumber,
-            specialties: garage.specialties,
+            specialties: garage.specialties || [],
             isInternal: garage.isInternal,
         });
         setIsModalOpen(true);
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (editingGarage) {
-            // Update existing garage
-            setGarages(garages.map(g =>
-                g.id === editingGarage.id
-                    ? {
-                        ...g,
-                        id: formData.id,
-                        name: formData.name,
-                        location: formData.location,
-                        contactPerson: formData.contactPerson,
-                        designation: formData.designation,
-                        email: formData.email,
-                        contactNumber: formData.contactNumber,
-                        specialties: formData.specialties,
-                        isInternal: formData.isInternal,
-                    }
-                    : g
-            ));
-        } else {
-            // Add new garage
-            const newGarage: Garage = {
-                id: formData.id,
-                name: formData.name,
-                location: formData.location,
-                contactPerson: formData.contactPerson,
-                designation: formData.designation,
-                email: formData.email,
-                contactNumber: formData.contactNumber,
-                specialties: formData.specialties,
-                isInternal: formData.isInternal,
-            };
-            setGarages([...garages, newGarage]);
-        }
+        try {
+            if (editingGarage) {
+                // Update existing garage
+                const updatedGarage = await updateGarage(editingGarage.id, {
+                    ...formData,
+                    id: editingGarage.id, // Ensure ID is preserved
+                    specialties: formData.specialties || [],
+                    isInternal: formData.isInternal
+                });
 
-        setIsModalOpen(false);
-        setEditingGarage(null);
+                // Update local state with response
+                setGarages(garages.map(g => g.id === editingGarage.id ? updatedGarage : g));
+            } else {
+                // Add new garage
+                const newGarage = await createGarage({
+                    ...formData,
+                    id: formData.id || '', // Let backend generate if empty, but form has ID field so we send it
+                    specialties: formData.specialties || [],
+                    isInternal: formData.isInternal
+                });
+
+                setGarages([...garages, newGarage]);
+            }
+
+            setIsModalOpen(false);
+            setEditingGarage(null);
+        } catch (error: any) {
+            console.error("Failed to save garage:", error);
+            alert(`Failed to save garage: ${error.message || 'Unknown error'}`);
+        }
     };
 
     if (loading) return <div className="p-8 text-center">Loading garages...</div>;
@@ -134,7 +128,7 @@ export default function GaragePage() {
             </div>
 
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {garages.map((garage) => (
+                {Array.isArray(garages) && garages.map((garage) => (
                     <div key={garage.id} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
                         <div className="flex items-start justify-between">
                             <div className="flex-1">
@@ -199,11 +193,11 @@ export default function GaragePage() {
                         <div className="mt-4">
                             <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Services Offered</p>
                             <div className="mt-2 flex flex-wrap gap-2">
-                                {garage.specialties.map((spec) => (
+                                {garage.specialties?.map((spec) => (
                                     <span key={spec} className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
                                         {spec}
                                     </span>
-                                ))}
+                                )) || <span className="text-xs text-slate-400">No services listed</span>}
                             </div>
                         </div>
                     </div >
@@ -232,9 +226,10 @@ export default function GaragePage() {
                                     <label className="block text-sm font-medium text-slate-700">Garage ID</label>
                                     <input
                                         type="text"
-                                        className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        className={`mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 ${editingGarage ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
                                         value={formData.id}
                                         onChange={(e) => setFormData({ ...formData, id: e.target.value })}
+                                        disabled={!!editingGarage}
                                     />
                                 </div>
                                 <div className="grid gap-4 md:grid-cols-2">
@@ -308,7 +303,7 @@ export default function GaragePage() {
                                                 <input
                                                     type="checkbox"
                                                     className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                                    checked={formData.specialties.includes(service)}
+                                                    checked={(formData.specialties || []).includes(service)}
                                                     onChange={(e) => {
                                                         const checked = e.target.checked;
                                                         setFormData(prev => ({

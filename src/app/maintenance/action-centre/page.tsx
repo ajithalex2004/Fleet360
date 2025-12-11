@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Alert, ActionStatus } from '@/types/maintenance';
+import { Alert, ActionStatus, AlertSeverity } from '@/types/maintenance';
 import { getAlerts } from '@/services/mockData';
+import { sendNotification, sendEventNotification } from '@/utils/notifications';
 import AlertCard from '@/components/ActionCentre/AlertCard';
 import FilterBar from '@/components/Maintenance/FilterBar';
+import Link from 'next/link';
 
 export default function ActionCentrePage() {
     const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -12,14 +14,17 @@ export default function ActionCentrePage() {
     const [filteredAlerts, setFilteredAlerts] = useState<Alert[]>([]);
     const [assigningAlert, setAssigningAlert] = useState<Alert | null>(null);
     const [escalatingAlert, setEscalatingAlert] = useState<Alert | null>(null);
+    const [viewingAlert, setViewingAlert] = useState<Alert | null>(null);
     const [assignEmail, setAssignEmail] = useState('');
     const [escalateEmail, setEscalateEmail] = useState('');
     const [escalateReason, setEscalateReason] = useState('');
 
     useEffect(() => {
         getAlerts().then((data) => {
-            setAlerts(data);
-            setFilteredAlerts(data);
+            // Filter out resolved/closed alerts for the main active view
+            const activeAlerts = data.filter((a: Alert) => a.status !== ActionStatus.RESOLVED && a.status !== 'Closed' as ActionStatus);
+            setAlerts(activeAlerts);
+            setFilteredAlerts(activeAlerts);
             setLoading(false);
         });
     }, []);
@@ -53,18 +58,29 @@ export default function ActionCentrePage() {
         setFilteredAlerts(result);
     };
 
-    const handleAction = (id: string, action: ActionStatus) => {
+    const handleAction = async (id: string, action: ActionStatus) => {
+        // Optimistic update
         const updateAlerts = (prev: Alert[]) => prev.map((alert) =>
-            alert.id === id ? { ...alert, status: action } : alert
+            alert.id === id ? { ...alert, status: action, ...(action === ActionStatus.ASSIGNED ? { assignedDate: new Date().toISOString() } : {}) } : alert
         );
 
         setAlerts(prev => {
             const updated = updateAlerts(prev);
-            // We should re-apply filters here, but for simplicity we'll just update the filtered list similarly
-            // Ideally, we would separate 'data' and 'view' more cleanly or use a useMemo for filtering
             setFilteredAlerts(prevFiltered => updateAlerts(prevFiltered));
             return updated;
         });
+
+        // Backend update
+        try {
+            const updates: Partial<Alert> = { status: action };
+            if (action === ActionStatus.ASSIGNED) {
+                updates.assignedDate = new Date().toISOString();
+            }
+            await import('@/services/mockData').then(m => m.updateAlert(id, updates));
+        } catch (error) {
+            console.error('Failed to persist alert action:', error);
+            // In a real app, revert optimistic update here
+        }
     };
 
     const handleAssignClick = (alert: Alert) => {
@@ -78,19 +94,83 @@ export default function ActionCentrePage() {
         setEscalateReason('');
     };
 
-    const handleAssignSubmit = (e: React.FormEvent) => {
+    const handleViewClick = (alert: Alert) => {
+        setViewingAlert(alert);
+    };
+
+    const handleAssignSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        console.log('[ActionCentre] Handle Assign Submit clicked', { assigningAlert, assignEmail });
         if (assigningAlert && assignEmail) {
-            handleAction(assigningAlert.id, ActionStatus.ASSIGNED);
+            // In a real app, we'd call an API here. For now, we update local state.
+            // We also need to update the specific alert with the assignee email
+            const updatedAlerts = alerts.map(a =>
+                a.id === assigningAlert.id
+                    ? { ...a, status: ActionStatus.ASSIGNED, assignedTo: assignEmail, assignedDate: new Date().toISOString() }
+                    : a
+            );
+            setAlerts(updatedAlerts);
+            setFilteredAlerts(updatedAlerts);
+
+            // Persist assignment
+            import('@/services/mockData').then(m =>
+                m.updateAlert(assigningAlert.id, {
+                    status: ActionStatus.ASSIGNED,
+                    assignedTo: assignEmail,
+                    assignedDate: new Date().toISOString()
+                })
+            ).catch(err => console.error('Failed to persist assignment:', err));
+
             setAssigningAlert(null);
             setAssignEmail('');
+
+            // Send Notification
+            console.log('[ActionCentre] Attempting to send configured notification...');
+
+            // Try new system first (SR_ASSIGNED maps to "Assignment" concept here)
+            const handled = await sendEventNotification(
+                'SR_ASSIGNED',
+                {
+                    requestId: assigningAlert.id,
+                    title: assigningAlert.title,
+                    description: assigningAlert.description,
+                    assignee: assignEmail,
+                    severity: assigningAlert.severity
+                },
+                assignEmail
+            );
+
+            if (handled) {
+                alert(`Alert assigned and configured notification sent.`);
+            } else {
+                console.log('[ActionCentre] No rule matched or enabled, falling back to legacy notification...');
+                const success = await sendNotification(
+                    assignEmail,
+                    `Alert Assigned: ${assigningAlert.title}`,
+                    `You have been assigned to handle the following alert:\n\nTitle: ${assigningAlert.title}\nSeverity: ${assigningAlert.severity}\nDescription: ${assigningAlert.description}\n\nPlease take necessary action.`,
+                    'Email',
+                    'Alert Assignment'
+                );
+
+                if (success) {
+                    alert(`Alert assigned to ${assignEmail} and notification sent.`);
+                } else {
+                    alert(`Alert assigned to ${assignEmail}, but notification delivery failed. Please check system logs.`);
+                }
+            }
+        } else {
+            console.warn('[ActionCentre] Missing alert or email', { assigningAlert, assignEmail });
         }
     };
 
     const handleEscalateSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (escalatingAlert && escalateEmail) {
-            handleAction(escalatingAlert.id, ActionStatus.ESCALATED);
+            handleAction(escalatingAlert.id, ActionStatus.ESCALATED); // This handles status update persistence
+
+            // Pending: We should also persist 'escalateEmail' and 'escalateReason' if the backend supports it.
+            // For now, assuming status update is sufficient for the main persistence issue.
+
             setEscalatingAlert(null);
             setEscalateEmail('');
             setEscalateReason('');
@@ -105,6 +185,14 @@ export default function ActionCentrePage() {
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">Action Centre</h1>
                     <p className="mt-1 text-slate-500">Monitor and respond to fleet alerts.</p>
+                </div>
+                <div>
+                    <Link href="/maintenance/action-centre/history" className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-sm transition-all hover:shadow">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-slate-500">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                        </svg>
+                        View History
+                    </Link>
                 </div>
             </div>
 
@@ -124,6 +212,7 @@ export default function ActionCentrePage() {
                         onAction={handleAction}
                         onAssign={handleAssignClick}
                         onEscalate={handleEscalateClick}
+                        onView={handleViewClick}
                     />
                 ))}
             </div>
@@ -161,9 +250,9 @@ export default function ActionCentrePage() {
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="font-medium text-slate-600">Severity:</span>
-                                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${assigningAlert.severity === 'CRITICAL' ? 'bg-red-100 text-red-700' :
-                                        assigningAlert.severity === 'HIGH' ? 'bg-orange-100 text-orange-700' :
-                                            assigningAlert.severity === 'MEDIUM' ? 'bg-amber-100 text-amber-700' :
+                                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${assigningAlert.severity === AlertSeverity.CRITICAL ? 'bg-red-100 text-red-700' :
+                                        assigningAlert.severity === AlertSeverity.HIGH ? 'bg-orange-100 text-orange-700' :
+                                            assigningAlert.severity === AlertSeverity.MEDIUM ? 'bg-amber-100 text-amber-700' :
                                                 'bg-blue-100 text-blue-700'
                                         }`}>
                                         {assigningAlert.severity}
@@ -246,9 +335,9 @@ export default function ActionCentrePage() {
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="font-medium text-orange-700">Severity:</span>
-                                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${escalatingAlert.severity === 'CRITICAL' ? 'bg-red-100 text-red-700' :
-                                        escalatingAlert.severity === 'HIGH' ? 'bg-orange-100 text-orange-700' :
-                                            escalatingAlert.severity === 'MEDIUM' ? 'bg-amber-100 text-amber-700' :
+                                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${escalatingAlert.severity === AlertSeverity.CRITICAL ? 'bg-red-100 text-red-700' :
+                                        escalatingAlert.severity === AlertSeverity.HIGH ? 'bg-orange-100 text-orange-700' :
+                                            escalatingAlert.severity === AlertSeverity.MEDIUM ? 'bg-amber-100 text-amber-700' :
                                                 'bg-blue-100 text-blue-700'
                                         }`}>
                                         {escalatingAlert.severity}
@@ -313,6 +402,96 @@ export default function ActionCentrePage() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* View Details Modal */}
+            {viewingAlert && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                    <div className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-2xl">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-xl font-bold text-slate-900">Alert Details</h3>
+                            <button onClick={() => setViewingAlert(null)} className="text-slate-400 hover:text-slate-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-6 w-6">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div className="space-y-6">
+                            {/* Header Info */}
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <h4 className="text-lg font-semibold text-slate-900">{viewingAlert.title}</h4>
+                                    <p className="text-sm text-slate-500 mt-1">ID: {viewingAlert.id.toUpperCase()}</p>
+                                </div>
+                                <span className={`rounded-full px-3 py-1 text-xs font-medium ${viewingAlert.severity === AlertSeverity.CRITICAL ? 'bg-red-100 text-red-700' :
+                                    viewingAlert.severity === AlertSeverity.HIGH ? 'bg-orange-100 text-orange-700' :
+                                        viewingAlert.severity === AlertSeverity.MEDIUM ? 'bg-amber-100 text-amber-700' :
+                                            'bg-blue-100 text-blue-700'
+                                    }`}>
+                                    {viewingAlert.severity} Severity
+                                </span>
+                            </div>
+
+                            {/* Main Details */}
+                            <div className="grid grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">Type</label>
+                                    <p className="text-sm font-medium text-slate-900">{viewingAlert.type}</p>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">Date Created</label>
+                                    <p className="text-sm font-medium text-slate-900">{new Date(viewingAlert.dateCreated).toLocaleString()}</p>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">Description</label>
+                                    <p className="text-sm text-slate-900 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                        {viewingAlert.description}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Assignment Details - Only if Assigned */}
+                            {viewingAlert.status === ActionStatus.ASSIGNED && (
+                                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                                    <h4 className="text-sm font-bold text-blue-900 mb-3 flex items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                                            <path d="M10 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3.465 14.493a1.23 1.23 0 0 0 .41 1.412A9.957 9.957 0 0 0 10 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 0 0-13.074.003Z" />
+                                        </svg>
+                                        Assignment Details
+                                    </h4>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-medium text-blue-700 mb-1">Assigned To</label>
+                                            <p className="text-sm font-medium text-blue-900">{viewingAlert.assignedTo || 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-blue-700 mb-1">Assigned Date</label>
+                                            <p className="text-sm font-medium text-blue-900">
+                                                {viewingAlert.assignedDate ? new Date(viewingAlert.assignedDate).toLocaleString() : 'N/A'}
+                                            </p>
+                                        </div>
+                                        {viewingAlert.assignmentNote && (
+                                            <div className="col-span-2">
+                                                <label className="block text-xs font-medium text-blue-700 mb-1">Note</label>
+                                                <p className="text-sm text-blue-900 italic">"{viewingAlert.assignmentNote}"</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="mt-8 flex justify-end">
+                            <button
+                                onClick={() => setViewingAlert(null)}
+                                className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200"
+                            >
+                                Close
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
