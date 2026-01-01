@@ -8,6 +8,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -38,6 +39,10 @@ func CreateVehicle(c *gin.Context) {
 	}
 
 	if err := database.DB.Create(&input).Error; err != nil {
+		if strings.Contains(err.Error(), "23505") {
+			c.JSON(http.StatusConflict, gin.H{"error": "License Plate or VIN already exists."})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -62,11 +67,98 @@ func UpdateVehicle(c *gin.Context) {
 
 	// Update fields
 	if err := database.DB.Model(&vehicle).Omit("ID").Updates(input).Error; err != nil {
+		if strings.Contains(err.Error(), "23505") { // Unique constraint violation
+			c.JSON(http.StatusConflict, gin.H{"error": "License Plate or VIN already exists."})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, vehicle)
+}
+
+// DeleteVehicle
+func DeleteVehicle(c *gin.Context) {
+	id := c.Param("id")
+
+	// Start atomic transaction for cascade delete
+	tx := database.DB.Begin()
+
+	// 1. Find dependent Maintenance Requests
+	var mrIDs []string
+	tx.Model(&models.MaintenanceRequest{}).Where("vehicle_id = ?", id).Pluck("id", &mrIDs)
+
+	if len(mrIDs) > 0 {
+		// Delete MR dependencies
+		if err := tx.Unscoped().Where("maintenance_request_id IN ?", mrIDs).Delete(&models.History{}).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete history: " + err.Error()})
+			return
+		}
+		if err := tx.Unscoped().Where("maintenance_request_id IN ?", mrIDs).Delete(&models.Comment{}).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete comments: " + err.Error()})
+			return
+		}
+		if err := tx.Unscoped().Where("maintenance_request_id IN ?", mrIDs).Delete(&models.Attachment{}).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete attachments: " + err.Error()})
+			return
+		}
+		// Quotations
+		if err := tx.Unscoped().Where("maintenance_request_id IN ?", mrIDs).Delete(&models.Quotation{}).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete quotations: " + err.Error()})
+			return
+		}
+		// Delete MRs
+		if err := tx.Unscoped().Where("vehicle_id = ?", id).Delete(&models.MaintenanceRequest{}).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete maintenance requests: " + err.Error()})
+			return
+		}
+	}
+
+	// 2. Find dependent Service Requests
+	var srIDs []string
+	tx.Model(&models.ServiceRequest{}).Where("vehicle_id = ?", id).Pluck("id", &srIDs)
+
+	if len(srIDs) > 0 {
+		if err := tx.Unscoped().Where("service_request_id IN ?", srIDs).Delete(&models.History{}).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete SR history: " + err.Error()})
+			return
+		}
+		if err := tx.Unscoped().Where("service_request_id IN ?", srIDs).Delete(&models.Attachment{}).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete SR attachments: " + err.Error()})
+			return
+		}
+		// Delete SRs
+		if err := tx.Unscoped().Where("vehicle_id = ?", id).Delete(&models.ServiceRequest{}).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete service requests: " + err.Error()})
+			return
+		}
+	}
+
+	// 3. Unassign Drivers
+	if err := tx.Model(&models.Driver{}).Where("assigned_vehicle_id = ?", id).Update("assigned_vehicle_id", nil).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to unassign drivers: " + err.Error()})
+		return
+	}
+
+	// 4. Finally, Hard Delete the Vehicle
+	if err := tx.Unscoped().Where("id = ?", id).Delete(&models.Vehicle{}).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	tx.Commit()
+	c.Status(http.StatusNoContent)
 }
 
 // GetMaintenanceRequests
@@ -750,9 +842,33 @@ func UploadFile(c *gin.Context) {
 	fileURL := fmt.Sprintf("%s://%s/uploads/%s", scheme, c.Request.Host, filename)
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "File uploaded successfully",
-		"url":     fileURL,
+		"message":  "File uploaded successfully",
+		"url":      fileURL,
 		"fileName": file.Filename,
 	})
 }
 
+// CreateAlert
+func CreateAlert(c *gin.Context) {
+	var input models.Alert
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Default status if missing
+	if input.Status == "" {
+		input.Status = models.ActionStatus("PENDING")
+	}
+	// Default date if missing
+	if input.DateCreated.IsZero() {
+		input.DateCreated = time.Now()
+	}
+
+	if err := database.DB.Create(&input).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, input)
+}

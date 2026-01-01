@@ -138,6 +138,23 @@ export interface Vehicle {
     insuranceExpiry: string; // ISO Date
     registrationLastRenewed?: string; // ISO Date
     insuranceLastRenewed?: string; // ISO Date
+
+    // Extended Fields
+    registrationNumber?: string;
+    deviceId?: string;
+    hierarchy?: string;
+    vehicleGroup?: string;
+    vehicleClass?: string;
+    vehicleUsage?: string;
+    simCardNumber?: string;
+    emirate?: string;
+    plateCategory?: string;
+    plateCode?: string;
+    chassisNumber?: string;
+    color?: string;
+    fuelType?: string;
+    transmissionType?: string;
+    passengerCapacity?: number;
 }
 
 export interface Driver {

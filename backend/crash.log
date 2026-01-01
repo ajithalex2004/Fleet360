@@ -1,0 +1,67 @@
+Database connection established
+
+2025/12/27 20:18:04 [32mC:/Users/athom/OneDrive/Documents/Gravity/my-c1-project/backend/database/db.go:34 [33mSLOW SQL >= 200ms
+[0m[31;1m[204.838ms] [33m[rows:-][35m SELECT c.column_name, constraint_name, constraint_type FROM information_schema.table_constraints tc JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_catalog, table_name, constraint_name) JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema AND tc.table_name = c.table_name AND ccu.column_name = c.column_name WHERE constraint_type IN ('PRIMARY KEY', 'UNIQUE') AND c.table_catalog = 'neondb' AND c.table_schema = CURRENT_SCHEMA() AND c.table_name = 'drivers'[0m
+
+2025/12/27 20:18:30 [32mC:/Users/athom/OneDrive/Documents/Gravity/my-c1-project/backend/database/db.go:34 [33mSLOW SQL >= 200ms
+[0m[31;1m[207.043ms] [33m[rows:0][35m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'alerts' AND column_name = 'created_at') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'alerts' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))[0m
+
+2025/12/27 20:18:36 [32mC:/Users/athom/OneDrive/Documents/Gravity/my-c1-project/backend/database/db.go:34 [33mSLOW SQL >= 200ms
+[0m[31;1m[227.396ms] [33m[rows:0][35m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'invoices' AND column_name = 'paid_amount') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'invoices' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))[0m
+
+2025/12/27 20:18:54 [32mC:/Users/athom/OneDrive/Documents/Gravity/my-c1-project/backend/database/db.go:34 [33mSLOW SQL >= 200ms
+[0m[31;1m[222.906ms] [33m[rows:0][35m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'attachments' AND column_name = 'file_name') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'attachments' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))[0m
+
+2025/12/27 20:18:54 [32mC:/Users/athom/OneDrive/Documents/Gravity/my-c1-project/backend/database/db.go:34 [33mSLOW SQL >= 200ms
+[0m[31;1m[205.037ms] [33m[rows:1][35m SELECT count(*) FROM INFORMATION_SCHEMA.table_constraints WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'attachments' AND constraint_name = 'fk_maintenance_requests_attachments'[0m
+
+2025/12/27 20:18:54 [32mC:/Users/athom/OneDrive/Documents/Gravity/my-c1-project/backend/database/db.go:34 [33mSLOW SQL >= 200ms
+[0m[31;1m[204.920ms] [33m[rows:1][35m SELECT count(*) FROM INFORMATION_SCHEMA.table_constraints WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'attachments' AND constraint_name = 'fk_quotations_attachments'[0m
+
+2025/12/27 20:18:55 [32mC:/Users/athom/OneDrive/Documents/Gravity/my-c1-project/backend/database/db.go:34 [33mSLOW SQL >= 200ms
+[0m[31;1m[218.993ms] [33m[rows:1][35m SELECT count(*) FROM information_schema.tables WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'alert_configs' AND table_type = 'BASE TABLE'[0m
+
+2025/12/27 20:18:56 [32mC:/Users/athom/OneDrive/Documents/Gravity/my-c1-project/backend/database/db.go:34 [33mSLOW SQL >= 200ms
+[0m[31;1m[215.884ms] [33m[rows:0][35m SELECT description FROM pg_catalog.pg_description WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'alert_configs' AND column_name = 'created_at') AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'alert_configs' AND relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = CURRENT_SCHEMA()))[0m
+Database migrated
+
+2025/12/27 20:18:59 [32mC:/Users/athom/OneDrive/Documents/Gravity/my-c1-project/backend/main.go:22 [33mSLOW SQL >= 200ms
+[0m[31;1m[480.407ms] [33m[rows:0][35m UPDATE "maintenance_requests" SET "deleted_at"='2025-12-27 20:18:58.728' WHERE id = '' AND "maintenance_requests"."deleted_at" IS NULL[0m
+Database already seeded
+[GIN-debug] [WARNING] Creating an Engine instance with the Logger and Recovery middleware already attached.
+
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /api/vehicles             --> my-c1-project-backend/handlers.GetVehicles (4 handlers)
+[GIN-debug] GET    /api/vehicles/:id         --> my-c1-project-backend/handlers.GetVehicle (4 handlers)
+[GIN-debug] POST   /api/vehicles             --> my-c1-project-backend/handlers.CreateVehicle (4 handlers)
+[GIN-debug] PATCH  /api/vehicles/:id         --> my-c1-project-backend/handlers.UpdateVehicle (4 handlers)
+[GIN-debug] GET    /api/maintenance-requests --> my-c1-project-backend/handlers.GetMaintenanceRequests (4 handlers)
+[GIN-debug] GET    /api/maintenance-requests/:id --> my-c1-project-backend/handlers.GetMaintenanceRequest (4 handlers)
+[GIN-debug] POST   /api/maintenance-requests --> my-c1-project-backend/handlers.CreateMaintenanceRequest (4 handlers)
+[GIN-debug] PATCH  /api/maintenance-requests/:id --> my-c1-project-backend/handlers.UpdateMaintenanceRequest (4 handlers)
+[GIN-debug] GET    /api/service-requests     --> my-c1-project-backend/handlers.GetServiceRequests (4 handlers)
+[GIN-debug] POST   /api/service-requests     --> my-c1-project-backend/handlers.CreateServiceRequest (4 handlers)
+[GIN-debug] PATCH  /api/service-requests/:id --> my-c1-project-backend/handlers.UpdateServiceRequest (4 handlers)
+[GIN-debug] GET    /api/drivers              --> my-c1-project-backend/handlers.GetDrivers (4 handlers)
+[GIN-debug] GET    /api/drivers/:id          --> my-c1-project-backend/handlers.GetDriver (4 handlers)
+[GIN-debug] POST   /api/quotations           --> my-c1-project-backend/handlers.CreateQuotation (4 handlers)
+[GIN-debug] PUT    /api/quotations/:id       --> my-c1-project-backend/handlers.UpdateQuotation (4 handlers)
+[GIN-debug] PATCH  /api/quotations/:id       --> my-c1-project-backend/handlers.PatchQuotation (4 handlers)
+[GIN-debug] GET    /api/garages              --> my-c1-project-backend/handlers.GetGarages (4 handlers)
+[GIN-debug] POST   /api/garages              --> my-c1-project-backend/handlers.CreateGarage (4 handlers)
+[GIN-debug] PUT    /api/garages/:id          --> my-c1-project-backend/handlers.UpdateGarage (4 handlers)
+[GIN-debug] GET    /api/alert-configs        --> my-c1-project-backend/handlers.GetAlertConfigs (4 handlers)
+[GIN-debug] POST   /api/alert-configs        --> my-c1-project-backend/handlers.CreateAlertConfig (4 handlers)
+[GIN-debug] PATCH  /api/alert-configs/:id    --> my-c1-project-backend/handlers.UpdateAlertConfig (4 handlers)
+[GIN-debug] DELETE /api/alert-configs/:id    --> my-c1-project-backend/handlers.DeleteAlertConfig (4 handlers)
+[GIN-debug] GET    /api/maintenance/predictive --> my-c1-project-backend/handlers.GetPredictiveMaintenance (4 handlers)
+[GIN-debug] POST   /api/upload               --> my-c1-project-backend/handlers.UploadFile (4 handlers)
+[GIN-debug] GET    /uploads/*filepath        --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] HEAD   /uploads/*filepath        --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://pkg.go.dev/github.com/gin-gonic/gin#readme-don-t-trust-all-proxies for details.
+[GIN-debug] Listening and serving HTTP on :8080
+[GIN-debug] [ERROR] listen tcp :8080: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.

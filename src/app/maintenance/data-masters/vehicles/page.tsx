@@ -66,22 +66,22 @@ export default function VehiclesPage() {
             vehicleUsage: vehicle.vehicleUsage || '',
             simCardNumber: vehicle.simCardNumber || '',
             emirate: vehicle.emirate || '',
-            plateNumber: vehicle.licensePlate,
+            plateNumber: vehicle.licensePlate || '',
             plateCategory: vehicle.plateCategory || '',
             plateCode: vehicle.plateCode || '',
             registrationExpiry: vehicle.registrationExpiry ? new Date(vehicle.registrationExpiry).toISOString().split('T')[0] : '',
             insuranceExpiry: vehicle.insuranceExpiry ? new Date(vehicle.insuranceExpiry).toISOString().split('T')[0] : '',
-            make: vehicle.make,
-            model: vehicle.model,
-            year: vehicle.year,
+            make: vehicle.make || '',
+            model: vehicle.model || '',
+            year: vehicle.year || new Date().getFullYear(),
             chassisNumber: vehicle.chassisNumber || '',
-            vin: vehicle.vin,
+            vin: vehicle.vin || '',
             color: vehicle.color || '',
             fuelType: vehicle.fuelType || '',
             transmissionType: vehicle.transmissionType || '',
             passengerCapacity: vehicle.passengerCapacity || 0,
-            currentMileage: vehicle.currentMileage,
-            type: vehicle.type,
+            currentMileage: vehicle.currentMileage || 0,
+            type: vehicle.type || '',
         });
         setIsModalOpen(true);
     };
@@ -90,8 +90,9 @@ export default function VehiclesPage() {
         if (!confirm('Are you sure you want to delete this vehicle?')) return;
         try {
             await api.delete(`vehicles/${id}`);
+            // Optimistic update: Remove from local state immediately
+            setVehicles(prev => prev.filter(v => v.id !== id));
             alert('Vehicle deleted successfully');
-            loadVehicles();
         } catch (error) {
             alert(`Failed to delete vehicle: ${(error as Error).message}`);
         }

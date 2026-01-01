@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const BACKEND_BASE_URL = 'http://localhost:8080/api/vehicles';
+const BACKEND_BASE_URL = 'http://127.0.0.1:8080/api/vehicles';
 
 export async function GET(
     request: Request,
@@ -37,7 +37,15 @@ export async function PATCH(
         });
 
         if (!res.ok) {
-            const error = await res.text();
+            let error = await res.text();
+            try {
+                const jsonError = JSON.parse(error);
+                if (jsonError.error) {
+                    error = jsonError.error;
+                }
+            } catch (e) {
+                // Keep raw text
+            }
             return NextResponse.json({ error }, { status: res.status });
         }
 
@@ -59,7 +67,16 @@ export async function DELETE(
         });
 
         if (!res.ok) {
-            const error = await res.text();
+            let error = await res.text();
+            try {
+                // Try to parse as JSON to avoid double quoting
+                const jsonError = JSON.parse(error);
+                if (jsonError.error) {
+                    error = jsonError.error;
+                }
+            } catch (e) {
+                // Keep raw text if not JSON
+            }
             return NextResponse.json({ error }, { status: res.status });
         }
 

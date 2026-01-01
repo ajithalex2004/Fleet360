@@ -40,6 +40,7 @@ func main() {
 		api.GET("/vehicles/:id", handlers.GetVehicle)
 		api.POST("/vehicles", handlers.CreateVehicle)
 		api.PATCH("/vehicles/:id", handlers.UpdateVehicle)
+		api.DELETE("/vehicles/:id", handlers.DeleteVehicle)
 		api.GET("/maintenance-requests", handlers.GetMaintenanceRequests)
 		api.GET("/maintenance-requests/:id", handlers.GetMaintenanceRequest)
 		api.POST("/maintenance-requests", handlers.CreateMaintenanceRequest)
@@ -60,6 +61,7 @@ func main() {
 		api.PATCH("/alert-configs/:id", handlers.UpdateAlertConfig)
 		api.DELETE("/alert-configs/:id", handlers.DeleteAlertConfig)
 		api.GET("/maintenance/predictive", handlers.GetPredictiveMaintenance)
+		api.POST("/alerts", handlers.CreateAlert)
 		api.POST("/upload", handlers.UploadFile)
 	}
 

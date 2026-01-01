@@ -9,12 +9,12 @@ import (
 
 func Seed() {
 	// Check if data exists
-	// var count int64
-	// database.DB.Model(&models.Vehicle{}).Count(&count)
-	// if count > 0 {
-	// 	fmt.Println("Database already seeded")
-	// 	return
-	// }
+	var count int64
+	database.DB.Model(&models.Vehicle{}).Count(&count)
+	if count > 0 {
+		fmt.Println("Database already seeded")
+		return
+	}
 
 	fmt.Println("Seeding database...")
 
