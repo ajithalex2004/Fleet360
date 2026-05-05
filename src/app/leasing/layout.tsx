@@ -22,6 +22,7 @@ const NAV_GROUPS = [
       { href: '/leasing/quotations/copilot', label: 'AI Co-pilot',        icon: '✨' },
       { href: '/leasing/quotations',         label: 'Quotations',         icon: '💬' },
       { href: '/leasing/contracts-v2',       label: 'Agreements',         icon: '📜' },
+      { href: '/leasing/contracts-v2/qa',    label: 'Contract Q&A (AI)',  icon: '💬' },
       { href: '/leasing/renewals',           label: 'Renewals',           icon: '🔄' },
       { href: '/leasing/early-terminations', label: 'Early Termination',  icon: '🚫' },
     ],
