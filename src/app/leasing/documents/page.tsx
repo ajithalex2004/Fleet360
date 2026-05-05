@@ -38,6 +38,8 @@ export default function DocumentsPage() {
   const [uploading, setUploading] = useState(false);
   const [sweepBusy, setSweepBusy] = useState(false);
   const [sweepResult, setSweepResult] = useState<string | null>(null);
+  const [classifyBusy, setClassifyBusy] = useState(false);
+  const [classifyHint, setClassifyHint] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormData>({
     entityType: 'CONTRACT',
     entityId: '',
@@ -139,6 +141,56 @@ export default function DocumentsPage() {
       alert(error instanceof Error ? error.message : 'Upload failed');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleClassify = async () => {
+    if (!selectedFile) {
+      setClassifyHint('Pick an image first.');
+      return;
+    }
+    if (!selectedFile.type.startsWith('image/')) {
+      setClassifyHint('AI classification only works on images (PNG/JPEG/WebP) in v1.0. PDF support coming in v1.1.');
+      return;
+    }
+    setClassifyBusy(true);
+    setClassifyHint(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', selectedFile);
+      if (formData.docType) fd.append('expectedDocType', formData.docType);
+      const res = await fetch('/api/leasing/documents/classify', { method: 'POST', body: fd });
+      const json = await res.json();
+      if (!res.ok) {
+        setClassifyHint(json.error ?? `Classifier returned ${res.status}`);
+        return;
+      }
+      const c = json.classification as {
+        docType: string;
+        suggestedName: string;
+        expiryDate: string | null;
+        issueDate: string | null;
+        confidence: string;
+        warnings: string[];
+      };
+
+      // Map classifier types that aren't in LeaseDocument enum to OTHER (until v1.1).
+      const allowed = new Set(['TRADE_LICENSE', 'EMIRATES_ID', 'PASSPORT', 'MOA', 'SIGNED_AGREEMENT', 'INSURANCE', 'VEHICLE_PHOTO', 'OTHER']);
+      const mappedType = allowed.has(c.docType) ? c.docType : 'OTHER';
+
+      setFormData((prev) => ({
+        ...prev,
+        docType: mappedType,
+        docName: c.suggestedName || prev.docName,
+        issueDate: c.issueDate ?? prev.issueDate,
+        expiryDate: c.expiryDate ?? prev.expiryDate,
+      }));
+      const warnSuffix = c.warnings.length > 0 ? ` · ${c.warnings.length} warning${c.warnings.length === 1 ? '' : 's'}` : '';
+      setClassifyHint(`AI: ${c.docType} (${c.confidence})${warnSuffix} — review and submit.`);
+    } catch (err) {
+      setClassifyHint(err instanceof Error ? err.message : 'Classification failed');
+    } finally {
+      setClassifyBusy(false);
     }
   };
 
@@ -405,13 +457,29 @@ export default function DocumentsPage() {
                   <input
                     type="file"
                     accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.txt"
-                    onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+                    onChange={(e) => { setSelectedFile(e.target.files?.[0] ?? null); setClassifyHint(null); }}
                     required
                     className="w-full text-sm text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-slate-600 file:text-white hover:file:bg-slate-500"
                   />
                   {selectedFile && (
-                    <p className="mt-1 text-xs text-slate-400">
-                      {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
+                    <div className="mt-2 flex items-center justify-between gap-3 flex-wrap">
+                      <p className="text-xs text-slate-400">
+                        {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleClassify}
+                        disabled={classifyBusy || !selectedFile.type.startsWith('image/')}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white font-medium hover:opacity-90 disabled:opacity-40"
+                        title={selectedFile.type.startsWith('image/') ? 'Auto-fill type, name, and expiry from the image' : 'AI classify works on images only (v1.0)'}
+                      >
+                        ✨ {classifyBusy ? 'Classifying…' : 'Auto-classify with AI'}
+                      </button>
+                    </div>
+                  )}
+                  {classifyHint && (
+                    <p className="mt-2 text-xs text-violet-300 bg-violet-900/20 border border-violet-500/30 rounded px-2 py-1">
+                      {classifyHint}
                     </p>
                   )}
                 </div>
