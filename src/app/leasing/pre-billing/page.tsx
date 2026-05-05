@@ -299,6 +299,20 @@ export default function PreBillingPage() {
                   </span>
                 </td>
                 <td className="px-6 py-4 text-sm space-x-2">
+                  <a
+                    href={`/api/leasing/pre-billing/${statement.id}/pdf?lang=en&download=1`}
+                    className="text-emerald-400 hover:text-emerald-300 transition-colors text-xs"
+                    title="Download bilingual PDF (English layout)"
+                  >
+                    PDF·EN
+                  </a>
+                  <a
+                    href={`/api/leasing/pre-billing/${statement.id}/pdf?lang=ar&download=1`}
+                    className="text-emerald-400 hover:text-emerald-300 transition-colors text-xs"
+                    title="Download bilingual PDF (Arabic layout)"
+                  >
+                    PDF·AR
+                  </a>
                   {statement.status === 'DRAFT' && (
                     <button
                       onClick={() => handleStatusChange(statement.id, 'SENT')}
