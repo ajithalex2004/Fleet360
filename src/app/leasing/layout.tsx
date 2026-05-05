@@ -19,6 +19,7 @@ const NAV_GROUPS = [
     label: 'Sales Lifecycle',
     items: [
       { href: '/leasing/inquiries',          label: 'Inquiries',          icon: '📩' },
+      { href: '/leasing/quotations/copilot', label: 'AI Co-pilot',        icon: '✨' },
       { href: '/leasing/quotations',         label: 'Quotations',         icon: '💬' },
       { href: '/leasing/contracts-v2',       label: 'Agreements',         icon: '📜' },
       { href: '/leasing/renewals',           label: 'Renewals',           icon: '🔄' },
