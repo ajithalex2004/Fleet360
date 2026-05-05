@@ -44,6 +44,7 @@ const NAV_GROUPS = [
       { href: '/leasing/traffic-fines',  label: 'Traffic Fines',      icon: '🚦' },
       { href: '/leasing/fuel',           label: 'Fuel Management',    icon: '⛽' },
       { href: '/leasing/mileage',        label: 'Mileage & Overage',  icon: '🛣️' },
+      { href: '/leasing/field',          label: 'Field App (mobile)', icon: '📲' },
     ],
   },
   {
@@ -84,6 +85,12 @@ export default function LeasingLayout({ children }: { children: React.ReactNode 
 
   const isActive = (href: string) =>
     href === '/leasing' ? pathname === '/leasing' : pathname.startsWith(href);
+
+  // Field PWA bypasses the desktop chrome — operators are on phones, the
+  // sidebar is dead weight there. The field route owns its own mobile shell.
+  if (pathname?.startsWith('/leasing/field')) {
+    return <>{children}</>;
+  }
 
   return (
     <ModuleGuard moduleId="leasing" moduleName="Vehicle Leasing" moduleIcon="📋">
