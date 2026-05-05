@@ -35,8 +35,9 @@ const NAV_GROUPS = [
       { href: '/rental/agreements',    label: 'Rental Agreements',   icon: '📄' },
       { href: '/rental/renewals',      label: 'Renewals',            icon: '🔄' },
       { href: '/rental/handover',      label: 'Handover & Return',   icon: '🔑' },
-      { href: '/rental/damage-claims', label: 'Damage Claims',       icon: '⚠️' },
-      { href: '/rental/transfers',     label: 'Vehicle Transfers',   icon: '🔀' },
+      { href: '/rental/damage-claims',     label: 'Damage Claims',       icon: '⚠️' },
+      { href: '/rental/damage-claims/ai',  label: 'Damage AI Studio',    icon: '🤖' },
+      { href: '/rental/transfers',         label: 'Vehicle Transfers',   icon: '🔀' },
     ],
   },
   {
