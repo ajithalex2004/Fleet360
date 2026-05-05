@@ -64,6 +64,13 @@ const NAV_FINANCE = [
   { href: '/finance/bank-recon', label: 'Bank Recon', icon: '🏦' },
 ];
 
+const NAV_LEASING = [
+  { href: '/leasing', label: 'Overview', icon: '📋' },
+  { href: '/leasing/contracts', label: 'My Contracts', icon: '📜' },
+  { href: '/leasing/invoices', label: 'My Invoices', icon: '🧾' },
+  { href: '/leasing/documents', label: 'My Documents', icon: '📄' },
+];
+
 const NAV_SUPPORT = [
   { href: '/support', label: 'Help', icon: '❓' },
 ];
@@ -82,6 +89,7 @@ function Sidebar({ tenant, slug }: { tenant: TenantData | null; slug: string }) 
 
   const hasRAC = tenant?.modules.some(m => m.module === 'RAC' && m.isEnabled) ?? false;
   const hasBus = tenant?.modules.some(m => ['SCHOOL_BUS', 'school_bus'].includes(m.module) && m.isEnabled) ?? false;
+  const hasLeasing = tenant?.modules.some(m => ['LEASING', 'leasing'].includes(m.module) && m.isEnabled) ?? false;
 
   function isActive(href: string, exact = false) {
     const full = base + href;
@@ -154,6 +162,12 @@ function Sidebar({ tenant, slug }: { tenant: TenantData | null; slug: string }) 
         {hasBus && (
           <NavGroup label="School Bus">
             {NAV_SCHOOL_BUS.map(n => <NavItem key={n.href} {...n} />)}
+          </NavGroup>
+        )}
+
+        {hasLeasing && (
+          <NavGroup label="Vehicle Leasing">
+            {NAV_LEASING.map(n => <NavItem key={n.href} {...n} />)}
           </NavGroup>
         )}
 
