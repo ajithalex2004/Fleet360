@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { sendBookingActivatedWhatsApp } from '@/lib/whatsapp';
 
 // POST /api/rental/bookings/[id]/activate
 // Activates booking (vehicle handed over to customer), records checkout inspection
@@ -8,7 +9,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const body = await req.json();
     const booking = await prisma.rentalBooking.findUnique({
       where: { id: params.id },
-      include: { agreement: true },
+      include: { agreement: true, customer: true },
     });
     if (!booking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
     if (!['CONFIRMED', 'PENDING'].includes(booking.status ?? '')) {
@@ -56,6 +57,22 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     const results = await prisma.$transaction(ops as any);
+
+    // Best-effort WhatsApp activation message.
+    void sendBookingActivatedWhatsApp(
+      { fullName: booking.customer.fullName, phone: booking.customer.phone },
+      {
+        bookingRef: booking.bookingRef,
+        pickupDate: booking.pickupDate,
+        dropoffDate: booking.dropoffDate,
+        pickupLocation: booking.pickupLocation,
+        dropoffLocation: booking.dropoffLocation,
+        vehicleCategory: booking.vehicleCategory,
+        totalAmount: booking.totalAmount ? Number(booking.totalAmount) : null,
+        currency: booking.currency ?? 'AED',
+      },
+    );
+
     return NextResponse.json({ booking: results[0] });
   } catch (error) {
     console.error('Error activating booking:', error);

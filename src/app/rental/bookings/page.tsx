@@ -43,6 +43,10 @@ export default function BookingsPage() {
   const [error, setError]               = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [sweeping, setSweeping] = useState(false);
+  const [permitFor, setPermitFor] = useState<Booking | null>(null);
+  const [permitDestination, setPermitDestination] = useState('OMAN');
+  const [permitBorder, setPermitBorder] = useState('');
+  const [permitPurpose, setPermitPurpose] = useState('Tourism');
 
   const [formData, setFormData] = useState({
     customerId: '',
@@ -290,6 +294,15 @@ export default function BookingsPage() {
                             Activate
                           </button>
                         )}
+                        {(status === 'CONFIRMED' || status === 'ACTIVE') && (
+                          <button
+                            onClick={() => setPermitFor(b)}
+                            className="text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30"
+                            title="Issue cross-border travel permit"
+                          >
+                            Permit
+                          </button>
+                        )}
                         {status === 'ACTIVE' && (
                           <button
                             onClick={() => handleAction(b.id, 'complete')}
@@ -391,6 +404,63 @@ export default function BookingsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {permitFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-lg bg-slate-800/95 border border-white/10 rounded-2xl p-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-white">Cross-Border Permit</h2>
+              <button onClick={() => setPermitFor(null)} className="text-slate-400 hover:text-white text-xl">×</button>
+            </div>
+            <p className="text-sm text-slate-400 mb-6">
+              For booking <span className="font-mono text-cyan-300">{permitFor.bookingRef ?? permitFor.id.slice(0,8)}</span>
+              {' · '}{permitFor.customer?.fullName ?? '—'}
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Destination *</label>
+                <select value={permitDestination} onChange={e => setPermitDestination(e.target.value)}
+                  className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-amber-500 focus:outline-none">
+                  <option value="OMAN">Sultanate of Oman</option>
+                  <option value="KSA">Kingdom of Saudi Arabia</option>
+                  <option value="BAHRAIN">Kingdom of Bahrain</option>
+                  <option value="QATAR">State of Qatar</option>
+                  <option value="KUWAIT">State of Kuwait</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Border Crossing</label>
+                <input type="text" value={permitBorder} onChange={e => setPermitBorder(e.target.value)}
+                  placeholder="e.g., Hatta / Wajaja"
+                  className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Purpose</label>
+                <input type="text" value={permitPurpose} onChange={e => setPermitPurpose(e.target.value)}
+                  placeholder="Tourism / Business / Family Visit"
+                  className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none" />
+              </div>
+              <p className="text-xs text-slate-500">
+                Validity defaults to the booking pickup → drop-off window. PDF opens in a new tab; bilingual EN + AR available.
+              </p>
+            </div>
+            <div className="flex gap-3 justify-end pt-6 mt-2 border-t border-white/10">
+              <button onClick={() => setPermitFor(null)} className="px-5 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5">Close</button>
+              {(['en','ar'] as const).map(lng => (
+                <a key={lng}
+                  href={`/api/rental/bookings/${permitFor.id}/cross-border-permit?lang=${lng}&destination=${permitDestination}` +
+                        `${permitBorder ? `&border=${encodeURIComponent(permitBorder)}` : ''}` +
+                        `${permitPurpose ? `&purpose=${encodeURIComponent(permitPurpose)}` : ''}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="px-5 py-2 rounded-lg bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:opacity-90"
+                >
+                  Issue · {lng.toUpperCase()}
+                </a>
+              ))}
+            </div>
           </div>
         </div>
       )}

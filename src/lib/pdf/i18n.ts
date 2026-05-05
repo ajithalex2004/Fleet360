@@ -191,6 +191,27 @@ export const pdfStrings = {
   },
   renter: { en: 'Renter', ar: 'المستأجر' },
   rentalCompany: { en: 'Rental Company', ar: 'شركة التأجير' },
+
+  // ── Cross-border permit (UAE → Oman / KSA / Bahrain / Qatar / Kuwait) ─────
+  crossBorderPermit: { en: 'Cross-Border Travel Permit', ar: 'تصريح سفر عبر الحدود' },
+  permitNo: { en: 'Permit No.', ar: 'رقم التصريح' },
+  permitIssueDate: { en: 'Issue Date', ar: 'تاريخ الإصدار' },
+  permitValidFrom: { en: 'Valid From', ar: 'صالح من' },
+  permitValidUntil: { en: 'Valid Until', ar: 'صالح حتى' },
+  destinationCountry: { en: 'Destination Country', ar: 'دولة الوجهة' },
+  purposeOfTravel: { en: 'Purpose of Travel', ar: 'الغرض من السفر' },
+  borderCrossing: { en: 'Border Crossing', ar: 'منفذ الحدود' },
+  routeOfTravel: { en: 'Route of Travel', ar: 'مسار السفر' },
+  permitDeclaration: {
+    en: 'The Rental Company hereby authorises the Renter named below to drive the vehicle described herein outside the United Arab Emirates for the period and destination stated, subject to the terms of the Rental Agreement and the laws of the destination country.',
+    ar: 'تأذن شركة التأجير بموجب هذا للمستأجر المذكور أدناه بقيادة المركبة الموصوفة هنا خارج دولة الإمارات العربية المتحدة للفترة والوجهة المذكورتين، وفقاً لشروط عقد الإيجار وقوانين دولة الوجهة.',
+  },
+  permitConditions: {
+    en: '1. This permit is valid only for the dates and destination shown above.\n2. The vehicle must remain in the renter\'s exclusive custody at all times.\n3. Any traffic violations, fines, or damage incurred outside the UAE are the renter\'s sole responsibility.\n4. Insurance coverage outside the UAE is subject to the policy attached to this rental.\n5. This permit must be presented to border authorities together with the rental agreement, registration card, and driver\'s licence.\n6. Loss, theft, or accident must be reported to the rental company within 24 hours.',
+    ar: '1. هذا التصريح صالح فقط للتواريخ والوجهة المذكورة أعلاه.\n2. يجب أن تبقى المركبة في عهدة المستأجر الحصرية في جميع الأوقات.\n3. أي مخالفات مرورية أو غرامات أو أضرار تحدث خارج الإمارات هي من مسؤولية المستأجر وحده.\n4. تخضع تغطية التأمين خارج الإمارات للوثيقة المرفقة بهذا الإيجار.\n5. يجب تقديم هذا التصريح لسلطات الحدود مع عقد الإيجار وبطاقة التسجيل ورخصة القيادة.\n6. يجب الإبلاغ عن الفقد أو السرقة أو الحوادث للشركة خلال 24 ساعة.',
+  },
+  authorisedBy: { en: 'Authorised By', ar: 'معتمد من' },
+  rentalAgreementRef: { en: 'Rental Agreement Ref.', ar: 'مرجع عقد الإيجار' },
 } as const;
 
 export type PdfStringKey = keyof typeof pdfStrings;

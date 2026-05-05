@@ -29,6 +29,7 @@ const NAV_GROUPS = [
       { href: '/rental/bookings',     label: 'Bookings',             icon: '📅' },
       { href: '/rental/availability', label: 'Vehicle Availability', icon: '🚗' },
       { href: '/rental/counter',      label: 'Counter PWA',          icon: '📲' },
+      { href: '/rental/channels',     label: 'Channel Manager',      icon: '🔌' },
     ],
   },
   {
