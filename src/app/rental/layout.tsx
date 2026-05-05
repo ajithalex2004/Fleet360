@@ -42,9 +42,11 @@ const NAV_GROUPS = [
   {
     label: 'Billing',
     items: [
-      { href: '/rental/invoices', label: 'Invoices',    icon: '🧾' },
-      { href: '/rental/pricing',  label: 'Pricing',     icon: '💰' },
-      { href: '/rental/rates',    label: 'Rate Engine', icon: '⚙️' },
+      { href: '/rental/invoices',      label: 'Invoices',         icon: '🧾' },
+      { href: '/rental/pricing',       label: 'Pricing',          icon: '💰' },
+      { href: '/rental/rates',         label: 'Rate Engine',      icon: '⚙️' },
+      { href: '/rental/rates/yield',   label: 'Yield Analyzer',   icon: '📊' },
+      { href: '/rental/rates/events',  label: 'Rate Events',      icon: '🎉' },
     ],
   },
   {

@@ -988,6 +988,30 @@ model PricingRule {
   @@map("pricing_rules")
 }
 
+// Yield-management event calendar — applied as a multiplier layer on top of
+// the base rate. Used for festival surcharges (DSF, Eid, F1) and demand-low
+// discounts (deep summer).
+model RateEvent {
+  id                    String    @id @default(uuid())
+  createdAt             DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt             DateTime? @map("deleted_at") @db.Timestamptz(6)
+  eventCode             String    @unique @map("event_code")
+  name                  String
+  description           String?
+  dateFrom              DateTime  @map("date_from") @db.Timestamptz(6)
+  dateTo                DateTime  @map("date_to") @db.Timestamptz(6)
+  multiplier            Decimal   @db.Decimal
+  applicableCategories  String?   @map("applicable_categories")
+  applicableChannels    String?   @map("applicable_channels")
+  priority              Int?      @default(0)
+  isActive              Boolean?  @default(true)
+  notes                 String?
+  @@index([isActive, dateFrom, dateTo], map: "idx_rate_events_active_dates")
+  @@index([deletedAt], map: "idx_rate_events_deleted_at")
+  @@map("rate_events")
+}
+
 // Rate quote snapshot -- saved when a booking is created
 model RentalRateQuote {
   id                  String    @id @default(uuid())
