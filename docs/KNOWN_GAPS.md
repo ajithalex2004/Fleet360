@@ -73,37 +73,21 @@ Before STS go-live, regenerate the Neon database credentials and update
 
 ---
 
-## KNOWN-PRISMA-001 — `prisma generate` fails with "Invalid character" on Node 22
-**Status:** open · **Target:** v1.0 cleanup · **Owner:** core
+## KNOWN-PRISMA-001 — RESOLVED 2026-05-05
+**Status:** ✅ resolved · **Resolution:** upgraded to Prisma 5.22.0
 
-`npx prisma generate` fails on this machine with a one-line `Error: Invalid character`
-after DMMF retrieval succeeds. `prisma validate` passes; `prisma --version` works.
-Engines (`query_engine-windows.dll.node`) are present.
+Was: `prisma generate` failed on Node 22 with a misleading "Invalid character"
+error on Prisma 5.10.0. Resolved by upgrading to Prisma 5.22.0 (last 5.x line)
+which has Node 22 compatibility. **Avoided** Prisma 7.x because it introduced
+breaking schema changes (datasource `url` moved to `prisma.config.ts`, new
+PrismaClient constructor signature) that would require multi-day refactor.
 
-**Likely cause:** Prisma 5.10.0 (`"prisma": "^5.10.0"` in package.json) was released
-in early 2024 and has known incompatibilities with Node 22 (released Apr 2024).
-The codegen step's wasm engine surfaces the incompatibility as a generic
-"Invalid character" error.
+Code cleanup: removed the `(contract as any).mileageOverageRate` cast in
+`src/app/api/leasing/mileage-readings/route.ts`.
 
-**Workaround in code:** New schema fields are accessed via `(model as any).newField`
-type assertion, with a `KNOWN-PRISMA-001` comment pointing here. The runtime works
-fine after the migration runs — only TypeScript types are out of sync.
-
-**Affected fields right now:**
-- `LeaseContract2.mileageOverageRate` (added in
-  `20260505000001_add_mileage_overage_rate` migration; used in
-  `src/app/api/leasing/mileage-readings/route.ts`)
-
-**Fix path:**
-1. Upgrade Prisma to 5.20+ (or 6.x): `npm install -D prisma@latest --legacy-peer-deps`
-2. Update `@prisma/client` to match
-3. `npx prisma generate` should succeed
-4. Remove the `(... as any).` casts and the KNOWN-PRISMA-001 comments
-
-**Mitigation now:** Production deployment runs `npx prisma generate` as part of
-the build step; if production is on Node 20 (per `engines: { node: ">=20.9.0" }`),
-the generate succeeds and types are correct in the deployed bundle. Local dev on
-Node 22 has stale types but runtime works.
+**Note for future Prisma upgrades:** stay on the 5.x line (5.22.x) until
+Prisma 7's `prisma.config.ts` / adapter pattern is needed. Skipping 6.x is
+fine — it was a short-lived series.
 
 ---
 

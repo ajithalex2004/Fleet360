@@ -80,17 +80,9 @@ export async function POST(req: NextRequest) {
     }
 
     const overageKm = actualKm - allowedKm;
-    // KNOWN-PRISMA-001: prisma generate fails on Node 22 + Prisma 5.10 with
-    // a misleading "Invalid character" error. Until Prisma is upgraded, the
-    // generated client types don't include the newly-added mileageOverageRate
-    // column. Cast through 'any' for now — the column exists in DB after the
-    // 20260505000001_add_mileage_overage_rate migration runs.
-    const contractRate = (contract as any).mileageOverageRate as
-      | string
-      | number
-      | null
-      | undefined;
-    const ratePerKm = contractRate ? Number(contractRate) : DEFAULT_OVERAGE_RATE_AED_PER_KM;
+    const ratePerKm = contract.mileageOverageRate
+      ? Number(contract.mileageOverageRate)
+      : DEFAULT_OVERAGE_RATE_AED_PER_KM;
     const overageAmount = overageKm * ratePerKm;
     const currency = contract.currency ?? 'AED';
 
