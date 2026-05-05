@@ -1834,6 +1834,8 @@ model LeaseContract2 {
   monthlyRate          Decimal  @map("monthly_rate") @db.Decimal
   totalContractValue   Decimal? @map("total_contract_value") @db.Decimal
   mileageCap           Int?     @map("mileage_cap")
+  // AED per km charged for over-cap usage. NULL falls back to platform default 0.50.
+  mileageOverageRate   Decimal? @map("mileage_overage_rate") @db.Decimal
   securityDeposit      Decimal? @map("security_deposit") @db.Decimal
   currency             String?  @default("AED")
   insuranceIncluded    Boolean? @default(false) @map("insurance_included")

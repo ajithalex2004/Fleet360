@@ -73,6 +73,40 @@ Before STS go-live, regenerate the Neon database credentials and update
 
 ---
 
+## KNOWN-PRISMA-001 — `prisma generate` fails with "Invalid character" on Node 22
+**Status:** open · **Target:** v1.0 cleanup · **Owner:** core
+
+`npx prisma generate` fails on this machine with a one-line `Error: Invalid character`
+after DMMF retrieval succeeds. `prisma validate` passes; `prisma --version` works.
+Engines (`query_engine-windows.dll.node`) are present.
+
+**Likely cause:** Prisma 5.10.0 (`"prisma": "^5.10.0"` in package.json) was released
+in early 2024 and has known incompatibilities with Node 22 (released Apr 2024).
+The codegen step's wasm engine surfaces the incompatibility as a generic
+"Invalid character" error.
+
+**Workaround in code:** New schema fields are accessed via `(model as any).newField`
+type assertion, with a `KNOWN-PRISMA-001` comment pointing here. The runtime works
+fine after the migration runs — only TypeScript types are out of sync.
+
+**Affected fields right now:**
+- `LeaseContract2.mileageOverageRate` (added in
+  `20260505000001_add_mileage_overage_rate` migration; used in
+  `src/app/api/leasing/mileage-readings/route.ts`)
+
+**Fix path:**
+1. Upgrade Prisma to 5.20+ (or 6.x): `npm install -D prisma@latest --legacy-peer-deps`
+2. Update `@prisma/client` to match
+3. `npx prisma generate` should succeed
+4. Remove the `(... as any).` casts and the KNOWN-PRISMA-001 comments
+
+**Mitigation now:** Production deployment runs `npx prisma generate` as part of
+the build step; if production is on Node 20 (per `engines: { node: ">=20.9.0" }`),
+the generate succeeds and types are correct in the deployed bundle. Local dev on
+Node 22 has stale types but runtime works.
+
+---
+
 ## KNOWN-TS-001 — Pre-existing TypeScript errors across the codebase
 **Status:** open · **Target:** v1.0 cleanup sprint · **Owner:** core
 
