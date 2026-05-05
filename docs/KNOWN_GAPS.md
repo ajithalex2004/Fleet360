@@ -73,6 +73,31 @@ Before STS go-live, regenerate the Neon database credentials and update
 
 ---
 
+## STORAGE-001 — Local file storage incompatible with Vercel production
+**Status:** open · **Target:** before STS production cutover · **Owner:** ops
+
+`src/lib/storage/index.ts` ships a `LocalFileStorage` adapter that writes to
+`public/uploads/...` on disk. This works for **local development** and
+**self-hosted Docker** with a persistent volume, but **breaks on Vercel** because
+serverless functions have ephemeral filesystems — files written during a request
+are gone the next request.
+
+**Affected feature:** Phase 1d document upload at
+[/leasing/documents](../src/app/leasing/documents/page.tsx).
+
+**Mitigation:** the storage layer is already abstracted behind a `FileStorage`
+interface. Production swap is one new file:
+- `S3FileStorage` — for AWS deployment (use `@aws-sdk/client-s3`)
+- `VercelBlobStorage` — for Vercel deployment (use `@vercel/blob`)
+
+Then update `getStorage()` in `src/lib/storage/index.ts` to read
+`STORAGE_BACKEND=local|vercel-blob|s3` from env and instantiate the right one.
+
+**Estimated effort:** 1–2 days (install SDK, write adapter, test, env vars).
+Must happen before STS production deploy if hosting on Vercel.
+
+---
+
 ## KNOWN-PRISMA-001 — RESOLVED 2026-05-05
 **Status:** ✅ resolved · **Resolution:** upgraded to Prisma 5.22.0
 
