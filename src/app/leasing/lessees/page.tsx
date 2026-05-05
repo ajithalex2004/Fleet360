@@ -210,6 +210,8 @@ export default function LesseesPage() {
                         <button onClick={()=>openEdit(l)} className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30">Edit</button>
                         <a href={`/leasing/credit-assessments?lesseeId=${l.id}`} className="text-xs px-2 py-1 rounded bg-violet-500/20 text-violet-400 border border-violet-500/30 hover:bg-violet-500/30">Credit</a>
                         <a href={`/leasing/documents?entityType=LESSEE&entityId=${l.id}`} className="text-xs px-2 py-1 rounded bg-slate-700 text-white border border-white/10 hover:bg-slate-600">Docs</a>
+                        <a href={`/api/leasing/lessees/${l.id}/statement?lang=en&download=1`} className="text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30" title="Account statement (last 90 days, EN)">Stmt·EN</a>
+                        <a href={`/api/leasing/lessees/${l.id}/statement?lang=ar&download=1`} className="text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30" title="كشف حساب آخر 90 يوماً (AR)">Stmt·AR</a>
                       </div>
                     </td>
                   </tr>

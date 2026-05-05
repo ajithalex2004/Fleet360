@@ -286,7 +286,21 @@ export default function InvoicesPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-2">
+                        <div className="flex items-center justify-center gap-2 text-xs">
+                          <a
+                            href={`/api/leasing/invoices/${invoice.id}/pdf?lang=en&download=1`}
+                            className="text-emerald-400 hover:text-emerald-300"
+                            title="Download bilingual PDF (EN layout)"
+                          >
+                            PDF·EN
+                          </a>
+                          <a
+                            href={`/api/leasing/invoices/${invoice.id}/pdf?lang=ar&download=1`}
+                            className="text-emerald-400 hover:text-emerald-300"
+                            title="Download bilingual PDF (AR layout)"
+                          >
+                            PDF·AR
+                          </a>
                           {invoice.status === 'DRAFT' && (
                             <button
                               onClick={() => handleSendInvoice(invoice.id)}

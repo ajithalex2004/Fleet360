@@ -90,6 +90,78 @@ export const pdfStrings = {
   itemisedDetail: { en: 'Itemised Detail', ar: 'التفاصيل المفصلة' },
   description: { en: 'Description', ar: 'الوصف' },
   amount: { en: 'Amount', ar: 'المبلغ' },
+
+  // Invoice
+  invoiceNo: { en: 'Invoice No.', ar: 'رقم الفاتورة' },
+  issueDate: { en: 'Issue Date', ar: 'تاريخ الإصدار' },
+  unitPrice: { en: 'Unit Price', ar: 'سعر الوحدة' },
+  taxableSupplies: { en: 'Taxable Supplies', ar: 'التوريدات الخاضعة للضريبة' },
+  paymentTerms: { en: 'Payment Terms', ar: 'شروط الدفع' },
+  thirtyDays: { en: 'Net 30 Days', ar: 'صافي 30 يوماً' },
+  invoiceFooter: {
+    en: 'Please remit payment by the due date. For queries, contact our finance team.',
+    ar: 'يرجى تسوية الدفع قبل تاريخ الاستحقاق. للاستفسارات، يرجى التواصل مع فريق المالية.',
+  },
+
+  // Receipt
+  receiptNo: { en: 'Receipt No.', ar: 'رقم الإيصال' },
+  receivedDate: { en: 'Received On', ar: 'تاريخ الاستلام' },
+  paymentMethod: { en: 'Payment Method', ar: 'طريقة الدفع' },
+  paymentType: { en: 'Payment Type', ar: 'نوع الدفع' },
+  chequeNo: { en: 'Cheque No.', ar: 'رقم الشيك' },
+  bankRef: { en: 'Bank Reference', ar: 'مرجع البنك' },
+  amountReceived: { en: 'Amount Received', ar: 'المبلغ المستلم' },
+  receivedFrom: { en: 'Received From', ar: 'استلم من' },
+  receiptThanks: {
+    en: 'Thank you for your payment. This receipt confirms the amount above has been received in full.',
+    ar: 'شكراً لكم على الدفع. يؤكد هذا الإيصال استلام المبلغ المذكور أعلاه بالكامل.',
+  },
+  // Payment types
+  pt_DEPOSIT: { en: 'Deposit', ar: 'وديعة' },
+  pt_SECURITY: { en: 'Security Deposit', ar: 'تأمين' },
+  pt_MONTHLY: { en: 'Monthly Rent', ar: 'إيجار شهري' },
+  pt_ADVANCE: { en: 'Advance Payment', ar: 'دفعة مقدمة' },
+  pt_PENALTY: { en: 'Penalty', ar: 'غرامة' },
+  // Payment methods
+  pm_CASH: { en: 'Cash', ar: 'نقد' },
+  pm_CHEQUE: { en: 'Cheque', ar: 'شيك' },
+  pm_BANK_TRANSFER: { en: 'Bank Transfer', ar: 'تحويل بنكي' },
+  pm_CARD: { en: 'Card', ar: 'بطاقة' },
+
+  // Contract / Agreement
+  contractNo: { en: 'Contract No.', ar: 'رقم العقد' },
+  startDate: { en: 'Start Date', ar: 'تاريخ البدء' },
+  endDate: { en: 'End Date', ar: 'تاريخ الانتهاء' },
+  termsConditions: { en: 'Terms & Conditions', ar: 'الشروط والأحكام' },
+  vehicleSchedule: { en: 'Vehicle Schedule', ar: 'جدول المركبات' },
+  licensePlate: { en: 'Plate', ar: 'لوحة' },
+  vin: { en: 'VIN', ar: 'رقم الهيكل' },
+  lessor: { en: 'Lessor', ar: 'المؤجر' },
+  lessee: { en: 'Lessee', ar: 'المستأجر' },
+  contractPreamble: {
+    en: 'This Lease Agreement is entered into between the Lessor and the Lessee for the lease of vehicle(s) described in the Vehicle Schedule below, on the terms and conditions set out herein.',
+    ar: 'تم إبرام عقد الإيجار هذا بين المؤجر والمستأجر لإيجار المركبة (المركبات) الموضحة في جدول المركبات أدناه، بموجب الشروط والأحكام المنصوص عليها هنا.',
+  },
+  contractTermsBoilerplate: {
+    en: '1. Monthly rent is payable in advance by the 1st of each month. Late payments accrue penalties per the schedule above.\n2. Mileage cap and overage rate are as specified. Excess kilometres are billed monthly.\n3. Insurance, maintenance, and driver services are included only where indicated. Otherwise the Lessee is responsible.\n4. Vehicles must be returned in the condition received, fair wear and tear excepted.\n5. Early termination triggers fees per the platform\'s standard schedule.\n6. This agreement is governed by the laws of the United Arab Emirates.',
+    ar: '1. الإيجار الشهري مستحق مقدماً في اليوم الأول من كل شهر. تتراكم غرامات على المدفوعات المتأخرة وفقاً للجدول أعلاه.\n2. الحد الأقصى للكيلومترات ومعدل التجاوز كما هو محدد. تُحسب الكيلومترات الزائدة شهرياً.\n3. التأمين والصيانة وخدمات السائق مشمولة فقط حيث يُشار إلى ذلك. وإلا فإن المستأجر يتحمل المسؤولية.\n4. يجب إعادة المركبات بنفس الحالة التي استُلمت بها، باستثناء البلى العادي.\n5. الإنهاء المبكر يستوجب رسوماً وفقاً للجدول القياسي للمنصة.\n6. تخضع هذه الاتفاقية لقوانين دولة الإمارات العربية المتحدة.',
+  },
+  signature: { en: 'Signature', ar: 'التوقيع' },
+  representative: { en: 'Authorized Representative', ar: 'الممثل المعتمد' },
+
+  // Customer account statement
+  accountStatement: { en: 'Account Statement', ar: 'كشف حساب' },
+  statementPeriod: { en: 'Statement Period', ar: 'فترة الكشف' },
+  openingBalance: { en: 'Opening Balance', ar: 'الرصيد الافتتاحي' },
+  closingBalance: { en: 'Closing Balance', ar: 'الرصيد الختامي' },
+  debit: { en: 'Debit', ar: 'مدين' },
+  credit: { en: 'Credit', ar: 'دائن' },
+  balance: { en: 'Balance', ar: 'الرصيد' },
+  transactionType: { en: 'Type', ar: 'النوع' },
+  reference: { en: 'Reference', ar: 'المرجع' },
+  noTransactions: { en: 'No transactions in this period.', ar: 'لا توجد معاملات في هذه الفترة.' },
+  txn_INVOICE: { en: 'Invoice', ar: 'فاتورة' },
+  txn_PAYMENT: { en: 'Payment', ar: 'دفعة' },
 } as const;
 
 export type PdfStringKey = keyof typeof pdfStrings;
