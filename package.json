@@ -8,6 +8,7 @@
         "start": "next start",
         "lint": "next lint",
         "typecheck": "tsc --noEmit",
+        "setup-hooks": "git config core.hooksPath scripts/githooks",
         "dev:clean": "npx rimraf .next && npm run dev",
         "test": "vitest run",
         "test:watch": "vitest",
