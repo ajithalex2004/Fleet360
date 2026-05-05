@@ -15,6 +15,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { sendEmail } from '@/lib/email';
+import { sendWhatsApp } from '@/lib/whatsapp';
 
 export const runtime = 'nodejs';
 
@@ -119,6 +121,37 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Digest notifications to the sales team (best-effort, non-blocking).
+    // Configured by LEASING_SALES_NOTIFY_EMAIL and/or LEASING_SALES_NOTIFY_WHATSAPP.
+    let digestEmailSent = false;
+    let digestWhatsAppSent = false;
+    if (assessments.length > 0) {
+      const teamEmail = process.env.LEASING_SALES_NOTIFY_EMAIL;
+      const teamPhone = process.env.LEASING_SALES_NOTIFY_WHATSAPP ?? process.env.OPERATIONS_PHONE;
+      const lines = assessments.map(a =>
+        `• ${a.inquiryNumber ?? a.inquiryId.slice(0, 8)} — ${a.label}: ${a.count} follow-up${a.count === 1 ? '' : 's'} (oldest ${a.oldestDue.toISOString().slice(0, 10)})`,
+      );
+      const summary = `Sales follow-up digest — ${assessments.length} inquiries with overdue follow-ups`;
+
+      if (teamEmail) {
+        const html = `<p>${summary}</p><ul>${assessments.map(a =>
+          `<li><strong>${a.inquiryNumber ?? a.inquiryId.slice(0, 8)}</strong> — ${escapeHtml(a.label)}: ${a.count} pending (oldest ${a.oldestDue.toISOString().slice(0, 10)})</li>`,
+        ).join('')}</ul><p style="color:#666;font-size:12px">Triggered by daily sweep at ${now.toISOString()}.</p>`;
+        const r = await sendEmail({
+          to: teamEmail,
+          subject: `[Leasing CRM] ${summary}`,
+          text: [summary, '', ...lines, '', `Generated ${now.toISOString()}`].join('\n'),
+          html,
+        });
+        digestEmailSent = r.sent;
+      }
+      if (teamPhone) {
+        const whatsappBody = `📋 ${summary}\n\n${lines.slice(0, 10).join('\n')}${lines.length > 10 ? `\n... and ${lines.length - 10} more` : ''}`;
+        const r = await sendWhatsApp({ to: teamPhone, body: whatsappBody });
+        digestWhatsAppSent = r.sent;
+      }
+    }
+
     if (counts.alertsCreated > 0) {
       void logAudit({
         tenantId: req.headers.get('x-tenant-id') ?? undefined,
@@ -126,7 +159,7 @@ export async function POST(req: NextRequest) {
         userRole: 'SYSTEM',
         entityType: 'LeaseInquiry',
         action: 'UPDATE',
-        details: `Inquiry follow-up sweep: ${assessments.length} inquiries with overdue follow-ups, ${counts.alertsCreated} alerts emitted, ${counts.alertsSkipped} skipped, ${counts.errors} errors.`,
+        details: `Inquiry follow-up sweep: ${assessments.length} inquiries with overdue follow-ups, ${counts.alertsCreated} alerts emitted, ${counts.alertsSkipped} skipped, ${counts.errors} errors. Digest email: ${digestEmailSent}, WhatsApp: ${digestWhatsAppSent}.`,
       });
     }
 
@@ -135,9 +168,14 @@ export async function POST(req: NextRequest) {
       scannedActivities: due.length,
       scannedInquiries: byInquiry.size,
       counts, assessments,
+      digestEmailSent, digestWhatsAppSent,
     });
   } catch (err) {
     captureException(err, { context: 'leasing.inquiries.sweep-followups' });
     return NextResponse.json({ error: 'Sweep failed' }, { status: 500 });
   }
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 }
