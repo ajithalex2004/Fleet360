@@ -174,15 +174,15 @@ export default function InvoicesPage() {
     const getStatusColor = (status: PaymentStatus) => {
         switch (status) {
             case PaymentStatus.PAID:
-                return 'bg-green-100 text-green-700 border-green-300';
+                return 'bg-emerald-500/20 text-green-700 border-green-300';
             case PaymentStatus.PARTIALLY_PAID:
-                return 'bg-yellow-100 text-yellow-700 border-yellow-300';
+                return 'bg-amber-500/20 text-yellow-700 border-yellow-300';
             case PaymentStatus.UNPAID:
-                return 'bg-slate-100 text-slate-700 border-slate-300';
+                return 'bg-slate-700/40 text-slate-300 border-white/15';
             case PaymentStatus.OVERDUE:
-                return 'bg-red-100 text-red-700 border-red-300';
+                return 'bg-red-500/20 text-red-700 border-red-300';
             default:
-                return 'bg-slate-100 text-slate-700 border-slate-300';
+                return 'bg-slate-700/40 text-slate-300 border-white/15';
         }
     };
 
@@ -202,7 +202,7 @@ export default function InvoicesPage() {
         <div className="space-y-6">
             {/* Header */}
             <div>
-                <h1 className="text-2xl font-bold text-slate-900">Invoice Management</h1>
+                <h1 className="text-2xl font-bold text-white">Invoice Management</h1>
                 <div className="flex justify-between items-center mt-1">
                     <p className="text-slate-500">Track and manage maintenance invoices and payments</p>
                     <button
@@ -219,13 +219,13 @@ export default function InvoicesPage() {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm text-slate-500">Total Expense</p>
-                            <p className="text-2xl font-bold text-slate-900">AED {totalRevenue.toLocaleString()}</p>
+                            <p className="text-2xl font-bold text-white">AED {totalRevenue.toLocaleString()}</p>
                         </div>
-                        <div className="rounded-full bg-blue-100 p-3">
+                        <div className="rounded-full bg-blue-500/20 p-3">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 text-blue-600">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                             </svg>
@@ -233,11 +233,11 @@ export default function InvoicesPage() {
                     </div>
                 </div>
 
-                <div className="rounded-xl border border-green-200 bg-green-50 p-6 shadow-sm">
+                <div className="rounded-xl border border-green-200 bg-emerald-500/10 p-6 shadow-sm">
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm text-green-700">Paid</p>
-                            <p className="text-2xl font-bold text-green-900">AED {totalPaid.toLocaleString()}</p>
+                            <p className="text-2xl font-bold text-emerald-300">AED {totalPaid.toLocaleString()}</p>
                         </div>
                         <div className="rounded-full bg-green-200 p-3">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 text-green-700">
@@ -247,11 +247,11 @@ export default function InvoicesPage() {
                     </div>
                 </div>
 
-                <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-6 shadow-sm">
+                <div className="rounded-xl border border-yellow-200 bg-amber-500/10 p-6 shadow-sm">
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm text-yellow-700">Outstanding</p>
-                            <p className="text-2xl font-bold text-yellow-900">AED {totalOutstanding.toLocaleString()}</p>
+                            <p className="text-2xl font-bold text-amber-300">AED {totalOutstanding.toLocaleString()}</p>
                         </div>
                         <div className="rounded-full bg-yellow-200 p-3">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 text-yellow-700">
@@ -261,11 +261,11 @@ export default function InvoicesPage() {
                     </div>
                 </div>
 
-                <div className="rounded-xl border border-red-200 bg-red-50 p-6 shadow-sm">
+                <div className="rounded-xl border border-red-200 bg-red-500/10 p-6 shadow-sm">
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-sm text-red-700">Overdue</p>
-                            <p className="text-2xl font-bold text-red-900">{overdueCount}</p>
+                            <p className="text-2xl font-bold text-red-300">{overdueCount}</p>
                         </div>
                         <div className="rounded-full bg-red-200 p-3">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 text-red-700">
@@ -282,7 +282,7 @@ export default function InvoicesPage() {
                     onClick={() => setFilter('all')}
                     className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${filter === 'all'
                         ? 'bg-blue-600 text-white'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        : 'bg-slate-700/40 text-slate-300 hover:bg-slate-200'
                         }`}
                 >
                     All
@@ -291,7 +291,7 @@ export default function InvoicesPage() {
                     onClick={() => setFilter(PaymentStatus.PAID)}
                     className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${filter === PaymentStatus.PAID
                         ? 'bg-green-600 text-white'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        : 'bg-slate-700/40 text-slate-300 hover:bg-slate-200'
                         }`}
                 >
                     Paid
@@ -300,7 +300,7 @@ export default function InvoicesPage() {
                     onClick={() => setFilter(PaymentStatus.PARTIALLY_PAID)}
                     className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${filter === PaymentStatus.PARTIALLY_PAID
                         ? 'bg-yellow-600 text-white'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        : 'bg-slate-700/40 text-slate-300 hover:bg-slate-200'
                         }`}
                 >
                     Partially Paid
@@ -309,7 +309,7 @@ export default function InvoicesPage() {
                     onClick={() => setFilter(PaymentStatus.UNPAID)}
                     className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${filter === PaymentStatus.UNPAID
                         ? 'bg-slate-600 text-white'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        : 'bg-slate-700/40 text-slate-300 hover:bg-slate-200'
                         }`}
                 >
                     Unpaid
@@ -318,7 +318,7 @@ export default function InvoicesPage() {
                     onClick={() => setFilter(PaymentStatus.OVERDUE)}
                     className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${filter === PaymentStatus.OVERDUE
                         ? 'bg-red-600 text-white'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        : 'bg-slate-700/40 text-slate-300 hover:bg-slate-200'
                         }`}
                 >
                     Overdue
@@ -326,9 +326,9 @@ export default function InvoicesPage() {
             </div>
 
             {/* Invoices Table */}
-            <div className="overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm">
-                <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-slate-50">
+            <div className="overflow-visible rounded-xl border border-white/10 bg-slate-900 shadow-sm">
+                <table className="min-w-full divide-y divide-white/10">
+                    <thead className="bg-slate-800/50">
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Invoice #</th>
                             <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Garage</th>
@@ -340,27 +340,27 @@ export default function InvoicesPage() {
                             <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Actions</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 bg-white">
+                    <tbody className="divide-y divide-white/10 bg-slate-900">
                         {filteredInvoices.map(invoice => {
                             const garage = garages[invoice.garageId];
                             const balance = invoice.totalAmount - invoice.paidAmount;
 
                             return (
-                                <tr key={invoice.id} className="hover:bg-slate-50 transition-colors">
+                                <tr key={invoice.id} className="hover:bg-white/5 transition-colors">
                                     <td className="whitespace-nowrap px-6 py-4">
                                         <div className="text-sm font-medium text-blue-600">{invoice.invoiceNumber}</div>
-                                        <div className="text-xs text-slate-500">Req: #{invoice.requestId.toUpperCase()}</div>
+                                        <div className="text-xs text-slate-300">Req: #{invoice.requestId.toUpperCase()}</div>
                                     </td>
                                     <td className="whitespace-nowrap px-6 py-4">
-                                        <div className="text-sm text-slate-900">{garage?.name || 'Unknown'}</div>
+                                        <div className="text-sm text-white">{garage?.name || 'Unknown'}</div>
                                     </td>
-                                    <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-700">
+                                    <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-300">
                                         {new Date(invoice.invoiceDate).toLocaleDateString()}
                                     </td>
-                                    <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-700">
+                                    <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-300">
                                         {new Date(invoice.dueDate).toLocaleDateString()}
                                     </td>
-                                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">
+                                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-white">
                                         AED {invoice.totalAmount.toLocaleString()}
                                     </td>
                                     <td className="whitespace-nowrap px-6 py-4">
@@ -398,11 +398,11 @@ export default function InvoicesPage() {
             {/* Payment Modal */}
             {showPaymentModal && selectedInvoice && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl">
-                        <div className="p-6 border-b border-slate-200">
+                    <div className="bg-slate-900 rounded-2xl w-full max-w-2xl shadow-2xl">
+                        <div className="p-6 border-b border-white/10">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-bold text-slate-900">Record Payment</h3>
-                                <button onClick={() => setShowPaymentModal(false)} className="text-slate-400 hover:text-slate-600">
+                                <h3 className="text-lg font-bold text-white">Record Payment</h3>
+                                <button onClick={() => setShowPaymentModal(false)} className="text-slate-400 hover:text-slate-300">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                     </svg>
@@ -411,15 +411,15 @@ export default function InvoicesPage() {
                         </div>
 
                         <div className="p-6 space-y-4">
-                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                            <div className="rounded-lg border border-white/10 bg-slate-800/50 p-4">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-xs text-slate-500">Invoice Number</label>
-                                        <p className="text-sm font-medium text-slate-900">{selectedInvoice.invoiceNumber}</p>
+                                        <p className="text-sm font-medium text-white">{selectedInvoice.invoiceNumber}</p>
                                     </div>
                                     <div>
                                         <label className="block text-xs text-slate-500">Total Amount</label>
-                                        <p className="text-sm font-medium text-slate-900">AED {selectedInvoice.totalAmount.toLocaleString()}</p>
+                                        <p className="text-sm font-medium text-white">AED {selectedInvoice.totalAmount.toLocaleString()}</p>
                                     </div>
                                     <div>
                                         <label className="block text-xs text-slate-500">Already Paid</label>
@@ -435,19 +435,19 @@ export default function InvoicesPage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Payment Amount (AED)</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Payment Amount (AED)</label>
                                 <input
                                     type="number"
                                     value={paymentAmount}
                                     onChange={(e) => setPaymentAmount(Number(e.target.value))}
                                     max={selectedInvoice.totalAmount - selectedInvoice.paidAmount}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900 text-lg font-medium"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white text-lg font-medium"
                                 />
                             </div>
 
-                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div className="bg-blue-500/10 border border-blue-200 rounded-lg p-4">
                                 <div className="flex justify-between items-center">
-                                    <span className="text-sm text-slate-700">New Balance:</span>
+                                    <span className="text-sm text-slate-300">New Balance:</span>
                                     <span className="text-xl font-bold text-blue-600">
                                         AED {Math.max(0, selectedInvoice.totalAmount - selectedInvoice.paidAmount - paymentAmount).toLocaleString()}
                                     </span>
@@ -455,10 +455,10 @@ export default function InvoicesPage() {
                             </div>
                         </div>
 
-                        <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+                        <div className="p-6 border-t border-white/10 flex justify-end gap-3">
                             <button
                                 onClick={() => setShowPaymentModal(false)}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
                             >
                                 Cancel
                             </button>
@@ -476,11 +476,11 @@ export default function InvoicesPage() {
             {/* Add Invoice Modal */}
             {showAddModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-                        <div className="p-6 border-b border-slate-200">
+                    <div className="bg-slate-900 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="p-6 border-b border-white/10">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-bold text-slate-900">Add New Invoice</h3>
-                                <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600">
+                                <h3 className="text-lg font-bold text-white">Add New Invoice</h3>
+                                <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-300">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                     </svg>
@@ -491,21 +491,21 @@ export default function InvoicesPage() {
                         <div className="p-6 space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Invoice Number</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Invoice Number</label>
                                     <input
                                         type="text"
                                         value={newInvoiceData.invoiceNumber}
                                         onChange={(e) => setNewInvoiceData({ ...newInvoiceData, invoiceNumber: e.target.value })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                         placeholder="INV-..."
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Garage</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Garage</label>
                                     <select
                                         value={newInvoiceData.garageId}
                                         onChange={(e) => setNewInvoiceData({ ...newInvoiceData, garageId: e.target.value })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                     >
                                         <option value="">Select Garage</option>
                                         {Object.values(garages).map(g => (
@@ -513,7 +513,7 @@ export default function InvoicesPage() {
                                         ))}
                                     </select>
                                 </div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Work Order</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Work Order</label>
                                 <select
                                     value={newInvoiceData.requestId}
                                     onChange={(e) => {
@@ -541,7 +541,7 @@ export default function InvoicesPage() {
                                             attachments: invoiceAttachment ? [invoiceAttachment] : []
                                         });
                                     }}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm"
                                 >
                                     <option value="">Select Work Order</option>
                                     {maintenanceRequests
@@ -553,27 +553,27 @@ export default function InvoicesPage() {
                                         ))}
                                 </select>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Invoice Date</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Invoice Date</label>
                                     <input
                                         type="date"
                                         value={newInvoiceData.invoiceDate}
                                         onChange={(e) => setNewInvoiceData({ ...newInvoiceData, invoiceDate: e.target.value })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Due Date</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Due Date</label>
                                     <input
                                         type="date"
                                         value={newInvoiceData.dueDate}
                                         onChange={(e) => setNewInvoiceData({ ...newInvoiceData, dueDate: e.target.value })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                     />
                                 </div>
                             </div>
 
-                            <div className="border-t border-slate-200 pt-4">
-                                <h4 className="text-sm font-medium text-slate-900 mb-3">Cost Breakdown</h4>
+                            <div className="border-t border-white/10 pt-4">
+                                <h4 className="text-sm font-medium text-white mb-3">Cost Breakdown</h4>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-xs text-slate-500 mb-1">Labor Cost</label>
@@ -581,7 +581,7 @@ export default function InvoicesPage() {
                                             type="number"
                                             value={newInvoiceData.laborCost}
                                             onChange={(e) => setNewInvoiceData({ ...newInvoiceData, laborCost: Number(e.target.value) })}
-                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                            className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                         />
                                     </div>
                                     <div>
@@ -590,7 +590,7 @@ export default function InvoicesPage() {
                                             type="number"
                                             value={newInvoiceData.partsCost}
                                             onChange={(e) => setNewInvoiceData({ ...newInvoiceData, partsCost: Number(e.target.value) })}
-                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                            className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                         />
                                     </div>
                                     <div>
@@ -599,7 +599,7 @@ export default function InvoicesPage() {
                                             type="number"
                                             value={newInvoiceData.taxAmount}
                                             onChange={(e) => setNewInvoiceData({ ...newInvoiceData, taxAmount: Number(e.target.value) })}
-                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                            className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                         />
                                     </div>
                                     <div>
@@ -608,26 +608,26 @@ export default function InvoicesPage() {
                                             type="number"
                                             value={newInvoiceData.discountAmount}
                                             onChange={(e) => setNewInvoiceData({ ...newInvoiceData, discountAmount: Number(e.target.value) })}
-                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                            className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                         />
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="bg-slate-50 p-4 rounded-lg flex justify-between items-center">
-                                <span className="font-medium text-slate-700">Total Amount</span>
-                                <span className="text-xl font-bold text-slate-900">
+                            <div className="bg-slate-800/50 p-4 rounded-lg flex justify-between items-center">
+                                <span className="font-medium text-slate-300">Total Amount</span>
+                                <span className="text-xl font-bold text-white">
                                     AED {(newInvoiceData.laborCost + newInvoiceData.partsCost + newInvoiceData.taxAmount - newInvoiceData.discountAmount).toLocaleString()}
                                 </span>
                             </div>
 
                             {/* Attachments Section */}
-                            <div className="border-t border-slate-200 pt-4">
-                                <h4 className="text-sm font-medium text-slate-900 mb-2">Attachments</h4>
+                            <div className="border-t border-white/10 pt-4">
+                                <h4 className="text-sm font-medium text-white mb-2">Attachments</h4>
                                 {newInvoiceData.attachments && newInvoiceData.attachments.length > 0 ? (
                                     <div className="flex gap-2">
                                         {newInvoiceData.attachments.map(att => (
-                                            <div key={att.id} className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+                                            <div key={att.id} className="flex items-center gap-2 p-2 rounded-lg bg-slate-800/50 border border-white/10 text-xs">
                                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-blue-600">
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
                                                 </svg>
@@ -643,10 +643,10 @@ export default function InvoicesPage() {
                             </div>
                         </div>
 
-                        <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+                        <div className="p-6 border-t border-white/10 flex justify-end gap-3">
                             <button
                                 onClick={() => setShowAddModal(false)}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
                             >
                                 Cancel
                             </button>

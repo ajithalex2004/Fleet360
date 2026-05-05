@@ -112,14 +112,24 @@ export default function OperationsDashboardPage() {
                     <h1 className="text-2xl font-bold text-slate-900">Operations Dashboard</h1>
                     <p className="mt-1 text-slate-500">Acknowledge pending maintenance requests</p>
                 </div>
-                {selectedRequests.size > 0 && (
-                    <button
-                        onClick={handleBulkAcknowledge}
-                        className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                <div className="flex items-center gap-3">
+                    <Link
+                        href="/operations/assistant"
+                        className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-2 text-sm font-medium text-white hover:from-orange-600 hover:to-amber-600 shadow-md transition-all"
                     >
-                        Acknowledge Selected ({selectedRequests.size})
-                    </button>
-                )}
+                        <span>🤖</span>
+                        <span>AI Ops Assistant</span>
+                        <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded-full">Live</span>
+                    </Link>
+                    {selectedRequests.size > 0 && (
+                        <button
+                            onClick={handleBulkAcknowledge}
+                            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                        >
+                            Acknowledge Selected ({selectedRequests.size})
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Stats */}
@@ -192,7 +202,7 @@ export default function OperationsDashboardPage() {
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="text-sm text-slate-900">{vehicle?.make} {vehicle?.model}</div>
-                                            <div className="text-xs text-slate-500">{vehicle?.licensePlate}</div>
+                                            <div className="text-xs text-slate-300">{vehicle?.licensePlate}</div>
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-700">
                                             {driver?.name}
@@ -200,7 +210,7 @@ export default function OperationsDashboardPage() {
                                         <td className="px-6 py-4">
                                             <div className="text-sm text-slate-900 max-w-xs truncate">{request.description}</div>
                                             {request.maintenanceType && (
-                                                <div className="text-xs text-slate-500 mt-1">{request.maintenanceType}</div>
+                                                <div className="text-xs text-slate-300 mt-1">{request.maintenanceType}</div>
                                             )}
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-700">

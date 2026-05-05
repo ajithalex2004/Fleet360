@@ -97,7 +97,7 @@ export default function GaragesPage() {
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Garage Management</h1>
+                    <h1 className="text-2xl font-bold text-white">Garage Management</h1>
                     <p className="text-slate-500">Manage service providers and garages.</p>
                 </div>
                 <button
@@ -109,9 +109,9 @@ export default function GaragesPage() {
             </div>
 
             {/* List View */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-slate-50">
+            <div className="bg-slate-900 rounded-xl border border-white/10 shadow-sm overflow-hidden">
+                <table className="min-w-full divide-y divide-white/10">
+                    <thead className="bg-slate-800/50">
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Name</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Location</th>
@@ -120,16 +120,16 @@ export default function GaragesPage() {
                             <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-slate-200">
+                    <tbody className="bg-slate-900 divide-y divide-white/10">
                         {garages.map((garage) => (
-                            <tr key={garage.id} className="hover:bg-slate-50">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{garage.name}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{garage.location}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{garage.contactPerson}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{garage.contactNumber}</td>
+                            <tr key={garage.id} className="hover:bg-white/5">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{garage.name}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">{garage.location}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">{garage.contactPerson}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">{garage.contactNumber}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                    <button onClick={() => handleEdit(garage)} className="text-blue-600 hover:text-blue-900 mr-4">Edit</button>
-                                    <button onClick={() => handleDelete(garage.id)} className="text-red-600 hover:text-red-900">Delete</button>
+                                    <button onClick={() => handleEdit(garage)} className="text-blue-600 hover:text-blue-300 mr-4">Edit</button>
+                                    <button onClick={() => handleDelete(garage.id)} className="text-red-600 hover:text-red-300">Delete</button>
                                 </td>
                             </tr>
                         ))}
@@ -140,10 +140,10 @@ export default function GaragesPage() {
             {/* Create Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                        <div className="flex justify-between items-center p-6 border-b border-slate-100">
-                            <h2 className="text-xl font-bold text-slate-900">{editingId ? 'Edit Garage' : 'Create New Garage'}</h2>
-                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                    <div className="bg-slate-900 rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="flex justify-between items-center p-6 border-b border-white/5">
+                            <h2 className="text-xl font-bold text-white">{editingId ? 'Edit Garage' : 'Create New Garage'}</h2>
+                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-300">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                                 </svg>
@@ -152,53 +152,53 @@ export default function GaragesPage() {
 
                         <form onSubmit={handleSubmit} className="p-6 space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Garage Name</label>
-                                <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Garage Name</label>
+                                <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Location</label>
-                                <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })} />
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Location</label>
+                                <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })} />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Contact Person</label>
-                                    <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.contactPerson} onChange={e => setFormData({ ...formData, contactPerson: e.target.value })} />
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Contact Person</label>
+                                    <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.contactPerson} onChange={e => setFormData({ ...formData, contactPerson: e.target.value })} />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Designation</label>
-                                    <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.designation} onChange={e => setFormData({ ...formData, designation: e.target.value })} />
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Designation</label>
+                                    <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.designation} onChange={e => setFormData({ ...formData, designation: e.target.value })} />
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                                    <input type="email" className="w-full rounded-lg border-slate-300 text-sm" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Email</label>
+                                    <input type="email" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Contact Number</label>
-                                    <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.contactNumber} onChange={e => setFormData({ ...formData, contactNumber: e.target.value })} />
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Contact Number</label>
+                                    <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.contactNumber} onChange={e => setFormData({ ...formData, contactNumber: e.target.value })} />
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Specialties (comma separated)</label>
-                                <input type="text" className="w-full rounded-lg border-slate-300 text-sm" placeholder="e.g., Tires, Oil Change, AC" value={formData.specialties} onChange={e => setFormData({ ...formData, specialties: e.target.value })} />
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Specialties (comma separated)</label>
+                                <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" placeholder="e.g., Tires, Oil Change, AC" value={formData.specialties} onChange={e => setFormData({ ...formData, specialties: e.target.value })} />
                             </div>
                             <div className="flex items-center">
                                 <input
                                     type="checkbox"
                                     id="isInternal"
-                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                    className="rounded border-white/15 text-blue-600 focus:ring-blue-500"
                                     checked={formData.isInternal}
                                     onChange={e => setFormData({ ...formData, isInternal: e.target.checked })}
                                 />
-                                <label htmlFor="isInternal" className="ml-2 text-sm text-slate-700">Internal Garage</label>
+                                <label htmlFor="isInternal" className="ml-2 text-sm text-slate-300">Internal Garage</label>
                             </div>
 
-                            <div className="mt-8 flex justify-end gap-3 pt-6 border-t border-slate-100">
+                            <div className="mt-8 flex justify-end gap-3 pt-6 border-t border-white/5">
                                 <button
                                     type="button"
                                     onClick={() => setIsModalOpen(false)}
-                                    className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 rounded-lg transition-colors"
+                                    className="px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 rounded-lg transition-colors"
                                 >
                                     Cancel
                                 </button>

@@ -1,8 +1,13 @@
 import { EmailLog, EnhancedMaintenanceRequest } from '@/types/maintenance';
+import nodemailer from 'nodemailer';
+import { prisma } from '@/lib/prisma';
 
 /**
- * Mock Email Service
- * In production, this would integrate with SendGrid, AWS SES, or similar service
+ * Functional Email Service
+ * Priorities:
+ * 1. Database Configuration (Admin > Integrations)
+ * 2. Environment Variables (SMTP_HOST, etc.)
+ * 3. Mock Fallback (Console Logs)
  */
 
 export interface EmailRecipient {
@@ -26,31 +31,77 @@ export interface SendEmailParams {
 }
 
 /**
- * Send email (mock implementation)
+ * Send email (Real implementation with DB + ENV fallback)
  */
 export async function sendEmail(params: SendEmailParams): Promise<EmailLog> {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500));
+    const recipients = params.to.map(r => r.email).join(', ');
+    const ccList = params.cc?.map(r => r.email).join(', ');
+    let transport: any;
+    let fromAddress = process.env.EMAIL_FROM || '"XL AI Smart Mobility" <noreply@xl-mobility.ai>';
 
-    // Mock email log
-    const emailLog: EmailLog = {
+    // Try Database configuration first
+    const dbConfig = await prisma.integrationConfig.findFirst({
+        where: { type: 'EMAIL', isEnabled: true },
+    }).catch(() => null);
+
+    if (dbConfig && dbConfig.host && dbConfig.username) {
+        transport = nodemailer.createTransport({
+            host: dbConfig.host,
+            port: parseInt(dbConfig.port || '587'),
+            secure: (dbConfig.encryption || '').toUpperCase() === 'SSL' || dbConfig.port === '465',
+            auth: {
+                user: dbConfig.username,
+                pass: dbConfig.password || '',
+            },
+            tls: { rejectUnauthorized: false },
+        });
+        fromAddress = `"${dbConfig.fromName || 'XL AI Smart Mobility'}" <${dbConfig.senderEmail || dbConfig.username}>`;
+        console.log(`[EMAIL SERVICE] Using DATABASE configuration for: ${recipients}`);
+    } else if (process.env.SMTP_HOST && process.env.SMTP_USER) {
+        // Fallback to ENV configuration
+        transport = nodemailer.createTransport({
+            host: process.env.SMTP_HOST,
+            port: parseInt(process.env.SMTP_PORT || '587'),
+            secure: process.env.SMTP_PORT === '465',
+            auth: {
+                user: process.env.SMTP_USER,
+                pass: process.env.SMTP_PASS || '',
+            },
+        });
+        console.log(`[EMAIL SERVICE] Using ENVIRONMENT configuration for: ${recipients}`);
+    }
+
+    if (transport) {
+        try {
+            await transport.sendMail({
+                from: fromAddress,
+                to: recipients,
+                cc: ccList,
+                subject: params.subject,
+                text: params.textBody || params.htmlBody.replace(/<[^>]*>/g, ''),
+                html: params.htmlBody,
+            });
+            console.log(`[EMAIL SERVICE] REAL EMAIL SENT to: ${recipients}`);
+        } catch (error) {
+            console.error(`[EMAIL SERVICE] FAILED to send real email:`, error);
+        }
+    } else {
+        // Mock fallback
+        await new Promise(resolve => setTimeout(resolve, 500));
+        console.log(`[EMAIL SERVICE] MOCK EMAIL SENT to: ${recipients}`);
+    }
+
+    return {
         id: `email-${Date.now()}`,
-        requestId: '', // Will be set by caller
+        requestId: '',
         emailType: 'NOTIFICATION',
         recipients: params.to.map(r => r.email),
         cc: params.cc?.map(r => r.email),
         subject: params.subject,
         sentAt: new Date().toISOString(),
-        status: 'SENT', // Mock success
+        status: transport ? 'SENT' : 'MOCK_SENT',
         retryCount: 0
     };
-
-    console.log('[EMAIL SERVICE] Email sent:', {
-        to: params.to.map(r => r.email).join(', '),
-        subject: params.subject
-    });
-
-    return emailLog;
 }
 
 /**

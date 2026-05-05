@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { transformStream } from "@crayonai/stream";
 import { DBMessage, getMessageStore } from "./messageStore";
+import { logInteraction } from "@/lib/agents/chat-widget/agent";
 
 
 export async function POST(req: NextRequest) {
+  const t0 = Date.now();
   const { prompt, threadId, responseId } = (await req.json()) as {
     prompt: DBMessage;
     threadId: string;
@@ -58,6 +60,14 @@ export async function POST(req: NextRequest) {
           role: "assistant",
           content: message,
           id: responseId,
+        });
+        // Log to agent_runs for ecosystem visibility (fire-and-forget)
+        const toolsUsed = message.includes('createBooking') ? ['createBooking'] : [];
+        logInteraction({
+          threadId,
+          messageCount: messageStore.getOpenAICompatibleMessageList().length,
+          toolsUsed,
+          durationMs: Date.now() - t0,
         });
       },
     }

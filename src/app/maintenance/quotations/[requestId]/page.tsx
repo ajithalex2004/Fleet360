@@ -182,15 +182,15 @@ export default function QuotationsPage() {
     const getStatusColor = (status: QuotationStatus) => {
         switch (status) {
             case QuotationStatus.PENDING:
-                return 'bg-yellow-100 text-yellow-700 border-yellow-300';
+                return 'bg-amber-500/20 text-yellow-700 border-yellow-300';
             case QuotationStatus.ACCEPTED:
-                return 'bg-green-100 text-green-700 border-green-300';
+                return 'bg-emerald-500/20 text-green-700 border-green-300';
             case QuotationStatus.REJECTED:
-                return 'bg-red-100 text-red-700 border-red-300';
+                return 'bg-red-500/20 text-red-700 border-red-300';
             case QuotationStatus.EXPIRED:
-                return 'bg-gray-100 text-gray-700 border-gray-300';
+                return 'bg-slate-700/40 text-slate-300 border-white/15';
             default:
-                return 'bg-slate-100 text-slate-700 border-slate-300';
+                return 'bg-slate-700/40 text-slate-300 border-white/15';
         }
     };
 
@@ -205,12 +205,12 @@ export default function QuotationsPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <div className="flex items-center gap-3 mb-1">
-                        <Link href={`/maintenance/requests/${requestId}`} className="text-slate-400 hover:text-slate-600">
+                        <Link href={`/maintenance/requests/${requestId}`} className="text-slate-400 hover:text-slate-300">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
                             </svg>
                         </Link>
-                        <h1 className="text-2xl font-bold text-slate-900">Quotations - Request #{request.id.toUpperCase()}</h1>
+                        <h1 className="text-2xl font-bold text-white">Quotations - Request #{request.id.toUpperCase()}</h1>
                     </div>
                     <p className="text-slate-500 ml-8">
                         {vehicle?.make} {vehicle?.model} ({vehicle?.licensePlate}) • {quotations.length} quotation(s) received
@@ -222,7 +222,7 @@ export default function QuotationsPage() {
                             onClick={() => setCompareMode(!compareMode)}
                             className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${compareMode
                                     ? 'bg-blue-600 text-white'
-                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                    : 'bg-slate-700/40 text-slate-300 hover:bg-slate-200'
                                 }`}
                         >
                             {compareMode ? 'Exit Compare Mode' : 'Compare Quotations'}
@@ -239,10 +239,10 @@ export default function QuotationsPage() {
 
             {/* Comparison View */}
             {compareMode && selectedForComparison.length > 0 && (
-                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                    <h3 className="text-lg font-bold text-slate-900 mb-4">Quotation Comparison</h3>
+                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-white mb-4">Quotation Comparison</h3>
                     <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-slate-200">
+                        <table className="min-w-full divide-y divide-white/10">
                             <thead>
                                 <tr>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Item</th>
@@ -253,49 +253,49 @@ export default function QuotationsPage() {
                                     ))}
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-200">
+                            <tbody className="divide-y divide-white/10">
                                 <tr>
-                                    <td className="px-4 py-3 text-sm font-medium text-slate-900">Total Cost</td>
+                                    <td className="px-4 py-3 text-sm font-medium text-white">Total Cost</td>
                                     {quotationsToCompare.map(q => (
-                                        <td key={q.id} className="px-4 py-3 text-sm text-slate-700 font-bold">
+                                        <td key={q.id} className="px-4 py-3 text-sm text-slate-300 font-bold">
                                             ${q.totalCost.toLocaleString()}
                                         </td>
                                     ))}
                                 </tr>
                                 <tr>
-                                    <td className="px-4 py-3 text-sm font-medium text-slate-900">Labor Cost</td>
+                                    <td className="px-4 py-3 text-sm font-medium text-white">Labor Cost</td>
                                     {quotationsToCompare.map(q => (
-                                        <td key={q.id} className="px-4 py-3 text-sm text-slate-700">
+                                        <td key={q.id} className="px-4 py-3 text-sm text-slate-300">
                                             ${q.laborCost.toLocaleString()}
                                         </td>
                                     ))}
                                 </tr>
                                 <tr>
-                                    <td className="px-4 py-3 text-sm font-medium text-slate-900">Parts Cost</td>
+                                    <td className="px-4 py-3 text-sm font-medium text-white">Parts Cost</td>
                                     {quotationsToCompare.map(q => (
-                                        <td key={q.id} className="px-4 py-3 text-sm text-slate-700">
+                                        <td key={q.id} className="px-4 py-3 text-sm text-slate-300">
                                             ${q.partsCost.toLocaleString()}
                                         </td>
                                     ))}
                                 </tr>
                                 <tr>
-                                    <td className="px-4 py-3 text-sm font-medium text-slate-900">Duration (hours)</td>
+                                    <td className="px-4 py-3 text-sm font-medium text-white">Duration (hours)</td>
                                     {quotationsToCompare.map(q => (
-                                        <td key={q.id} className="px-4 py-3 text-sm text-slate-700">
+                                        <td key={q.id} className="px-4 py-3 text-sm text-slate-300">
                                             {q.estimatedDuration}h
                                         </td>
                                     ))}
                                 </tr>
                                 <tr>
-                                    <td className="px-4 py-3 text-sm font-medium text-slate-900">Valid Until</td>
+                                    <td className="px-4 py-3 text-sm font-medium text-white">Valid Until</td>
                                     {quotationsToCompare.map(q => (
-                                        <td key={q.id} className="px-4 py-3 text-sm text-slate-700">
+                                        <td key={q.id} className="px-4 py-3 text-sm text-slate-300">
                                             {new Date(q.validUntil).toLocaleDateString()}
                                         </td>
                                     ))}
                                 </tr>
                                 <tr>
-                                    <td className="px-4 py-3 text-sm font-medium text-slate-900">Status</td>
+                                    <td className="px-4 py-3 text-sm font-medium text-white">Status</td>
                                     {quotationsToCompare.map(q => (
                                         <td key={q.id} className="px-4 py-3">
                                             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border ${getStatusColor(q.status)}`}>
@@ -313,22 +313,22 @@ export default function QuotationsPage() {
             {/* Quotations List */}
             <div className="grid grid-cols-1 gap-6">
                 {quotations.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-12 text-center">
+                    <div className="rounded-xl border border-dashed border-white/15 bg-slate-800/50 p-12 text-center">
                         <p className="text-slate-500">No quotations received yet.</p>
                         <button
                             onClick={() => setShowSubmitForm(true)}
-                            className="mt-4 text-sm font-medium text-blue-600 hover:text-blue-800"
+                            className="mt-4 text-sm font-medium text-blue-600 hover:text-blue-300"
                         >
                             Submit the first quotation
                         </button>
                     </div>
                 ) : (
                     quotations.map(quotation => (
-                        <div key={quotation.id} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                        <div key={quotation.id} className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
                             <div className="flex items-start justify-between mb-4">
                                 <div className="flex-1">
                                     <div className="flex items-center gap-3 mb-2">
-                                        <h3 className="text-lg font-bold text-slate-900">{quotation.garageName}</h3>
+                                        <h3 className="text-lg font-bold text-white">{quotation.garageName}</h3>
                                         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${getStatusColor(quotation.status)}`}>
                                             {quotation.status}
                                         </span>
@@ -344,7 +344,7 @@ export default function QuotationsPage() {
                                             onClick={() => toggleComparisonSelection(quotation.id)}
                                             className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${selectedForComparison.includes(quotation.id)
                                                     ? 'bg-blue-600 text-white'
-                                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                                    : 'bg-slate-700/40 text-slate-300 hover:bg-slate-200'
                                                 }`}
                                         >
                                             {selectedForComparison.includes(quotation.id) ? 'Selected' : 'Select'}
@@ -372,11 +372,11 @@ export default function QuotationsPage() {
                             <div className="grid grid-cols-4 gap-6 mb-4">
                                 <div>
                                     <label className="block text-xs text-slate-500">Labor Cost</label>
-                                    <p className="text-sm font-medium text-slate-900">${quotation.laborCost.toLocaleString()}</p>
+                                    <p className="text-sm font-medium text-white">${quotation.laborCost.toLocaleString()}</p>
                                 </div>
                                 <div>
                                     <label className="block text-xs text-slate-500">Parts Cost</label>
-                                    <p className="text-sm font-medium text-slate-900">${quotation.partsCost.toLocaleString()}</p>
+                                    <p className="text-sm font-medium text-white">${quotation.partsCost.toLocaleString()}</p>
                                 </div>
                                 <div>
                                     <label className="block text-xs text-slate-500">Total Cost</label>
@@ -384,16 +384,16 @@ export default function QuotationsPage() {
                                 </div>
                                 <div>
                                     <label className="block text-xs text-slate-500">Duration</label>
-                                    <p className="text-sm font-medium text-slate-900">{quotation.estimatedDuration} hours</p>
+                                    <p className="text-sm font-medium text-white">{quotation.estimatedDuration} hours</p>
                                 </div>
                             </div>
 
                             {quotation.partsBreakdown.length > 0 && (
                                 <div className="mt-4">
-                                    <h4 className="text-sm font-medium text-slate-900 mb-2">Parts Breakdown</h4>
-                                    <div className="rounded-lg border border-slate-200 overflow-hidden">
-                                        <table className="min-w-full divide-y divide-slate-200">
-                                            <thead className="bg-slate-50">
+                                    <h4 className="text-sm font-medium text-white mb-2">Parts Breakdown</h4>
+                                    <div className="rounded-lg border border-white/10 overflow-hidden">
+                                        <table className="min-w-full divide-y divide-white/10">
+                                            <thead className="bg-slate-800/50">
                                                 <tr>
                                                     <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Part Name</th>
                                                     <th className="px-3 py-2 text-left text-xs font-medium text-slate-500">Part #</th>
@@ -402,14 +402,14 @@ export default function QuotationsPage() {
                                                     <th className="px-3 py-2 text-right text-xs font-medium text-slate-500">Total</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-slate-200 bg-white">
+                                            <tbody className="divide-y divide-white/10 bg-slate-900">
                                                 {quotation.partsBreakdown.map(part => (
                                                     <tr key={part.id}>
-                                                        <td className="px-3 py-2 text-sm text-slate-900">{part.name}</td>
-                                                        <td className="px-3 py-2 text-sm text-slate-500">{part.partNumber || '-'}</td>
-                                                        <td className="px-3 py-2 text-sm text-slate-900 text-right">{part.quantity}</td>
-                                                        <td className="px-3 py-2 text-sm text-slate-900 text-right">${part.unitPrice}</td>
-                                                        <td className="px-3 py-2 text-sm font-medium text-slate-900 text-right">${part.totalPrice}</td>
+                                                        <td className="px-3 py-2 text-sm text-white">{part.name}</td>
+                                                        <td className="px-3 py-2 text-sm text-slate-300">{part.partNumber || '-'}</td>
+                                                        <td className="px-3 py-2 text-sm text-white text-right">{part.quantity}</td>
+                                                        <td className="px-3 py-2 text-sm text-white text-right">${part.unitPrice}</td>
+                                                        <td className="px-3 py-2 text-sm font-medium text-white text-right">${part.totalPrice}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -421,7 +421,7 @@ export default function QuotationsPage() {
                             {quotation.notes && (
                                 <div className="mt-4">
                                     <label className="block text-xs text-slate-500 mb-1">Notes</label>
-                                    <p className="text-sm text-slate-700 bg-slate-50 p-3 rounded-lg">{quotation.notes}</p>
+                                    <p className="text-sm text-slate-300 bg-slate-800/50 p-3 rounded-lg">{quotation.notes}</p>
                                 </div>
                             )}
                         </div>
@@ -432,11 +432,11 @@ export default function QuotationsPage() {
             {/* Submit Quotation Modal */}
             {showSubmitForm && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl">
-                        <div className="p-6 border-b border-slate-200">
+                    <div className="bg-slate-900 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl">
+                        <div className="p-6 border-b border-white/10">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-bold text-slate-900">Submit Quotation</h3>
-                                <button onClick={() => setShowSubmitForm(false)} className="text-slate-400 hover:text-slate-600">
+                                <h3 className="text-lg font-bold text-white">Submit Quotation</h3>
+                                <button onClick={() => setShowSubmitForm(false)} className="text-slate-400 hover:text-slate-300">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                     </svg>
@@ -447,11 +447,11 @@ export default function QuotationsPage() {
                         <div className="p-6 space-y-6">
                             {/* Garage Selection */}
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Select Garage *</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Select Garage *</label>
                                 <select
                                     value={selectedGarageId}
                                     onChange={(e) => setSelectedGarageId(e.target.value)}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                 >
                                     <option value="">Choose a garage</option>
                                     {garages.map(garage => (
@@ -463,65 +463,65 @@ export default function QuotationsPage() {
                             {/* Cost Details */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Labor Cost ($)</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Labor Cost ($)</label>
                                     <input
                                         type="number"
                                         value={quotationForm.laborCost}
                                         onChange={(e) => setQuotationForm({ ...quotationForm, laborCost: Number(e.target.value) })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Parts Cost ($)</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Parts Cost ($)</label>
                                     <input
                                         type="number"
                                         value={quotationForm.partsCost}
                                         onChange={(e) => setQuotationForm({ ...quotationForm, partsCost: Number(e.target.value) })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Additional Costs ($)</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Additional Costs ($)</label>
                                     <input
                                         type="number"
                                         value={quotationForm.additionalCosts}
                                         onChange={(e) => setQuotationForm({ ...quotationForm, additionalCosts: Number(e.target.value) })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Tax Amount ($)</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Tax Amount ($)</label>
                                     <input
                                         type="number"
                                         value={quotationForm.taxAmount}
                                         onChange={(e) => setQuotationForm({ ...quotationForm, taxAmount: Number(e.target.value) })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Estimated Duration (hours)</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Estimated Duration (hours)</label>
                                     <input
                                         type="number"
                                         value={quotationForm.estimatedDuration}
                                         onChange={(e) => setQuotationForm({ ...quotationForm, estimatedDuration: Number(e.target.value) })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Valid Until *</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Valid Until *</label>
                                     <input
                                         type="date"
                                         value={quotationForm.validUntil}
                                         onChange={(e) => setQuotationForm({ ...quotationForm, validUntil: e.target.value })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     />
                                 </div>
                             </div>
 
                             {/* Total Cost Display */}
-                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div className="bg-blue-500/10 border border-blue-200 rounded-lg p-4">
                                 <div className="flex justify-between items-center">
-                                    <span className="text-sm font-medium text-slate-700">Total Cost:</span>
+                                    <span className="text-sm font-medium text-slate-300">Total Cost:</span>
                                     <span className="text-2xl font-bold text-blue-600">${calculateTotalCost().toLocaleString()}</span>
                                 </div>
                             </div>
@@ -529,10 +529,10 @@ export default function QuotationsPage() {
                             {/* Parts Breakdown */}
                             <div>
                                 <div className="flex items-center justify-between mb-3">
-                                    <label className="block text-sm font-medium text-slate-700">Parts Breakdown</label>
+                                    <label className="block text-sm font-medium text-slate-300">Parts Breakdown</label>
                                     <button
                                         onClick={handleAddPart}
-                                        className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                                        className="text-sm font-medium text-blue-600 hover:text-blue-300"
                                     >
                                         + Add Part
                                     </button>
@@ -540,14 +540,14 @@ export default function QuotationsPage() {
                                 {quotationForm.partsBreakdown.length > 0 && (
                                     <div className="space-y-3">
                                         {quotationForm.partsBreakdown.map((part, index) => (
-                                            <div key={part.id} className="grid grid-cols-6 gap-3 items-end p-3 bg-slate-50 rounded-lg">
+                                            <div key={part.id} className="grid grid-cols-6 gap-3 items-end p-3 bg-slate-800/50 rounded-lg">
                                                 <div className="col-span-2">
                                                     <label className="block text-xs text-slate-500 mb-1">Part Name</label>
                                                     <input
                                                         type="text"
                                                         value={part.name}
                                                         onChange={(e) => handlePartChange(index, 'name', e.target.value)}
-                                                        className="w-full rounded border border-slate-300 px-2 py-1 text-sm bg-white text-slate-900"
+                                                        className="w-full rounded border border-white/15 px-2 py-1 text-sm bg-slate-900 text-white"
                                                     />
                                                 </div>
                                                 <div>
@@ -556,7 +556,7 @@ export default function QuotationsPage() {
                                                         type="text"
                                                         value={part.partNumber}
                                                         onChange={(e) => handlePartChange(index, 'partNumber', e.target.value)}
-                                                        className="w-full rounded border border-slate-300 px-2 py-1 text-sm bg-white text-slate-900"
+                                                        className="w-full rounded border border-white/15 px-2 py-1 text-sm bg-slate-900 text-white"
                                                     />
                                                 </div>
                                                 <div>
@@ -565,7 +565,7 @@ export default function QuotationsPage() {
                                                         type="number"
                                                         value={part.quantity}
                                                         onChange={(e) => handlePartChange(index, 'quantity', Number(e.target.value))}
-                                                        className="w-full rounded border border-slate-300 px-2 py-1 text-sm bg-white text-slate-900"
+                                                        className="w-full rounded border border-white/15 px-2 py-1 text-sm bg-slate-900 text-white"
                                                     />
                                                 </div>
                                                 <div>
@@ -574,12 +574,12 @@ export default function QuotationsPage() {
                                                         type="number"
                                                         value={part.unitPrice}
                                                         onChange={(e) => handlePartChange(index, 'unitPrice', Number(e.target.value))}
-                                                        className="w-full rounded border border-slate-300 px-2 py-1 text-sm bg-white text-slate-900"
+                                                        className="w-full rounded border border-white/15 px-2 py-1 text-sm bg-slate-900 text-white"
                                                     />
                                                 </div>
                                                 <button
                                                     onClick={() => handleRemovePart(index)}
-                                                    className="text-red-600 hover:text-red-800 p-1"
+                                                    className="text-red-600 hover:text-red-300 p-1"
                                                 >
                                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -593,21 +593,21 @@ export default function QuotationsPage() {
 
                             {/* Notes */}
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Notes</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Notes</label>
                                 <textarea
                                     rows={3}
                                     value={quotationForm.notes}
                                     onChange={(e) => setQuotationForm({ ...quotationForm, notes: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     placeholder="Additional notes or terms..."
                                 />
                             </div>
                         </div>
 
-                        <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+                        <div className="p-6 border-t border-white/10 flex justify-end gap-3">
                             <button
                                 onClick={() => setShowSubmitForm(false)}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
                             >
                                 Cancel
                             </button>

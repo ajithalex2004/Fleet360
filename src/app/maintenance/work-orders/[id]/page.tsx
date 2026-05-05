@@ -742,19 +742,19 @@ export default function WorkOrderPage() {
     const getStatusColor = (status: WorkOrderStatus) => {
         switch (status) {
             case WorkOrderStatus.NOT_STARTED:
-                return 'bg-slate-100 text-slate-700 border-slate-300';
+                return 'bg-slate-700/40 text-slate-300 border-white/15';
             case WorkOrderStatus.IN_PROGRESS:
-                return 'bg-blue-100 text-blue-700 border-blue-300';
+                return 'bg-blue-500/20 text-blue-700 border-blue-300';
             case WorkOrderStatus.ON_HOLD:
-                return 'bg-yellow-100 text-yellow-700 border-yellow-300';
+                return 'bg-amber-500/20 text-yellow-700 border-yellow-300';
             case WorkOrderStatus.QUALITY_CHECK:
-                return 'bg-purple-100 text-purple-700 border-purple-300';
+                return 'bg-purple-500/20 text-purple-700 border-purple-300';
             case WorkOrderStatus.COMPLETED:
-                return 'bg-green-100 text-green-700 border-green-300';
+                return 'bg-emerald-500/20 text-green-700 border-green-300';
             case WorkOrderStatus.SUBMIT_INVOICE:
                 return 'bg-indigo-100 text-indigo-700 border-indigo-300';
             default:
-                return 'bg-slate-100 text-slate-700 border-slate-300';
+                return 'bg-slate-700/40 text-slate-300 border-white/15';
         }
     };
 
@@ -807,11 +807,11 @@ export default function WorkOrderPage() {
             <div className="hidden print:block mb-8 border-b-2 border-slate-900 pb-4">
                 <div className="flex justify-between items-start">
                     <div>
-                        <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-wider">Work Order Details</h1>
+                        <h1 className="text-3xl font-bold text-white uppercase tracking-wider">Work Order Details</h1>
                         <p className="text-sm text-slate-600 mt-1">ID: <span className="font-mono font-bold">{workOrder.id.toUpperCase()}</span></p>
                     </div>
                     <div className="text-right">
-                        <p className="text-sm font-bold text-slate-900">{garage?.name}</p>
+                        <p className="text-sm font-bold text-white">{garage?.name}</p>
                         <p className="text-xs text-slate-500">Date: {new Date().toLocaleDateString()}</p>
                     </div>
                 </div>
@@ -821,12 +821,12 @@ export default function WorkOrderPage() {
             <div className="flex items-center justify-between print:hidden">
                 <div>
                     <div className="flex items-center gap-3 mb-1">
-                        <Link href="/maintenance/work-orders" className="text-slate-400 hover:text-slate-600">
+                        <Link href="/maintenance/work-orders" className="text-slate-400 hover:text-slate-300">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
                             </svg>
                         </Link>
-                        <h1 className="text-lg font-bold text-slate-900">Work Order #{workOrder.id.toUpperCase()}</h1>
+                        <h1 className="text-lg font-bold text-white">Work Order #{workOrder.id.toUpperCase()}</h1>
                         <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium border ${getStatusColor(workOrder.status)}`}>
                             {workOrder.status}
                         </span>
@@ -838,7 +838,7 @@ export default function WorkOrderPage() {
                 <div className="flex items-center gap-3">
                     <button
                         onClick={handleSaveProgress}
-                        className="rounded-lg bg-white border border-slate-300 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 shadow-sm transition-colors"
+                        className="rounded-lg bg-slate-900 border border-white/15 px-4 py-2 text-xs font-medium text-slate-300 hover:bg-white/5 shadow-sm transition-colors"
                     >
                         Save Progress
                     </button>
@@ -868,17 +868,17 @@ export default function WorkOrderPage() {
                         </button>
                     )}
                     {/* View Mode Toggle (Dev Only) */}
-                    <div className="flex items-center bg-slate-100 rounded-lg p-1 mr-2">
+                    <div className="flex items-center bg-slate-700/40 rounded-lg p-1 mr-2">
                         <button
                             onClick={() => setViewMode('MAINTENANCE')}
-                            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'MAINTENANCE' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'
+                            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'MAINTENANCE' ? 'bg-slate-900 shadow text-white' : 'text-slate-500 hover:text-slate-300'
                                 }`}
                         >
                             Maintenance
                         </button>
                         <button
                             onClick={() => setViewMode('GARAGE')}
-                            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'GARAGE' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'
+                            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'GARAGE' ? 'bg-slate-900 shadow text-white' : 'text-slate-500 hover:text-slate-300'
                                 }`}
                         >
                             Garage
@@ -888,7 +888,7 @@ export default function WorkOrderPage() {
                         value={workOrder.status}
                         onChange={(e) => updateWorkOrderStatus(e.target.value as WorkOrderStatus)}
                         disabled={viewMode !== 'GARAGE'}
-                        className={`rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900 ${viewMode !== 'GARAGE' ? 'opacity-50 cursor-not-allowed bg-slate-100' : ''}`}
+                        className={`rounded-lg border border-white/15 px-3 py-2 text-sm bg-slate-900 text-white ${viewMode !== 'GARAGE' ? 'opacity-50 cursor-not-allowed bg-slate-700/40' : ''}`}
                     >
                         <option value={workOrder.status}>{workOrder.status}</option>
                         {allowedTransitions[workOrder.status]?.map(status => (
@@ -897,7 +897,7 @@ export default function WorkOrderPage() {
                     </select>
                     <button
                         onClick={() => window.print()}
-                        className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 print:hidden"
+                        className="flex items-center gap-2 rounded-lg border border-white/15 bg-slate-900 px-4 py-2 text-xs font-medium text-slate-300 hover:bg-white/5 print:hidden"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5Zm-3 0h.008v.008H15V10.5Z" />
@@ -1018,9 +1018,9 @@ export default function WorkOrderPage() {
             `}</style>
 
             {/* Progress Bar */}
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm print:hidden">
+            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm print:hidden">
                 <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-slate-700">Overall Progress</span>
+                    <span className="text-sm font-medium text-slate-300">Overall Progress</span>
                     <span className="text-sm font-bold text-blue-600">{progress}%</span>
                 </div>
                 <div className="w-full bg-slate-200 rounded-full h-3">
@@ -1032,13 +1032,13 @@ export default function WorkOrderPage() {
             </div>
 
             {/* Work Order Details */}
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold text-slate-900">Work Order Details</h3>
+                    <h3 className="text-lg font-bold text-white">Work Order Details</h3>
                     {viewMode === 'GARAGE' && !isEditingDetails && (
                         <button
                             onClick={() => setIsEditingDetails(true)}
-                            className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                            className="text-sm font-medium text-blue-600 hover:text-blue-300"
                         >
                             Edit Details
                         </button>
@@ -1049,22 +1049,22 @@ export default function WorkOrderPage() {
                     <div className="space-y-4">
                         <div>
                             <label className="block text-xs text-slate-500">Work Order Number</label>
-                            <p className="text-sm font-medium text-slate-900">{workOrder.id.toUpperCase()}</p>
+                            <p className="text-sm font-medium text-white">{workOrder.id.toUpperCase()}</p>
                         </div>
                         <div>
                             <label className="block text-xs text-slate-500">Vehicle</label>
-                            <p className="text-sm font-medium text-slate-900">
+                            <p className="text-sm font-medium text-white">
                                 {vehicle?.make} {vehicle?.model} ({vehicle?.year})
                             </p>
                             <p className="text-xs text-slate-500">{vehicle?.licensePlate} • VIN: {vehicle?.vin}</p>
                         </div>
                         <div>
                             <label className="block text-xs text-slate-500">Current Mileage</label>
-                            <p className="text-sm font-medium text-slate-900">{vehicle?.currentMileage.toLocaleString()} km</p>
+                            <p className="text-sm font-medium text-white">{vehicle?.currentMileage.toLocaleString()} km</p>
                         </div>
                         <div>
                             <label className="block text-xs text-slate-500">Estimation Approved By</label>
-                            <p className="text-sm font-medium text-slate-900">
+                            <p className="text-sm font-medium text-white">
                                 {request?.estimateApproval?.approvedByName || 'N/A'}
                             </p>
                         </div>
@@ -1078,14 +1078,14 @@ export default function WorkOrderPage() {
                                 <select
                                     value={detailsForm.maintenanceType}
                                     onChange={(e) => setDetailsForm({ ...detailsForm, maintenanceType: e.target.value as MaintenanceType })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm bg-slate-900 text-white"
                                 >
                                     {MaintenanceType && Object.values(MaintenanceType).map(type => (
                                         <option key={type} value={type}>{type}</option>
                                     ))}
                                 </select>
                             ) : (
-                                <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+                                <span className="inline-flex items-center rounded-full bg-blue-500/10 px-2.5 py-0.5 text-xs font-medium text-blue-700">
                                     {request?.maintenanceType || 'N/A'}
                                 </span>
                             )}
@@ -1097,11 +1097,11 @@ export default function WorkOrderPage() {
                                     value={detailsForm.maintenanceJobs.join('\n')}
                                     onChange={(e) => setDetailsForm({ ...detailsForm, maintenanceJobs: e.target.value.split('\n') })}
                                     rows={4}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm bg-slate-900 text-white"
                                     placeholder="Enter jobs (one per line)"
                                 />
                             ) : (
-                                <ul className="list-disc list-inside text-sm text-slate-700 space-y-1">
+                                <ul className="list-disc list-inside text-sm text-slate-300 space-y-1">
                                     {request?.maintenanceJobs?.length ? (
                                         request.maintenanceJobs.map((job, idx) => (
                                             <li key={idx}>{job}</li>
@@ -1129,7 +1129,7 @@ export default function WorkOrderPage() {
                                             }
                                         }
                                     }}
-                                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-white/10"
                                 >
                                     Cancel
                                 </button>
@@ -1147,37 +1147,37 @@ export default function WorkOrderPage() {
 
             {/* TRIPEXL: Cost Comparison Card */}
             {workOrder.actualCosts && (
-                <div className="rounded-xl border border-blue-200 bg-blue-50 p-6 shadow-sm">
-                    <h3 className="text-lg font-bold text-blue-900 mb-4">Cost Comparison - Estimated vs Actual</h3>
+                <div className="rounded-xl border border-blue-200 bg-blue-500/10 p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-blue-300 mb-4">Cost Comparison - Estimated vs Actual</h3>
                     <div className="grid grid-cols-4 gap-4">
                         <div>
                             <p className="text-xs text-blue-700 mb-1">Parts</p>
-                            <p className="text-sm text-blue-900">Est: {formatCurrency(estimatedCosts.parts)}</p>
-                            <p className="text-sm font-bold text-blue-900">Act: {formatCurrency(workOrder.actualCosts.parts)}</p>
+                            <p className="text-sm text-blue-300">Est: {formatCurrency(estimatedCosts.parts)}</p>
+                            <p className="text-sm font-bold text-blue-300">Act: {formatCurrency(workOrder.actualCosts.parts)}</p>
                             <p className={`text-xs mt-1 ${workOrder.actualCosts.parts > estimatedCosts.parts ? 'text-red-700' : 'text-green-700'}`}>
                                 {workOrder.actualCosts.parts > estimatedCosts.parts ? '+' : ''}{formatCurrency(workOrder.actualCosts.parts - estimatedCosts.parts)}
                             </p>
                         </div>
                         <div>
                             <p className="text-xs text-blue-700 mb-1">Labor</p>
-                            <p className="text-sm text-blue-900">Est: {formatCurrency(estimatedCosts.labor)}</p>
-                            <p className="text-sm font-bold text-blue-900">Act: {formatCurrency(workOrder.actualCosts.labor)}</p>
+                            <p className="text-sm text-blue-300">Est: {formatCurrency(estimatedCosts.labor)}</p>
+                            <p className="text-sm font-bold text-blue-300">Act: {formatCurrency(workOrder.actualCosts.labor)}</p>
                             <p className={`text-xs mt-1 ${workOrder.actualCosts.labor > estimatedCosts.labor ? 'text-red-700' : 'text-green-700'}`}>
                                 {workOrder.actualCosts.labor > estimatedCosts.labor ? '+' : ''}{formatCurrency(workOrder.actualCosts.labor - estimatedCosts.labor)}
                             </p>
                         </div>
                         <div>
                             <p className="text-xs text-blue-700 mb-1">Other</p>
-                            <p className="text-sm text-blue-900">Est: {formatCurrency(estimatedCosts.other)}</p>
-                            <p className="text-sm font-bold text-blue-900">Act: {formatCurrency(workOrder.actualCosts.other)}</p>
+                            <p className="text-sm text-blue-300">Est: {formatCurrency(estimatedCosts.other)}</p>
+                            <p className="text-sm font-bold text-blue-300">Act: {formatCurrency(workOrder.actualCosts.other)}</p>
                             <p className={`text-xs mt-1 ${workOrder.actualCosts.other > estimatedCosts.other ? 'text-red-700' : 'text-green-700'}`}>
                                 {workOrder.actualCosts.other > estimatedCosts.other ? '+' : ''}{formatCurrency(workOrder.actualCosts.other - estimatedCosts.other)}
                             </p>
                         </div>
                         <div>
                             <p className="text-xs text-blue-700 mb-1">Total</p>
-                            <p className="text-sm text-blue-900">Est: {formatCurrency(estimatedCosts.total)}</p>
-                            <p className="text-lg font-bold text-blue-900">Act: {formatCurrency(workOrder.actualCosts.total)}</p>
+                            <p className="text-sm text-blue-300">Est: {formatCurrency(estimatedCosts.total)}</p>
+                            <p className="text-lg font-bold text-blue-300">Act: {formatCurrency(workOrder.actualCosts.total)}</p>
                             <p className={`text-sm font-bold mt-1 ${workOrder.actualCosts.total > estimatedCosts.total ? 'text-red-700' : 'text-green-700'}`}>
                                 {workOrder.actualCosts.total > estimatedCosts.total ? '+' : ''}{formatCurrency(workOrder.actualCosts.total - estimatedCosts.total)}
                             </p>
@@ -1190,9 +1190,9 @@ export default function WorkOrderPage() {
                 {/* Main Content */}
                 <div className="lg:col-span-2 space-y-8">
                     {/* Work Log */}
-                    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-bold text-slate-900">Work Log</h3>
+                            <h3 className="text-lg font-bold text-white">Work Log</h3>
                             <button
                                 onClick={() => setShowAddLogModal(true)}
                                 disabled={viewMode !== 'GARAGE'}
@@ -1208,7 +1208,7 @@ export default function WorkOrderPage() {
                                     <div className="flex items-start justify-between">
                                         <div className="flex-1">
                                             <div className="flex justify-between items-start">
-                                                <p className="text-sm font-medium text-slate-900">{log.activity}</p>
+                                                <p className="text-sm font-medium text-white">{log.activity}</p>
                                                 {viewMode === 'GARAGE' && (
                                                     <button
                                                         onClick={() => handleEditLog(log)}
@@ -1224,7 +1224,7 @@ export default function WorkOrderPage() {
                                                 {log.technicianName} • {new Date(log.timestamp).toLocaleString()} • {log.hoursSpent}h
                                             </p>
                                             {log.notes && (
-                                                <p className="text-sm text-slate-700 mt-2 bg-slate-50 p-2 rounded">{log.notes}</p>
+                                                <p className="text-sm text-slate-300 mt-2 bg-slate-800/50 p-2 rounded">{log.notes}</p>
                                             )}
                                         </div>
                                     </div>
@@ -1232,18 +1232,18 @@ export default function WorkOrderPage() {
                             ))}
                         </div>
 
-                        <div className="mt-4 pt-4 border-t border-slate-200">
+                        <div className="mt-4 pt-4 border-t border-white/10">
                             <div className="flex justify-between text-sm">
                                 <span className="text-slate-600">Total Labor Hours:</span>
-                                <span className="font-bold text-slate-900">{workOrder.totalLaborHours}h</span>
+                                <span className="font-bold text-white">{workOrder.totalLaborHours}h</span>
                             </div>
                         </div>
                     </div>
 
                     {/* Parts Used */}
-                    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-bold text-slate-900">Parts Used</h3>
+                            <h3 className="text-lg font-bold text-white">Parts Used</h3>
                             <button
                                 onClick={() => setShowAddPartModal(true)}
                                 disabled={viewMode !== 'GARAGE'}
@@ -1254,9 +1254,9 @@ export default function WorkOrderPage() {
                         </div>
 
                         {workOrder.partsUsed.length > 0 ? (
-                            <div className="overflow-hidden rounded-lg border border-slate-200">
-                                <table className="min-w-full divide-y divide-slate-200">
-                                    <thead className="bg-slate-50">
+                            <div className="overflow-hidden rounded-lg border border-white/10">
+                                <table className="min-w-full divide-y divide-white/10">
+                                    <thead className="bg-slate-800/50">
                                         <tr>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Part Name</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Part #</th>
@@ -1267,20 +1267,20 @@ export default function WorkOrderPage() {
                                             {viewMode === 'GARAGE' && <th className="px-4 py-3 text-right text-xs font-medium text-slate-500">Actions</th>}
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-200 bg-white">
+                                    <tbody className="divide-y divide-white/10 bg-slate-900">
                                         {workOrder.partsUsed.map(part => (
                                             <tr key={part.id}>
-                                                <td className="px-4 py-3 text-sm text-slate-900">{part.partName}</td>
-                                                <td className="px-4 py-3 text-sm text-slate-500">{part.partNumber || '-'}</td>
-                                                <td className="px-4 py-3 text-sm text-slate-900 text-right">{part.quantityUsed}</td>
-                                                <td className="px-4 py-3 text-sm text-slate-900 text-right">{formatCurrency(part.unitCost)}</td>
-                                                <td className="px-4 py-3 text-sm font-medium text-slate-900 text-right">{formatCurrency(part.totalCost)}</td>
-                                                <td className="px-4 py-3 text-sm text-slate-500">{part.source}</td>
+                                                <td className="px-4 py-3 text-sm text-white">{part.partName}</td>
+                                                <td className="px-4 py-3 text-sm text-slate-300">{part.partNumber || '-'}</td>
+                                                <td className="px-4 py-3 text-sm text-white text-right">{part.quantityUsed}</td>
+                                                <td className="px-4 py-3 text-sm text-white text-right">{formatCurrency(part.unitCost)}</td>
+                                                <td className="px-4 py-3 text-sm font-medium text-white text-right">{formatCurrency(part.totalCost)}</td>
+                                                <td className="px-4 py-3 text-sm text-slate-300">{part.source}</td>
                                                 {viewMode === 'GARAGE' && (
                                                     <td className="px-4 py-3 text-sm text-right">
                                                         <button
                                                             onClick={() => handleEditPart(part)}
-                                                            className="text-slate-400 hover:text-blue-600"
+                                                            className="text-slate-200 hover:text-blue-600"
                                                         >
                                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 inline-block">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
@@ -1297,22 +1297,22 @@ export default function WorkOrderPage() {
                             <p className="text-sm text-slate-500 text-center py-8">No parts used yet</p>
                         )}
 
-                        <div className="mt-4 pt-4 border-t border-slate-200">
+                        <div className="mt-4 pt-4 border-t border-white/10">
                             <div className="flex justify-between text-sm">
                                 <span className="text-slate-600">Total Parts Cost:</span>
-                                <span className="font-bold text-slate-900">{formatCurrency(calculateTotalPartsCost())}</span>
+                                <span className="font-bold text-white">{formatCurrency(calculateTotalPartsCost())}</span>
                             </div>
                         </div>
                     </div>
 
                     {/* Invoice & Attachments */}
-                    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-bold text-slate-900">Invoices & Attachments</h3>
+                            <h3 className="text-lg font-bold text-white">Invoices & Attachments</h3>
                             {viewMode === 'GARAGE' && (
                                 <label className="cursor-pointer rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
                                     + Upload Invoice
-                                    <input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg" onChange={handleFileUpload} />
+                                    <input type="file" className="hidden text-white" accept=".pdf,.png,.jpg,.jpeg" onChange={handleFileUpload} />
                                 </label>
                             )}
                         </div>
@@ -1320,15 +1320,15 @@ export default function WorkOrderPage() {
                         {workOrder.invoiceAttachments && workOrder.invoiceAttachments.length > 0 ? (
                             <div className="space-y-3">
                                 {workOrder.invoiceAttachments.map(att => (
-                                    <div key={att.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
+                                    <div key={att.id} className="flex items-center justify-between rounded-lg border border-white/10 p-3">
                                         <div className="flex items-center gap-3">
-                                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-50 text-red-600">
+                                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/10 text-red-600">
                                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                                                 </svg>
                                             </div>
                                             <div>
-                                                <p className="text-sm font-medium text-slate-900">{att.fileName}</p>
+                                                <p className="text-sm font-medium text-white">{att.fileName}</p>
                                                 <p className="text-xs text-slate-500">{new Date(att.uploadedAt).toLocaleDateString()}</p>
                                             </div>
                                         </div>
@@ -1346,13 +1346,13 @@ export default function WorkOrderPage() {
                                 ))}
                             </div>
                         ) : (
-                            <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-200 py-8">
-                                <div className="rounded-full bg-slate-50 p-3 mb-3">
+                            <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-white/10 py-8">
+                                <div className="rounded-full bg-slate-800/50 p-3 mb-3">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-slate-400">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                                     </svg>
                                 </div>
-                                <p className="text-sm font-medium text-slate-900">No invoices attached</p>
+                                <p className="text-sm font-medium text-white">No invoices attached</p>
                                 <p className="text-xs text-slate-500 mt-1">Upload the final invoice to complete the work order</p>
                             </div>
                         )}
@@ -1362,12 +1362,12 @@ export default function WorkOrderPage() {
                 {/* Sidebar */}
                 <div className="space-y-8">
                     {/* Timeline */}
-                    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                        <h3 className="text-sm font-bold text-slate-900 uppercase mb-4">Timeline</h3>
+                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                        <h3 className="text-sm font-bold text-white uppercase mb-4">Timeline</h3>
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-xs text-slate-500">Start Date</label>
-                                <p className="text-sm font-medium text-slate-900">{new Date(workOrder.startDate).toLocaleDateString()}</p>
+                                <p className="text-sm font-medium text-white">{new Date(workOrder.startDate).toLocaleDateString()}</p>
                             </div>
                             <div>
                                 <label className="block text-xs text-slate-500">Est. Completion</label>
@@ -1376,24 +1376,24 @@ export default function WorkOrderPage() {
                                         type="date"
                                         value={detailsForm.estimatedCompletionDate}
                                         onChange={(e) => setDetailsForm({ ...detailsForm, estimatedCompletionDate: e.target.value })}
-                                        className="w-full rounded-lg border border-slate-300 px-2 py-1 text-sm bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-2 py-1 text-sm bg-slate-900 text-white"
                                     />
                                 ) : (
-                                    <p className="text-sm font-medium text-slate-900">{new Date(workOrder.estimatedCompletionDate).toLocaleDateString()}</p>
+                                    <p className="text-sm font-medium text-white">{new Date(workOrder.estimatedCompletionDate).toLocaleDateString()}</p>
                                 )}
                             </div>
                             {workOrder.actualCompletionDate && (
                                 <div>
                                     <label className="block text-xs text-slate-500">Actual Completion</label>
-                                    <p className="text-sm font-medium text-slate-900">{new Date(workOrder.actualCompletionDate).toLocaleDateString()}</p>
+                                    <p className="text-sm font-medium text-white">{new Date(workOrder.actualCompletionDate).toLocaleDateString()}</p>
                                 </div>
                             )}
                         </div>
                     </div>
 
                     {/* Checklist */}
-                    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                        <h3 className="text-sm font-bold text-slate-900 uppercase mb-4">Checklist</h3>
+                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                        <h3 className="text-sm font-bold text-white uppercase mb-4">Checklist</h3>
                         <div className="space-y-3">
                             {workOrder.checklistItems.map(item => (
                                 <div key={item.id} className="flex items-start gap-3">
@@ -1402,10 +1402,10 @@ export default function WorkOrderPage() {
                                         checked={item.completed}
                                         onChange={() => toggleChecklistItem(item.id)}
                                         disabled={viewMode !== 'GARAGE'}
-                                        className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        className="mt-1 h-4 w-4 rounded border-white/15 text-blue-600 focus:ring-blue-500"
                                     />
                                     <div>
-                                        <p className={`text-sm ${item.completed ? 'text-slate-500 line-through' : 'text-slate-900'}`}>
+                                        <p className={`text-sm ${item.completed ? 'text-slate-500 line-through' : 'text-white'}`}>
                                             {item.task}
                                         </p>
                                         {item.completed && (
@@ -1420,13 +1420,13 @@ export default function WorkOrderPage() {
                     </div>
 
                     {/* Assigned Technicians */}
-                    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-sm font-bold text-slate-900 uppercase">Technicians</h3>
+                            <h3 className="text-sm font-bold text-white uppercase">Technicians</h3>
                             {viewMode === 'GARAGE' && (
                                 <button
                                     onClick={() => setShowAddTechnicianModal(true)}
-                                    className="text-xs font-medium text-blue-600 hover:text-blue-800"
+                                    className="text-xs font-medium text-blue-600 hover:text-blue-300"
                                 >
                                     + Add
                                 </button>
@@ -1436,11 +1436,11 @@ export default function WorkOrderPage() {
                             {workOrder.assignedTechnicians.length > 0 ? (
                                 workOrder.assignedTechnicians.map(tech => (
                                     <div key={tech.id} className="flex items-center gap-3">
-                                        <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600">
+                                        <div className="h-8 w-8 rounded-full bg-slate-700/40 flex items-center justify-center text-xs font-bold text-slate-600">
                                             {tech.name.charAt(0)}
                                         </div>
                                         <div>
-                                            <p className="text-sm font-medium text-slate-900">{tech.name}</p>
+                                            <p className="text-sm font-medium text-white">{tech.name}</p>
                                             <p className="text-xs text-slate-500">{tech.specialization.join(', ')}</p>
                                         </div>
                                     </div>
@@ -1456,15 +1456,15 @@ export default function WorkOrderPage() {
             {/* Modals */}
             {showAddLogModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-                        <h3 className="text-lg font-bold text-slate-900 mb-4">{editingLogId ? 'Edit Work Log Entry' : 'Add Work Log Entry'}</h3>
+                    <div className="w-full max-w-md rounded-xl bg-slate-900 p-6 shadow-xl">
+                        <h3 className="text-lg font-bold text-white mb-4">{editingLogId ? 'Edit Work Log Entry' : 'Add Work Log Entry'}</h3>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Technician</label>
+                                <label className="block text-xs font-medium text-slate-300 mb-1">Technician</label>
                                 <select
                                     value={logForm.technicianId}
                                     onChange={(e) => setLogForm({ ...logForm, technicianId: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                 >
                                     <option value="">Select Technician</option>
                                     {availableTechnicians.map(tech => (
@@ -1473,31 +1473,31 @@ export default function WorkOrderPage() {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Activity</label>
+                                <label className="block text-xs font-medium text-slate-300 mb-1">Activity</label>
                                 <input
                                     type="text"
                                     value={logForm.activity}
                                     onChange={(e) => setLogForm({ ...logForm, activity: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                     placeholder="e.g. Replaced brake pads"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Hours Spent</label>
+                                <label className="block text-xs font-medium text-slate-300 mb-1">Hours Spent</label>
                                 <input
                                     type="number"
                                     value={isNaN(logForm.hoursSpent) ? '' : logForm.hoursSpent}
                                     onChange={(e) => setLogForm({ ...logForm, hoursSpent: parseFloat(e.target.value) })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                     step="0.5"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Notes</label>
+                                <label className="block text-xs font-medium text-slate-300 mb-1">Notes</label>
                                 <textarea
                                     value={logForm.notes}
                                     onChange={(e) => setLogForm({ ...logForm, notes: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                     rows={3}
                                 />
                             </div>
@@ -1508,7 +1508,7 @@ export default function WorkOrderPage() {
                                         setEditingLogId(null);
                                         setLogForm({ technicianId: '', technicianName: '', activity: '', hoursSpent: 0, notes: '' });
                                     }}
-                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
                                 >
                                     Cancel
                                 </button>
@@ -1526,58 +1526,58 @@ export default function WorkOrderPage() {
 
             {showAddPartModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-                        <h3 className="text-lg font-bold text-slate-900 mb-4">{editingPartId ? 'Edit Part Usage' : 'Add Part Usage'}</h3>
+                    <div className="w-full max-w-md rounded-xl bg-slate-900 p-6 shadow-xl">
+                        <h3 className="text-lg font-bold text-white mb-4">{editingPartId ? 'Edit Part Usage' : 'Add Part Usage'}</h3>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Part Name</label>
+                                <label className="block text-xs font-medium text-slate-300 mb-1">Part Name</label>
                                 <input
                                     type="text"
                                     value={partForm.partName}
                                     onChange={(e) => setPartForm({ ...partForm, partName: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                     placeholder="e.g. Oil Filter"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Part Number</label>
+                                <label className="block text-xs font-medium text-slate-300 mb-1">Part Number</label>
                                 <input
                                     type="text"
                                     value={partForm.partNumber}
                                     onChange={(e) => setPartForm({ ...partForm, partNumber: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                     placeholder="Optional"
                                 />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-700 mb-1">Quantity</label>
+                                    <label className="block text-xs font-medium text-slate-300 mb-1">Quantity</label>
                                     <input
                                         type="number"
                                         value={isNaN(partForm.quantityUsed) ? '' : partForm.quantityUsed}
                                         onChange={(e) => setPartForm({ ...partForm, quantityUsed: parseInt(e.target.value) })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                         min="1"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-700 mb-1">Unit Cost</label>
+                                    <label className="block text-xs font-medium text-slate-300 mb-1">Unit Cost</label>
                                     <input
                                         type="number"
                                         value={isNaN(partForm.unitCost) ? '' : partForm.unitCost}
                                         onChange={(e) => setPartForm({ ...partForm, unitCost: parseFloat(e.target.value) })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                         min="0"
                                         step="0.01"
                                     />
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Source</label>
+                                <label className="block text-xs font-medium text-slate-300 mb-1">Source</label>
                                 <select
                                     value={partForm.source}
                                     onChange={(e) => setPartForm({ ...partForm, source: e.target.value as PartSource })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                 >
                                     {Object.values(PartSource).map(source => (
                                         <option key={source} value={source}>{source}</option>
@@ -1591,7 +1591,7 @@ export default function WorkOrderPage() {
                                         setEditingPartId(null);
                                         setPartForm({ partName: '', partNumber: '', quantityUsed: 1, unitCost: 0, source: PartSource.STOCK });
                                     }}
-                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
                                 >
                                     Cancel
                                 </button>
@@ -1610,44 +1610,44 @@ export default function WorkOrderPage() {
             {/* Cost Entry Modal */}
             {showCostEntryModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-                        <h3 className="text-lg font-bold text-slate-900 mb-4">Enter Actual Costs</h3>
+                    <div className="w-full max-w-md rounded-xl bg-slate-900 p-6 shadow-xl">
+                        <h3 className="text-lg font-bold text-white mb-4">Enter Actual Costs</h3>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Actual Parts Cost</label>
+                                <label className="block text-xs font-medium text-slate-300 mb-1">Actual Parts Cost</label>
                                 <input
                                     type="number"
                                     value={isNaN(costForm.actualPartsCost) ? '' : costForm.actualPartsCost}
                                     onChange={(e) => setCostForm({ ...costForm, actualPartsCost: parseFloat(e.target.value) })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                     min="0"
                                     step="0.01"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Actual Labor Cost</label>
+                                <label className="block text-xs font-medium text-slate-300 mb-1">Actual Labor Cost</label>
                                 <input
                                     type="number"
                                     value={isNaN(costForm.actualLaborCost) ? '' : costForm.actualLaborCost}
                                     onChange={(e) => setCostForm({ ...costForm, actualLaborCost: parseFloat(e.target.value) })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                     min="0"
                                     step="0.01"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Other Charges</label>
+                                <label className="block text-xs font-medium text-slate-300 mb-1">Other Charges</label>
                                 <input
                                     type="number"
                                     value={isNaN(costForm.actualOtherCharges) ? '' : costForm.actualOtherCharges}
                                     onChange={(e) => setCostForm({ ...costForm, actualOtherCharges: parseFloat(e.target.value) })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                     min="0"
                                     step="0.01"
                                 />
                             </div>
-                            <div className="bg-slate-50 p-3 rounded-lg">
-                                <div className="flex justify-between text-sm font-bold text-slate-900">
+                            <div className="bg-slate-800/50 p-3 rounded-lg">
+                                <div className="flex justify-between text-sm font-bold text-white">
                                     <span>Total Actual Cost:</span>
                                     <span>{formatCurrency(costForm.actualPartsCost + costForm.actualLaborCost + costForm.actualOtherCharges)}</span>
                                 </div>
@@ -1655,7 +1655,7 @@ export default function WorkOrderPage() {
                             <div className="flex justify-end gap-3 mt-6">
                                 <button
                                     onClick={() => setShowCostEntryModal(false)}
-                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
                                 >
                                     Cancel
                                 </button>
@@ -1674,11 +1674,11 @@ export default function WorkOrderPage() {
             {/* Completion Modal */}
             {showCompletionModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-                        <h3 className="text-lg font-bold text-slate-900 mb-4">Complete Work Order</h3>
+                    <div className="w-full max-w-lg rounded-xl bg-slate-900 p-6 shadow-xl">
+                        <h3 className="text-lg font-bold text-white mb-4">Complete Work Order</h3>
                         <div className="space-y-4">
-                            <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-                                <h4 className="text-sm font-bold text-yellow-800 mb-2">Summary</h4>
+                            <div className="bg-amber-500/10 p-4 rounded-lg border border-yellow-200">
+                                <h4 className="text-sm font-bold text-amber-300 mb-2">Summary</h4>
                                 <ul className="text-xs text-yellow-700 space-y-1">
                                     <li>• All checklist items completed</li>
                                     <li>• Actual costs recorded: {formatCurrency(workOrder.actualCosts?.total || 0)}</li>
@@ -1687,11 +1687,11 @@ export default function WorkOrderPage() {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Completion Notes</label>
+                                <label className="block text-xs font-medium text-slate-300 mb-1">Completion Notes</label>
                                 <textarea
                                     value={completionForm.completionNotes}
                                     onChange={(e) => setCompletionForm({ ...completionForm, completionNotes: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                     rows={3}
                                     placeholder="Enter any final notes or observations..."
                                 />
@@ -1703,25 +1703,25 @@ export default function WorkOrderPage() {
                                         type="checkbox"
                                         checked={completionForm.qualityCheckPassed}
                                         onChange={(e) => setCompletionForm({ ...completionForm, qualityCheckPassed: e.target.checked })}
-                                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        className="h-4 w-4 rounded border-white/15 text-blue-600 focus:ring-blue-500"
                                     />
-                                    <span className="text-sm text-slate-700">Quality check passed</span>
+                                    <span className="text-sm text-slate-300">Quality check passed</span>
                                 </label>
                                 <label className="flex items-center gap-2">
                                     <input
                                         type="checkbox"
                                         checked={completionForm.customerNotified}
                                         onChange={(e) => setCompletionForm({ ...completionForm, customerNotified: e.target.checked })}
-                                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        className="h-4 w-4 rounded border-white/15 text-blue-600 focus:ring-blue-500"
                                     />
-                                    <span className="text-sm text-slate-700">Customer notified (if applicable)</span>
+                                    <span className="text-sm text-slate-300">Customer notified (if applicable)</span>
                                 </label>
                             </div>
 
                             <div className="flex justify-end gap-3 mt-6">
                                 <button
                                     onClick={() => setShowCompletionModal(false)}
-                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
                                 >
                                     Cancel
                                 </button>
@@ -1740,33 +1740,33 @@ export default function WorkOrderPage() {
             {/* Add Technician Modal */}
             {showAddTechnicianModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-                        <h3 className="text-lg font-bold text-slate-900 mb-4">Add New Technician</h3>
+                    <div className="w-full max-w-md rounded-xl bg-slate-900 p-6 shadow-xl">
+                        <h3 className="text-lg font-bold text-white mb-4">Add New Technician</h3>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Name</label>
+                                <label className="block text-xs font-medium text-slate-300 mb-1">Name</label>
                                 <input
                                     type="text"
                                     value={newTechnicianForm.name}
                                     onChange={(e) => setNewTechnicianForm({ ...newTechnicianForm, name: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                     placeholder="Technician Name"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Specialization</label>
+                                <label className="block text-xs font-medium text-slate-300 mb-1">Specialization</label>
                                 <input
                                     type="text"
                                     value={newTechnicianForm.specialization}
                                     onChange={(e) => setNewTechnicianForm({ ...newTechnicianForm, specialization: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
                                     placeholder="e.g. Engine, Brakes (comma separated)"
                                 />
                             </div>
                             <div className="flex justify-end gap-3 mt-6">
                                 <button
                                     onClick={() => setShowAddTechnicianModal(false)}
-                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
                                 >
                                     Cancel
                                 </button>

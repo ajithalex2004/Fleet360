@@ -40,10 +40,10 @@ export default function NotificationHistoryPage() {
 
     const getStatusColor = (status: string) => {
         switch (status.toLowerCase()) {
-            case 'sent': return 'bg-green-100 text-green-700 border-green-200';
-            case 'failed': return 'bg-red-100 text-red-700 border-red-200';
+            case 'sent': return 'bg-emerald-500/20 text-green-700 border-green-200';
+            case 'failed': return 'bg-red-500/20 text-red-700 border-red-200';
             case 'pending': return 'bg-amber-100 text-amber-700 border-amber-200';
-            default: return 'bg-slate-100 text-slate-700 border-slate-200';
+            default: return 'bg-slate-700/40 text-slate-300 border-white/10';
         }
     };
 
@@ -72,7 +72,7 @@ export default function NotificationHistoryPage() {
     };
 
     return (
-        <div className="flex-1 p-8 space-y-8 bg-slate-50/50 min-h-screen">
+        <div className="flex-1 p-8 space-y-8 bg-slate-800/50/50 min-h-screen">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -82,13 +82,13 @@ export default function NotificationHistoryPage() {
                         </svg>
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Email/SMS Notifications</h1>
+                        <h1 className="text-2xl font-bold text-white tracking-tight">Email/SMS Notifications</h1>
                         <p className="text-slate-500">History of all alerts sent from the application</p>
                     </div>
                 </div>
                 <button
                     onClick={fetchLogs}
-                    className="flex items-center gap-2 rounded-xl bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-all hover:bg-slate-50"
+                    className="flex items-center gap-2 rounded-xl bg-slate-900 border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 shadow-sm transition-all hover:bg-white/5"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
@@ -98,52 +98,52 @@ export default function NotificationHistoryPage() {
             </div>
 
             {/* Content */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="bg-slate-900 rounded-2xl shadow-sm border border-white/10 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-50 border-b border-slate-200">
+                        <thead className="bg-slate-800/50 border-b border-white/10">
                             <tr>
-                                <th className="px-6 py-4 font-semibold text-slate-700">Sent At</th>
-                                <th className="px-6 py-4 font-semibold text-slate-700">Recipient</th>
-                                <th className="px-6 py-4 font-semibold text-slate-700">Type</th>
-                                <th className="px-6 py-4 font-semibold text-slate-700">Subject / Reason</th>
-                                <th className="px-6 py-4 font-semibold text-slate-700">Status</th>
+                                <th className="px-6 py-4 font-semibold text-slate-300">Sent At</th>
+                                <th className="px-6 py-4 font-semibold text-slate-300">Recipient</th>
+                                <th className="px-6 py-4 font-semibold text-slate-300">Type</th>
+                                <th className="px-6 py-4 font-semibold text-slate-300">Subject / Reason</th>
+                                <th className="px-6 py-4 font-semibold text-slate-300">Status</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-white/5">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
+                                    <td colSpan={5} className="px-6 py-8 text-center text-slate-300">
                                         Loading notifications...
                                     </td>
                                 </tr>
                             ) : logs.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
+                                    <td colSpan={5} className="px-6 py-8 text-center text-slate-300">
                                         No notifications found.
                                     </td>
                                 </tr>
                             ) : (
                                 logs.map((log) => (
-                                    <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
-                                        <td className="px-6 py-4 text-slate-500 whitespace-nowrap">
+                                    <tr key={log.id} className="hover:bg-white/5/50 transition-colors">
+                                        <td className="px-6 py-4 text-slate-300 whitespace-nowrap">
                                             {new Date(log.sentAt).toLocaleString()}
                                         </td>
-                                        <td className="px-6 py-4 font-medium text-slate-900">
+                                        <td className="px-6 py-4 font-medium text-white">
                                             {log.recipient}
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-2">
-                                                <span className={`p-1.5 rounded-lg ${log.type === 'WhatsApp' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                <span className={`p-1.5 rounded-lg ${log.type === 'WhatsApp' ? 'bg-emerald-500/20 text-green-700' : 'bg-blue-500/20 text-blue-700'}`}>
                                                     {getTypeIcon(log.type)}
                                                 </span>
-                                                <span className="text-slate-700">{log.type}</span>
+                                                <span className="text-slate-300">{log.type}</span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="space-y-1">
-                                                <div className="text-slate-900 font-medium">{log.subject}</div>
-                                                <div className="text-xs text-slate-500">{log.triggerReason}</div>
+                                                <div className="text-white font-medium">{log.subject}</div>
+                                                <div className="text-xs text-slate-300">{log.triggerReason}</div>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">

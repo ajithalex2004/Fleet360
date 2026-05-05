@@ -46,17 +46,17 @@ function StatusUpdateModal({
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
-                <h3 className="text-lg font-bold text-slate-900">Update Status</h3>
+            <div className="w-full max-w-md rounded-xl bg-slate-900 p-6 shadow-2xl">
+                <h3 className="text-lg font-bold text-white">Update Status</h3>
                 <p className="mt-1 text-sm text-slate-500">
                     Change the status of this maintenance request.
                 </p>
                 <div className="mt-4">
-                    <label className="block text-sm font-medium text-slate-700">
+                    <label className="block text-sm font-medium text-slate-300">
                         New Status
                     </label>
                     <select
-                        className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="mt-1 block w-full rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
                         value={selectedStatus}
                         onChange={(e) =>
                             setSelectedStatus(e.target.value as MaintenanceStatus)
@@ -65,7 +65,7 @@ function StatusUpdateModal({
                         <option
                             key={currentStatus}
                             value={currentStatus}
-                            className="bg-white text-slate-900"
+                            className="bg-slate-900 text-white"
                         >
                             {currentStatus} (Current)
                         </option>
@@ -73,7 +73,7 @@ function StatusUpdateModal({
                             <option
                                 key={status}
                                 value={status}
-                                className="bg-white text-slate-900"
+                                className="bg-slate-900 text-white"
                             >
                                 {status}
                             </option>
@@ -83,7 +83,7 @@ function StatusUpdateModal({
                 <div className="mt-6 flex justify-end gap-3">
                     <button
                         onClick={onClose}
-                        className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                        className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
                     >
                         Cancel
                     </button>
@@ -258,7 +258,7 @@ export default function MaintenanceRequestsPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">
+                    <h1 className="text-2xl font-bold text-white">
                         Maintenance Requests
                     </h1>
                     <p className="mt-1 text-slate-500">
@@ -284,10 +284,10 @@ export default function MaintenanceRequestsPage() {
             />
 
             {/* Removed overflow-hidden to allow dropdowns to spill out */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="rounded-xl border border-white/10 bg-slate-900 shadow-sm">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-50 text-slate-500">
+                        <thead className="bg-slate-800/50 text-slate-500">
                             <tr>
                                 <th className="px-6 py-3 font-medium">Request ID</th>
                                 <th className="px-6 py-3 font-medium">Vehicle</th>
@@ -297,12 +297,12 @@ export default function MaintenanceRequestsPage() {
                                 <th className="px-6 py-3 font-medium">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-white/5">
                             {filteredRequests.map((request) => {
                                 const vehicle = vehicles[request.vehicleId];
                                 return (
-                                    <tr key={request.id} className="hover:bg-slate-50">
-                                        <td className="px-6 py-4 font-medium text-slate-900">
+                                    <tr key={request.id} className="hover:bg-white/5">
+                                        <td className="px-6 py-4 font-medium text-white">
                                             <Link
                                                 href={`/maintenance/requests/${encodeURIComponent(request.id)}`}
                                                 className="hover:text-blue-600 hover:underline"
@@ -310,7 +310,7 @@ export default function MaintenanceRequestsPage() {
                                                 {request.readableId || request.id}
                                             </Link>
                                         </td>
-                                        <td className="px-6 py-4 text-slate-700">
+                                        <td className="px-6 py-4 text-slate-300">
                                             {vehicle
                                                 ? `${vehicle.make} ${vehicle.model} (${vehicle.licensePlate})`
                                                 : 'Unknown Vehicle'}
@@ -345,7 +345,7 @@ export default function MaintenanceRequestsPage() {
                                                         e.stopPropagation();
                                                         setOpenActionMenuId(openActionMenuId === request.id ? null : request.id);
                                                     }}
-                                                    className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100"
+                                                    className="text-slate-200 hover:text-slate-300 p-1 rounded-full hover:bg-white/10"
                                                 >
                                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                                                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 12.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 18.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" />
@@ -354,11 +354,11 @@ export default function MaintenanceRequestsPage() {
 
                                                 {/* Dropdown Menu */}
                                                 {openActionMenuId === request.id && (
-                                                    <div className="absolute right-0 top-8 w-48 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
+                                                    <div className="absolute right-0 top-8 w-48 origin-top-right rounded-md bg-slate-900 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
                                                         <div className="py-1">
                                                             <Link
                                                                 href={`/maintenance/requests/${encodeURIComponent(request.id)}`}
-                                                                className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                                                                className="block px-4 py-2 text-sm text-slate-300 hover:bg-white/10"
                                                                 onClick={() => setOpenActionMenuId(null)}
                                                             >
                                                                 Update/View Details
@@ -369,13 +369,13 @@ export default function MaintenanceRequestsPage() {
                                                                     handleStatusClick(request);
                                                                     setOpenActionMenuId(null);
                                                                 }}
-                                                                className="block w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                                                                className="block w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-white/10"
                                                             >
                                                                 Update Status
                                                             </button>
                                                             <Link
                                                                 href={`/maintenance/requests/${encodeURIComponent(request.id)}#attachments`}
-                                                                className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                                                                className="block px-4 py-2 text-sm text-slate-300 hover:bg-white/10"
                                                                 onClick={() => setOpenActionMenuId(null)}
                                                             >
                                                                 Attachments

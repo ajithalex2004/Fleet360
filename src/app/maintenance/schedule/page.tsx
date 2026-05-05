@@ -149,16 +149,16 @@ export default function SchedulePage() {
     };
 
     const getStatusColor = (daysUntil: number) => {
-        if (daysUntil < 0) return 'bg-red-100 text-red-700 border-red-300';
-        if (daysUntil <= 7) return 'bg-yellow-100 text-yellow-700 border-yellow-300';
-        return 'bg-green-100 text-green-700 border-green-300';
+        if (daysUntil < 0) return 'bg-red-500/20 text-red-700 border-red-300';
+        if (daysUntil <= 7) return 'bg-amber-500/20 text-yellow-700 border-yellow-300';
+        return 'bg-emerald-500/20 text-green-700 border-green-300';
     };
 
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Preventive Maintenance Schedule</h1>
+                    <h1 className="text-2xl font-bold text-white">Preventive Maintenance Schedule</h1>
                     <p className="mt-1 text-slate-500">Automated maintenance scheduling and templates</p>
                 </div>
                 <div className="flex gap-3">
@@ -179,47 +179,47 @@ export default function SchedulePage() {
 
             {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
                     <p className="text-sm text-slate-500">Total Schedules</p>
-                    <p className="text-2xl font-bold text-slate-900">{schedules.length}</p>
+                    <p className="text-2xl font-bold text-white">{schedules.length}</p>
                 </div>
-                <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-6 shadow-sm">
+                <div className="rounded-xl border border-yellow-200 bg-amber-500/10 p-6 shadow-sm">
                     <p className="text-sm text-yellow-700">Due This Week</p>
-                    <p className="text-2xl font-bold text-yellow-900">
+                    <p className="text-2xl font-bold text-amber-300">
                         {schedules.filter(s => getDaysUntil(s.scheduledDate) <= 7 && getDaysUntil(s.scheduledDate) >= 0).length}
                     </p>
                 </div>
-                <div className="rounded-xl border border-red-200 bg-red-50 p-6 shadow-sm">
+                <div className="rounded-xl border border-red-200 bg-red-500/10 p-6 shadow-sm">
                     <p className="text-sm text-red-700">Overdue</p>
-                    <p className="text-2xl font-bold text-red-900">
+                    <p className="text-2xl font-bold text-red-300">
                         {schedules.filter(s => getDaysUntil(s.scheduledDate) < 0).length}
                     </p>
                 </div>
-                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
                     <p className="text-sm text-slate-500">Templates</p>
-                    <p className="text-2xl font-bold text-slate-900">{templates.length}</p>
+                    <p className="text-2xl font-bold text-white">{templates.length}</p>
                 </div>
             </div>
 
             {/* Schedules List */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="p-6 border-b border-slate-200">
-                    <h3 className="text-lg font-bold text-slate-900">Upcoming Schedules</h3>
+            <div className="rounded-xl border border-white/10 bg-slate-900 shadow-sm">
+                <div className="p-6 border-b border-white/10">
+                    <h3 className="text-lg font-bold text-white">Upcoming Schedules</h3>
                 </div>
-                <div className="divide-y divide-slate-200">
+                <div className="divide-y divide-white/10">
                     {schedules.sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime()).map(schedule => {
                         const daysUntil = getDaysUntil(schedule.scheduledDate);
                         return (
-                            <div key={schedule.id} className="p-6 hover:bg-slate-50 transition-colors">
+                            <div key={schedule.id} className="p-6 hover:bg-white/5 transition-colors">
                                 <div className="flex items-start justify-between">
                                     <div className="flex-1">
                                         <div className="flex items-center gap-3 mb-2">
-                                            <h4 className="text-base font-bold text-slate-900">{schedule.description}</h4>
+                                            <h4 className="text-base font-bold text-white">{schedule.description}</h4>
                                             <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${getStatusColor(daysUntil)}`}>
                                                 {daysUntil < 0 ? `${Math.abs(daysUntil)} days overdue` : daysUntil === 0 ? 'Today' : `In ${daysUntil} days`}
                                             </span>
                                             {schedule.recurring && (
-                                                <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+                                                <span className="inline-flex items-center rounded-full bg-blue-500/20 px-2.5 py-0.5 text-xs font-medium text-blue-700">
                                                     Recurring
                                                 </span>
                                             )}
@@ -227,19 +227,19 @@ export default function SchedulePage() {
                                         <div className="grid grid-cols-4 gap-4 text-sm">
                                             <div>
                                                 <span className="text-slate-500">Vehicle:</span>
-                                                <span className="ml-2 font-medium text-slate-900">{schedule.vehicleId.toUpperCase()}</span>
+                                                <span className="ml-2 font-medium text-white">{schedule.vehicleId.toUpperCase()}</span>
                                             </div>
                                             <div>
                                                 <span className="text-slate-500">Date:</span>
-                                                <span className="ml-2 font-medium text-slate-900">{new Date(schedule.scheduledDate).toLocaleDateString()}</span>
+                                                <span className="ml-2 font-medium text-white">{new Date(schedule.scheduledDate).toLocaleDateString()}</span>
                                             </div>
                                             <div>
                                                 <span className="text-slate-500">Est. Cost:</span>
-                                                <span className="ml-2 font-medium text-slate-900">{formatCurrency(schedule.estimatedCost)}</span>
+                                                <span className="ml-2 font-medium text-white">{formatCurrency(schedule.estimatedCost)}</span>
                                             </div>
                                             <div>
                                                 <span className="text-slate-500">Auto-Create:</span>
-                                                <span className="ml-2 font-medium text-slate-900">{schedule.autoCreateRequest ? 'Yes' : 'No'}</span>
+                                                <span className="ml-2 font-medium text-white">{schedule.autoCreateRequest ? 'Yes' : 'No'}</span>
                                             </div>
                                         </div>
                                         {schedule.recurring && (
@@ -256,16 +256,16 @@ export default function SchedulePage() {
             </div>
 
             {/* Templates */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="p-6 border-b border-slate-200">
-                    <h3 className="text-lg font-bold text-slate-900">Maintenance Templates</h3>
+            <div className="rounded-xl border border-white/10 bg-slate-900 shadow-sm">
+                <div className="p-6 border-b border-white/10">
+                    <h3 className="text-lg font-bold text-white">Maintenance Templates</h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6">
                     {templates.map(template => (
-                        <div key={template.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                            <h4 className="text-base font-bold text-slate-900 mb-2">{template.name}</h4>
+                        <div key={template.id} className="rounded-lg border border-white/10 bg-slate-800/50 p-4">
+                            <h4 className="text-base font-bold text-white mb-2">{template.name}</h4>
                             <p className="text-sm text-slate-600 mb-3">{template.description}</p>
-                            <div className="grid grid-cols-2 gap-2 text-xs text-slate-700">
+                            <div className="grid grid-cols-2 gap-2 text-xs text-slate-300">
                                 <div>
                                     <span className="text-slate-500">Duration:</span> {template.estimatedDuration}h
                                 </div>
@@ -287,11 +287,11 @@ export default function SchedulePage() {
             {/* Schedule Modal */}
             {showScheduleModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl">
-                        <div className="p-6 border-b border-slate-200">
+                    <div className="bg-slate-900 rounded-2xl w-full max-w-2xl shadow-2xl">
+                        <div className="p-6 border-b border-white/10">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-bold text-slate-900">Create Schedule</h3>
-                                <button onClick={() => setShowScheduleModal(false)} className="text-slate-400 hover:text-slate-600">
+                                <h3 className="text-lg font-bold text-white">Create Schedule</h3>
+                                <button onClick={() => setShowScheduleModal(false)} className="text-slate-400 hover:text-slate-300">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                     </svg>
@@ -302,21 +302,21 @@ export default function SchedulePage() {
                         <div className="p-6 space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Vehicle ID</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Vehicle ID</label>
                                     <input
                                         type="text"
                                         value={scheduleForm.vehicleId}
                                         onChange={(e) => setScheduleForm({ ...scheduleForm, vehicleId: e.target.value })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                         placeholder="e.g., v1"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Template</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Template</label>
                                     <select
                                         value={scheduleForm.templateId}
                                         onChange={(e) => setScheduleForm({ ...scheduleForm, templateId: e.target.value })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     >
                                         <option value="">Select template</option>
                                         {templates.map(t => (
@@ -327,22 +327,22 @@ export default function SchedulePage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Scheduled Date</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Scheduled Date</label>
                                 <input
                                     type="date"
                                     value={scheduleForm.scheduledDate}
                                     onChange={(e) => setScheduleForm({ ...scheduleForm, scheduledDate: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Notify Days Before</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Notify Days Before</label>
                                 <input
                                     type="number"
                                     value={scheduleForm.notifyDaysBefore}
                                     onChange={(e) => setScheduleForm({ ...scheduleForm, notifyDaysBefore: Number(e.target.value) })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                 />
                             </div>
 
@@ -352,9 +352,9 @@ export default function SchedulePage() {
                                     id="autoCreate"
                                     checked={scheduleForm.autoCreateRequest}
                                     onChange={(e) => setScheduleForm({ ...scheduleForm, autoCreateRequest: e.target.checked })}
-                                    className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                                    className="h-4 w-4 rounded border-white/15 text-blue-600"
                                 />
-                                <label htmlFor="autoCreate" className="text-sm text-slate-700">
+                                <label htmlFor="autoCreate" className="text-sm text-slate-300">
                                     Auto-create maintenance request
                                 </label>
                             </div>
@@ -365,30 +365,30 @@ export default function SchedulePage() {
                                     id="recurring"
                                     checked={scheduleForm.recurring}
                                     onChange={(e) => setScheduleForm({ ...scheduleForm, recurring: e.target.checked })}
-                                    className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                                    className="h-4 w-4 rounded border-white/15 text-blue-600"
                                 />
-                                <label htmlFor="recurring" className="text-sm text-slate-700">
+                                <label htmlFor="recurring" className="text-sm text-slate-300">
                                     Recurring schedule
                                 </label>
                             </div>
 
                             {scheduleForm.recurring && (
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Interval (days)</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Interval (days)</label>
                                     <input
                                         type="number"
                                         value={scheduleForm.recurringInterval}
                                         onChange={(e) => setScheduleForm({ ...scheduleForm, recurringInterval: Number(e.target.value) })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     />
                                 </div>
                             )}
                         </div>
 
-                        <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+                        <div className="p-6 border-t border-white/10 flex justify-end gap-3">
                             <button
                                 onClick={() => setShowScheduleModal(false)}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
                             >
                                 Cancel
                             </button>
@@ -406,11 +406,11 @@ export default function SchedulePage() {
             {/* Template Modal */}
             {showTemplateModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl">
-                        <div className="p-6 border-b border-slate-200">
+                    <div className="bg-slate-900 rounded-2xl w-full max-w-2xl shadow-2xl">
+                        <div className="p-6 border-b border-white/10">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-bold text-slate-900">Create Template</h3>
-                                <button onClick={() => setShowTemplateModal(false)} className="text-slate-400 hover:text-slate-600">
+                                <h3 className="text-lg font-bold text-white">Create Template</h3>
+                                <button onClick={() => setShowTemplateModal(false)} className="text-slate-400 hover:text-slate-300">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                     </svg>
@@ -420,60 +420,60 @@ export default function SchedulePage() {
 
                         <div className="p-6 space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Template Name</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Template Name</label>
                                 <input
                                     type="text"
                                     value={templateForm.name}
                                     onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Description</label>
                                 <textarea
                                     rows={3}
                                     value={templateForm.description}
                                     onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                 />
                             </div>
 
                             <div className="grid grid-cols-3 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Duration (hours)</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Duration (hours)</label>
                                     <input
                                         type="number"
                                         value={templateForm.estimatedDuration}
                                         onChange={(e) => setTemplateForm({ ...templateForm, estimatedDuration: Number(e.target.value) })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Cost (AED)</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Cost (AED)</label>
                                     <input
                                         type="number"
                                         value={templateForm.estimatedCost}
                                         onChange={(e) => setTemplateForm({ ...templateForm, estimatedCost: Number(e.target.value) })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Interval (days)</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Interval (days)</label>
                                     <input
                                         type="number"
                                         value={templateForm.intervalDays}
                                         onChange={(e) => setTemplateForm({ ...templateForm, intervalDays: Number(e.target.value) })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     />
                                 </div>
                             </div>
                         </div>
 
-                        <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+                        <div className="p-6 border-t border-white/10 flex justify-end gap-3">
                             <button
                                 onClick={() => setShowTemplateModal(false)}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
                             >
                                 Cancel
                             </button>

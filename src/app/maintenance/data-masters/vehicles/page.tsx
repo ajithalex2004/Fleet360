@@ -195,7 +195,7 @@ export default function VehiclesPage() {
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Vehicle Management</h1>
+                    <h1 className="text-2xl font-bold text-white">Vehicle Management</h1>
                     <p className="text-slate-500">Manage your fleet vehicles.</p>
                 </div>
                 <button
@@ -207,9 +207,9 @@ export default function VehiclesPage() {
             </div>
 
             {/* List View */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-slate-50">
+            <div className="bg-slate-900 rounded-xl border border-white/10 shadow-sm overflow-hidden">
+                <table className="min-w-full divide-y divide-white/10">
+                    <thead className="bg-slate-800/50">
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Vehicle ID</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Make/Model</th>
@@ -218,20 +218,20 @@ export default function VehiclesPage() {
                             <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-slate-200">
+                    <tbody className="bg-slate-900 divide-y divide-white/10">
                         {vehicles.map((vehicle) => (
-                            <tr key={vehicle.id} className="hover:bg-slate-50">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{vehicle.id}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{vehicle.make} {vehicle.model}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{vehicle.licensePlate}</td>
+                            <tr key={vehicle.id} className="hover:bg-white/5">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{vehicle.id}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">{vehicle.make} {vehicle.model}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">{vehicle.licensePlate}</td>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${vehicle.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${vehicle.status === 'Active' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
                                         {vehicle.status}
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                    <button onClick={() => { setEditingId(vehicle.id); handleEdit(vehicle); }} className="text-blue-600 hover:text-blue-900 mr-4">Edit</button>
-                                    <button onClick={() => handleDelete(vehicle.id)} className="text-red-600 hover:text-red-900">Delete</button>
+                                    <button onClick={() => { setEditingId(vehicle.id); handleEdit(vehicle); }} className="text-blue-600 hover:text-blue-300 mr-4">Edit</button>
+                                    <button onClick={() => handleDelete(vehicle.id)} className="text-red-600 hover:text-red-300">Delete</button>
                                 </td>
                             </tr>
                         ))}
@@ -242,10 +242,10 @@ export default function VehiclesPage() {
             {/* Create Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-                        <div className="flex justify-between items-center p-6 border-b border-slate-100">
-                            <h2 className="text-xl font-bold text-slate-900">{editingId ? 'Edit Vehicle' : 'Create New Vehicle'}</h2>
-                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                    <div className="bg-slate-900 rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+                        <div className="flex justify-between items-center p-6 border-b border-white/5">
+                            <h2 className="text-xl font-bold text-white">{editingId ? 'Edit Vehicle' : 'Create New Vehicle'}</h2>
+                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-300">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                                 </svg>
@@ -254,25 +254,25 @@ export default function VehiclesPage() {
 
                         <form onSubmit={handleSubmit} className="p-6">
                             {/* Tabs */}
-                            <div className="flex border-b border-slate-200 mb-6">
+                            <div className="flex border-b border-white/10 mb-6">
                                 <button
                                     type="button"
                                     onClick={() => setActiveTab('basic')}
-                                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'basic' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'basic' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
                                 >
                                     Basic Information
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setActiveTab('registration')}
-                                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'registration' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'registration' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
                                 >
                                     Registration Details
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setActiveTab('specs')}
-                                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'specs' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'specs' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
                                 >
                                     Vehicle Specifications
                                 </button>
@@ -283,44 +283,44 @@ export default function VehiclesPage() {
                                 {activeTab === 'basic' && (
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Vehicle ID</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" placeholder="e.g., AD-10-96448" value={formData.id} onChange={e => setFormData({ ...formData, id: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Vehicle ID</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" placeholder="e.g., AD-10-96448" value={formData.id} onChange={e => setFormData({ ...formData, id: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Registration Number</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.registrationNumber} onChange={e => setFormData({ ...formData, registrationNumber: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Registration Number</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.registrationNumber} onChange={e => setFormData({ ...formData, registrationNumber: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Device ID</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.deviceId} onChange={e => setFormData({ ...formData, deviceId: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Device ID</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.deviceId} onChange={e => setFormData({ ...formData, deviceId: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Hierarchy</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.hierarchy} onChange={e => setFormData({ ...formData, hierarchy: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Hierarchy</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.hierarchy} onChange={e => setFormData({ ...formData, hierarchy: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Vehicle Type</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Vehicle Type</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Vehicle Group</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.vehicleGroup} onChange={e => setFormData({ ...formData, vehicleGroup: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Vehicle Group</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.vehicleGroup} onChange={e => setFormData({ ...formData, vehicleGroup: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Vehicle Class</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.vehicleClass} onChange={e => setFormData({ ...formData, vehicleClass: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Vehicle Class</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.vehicleClass} onChange={e => setFormData({ ...formData, vehicleClass: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Vehicle Usage</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.vehicleUsage} onChange={e => setFormData({ ...formData, vehicleUsage: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Vehicle Usage</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.vehicleUsage} onChange={e => setFormData({ ...formData, vehicleUsage: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">SIM Card Number</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.simCardNumber} onChange={e => setFormData({ ...formData, simCardNumber: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">SIM Card Number</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.simCardNumber} onChange={e => setFormData({ ...formData, simCardNumber: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Emirate</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.emirate} onChange={e => setFormData({ ...formData, emirate: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Emirate</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.emirate} onChange={e => setFormData({ ...formData, emirate: e.target.value })} />
                                         </div>
                                     </div>
                                 )}
@@ -328,24 +328,24 @@ export default function VehiclesPage() {
                                 {activeTab === 'registration' && (
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Plate Number</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.plateNumber} onChange={e => setFormData({ ...formData, plateNumber: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Plate Number</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.plateNumber} onChange={e => setFormData({ ...formData, plateNumber: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Plate Category</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.plateCategory} onChange={e => setFormData({ ...formData, plateCategory: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Plate Category</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.plateCategory} onChange={e => setFormData({ ...formData, plateCategory: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Plate Code</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.plateCode} onChange={e => setFormData({ ...formData, plateCode: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Plate Code</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.plateCode} onChange={e => setFormData({ ...formData, plateCode: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Registration Expiry</label>
-                                            <input type="date" className="w-full rounded-lg border-slate-300 text-sm" value={formData.registrationExpiry} onChange={e => setFormData({ ...formData, registrationExpiry: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Registration Expiry</label>
+                                            <input type="date" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.registrationExpiry} onChange={e => setFormData({ ...formData, registrationExpiry: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Insurance Expiry</label>
-                                            <input type="date" className="w-full rounded-lg border-slate-300 text-sm" value={formData.insuranceExpiry} onChange={e => setFormData({ ...formData, insuranceExpiry: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Insurance Expiry</label>
+                                            <input type="date" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.insuranceExpiry} onChange={e => setFormData({ ...formData, insuranceExpiry: e.target.value })} />
                                         </div>
                                     </div>
                                 )}
@@ -353,54 +353,54 @@ export default function VehiclesPage() {
                                 {activeTab === 'specs' && (
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Make</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.make} onChange={e => setFormData({ ...formData, make: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Make</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.make} onChange={e => setFormData({ ...formData, make: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Model</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.model} onChange={e => setFormData({ ...formData, model: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Model</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.model} onChange={e => setFormData({ ...formData, model: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Year</label>
-                                            <input type="number" className="w-full rounded-lg border-slate-300 text-sm" value={formData.year} onChange={e => setFormData({ ...formData, year: parseInt(e.target.value) })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Year</label>
+                                            <input type="number" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.year} onChange={e => setFormData({ ...formData, year: parseInt(e.target.value) })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Chassis No</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.chassisNumber} onChange={e => setFormData({ ...formData, chassisNumber: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Chassis No</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.chassisNumber} onChange={e => setFormData({ ...formData, chassisNumber: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">VIN</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.vin} onChange={e => setFormData({ ...formData, vin: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">VIN</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.vin} onChange={e => setFormData({ ...formData, vin: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Color</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.color} onChange={e => setFormData({ ...formData, color: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Color</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.color} onChange={e => setFormData({ ...formData, color: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Fuel Type</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.fuelType} onChange={e => setFormData({ ...formData, fuelType: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Fuel Type</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.fuelType} onChange={e => setFormData({ ...formData, fuelType: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Transmission Type</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" value={formData.transmissionType} onChange={e => setFormData({ ...formData, transmissionType: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Transmission Type</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.transmissionType} onChange={e => setFormData({ ...formData, transmissionType: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Passenger Capacity</label>
-                                            <input type="number" className="w-full rounded-lg border-slate-300 text-sm" value={formData.passengerCapacity} onChange={e => setFormData({ ...formData, passengerCapacity: parseInt(e.target.value) })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Passenger Capacity</label>
+                                            <input type="number" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.passengerCapacity} onChange={e => setFormData({ ...formData, passengerCapacity: parseInt(e.target.value) })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Current Mileage</label>
-                                            <input type="number" className="w-full rounded-lg border-slate-300 text-sm" value={formData.currentMileage} onChange={e => setFormData({ ...formData, currentMileage: parseInt(e.target.value) })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Current Mileage</label>
+                                            <input type="number" className="w-full rounded-lg border-white/15 text-sm text-white" value={formData.currentMileage} onChange={e => setFormData({ ...formData, currentMileage: parseInt(e.target.value) })} />
                                         </div>
                                     </div>
                                 )}
                             </div>
 
-                            <div className="mt-8 flex justify-end gap-3 pt-6 border-t border-slate-100">
+                            <div className="mt-8 flex justify-end gap-3 pt-6 border-t border-white/5">
                                 <button
                                     type="button"
                                     onClick={() => setIsModalOpen(false)}
-                                    className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 rounded-lg transition-colors"
+                                    className="px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 rounded-lg transition-colors"
                                 >
                                     Cancel
                                 </button>

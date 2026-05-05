@@ -583,27 +583,27 @@ export default function AlertConfigPage() {
             {/* Email Modal */}
             {selectedEmail && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setSelectedEmail(null)}>
-                    <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
-                        <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                    <div className="bg-slate-900 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+                        <div className="p-4 border-b border-white/10 flex justify-between items-center bg-slate-800/50">
                             <div>
-                                <h3 className="text-lg font-bold text-slate-900">Email Preview</h3>
+                                <h3 className="text-lg font-bold text-white">Email Preview</h3>
                                 <p className="text-xs text-slate-500">Sent to: {selectedEmail.recipient} at {selectedEmail.timestamp}</p>
                             </div>
-                            <button onClick={() => setSelectedEmail(null)} className="text-slate-400 hover:text-slate-600">
+                            <button onClick={() => setSelectedEmail(null)} className="text-slate-400 hover:text-slate-300">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                 </svg>
                             </button>
                         </div>
-                        <div className="p-4 border-b border-slate-100">
-                            <span className="text-sm font-bold text-slate-700">Subject: </span>
-                            <span className="text-sm text-slate-900">{selectedEmail.subject}</span>
+                        <div className="p-4 border-b border-white/5">
+                            <span className="text-sm font-bold text-slate-300">Subject: </span>
+                            <span className="text-sm text-white">{selectedEmail.subject}</span>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-6 bg-slate-50 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto p-6 bg-slate-800/50 custom-scrollbar">
                             <div dangerouslySetInnerHTML={{ __html: selectedEmail.body }} />
                         </div>
-                        <div className="p-4 border-t border-slate-200 bg-white flex justify-end">
-                            <button onClick={() => setSelectedEmail(null)} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 font-medium text-sm">
+                        <div className="p-4 border-t border-white/10 bg-slate-900 flex justify-end">
+                            <button onClick={() => setSelectedEmail(null)} className="px-4 py-2 bg-slate-200 text-slate-300 rounded-lg hover:bg-slate-300 font-medium text-sm">
                                 Close Preview
                             </button>
                         </div>
@@ -613,13 +613,13 @@ export default function AlertConfigPage() {
 
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Alert Configuration</h1>
+                    <h1 className="text-3xl font-bold text-white tracking-tight">Alert Configuration</h1>
                     <p className="mt-1 text-slate-500">Configure automated alerts and notifications.</p>
                 </div>
                 <div className="flex gap-3">
                     <button
                         onClick={() => checkAlerts()}
-                        className="rounded-xl bg-green-50 border border-green-200 px-6 py-2.5 text-sm font-medium text-green-700 shadow-sm transition-all hover:bg-green-100 hover:scale-105"
+                        className="rounded-xl bg-emerald-500/10 border border-green-200 px-6 py-2.5 text-sm font-medium text-green-700 shadow-sm transition-all hover:bg-emerald-500/20 hover:scale-105"
                     >
                         Run Alert Check
                     </button>
@@ -633,15 +633,15 @@ export default function AlertConfigPage() {
             </div>
 
             {/* Configuration Form */}
-            <div className="bg-white rounded-2xl p-8 relative overflow-hidden border border-slate-200 shadow-sm">
+            <div className="bg-slate-900 rounded-2xl p-8 relative overflow-hidden border border-white/10 shadow-sm">
                 <div className="absolute top-0 right-0 p-6 opacity-5">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-32 h-32 text-slate-900">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-32 h-32 text-white">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                     </svg>
                 </div>
 
-                <h2 className="mb-6 text-xl font-bold text-slate-900 flex items-center gap-2">
+                <h2 className="mb-6 text-xl font-bold text-white flex items-center gap-2">
                     <span className="w-1 h-6 bg-blue-600 rounded-full"></span>
                     {isAddingNew ? 'Create New Alert Rule' : 'Edit Alert Rule'}
                 </h2>
@@ -650,9 +650,9 @@ export default function AlertConfigPage() {
                     {/* Alert For & Alert Type */}
                     <div className="grid gap-6 md:grid-cols-2">
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">Alert For</label>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Alert For</label>
                             <select
-                                className="block w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+                                className="block w-full rounded-xl border border-white/15 bg-slate-900 px-4 py-3 text-sm text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
                                 value={currentConfig.alertFor}
                                 onChange={(e) => {
                                     const newAlertFor = e.target.value as 'Vehicle' | 'Driver';
@@ -664,20 +664,20 @@ export default function AlertConfigPage() {
                                     });
                                 }}
                             >
-                                <option value="Vehicle" className="text-slate-900">Vehicle</option>
-                                <option value="Driver" className="text-slate-900">Driver</option>
+                                <option value="Vehicle" className="text-white">Vehicle</option>
+                                <option value="Driver" className="text-white">Driver</option>
                             </select>
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">Alert / Notification Type</label>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Alert / Notification Type</label>
                             <select
-                                className="block w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+                                className="block w-full rounded-xl border border-white/15 bg-slate-900 px-4 py-3 text-sm text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
                                 value={currentConfig.alertType}
                                 onChange={(e) => setCurrentConfig({ ...currentConfig, alertType: e.target.value })}
                             >
                                 {alertTypes[currentConfig.alertFor].map((type) => (
-                                    <option key={type} value={type} className="text-slate-900">{type}</option>
+                                    <option key={type} value={type} className="text-white">{type}</option>
                                 ))}
                             </select>
                         </div>
@@ -686,9 +686,9 @@ export default function AlertConfigPage() {
                     {/* Frequency */}
                     <div className="grid gap-6 md:grid-cols-2">
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">Frequency</label>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Frequency</label>
                             <select
-                                className="block w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+                                className="block w-full rounded-xl border border-white/15 bg-slate-900 px-4 py-3 text-sm text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
                                 value={currentConfig.frequency}
                                 onChange={(e) => setCurrentConfig({
                                     ...currentConfig,
@@ -697,18 +697,18 @@ export default function AlertConfigPage() {
                                 })}
                             >
                                 {frequencyOptions.map((option) => (
-                                    <option key={option} value={option} className="text-slate-900">{option}</option>
+                                    <option key={option} value={option} className="text-white">{option}</option>
                                 ))}
                             </select>
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                            <label className="block text-sm font-medium text-slate-300 mb-2">
                                 Frequency Value ({getUnit(currentConfig.frequency)})
                             </label>
                             <input
                                 type="number"
-                                className="block w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors placeholder-slate-400"
+                                className="block w-full rounded-xl border border-white/15 bg-slate-900 px-4 py-3 text-sm text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors placeholder-slate-400"
                                 value={currentConfig.frequencyValue}
                                 onChange={(e) => setCurrentConfig({ ...currentConfig, frequencyValue: Number(e.target.value) })}
                                 placeholder={`Enter value in ${getUnit(currentConfig.frequency)}`}
@@ -719,25 +719,25 @@ export default function AlertConfigPage() {
                     {/* Due Alert Threshold */}
                     <div className="grid gap-6 md:grid-cols-2">
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">Due Alert Threshold</label>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Due Alert Threshold</label>
                             <select
-                                className="block w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+                                className="block w-full rounded-xl border border-white/15 bg-slate-900 px-4 py-3 text-sm text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
                                 value={currentConfig.dueAlertThreshold}
                                 onChange={(e) => setCurrentConfig({ ...currentConfig, dueAlertThreshold: e.target.value })}
                             >
                                 {thresholdOptions[currentConfig.frequency as keyof typeof thresholdOptions].map((option) => (
-                                    <option key={option} value={option} className="text-slate-900">{option}</option>
+                                    <option key={option} value={option} className="text-white">{option}</option>
                                 ))}
                             </select>
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                            <label className="block text-sm font-medium text-slate-300 mb-2">
                                 Threshold Value ({getUnit(currentConfig.frequency)})
                             </label>
                             <input
                                 type="number"
-                                className="block w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors placeholder-slate-400"
+                                className="block w-full rounded-xl border border-white/15 bg-slate-900 px-4 py-3 text-sm text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors placeholder-slate-400"
                                 value={currentConfig.thresholdValue}
                                 onChange={(e) => setCurrentConfig({ ...currentConfig, thresholdValue: Number(e.target.value) })}
                                 placeholder={`Enter value in ${getUnit(currentConfig.frequency)}`}
@@ -748,10 +748,10 @@ export default function AlertConfigPage() {
                     {/* Notification Email (Optional) */}
                     <div className="grid gap-6 md:grid-cols-2 mt-6">
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">Notification Email (Optional)</label>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Notification Email (Optional)</label>
                             <input
                                 type="email"
-                                className="block w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors placeholder-slate-400"
+                                className="block w-full rounded-xl border border-white/15 bg-slate-900 px-4 py-3 text-sm text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors placeholder-slate-400"
                                 value={currentConfig.notificationEmail || ''}
                                 onChange={(e) => setCurrentConfig({ ...currentConfig, notificationEmail: e.target.value })}
                                 placeholder="e.g. manager@example.com (Defaults to Driver or Fleet Manager)"
@@ -761,18 +761,18 @@ export default function AlertConfigPage() {
                     </div>
 
                     {/* Assignment Section */}
-                    <div className="border-t border-slate-200 pt-6">
+                    <div className="border-t border-white/10 pt-6">
                         <div className="flex flex-col gap-4 mb-4">
                             <div className="flex items-center justify-between">
-                                <label className="block text-sm font-medium text-slate-700">
+                                <label className="block text-sm font-medium text-slate-300">
                                     Assign to {currentConfig.alertFor}s
                                 </label>
                                 <div className="space-x-2">
-                                    <button onClick={selectAllFiltered} className="text-xs text-blue-600 hover:text-blue-800">
+                                    <button onClick={selectAllFiltered} className="text-xs text-blue-600 hover:text-blue-300">
                                         Select All {searchTerm && 'Filtered'}
                                     </button>
                                     <span className="text-slate-300">|</span>
-                                    <button onClick={clearSelection} className="text-xs text-slate-500 hover:text-slate-700">Clear Selection</button>
+                                    <button onClick={clearSelection} className="text-xs text-slate-500 hover:text-slate-300">Clear Selection</button>
                                 </div>
                             </div>
 
@@ -785,7 +785,7 @@ export default function AlertConfigPage() {
                                 </div>
                                 <input
                                     type="text"
-                                    className="block w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors placeholder-slate-400"
+                                    className="block w-full rounded-lg border border-white/15 bg-slate-900 pl-10 pr-3 py-2 text-sm text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors placeholder-slate-400"
                                     placeholder={`Search ${currentConfig.alertFor}s...`}
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -801,11 +801,11 @@ export default function AlertConfigPage() {
                                         key={item.id}
                                         onClick={() => toggleAssignment(item.id)}
                                         className={`flex items-center p-3 rounded-lg border cursor-pointer transition-all relative group/item ${isSelected
-                                            ? 'bg-blue-50 border-blue-200 text-blue-700'
-                                            : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                                            ? 'bg-blue-500/10 border-blue-200 text-blue-700'
+                                            : 'bg-slate-900 border-white/10 text-slate-500 hover:bg-white/5'
                                             }`}
                                     >
-                                        <div className={`w-4 h-4 rounded border mr-3 flex items-center justify-center ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300'
+                                        <div className={`w-4 h-4 rounded border mr-3 flex items-center justify-center ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-white/15'
                                             }`}>
                                             {isSelected && (
                                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-white">
@@ -845,23 +845,23 @@ export default function AlertConfigPage() {
                     </div>
 
                     {/* Notification Enabled Toggle */}
-                    <div className="flex items-center gap-3 pt-4 border-t border-slate-200">
+                    <div className="flex items-center gap-3 pt-4 border-t border-white/10">
                         <button
                             onClick={() => setCurrentConfig({ ...currentConfig, notificationEnabled: !currentConfig.notificationEnabled })}
                             className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${currentConfig.notificationEnabled ? 'bg-blue-600' : 'bg-slate-200'
                                 }`}
                         >
                             <span
-                                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${currentConfig.notificationEnabled ? 'translate-x-5' : 'translate-x-0'
+                                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-slate-900 shadow ring-0 transition duration-200 ease-in-out ${currentConfig.notificationEnabled ? 'translate-x-5' : 'translate-x-0'
                                     }`}
                             />
                         </button>
-                        <span className="text-sm font-medium text-slate-700">Enable Automated Notifications</span>
+                        <span className="text-sm font-medium text-slate-300">Enable Automated Notifications</span>
                     </div>
 
                     {/* Notification Channels */}
-                    <div className="space-y-4 pt-4 border-t border-slate-200">
-                        <label className="block text-sm font-medium text-slate-700">Notification Channels</label>
+                    <div className="space-y-4 pt-4 border-t border-white/10">
+                        <label className="block text-sm font-medium text-slate-300">Notification Channels</label>
 
                         {/* Email Toggle */}
                         <div className="flex items-center gap-3">
@@ -871,11 +871,11 @@ export default function AlertConfigPage() {
                                     }`}
                             >
                                 <span
-                                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${currentConfig.emailEnabled ? 'translate-x-5' : 'translate-x-0'
+                                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-slate-900 shadow ring-0 transition duration-200 ease-in-out ${currentConfig.emailEnabled ? 'translate-x-5' : 'translate-x-0'
                                         }`}
                                 />
                             </button>
-                            <span className="text-sm font-medium text-slate-700">Email</span>
+                            <span className="text-sm font-medium text-slate-300">Email</span>
                         </div>
 
                         {/* SMS Toggle */}
@@ -886,11 +886,11 @@ export default function AlertConfigPage() {
                                     }`}
                             >
                                 <span
-                                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${currentConfig.smsEnabled ? 'translate-x-5' : 'translate-x-0'
+                                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-slate-900 shadow ring-0 transition duration-200 ease-in-out ${currentConfig.smsEnabled ? 'translate-x-5' : 'translate-x-0'
                                         }`}
                                 />
                             </button>
-                            <span className="text-sm font-medium text-slate-700">SMS</span>
+                            <span className="text-sm font-medium text-slate-300">SMS</span>
                         </div>
 
                         {/* WhatsApp Toggle */}
@@ -901,19 +901,19 @@ export default function AlertConfigPage() {
                                     }`}
                             >
                                 <span
-                                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${currentConfig.whatsappEnabled ? 'translate-x-5' : 'translate-x-0'
+                                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-slate-900 shadow ring-0 transition duration-200 ease-in-out ${currentConfig.whatsappEnabled ? 'translate-x-5' : 'translate-x-0'
                                         }`}
                                 />
                             </button>
-                            <span className="text-sm font-medium text-slate-700">WhatsApp</span>
+                            <span className="text-sm font-medium text-slate-300">WhatsApp</span>
                         </div>
                     </div>
 
                     {/* Action Buttons */}
-                    <div className="flex justify-end gap-3 pt-6 border-t border-slate-200">
+                    <div className="flex justify-end gap-3 pt-6 border-t border-white/10">
                         <button
                             onClick={handleReset}
-                            className="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-all"
+                            className="flex items-center gap-2 rounded-xl border border-white/15 bg-slate-900 px-6 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/5 transition-all"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
@@ -935,8 +935,8 @@ export default function AlertConfigPage() {
 
             {/* Notification Log */}
             {notificationLog.length > 0 && (
-                <div className="bg-green-50 rounded-xl p-6 border border-green-200">
-                    <h3 className="text-lg font-bold text-green-900 mb-4 flex items-center gap-2">
+                <div className="bg-emerald-500/10 rounded-xl p-6 border border-green-200">
+                    <h3 className="text-lg font-bold text-emerald-300 mb-4 flex items-center gap-2">
                         <span className="w-1 h-6 bg-green-600 rounded-full"></span>
                         Notification Log
                     </h3>
@@ -948,7 +948,7 @@ export default function AlertConfigPage() {
                                     console.log('Clicked log:', log);
                                     setSelectedEmail(log);
                                 }}
-                                className="flex items-center justify-between text-sm text-green-800 border-b border-green-200 pb-2 last:border-0 cursor-pointer hover:bg-green-100 transition-colors rounded px-2 -mx-2"
+                                className="flex items-center justify-between text-sm text-emerald-300 border-b border-green-200 pb-2 last:border-0 cursor-pointer hover:bg-emerald-500/20 transition-colors rounded px-2 -mx-2"
                             >
                                 <div className="font-mono">
                                     <span className="opacity-70">[{log.timestamp}]</span> {log.triggerReason}
@@ -961,13 +961,13 @@ export default function AlertConfigPage() {
                                 {log.type === 'WhatsApp' && (
                                     <div className="flex items-center gap-2">
                                         {log.whatsappStatus === 'Sent' && (
-                                            <span className="px-3 py-1 bg-green-100 text-green-700 rounded-lg text-xs font-bold flex items-center gap-1 border border-green-200">
+                                            <span className="px-3 py-1 bg-emerald-500/20 text-green-700 rounded-lg text-xs font-bold flex items-center gap-1 border border-green-200">
                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
                                                 SENT
                                             </span>
                                         )}
                                         {log.whatsappStatus === 'Failed' && (
-                                            <span className="px-3 py-1 bg-red-100 text-red-700 rounded-lg text-xs font-bold flex items-center gap-1 border border-red-200">
+                                            <span className="px-3 py-1 bg-red-500/20 text-red-700 rounded-lg text-xs font-bold flex items-center gap-1 border border-red-200">
                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
                                                 FAILED
                                             </span>
@@ -994,7 +994,7 @@ export default function AlertConfigPage() {
 
             {/* Configured Alerts List */}
             <div>
-                <h3 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
                     <span className="w-1 h-6 bg-blue-600 rounded-full"></span>
                     Configured Alert Rules
                 </h3>
@@ -1007,17 +1007,17 @@ export default function AlertConfigPage() {
                                 setIsAddingNew(false);
                                 window.scrollTo({ top: 0, behavior: 'smooth' });
                             }}
-                            className={`bg-white rounded-xl p-6 cursor-pointer group relative overflow-hidden transition-all duration-300 hover:shadow-md border ${currentConfig.id === config.id && !isAddingNew ? 'border-blue-500 ring-1 ring-blue-500' : 'border-slate-200 hover:border-blue-300'}`}
+                            className={`bg-slate-900 rounded-xl p-6 cursor-pointer group relative overflow-hidden transition-all duration-300 hover:shadow-md border ${currentConfig.id === config.id && !isAddingNew ? 'border-blue-500 ring-1 ring-blue-500' : 'border-white/10 hover:border-blue-300'}`}
                         >
                             <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-24 h-24 text-slate-900">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-24 h-24 text-white">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
                                 </svg>
                             </div>
 
                             <button
                                 onClick={(e) => handleDelete(e, config.id)}
-                                className="absolute top-4 right-4 p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all z-20 opacity-0 group-hover:opacity-100"
+                                className="absolute top-4 right-4 p-2 text-slate-400 hover:text-red-600 hover:bg-red-500/10 rounded-lg transition-all z-20 opacity-0 group-hover:opacity-100"
                                 title="Delete Rule"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
@@ -1027,24 +1027,24 @@ export default function AlertConfigPage() {
 
                             <div className="relative z-10">
                                 <div className="flex justify-between items-start mb-4">
-                                    <span className={`px-2.5 py-1 rounded-lg text-xs font-medium border ${config.alertFor === 'Vehicle' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-purple-50 text-purple-700 border-purple-200'}`}>
+                                    <span className={`px-2.5 py-1 rounded-lg text-xs font-medium border ${config.alertFor === 'Vehicle' ? 'bg-blue-500/10 text-blue-700 border-blue-200' : 'bg-purple-500/10 text-purple-700 border-purple-200'}`}>
                                         {config.alertFor} ({config.assignedIds.length})
                                     </span>
                                     <div className={`h-2.5 w-2.5 rounded-full shadow-sm ${config.notificationEnabled ? 'bg-green-500' : 'bg-slate-400'}`} />
                                 </div>
 
-                                <h4 className="text-lg font-bold text-slate-900 mb-1 group-hover:text-blue-600 transition-colors">{config.alertType}</h4>
+                                <h4 className="text-lg font-bold text-white mb-1 group-hover:text-blue-600 transition-colors">{config.alertType}</h4>
 
                                 <div className="space-y-2 mt-4">
                                     <div className="flex justify-between text-sm">
                                         <span className="text-slate-500">Frequency:</span>
-                                        <span className="text-slate-700 font-medium">{config.frequencyValue} {getUnit(config.frequency)}</span>
+                                        <span className="text-slate-300 font-medium">{config.frequencyValue} {getUnit(config.frequency)}</span>
                                     </div>
                                     <div className="flex justify-between text-sm">
                                         <span className="text-slate-500">Threshold:</span>
-                                        <span className="text-slate-700 font-medium">{config.thresholdValue} {getUnit(config.frequency)}</span>
+                                        <span className="text-slate-300 font-medium">{config.thresholdValue} {getUnit(config.frequency)}</span>
                                     </div>
-                                    <div className="border-t border-slate-100 pt-2 mt-2">
+                                    <div className="border-t border-white/5 pt-2 mt-2">
                                         <span className="text-xs font-medium text-slate-500 block mb-2">Assigned To:</span>
                                         <div className="max-h-40 overflow-y-auto custom-scrollbar space-y-1">
                                             {config.assignedIds.length > 0 ? (
@@ -1052,8 +1052,8 @@ export default function AlertConfigPage() {
                                                     if (config.alertFor === 'Vehicle') {
                                                         const v = vehicles.find(v => v.id === id);
                                                         return v ? (
-                                                            <div key={id} className="text-xs bg-slate-50 p-2 rounded border border-slate-100">
-                                                                <div className="font-medium text-slate-700">{v.make} {v.model}</div>
+                                                            <div key={id} className="text-xs bg-slate-800/50 p-2 rounded border border-white/5">
+                                                                <div className="font-medium text-slate-300">{v.make} {v.model}</div>
                                                                 <div className="flex justify-between text-slate-500 mt-0.5">
                                                                     <span>{v.type}</span>
                                                                     <span className="font-mono">{v.licensePlate}</span>
@@ -1063,8 +1063,8 @@ export default function AlertConfigPage() {
                                                     } else {
                                                         const d = drivers.find(d => d.id === id);
                                                         return d ? (
-                                                            <div key={id} className="text-xs bg-slate-50 p-2 rounded border border-slate-100">
-                                                                <div className="font-medium text-slate-700">{d.name}</div>
+                                                            <div key={id} className="text-xs bg-slate-800/50 p-2 rounded border border-white/5">
+                                                                <div className="font-medium text-slate-300">{d.name}</div>
                                                                 <div className="text-slate-500 mt-0.5 font-mono">{d.licenseNumber}</div>
                                                             </div>
                                                         ) : null;

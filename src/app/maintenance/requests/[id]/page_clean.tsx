@@ -355,29 +355,29 @@ export default function RequestDetailsPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <div className="flex items-center gap-3 mb-1">
-                        <Link href="/maintenance/requests" className="text-slate-400 hover:text-slate-600">
+                        <Link href="/maintenance/requests" className="text-slate-400 hover:text-slate-300">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
                             </svg>
                         </Link>
-                        <h1 className="text-2xl font-bold text-slate-900">Request #{request.id.toUpperCase()}</h1>
+                        <h1 className="text-2xl font-bold text-white">Request #{request.id.toUpperCase()}</h1>
                         <StatusBadge status={request.status} />
                     </div>
                     <p className="text-slate-500 ml-8">Created on {new Date(request.requestDate).toLocaleDateString()}</p>
                 </div>
                 <div className="flex items-center gap-3">
                     <select
-                        className="rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-slate-900"
+                        className="rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-900 text-white"
                         value={request.status}
                         onChange={(e) => handleStatusUpdate(e.target.value as MaintenanceStatus)}
                     >
                         {/* Current status */}
-                        <option key={request.status} value={request.status} className="text-slate-900">
+                        <option key={request.status} value={request.status} className="text-white">
                             {request.status} (Current)
                         </option>
                         {/* Next valid statuses only */}
                         {nextStatuses.map((status) => (
-                            <option key={status} value={status} className="text-slate-900">
+                            <option key={status} value={status} className="text-white">
                                 {status}
                             </option>
                         ))}
@@ -389,9 +389,9 @@ export default function RequestDetailsPage() {
                 {/* Main Info */}
                 <div className="lg:col-span-2 space-y-8">
                     {/* Vehicle & Maintenance Info */}
-                    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-bold text-slate-900">Request Details</h3>
+                            <h3 className="text-lg font-bold text-white">Request Details</h3>
                             <div className="flex gap-2">
                                 {!isEditMode ? (
                                     <button
@@ -407,7 +407,7 @@ export default function RequestDetailsPage() {
                                     <>
                                         <button
                                             onClick={handleCancelEdit}
-                                            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                                            className="rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/5"
                                         >
                                             Cancel
                                         </button>
@@ -424,7 +424,7 @@ export default function RequestDetailsPage() {
                         <div className="grid grid-cols-2 gap-6">
                             <div>
                                 <label className="block text-xs font-medium text-slate-500 uppercase">Vehicle</label>
-                                <p className="mt-1 text-sm font-medium text-slate-900">{vehicle?.make} {vehicle?.model}</p>
+                                <p className="mt-1 text-sm font-medium text-white">{vehicle?.make} {vehicle?.model}</p>
                                 <p className="text-xs text-slate-500">{vehicle?.licensePlate}</p>
                             </div>
                             <div>
@@ -434,11 +434,11 @@ export default function RequestDetailsPage() {
                                         type="number"
                                         value={editedFields.odometer || ''}
                                         onChange={(e) => handleFieldChange('odometer', parseInt(e.target.value) || 0)}
-                                        className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        className="mt-1 block w-full rounded-md border border-white/15 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
                                         placeholder="Enter odometer reading"
                                     />
                                 ) : (
-                                    <p className="mt-1 text-sm font-medium text-slate-900">{request.odometer ? `${request.odometer} km` : 'N/A'}</p>
+                                    <p className="mt-1 text-sm font-medium text-white">{request.odometer ? `${request.odometer} km` : 'N/A'}</p>
                                 )}
                             </div>
                             <div>
@@ -447,7 +447,7 @@ export default function RequestDetailsPage() {
                                     <select
                                         value={editedFields.maintenanceType || ''}
                                         onChange={(e) => handleFieldChange('maintenanceType', e.target.value)}
-                                        className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        className="mt-1 block w-full rounded-md border border-white/15 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
                                     >
                                         <option value="">Select type</option>
                                         {Object.values(MaintenanceType).map((type) => (
@@ -455,7 +455,7 @@ export default function RequestDetailsPage() {
                                         ))}
                                     </select>
                                 ) : (
-                                    <p className="mt-1 text-sm font-medium text-slate-900">{request.maintenanceType || 'N/A'}</p>
+                                    <p className="mt-1 text-sm font-medium text-white">{request.maintenanceType || 'N/A'}</p>
                                 )}
                             </div>
                             <div>
@@ -464,17 +464,17 @@ export default function RequestDetailsPage() {
                                     <select
                                         value={editedFields.priority || ''}
                                         onChange={(e) => handleFieldChange('priority', e.target.value as MaintenancePriority)}
-                                        className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        className="mt-1 block w-full rounded-md border border-white/15 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
                                     >
                                         {Object.values(MaintenancePriority).map((priority) => (
                                             <option key={priority} value={priority}>{priority}</option>
                                         ))}
                                     </select>
                                 ) : (
-                                    <span className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${request.priority === MaintenancePriority.CRITICAL ? 'bg-red-100 text-red-700' :
-                                        request.priority === MaintenancePriority.HIGH ? 'bg-orange-100 text-orange-700' :
-                                            request.priority === MaintenancePriority.MEDIUM ? 'bg-yellow-100 text-yellow-700' :
-                                                'bg-green-100 text-green-700'
+                                    <span className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${request.priority === MaintenancePriority.CRITICAL ? 'bg-red-500/20 text-red-700' :
+                                        request.priority === MaintenancePriority.HIGH ? 'bg-orange-500/20 text-orange-700' :
+                                            request.priority === MaintenancePriority.MEDIUM ? 'bg-amber-500/20 text-yellow-700' :
+                                                'bg-emerald-500/20 text-green-700'
                                         }`}>
                                         {request.priority || 'Low'}
                                     </span>
@@ -487,11 +487,11 @@ export default function RequestDetailsPage() {
                                         value={editedFields.description || ''}
                                         onChange={(e) => handleFieldChange('description', e.target.value)}
                                         rows={3}
-                                        className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        className="mt-1 block w-full rounded-md border border-white/15 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                                         placeholder="Enter description"
                                     />
                                 ) : (
-                                    <p className="mt-1 text-sm text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                    <p className="mt-1 text-sm text-slate-300 bg-slate-800/50 p-3 rounded-lg border border-white/5">
                                         {request.description}
                                     </p>
                                 )}
@@ -521,12 +521,12 @@ export default function RequestDetailsPage() {
                                                     value={jobSearchQuery}
                                                     onChange={(e) => setJobSearchQuery(e.target.value)}
                                                     placeholder="Search jobs..."
-                                                    className="block w-full rounded-md border border-slate-300 pl-10 pr-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                    className="block w-full rounded-md border border-white/15 pl-10 pr-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                                 />
                                             </div>
                                             {/* Jobs List with Enhanced Scrollbar */}
                                             <div
-                                                className="max-h-60 overflow-y-auto rounded-lg border-2 border-slate-300 bg-white p-3 shadow-inner"
+                                                className="max-h-60 overflow-y-auto rounded-lg border-2 border-white/15 bg-slate-900 p-3 shadow-inner"
                                                 style={{
                                                     scrollbarWidth: 'thin',
                                                     scrollbarColor: '#94a3b8 #e2e8f0'
@@ -552,15 +552,15 @@ export default function RequestDetailsPage() {
                                                     {getFilteredJobs().map((job) => (
                                                         <label
                                                             key={job}
-                                                            className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 rounded-md p-2 transition-colors border border-transparent hover:border-slate-200"
+                                                            className="flex items-center gap-3 cursor-pointer hover:bg-white/5 rounded-md p-2 transition-colors border border-transparent hover:border-white/10"
                                                         >
                                                             <input
                                                                 type="checkbox"
                                                                 checked={(editedFields.maintenanceJobs || []).includes(job)}
                                                                 onChange={() => handleJobToggle(job)}
-                                                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
+                                                                className="h-4 w-4 rounded border-white/15 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
                                                             />
-                                                            <span className="text-sm text-slate-700 font-medium">{job}</span>
+                                                            <span className="text-sm text-slate-300 font-medium">{job}</span>
                                                         </label>
                                                     ))}
                                                     {getFilteredJobs().length === 0 && (
@@ -580,7 +580,7 @@ export default function RequestDetailsPage() {
                                     request.maintenanceJobs && request.maintenanceJobs.length > 0 ? (
                                         <div className="mt-2 flex flex-wrap gap-2">
                                             {request.maintenanceJobs.map(job => (
-                                                <span key={job} className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+                                                <span key={job} className="inline-flex items-center rounded-md bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
                                                     {job}
                                                 </span>
                                             ))}
@@ -598,10 +598,10 @@ export default function RequestDetailsPage() {
                                         type="date"
                                         value={editedFields.expectedCompletionDate || ''}
                                         onChange={(e) => handleFieldChange('expectedCompletionDate', e.target.value)}
-                                        className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="mt-1 block w-full rounded-md border border-white/15 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
                                     />
                                 ) : (
-                                    <p className="mt-1 text-sm font-medium text-slate-900">
+                                    <p className="mt-1 text-sm font-medium text-white">
                                         {request.expectedCompletionDate
                                             ? new Date(request.expectedCompletionDate).toLocaleDateString('en-GB', {
                                                 day: '2-digit',
@@ -617,9 +617,9 @@ export default function RequestDetailsPage() {
                     </div>
 
                     {/* RFQ Section */}
-                    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-bold text-slate-900">Request for Quotation (RFQ)</h3>
+                            <h3 className="text-lg font-bold text-white">Request for Quotation (RFQ)</h3>
                             <button
                                 onClick={handleSendRFQ}
                                 disabled={request.status !== MaintenanceStatus.UNDER_ESTIMATION}
@@ -641,19 +641,19 @@ export default function RequestDetailsPage() {
                             }
                         </p>
 
-                        <div className="max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2 custom-scrollbar">
+                        <div className="max-h-60 overflow-y-auto rounded-lg border border-white/10 bg-slate-800/50 p-2 custom-scrollbar">
                             {garages.map((g) => (
-                                <label key={g.id} className="flex items-center space-x-3 p-3 hover:bg-white hover:shadow-sm rounded-lg cursor-pointer transition-all border border-transparent hover:border-slate-200">
+                                <label key={g.id} className="flex items-center space-x-3 p-3 hover:bg-slate-900 hover:shadow-sm rounded-lg cursor-pointer transition-all border border-transparent hover:border-white/10">
                                     <input
                                         type="checkbox"
-                                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        className="h-4 w-4 rounded border-white/15 text-blue-600 focus:ring-blue-500"
                                         checked={candidateGarageIds.includes(g.id)}
                                         onChange={() => handleGarageToggle(g.id)}
                                     />
                                     <div className="flex-1">
                                         <div className="flex justify-between">
-                                            <span className="font-medium text-slate-900">{g.name}</span>
-                                            {g.isInternal && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Internal</span>}
+                                            <span className="font-medium text-white">{g.name}</span>
+                                            {g.isInternal && <span className="text-xs bg-emerald-500/20 text-green-700 px-2 py-0.5 rounded-full">Internal</span>}
                                         </div>
                                         <p className="text-xs text-slate-500">{g.location} • {g.specialties.join(', ')}</p>
                                     </div>
@@ -672,28 +672,28 @@ export default function RequestDetailsPage() {
                 {/* Sidebar Info */}
                 <div className="space-y-8">
                     {/* Dates */}
-                    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                        <h3 className="text-sm font-bold text-slate-900 uppercase mb-4">Timeline</h3>
+                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                        <h3 className="text-sm font-bold text-white uppercase mb-4">Timeline</h3>
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-xs text-slate-500">Requested Date</label>
-                                <p className="text-sm font-medium text-slate-900">{new Date(request.requestDate).toLocaleDateString()}</p>
+                                <p className="text-sm font-medium text-white">{new Date(request.requestDate).toLocaleDateString()}</p>
                             </div>
                             <div>
                                 <label className="block text-xs text-slate-500">Expected Completion</label>
-                                <p className="text-sm font-medium text-slate-900">{request.expectedEndDate ? new Date(request.expectedEndDate).toLocaleDateString() : 'Not set'}</p>
+                                <p className="text-sm font-medium text-white">{request.expectedEndDate ? new Date(request.expectedEndDate).toLocaleDateString() : 'Not set'}</p>
                             </div>
                         </div>
                     </div>
 
                     {/* Attachments */}
-                    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-sm font-bold text-slate-900 uppercase">Attachments</h3>
+                            <h3 className="text-sm font-bold text-white uppercase">Attachments</h3>
                             {request.status !== MaintenanceStatus.COMPLETED && (
                                 <button
                                     onClick={handleAddAttachment}
-                                    className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800"
+                                    className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-300"
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -705,7 +705,7 @@ export default function RequestDetailsPage() {
                         {request.attachments && request.attachments.length > 0 ? (
                             <ul className="space-y-2">
                                 {request.attachments.map(att => (
-                                    <li key={att.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-50 border border-slate-100">
+                                    <li key={att.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-800/50 border border-white/5">
                                         <div className="flex items-center gap-2 flex-1 min-w-0">
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-slate-400 flex-shrink-0">
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
@@ -719,7 +719,7 @@ export default function RequestDetailsPage() {
                                         </div>
                                         <button
                                             onClick={() => handleDeleteAttachment(att.id)}
-                                            className="text-red-600 hover:text-red-800 p-1"
+                                            className="text-red-600 hover:text-red-300 p-1"
                                         >
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -738,27 +738,27 @@ export default function RequestDetailsPage() {
             {/* Attachment Upload Modal */}
             {showAttachmentModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-                    <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
-                        <h3 className="text-lg font-bold text-slate-900">Add Attachment</h3>
+                    <div className="w-full max-w-md rounded-xl bg-slate-900 p-6 shadow-2xl">
+                        <h3 className="text-lg font-bold text-white">Add Attachment</h3>
                         <p className="mt-1 text-sm text-slate-500">Select the attachment type and upload a file</p>
 
                         <div className="mt-4 space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Attachment Type</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Attachment Type</label>
                                 <select
                                     value={selectedAttachmentType}
                                     onChange={(e) => setSelectedAttachmentType(e.target.value as AttachmentType)}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-slate-900"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-900 text-white"
                                 >
                                     {Object.values(AttachmentType).map((type) => (
-                                        <option key={type} value={type} className="text-slate-900">
+                                        <option key={type} value={type} className="text-white">
                                             {type}
                                         </option>
                                     ))}
                                 </select>
                             </div>
 
-                            <div className="rounded-lg border-2 border-dashed border-slate-300 p-6 text-center">
+                            <div className="rounded-lg border-2 border-dashed border-white/15 p-6 text-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="mx-auto h-12 w-12 text-slate-400">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
                                 </svg>
@@ -773,7 +773,7 @@ export default function RequestDetailsPage() {
                                     setShowAttachmentModal(false);
                                     setSelectedAttachmentType(AttachmentType.INVOICE);
                                 }}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
                             >
                                 Cancel
                             </button>

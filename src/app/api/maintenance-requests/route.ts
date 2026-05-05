@@ -1,51 +1,54 @@
 import { NextResponse } from 'next/server';
-
-const BACKEND_URL = 'http://127.0.0.1:8080/api/maintenance-requests';
+import { prisma } from '@/lib/prisma';
 
 export async function GET() {
     try {
-        const res = await fetch(BACKEND_URL, { cache: 'no-store' });
-        if (!res.ok) {
-            return NextResponse.json({ error: 'Failed to fetch maintenance requests' }, { status: res.status });
-        }
-        const data = await res.json();
-        return NextResponse.json(data);
+        const requests = await prisma.maintenanceRequest.findMany({
+            where: { deletedAt: null },
+            include: {
+                Vehicle: true,
+                Garage: true,
+                Driver: true,
+                quotations: true,
+                WorkOrder: true,
+                attachments: true,
+                comments: true,
+                histories: true,
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        return NextResponse.json(JSON.parse(JSON.stringify(requests)));
     } catch (error) {
-        console.warn('Backend proxy failed, using mock data:', error);
-        // Fail-safe mock response
-        const mockRequests = [
-            {
-                id: 'MR-MOCK-001',
-                status: 'Open',
-                priority: 'Medium',
-                description: 'Mock Maintenance Request (Backend Offline)',
-                dateCreated: new Date().toISOString(),
-                vehicle: { id: 'V-001', plateNumber: 'DXB-1234' },
-                garage: { id: 'G-001', name: 'Al Quoz Garage' },
-                issueSettings: []
-            }
-        ];
-        return NextResponse.json(mockRequests);
+        console.error('Failed to fetch maintenance requests:', error);
+        return NextResponse.json({ error: 'Internal Server Error', details: String(error) }, { status: 500 });
     }
 }
 
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const res = await fetch(BACKEND_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
+
+        const req = await prisma.maintenanceRequest.create({
+            data: {
+                vehicleId: body.vehicleId || body.vehicle_id,
+                driverId: body.driverId || body.driver_id,
+                description: body.description,
+                status: body.status || 'Open',
+                priority: body.priority || 'Medium',
+                maintenanceType: body.maintenanceType || body.maintenance_type,
+                workOrderNo: body.workOrderNo || body.work_order_no,
+                odometer: body.odometer ? BigInt(body.odometer) : null,
+                garageId: body.garageId || body.garage_id,
+                estimatedCost: body.estimatedCost,
+                requestDate: body.requestDate ? new Date(body.requestDate) : new Date(),
+                expectedEndDate: body.expectedEndDate ? new Date(body.expectedEndDate) : null,
+                maintenanceJobs: body.maintenanceJobs || body.maintenance_jobs || [],
+            }
         });
 
-        if (!res.ok) {
-            const errorData = await res.text();
-            return NextResponse.json({ error: errorData }, { status: res.status });
-        }
-
-        const data = await res.json();
-        return NextResponse.json(data, { status: 201 });
+        return NextResponse.json(JSON.parse(JSON.stringify(req)), { status: 201 });
     } catch (error) {
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        console.error('Failed to create maintenance request:', error);
+        return NextResponse.json({ error: 'Internal Server Error', details: String(error) }, { status: 500 });
     }
 }

@@ -39,7 +39,7 @@ export default function BookingForm({
                     <input
                         type="text"
                         defaultValue={initialOrigin}
-                        className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#0056b3] focus:border-transparent outline-none"
+                        className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#0056b3] focus:border-transparent outline-none text-white"
                         placeholder="e.g., Dubai Port"
                         required
                     />
@@ -51,7 +51,7 @@ export default function BookingForm({
                     <input
                         type="text"
                         defaultValue={initialDestination}
-                        className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#0056b3] focus:border-transparent outline-none"
+                        className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#0056b3] focus:border-transparent outline-none text-white"
                         placeholder="e.g., London Gateway"
                         required
                     />
@@ -62,7 +62,7 @@ export default function BookingForm({
                     </label>
                     <input
                         type="date"
-                        className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#0056b3] focus:border-transparent outline-none"
+                        className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#0056b3] focus:border-transparent outline-none text-white"
                         required
                     />
                 </div>
@@ -71,7 +71,7 @@ export default function BookingForm({
                         Cargo Details
                     </label>
                     <textarea
-                        className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#0056b3] focus:border-transparent outline-none"
+                        className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#0056b3] focus:border-transparent outline-none text-white"
                         rows={3}
                         placeholder="Describe your cargo..."
                         required

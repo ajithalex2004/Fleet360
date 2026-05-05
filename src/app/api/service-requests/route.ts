@@ -1,17 +1,18 @@
-
 import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 import { processNotificationRules } from '@/lib/notifications';
-
-const BACKEND_URL = 'http://127.0.0.1:8080/api/service-requests';
 
 export async function GET() {
     try {
-        const res = await fetch(BACKEND_URL, { cache: 'no-store' });
-        if (!res.ok) {
-            return NextResponse.json({ error: 'Failed to fetch' }, { status: res.status });
-        }
-        const data = await res.json();
-        return NextResponse.json(data);
+        const requests = await prisma.serviceRequest.findMany({
+            where: { deletedAt: null },
+            include: {
+                attachments: true,
+                histories: true,
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        return NextResponse.json(JSON.parse(JSON.stringify(requests)));
     } catch (error) {
         console.error('Proxy Error GET /service-requests:', error);
         return NextResponse.json({ error: `Internal Server Error: ${error instanceof Error ? error.message : String(error)}` }, { status: 500 });
@@ -21,38 +22,41 @@ export async function GET() {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const res = await fetch(BACKEND_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
+
+        const data = await prisma.serviceRequest.create({
+            data: {
+                requestorId: body.requestorId || body.requestor_id,
+                serviceType: body.serviceType || body.service_type,
+                vehicleId: body.vehicleId || body.vehicle_id,
+                priority: body.priority,
+                description: body.description,
+                date: body.date ? new Date(body.date) : new Date(),
+                status: body.status || 'Open',
+                maintenanceRequestId: body.maintenanceRequestId || body.maintenance_request_id,
+                assignedTo: body.assignedTo || body.assigned_to,
+                relatedDriverId: body.relatedDriverId || body.related_driver_id,
+            }
         });
 
-        if (!res.ok) {
-            const errorData = await res.text();
-            return NextResponse.json({ error: errorData }, { status: res.status });
-        }
-
-        const data = await res.json();
-
-        // Trigger Notification in background
+        // Trigger notification in background
         if (data && data.id) {
-            // Map data for template
             const templateData = {
                 requestId: data.id,
                 status: data.status || 'Open',
-                assignee: data.assignee || 'Unassigned',
+                assignee: data.assignedTo || 'Unassigned',
                 description: data.description || '',
-                vehicle: data.vehicle?.licensePlate || 'Unknown',
+                vehicle: data.vehicleId || 'Unknown',
             };
 
             // Fire and forget - DO NOT await to avoid blocking UI
-            processNotificationRules('SR_CREATED', templateData, data.assignee).catch(err => {
+            processNotificationRules('SR_CREATED', templateData, data.assignedTo ?? undefined).catch(err => {
                 console.error('Background Notification Failed:', err);
             });
         }
 
-        return NextResponse.json(data, { status: 201 });
+        return NextResponse.json(JSON.parse(JSON.stringify(data)), { status: 201 });
     } catch (error) {
+        console.error('Failed to create service request:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

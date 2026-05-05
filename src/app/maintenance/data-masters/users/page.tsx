@@ -120,7 +120,7 @@ export default function UsersPage() {
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">User Management</h1>
+                    <h1 className="text-2xl font-bold text-white">User Management</h1>
                     <p className="text-slate-500">Manage system users.</p>
                 </div>
                 <button
@@ -132,9 +132,9 @@ export default function UsersPage() {
             </div>
 
             {/* List View */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-slate-50">
+            <div className="bg-slate-900 rounded-xl border border-white/10 shadow-sm overflow-hidden">
+                <table className="min-w-full divide-y divide-white/10">
+                    <thead className="bg-slate-800/50">
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Username</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Email</th>
@@ -143,16 +143,16 @@ export default function UsersPage() {
                             <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-slate-200">
+                    <tbody className="bg-slate-900 divide-y divide-white/10">
                         {users.map((user) => (
-                            <tr key={user.id} className="hover:bg-slate-50">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{user.username}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{user.email}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{user.department}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{user.userType}</td>
+                            <tr key={user.id} className="hover:bg-white/5">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{user.username}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">{user.email}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">{user.department}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">{user.userType}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                    <button onClick={() => handleEdit(user)} className="text-blue-600 hover:text-blue-900 mr-4">Edit</button>
-                                    <button onClick={() => handleDelete(user.id)} className="text-red-600 hover:text-red-900">Delete</button>
+                                    <button onClick={() => handleEdit(user)} className="text-blue-600 hover:text-blue-300 mr-4">Edit</button>
+                                    <button onClick={() => handleDelete(user.id)} className="text-red-600 hover:text-red-300">Delete</button>
                                 </td>
                             </tr>
                         ))}
@@ -163,10 +163,10 @@ export default function UsersPage() {
             {/* Create Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-                        <div className="flex justify-between items-center p-6 border-b border-slate-100">
-                            <h2 className="text-xl font-bold text-slate-900">{editingId ? 'Edit User' : 'Create New User'}</h2>
-                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                    <div className="bg-slate-900 rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+                        <div className="flex justify-between items-center p-6 border-b border-white/5">
+                            <h2 className="text-xl font-bold text-white">{editingId ? 'Edit User' : 'Create New User'}</h2>
+                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-300">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                                 </svg>
@@ -175,25 +175,25 @@ export default function UsersPage() {
 
                         <form onSubmit={handleSubmit} className="p-6">
                             {/* Tabs */}
-                            <div className="flex border-b border-slate-200 mb-6">
+                            <div className="flex border-b border-white/10 mb-6">
                                 <button
                                     type="button"
                                     onClick={() => setActiveTab('basic')}
-                                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'basic' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'basic' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
                                 >
                                     Basic Information
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setActiveTab('localized')}
-                                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'localized' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'localized' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
                                 >
                                     Localized Content
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setActiveTab('details')}
-                                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'details' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'details' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
                                 >
                                     User Details
                                 </button>
@@ -204,27 +204,27 @@ export default function UsersPage() {
                                 {activeTab === 'basic' && (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Username</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" placeholder="Enter username" value={formData.username} onChange={e => setFormData({ ...formData, username: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Username</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" placeholder="Enter username" value={formData.username} onChange={e => setFormData({ ...formData, username: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                                            <input type="email" className="w-full rounded-lg border-slate-300 text-sm" placeholder="Enter email address" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Email</label>
+                                            <input type="email" className="w-full rounded-lg border-white/15 text-sm text-white" placeholder="Enter email address" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Mobile Number</label>
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Mobile Number</label>
                                             <div className="flex">
-                                                <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-slate-300 bg-slate-50 text-slate-500 text-sm">+971</span>
-                                                <input type="text" className="w-full rounded-r-lg border-slate-300 text-sm" placeholder="Phone number" value={formData.mobileNumber} onChange={e => setFormData({ ...formData, mobileNumber: e.target.value })} />
+                                                <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-white/15 bg-slate-800/50 text-slate-500 text-sm">+971</span>
+                                                <input type="text" className="w-full rounded-r-lg border-white/15 text-sm text-white" placeholder="Phone number" value={formData.mobileNumber} onChange={e => setFormData({ ...formData, mobileNumber: e.target.value })} />
                                             </div>
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Hierarchy</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" placeholder="Select hierarchy" value={formData.hierarchy} onChange={e => setFormData({ ...formData, hierarchy: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Hierarchy</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" placeholder="Select hierarchy" value={formData.hierarchy} onChange={e => setFormData({ ...formData, hierarchy: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">User Type</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" placeholder="Operator" value={formData.userType} onChange={e => setFormData({ ...formData, userType: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">User Type</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" placeholder="Operator" value={formData.userType} onChange={e => setFormData({ ...formData, userType: e.target.value })} />
                                         </div>
                                     </div>
                                 )}
@@ -232,16 +232,16 @@ export default function UsersPage() {
                                 {activeTab === 'localized' && (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">First Name</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" placeholder="Enter first name (English)" value={formData.firstName} onChange={e => setFormData({ ...formData, firstName: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">First Name</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" placeholder="Enter first name (English)" value={formData.firstName} onChange={e => setFormData({ ...formData, firstName: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Last Name</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" placeholder="Enter last name (English)" value={formData.lastName} onChange={e => setFormData({ ...formData, lastName: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Last Name</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" placeholder="Enter last name (English)" value={formData.lastName} onChange={e => setFormData({ ...formData, lastName: e.target.value })} />
                                         </div>
                                         <div className="md:col-span-2">
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 bg-slate-50 text-sm" placeholder="Auto-generated from first and last name" value={`${formData.firstName} ${formData.lastName}`} readOnly />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Full Name</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 bg-slate-800/50 text-sm text-white" placeholder="Auto-generated from first and last name" value={`${formData.firstName} ${formData.lastName}`} readOnly />
                                         </div>
                                     </div>
                                 )}
@@ -249,26 +249,26 @@ export default function UsersPage() {
                                 {activeTab === 'details' && (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Department</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" placeholder="Enter department" value={formData.department} onChange={e => setFormData({ ...formData, department: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Department</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" placeholder="Enter department" value={formData.department} onChange={e => setFormData({ ...formData, department: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Position</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" placeholder="Enter position" value={formData.position} onChange={e => setFormData({ ...formData, position: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Position</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" placeholder="Enter position" value={formData.position} onChange={e => setFormData({ ...formData, position: e.target.value })} />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Employee ID</label>
-                                            <input type="text" className="w-full rounded-lg border-slate-300 text-sm" placeholder="Enter employee ID" value={formData.employeeId} onChange={e => setFormData({ ...formData, employeeId: e.target.value })} />
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Employee ID</label>
+                                            <input type="text" className="w-full rounded-lg border-white/15 text-sm text-white" placeholder="Enter employee ID" value={formData.employeeId} onChange={e => setFormData({ ...formData, employeeId: e.target.value })} />
                                         </div>
                                     </div>
                                 )}
                             </div>
 
-                            <div className="mt-8 flex justify-end gap-3 pt-6 border-t border-slate-100">
+                            <div className="mt-8 flex justify-end gap-3 pt-6 border-t border-white/5">
                                 <button
                                     type="button"
                                     onClick={() => setIsModalOpen(false)}
-                                    className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 rounded-lg transition-colors"
+                                    className="px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 rounded-lg transition-colors"
                                 >
                                     Cancel
                                 </button>

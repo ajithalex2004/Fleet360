@@ -383,21 +383,21 @@ export default function VendorQuotePage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-slate-50">
+            <div className="min-h-screen flex items-center justify-center bg-slate-800/50">
                 Loading...
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-slate-50">
+        <div className="min-h-screen bg-slate-800/50">
             {/* Top Bar */}
-            <header className="flex items-center justify-between px-4 py-3 bg-white shadow-sm md:px-6 sticky top-0 z-10">
+            <header className="flex items-center justify-between px-4 py-3 bg-slate-900 shadow-sm md:px-6 sticky top-0 z-10">
                 <div className="flex items-center gap-2">
                     <div className="h-8 w-8 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs font-bold">
                         G
                     </div>
-                    <div className="font-semibold text-slate-800 text-sm md:text-base">Garage Portal</div>
+                    <div className="font-semibold text-slate-200 text-sm md:text-base">Garage Portal</div>
                 </div>
                 <div className="text-xs text-slate-600 md:text-sm">
                     Logged in as <span className="font-medium">Autopro Service Centre</span> (v2.2 - HARDENED)
@@ -410,7 +410,7 @@ export default function VendorQuotePage() {
                     // List View - Quotations
                     <div className="space-y-4">
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <h2 className="text-2xl font-bold text-slate-800">Quotations</h2>
+                            <h2 className="text-2xl font-bold text-slate-200">Quotations</h2>
 
                             {/* Filters */}
                             <div className="flex flex-col sm:flex-row gap-2 text-sm">
@@ -419,18 +419,18 @@ export default function VendorQuotePage() {
                                     placeholder="Search WO or Description..."
                                     value={searchFilter}
                                     onChange={(e) => setSearchFilter(e.target.value)}
-                                    className="px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 w-full sm:w-48"
+                                    className="px-3 py-2 rounded-lg border border-white/10 focus:outline-none focus:ring-2 focus:ring-slate-900 w-full sm:w-48 text-white"
                                 />
                                 <input
                                     type="date"
                                     value={dateFilter}
                                     onChange={(e) => setDateFilter(e.target.value)}
-                                    className="px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                                    className="px-3 py-2 rounded-lg border border-white/10 focus:outline-none focus:ring-2 focus:ring-slate-900 text-white"
                                 />
                                 <select
                                     value={statusFilter}
                                     onChange={(e) => setStatusFilter(e.target.value as 'All' | 'Pending for Submission' | 'Quote Submitted')}
-                                    className="px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white"
+                                    className="px-3 py-2 rounded-lg border border-white/10 focus:outline-none focus:ring-2 focus:ring-slate-900 bg-slate-900 text-white"
                                 >
                                     <option value="All">All Status</option>
                                     <option value="Pending for Submission">Pending Submission</option>
@@ -440,7 +440,7 @@ export default function VendorQuotePage() {
                         </div>
 
                         {filteredRequests.length === 0 ? (
-                            <div className="text-center py-12 bg-white rounded-2xl shadow-sm">
+                            <div className="text-center py-12 bg-slate-900 rounded-2xl shadow-sm">
                                 <p className="text-slate-500">No requests found matching your filters.</p>
                             </div>
                         ) : (
@@ -457,10 +457,10 @@ export default function VendorQuotePage() {
                                                 // Reset revision mode when opening a request
                                                 setIsRevisionMode(false);
                                             }}
-                                            className="bg-white rounded-xl shadow-sm p-5 cursor-pointer hover:shadow-md transition-shadow border border-transparent hover:border-blue-500/30 group"
+                                            className="bg-slate-900 rounded-xl shadow-sm p-5 cursor-pointer hover:shadow-md transition-shadow border border-transparent hover:border-blue-500/30 group"
                                         >
                                             <div className="flex justify-between items-start mb-3">
-                                                <span className="font-mono text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                                                <span className="font-mono text-xs font-medium text-slate-500 bg-slate-700/40 px-2 py-1 rounded">
                                                     WO-{new Date().getFullYear()}-{req.id.toUpperCase()}
                                                 </span>
                                                 {isSubmitted ? (
@@ -480,7 +480,7 @@ export default function VendorQuotePage() {
                                                     </span>
                                                 )}
                                             </div>
-                                            <h3 className="font-semibold text-slate-800 mb-1 group-hover:text-blue-600 transition-colors line-clamp-1">
+                                            <h3 className="font-semibold text-slate-200 mb-1 group-hover:text-blue-600 transition-colors line-clamp-1">
                                                 {req.description}
                                             </h3>
                                             <div className="text-xs text-slate-500 mb-4 space-y-1">
@@ -491,7 +491,7 @@ export default function VendorQuotePage() {
                                                     </div>
                                                 )}
                                             </div>
-                                            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                                            <div className="flex items-center justify-between pt-3 border-t border-white/5">
                                                 <span className="text-xs font-medium text-slate-600">View Details</span>
                                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-slate-400 group-hover:text-blue-500">
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
@@ -509,7 +509,7 @@ export default function VendorQuotePage() {
                         <div className="md:col-span-2 mb-2">
                             <button
                                 onClick={() => setSelectedRequest(null)}
-                                className="flex items-center text-sm text-slate-500 hover:text-slate-800 transition-colors"
+                                className="flex items-center text-sm text-slate-500 hover:text-slate-200 transition-colors"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 mr-1">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
@@ -519,9 +519,9 @@ export default function VendorQuotePage() {
                         </div>
 
                         {/* Left: WO Summary */}
-                        <section className="bg-white rounded-2xl shadow-sm p-4 md:p-5 space-y-3 h-fit">
+                        <section className="bg-slate-900 rounded-2xl shadow-sm p-4 md:p-5 space-y-3 h-fit">
                             <div className="flex items-center justify-between">
-                                <h2 className="text-sm font-semibold tracking-wide text-slate-700 uppercase">
+                                <h2 className="text-sm font-semibold tracking-wide text-slate-300 uppercase">
                                     Work Order Summary
                                 </h2>
                                 <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">
@@ -529,21 +529,21 @@ export default function VendorQuotePage() {
                                 </span>
                             </div>
                             <div className="space-y-2 text-sm text-slate-600">
-                                <div><span className="font-medium text-slate-900">WO Number:</span> <span className="text-slate-700">{selectedRequest.workOrderNo || `WO-${new Date().getMonth() + 1}-${selectedRequest.id}`}</span></div>
+                                <div><span className="font-medium text-white">WO Number:</span> <span className="text-slate-300">{selectedRequest.workOrderNo || `WO-${new Date().getMonth() + 1}-${selectedRequest.id}`}</span></div>
                                 {selectedVehicle && (
                                     <>
-                                        <div><span className="font-medium text-slate-900">Vehicle ID:</span> <span className="text-slate-700">{selectedVehicle.id}</span></div>
-                                        <div><span className="font-medium text-slate-900">Vehicle:</span> <span className="text-slate-700">{selectedVehicle.licensePlate} – {selectedVehicle.make} {selectedVehicle.model} {selectedVehicle.year}</span></div>
-                                        <div><span className="font-medium text-slate-900">Type:</span> <span className="text-slate-700">{selectedVehicle.type}</span></div>
-                                        <div><span className="font-medium text-slate-900">Odometer:</span> <span className="text-slate-700">{(selectedRequest.odometer || selectedVehicle.currentMileage).toLocaleString()} km</span></div>
+                                        <div><span className="font-medium text-white">Vehicle ID:</span> <span className="text-slate-300">{selectedVehicle.id}</span></div>
+                                        <div><span className="font-medium text-white">Vehicle:</span> <span className="text-slate-300">{selectedVehicle.licensePlate} – {selectedVehicle.make} {selectedVehicle.model} {selectedVehicle.year}</span></div>
+                                        <div><span className="font-medium text-white">Type:</span> <span className="text-slate-300">{selectedVehicle.type}</span></div>
+                                        <div><span className="font-medium text-white">Odometer:</span> <span className="text-slate-300">{(selectedRequest.odometer || selectedVehicle.currentMileage).toLocaleString()} km</span></div>
                                     </>
                                 )}
                                 {selectedRequest.maintenanceType && (
-                                    <div><span className="font-medium text-slate-900">Maintenance Type:</span> <span className="text-slate-700">{selectedRequest.maintenanceType}</span></div>
+                                    <div><span className="font-medium text-white">Maintenance Type:</span> <span className="text-slate-300">{selectedRequest.maintenanceType}</span></div>
                                 )}
                                 {selectedRequest.maintenanceJobs && selectedRequest.maintenanceJobs.length > 0 && (
                                     <div>
-                                        <span className="font-medium text-slate-900">Jobs Selected:</span>
+                                        <span className="font-medium text-white">Jobs Selected:</span>
                                         <ul className="list-disc list-inside text-xs text-slate-600 mt-1 ml-1">
                                             {selectedRequest.maintenanceJobs?.map((job, idx) => (
                                                 <li key={idx}>{job}</li>
@@ -551,24 +551,24 @@ export default function VendorQuotePage() {
                                         </ul>
                                     </div>
                                 )}
-                                <div><span className="font-medium text-slate-900">Reported Issue:</span></div>
-                                <p className="text-slate-700 text-xs bg-slate-50 rounded-lg p-2 border border-slate-100">
+                                <div><span className="font-medium text-white">Reported Issue:</span></div>
+                                <p className="text-slate-300 text-xs bg-slate-800/50 rounded-lg p-2 border border-white/5">
                                     {selectedRequest.description}
                                 </p>
                                 <div className="grid grid-cols-2 gap-2 text-xs">
                                     <div>
-                                        <span className="font-medium text-slate-900">Priority:</span> <span className="text-slate-700">{selectedRequest.priority || 'Normal'}</span>
+                                        <span className="font-medium text-white">Priority:</span> <span className="text-slate-300">{selectedRequest.priority || 'Normal'}</span>
                                     </div>
                                     <div>
-                                        <span className="font-medium text-slate-900">Required By:</span> <span className="text-slate-700">{selectedRequest.expectedEndDate ? new Date(selectedRequest.expectedEndDate).toLocaleDateString() : 'N/A'}</span>
+                                        <span className="font-medium text-white">Required By:</span> <span className="text-slate-300">{selectedRequest.expectedEndDate ? new Date(selectedRequest.expectedEndDate).toLocaleDateString() : 'N/A'}</span>
                                     </div>
                                     <div className="col-span-2">
-                                        <span className="font-medium text-slate-900">Location:</span> <span className="text-slate-700">{selectedVehicle?.location || 'Abu Dhabi – Musaffah Yard'}</span>
+                                        <span className="font-medium text-white">Location:</span> <span className="text-slate-300">{selectedVehicle?.location || 'Abu Dhabi – Musaffah Yard'}</span>
                                     </div>
                                 </div>
                             </div>
-                            <div className="pt-2 border-t border-slate-100">
-                                <div className="text-xs font-medium text-slate-700 mb-1">
+                            <div className="pt-2 border-t border-white/5">
+                                <div className="text-xs font-medium text-slate-300 mb-1">
                                     Attachments
                                 </div>
                                 {selectedRequest.attachments && selectedRequest.attachments.length > 0 ? (
@@ -579,7 +579,7 @@ export default function VendorQuotePage() {
                                                 href={att.url}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="h-16 w-20 rounded-lg bg-slate-100 border border-slate-200 text-[10px] flex flex-col items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors p-1"
+                                                className="h-16 w-20 rounded-lg bg-slate-700/40 border border-white/10 text-[10px] flex flex-col items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors p-1"
                                             >
                                                 <span className="truncate w-full text-center">{att.fileName}</span>
                                                 <span className="text-[9px] text-slate-400 uppercase mt-1">{att.type}</span>
@@ -593,8 +593,8 @@ export default function VendorQuotePage() {
                         </section>
 
                         {/* Right: Quote Form */}
-                        <section className="bg-white rounded-2xl shadow-sm p-4 md:p-5">
-                            <h2 className="text-sm font-semibold tracking-wide text-slate-700 uppercase flex items-center gap-2">
+                        <section className="bg-slate-900 rounded-2xl shadow-sm p-4 md:p-5">
+                            <h2 className="text-sm font-semibold tracking-wide text-slate-300 uppercase flex items-center gap-2">
                                 {submitted ? (
                                     isRevisionMode ? (
                                         <>
@@ -617,14 +617,14 @@ export default function VendorQuotePage() {
                             </h2>
                             {submitted && (
                                 <div className="flex gap-2">
-                                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700 ring-1 ring-inset ring-slate-700/10">
+                                    <span className="inline-flex items-center rounded-full bg-slate-700/40 px-2.5 py-0.5 text-xs font-medium text-slate-300 ring-1 ring-inset ring-slate-700/10">
                                         {selectedRequest.quotations?.find(q => q.garageId === currentGarageId)?.status || 'SUBMITTED'}
                                     </span>
                                     <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-700/10">
                                         {selectedRequest.quotations?.find(q => q.garageId === currentGarageId)?.revision ? `Rev.${String(selectedRequest.quotations?.find(q => q.garageId === currentGarageId)?.revision).padStart(2, '0')}` : 'Rev.00'}
                                     </span>
                                     {isRevisionMode && !isLocked && (
-                                        <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+                                        <span className="inline-flex items-center rounded-full bg-blue-500/10 px-2.5 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
                                             Revision Mode
                                         </span>
                                     )}
@@ -634,7 +634,7 @@ export default function VendorQuotePage() {
 
                             <form onSubmit={handleSubmit} className="space-y-6 text-sm">
                                 {submitted && !isLocked && isRevisionMode && (
-                                    <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 text-blue-700 text-xs flex items-start gap-2">
+                                    <div className="bg-blue-500/10 p-3 rounded-lg border border-blue-100 text-blue-700 text-xs flex items-start gap-2">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 mt-0.5 flex-shrink-0">
                                             <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM7.48 9.817a3 3 0 0 1 5.04 0 4.301 4.301 0 0 1-1.64 3.193.75.75 0 0 0-.53.74v.75a.75.75 0 0 1-1.5 0v-.75a2.25 2.25 0 0 1 1.581-2.219 1.5 1.5 0 1 0-2.122-1.396.75.75 0 0 1-1.5 0 4.25 4.25 0 0 1 .822-2.536.75.75 0 0 1 .349.818ZM9 15a1 1 0 1 1 2 0 1 1 0 0 1-2 0Z" clipRule="evenodd" />
                                         </svg>
@@ -645,12 +645,12 @@ export default function VendorQuotePage() {
                                     </div>
                                 )}
                                 <div>
-                                    <h3 className="text-sm font-bold text-slate-800 mb-3">Cost Breakdown</h3>
+                                    <h3 className="text-sm font-bold text-slate-200 mb-3">Cost Breakdown</h3>
 
                                     {/* Spare Parts & Materials */}
                                     <div className="mb-6">
                                         <div className="flex items-center justify-between mb-2">
-                                            <h4 className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                                            <h4 className="text-xs font-semibold text-slate-300 flex items-center gap-1">
                                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437 1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008Z" />
                                                 </svg>
@@ -676,14 +676,14 @@ export default function VendorQuotePage() {
 
                                         <div className="space-y-2">
                                             {parts?.map((item, index) => (
-                                                <div key={item.id} className="grid grid-cols-12 gap-2 items-center bg-slate-50 p-1.5 rounded border border-slate-100">
+                                                <div key={item.id} className="grid grid-cols-12 gap-2 items-center bg-slate-800/50 p-1.5 rounded border border-white/5">
                                                     <div className="col-span-1 text-xs text-slate-500 pl-1">{index + 1}</div>
                                                     <div className="col-span-5">
                                                         <input
                                                             type="text"
                                                             value={item.name}
                                                             onChange={e => updatePart(item.id, 'name', e.target.value)}
-                                                            className="w-full bg-transparent border-b border-slate-200 focus:border-blue-500 focus:outline-none text-xs py-1"
+                                                            className="w-full bg-transparent border-b border-white/10 focus:border-blue-500 focus:outline-none text-xs py-1 text-white"
                                                             placeholder="Item Name"
                                                             disabled={submitted && !isRevisionMode}
                                                         />
@@ -694,7 +694,7 @@ export default function VendorQuotePage() {
                                                             min="1"
                                                             value={item.quantity}
                                                             onChange={e => updatePart(item.id, 'quantity', e.target.value)}
-                                                            className="w-full bg-transparent border-b border-slate-200 focus:border-blue-500 focus:outline-none text-xs py-1"
+                                                            className="w-full bg-transparent border-b border-white/10 focus:border-blue-500 focus:outline-none text-xs py-1 text-white"
                                                             disabled={submitted && !isRevisionMode}
                                                         />
                                                     </div>
@@ -705,12 +705,12 @@ export default function VendorQuotePage() {
                                                             step="0.01"
                                                             value={item.unitPrice}
                                                             onChange={e => updatePart(item.id, 'unitPrice', e.target.value)}
-                                                            className="w-full bg-transparent border-b border-slate-200 focus:border-blue-500 focus:outline-none text-xs py-1"
+                                                            className="w-full bg-transparent border-b border-white/10 focus:border-blue-500 focus:outline-none text-xs py-1 text-white"
                                                             disabled={submitted && !isRevisionMode}
                                                         />
                                                     </div>
                                                     <div className="col-span-2 flex items-center justify-between pl-2">
-                                                        <span className="text-xs font-medium text-slate-700">{item.totalPrice.toFixed(2)}</span>
+                                                        <span className="text-xs font-medium text-slate-300">{item.totalPrice.toFixed(2)}</span>
                                                         {(!submitted || isRevisionMode) && (
                                                             <button type="button" onClick={() => removePart(item.id)} className="text-slate-400 hover:text-red-500 transition-colors">
                                                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3">
@@ -721,18 +721,18 @@ export default function VendorQuotePage() {
                                                     </div>
                                                 </div>
                                             ))}
-                                            {parts.length === 0 && <div className="text-center py-3 text-xs text-slate-400 italic bg-slate-50 rounded border border-dashed border-slate-200">No parts added. Click "Add Item" to start.</div>}
+                                            {parts.length === 0 && <div className="text-center py-3 text-xs text-slate-400 italic bg-slate-800/50 rounded border border-dashed border-white/10">No parts added. Click "Add Item" to start.</div>}
                                         </div>
-                                        <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-100">
-                                            <span className="text-xs font-semibold text-slate-700">Parts Sub Total</span>
-                                            <span className="text-xs font-bold text-slate-900">{totals.partsTotal.toFixed(2)}</span>
+                                        <div className="flex justify-between items-center mt-2 pt-2 border-t border-white/5">
+                                            <span className="text-xs font-semibold text-slate-300">Parts Sub Total</span>
+                                            <span className="text-xs font-bold text-white">{totals.partsTotal.toFixed(2)}</span>
                                         </div>
                                     </div>
 
                                     {/* Labor Charges */}
                                     <div className="mb-6">
                                         <div className="flex items-center justify-between mb-2">
-                                            <h4 className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                                            <h4 className="text-xs font-semibold text-slate-300 flex items-center gap-1">
                                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437 1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008Z" />
                                                 </svg>
@@ -758,14 +758,14 @@ export default function VendorQuotePage() {
 
                                         <div className="space-y-2">
                                             {labor?.map((item, index) => (
-                                                <div key={item.id} className="grid grid-cols-12 gap-2 items-center bg-slate-50 p-1.5 rounded border border-slate-100">
+                                                <div key={item.id} className="grid grid-cols-12 gap-2 items-center bg-slate-800/50 p-1.5 rounded border border-white/5">
                                                     <div className="col-span-1 text-xs text-slate-500 pl-1">{index + 1}</div>
                                                     <div className="col-span-5">
                                                         <input
                                                             type="text"
                                                             value={item.description}
                                                             onChange={e => updateLabor(item.id, 'description', e.target.value)}
-                                                            className="w-full bg-transparent border-b border-slate-200 focus:border-blue-500 focus:outline-none text-xs py-1"
+                                                            className="w-full bg-transparent border-b border-white/10 focus:border-blue-500 focus:outline-none text-xs py-1 text-white"
                                                             placeholder="Description"
                                                             disabled={submitted && !isRevisionMode}
                                                         />
@@ -777,7 +777,7 @@ export default function VendorQuotePage() {
                                                             step="0.5"
                                                             value={item.hours}
                                                             onChange={e => updateLabor(item.id, 'hours', e.target.value)}
-                                                            className="w-full bg-transparent border-b border-slate-200 focus:border-blue-500 focus:outline-none text-xs py-1"
+                                                            className="w-full bg-transparent border-b border-white/10 focus:border-blue-500 focus:outline-none text-xs py-1 text-white"
                                                             disabled={submitted && !isRevisionMode}
                                                         />
                                                     </div>
@@ -788,12 +788,12 @@ export default function VendorQuotePage() {
                                                             step="0.01"
                                                             value={item.ratePerHour}
                                                             onChange={e => updateLabor(item.id, 'ratePerHour', e.target.value)}
-                                                            className="w-full bg-transparent border-b border-slate-200 focus:border-blue-500 focus:outline-none text-xs py-1"
+                                                            className="w-full bg-transparent border-b border-white/10 focus:border-blue-500 focus:outline-none text-xs py-1 text-white"
                                                             disabled={submitted && !isRevisionMode}
                                                         />
                                                     </div>
                                                     <div className="col-span-2 flex items-center justify-between pl-2">
-                                                        <span className="text-xs font-medium text-slate-700">{item.totalPrice.toFixed(2)}</span>
+                                                        <span className="text-xs font-medium text-slate-300">{item.totalPrice.toFixed(2)}</span>
                                                         {(!submitted || isRevisionMode) && (
                                                             <button type="button" onClick={() => removeLabor(item.id)} className="text-slate-400 hover:text-red-500 transition-colors">
                                                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3">
@@ -804,25 +804,25 @@ export default function VendorQuotePage() {
                                                     </div>
                                                 </div>
                                             ))}
-                                            {labor.length === 0 && <div className="text-center py-3 text-xs text-slate-400 italic bg-slate-50 rounded border border-dashed border-slate-200">No labor charges added.</div>}
+                                            {labor.length === 0 && <div className="text-center py-3 text-xs text-slate-400 italic bg-slate-800/50 rounded border border-dashed border-white/10">No labor charges added.</div>}
                                         </div>
-                                        <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-100">
-                                            <span className="text-xs font-semibold text-slate-700">Labor Sub Total</span>
-                                            <span className="text-xs font-bold text-slate-900">{totals.laborTotal.toFixed(2)}</span>
+                                        <div className="flex justify-between items-center mt-2 pt-2 border-t border-white/5">
+                                            <span className="text-xs font-semibold text-slate-300">Labor Sub Total</span>
+                                            <span className="text-xs font-bold text-white">{totals.laborTotal.toFixed(2)}</span>
                                         </div>
                                     </div>
 
                                     {/* Summary of Charges */}
-                                    <div className="bg-slate-50 rounded-lg p-4 space-y-3 border border-slate-100">
-                                        <h4 className="text-xs font-bold text-slate-800 mb-2 border-b border-slate-200 pb-2">Summary of Charges</h4>
+                                    <div className="bg-slate-800/50 rounded-lg p-4 space-y-3 border border-white/5">
+                                        <h4 className="text-xs font-bold text-slate-200 mb-2 border-b border-white/10 pb-2">Summary of Charges</h4>
 
                                         <div className="flex justify-between text-xs">
                                             <span className="text-slate-600">Parts Total</span>
-                                            <span className="font-medium text-slate-900">{totals.partsTotal.toFixed(2)}</span>
+                                            <span className="font-medium text-white">{totals.partsTotal.toFixed(2)}</span>
                                         </div>
                                         <div className="flex justify-between text-xs">
                                             <span className="text-slate-600">Labor Total</span>
-                                            <span className="font-medium text-slate-900">{totals.laborTotal.toFixed(2)}</span>
+                                            <span className="font-medium text-white">{totals.laborTotal.toFixed(2)}</span>
                                         </div>
                                         <div className="flex justify-between text-xs items-center">
                                             <span className="text-slate-600 flex items-center gap-1">
@@ -830,7 +830,7 @@ export default function VendorQuotePage() {
                                                 <select
                                                     value={consumablesType}
                                                     onChange={e => setConsumablesType(e.target.value as any)}
-                                                    className="bg-transparent border-none text-[10px] text-slate-500 focus:ring-0 p-0"
+                                                    className="bg-transparent border-none text-[10px] text-white focus:ring-0 p-0"
                                                     disabled={submitted && !isRevisionMode}
                                                 >
                                                     <option value="Percentage">(%)</option>
@@ -841,25 +841,25 @@ export default function VendorQuotePage() {
                                                         type="number"
                                                         value={consumablesValue}
                                                         onChange={e => setConsumablesValue(Number(e.target.value))}
-                                                        className="w-8 bg-transparent border-b border-slate-300 text-center text-[10px] focus:outline-none"
+                                                        className="w-8 bg-transparent border-b border-white/15 text-center text-[10px] focus:outline-none text-white"
                                                         disabled={submitted && !isRevisionMode}
                                                     />
                                                 )}
                                             </span>
-                                            <span className="font-medium text-slate-900">{totals.consumables.toFixed(2)}</span>
+                                            <span className="font-medium text-white">{totals.consumables.toFixed(2)}</span>
                                         </div>
 
-                                        <div className="flex justify-between text-xs font-semibold pt-2 border-t border-slate-200">
-                                            <span className="text-slate-700">Subtotal</span>
-                                            <span className="text-slate-900">{totals.subTotal.toFixed(2)}</span>
+                                        <div className="flex justify-between text-xs font-semibold pt-2 border-t border-white/10">
+                                            <span className="text-slate-300">Subtotal</span>
+                                            <span className="text-white">{totals.subTotal.toFixed(2)}</span>
                                         </div>
 
                                         <div className="flex justify-between text-xs items-center">
                                             <span className="text-slate-600">VAT ({vatRate}%)</span>
-                                            <span className="font-medium text-slate-900">{totals.vat.toFixed(2)}</span>
+                                            <span className="font-medium text-white">{totals.vat.toFixed(2)}</span>
                                         </div>
 
-                                        <div className="flex justify-between text-sm font-bold pt-2 border-t border-slate-300 text-slate-900">
+                                        <div className="flex justify-between text-sm font-bold pt-2 border-t border-white/15 text-white">
                                             <span>Grand Total</span>
                                             <span>{totals.grandTotal.toFixed(2)} AED</span>
                                         </div>
@@ -869,7 +869,7 @@ export default function VendorQuotePage() {
                                 {/* Other Fields */}
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-xs font-medium text-slate-700 mb-1">
+                                        <label className="block text-xs font-medium text-slate-300 mb-1">
                                             Estimated Completion Date *
                                         </label>
                                         <input
@@ -877,11 +877,11 @@ export default function VendorQuotePage() {
                                             value={eta}
                                             onChange={(e) => setEta(e.target.value)}
                                             disabled={submitted && !isRevisionMode}
-                                            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+                                            className="w-full rounded-lg border border-white/10 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium text-slate-700 mb-1">
+                                        <label className="block text-xs font-medium text-slate-300 mb-1">
                                             Quotation Validity (Days) *
                                         </label>
                                         <input
@@ -890,14 +890,14 @@ export default function VendorQuotePage() {
                                             value={validityDays}
                                             onChange={(e) => setValidityDays(e.target.value)}
                                             disabled={submitted && !isRevisionMode}
-                                            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+                                            className="w-full rounded-lg border border-white/10 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
                                             placeholder="e.g. 30"
                                         />
                                     </div>
                                 </div>
 
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                                    <label className="block text-xs font-medium text-slate-300 mb-1">
                                         Quotation Attachment (PDF / Image) *
                                     </label>
                                     <input
@@ -922,7 +922,7 @@ export default function VendorQuotePage() {
                                 </div>
 
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                                    <label className="block text-xs font-medium text-slate-300 mb-1">
                                         Comments (Optional)
                                     </label>
                                     <textarea
@@ -930,7 +930,7 @@ export default function VendorQuotePage() {
                                         value={comments}
                                         onChange={(e) => setComments(e.target.value)}
                                         disabled={submitted && !isRevisionMode}
-                                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+                                        className="w-full rounded-lg border border-white/10 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
                                         placeholder="Add any clarifications if needed..."
                                     />
                                 </div>
@@ -945,7 +945,7 @@ export default function VendorQuotePage() {
                                         {!submitted && (
                                             <button
                                                 type="button"
-                                                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                                                className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-white/5"
                                             >
                                                 Save as Draft
                                             </button>
@@ -974,7 +974,7 @@ export default function VendorQuotePage() {
                                                     <button
                                                         type="button"
                                                         onClick={() => setIsRevisionMode(false)}
-                                                        className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                                                        className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-white/5"
                                                     >
                                                         Cancel Revision
                                                     </button>

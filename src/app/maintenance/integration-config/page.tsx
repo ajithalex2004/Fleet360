@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import PasswordInput from '@/components/ui/PasswordInput';
 
 export default function IntegrationsPage() {
     const [activeTab, setActiveTab] = useState<'Email' | 'SMS' | 'WhatsApp'>('Email');
@@ -128,12 +129,12 @@ export default function IntegrationsPage() {
     return (
         <div className="space-y-8">
             <div>
-                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Integrations</h1>
+                <h1 className="text-3xl font-bold text-white tracking-tight">Integrations</h1>
                 <p className="mt-1 text-slate-500">Configure external services for Email, SMS, and WhatsApp.</p>
             </div>
 
             {/* Tabs */}
-            <div className="border-b border-slate-200">
+            <div className="border-b border-white/10">
                 <nav className="-mb-px flex space-x-8" aria-label="Tabs">
                     {['Email', 'SMS', 'WhatsApp'].map((tab) => (
                         <button
@@ -143,7 +144,7 @@ export default function IntegrationsPage() {
                                 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors
                                 ${activeTab === tab
                                     ? 'border-blue-500 text-blue-600'
-                                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}
+                                    : 'border-transparent text-slate-500 hover:text-slate-300 hover:border-white/15'}
                             `}
                         >
                             {tab} Integration
@@ -152,55 +153,54 @@ export default function IntegrationsPage() {
                 </nav>
             </div>
 
-            <div className="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm max-w-4xl">
+            <div className="bg-slate-900 rounded-2xl p-8 border border-white/10 shadow-sm max-w-4xl">
 
                 {/* Email Configuration */}
                 {activeTab === 'Email' && (
                     <div className="space-y-6">
-                        <h2 className="text-xl font-bold text-slate-900">SMTP Configuration</h2>
+                        <h2 className="text-xl font-bold text-white">SMTP Configuration</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">SMTP Host</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">SMTP Host</label>
                                 <input
                                     type="text"
-                                    className="block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    className="block w-full rounded-xl border border-white/15 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white"
                                     placeholder="smtp.example.com"
                                     value={emailConfig.host}
                                     onChange={(e) => setEmailConfig({ ...emailConfig, host: e.target.value })}
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Port</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Port</label>
                                 <input
                                     type="text"
-                                    className="block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    className="block w-full rounded-xl border border-white/15 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white"
                                     placeholder="587"
                                     value={emailConfig.port}
                                     onChange={(e) => setEmailConfig({ ...emailConfig, port: e.target.value })}
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Username</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Username</label>
                                 <input
                                     type="text"
-                                    className="block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    className="block w-full rounded-xl border border-white/15 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white"
                                     value={emailConfig.username}
                                     onChange={(e) => setEmailConfig({ ...emailConfig, username: e.target.value })}
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
-                                <input
-                                    type="password"
-                                    className="block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Password</label>
+                                <PasswordInput
+                                    className="block w-full rounded-xl border border-white/15 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white"
                                     value={emailConfig.password}
                                     onChange={(e) => setEmailConfig({ ...emailConfig, password: e.target.value })}
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Encryption</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Encryption</label>
                                 <select
-                                    className="block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    className="block w-full rounded-xl border border-white/15 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white"
                                     value={emailConfig.encryption}
                                     onChange={(e) => setEmailConfig({ ...emailConfig, encryption: e.target.value })}
                                 >
@@ -210,22 +210,22 @@ export default function IntegrationsPage() {
                                 </select>
                             </div>
                         </div>
-                        <div className="border-t border-slate-100 pt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="border-t border-white/5 pt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">From Email</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">From Email</label>
                                 <input
                                     type="email"
-                                    className="block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    className="block w-full rounded-xl border border-white/15 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white"
                                     placeholder="notifications@example.com"
                                     value={emailConfig.fromEmail}
                                     onChange={(e) => setEmailConfig({ ...emailConfig, fromEmail: e.target.value })}
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">From Name</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">From Name</label>
                                 <input
                                     type="text"
-                                    className="block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    className="block w-full rounded-xl border border-white/15 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white"
                                     placeholder="System Notifications"
                                     value={emailConfig.fromName}
                                     onChange={(e) => setEmailConfig({ ...emailConfig, fromName: e.target.value })}
@@ -238,12 +238,12 @@ export default function IntegrationsPage() {
                 {/* SMS Configuration */}
                 {activeTab === 'SMS' && (
                     <div className="space-y-6">
-                        <h2 className="text-xl font-bold text-slate-900">SMS Gateway Configuration</h2>
+                        <h2 className="text-xl font-bold text-white">SMS Gateway Configuration</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Provider</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Provider</label>
                                 <select
-                                    className="block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    className="block w-full rounded-xl border border-white/15 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white"
                                     value={smsConfig.provider}
                                     onChange={(e) => setSmsConfig({ ...smsConfig, provider: e.target.value })}
                                 >
@@ -253,28 +253,27 @@ export default function IntegrationsPage() {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">API Key / SID</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">API Key / SID</label>
                                 <input
                                     type="text"
-                                    className="block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    className="block w-full rounded-xl border border-white/15 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white"
                                     value={smsConfig.apiKey}
                                     onChange={(e) => setSmsConfig({ ...smsConfig, apiKey: e.target.value })}
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">API Secret / Auth Token</label>
-                                <input
-                                    type="password"
-                                    className="block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                <label className="block text-sm font-medium text-slate-300 mb-2">API Secret / Auth Token</label>
+                                <PasswordInput
+                                    className="block w-full rounded-xl border border-white/15 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white"
                                     value={smsConfig.apiSecret}
                                     onChange={(e) => setSmsConfig({ ...smsConfig, apiSecret: e.target.value })}
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Sender ID</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Sender ID</label>
                                 <input
                                     type="text"
-                                    className="block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    className="block w-full rounded-xl border border-white/15 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white"
                                     placeholder="e.g., MYAPP"
                                     value={smsConfig.senderId}
                                     onChange={(e) => setSmsConfig({ ...smsConfig, senderId: e.target.value })}
@@ -287,12 +286,12 @@ export default function IntegrationsPage() {
                 {/* WhatsApp Configuration */}
                 {activeTab === 'WhatsApp' && (
                     <div className="space-y-6">
-                        <h2 className="text-xl font-bold text-slate-900">WhatsApp Configuration</h2>
+                        <h2 className="text-xl font-bold text-white">WhatsApp Configuration</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Provider</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Provider</label>
                                 <select
-                                    className="block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    className="block w-full rounded-xl border border-white/15 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white"
                                     value={whatsappConfig.provider}
                                     onChange={(e) => setWhatsappConfig({ ...whatsappConfig, provider: e.target.value })}
                                 >
@@ -301,28 +300,27 @@ export default function IntegrationsPage() {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Account SID / App ID</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Account SID / App ID</label>
                                 <input
                                     type="text"
-                                    className="block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    className="block w-full rounded-xl border border-white/15 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white"
                                     value={whatsappConfig.accountSid}
                                     onChange={(e) => setWhatsappConfig({ ...whatsappConfig, accountSid: e.target.value })}
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Auth Token / Access Token</label>
-                                <input
-                                    type="password"
-                                    className="block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Auth Token / Access Token</label>
+                                <PasswordInput
+                                    className="block w-full rounded-xl border border-white/15 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white"
                                     value={whatsappConfig.authToken}
                                     onChange={(e) => setWhatsappConfig({ ...whatsappConfig, authToken: e.target.value })}
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">From Number</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">From Number</label>
                                 <input
                                     type="text"
-                                    className="block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    className="block w-full rounded-xl border border-white/15 px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-white"
                                     placeholder="e.g., +14155238886"
                                     value={whatsappConfig.fromNumber}
                                     onChange={(e) => setWhatsappConfig({ ...whatsappConfig, fromNumber: e.target.value })}
@@ -332,7 +330,7 @@ export default function IntegrationsPage() {
                     </div>
                 )}
 
-                <div className="mt-8 pt-6 border-t border-slate-200 flex justify-end">
+                <div className="mt-8 pt-6 border-t border-white/10 flex justify-end">
                     <button
                         onClick={handleSave}
                         className="flex items-center gap-2 rounded-xl bg-blue-600 px-8 py-3 text-sm font-medium text-white shadow-lg shadow-blue-500/30 transition-all hover:bg-blue-700 hover:scale-105"

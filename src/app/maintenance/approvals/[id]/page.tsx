@@ -414,22 +414,22 @@ export default function ApprovalDetailsPage() {
             {/* Header with Toggle */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <Link href="/maintenance/approvals" className="text-slate-400 hover:text-slate-600">
+                    <Link href="/maintenance/approvals" className="text-slate-400 hover:text-slate-300">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
                         </svg>
                     </Link>
-                    <h1 className="text-2xl font-bold text-slate-900">Estimate Approval</h1>
+                    <h1 className="text-2xl font-bold text-white">Estimate Approval</h1>
                 </div>
 
                 <div className="flex items-center gap-4">
                     {/* View Mode Toggle - ALWAYS VISIBLE ON THIS PAGE */}
-                    <div className="bg-slate-100 p-1 rounded-lg flex items-center">
+                    <div className="bg-slate-700/40 p-1 rounded-lg flex items-center">
                         <button
                             onClick={() => setApprovalViewMode('MAINTENANCE')}
                             className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${approvalViewMode === 'MAINTENANCE'
-                                ? 'bg-white text-slate-900 shadow-sm'
-                                : 'text-slate-500 hover:text-slate-700'
+                                ? 'bg-slate-900 text-white shadow-sm'
+                                : 'text-slate-500 hover:text-slate-300'
                                 }`}
                         >
                             Maintenance Team
@@ -437,8 +437,8 @@ export default function ApprovalDetailsPage() {
                         <button
                             onClick={() => setApprovalViewMode('APPROVER')}
                             className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${approvalViewMode === 'APPROVER'
-                                ? 'bg-white text-blue-600 shadow-sm'
-                                : 'text-slate-500 hover:text-slate-700'
+                                ? 'bg-slate-900 text-blue-600 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-300'
                                 }`}
                         >
                             Approving Authority
@@ -453,36 +453,36 @@ export default function ApprovalDetailsPage() {
                 /* APPROVER VIEW */
                 <div className="space-y-8">
                     {/* Summary Card */}
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                    <div className="bg-slate-900 rounded-xl border border-white/10 shadow-sm p-6">
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                             <div>
                                 <label className="block text-xs font-medium text-slate-500 uppercase">Vehicle</label>
-                                <p className="text-lg font-semibold text-slate-900">{vehicle?.licensePlate}</p>
+                                <p className="text-lg font-semibold text-white">{vehicle?.licensePlate}</p>
                                 <p className="text-sm text-slate-500">{vehicle?.make} {vehicle?.model} ({vehicle?.year})</p>
                             </div>
                             <div>
                                 <label className="block text-xs font-medium text-slate-500 uppercase">Work Order</label>
-                                <p className="text-lg font-semibold text-slate-900">#{request.id.toUpperCase()}</p>
+                                <p className="text-lg font-semibold text-white">#{request.id.toUpperCase()}</p>
                             </div>
                             <div>
                                 <label className="block text-xs font-medium text-slate-500 uppercase">Reported Issue</label>
-                                <p className="text-lg font-semibold text-slate-900 truncate" title={request.description}>{request.description}</p>
+                                <p className="text-lg font-semibold text-white truncate" title={request.description}>{request.description}</p>
                             </div>
                             <div>
                                 <label className="block text-xs font-medium text-slate-500 uppercase">Odometer</label>
-                                <p className="text-lg font-semibold text-slate-900">{request.odometer?.toLocaleString()} km</p>
+                                <p className="text-lg font-semibold text-white">{request.odometer?.toLocaleString()} km</p>
                             </div>
                         </div>
                     </div>
 
                     {/* Comparison Grid */}
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
-                            <h3 className="font-semibold text-slate-900">Quotation Comparison</h3>
+                    <div className="bg-slate-900 rounded-xl border border-white/10 shadow-sm overflow-hidden">
+                        <div className="px-6 py-4 border-b border-white/5 bg-slate-800/50">
+                            <h3 className="font-semibold text-white">Quotation Comparison</h3>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-sm">
-                                <thead className="bg-slate-50 text-slate-500">
+                                <thead className="bg-slate-800/50 text-slate-500">
                                     <tr>
                                         <th className="px-6 py-3 font-medium">Select</th>
                                         <th className="px-6 py-3 font-medium">Garage</th>
@@ -492,7 +492,7 @@ export default function ApprovalDetailsPage() {
                                         <th className="px-6 py-3 font-medium">Attachment</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-100">
+                                <tbody className="divide-y divide-white/5">
                                     {candidateGarageIds.map(garageId => {
                                         const garage = garages.find(g => g.id === garageId);
                                         const quote = quotations[garageId];
@@ -501,25 +501,25 @@ export default function ApprovalDetailsPage() {
                                         const isLowest = amount > 0 && amount === lowestAmount;
 
                                         return (
-                                            <tr key={garageId} className={`hover:bg-slate-50 ${selectedGarageForApproval === garageId ? 'bg-blue-50' : ''}`}>
+                                            <tr key={garageId} className={`hover:bg-white/5 ${selectedGarageForApproval === garageId ? 'bg-blue-500/10' : ''}`}>
                                                 <td className="px-6 py-4">
                                                     <input
                                                         type="radio"
                                                         name="garageSelection"
-                                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300"
+                                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-white/15"
                                                         checked={selectedGarageForApproval === garageId}
                                                         onChange={() => setSelectedGarageForApproval(garageId)}
                                                         disabled={!amount}
                                                     />
                                                 </td>
-                                                <td className="px-6 py-4 font-medium text-slate-900">{garage?.name}</td>
-                                                <td className="px-6 py-4 text-slate-700 font-semibold">
+                                                <td className="px-6 py-4 font-medium text-white">{garage?.name}</td>
+                                                <td className="px-6 py-4 text-slate-300 font-semibold">
                                                     {amount > 0 ? amount.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '-'}
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     {amount > 0 ? (
                                                         isLowest ? (
-                                                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                                                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-green-700">
                                                                 Best Price
                                                             </span>
                                                         ) : (
@@ -538,7 +538,7 @@ export default function ApprovalDetailsPage() {
                                                             href={quote.attachmentUrl}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                                                            className="text-blue-600 hover:text-blue-300 flex items-center gap-1"
                                                         >
                                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
@@ -546,7 +546,7 @@ export default function ApprovalDetailsPage() {
                                                             View
                                                         </a>
                                                     ) : (
-                                                        <span className="text-slate-400 text-xs">No file</span>
+                                                        <span className="text-slate-200 text-xs">No file</span>
                                                     )}
                                                 </td>
                                             </tr>
@@ -558,10 +558,10 @@ export default function ApprovalDetailsPage() {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center justify-end gap-4 pt-4 border-t border-slate-200">
+                    <div className="flex items-center justify-end gap-4 pt-4 border-t border-white/10">
                         <button
                             onClick={() => setShowRejectModal(true)}
-                            className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors"
+                            className="px-4 py-2 text-red-600 hover:bg-red-500/10 rounded-lg font-medium transition-colors"
                         >
                             Reject / Return for Re-Estimation
                         </button>
@@ -583,9 +583,9 @@ export default function ApprovalDetailsPage() {
                     {/* Main Info */}
                     <div className="lg:col-span-2 space-y-8">
                         {/* Request Details */}
-                        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                        <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-lg font-bold text-slate-900">Request Details</h3>
+                                <h3 className="text-lg font-bold text-white">Request Details</h3>
                                 {/* Edit buttons removed for this view in Approval context to keep it simple, or can be added back if needed */}
                             </div>
 
@@ -593,13 +593,13 @@ export default function ApprovalDetailsPage() {
                                 <div>
                                     <label className="block text-xs font-medium text-slate-500 uppercase">Vehicle</label>
                                     <div className="mt-1 flex items-center gap-3">
-                                        <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
+                                        <div className="h-10 w-10 rounded-full bg-slate-700/40 flex items-center justify-center text-slate-500">
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 0 0-10.026 0 1.106 1.106 0 0 0-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
                                             </svg>
                                         </div>
                                         <div>
-                                            <p className="text-sm font-medium text-slate-900">{vehicle?.make} {vehicle?.model}</p>
+                                            <p className="text-sm font-medium text-white">{vehicle?.make} {vehicle?.model}</p>
                                             <p className="text-xs text-slate-500">{vehicle?.licensePlate} • {vehicle?.year}</p>
                                         </div>
                                     </div>
@@ -607,32 +607,32 @@ export default function ApprovalDetailsPage() {
                                 <div>
                                     <label className="block text-xs font-medium text-slate-500 uppercase">Driver</label>
                                     <div className="mt-1 flex items-center gap-3">
-                                        <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
+                                        <div className="h-10 w-10 rounded-full bg-slate-700/40 flex items-center justify-center text-slate-500">
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
                                             </svg>
                                         </div>
                                         <div>
-                                            <p className="text-sm font-medium text-slate-900">{request.driverId}</p>
+                                            <p className="text-sm font-medium text-white">{request.driverId}</p>
                                             <p className="text-xs text-slate-500">ID: {request.driverId}</p>
                                         </div>
                                     </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-medium text-slate-500 uppercase">Odometer</label>
-                                    <p className="mt-1 text-sm font-medium text-slate-900">{request.odometer?.toLocaleString()} km</p>
+                                    <p className="mt-1 text-sm font-medium text-white">{request.odometer?.toLocaleString()} km</p>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-medium text-slate-500 uppercase">Priority</label>
-                                    <p className="mt-1 text-sm font-medium text-slate-900 capitalize">{request.priority}</p>
+                                    <p className="mt-1 text-sm font-medium text-white capitalize">{request.priority}</p>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-medium text-slate-500 uppercase">Maintenance Type</label>
-                                    <p className="mt-1 text-sm font-medium text-slate-900 capitalize">{request.maintenanceType}</p>
+                                    <p className="mt-1 text-sm font-medium text-white capitalize">{request.maintenanceType}</p>
                                 </div>
                                 <div className="col-span-2">
                                     <label className="block text-xs font-medium text-slate-500 uppercase">Description</label>
-                                    <p className="mt-1 text-sm text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                    <p className="mt-1 text-sm text-slate-300 bg-slate-800/50 p-3 rounded-lg border border-white/5">
                                         {request.description}
                                     </p>
                                 </div>
@@ -644,7 +644,7 @@ export default function ApprovalDetailsPage() {
                                     {request.maintenanceJobs && request.maintenanceJobs.length > 0 ? (
                                         <div className="mt-2 flex flex-wrap gap-2">
                                             {request.maintenanceJobs.map(job => (
-                                                <span key={job} className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+                                                <span key={job} className="inline-flex items-center rounded-md bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
                                                     {job}
                                                 </span>
                                             ))}
@@ -656,7 +656,7 @@ export default function ApprovalDetailsPage() {
                                 {/* Expected Completion Date */}
                                 <div className="col-span-2">
                                     <label className="block text-xs font-medium text-slate-500 uppercase">Expected Completion Date</label>
-                                    <p className="mt-1 text-sm font-medium text-slate-900">
+                                    <p className="mt-1 text-sm font-medium text-white">
                                         {request.expectedEndDate
                                             ? new Date(request.expectedEndDate).toLocaleDateString('en-GB', {
                                                 day: '2-digit',
@@ -673,28 +673,28 @@ export default function ApprovalDetailsPage() {
                     {/* Sidebar Info */}
                     <div className="space-y-8">
                         {/* Timeline */}
-                        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                            <h3 className="text-sm font-bold text-slate-900 uppercase mb-4">Timeline</h3>
+                        <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                            <h3 className="text-sm font-bold text-white uppercase mb-4">Timeline</h3>
                             <div className="space-y-4">
                                 <div>
                                     <label className="block text-xs text-slate-500">Requested Date</label>
-                                    <p className="text-sm font-medium text-slate-900">{new Date(request.requestDate).toLocaleDateString()}</p>
+                                    <p className="text-sm font-medium text-white">{new Date(request.requestDate).toLocaleDateString()}</p>
                                 </div>
                                 <div>
                                     <label className="block text-xs text-slate-500">Expected Completion</label>
-                                    <p className="text-sm font-medium text-slate-900">{request.expectedEndDate ? new Date(request.expectedEndDate).toLocaleDateString() : 'Not set'}</p>
+                                    <p className="text-sm font-medium text-white">{request.expectedEndDate ? new Date(request.expectedEndDate).toLocaleDateString() : 'Not set'}</p>
                                 </div>
                             </div>
                         </div>
                         {/* Attachments */}
-                        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                        <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-sm font-bold text-slate-900 uppercase">Attachments</h3>
+                                <h3 className="text-sm font-bold text-white uppercase">Attachments</h3>
                             </div>
                             {request.attachments && request.attachments.length > 0 ? (
                                 <ul className="space-y-2">
                                     {request.attachments.map(att => (
-                                        <li key={att.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-50 border border-slate-100">
+                                        <li key={att.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-800/50 border border-white/5">
                                             <div className="flex items-center gap-2 flex-1 min-w-0">
                                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-slate-400 flex-shrink-0">
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
@@ -720,15 +720,15 @@ export default function ApprovalDetailsPage() {
             {/* Reject Modal */}
             {showRejectModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
-                        <h3 className="text-lg font-bold text-slate-900">Reject Estimate</h3>
+                    <div className="bg-slate-900 rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+                        <h3 className="text-lg font-bold text-white">Reject Estimate</h3>
                         <p className="text-sm text-slate-600">
                             Are you sure you want to reject all estimates? This will return the request to the "Under Estimation" stage.
                         </p>
                         <div>
                             <label className="block text-xs font-medium text-slate-500 uppercase mb-1">Reason (Optional)</label>
                             <textarea
-                                className="w-full rounded-lg border border-slate-300 p-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
+                                className="w-full rounded-lg border border-white/15 p-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-white"
                                 rows={3}
                                 placeholder="Enter reason for rejection..."
                                 value={rejectionReason}
@@ -738,7 +738,7 @@ export default function ApprovalDetailsPage() {
                         <div className="flex justify-end gap-3 pt-2">
                             <button
                                 onClick={() => setShowRejectModal(false)}
-                                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
+                                className="px-4 py-2 text-slate-600 hover:bg-white/10 rounded-lg font-medium"
                             >
                                 Cancel
                             </button>

@@ -61,10 +61,10 @@ export default function GaragePerformancePage() {
     };
 
     const getScoreBg = (score: number) => {
-        if (score >= 90) return 'bg-green-100 border-green-300';
-        if (score >= 75) return 'bg-yellow-100 border-yellow-300';
-        if (score >= 60) return 'bg-orange-100 border-orange-300';
-        return 'bg-red-100 border-red-300';
+        if (score >= 90) return 'bg-emerald-500/20 border-green-300';
+        if (score >= 75) return 'bg-amber-500/20 border-yellow-300';
+        if (score >= 60) return 'bg-orange-500/20 border-orange-300';
+        return 'bg-red-500/20 border-red-300';
     };
 
     // Calculate rankings
@@ -77,27 +77,27 @@ export default function GaragePerformancePage() {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-bold text-slate-900">Garage Performance Metrics</h1>
+                <h1 className="text-2xl font-bold text-white">Garage Performance Metrics</h1>
                 <p className="mt-1 text-slate-500">Compare and analyze garage performance across key metrics</p>
             </div>
 
             {/* Rankings */}
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h3 className="text-lg font-bold text-slate-900 mb-4">Overall Rankings</h3>
+            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-white mb-4">Overall Rankings</h3>
                 <div className="space-y-3">
                     {rankedGarages.map((garage, idx) => {
                         const overallScore = Math.round((garage.qualityScore + garage.onTimeDeliveryRate + (garage.customerSatisfaction * 20)) / 3);
                         return (
-                            <div key={garage.garageId} className="flex items-center gap-4 p-4 rounded-lg border border-slate-200 bg-slate-50">
-                                <div className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg ${idx === 0 ? 'bg-yellow-100 text-yellow-700' :
-                                        idx === 1 ? 'bg-slate-200 text-slate-700' :
-                                            idx === 2 ? 'bg-orange-100 text-orange-700' :
-                                                'bg-slate-100 text-slate-600'
+                            <div key={garage.garageId} className="flex items-center gap-4 p-4 rounded-lg border border-white/10 bg-slate-800/50">
+                                <div className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg ${idx === 0 ? 'bg-amber-500/20 text-yellow-700' :
+                                        idx === 1 ? 'bg-slate-200 text-slate-300' :
+                                            idx === 2 ? 'bg-orange-500/20 text-orange-700' :
+                                                'bg-slate-700/40 text-slate-600'
                                     }`}>
                                     #{idx + 1}
                                 </div>
                                 <div className="flex-1">
-                                    <h4 className="text-base font-bold text-slate-900">{garage.garageName}</h4>
+                                    <h4 className="text-base font-bold text-white">{garage.garageName}</h4>
                                     <p className="text-sm text-slate-500">{garage.completedJobs} jobs completed</p>
                                 </div>
                                 <div className="text-right">
@@ -116,10 +116,10 @@ export default function GaragePerformancePage() {
                     const overallScore = Math.round((garage.qualityScore + garage.onTimeDeliveryRate + (garage.customerSatisfaction * 20)) / 3);
 
                     return (
-                        <div key={garage.garageId} className="rounded-xl border border-slate-200 bg-white shadow-sm">
-                            <div className="p-6 border-b border-slate-200 flex items-center justify-between">
+                        <div key={garage.garageId} className="rounded-xl border border-white/10 bg-slate-900 shadow-sm">
+                            <div className="p-6 border-b border-white/10 flex items-center justify-between">
                                 <div>
-                                    <h3 className="text-lg font-bold text-slate-900">{garage.garageName}</h3>
+                                    <h3 className="text-lg font-bold text-white">{garage.garageName}</h3>
                                     <p className="text-sm text-slate-500">{garage.period}</p>
                                 </div>
                                 <div className={`rounded-full px-4 py-2 border ${getScoreBg(overallScore)}`}>
@@ -131,24 +131,24 @@ export default function GaragePerformancePage() {
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6">
                                     <div>
                                         <p className="text-sm text-slate-500">Total Jobs</p>
-                                        <p className="text-2xl font-bold text-slate-900">{garage.totalJobs}</p>
+                                        <p className="text-2xl font-bold text-white">{garage.totalJobs}</p>
                                         <p className="text-xs text-green-600">{garage.completedJobs} completed</p>
                                     </div>
                                     <div>
                                         <p className="text-sm text-slate-500">Avg Completion</p>
-                                        <p className="text-2xl font-bold text-slate-900">{garage.averageCompletionTime}d</p>
+                                        <p className="text-2xl font-bold text-white">{garage.averageCompletionTime}d</p>
                                         <p className="text-xs text-slate-500">days</p>
                                     </div>
                                     <div>
                                         <p className="text-sm text-slate-500">Avg Cost</p>
-                                        <p className="text-2xl font-bold text-slate-900">${garage.averageCost}</p>
+                                        <p className="text-2xl font-bold text-white">${garage.averageCost}</p>
                                         <p className={`text-xs ${garage.costVariance < 0 ? 'text-green-600' : 'text-red-600'}`}>
                                             {garage.costVariance > 0 ? '+' : ''}{garage.costVariance}% variance
                                         </p>
                                     </div>
                                     <div>
                                         <p className="text-sm text-slate-500">Response Time</p>
-                                        <p className="text-2xl font-bold text-slate-900">{garage.responseTime}h</p>
+                                        <p className="text-2xl font-bold text-white">{garage.responseTime}h</p>
                                         <p className="text-xs text-slate-500">hours</p>
                                     </div>
                                 </div>
@@ -156,7 +156,7 @@ export default function GaragePerformancePage() {
                                 <div className="space-y-4">
                                     <div>
                                         <div className="flex items-center justify-between mb-2">
-                                            <span className="text-sm font-medium text-slate-700">Quality Score</span>
+                                            <span className="text-sm font-medium text-slate-300">Quality Score</span>
                                             <span className={`text-sm font-bold ${getScoreColor(garage.qualityScore)}`}>{garage.qualityScore}%</span>
                                         </div>
                                         <div className="w-full bg-slate-200 rounded-full h-3">
@@ -169,7 +169,7 @@ export default function GaragePerformancePage() {
 
                                     <div>
                                         <div className="flex items-center justify-between mb-2">
-                                            <span className="text-sm font-medium text-slate-700">On-Time Delivery</span>
+                                            <span className="text-sm font-medium text-slate-300">On-Time Delivery</span>
                                             <span className={`text-sm font-bold ${getScoreColor(garage.onTimeDeliveryRate)}`}>{garage.onTimeDeliveryRate}%</span>
                                         </div>
                                         <div className="w-full bg-slate-200 rounded-full h-3">
@@ -182,8 +182,8 @@ export default function GaragePerformancePage() {
 
                                     <div>
                                         <div className="flex items-center justify-between mb-2">
-                                            <span className="text-sm font-medium text-slate-700">Customer Satisfaction</span>
-                                            <span className="text-sm font-bold text-slate-900">{garage.customerSatisfaction}/5.0 ⭐</span>
+                                            <span className="text-sm font-medium text-slate-300">Customer Satisfaction</span>
+                                            <span className="text-sm font-bold text-white">{garage.customerSatisfaction}/5.0 ⭐</span>
                                         </div>
                                         <div className="w-full bg-slate-200 rounded-full h-3">
                                             <div
@@ -200,13 +200,13 @@ export default function GaragePerformancePage() {
             </div>
 
             {/* Comparison Table */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="p-6 border-b border-slate-200">
-                    <h3 className="text-lg font-bold text-slate-900">Side-by-Side Comparison</h3>
+            <div className="rounded-xl border border-white/10 bg-slate-900 shadow-sm">
+                <div className="p-6 border-b border-white/10">
+                    <h3 className="text-lg font-bold text-white">Side-by-Side Comparison</h3>
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-slate-200">
-                        <thead className="bg-slate-50">
+                    <table className="min-w-full divide-y divide-white/10">
+                        <thead className="bg-slate-800/50">
                             <tr>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Metric</th>
                                 {garagePerformance.map(g => (
@@ -214,35 +214,35 @@ export default function GaragePerformancePage() {
                                 ))}
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-200 bg-white">
+                        <tbody className="divide-y divide-white/10 bg-slate-900">
                             <tr>
-                                <td className="px-6 py-4 text-sm font-medium text-slate-900">Quality Score</td>
+                                <td className="px-6 py-4 text-sm font-medium text-white">Quality Score</td>
                                 {garagePerformance.map(g => (
                                     <td key={g.garageId} className={`px-6 py-4 text-sm font-bold ${getScoreColor(g.qualityScore)}`}>{g.qualityScore}%</td>
                                 ))}
                             </tr>
                             <tr>
-                                <td className="px-6 py-4 text-sm font-medium text-slate-900">On-Time Delivery</td>
+                                <td className="px-6 py-4 text-sm font-medium text-white">On-Time Delivery</td>
                                 {garagePerformance.map(g => (
                                     <td key={g.garageId} className={`px-6 py-4 text-sm font-bold ${getScoreColor(g.onTimeDeliveryRate)}`}>{g.onTimeDeliveryRate}%</td>
                                 ))}
                             </tr>
                             <tr>
-                                <td className="px-6 py-4 text-sm font-medium text-slate-900">Satisfaction</td>
+                                <td className="px-6 py-4 text-sm font-medium text-white">Satisfaction</td>
                                 {garagePerformance.map(g => (
-                                    <td key={g.garageId} className="px-6 py-4 text-sm font-bold text-slate-900">{g.customerSatisfaction}/5.0</td>
+                                    <td key={g.garageId} className="px-6 py-4 text-sm font-bold text-white">{g.customerSatisfaction}/5.0</td>
                                 ))}
                             </tr>
                             <tr>
-                                <td className="px-6 py-4 text-sm font-medium text-slate-900">Avg Cost</td>
+                                <td className="px-6 py-4 text-sm font-medium text-white">Avg Cost</td>
                                 {garagePerformance.map(g => (
-                                    <td key={g.garageId} className="px-6 py-4 text-sm font-bold text-slate-900">${g.averageCost}</td>
+                                    <td key={g.garageId} className="px-6 py-4 text-sm font-bold text-white">${g.averageCost}</td>
                                 ))}
                             </tr>
                             <tr>
-                                <td className="px-6 py-4 text-sm font-medium text-slate-900">Response Time</td>
+                                <td className="px-6 py-4 text-sm font-medium text-white">Response Time</td>
                                 {garagePerformance.map(g => (
-                                    <td key={g.garageId} className="px-6 py-4 text-sm font-bold text-slate-900">{g.responseTime}h</td>
+                                    <td key={g.garageId} className="px-6 py-4 text-sm font-bold text-white">{g.responseTime}h</td>
                                 ))}
                             </tr>
                         </tbody>

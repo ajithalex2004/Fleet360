@@ -1,18 +1,15 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient, ActionStatus } from '@prisma/client';
-
-const prisma = new PrismaClient();
-const BACKEND_BASE_URL = 'http://127.0.0.1:8080/api/alerts';
+import { prisma } from '@/lib/prisma';
 
 export async function GET() {
     try {
         const alerts = await prisma.alert.findMany({
-            orderBy: {
-                dateCreated: 'desc'
-            }
+            where: { deletedAt: null },
+            orderBy: { dateCreated: 'desc' }
         });
-        return NextResponse.json(alerts);
+        return NextResponse.json(JSON.parse(JSON.stringify(alerts)));
     } catch (error) {
+        console.error('Failed to fetch alerts:', error);
         return NextResponse.json({ error: 'Failed to fetch alerts' }, { status: 500 });
     }
 }
@@ -21,44 +18,25 @@ export async function POST(request: Request) {
     try {
         const body = await request.json();
 
-        // Sanitize Payload for Backend
-        let relatedId = "";
-        if (body.vehicleId) relatedId = body.vehicleId;
-        else if (body.driverId) relatedId = body.driverId;
+        let relatedEntityId: string | null = null;
+        if (body.vehicleId) relatedEntityId = body.vehicleId;
+        else if (body.driverId) relatedEntityId = body.driverId;
+        else if (body.relatedEntityId) relatedEntityId = body.relatedEntityId;
 
-        const backendPayload = {
-            type: body.type,
-            title: body.title,
-            description: body.description,
-            severity: body.severity,
-            status: body.status || "PENDING",
-            assignedTo: body.assignedTo,
-            relatedEntityId: relatedId, // Map to Go model field
-            dateCreated: new Date().toISOString() // Ensure date is set
-        };
-
-        const res = await fetch(BACKEND_BASE_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(backendPayload),
+        const alert = await prisma.alert.create({
+            data: {
+                type: body.type,
+                title: body.title,
+                description: body.description,
+                severity: body.severity,
+                status: body.status || 'PENDING',
+                assignedTo: body.assignedTo,
+                relatedEntityId,
+                dateCreated: new Date(),
+            }
         });
 
-        if (!res.ok) {
-            const errorText = await res.text();
-            let errorMessage = errorText;
-            try {
-                const jsonError = JSON.parse(errorText);
-                if (jsonError.error) {
-                    errorMessage = jsonError.error;
-                }
-            } catch (e) { /* ignore */ }
-            return NextResponse.json({ error: errorMessage }, { status: res.status });
-        }
-
-        const newAlert = await res.json();
-        return NextResponse.json(newAlert);
+        return NextResponse.json(JSON.parse(JSON.stringify(alert)), { status: 201 });
     } catch (error) {
         console.error('Failed to create alert:', error);
         return NextResponse.json({ error: 'Failed to create alert', details: String(error) }, { status: 500 });

@@ -416,7 +416,7 @@ export default function ServiceRequestPage() {
         <div className="space-y-8">
             {/* Service Requests List (Moved to Top) */}
             {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                <div className="bg-red-500/10 border border-red-200 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
                     <strong className="font-bold">Error! </strong>
                     <span className="block sm:inline">{error}</span>
                 </div>
@@ -424,7 +424,7 @@ export default function ServiceRequestPage() {
             <div>
                 <div className="flex items-center justify-between mb-6">
                     <div>
-                        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Service Requests</h1>
+                        <h1 className="text-2xl font-bold text-white tracking-tight">Service Requests</h1>
                         <p className="mt-1 text-slate-500">Manage and track service requests.</p>
                     </div>
                     <button
@@ -471,7 +471,7 @@ export default function ServiceRequestPage() {
                         const isHighPriority = request.priority === 'High';
 
                         return (
-                            <div key={request.id} className={`bg-white rounded-lg p-4 relative overflow-hidden group border shadow-sm hover:shadow-md transition-all flex flex-col ${isHighPriority ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-200'}`}>
+                            <div key={request.id} className={`bg-slate-900 rounded-lg p-4 relative overflow-hidden group border shadow-sm hover:shadow-md transition-all flex flex-col ${isHighPriority ? 'border-red-300 ring-1 ring-red-100' : 'border-white/10'}`}>
                                 {isHighPriority && (
                                     <div className="absolute top-0 right-0 w-0 h-0 border-t-[40px] border-r-[40px] border-t-red-500 border-r-transparent z-20">
                                         <span className="absolute -top-[34px] left-[6px] text-white text-[10px] font-bold rotate-45">!</span>
@@ -480,13 +480,13 @@ export default function ServiceRequestPage() {
 
                                 <div className="relative z-10 flex-1">
                                     <div className="flex justify-between items-start mb-3">
-                                        <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{request.id}</span>
+                                        <span className="text-[10px] font-mono text-slate-500 bg-slate-700/40 px-1.5 py-0.5 rounded">{request.id}</span>
                                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${getStatusColor(displayStatus)}`}>
                                             {displayStatus}
                                         </span>
                                     </div>
 
-                                    <h4 className="text-sm font-bold text-slate-900 mb-1 line-clamp-1" title={request.serviceType}>
+                                    <h4 className="text-sm font-bold text-white mb-1 line-clamp-1" title={request.serviceType}>
                                         {request.serviceType}
                                     </h4>
 
@@ -494,17 +494,17 @@ export default function ServiceRequestPage() {
                                         {request.description}
                                     </p>
 
-                                    <div className="space-y-1.5 text-xs border-t border-slate-100 pt-3">
+                                    <div className="space-y-1.5 text-xs border-t border-white/5 pt-3">
                                         <div className="flex justify-between">
                                             <span className="text-slate-500">Requestor:</span>
-                                            <span className="text-slate-700 font-medium truncate max-w-[100px]">{requestorName}</span>
+                                            <span className="text-slate-300 font-medium truncate max-w-[100px]">{requestorName}</span>
                                         </div>
                                         {/* Dynamic Details: Vehicle or Driver */}
                                         {request.serviceType.includes('Driver') ? (
                                             request.relatedDriverId && (
                                                 <div className="flex justify-between">
                                                     <span className="text-slate-500">Driver Subject:</span>
-                                                    <span className="text-slate-700 truncate max-w-[100px]">
+                                                    <span className="text-slate-300 truncate max-w-[100px]">
                                                         {drivers.find(d => d.id === request.relatedDriverId)?.name || 'Unknown'}
                                                     </span>
                                                 </div>
@@ -514,18 +514,18 @@ export default function ServiceRequestPage() {
                                                 <>
                                                     <div className="flex justify-between">
                                                         <span className="text-slate-500">Vehicle ID:</span>
-                                                        <span className="text-slate-700 font-mono text-[10px]">{vehicle.id}</span>
+                                                        <span className="text-slate-300 font-mono text-[10px]">{vehicle.id}</span>
                                                     </div>
                                                     <div className="flex justify-between">
                                                         <span className="text-slate-500">Vehicle:</span>
-                                                        <span className="text-slate-700 truncate max-w-[100px]">{vehicle.make} {vehicle.model}</span>
+                                                        <span className="text-slate-300 truncate max-w-[100px]">{vehicle.make} {vehicle.model}</span>
                                                     </div>
                                                 </>
                                             )
                                         )}
                                         <div className="flex justify-between">
                                             <span className="text-slate-500">Service Needed:</span>
-                                            <span className="text-slate-700 font-medium">{request.date}</span>
+                                            <span className="text-slate-300 font-medium">{request.date}</span>
                                         </div>
                                         <div className="flex justify-between items-center pt-1">
                                             <span className="text-slate-500">Priority:</span>
@@ -536,13 +536,13 @@ export default function ServiceRequestPage() {
                                         {request.assignedTo && (
                                             <div className="flex justify-between items-center pt-1">
                                                 <span className="text-slate-500">Assigned To:</span>
-                                                <span className="text-slate-700 truncate max-w-[100px]" title={request.assignedTo}>
+                                                <span className="text-slate-300 truncate max-w-[100px]" title={request.assignedTo}>
                                                     {request.assignedTo}
                                                 </span>
                                             </div>
                                         )}
                                         {linkedMrId && (
-                                            <div className="mt-1 pt-1 border-t border-slate-100 text-[10px] text-blue-600 flex items-center gap-1">
+                                            <div className="mt-1 pt-1 border-t border-white/5 text-[10px] text-blue-600 flex items-center gap-1">
                                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
                                                     <path fillRule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
                                                 </svg>
@@ -553,12 +553,12 @@ export default function ServiceRequestPage() {
                                 </div>
 
                                 {/* Workflow Actions for ALL Requests */}
-                                <div className="relative z-10 mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2">
+                                <div className="relative z-10 mt-4 pt-3 border-t border-white/5 grid grid-cols-2 gap-2">
                                     {/* Acknowledge - Only for Pending */}
                                     {request.status === 'Pending' && (
                                         <button
                                             onClick={() => handleStatusChange(request.id, 'Acknowledged')}
-                                            className="col-span-2 rounded bg-blue-50 border border-blue-200 px-2 py-1.5 text-[10px] font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+                                            className="col-span-2 rounded bg-blue-500/10 border border-blue-200 px-2 py-1.5 text-[10px] font-medium text-blue-700 hover:bg-blue-500/20 transition-colors"
                                         >
                                             Acknowledge
                                         </button>
@@ -575,7 +575,7 @@ export default function ServiceRequestPage() {
                                             </button>
                                             <button
                                                 onClick={() => handleStatusChange(request.id, 'Escalated')}
-                                                className="rounded bg-orange-50 border border-orange-200 px-2 py-1.5 text-[10px] font-medium text-orange-700 hover:bg-orange-100 transition-colors"
+                                                className="rounded bg-orange-500/10 border border-orange-200 px-2 py-1.5 text-[10px] font-medium text-orange-700 hover:bg-orange-500/20 transition-colors"
                                             >
                                                 Escalate
                                             </button>
@@ -586,7 +586,7 @@ export default function ServiceRequestPage() {
                                     {(request.status === 'Assigned' || request.status === 'Escalated') && (
                                         <button
                                             onClick={() => handleStatusChange(request.id, 'Resolved')}
-                                            className="col-span-2 rounded bg-green-50 border border-green-200 px-2 py-1.5 text-[10px] font-medium text-green-700 hover:bg-green-100 transition-colors"
+                                            className="col-span-2 rounded bg-emerald-500/10 border border-green-200 px-2 py-1.5 text-[10px] font-medium text-green-700 hover:bg-emerald-500/20 transition-colors"
                                         >
                                             Resolve
                                         </button>
@@ -599,31 +599,31 @@ export default function ServiceRequestPage() {
             </div>
 
             {/* Create Service Request Form (Moved to Bottom & Compacted) */}
-            <div className="border-t border-slate-200 pt-8">
-                <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+            <div className="border-t border-white/10 pt-8">
+                <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
                     <span className="w-1 h-6 bg-blue-600 rounded-full"></span>
                     Create New Request
                 </h3>
 
-                <div className="bg-white rounded-xl p-6 relative overflow-hidden border border-slate-200 shadow-sm">
+                <div className="bg-slate-900 rounded-xl p-6 relative overflow-hidden border border-white/10 shadow-sm">
                     <form onSubmit={handleSubmit} className="space-y-4 relative z-10">
                         {/* Compact Grid Layout */}
                         <div className="grid gap-4 md:grid-cols-12">
                             {/* Requestor */}
                             <div className="md:col-span-4">
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Requestor</label>
+                                <label className="block text-xs font-medium text-slate-300 mb-1">Requestor</label>
                                 <select
                                     required
-                                    className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+                                    className="block w-full rounded-lg border border-white/15 bg-slate-900 px-3 py-2 text-sm text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
                                     value={formData.requestorId}
                                     onChange={(e) => setFormData({ ...formData, requestorId: e.target.value })}
                                 >
                                     <option value="" className="text-slate-500">Select Requestor</option>
-                                    <option value={currentUser.id} className="text-slate-900">
+                                    <option value={currentUser.id} className="text-white">
                                         {currentUser.name} (Me)
                                     </option>
                                     {drivers.map((driver, index) => (
-                                        <option key={driver.id || index} value={driver.id} className="text-slate-900">
+                                        <option key={driver.id || index} value={driver.id} className="text-white">
                                             {driver.name}
                                         </option>
                                     ))}
@@ -632,10 +632,10 @@ export default function ServiceRequestPage() {
 
                             {/* Service Type */}
                             <div className="md:col-span-4">
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Service Type</label>
+                                <label className="block text-xs font-medium text-slate-300 mb-1">Service Type</label>
                                 <select
                                     required
-                                    className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+                                    className="block w-full rounded-lg border border-white/15 bg-slate-900 px-3 py-2 text-sm text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
                                     value={formData.serviceType}
                                     onChange={(e) => setFormData({ ...formData, serviceType: e.target.value })}
                                 >
@@ -647,9 +647,9 @@ export default function ServiceRequestPage() {
 
                             {/* Priority - Moved here for better layout */}
                             <div className="md:col-span-4">
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Priority</label>
+                                <label className="block text-xs font-medium text-slate-300 mb-1">Priority</label>
                                 <select
-                                    className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+                                    className="block w-full rounded-lg border border-white/15 bg-slate-900 px-3 py-2 text-sm text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
                                     value={formData.priority}
                                     onChange={(e) => setFormData({ ...formData, priority: e.target.value as any })}
                                 >
@@ -663,9 +663,9 @@ export default function ServiceRequestPage() {
                             <div className="md:col-span-8">
                                 {formData.serviceType.includes('Driver') ? (
                                     <>
-                                        <label className="block text-xs font-medium text-slate-700 mb-1">Driver Subject</label>
+                                        <label className="block text-xs font-medium text-slate-300 mb-1">Driver Subject</label>
                                         <select
-                                            className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+                                            className="block w-full rounded-lg border border-white/15 bg-slate-900 px-3 py-2 text-sm text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
                                             value={formData.relatedDriverId}
                                             onChange={(e) => setFormData({ ...formData, relatedDriverId: e.target.value, vehicleId: '' })}
                                         >
@@ -679,10 +679,10 @@ export default function ServiceRequestPage() {
                                     </>
                                 ) : (
                                     <>
-                                        <label className="block text-xs font-medium text-slate-700 mb-1">Vehicle</label>
+                                        <label className="block text-xs font-medium text-slate-300 mb-1">Vehicle</label>
                                         <select
                                             required
-                                            className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+                                            className="block w-full rounded-lg border border-white/15 bg-slate-900 px-3 py-2 text-sm text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
                                             value={formData.vehicleId}
                                             onChange={(e) => setFormData({ ...formData, vehicleId: e.target.value, relatedDriverId: '' })}
                                         >
@@ -701,11 +701,11 @@ export default function ServiceRequestPage() {
 
                             {/* Service Needed Date */}
                             <div className="md:col-span-4">
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Service Needed Date</label>
+                                <label className="block text-xs font-medium text-slate-300 mb-1">Service Needed Date</label>
                                 <input
                                     type="date"
                                     required
-                                    className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+                                    className="block w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
                                     value={formData.date}
                                     onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                                 />
@@ -713,11 +713,11 @@ export default function ServiceRequestPage() {
 
                             {/* Description - Full Width */}
                             <div className="md:col-span-12">
-                                <label className="block text-xs font-medium text-slate-700 mb-1">Description</label>
+                                <label className="block text-xs font-medium text-slate-300 mb-1">Description</label>
                                 <textarea
                                     required
                                     rows={2}
-                                    className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+                                    className="block w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                     placeholder="Describe the issue or service required..."
@@ -725,15 +725,15 @@ export default function ServiceRequestPage() {
                             </div>
 
                             {/* Attachments Section */}
-                            <div className="md:col-span-4 border-t border-slate-100 pt-4 mt-2">
-                                <h4 className="text-sm font-medium text-slate-900 mb-3">Attachments</h4>
+                            <div className="md:col-span-4 border-t border-white/5 pt-4 mt-2">
+                                <h4 className="text-sm font-medium text-white mb-3">Attachments</h4>
                                 <div className="space-y-3">
                                     {attachments.map((att, index) => (
-                                        <div key={index} className="flex items-end gap-3 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                        <div key={index} className="flex items-end gap-3 bg-slate-800/50 p-3 rounded-lg border border-white/5">
                                             <div className="w-1/3">
                                                 <label className="block text-xs font-medium text-slate-500 mb-1">Type</label>
                                                 <select
-                                                    className="block w-full rounded-md border-slate-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                    className="block w-full rounded-md border-white/15 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 text-white"
                                                     value={att.type}
                                                     onChange={(e) => {
                                                         const newAtts = [...attachments];
@@ -750,7 +750,7 @@ export default function ServiceRequestPage() {
                                                 <label className="block text-xs font-medium text-slate-500 mb-1">File</label>
                                                 <input
                                                     type="file"
-                                                    className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200"
+                                                    className="block w-full text-xs text-white file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-500/20 file:text-blue-700 hover:file:bg-blue-200"
                                                     onChange={(e) => {
                                                         const file = e.target.files?.[0] || null;
                                                         const newAtts = [...attachments];
@@ -765,7 +765,7 @@ export default function ServiceRequestPage() {
                                                     const newAtts = attachments.filter((_, i) => i !== index);
                                                     setAttachments(newAtts);
                                                 }}
-                                                className="p-1.5 text-red-500 hover:bg-red-100 rounded-md transition-colors"
+                                                className="p-1.5 text-red-500 hover:bg-red-500/20 rounded-md transition-colors"
                                                 disabled={attachments.length === 1}
                                                 title="Remove Attachment"
                                             >

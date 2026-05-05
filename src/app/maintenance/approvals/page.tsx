@@ -320,13 +320,13 @@ export default function ApprovalsPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Pending Approvals</h1>
+                    <h1 className="text-2xl font-bold text-white">Pending Approvals</h1>
                     <p className="mt-1 text-slate-500">Review and approve maintenance requests.</p>
                 </div>
             </div>
 
             {/* Tabs */}
-            <div className="border-b border-slate-200">
+            <div className="border-b border-white/10">
                 <nav className="-mb-px flex space-x-8" aria-label="Tabs">
                     <button
                         onClick={() => setActiveTab('maintenance')}
@@ -334,7 +334,7 @@ export default function ApprovalsPage() {
                             whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium
                             ${activeTab === 'maintenance'
                                 ? 'border-blue-500 text-blue-600'
-                                : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'}
+                                : 'border-transparent text-slate-500 hover:border-white/15 hover:text-slate-300'}
                         `}
                     >
                         Maintenance Approvals
@@ -345,7 +345,7 @@ export default function ApprovalsPage() {
                             whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium
                             ${activeTab === 'estimation'
                                 ? 'border-blue-500 text-blue-600'
-                                : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'}
+                                : 'border-transparent text-slate-500 hover:border-white/15 hover:text-slate-300'}
                         `}
                     >
                         Estimation Approvals
@@ -363,10 +363,10 @@ export default function ApprovalsPage() {
                 placeholder="Search approvals..."
             />
 
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="rounded-xl border border-white/10 bg-slate-900 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-50 text-slate-500">
+                        <thead className="bg-slate-800/50 text-slate-500">
                             <tr>
                                 <th className="px-6 py-3 font-medium">Request ID</th>
                                 <th className="px-6 py-3 font-medium">Vehicle</th>
@@ -376,26 +376,26 @@ export default function ApprovalsPage() {
                                 <th className="px-6 py-3 font-medium">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-white/5">
                             {filteredRequests.map((request) => {
                                 const vehicle = vehicles[request.vehicleId];
                                 return (
-                                    <tr key={request.id} className="hover:bg-slate-50">
-                                        <td className="px-6 py-4 font-medium text-slate-900">
+                                    <tr key={request.id} className="hover:bg-white/5">
+                                        <td className="px-6 py-4 font-medium text-white">
                                             <Link href={`/maintenance/requests/${encodeURIComponent(request.id)}`} className="hover:text-blue-600 hover:underline">
                                                 {request.id}
                                             </Link>
                                         </td>
-                                        <td className="px-6 py-4 text-slate-700">
+                                        <td className="px-6 py-4 text-slate-300">
                                             {vehicle ? `${vehicle.make} ${vehicle.model}` : 'Unknown'}
-                                            <div className="text-xs text-slate-500">{vehicle?.licensePlate}</div>
+                                            <div className="text-xs text-slate-300">{vehicle?.licensePlate}</div>
                                         </td>
                                         <td className="px-6 py-4 text-slate-600">
                                             <div className="max-w-xs truncate" title={request.description}>
                                                 {request.description}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 font-medium text-slate-900">
+                                        <td className="px-6 py-4 font-medium text-white">
                                             {request.estimatedCost ? formatCurrency(request.estimatedCost) : '-'}
                                         </td>
                                         <td className="px-6 py-4">
@@ -408,19 +408,19 @@ export default function ApprovalsPage() {
                                                         <>
                                                             <button
                                                                 onClick={() => openApprovalModal(request, 'approve')}
-                                                                className="rounded bg-green-50 px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-100 border border-green-200"
+                                                                className="rounded bg-emerald-500/10 px-2 py-1 text-xs font-medium text-green-700 hover:bg-emerald-500/20 border border-green-200"
                                                             >
                                                                 Approve
                                                             </button>
                                                             <button
                                                                 onClick={() => openApprovalModal(request, 're-assign')}
-                                                                className="rounded bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700 hover:bg-orange-100 border border-orange-200"
+                                                                className="rounded bg-orange-500/10 px-2 py-1 text-xs font-medium text-orange-700 hover:bg-orange-500/20 border border-orange-200"
                                                             >
                                                                 Re-Assign
                                                             </button>
                                                             <button
                                                                 onClick={() => openApprovalModal(request, 'reject')}
-                                                                className="rounded bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 border border-red-200"
+                                                                className="rounded bg-red-500/10 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-500/20 border border-red-200"
                                                             >
                                                                 Reject
                                                             </button>
@@ -430,7 +430,7 @@ export default function ApprovalsPage() {
                                                     request.status === MaintenanceStatus.PENDING_ESTIMATION_APPROVAL && (
                                                         <button
                                                             onClick={() => openReviewModal(request)}
-                                                            className="rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 border border-blue-200"
+                                                            className="rounded bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-500/20 border border-blue-200"
                                                         >
                                                             Review Estimation
                                                         </button>
@@ -454,8 +454,8 @@ export default function ApprovalsPage() {
             {/* Approval Modal */}
             {showApprovalModal && selectedRequest && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-                    <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
-                        <h3 className="text-lg font-bold text-slate-900">
+                    <div className="w-full max-w-md rounded-xl bg-slate-900 p-6 shadow-2xl">
+                        <h3 className="text-lg font-bold text-white">
                             {approvalAction === 'approve' ? 'Approve Request' : (approvalAction === 're-assign' ? 'Re-Assign Request' : 'Reject Request')}
                         </h3>
                         <p className="mt-1 text-sm text-slate-500">
@@ -468,12 +468,12 @@ export default function ApprovalsPage() {
                         </p>
 
                         <div className="mt-4">
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                            <label className="block text-sm font-medium text-slate-300 mb-2">
                                 Comments {approvalAction !== 'approve' && '*'}
                             </label>
                             <textarea
                                 rows={3}
-                                className="block w-full rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                className="block w-full rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
                                 placeholder="Add comments..."
                                 value={approvalComments}
                                 onChange={(e) => setApprovalComments(e.target.value)}
@@ -483,7 +483,7 @@ export default function ApprovalsPage() {
                         <div className="mt-6 flex justify-end gap-3">
                             <button
                                 onClick={() => setShowApprovalModal(false)}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
                             >
                                 Cancel
                             </button>
@@ -507,10 +507,10 @@ export default function ApprovalsPage() {
             {/* Review Estimation Modal */}
             {showReviewModal && selectedRequest && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-                    <div className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+                    <div className="w-full max-w-2xl rounded-xl bg-slate-900 p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-bold text-slate-900">Review Estimation</h3>
-                            <button onClick={() => setShowReviewModal(false)} className="text-slate-400 hover:text-slate-600">
+                            <h3 className="text-lg font-bold text-white">Review Estimation</h3>
+                            <button onClick={() => setShowReviewModal(false)} className="text-slate-400 hover:text-slate-300">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                                 </svg>
@@ -521,27 +521,27 @@ export default function ApprovalsPage() {
                             <div className="grid grid-cols-2 gap-4 text-sm">
                                 <div>
                                     <span className="block text-slate-500">Request ID</span>
-                                    <span className="font-medium text-slate-900">{selectedRequest.id}</span>
+                                    <span className="font-medium text-white">{selectedRequest.id}</span>
                                 </div>
                                 <div>
                                     <span className="block text-slate-500">Vehicle</span>
-                                    <span className="font-medium text-slate-900">
+                                    <span className="font-medium text-white">
                                         {vehicles[selectedRequest.vehicleId]?.make} {vehicles[selectedRequest.vehicleId]?.model} ({vehicles[selectedRequest.vehicleId]?.licensePlate})
                                     </span>
                                 </div>
                             </div>
 
-                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                                <h4 className="font-medium text-slate-900 mb-2">Select Quotation to Approve</h4>
+                            <div className="rounded-lg border border-white/10 bg-slate-800/50 p-4">
+                                <h4 className="font-medium text-white mb-2">Select Quotation to Approve</h4>
                                 {selectedRequest.quotations && selectedRequest.quotations.length > 0 ? (
                                     <div className="space-y-3">
                                         {/* Deduplicate quotations by Garage ID (show latest per garage) */}
                                         {Array.from(new Map(selectedRequest.quotations.map(q => [q.garageId, q])).values()).map((quote) => (
                                             <label
                                                 key={quote.id}
-                                                className={`flex items-center justify-between bg-white p-3 rounded border cursor-pointer transition-all ${selectedQuotationId === quote.id
-                                                    ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'
-                                                    : 'border-slate-200 hover:border-slate-300'
+                                                className={`flex items-center justify-between bg-slate-900 p-3 rounded border cursor-pointer transition-all ${selectedQuotationId === quote.id
+                                                    ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-500/10'
+                                                    : 'border-white/10 hover:border-white/15'
                                                     }`}
                                             >
                                                 <div className="flex items-center gap-3">
@@ -551,15 +551,15 @@ export default function ApprovalsPage() {
                                                         value={quote.id}
                                                         checked={selectedQuotationId === quote.id}
                                                         onChange={() => setSelectedQuotationId(quote.id)}
-                                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300"
+                                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-white/15"
                                                     />
                                                     <div>
-                                                        <div className="font-medium text-slate-900">{garages[quote.garageId]?.name || 'Unknown Garage'}</div>
+                                                        <div className="font-medium text-white">{garages[quote.garageId]?.name || 'Unknown Garage'}</div>
                                                         <div className="text-xs text-slate-500">ETC: {quote.estimatedCompletionDate ? new Date(quote.estimatedCompletionDate).toLocaleDateString() : 'N/A'}</div>
                                                     </div>
                                                 </div>
                                                 <div className="text-right">
-                                                    <div className="font-bold text-slate-900">{formatCurrency(quote.totalCost)}</div>
+                                                    <div className="font-bold text-white">{formatCurrency(quote.totalCost)}</div>
                                                     {quote.attachments && quote.attachments.length > 0 && (
                                                         <a
                                                             href={quote.attachments[0].url}
@@ -581,12 +581,12 @@ export default function ApprovalsPage() {
                             </div>
 
                             <div className="mt-4">
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                <label className="block text-sm font-medium text-slate-300 mb-2">
                                     Approval Comments
                                 </label>
                                 <textarea
                                     rows={3}
-                                    className="block w-full rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    className="block w-full rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
                                     placeholder="Add comments..."
                                     value={approvalComments}
                                     onChange={(e) => setApprovalComments(e.target.value)}
@@ -594,7 +594,7 @@ export default function ApprovalsPage() {
                             </div>
                         </div>
 
-                        <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-slate-100">
+                        <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-white/5">
                             <button
                                 onClick={() => {
                                     setApprovalAction('reject');

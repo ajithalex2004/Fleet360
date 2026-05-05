@@ -85,15 +85,15 @@ export default function WorkOrderListPage() {
     const getStatusBadgeColor = (status: MaintenanceStatus) => {
         switch (status) {
             case MaintenanceStatus.UNDER_MAINTENANCE:
-                return 'bg-blue-100 text-blue-800';
+                return 'bg-blue-500/20 text-blue-300';
             case MaintenanceStatus.MAINTENANCE_COMPLETED:
-                return 'bg-green-100 text-green-800';
+                return 'bg-emerald-500/20 text-emerald-300';
             case MaintenanceStatus.PENDING_INVOICE:
-                return 'bg-yellow-100 text-yellow-800';
+                return 'bg-amber-500/20 text-amber-300';
             case MaintenanceStatus.CLOSED:
-                return 'bg-slate-100 text-slate-800';
+                return 'bg-slate-700/40 text-slate-200';
             default:
-                return 'bg-gray-100 text-gray-800';
+                return 'bg-slate-700/40 text-slate-200';
         }
     };
 
@@ -109,7 +109,7 @@ export default function WorkOrderListPage() {
         <div className="container mx-auto px-4 py-8 max-w-7xl">
             <div className="mb-8 flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Work Orders</h1>
+                    <h1 className="text-2xl font-bold text-white">Work Orders</h1>
                     <p className="mt-1 text-sm text-slate-500">Manage and track all maintenance work orders</p>
                 </div>
             </div>
@@ -122,7 +122,7 @@ export default function WorkOrderListPage() {
                         placeholder="Search WO #, Vehicle, or Garage..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 pl-10 pr-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full rounded-lg border border-white/15 pl-10 pr-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
                     />
                     <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -138,7 +138,7 @@ export default function WorkOrderListPage() {
                 <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="rounded-lg border border-white/15 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
                 >
                     <option value="All">All Statuses</option>
                     <option value={MaintenanceStatus.UNDER_MAINTENANCE}>Under Maintenance</option>
@@ -149,9 +149,9 @@ export default function WorkOrderListPage() {
             </div>
 
             {/* List */}
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-slate-50">
+            <div className="overflow-hidden rounded-xl border border-white/10 bg-slate-900 shadow-sm">
+                <table className="min-w-full divide-y divide-white/10">
+                    <thead className="bg-slate-800/50">
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Work Order</th>
                             <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Vehicle</th>
@@ -161,7 +161,7 @@ export default function WorkOrderListPage() {
                             <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500">Est. Cost</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 bg-white">
+                    <tbody className="divide-y divide-white/10 bg-slate-900">
                         {filteredRequests.length > 0 ? (
                             filteredRequests.map((req) => {
                                 const vehicle = vehicles[req.vehicleId];
@@ -171,36 +171,36 @@ export default function WorkOrderListPage() {
                                     <tr
                                         key={req.id}
                                         onClick={() => router.push(`/maintenance/work-orders/${req.id}`)}
-                                        className="cursor-pointer hover:bg-slate-50 transition-colors"
+                                        className="cursor-pointer hover:bg-white/5 transition-colors"
                                     >
                                         <td className="whitespace-nowrap px-6 py-4">
                                             <div className="flex flex-col">
                                                 <span className="text-sm font-medium text-blue-600 hover:underline">
                                                     {req.workOrderNo || `WO-${req.id.toUpperCase()}`}
                                                 </span>
-                                                <span className="text-xs text-slate-500">Req: {req.id.toUpperCase()}</span>
+                                                <span className="text-xs text-slate-300">Req: {req.id.toUpperCase()}</span>
                                             </div>
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4">
                                             <div className="flex flex-col">
-                                                <span className="text-sm font-medium text-slate-900">
+                                                <span className="text-sm font-medium text-white">
                                                     {vehicle?.make} {vehicle?.model}
                                                 </span>
-                                                <span className="text-xs text-slate-500">{vehicle?.licensePlate}</span>
+                                                <span className="text-xs text-slate-300">{vehicle?.licensePlate}</span>
                                             </div>
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4">
-                                            <div className="text-sm text-slate-900">{garage?.name || 'N/A'}</div>
+                                            <div className="text-sm text-white">{garage?.name || 'N/A'}</div>
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4">
                                             <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusBadgeColor(req.status)}`}>
                                                 {req.status}
                                             </span>
                                         </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500">
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-300">
                                             {new Date(req.requestDate).toLocaleDateString()}
                                         </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-slate-900">
+                                        <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-white">
                                             {req.estimatedCost ? formatCurrency(req.estimatedCost) : '-'}
                                         </td>
                                     </tr>
@@ -208,7 +208,7 @@ export default function WorkOrderListPage() {
                             })
                         ) : (
                             <tr>
-                                <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                                <td colSpan={6} className="px-6 py-12 text-center text-slate-300">
                                     No work orders found matching your filters.
                                 </td>
                             </tr>

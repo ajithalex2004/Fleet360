@@ -116,7 +116,7 @@ export default function GaragePage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Garage Management</h1>
+                    <h1 className="text-2xl font-bold text-white">Garage Management</h1>
                     <p className="mt-1 text-slate-500">Manage internal and external service providers.</p>
                 </div>
                 <button
@@ -129,20 +129,20 @@ export default function GaragePage() {
 
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {Array.isArray(garages) && garages.map((garage) => (
-                    <div key={garage.id} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
+                    <div key={garage.id} className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm hover:shadow-md transition-shadow">
                         <div className="flex items-start justify-between">
                             <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1">
-                                    <h3 className="text-lg font-semibold text-slate-900">{garage.name}</h3>
+                                    <h3 className="text-lg font-semibold text-white">{garage.name}</h3>
                                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${garage.isInternal
-                                        ? 'bg-green-100 text-green-700'
-                                        : 'bg-blue-100 text-blue-700'
+                                        ? 'bg-emerald-500/20 text-green-700'
+                                        : 'bg-blue-500/20 text-blue-700'
                                         }`}>
                                         {garage.isInternal ? 'Internal' : 'External'}
                                     </span>
                                 </div>
                                 <div className="mb-1">
-                                    <span className="text-xs text-slate-400 font-mono bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                                    <span className="text-xs text-slate-400 font-mono bg-slate-800/50 px-1.5 py-0.5 rounded border border-white/5">
                                         ID: {garage.id}
                                     </span>
                                 </div>
@@ -151,14 +151,14 @@ export default function GaragePage() {
                             <div className="flex gap-2">
                                 <button
                                     onClick={() => openEditModal(garage)}
-                                    className="rounded-full p-2 text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                                    className="rounded-full p-2 text-slate-600 hover:bg-blue-500/10 hover:text-blue-600 transition-colors"
                                     title="Edit garage"
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
                                     </svg>
                                 </button>
-                                <div className="rounded-full bg-slate-100 p-2 text-slate-600">
+                                <div className="rounded-full bg-slate-700/40 p-2 text-slate-600">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.703-.127 1.5.168 2.37 1.945 2.37 1.945a.563.563 0 0 1-.67.67s-1.777-.869-1.944-2.37c-.061-.539-.037-1.152.126-1.703ZM13.253 13.253l4.003-4.003M9.53 2.47a.75.75 0 0 1 .34.952h-.001l-1.96 4.896c-.198.495-.157 1.051.109 1.514.265.463.714.78 1.226.865l5.29.882c.513.085 1.04-.04 1.43-.341l4.586-3.525a.75.75 0 0 1 .91 1.183l-4.586 3.525a3.003 3.003 0 0 1-2.146.51l-5.29-.882a3.001 3.001 0 0 1-1.838-1.298c-.398-.694-.46-1.527-.163-2.27l1.96-4.896a.75.75 0 0 1 .952-.34Z" />
                                     </svg>
@@ -194,7 +194,7 @@ export default function GaragePage() {
                             <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Services Offered</p>
                             <div className="mt-2 flex flex-wrap gap-2">
                                 {garage.specialties?.map((spec) => (
-                                    <span key={spec} className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
+                                    <span key={spec} className="rounded-md bg-slate-700/40 px-2 py-1 text-xs font-medium text-slate-600">
                                         {spec}
                                     </span>
                                 )) || <span className="text-xs text-slate-400">No services listed</span>}
@@ -209,12 +209,12 @@ export default function GaragePage() {
             {
                 isModalOpen && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-                        <div className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="w-full max-w-2xl rounded-xl bg-slate-900 p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-lg font-bold text-slate-900">
+                                <h3 className="text-lg font-bold text-white">
                                     {editingGarage ? 'Edit Garage' : 'Add New Garage'}
                                 </h3>
-                                <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                                <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-300">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-6 w-6">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                     </svg>
@@ -223,10 +223,10 @@ export default function GaragePage() {
 
                             <form onSubmit={handleSubmit} className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700">Garage ID</label>
+                                    <label className="block text-sm font-medium text-slate-300">Garage ID</label>
                                     <input
                                         type="text"
-                                        className={`mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 ${editingGarage ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
+                                        className={`mt-1 block w-full rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 ${editingGarage ? 'bg-slate-700/40 text-white cursor-not-allowed' : ''}`}
                                         value={formData.id}
                                         onChange={(e) => setFormData({ ...formData, id: e.target.value })}
                                         disabled={!!editingGarage}
@@ -234,61 +234,61 @@ export default function GaragePage() {
                                 </div>
                                 <div className="grid gap-4 md:grid-cols-2">
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700">Garage Name *</label>
+                                        <label className="block text-sm font-medium text-slate-300">Garage Name *</label>
                                         <input
                                             type="text"
                                             required
-                                            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                            className="mt-1 block w-full rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
                                             value={formData.name}
                                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700">Location *</label>
+                                        <label className="block text-sm font-medium text-slate-300">Location *</label>
                                         <input
                                             type="text"
                                             required
-                                            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                            className="mt-1 block w-full rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
                                             value={formData.location}
                                             onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700">Contact Person *</label>
+                                        <label className="block text-sm font-medium text-slate-300">Contact Person *</label>
                                         <input
                                             type="text"
                                             required
-                                            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                            className="mt-1 block w-full rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
                                             value={formData.contactPerson}
                                             onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700">Designation *</label>
+                                        <label className="block text-sm font-medium text-slate-300">Designation *</label>
                                         <input
                                             type="text"
                                             required
-                                            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                            className="mt-1 block w-full rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
                                             value={formData.designation}
                                             onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700">Email *</label>
+                                        <label className="block text-sm font-medium text-slate-300">Email *</label>
                                         <input
                                             type="email"
                                             required
-                                            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                            className="mt-1 block w-full rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
                                             value={formData.email}
                                             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700">Contact Number *</label>
+                                        <label className="block text-sm font-medium text-slate-300">Contact Number *</label>
                                         <input
                                             type="tel"
                                             required
-                                            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                            className="mt-1 block w-full rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
                                             value={formData.contactNumber}
                                             onChange={(e) => setFormData({ ...formData, contactNumber: e.target.value })}
                                         />
@@ -296,13 +296,13 @@ export default function GaragePage() {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Services Offered *</label>
-                                    <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border border-slate-200 rounded-lg bg-slate-50">
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Services Offered *</label>
+                                    <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border border-white/10 rounded-lg bg-slate-800/50">
                                         {availableServices.map(service => (
-                                            <label key={service} className="flex items-center space-x-2 text-sm text-slate-700 cursor-pointer hover:bg-slate-100 p-1 rounded">
+                                            <label key={service} className="flex items-center space-x-2 text-sm text-slate-300 cursor-pointer hover:bg-white/10 p-1 rounded">
                                                 <input
                                                     type="checkbox"
-                                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                    className="rounded border-white/15 text-blue-600 focus:ring-blue-500"
                                                     checked={(formData.specialties || []).includes(service)}
                                                     onChange={(e) => {
                                                         const checked = e.target.checked;
@@ -327,11 +327,11 @@ export default function GaragePage() {
                                     <input
                                         type="checkbox"
                                         id="isInternal"
-                                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        className="h-4 w-4 rounded border-white/15 text-blue-600 focus:ring-blue-500"
                                         checked={formData.isInternal}
                                         onChange={(e) => setFormData({ ...formData, isInternal: e.target.checked })}
                                     />
-                                    <label htmlFor="isInternal" className="text-sm font-medium text-slate-700">
+                                    <label htmlFor="isInternal" className="text-sm font-medium text-slate-300">
                                         Internal Garage
                                     </label>
                                 </div>
@@ -340,7 +340,7 @@ export default function GaragePage() {
                                     <button
                                         type="button"
                                         onClick={() => setIsModalOpen(false)}
-                                        className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                                        className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
                                     >
                                         Cancel
                                     </button>

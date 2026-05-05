@@ -1,33 +1,59 @@
-import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { randomUUID } from 'crypto';
 
 export async function GET() {
-    try {
-        const configs = await prisma.integrationConfig.findMany();
-        return NextResponse.json(configs);
-    } catch (error) {
-        console.error('Failed to fetch integration configs:', error);
-        return NextResponse.json({ error: 'Failed to fetch integration configs' }, { status: 500 });
-    }
+  try {
+    const configs = await prisma.integrationConfig.findMany();
+    return NextResponse.json(configs);
+  } catch (e: any) {
+    console.error('GET integration-configs error:', e);
+    return NextResponse.json({ error: 'Failed to fetch configurations' }, { status: 500 });
+  }
 }
 
-export async function POST(request: Request) {
-    try {
-        const body = await request.json();
-        const { type, ...data } = body;
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { type, ...data } = body;
 
-        // Upsert based on Type (Email vs SMS vs WhatsApp)
-        const config = await prisma.integrationConfig.upsert({
-            where: { type },
-            update: data,
-            create: { type, ...data },
-        });
-
-        return NextResponse.json(config);
-    } catch (error) {
-        console.error('Failed to save integration config:', error);
-        return NextResponse.json({ error: 'Failed to save integration config' }, { status: 500 });
+    if (!type) {
+      return NextResponse.json({ error: 'type is required' }, { status: 400 });
     }
+
+    // provider is required  default to type name if missing
+    const provider = data.provider?.trim() || type;
+
+    // Strip unknown/undefined fields and build clean update payload
+    const allowed = [
+      'provider','host','port','username','password','apiKey','apiSecret',
+      'senderId','senderEmail','fromName','encryption','accountSid',
+      'authToken','fromNumber','isEnabled',
+    ];
+    const updateData: Record<string, unknown> = { updatedAt: new Date() };
+    for (const key of allowed) {
+      if (data[key] !== undefined) updateData[key] = data[key] ?? null;
+    }
+    updateData.provider = provider;
+
+    const config = await prisma.integrationConfig.upsert({
+      where:  { type },
+      update: updateData,
+      create: {
+        id:        randomUUID(),
+        type,
+        provider,
+        updatedAt: new Date(),
+        ...updateData,
+      },
+    });
+
+    return NextResponse.json(config);
+  } catch (e: any) {
+    console.error('POST integration-configs error:', e);
+    return NextResponse.json(
+      { error: e?.message ?? 'Failed to save configuration' },
+      { status: 500 }
+    );
+  }
 }

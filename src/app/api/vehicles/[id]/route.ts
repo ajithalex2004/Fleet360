@@ -1,22 +1,20 @@
 import { NextResponse } from 'next/server';
-
-const BACKEND_BASE_URL = 'http://127.0.0.1:8080/api/vehicles';
+import { prisma } from '@/lib/prisma';
 
 export async function GET(
     request: Request,
     { params }: { params: { id: string } }
 ) {
     try {
-        const id = params.id;
-        const res = await fetch(`${BACKEND_BASE_URL}/${id}`);
-        if (!res.ok) {
-            if (res.status === 404) return NextResponse.json({ error: 'Vehicle not found' }, { status: 404 });
-            const error = await res.text();
-            return NextResponse.json({ error }, { status: res.status });
+        const vehicle = await prisma.vehicle.findFirst({
+            where: { id: params.id, deletedAt: null }
+        });
+        if (!vehicle) {
+            return NextResponse.json({ error: 'Vehicle not found' }, { status: 404 });
         }
-        const data = await res.json();
-        return NextResponse.json(data);
+        return NextResponse.json(JSON.parse(JSON.stringify(vehicle)));
     } catch (error) {
+        console.error('Failed to fetch vehicle:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
@@ -26,32 +24,30 @@ export async function PATCH(
     { params }: { params: { id: string } }
 ) {
     try {
-        const id = params.id;
         const body = await request.json();
 
-        // No need to convert dates manually, standard JSON string is fine for backend
-        const res = await fetch(`${BACKEND_BASE_URL}/${id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
+        const data: Record<string, unknown> = {};
+        if (body.make !== undefined) data.make = body.make;
+        if (body.model !== undefined) data.model = body.model;
+        if (body.type !== undefined) data.type = body.type;
+        if (body.year !== undefined) data.year = body.year ? BigInt(body.year) : null;
+        if (body.licensePlate !== undefined) data.licensePlate = body.licensePlate;
+        if (body.license_plate !== undefined) data.licensePlate = body.license_plate;
+        if (body.vin !== undefined) data.vin = body.vin;
+        if (body.status !== undefined) data.status = body.status;
+        if (body.currentOdometer !== undefined) data.currentMileage = body.currentOdometer ? BigInt(body.currentOdometer) : null;
+        if (body.currentMileage !== undefined) data.currentMileage = body.currentMileage ? BigInt(body.currentMileage) : null;
+        if (body.registrationExpiry !== undefined) data.registrationExpiry = body.registrationExpiry ? new Date(body.registrationExpiry) : null;
+        if (body.insuranceExpiry !== undefined) data.insuranceExpiry = body.insuranceExpiry ? new Date(body.insuranceExpiry) : null;
+
+        const updated = await prisma.vehicle.update({
+            where: { id: params.id },
+            data,
         });
 
-        if (!res.ok) {
-            let error = await res.text();
-            try {
-                const jsonError = JSON.parse(error);
-                if (jsonError.error) {
-                    error = jsonError.error;
-                }
-            } catch (e) {
-                // Keep raw text
-            }
-            return NextResponse.json({ error }, { status: res.status });
-        }
-
-        const data = await res.json();
-        return NextResponse.json(data);
+        return NextResponse.json(JSON.parse(JSON.stringify(updated)));
     } catch (error) {
+        console.error('Failed to update vehicle:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
@@ -61,27 +57,13 @@ export async function DELETE(
     { params }: { params: { id: string } }
 ) {
     try {
-        const id = params.id;
-        const res = await fetch(`${BACKEND_BASE_URL}/${id}`, {
-            method: 'DELETE',
+        await prisma.vehicle.update({
+            where: { id: params.id },
+            data: { deletedAt: new Date() },
         });
-
-        if (!res.ok) {
-            let error = await res.text();
-            try {
-                // Try to parse as JSON to avoid double quoting
-                const jsonError = JSON.parse(error);
-                if (jsonError.error) {
-                    error = jsonError.error;
-                }
-            } catch (e) {
-                // Keep raw text if not JSON
-            }
-            return NextResponse.json({ error }, { status: res.status });
-        }
-
-        return NextResponse.json({ message: 'Vehicle deleted' });
+        return NextResponse.json({ success: true });
     } catch (error) {
+        console.error('Failed to delete vehicle:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

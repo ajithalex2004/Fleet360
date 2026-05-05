@@ -1,59 +1,76 @@
-import { NextResponse } from 'next/server';
+/**
+ * /api/vehicles — Maintenance module vehicle access
+ *
+ * Hub-and-Spoke rule: Vehicles are OWNED by Fleet Management.
+ * This route is READ-ONLY for all non-Fleet modules.
+ * To create a vehicle, use POST /api/fleet/vehicles.
+ *
+ * GET  — returns vehicles from the central Fleet registry
+ * POST — returns 405 with a redirect hint to the Fleet Hub
+ */
 
-const BACKEND_BASE_URL = 'http://127.0.0.1:8080/api/vehicles';
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 
-export async function GET() {
-    try {
-        const res = await fetch(BACKEND_BASE_URL, { cache: 'no-store' });
-        if (!res.ok) {
-            throw new Error(`Backend responded with ${res.status}`);
-        }
-        const data = await res.json();
-        return NextResponse.json(data);
-    } catch (error) {
-        console.error('Failed to fetch vehicles:', error);
-        return NextResponse.json({ error: 'Internal Server Error', details: String(error) }, { status: 500 });
-    }
+function serialize(obj: unknown): unknown {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj === 'bigint') return obj.toString();
+  if (obj instanceof Date) return obj.toISOString();
+  if (Array.isArray(obj)) return obj.map(serialize);
+  if (typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj as Record<string, unknown>).map(([k, v]) => [k, serialize(v)])
+    );
+  }
+  return obj;
 }
 
-export async function POST(request: Request) {
-    try {
-        const body = await request.json();
+export async function GET(request: NextRequest) {
+  try {
+    const sp = request.nextUrl.searchParams;
+    const status       = sp.get('status');
+    const vehicleUsage = sp.get('vehicleUsage') ?? sp.get('usage');
+    const search       = sp.get('search');
 
-        // Sanitize Payload: Ensure numbers are actually numbers for Go Strict JSON
-        const sanitizedBody = {
-            ...body,
-            year: parseInt(body.year) || 0,
-            currentOdometer: parseInt(body.currentOdometer) || 0,
-        };
-
-        // Proxy to Go Backend
-        const res = await fetch(BACKEND_BASE_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(sanitizedBody),
-        });
-
-        if (!res.ok) {
-            const errorText = await res.text();
-            let errorMessage = errorText;
-            try {
-                const jsonError = JSON.parse(errorText);
-                if (jsonError.error) {
-                    errorMessage = jsonError.error;
-                }
-            } catch (e) {
-                // Raw text
-            }
-            return NextResponse.json({ error: errorMessage }, { status: res.status });
-        }
-
-        const newVehicle = await res.json();
-        return NextResponse.json(newVehicle, { status: 201 });
-    } catch (error) {
-        console.error('Failed to create vehicle:', error);
-        return NextResponse.json({ error: 'Internal Server Error', details: String(error) }, { status: 500 });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: any = { deletedAt: null };
+    if (status)       where.status       = status;
+    if (vehicleUsage) where.vehicleUsage = vehicleUsage;
+    if (search) {
+      where.OR = [
+        { make: { contains: search, mode: 'insensitive' } },
+        { model: { contains: search, mode: 'insensitive' } },
+        { licensePlate: { contains: search, mode: 'insensitive' } },
+        { vin: { contains: search, mode: 'insensitive' } },
+      ];
     }
+
+    const vehicles = await prisma.vehicle.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return NextResponse.json(serialize(vehicles));
+  } catch (error) {
+    console.error('[Fleet Hub] Failed to fetch vehicles:', error);
+    return NextResponse.json(
+      { error: 'Internal Server Error', details: String(error) },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Vehicle creation is centralised in Fleet Management.
+ * Direct POST to /api/vehicles is not permitted from operational modules.
+ */
+export async function POST() {
+  return NextResponse.json(
+    {
+      error: 'Vehicle creation is centralised in Fleet Management.',
+      message: 'Use POST /api/fleet/vehicles to register a new vehicle. All modules reference vehicles by ID.',
+      hub: '/api/fleet/vehicles',
+    },
+    { status: 405 }
+  );
 }

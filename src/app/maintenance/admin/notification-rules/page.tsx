@@ -72,17 +72,17 @@ export default function NotificationRulesPage() {
     const [customEmail, setCustomEmail] = useState('');
 
     const ChannelColors: Record<string, string> = {
-        'EMAIL': 'bg-blue-100 border-blue-300 text-blue-800',
+        'EMAIL': 'bg-blue-500/20 border-blue-300 text-blue-300',
         'SMS': 'bg-amber-100 border-amber-300 text-amber-800',
         'WHATSAPP': 'bg-emerald-100 border-emerald-300 text-emerald-800'
     };
 
     const RecipientColors: Record<string, string> = {
-        'REQUESTER': 'bg-orange-100 border-orange-300 text-orange-800',
+        'REQUESTER': 'bg-orange-500/20 border-orange-300 text-orange-300',
         'ASSIGNEE': 'bg-violet-100 border-violet-300 text-violet-800',
         'FLEET_MANAGER': 'bg-sky-100 border-sky-300 text-sky-800',
         'ADMIN': 'bg-rose-100 border-rose-300 text-rose-800',
-        'CUSTOM': 'bg-slate-100 border-slate-300 text-slate-800'
+        'CUSTOM': 'bg-slate-700/40 border-white/15 text-slate-200'
     };
 
     useEffect(() => {
@@ -232,11 +232,11 @@ export default function NotificationRulesPage() {
     };
 
     return (
-        <div className="flex h-screen bg-slate-50">
+        <div className="flex h-screen bg-slate-800/50">
             {/* Sidebar List of Events */}
-            <div className="w-80 bg-white border-r border-slate-200 overflow-y-auto">
-                <div className="p-4 border-b border-slate-200">
-                    <h2 className="font-bold text-slate-800">System Events</h2>
+            <div className="w-80 bg-slate-900 border-r border-white/10 overflow-y-auto">
+                <div className="p-4 border-b border-white/10">
+                    <h2 className="font-bold text-slate-200">System Events</h2>
                     <p className="text-xs text-slate-500">Select an event to configure</p>
                 </div>
                 <div>
@@ -247,10 +247,10 @@ export default function NotificationRulesPage() {
                             <div
                                 key={event}
                                 onClick={() => handleEventSelect(event)}
-                                className={`p-4 border-b border-slate-100 cursor-pointer hover:bg-slate-50 ${selectedEvent === event ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''}`}
+                                className={`p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 ${selectedEvent === event ? 'bg-blue-500/10 border-l-4 border-l-blue-500' : ''}`}
                             >
                                 <div className="flex items-center justify-between mb-1">
-                                    <span className="text-sm font-medium text-slate-900">{EventLabels[event]}</span>
+                                    <span className="text-sm font-medium text-white">{EventLabels[event]}</span>
                                     {isConfigured && <span className="h-2 w-2 rounded-full bg-green-500"></span>}
                                 </div>
                                 <p className="text-xs text-slate-500">{event}</p>
@@ -265,18 +265,18 @@ export default function NotificationRulesPage() {
                 {selectedEvent && editingRule ? (
                     <div className="p-8 max-w-4xl mx-auto space-y-8">
                         <div>
-                            <h1 className="text-2xl font-bold text-slate-900">{EventLabels[selectedEvent]}</h1>
+                            <h1 className="text-2xl font-bold text-white">{EventLabels[selectedEvent]}</h1>
                             <p className="text-slate-500">Configure notifications for this event.</p>
                         </div>
 
                         {/* Enable/Disable Toggle */}
                         <div className="flex items-center gap-3">
-                            <span className="text-sm font-medium text-slate-700">Notification Status:</span>
+                            <span className="text-sm font-medium text-slate-300">Notification Status:</span>
                             <button
                                 onClick={() => setEditingRule({ ...editingRule, isEnabled: !editingRule.isEnabled })}
                                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editingRule.isEnabled ? 'bg-blue-600' : 'bg-slate-200'}`}
                             >
-                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${editingRule.isEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-slate-900 transition duration-200 ease-in-out ${editingRule.isEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                             </button>
                             <span className={`text-sm ${editingRule.isEnabled ? 'text-blue-600 font-medium' : 'text-slate-500'}`}>
                                 {editingRule.isEnabled ? 'Active' : 'Inactive'}
@@ -284,16 +284,16 @@ export default function NotificationRulesPage() {
                         </div>
 
                         {/* Channels */}
-                        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                            <h3 className="font-bold text-slate-800 mb-4">Channels</h3>
+                        <div className="bg-slate-900 p-6 rounded-xl border border-white/10 shadow-sm">
+                            <h3 className="font-bold text-slate-200 mb-4">Channels</h3>
                             <div className="flex gap-4">
                                 {['EMAIL', 'SMS', 'WHATSAPP'].map(ch => (
                                     <button
                                         key={ch}
                                         onClick={() => toggleChannel(ch)}
                                         className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${editingRule.channels.includes(ch)
-                                            ? `${ChannelColors[ch] || 'bg-slate-100'} shadow-sm scale-105`
-                                            : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                                            ? `${ChannelColors[ch] || 'bg-slate-700/40'} shadow-sm scale-105`
+                                            : 'bg-slate-900 border-white/10 text-slate-500 hover:bg-white/5'
                                             }`}
                                     >
                                         <div className="flex items-center gap-2">
@@ -310,16 +310,16 @@ export default function NotificationRulesPage() {
                         </div>
 
                         {/* Recipients */}
-                        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                            <h3 className="font-bold text-slate-800 mb-4">Recipients</h3>
+                        <div className="bg-slate-900 p-6 rounded-xl border border-white/10 shadow-sm">
+                            <h3 className="font-bold text-slate-200 mb-4">Recipients</h3>
                             <div className="flex flex-wrap gap-3">
                                 {RecipientOptions.map(type => (
                                     <button
                                         key={type}
                                         onClick={() => toggleRecipient(type)}
                                         className={`px-3 py-1.5 rounded-full border text-xs font-bold transition-all ${editingRule.recipientTypes.includes(type)
-                                            ? `${RecipientColors[type] || 'bg-gray-100'} shadow-sm scale-105`
-                                            : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50'
+                                            ? `${RecipientColors[type] || 'bg-slate-700/40'} shadow-sm scale-105`
+                                            : 'bg-slate-900 border-white/10 text-slate-400 hover:bg-white/5'
                                             }`}
                                     >
                                         {type.replace('_', ' ')}
@@ -329,8 +329,8 @@ export default function NotificationRulesPage() {
 
                             {/* Custom Recipient Inputs */}
                             {editingRule.recipientTypes.includes('CUSTOM') && (
-                                <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                                    <h4 className="text-sm font-semibold text-slate-700 mb-3">Manage Custom Recipients</h4>
+                                <div className="mt-4 p-4 bg-slate-800/50 rounded-lg border border-white/10">
+                                    <h4 className="text-sm font-semibold text-slate-300 mb-3">Manage Custom Recipients</h4>
 
                                     <div className="flex gap-2 mb-4">
                                         <input
@@ -338,14 +338,14 @@ export default function NotificationRulesPage() {
                                             placeholder="Name"
                                             value={customName}
                                             onChange={(e) => setCustomName(e.target.value)}
-                                            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                            className="flex-1 rounded-lg border border-white/15 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-white"
                                         />
                                         <input
                                             type="email"
                                             placeholder="Email"
                                             value={customEmail}
                                             onChange={(e) => setCustomEmail(e.target.value)}
-                                            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                            className="flex-1 rounded-lg border border-white/15 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-white"
                                         />
                                         <button
                                             onClick={addCustomRecipient}
@@ -358,8 +358,8 @@ export default function NotificationRulesPage() {
 
                                     <div className="space-y-2">
                                         {editingRule.specificRecipientIds.map((recipient, idx) => (
-                                            <div key={idx} className="flex justify-between items-center bg-white px-3 py-2 rounded border border-slate-200 text-sm">
-                                                <span className="text-slate-700 font-medium">
+                                            <div key={idx} className="flex justify-between items-center bg-slate-900 px-3 py-2 rounded border border-white/10 text-sm">
+                                                <span className="text-slate-300 font-medium">
                                                     {parseRecipient(recipient)}
                                                 </span>
                                                 <button
@@ -379,21 +379,21 @@ export default function NotificationRulesPage() {
                         </div>
 
                         {/* Template Editor */}
-                        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                            <h3 className="font-bold text-slate-800 mb-4">Template Configuration</h3>
+                        <div className="bg-slate-900 p-6 rounded-xl border border-white/10 shadow-sm">
+                            <h3 className="font-bold text-slate-200 mb-4">Template Configuration</h3>
 
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Subject Line</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Subject Line</label>
                                     <input
                                         type="text"
                                         value={templateSubject}
                                         onChange={e => setTemplateSubject(e.target.value)}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-white"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">
                                         Body Content
                                         <span className="ml-2 text-xs font-normal text-slate-400">Supported variables: {'{{requestId}}'}, {'{{status}}'}, {'{{assignee}}'}</span>
                                     </label>
@@ -401,7 +401,7 @@ export default function NotificationRulesPage() {
                                         rows={6}
                                         value={templateBody}
                                         onChange={e => setTemplateBody(e.target.value)}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-white"
                                     />
                                 </div>
                             </div>

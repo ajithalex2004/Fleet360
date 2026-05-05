@@ -59,12 +59,12 @@ export default function ActionCentreHistoryPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <div className="flex items-center gap-2">
-                        <Link href="/maintenance/action-centre" className="text-slate-400 hover:text-slate-600 transition-colors">
+                        <Link href="/maintenance/action-centre" className="text-slate-400 hover:text-slate-300 transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
                             </svg>
                         </Link>
-                        <h1 className="text-2xl font-bold text-slate-900">Alert History</h1>
+                        <h1 className="text-2xl font-bold text-white">Alert History</h1>
                     </div>
                     <p className="mt-1 text-slate-500 ml-8">View resolved and closed alerts.</p>
                 </div>
@@ -93,7 +93,7 @@ export default function ActionCentreHistoryPage() {
             </div>
 
             {filteredAlerts.length === 0 && (
-                <div className="rounded-xl border border-dashed border-slate-300 p-12 text-center">
+                <div className="rounded-xl border border-dashed border-white/15 p-12 text-center">
                     <p className="text-slate-500">No resolved alerts found.</p>
                 </div>
             )}
@@ -101,10 +101,10 @@ export default function ActionCentreHistoryPage() {
             {/* View Details Modal */}
             {viewingAlert && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-                    <div className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-2xl">
+                    <div className="w-full max-w-2xl rounded-xl bg-slate-900 p-6 shadow-2xl">
                         <div className="flex items-center justify-between mb-6">
-                            <h3 className="text-xl font-bold text-slate-900">Alert Details</h3>
-                            <button onClick={() => setViewingAlert(null)} className="text-slate-400 hover:text-slate-600">
+                            <h3 className="text-xl font-bold text-white">Alert Details</h3>
+                            <button onClick={() => setViewingAlert(null)} className="text-slate-400 hover:text-slate-300">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-6 w-6">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                 </svg>
@@ -115,10 +115,10 @@ export default function ActionCentreHistoryPage() {
                             {/* Header Info */}
                             <div className="flex items-start justify-between">
                                 <div>
-                                    <h4 className="text-lg font-semibold text-slate-900">{viewingAlert.title}</h4>
+                                    <h4 className="text-lg font-semibold text-white">{viewingAlert.title}</h4>
                                     <p className="text-sm text-slate-500 mt-1">ID: {viewingAlert.id.toUpperCase()}</p>
                                 </div>
-                                <span className={`rounded-full px-3 py-1 text-xs font-medium bg-green-100 text-green-700`}>
+                                <span className={`rounded-full px-3 py-1 text-xs font-medium bg-emerald-500/20 text-green-700`}>
                                     {viewingAlert.status}
                                 </span>
                             </div>
@@ -127,15 +127,15 @@ export default function ActionCentreHistoryPage() {
                             <div className="grid grid-cols-2 gap-6">
                                 <div>
                                     <label className="block text-xs font-medium text-slate-500 mb-1">Type</label>
-                                    <p className="text-sm font-medium text-slate-900">{viewingAlert.type}</p>
+                                    <p className="text-sm font-medium text-white">{viewingAlert.type}</p>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-medium text-slate-500 mb-1">Date Created</label>
-                                    <p className="text-sm font-medium text-slate-900">{new Date(viewingAlert.dateCreated).toLocaleString()}</p>
+                                    <p className="text-sm font-medium text-white">{new Date(viewingAlert.dateCreated).toLocaleString()}</p>
                                 </div>
                                 <div className="col-span-2">
                                     <label className="block text-xs font-medium text-slate-500 mb-1">Description</label>
-                                    <p className="text-sm text-slate-900 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                    <p className="text-sm text-white bg-slate-800/50 p-3 rounded-lg border border-white/5">
                                         {viewingAlert.description}
                                     </p>
                                 </div>
@@ -143,18 +143,18 @@ export default function ActionCentreHistoryPage() {
 
                             {/* Assignment Details - Only if Assigned/Resolved */}
                             {viewingAlert.assignedTo && (
-                                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-                                    <h4 className="text-sm font-bold text-blue-900 mb-3 flex items-center gap-2">
+                                <div className="rounded-xl border border-blue-200 bg-blue-500/10 p-4">
+                                    <h4 className="text-sm font-bold text-blue-300 mb-3 flex items-center gap-2">
                                         Assignment Details
                                     </h4>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-xs font-medium text-blue-700 mb-1">Assigned To</label>
-                                            <p className="text-sm font-medium text-blue-900">{viewingAlert.assignedTo}</p>
+                                            <p className="text-sm font-medium text-blue-300">{viewingAlert.assignedTo}</p>
                                         </div>
                                         <div>
                                             <label className="block text-xs font-medium text-blue-700 mb-1">Assigned Date</label>
-                                            <p className="text-sm font-medium text-blue-900">
+                                            <p className="text-sm font-medium text-blue-300">
                                                 {viewingAlert.assignedDate ? new Date(viewingAlert.assignedDate).toLocaleString() : 'N/A'}
                                             </p>
                                         </div>
@@ -166,7 +166,7 @@ export default function ActionCentreHistoryPage() {
                         <div className="mt-8 flex justify-end">
                             <button
                                 onClick={() => setViewingAlert(null)}
-                                className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200"
+                                className="rounded-lg bg-slate-700/40 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-200"
                             >
                                 Close
                             </button>

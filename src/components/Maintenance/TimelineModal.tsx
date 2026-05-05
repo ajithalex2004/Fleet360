@@ -71,11 +71,11 @@ export default function TimelineModal({ isOpen, onClose, request, maintenanceReq
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="bg-slate-900 rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200 border border-white/10">
                 {/* Header */}
-                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                    <h3 className="text-lg font-bold text-slate-900">{title}</h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+                <div className="px-6 py-4 border-b border-white/10 flex justify-between items-center">
+                    <h3 className="text-lg font-bold text-white">{title}</h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-300">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                         </svg>
@@ -84,24 +84,24 @@ export default function TimelineModal({ isOpen, onClose, request, maintenanceReq
 
                 {/* Body */}
                 <div className="p-6 max-h-[60vh] overflow-y-auto">
-                    <div className="relative border-l border-slate-200 ml-3 space-y-8">
+                    <div className="relative border-l border-white/10 ml-3 space-y-8">
                         {sortedHistory.length === 0 ? (
                             <p className="text-slate-500 text-sm pl-6">No history available.</p>
                         ) : (
                             sortedHistory.map((entry, index) => (
                                 <div key={index} className="relative pl-6">
                                     {/* Dot */}
-                                    <div className={`absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full border border-white ring-1 ring-slate-200 ${index === 0 ? 'bg-blue-500 ring-blue-100' : 'bg-slate-300'
+                                    <div className={`absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full border border-slate-900 ring-1 ${index === 0 ? 'bg-blue-500 ring-blue-500/50' : 'bg-slate-600 ring-white/10'
                                         }`}></div>
 
                                     <div className="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1">
-                                        <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                                        <h4 className="text-sm font-semibold text-white flex items-center gap-2">
                                             {entry.status}
                                             {/* Source Badge */}
                                             {entry.source && (
                                                 <span className={`text-[10px] px-1.5 py-0.5 rounded border ${entry.source === 'Service Request'
-                                                    ? 'bg-blue-50 text-blue-600 border-blue-100'
-                                                    : 'bg-purple-50 text-purple-600 border-purple-100'
+                                                    ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                                    : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
                                                     }`}>
                                                     {entry.source === 'Service Request' ? 'SR' : 'MR'}
                                                 </span>
@@ -113,11 +113,11 @@ export default function TimelineModal({ isOpen, onClose, request, maintenanceReq
                                     </div>
 
                                     {entry.note && (
-                                        <p className="mt-1 text-sm text-slate-600">{entry.note}</p>
+                                        <p className="mt-1 text-sm text-slate-400">{entry.note}</p>
                                     )}
 
                                     {entry.actor && (
-                                        <div className="mt-1 flex items-center gap-1 text-xs text-slate-400">
+                                        <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
                                                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-5.5-2.5a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0zM10 12a5.99 5.99 0 00-4.793 2.39A9.916 9.916 0 0010 18c2.695 0 5.13-1.07 6.793-2.61A5.99 5.99 0 0010 12z" clipRule="evenodd" />
                                             </svg>

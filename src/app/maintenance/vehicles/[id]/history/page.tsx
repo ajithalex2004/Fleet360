@@ -133,12 +133,12 @@ export default function VehicleHistoryPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <div className="flex items-center gap-3 mb-1">
-                        <Link href="/maintenance/vehicles" className="text-slate-400 hover:text-slate-600">
+                        <Link href="/maintenance/vehicles" className="text-slate-400 hover:text-slate-300">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
                             </svg>
                         </Link>
-                        <h1 className="text-2xl font-bold text-slate-900">Vehicle History</h1>
+                        <h1 className="text-2xl font-bold text-white">Vehicle History</h1>
                     </div>
                     <p className="text-slate-500 ml-8">
                         {vehicle.make} {vehicle.model} ({vehicle.licensePlate}) • {vehicle.year}
@@ -154,28 +154,28 @@ export default function VehicleHistoryPage() {
 
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
                     <p className="text-sm text-slate-500">Total Services</p>
-                    <p className="text-2xl font-bold text-slate-900">{history.totalMaintenanceRequests}</p>
+                    <p className="text-2xl font-bold text-white">{history.totalMaintenanceRequests}</p>
                 </div>
-                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
                     <p className="text-sm text-slate-500">Total Cost</p>
-                    <p className="text-2xl font-bold text-slate-900">${history.totalCost.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-white">${history.totalCost.toLocaleString()}</p>
                 </div>
-                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
                     <p className="text-sm text-slate-500">Avg Cost/Service</p>
-                    <p className="text-2xl font-bold text-slate-900">${Math.round(history.averageCostPerService).toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-white">${Math.round(history.averageCostPerService).toLocaleString()}</p>
                 </div>
-                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
                     <p className="text-sm text-slate-500">Total Downtime</p>
-                    <p className="text-2xl font-bold text-slate-900">{Math.round(history.totalDowntimeDays)} days</p>
+                    <p className="text-2xl font-bold text-white">{Math.round(history.totalDowntimeDays)} days</p>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Service History Timeline */}
-                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                    <h3 className="text-lg font-bold text-slate-900 mb-4">Service History</h3>
+                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-white mb-4">Service History</h3>
                     <div className="space-y-4 max-h-96 overflow-y-auto">
                         {requests.map(req => (
                             <div key={req.id} className="border-l-4 border-blue-500 pl-4 py-2">
@@ -187,10 +187,10 @@ export default function VehicleHistoryPage() {
                                         <p className="text-xs text-slate-500 mt-1">
                                             {new Date(req.requestDate).toLocaleDateString()} • {req.maintenanceType}
                                         </p>
-                                        <p className="text-sm text-slate-700 mt-1">{req.description}</p>
+                                        <p className="text-sm text-slate-300 mt-1">{req.description}</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-sm font-medium text-slate-900">
+                                        <p className="text-sm font-medium text-white">
                                             ${(req.actualCost || req.estimatedCost || 0).toLocaleString()}
                                         </p>
                                     </div>
@@ -201,15 +201,15 @@ export default function VehicleHistoryPage() {
                 </div>
 
                 {/* Recurring Issues */}
-                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                    <h3 className="text-lg font-bold text-slate-900 mb-4">Recurring Issues</h3>
+                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-white mb-4">Recurring Issues</h3>
                     {history.recurringIssues.length > 0 ? (
                         <div className="space-y-3">
                             {history.recurringIssues.map((issue, idx) => (
-                                <div key={idx} className="rounded-lg border border-red-200 bg-red-50 p-4">
+                                <div key={idx} className="rounded-lg border border-red-200 bg-red-500/10 p-4">
                                     <div className="flex items-start justify-between mb-2">
-                                        <p className="text-sm font-medium text-red-900">{issue.issue}...</p>
-                                        <span className="inline-flex items-center rounded-full bg-red-200 px-2 py-0.5 text-xs font-medium text-red-800">
+                                        <p className="text-sm font-medium text-red-300">{issue.issue}...</p>
+                                        <span className="inline-flex items-center rounded-full bg-red-200 px-2 py-0.5 text-xs font-medium text-red-300">
                                             {issue.occurrences}x
                                         </span>
                                     </div>
@@ -233,12 +233,12 @@ export default function VehicleHistoryPage() {
                 </div>
 
                 {/* Services by Type */}
-                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                    <h3 className="text-lg font-bold text-slate-900 mb-4">Services by Type</h3>
+                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-white mb-4">Services by Type</h3>
                     <div className="space-y-3">
                         {Object.entries(history.servicesByType).map(([type, count]) => (
                             <div key={type} className="flex items-center justify-between">
-                                <span className="text-sm text-slate-700">{type}</span>
+                                <span className="text-sm text-slate-300">{type}</span>
                                 <div className="flex items-center gap-3">
                                     <div className="w-32 bg-slate-200 rounded-full h-2">
                                         <div
@@ -246,7 +246,7 @@ export default function VehicleHistoryPage() {
                                             style={{ width: `${(count / history.totalMaintenanceRequests) * 100}%` }}
                                         />
                                     </div>
-                                    <span className="text-sm font-medium text-slate-900 w-8 text-right">{count}</span>
+                                    <span className="text-sm font-medium text-white w-8 text-right">{count}</span>
                                 </div>
                             </div>
                         ))}
@@ -254,13 +254,13 @@ export default function VehicleHistoryPage() {
                 </div>
 
                 {/* Cost by Year */}
-                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                    <h3 className="text-lg font-bold text-slate-900 mb-4">Cost by Year</h3>
+                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-white mb-4">Cost by Year</h3>
                     <div className="space-y-3">
                         {Object.entries(history.costByYear).sort((a, b) => b[0].localeCompare(a[0])).map(([year, cost]) => (
                             <div key={year} className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-slate-700">{year}</span>
-                                <span className="text-sm font-bold text-slate-900">${cost.toLocaleString()}</span>
+                                <span className="text-sm font-medium text-slate-300">{year}</span>
+                                <span className="text-sm font-bold text-white">${cost.toLocaleString()}</span>
                             </div>
                         ))}
                     </div>

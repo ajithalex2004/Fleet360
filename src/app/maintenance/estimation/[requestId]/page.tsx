@@ -261,7 +261,7 @@ export default function EstimationPage() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Estimation Management</h1>
+                    <h1 className="text-2xl font-bold text-white">Estimation Management</h1>
                     <p className="mt-1 text-slate-500">Request #{request.id.toUpperCase()} - {request.status}</p>
                 </div>
                 <div className="flex gap-3">
@@ -286,44 +286,44 @@ export default function EstimationPage() {
             </div>
 
             {/* Request Summary */}
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h3 className="text-lg font-bold text-slate-900 mb-4">Request Details</h3>
+            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-white mb-4">Request Details</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                     <div>
                         <span className="text-slate-500">Maintenance Type:</span>
-                        <span className="ml-2 font-medium text-slate-900">{request.maintenanceType || 'N/A'}</span>
+                        <span className="ml-2 font-medium text-white">{request.maintenanceType || 'N/A'}</span>
                     </div>
                     <div>
                         <span className="text-slate-500">Priority:</span>
-                        <span className="ml-2 font-medium text-slate-900">{request.priority || 'Medium'}</span>
+                        <span className="ml-2 font-medium text-white">{request.priority || 'Medium'}</span>
                     </div>
                     <div>
                         <span className="text-slate-500">RFQ Sent:</span>
-                        <span className="ml-2 font-medium text-slate-900">
+                        <span className="ml-2 font-medium text-white">
                             {request.rfqSentAt ? new Date(request.rfqSentAt).toLocaleDateString() : 'Not sent'}
                         </span>
                     </div>
                     <div>
                         <span className="text-slate-500">Quotations Received:</span>
-                        <span className="ml-2 font-medium text-slate-900">{quotations.length}</span>
+                        <span className="ml-2 font-medium text-white">{quotations.length}</span>
                     </div>
                 </div>
-                <div className="mt-3 pt-3 border-t border-slate-200">
+                <div className="mt-3 pt-3 border-t border-white/10">
                     <p className="text-xs text-slate-500">Description</p>
-                    <p className="text-sm text-slate-900 mt-1">{request.description}</p>
+                    <p className="text-sm text-white mt-1">{request.description}</p>
                 </div>
             </div>
 
             {/* Quotation Comparison Table */}
             {quotations.length > 0 && (
-                <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-                    <div className="p-6 border-b border-slate-200">
-                        <h3 className="text-lg font-bold text-slate-900">Quotation Comparison ({quotations.length})</h3>
+                <div className="rounded-xl border border-white/10 bg-slate-900 shadow-sm">
+                    <div className="p-6 border-b border-white/10">
+                        <h3 className="text-lg font-bold text-white">Quotation Comparison ({quotations.length})</h3>
                         <p className="text-sm text-slate-500">Compare vendor quotations side-by-side</p>
                     </div>
                     <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-slate-200">
-                            <thead className="bg-slate-50">
+                        <table className="min-w-full divide-y divide-white/10">
+                            <thead className="bg-slate-800/50">
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Garage</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Parts</th>
@@ -334,24 +334,24 @@ export default function EstimationPage() {
                                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Status</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-200 bg-white">
+                            <tbody className="divide-y divide-white/10 bg-slate-900">
                                 {quotations.map(quot => (
-                                    <tr key={quot.id} className="hover:bg-slate-50">
+                                    <tr key={quot.id} className="hover:bg-white/5">
                                         <td className="whitespace-nowrap px-6 py-4">
-                                            <div className="text-sm font-medium text-slate-900">{quot.garageName}</div>
-                                            <div className="text-xs text-slate-500">Submitted {new Date(quot.submittedAt).toLocaleDateString()}</div>
+                                            <div className="text-sm font-medium text-white">{quot.garageName}</div>
+                                            <div className="text-xs text-slate-300">Submitted {new Date(quot.submittedAt).toLocaleDateString()}</div>
                                         </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900">{formatCurrency(quot.partsCost)}</td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900">{formatCurrency(quot.laborCost)}</td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900">{formatCurrency(quot.otherCharges)}</td>
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">{formatCurrency(quot.partsCost)}</td>
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">{formatCurrency(quot.laborCost)}</td>
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">{formatCurrency(quot.otherCharges)}</td>
                                         <td className="whitespace-nowrap px-6 py-4">
                                             <div className="text-sm font-bold text-blue-600">{formatCurrency(quot.totalCost)}</div>
                                         </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900">{quot.estimatedDuration} days</td>
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">{quot.estimatedDuration} days</td>
                                         <td className="whitespace-nowrap px-6 py-4">
-                                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${quot.status === 'APPROVED' ? 'bg-green-100 text-green-700 border-green-300' :
-                                                quot.status === 'REJECTED' ? 'bg-red-100 text-red-700 border-red-300' :
-                                                    'bg-yellow-100 text-yellow-700 border-yellow-300'
+                                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${quot.status === 'APPROVED' ? 'bg-emerald-500/20 text-green-700 border-green-300' :
+                                                quot.status === 'REJECTED' ? 'bg-red-500/20 text-red-700 border-red-300' :
+                                                    'bg-amber-500/20 text-yellow-700 border-yellow-300'
                                                 }`}>
                                                 {quot.status}
                                             </span>
@@ -365,11 +365,11 @@ export default function EstimationPage() {
             )}
 
             {/* Matched Garages with Search */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="p-6 border-b border-slate-200">
+            <div className="rounded-xl border border-white/10 bg-slate-900 shadow-sm">
+                <div className="p-6 border-b border-white/10">
                     <div className="flex items-center justify-between mb-4">
                         <div>
-                            <h3 className="text-lg font-bold text-slate-900">Vendor Selection ({filteredGarages.length})</h3>
+                            <h3 className="text-lg font-bold text-white">Vendor Selection ({filteredGarages.length})</h3>
                             <p className="text-sm text-slate-500">Select garages to send RFQ</p>
                         </div>
                         <div className="w-64">
@@ -378,7 +378,7 @@ export default function EstimationPage() {
                                 placeholder="Search garages..."
                                 value={garageSearch}
                                 onChange={(e) => setGarageSearch(e.target.value)}
-                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900"
+                                className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm bg-slate-900 text-white"
                             />
                         </div>
                     </div>
@@ -387,7 +387,7 @@ export default function EstimationPage() {
                         <span className="font-medium text-blue-600">{selectedGarages.size} garage(s)</span>
                     </div>
                 </div>
-                <div className="divide-y divide-slate-200 max-h-96 overflow-y-auto">
+                <div className="divide-y divide-white/10 max-h-96 overflow-y-auto">
                     {filteredGarages.length === 0 ? (
                         <div className="p-12 text-center text-slate-500">
                             {garageSearch ? 'No garages match your search' : 'No garages matched for this request'}
@@ -399,28 +399,28 @@ export default function EstimationPage() {
                             const hasQuotation = quotations.some(q => q.garageId === match.garageId);
 
                             return (
-                                <div key={match.garageId} className={`p-6 hover:bg-slate-50 transition-colors ${isSelected ? 'bg-blue-50' : ''}`}>
+                                <div key={match.garageId} className={`p-6 hover:bg-white/5 transition-colors ${isSelected ? 'bg-blue-500/10' : ''}`}>
                                     <div className="flex items-start gap-4">
                                         <input
                                             type="checkbox"
                                             checked={isSelected}
                                             onChange={() => toggleGarageSelection(match.garageId)}
                                             disabled={rfqSent}
-                                            className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 disabled:opacity-50"
+                                            className="mt-1 h-4 w-4 rounded border-white/15 text-blue-600 disabled:opacity-50"
                                         />
                                         <div className="flex-1">
                                             <div className="flex items-center gap-3 mb-2">
-                                                <h4 className="text-base font-bold text-slate-900">{match.garageName}</h4>
+                                                <h4 className="text-base font-bold text-white">{match.garageName}</h4>
                                                 <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${getMatchScoreBadge(match.matchScore)}`}>
                                                     {match.matchScore}% Match
                                                 </span>
                                                 {rfqSent && (
-                                                    <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700 border border-green-300">
+                                                    <span className="inline-flex items-center rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-medium text-green-700 border border-green-300">
                                                         RFQ Sent
                                                     </span>
                                                 )}
                                                 {hasQuotation && (
-                                                    <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700 border border-blue-300">
+                                                    <span className="inline-flex items-center rounded-full bg-blue-500/20 px-2.5 py-0.5 text-xs font-medium text-blue-700 border border-blue-300">
                                                         Quotation Received
                                                     </span>
                                                 )}
@@ -430,7 +430,7 @@ export default function EstimationPage() {
                                                     <span className="text-slate-500">Specialties:</span>
                                                     <div className="flex flex-wrap gap-1 mt-1">
                                                         {match.matchedSpecialties.map((spec, idx) => (
-                                                            <span key={idx} className="inline-flex items-center rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                                                            <span key={idx} className="inline-flex items-center rounded bg-blue-500/20 px-2 py-0.5 text-xs text-blue-700">
                                                                 {spec}
                                                             </span>
                                                         ))}
@@ -439,7 +439,7 @@ export default function EstimationPage() {
                                                 {rfqSent && (
                                                     <div>
                                                         <span className="text-slate-500">RFQ Sent:</span>
-                                                        <span className="ml-2 text-slate-900">{new Date(match.rfqSentAt!).toLocaleDateString()}</span>
+                                                        <span className="ml-2 text-white">{new Date(match.rfqSentAt!).toLocaleDateString()}</span>
                                                     </div>
                                                 )}
                                             </div>
@@ -466,11 +466,11 @@ export default function EstimationPage() {
             {/* Quotation Entry Modal */}
             {showQuotationModal && selectedGarage && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl">
-                        <div className="p-6 border-b border-slate-200">
+                    <div className="bg-slate-900 rounded-2xl w-full max-w-2xl shadow-2xl">
+                        <div className="p-6 border-b border-white/10">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-bold text-slate-900">Enter Quotation - {selectedGarage.garageName}</h3>
-                                <button onClick={() => setShowQuotationModal(false)} className="text-slate-400 hover:text-slate-600">
+                                <h3 className="text-lg font-bold text-white">Enter Quotation - {selectedGarage.garageName}</h3>
+                                <button onClick={() => setShowQuotationModal(false)} className="text-slate-400 hover:text-slate-300">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                     </svg>
@@ -481,38 +481,38 @@ export default function EstimationPage() {
                         <div className="p-6 space-y-4">
                             <div className="grid grid-cols-3 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Parts Cost (AED)</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Parts Cost (AED)</label>
                                     <input
                                         type="number"
                                         value={quotationForm.partsCost}
                                         onChange={(e) => setQuotationForm({ ...quotationForm, partsCost: Number(e.target.value) })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Labor Cost (AED)</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Labor Cost (AED)</label>
                                     <input
                                         type="number"
                                         value={quotationForm.laborCost}
                                         onChange={(e) => setQuotationForm({ ...quotationForm, laborCost: Number(e.target.value) })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Other Charges (AED)</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Other Charges (AED)</label>
                                     <input
                                         type="number"
                                         value={quotationForm.otherCharges}
                                         onChange={(e) => setQuotationForm({ ...quotationForm, otherCharges: Number(e.target.value) })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     />
                                 </div>
                             </div>
 
-                            <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
+                            <div className="rounded-lg bg-blue-500/10 border border-blue-200 p-4">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-sm font-medium text-blue-900">Total Quotation:</span>
-                                    <span className="text-2xl font-bold text-blue-900">
+                                    <span className="text-sm font-medium text-blue-300">Total Quotation:</span>
+                                    <span className="text-2xl font-bold text-blue-300">
                                         {formatCurrency(quotationForm.partsCost + quotationForm.laborCost + quotationForm.otherCharges)}
                                     </span>
                                 </div>
@@ -520,41 +520,41 @@ export default function EstimationPage() {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Estimated Duration (days)</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Estimated Duration (days)</label>
                                     <input
                                         type="number"
                                         value={quotationForm.estimatedDuration}
                                         onChange={(e) => setQuotationForm({ ...quotationForm, estimatedDuration: Number(e.target.value) })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Valid Until</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Valid Until</label>
                                     <input
                                         type="date"
                                         value={quotationForm.validUntil}
                                         onChange={(e) => setQuotationForm({ ...quotationForm, validUntil: e.target.value })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     />
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Notes (Optional)</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Notes (Optional)</label>
                                 <textarea
                                     rows={3}
                                     value={quotationForm.notes}
                                     onChange={(e) => setQuotationForm({ ...quotationForm, notes: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     placeholder="Add any notes about the quotation..."
                                 />
                             </div>
                         </div>
 
-                        <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+                        <div className="p-6 border-t border-white/10 flex justify-end gap-3">
                             <button
                                 onClick={() => setShowQuotationModal(false)}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
                             >
                                 Cancel
                             </button>

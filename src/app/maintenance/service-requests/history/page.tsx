@@ -150,13 +150,13 @@ export default function ServiceRequestHistoryPage() {
                         <div className="flex items-center gap-2 mb-1">
                             <button
                                 onClick={() => router.back()}
-                                className="text-slate-400 hover:text-slate-600 transition-colors"
+                                className="text-slate-400 hover:text-slate-300 transition-colors"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
                                 </svg>
                             </button>
-                            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Service Request History</h1>
+                            <h1 className="text-2xl font-bold text-white tracking-tight">Service Request History</h1>
                         </div>
                         <p className="mt-1 text-slate-500 ml-7">View resolved service requests.</p>
                     </div>
@@ -176,7 +176,7 @@ export default function ServiceRequestHistoryPage() {
 
                 <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {filteredRequests.length === 0 ? (
-                        <div className="col-span-full text-center py-12 text-slate-500 bg-slate-50 rounded-lg border border-dashed border-slate-300">
+                        <div className="col-span-full text-center py-12 text-slate-500 bg-slate-800/50 rounded-lg border border-dashed border-white/15">
                             No resolved requests found.
                         </div>
                     ) : (
@@ -186,16 +186,16 @@ export default function ServiceRequestHistoryPage() {
                             const vehicle = vehicles.find(v => v.id === request.vehicleId);
 
                             return (
-                                <div key={request.id} className="bg-slate-50 rounded-lg p-4 relative overflow-hidden border border-slate-200 hover:shadow-md transition-all flex flex-col min-h-[200px]">
+                                <div key={request.id} className="bg-slate-800/50 rounded-lg p-4 relative overflow-hidden border border-white/10 hover:shadow-md transition-all flex flex-col min-h-[200px]">
                                     <div className="relative z-10 flex-1 flex flex-col">
                                         <div className="flex justify-between items-start mb-3">
-                                            <span className="text-[10px] font-mono text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">{request.id}</span>
+                                            <span className="text-[10px] font-mono text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded border border-white/10">{request.id}</span>
                                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${getStatusColor(request.status)}`}>
                                                 {request.status}
                                             </span>
                                         </div>
 
-                                        <h4 className="text-sm font-bold text-slate-700 mb-1 line-clamp-1" title={request.serviceType}>
+                                        <h4 className="text-sm font-bold text-slate-300 mb-1 line-clamp-1" title={request.serviceType}>
                                             {request.serviceType}
                                         </h4>
 
@@ -203,17 +203,17 @@ export default function ServiceRequestHistoryPage() {
                                             {request.description}
                                         </p>
 
-                                        <div className="space-y-1.5 text-xs border-t border-slate-200 pt-3">
+                                        <div className="space-y-1.5 text-xs border-t border-white/10 pt-3">
                                             <div className="flex justify-between">
                                                 <span className="text-slate-500">Requestor:</span>
-                                                <span className="text-slate-700 font-medium truncate max-w-[100px]">{requestorName}</span>
+                                                <span className="text-slate-300 font-medium truncate max-w-[100px]">{requestorName}</span>
                                             </div>
                                             {/* Dynamic Details: Vehicle or Driver */}
                                             {request.serviceType.includes('Driver') ? (
                                                 request.relatedDriverId && (
                                                     <div className="flex justify-between">
                                                         <span className="text-slate-500">Driver Subject:</span>
-                                                        <span className="text-slate-700 truncate max-w-[100px]">
+                                                        <span className="text-slate-300 truncate max-w-[100px]">
                                                             {drivers.find(d => d.id === request.relatedDriverId)?.name || 'Unknown'}
                                                         </span>
                                                     </div>
@@ -223,30 +223,30 @@ export default function ServiceRequestHistoryPage() {
                                                     <>
                                                         <div className="flex justify-between">
                                                             <span className="text-slate-500">Vehicle ID:</span>
-                                                            <span className="text-slate-700 font-mono text-[10px]">{vehicle.id}</span>
+                                                            <span className="text-slate-300 font-mono text-[10px]">{vehicle.id}</span>
                                                         </div>
                                                         <div className="flex justify-between">
                                                             <span className="text-slate-500">Vehicle:</span>
-                                                            <span className="text-slate-700 truncate max-w-[100px]">{vehicle.make} {vehicle.model}</span>
+                                                            <span className="text-slate-300 truncate max-w-[100px]">{vehicle.make} {vehicle.model}</span>
                                                         </div>
                                                     </>
                                                 )
                                             )}
                                             <div className="flex justify-between">
                                                 <span className="text-slate-500">Service Needed:</span>
-                                                <span className="text-slate-700 font-medium">{request.date}</span>
+                                                <span className="text-slate-300 font-medium">{request.date}</span>
                                             </div>
                                             {request.assignedTo && (
                                                 <div className="flex justify-between items-center pt-1">
                                                     <span className="text-slate-500">Assigned To:</span>
-                                                    <span className="text-slate-700 truncate max-w-[100px]" title={request.assignedTo}>
+                                                    <span className="text-slate-300 truncate max-w-[100px]" title={request.assignedTo}>
                                                         {request.assignedTo}
                                                     </span>
                                                 </div>
                                             )}
                                         </div>
 
-                                        <div className="mt-auto pt-3 border-t border-slate-200">
+                                        <div className="mt-auto pt-3 border-t border-white/10">
                                             <button
                                                 onClick={() => {
                                                     setSelectedRequestForTimeline(request);

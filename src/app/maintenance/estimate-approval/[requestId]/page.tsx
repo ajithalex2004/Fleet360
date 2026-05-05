@@ -189,7 +189,7 @@ export default function EstimateApprovalPage() {
     if (!canApproveEstimate && !isEmailApproval) {
         return (
             <div className="p-8 text-center">
-                <div className="rounded-xl border border-red-200 bg-red-50 p-6 inline-block">
+                <div className="rounded-xl border border-red-200 bg-red-500/10 p-6 inline-block">
                     <p className="text-red-700 font-medium">Access Denied</p>
                     <p className="text-sm text-red-600 mt-1">You do not have permission to approve estimates.</p>
                 </div>
@@ -201,7 +201,7 @@ export default function EstimateApprovalPage() {
     if (!linkValid) {
         return (
             <div className="p-8 text-center">
-                <div className="rounded-xl border border-red-200 bg-red-50 p-6 inline-block">
+                <div className="rounded-xl border border-red-200 bg-red-500/10 p-6 inline-block">
                     <p className="text-red-700 font-medium">Invalid or Expired Link</p>
                     <p className="text-sm text-red-600 mt-1">This approval link is invalid, expired, or has already been used.</p>
                 </div>
@@ -220,7 +220,7 @@ export default function EstimateApprovalPage() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Estimate Approval</h1>
+                    <h1 className="text-2xl font-bold text-white">Estimate Approval</h1>
                     <p className="mt-1 text-slate-500">
                         Request #{request.id.toUpperCase()}
                         {isEmailApproval && <span className="ml-2 text-blue-600">• Email Approval</span>}
@@ -244,43 +244,43 @@ export default function EstimateApprovalPage() {
             </div>
 
             {/* Request Summary */}
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h3 className="text-lg font-bold text-slate-900 mb-4">Request Details</h3>
+            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-white mb-4">Request Details</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                     <div>
                         <span className="text-slate-500">Vehicle:</span>
-                        <span className="ml-2 font-medium text-slate-900">
+                        <span className="ml-2 font-medium text-white">
                             {vehicle?.make} {vehicle?.model} ({vehicle?.licensePlate})
                         </span>
                     </div>
                     <div>
                         <span className="text-slate-500">Maintenance Type:</span>
-                        <span className="ml-2 font-medium text-slate-900">{request.maintenanceType || 'N/A'}</span>
+                        <span className="ml-2 font-medium text-white">{request.maintenanceType || 'N/A'}</span>
                     </div>
                     <div>
                         <span className="text-slate-500">Priority:</span>
-                        <span className="ml-2 font-medium text-slate-900">{request.priority || 'Medium'}</span>
+                        <span className="ml-2 font-medium text-white">{request.priority || 'Medium'}</span>
                     </div>
                     <div>
                         <span className="text-slate-500">Quotations:</span>
-                        <span className="ml-2 font-medium text-slate-900">{quotations.length}</span>
+                        <span className="ml-2 font-medium text-white">{quotations.length}</span>
                     </div>
                 </div>
-                <div className="mt-3 pt-3 border-t border-slate-200">
+                <div className="mt-3 pt-3 border-t border-white/10">
                     <p className="text-xs text-slate-500">Description</p>
-                    <p className="text-sm text-slate-900 mt-1">{request.description}</p>
+                    <p className="text-sm text-white mt-1">{request.description}</p>
                 </div>
             </div>
 
             {/* Quotation Comparison */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="p-6 border-b border-slate-200">
-                    <h3 className="text-lg font-bold text-slate-900">Quotation Comparison</h3>
+            <div className="rounded-xl border border-white/10 bg-slate-900 shadow-sm">
+                <div className="p-6 border-b border-white/10">
+                    <h3 className="text-lg font-bold text-white">Quotation Comparison</h3>
                     <p className="text-sm text-slate-500">Select a quotation to approve</p>
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-slate-200">
-                        <thead className="bg-slate-50">
+                    <table className="min-w-full divide-y divide-white/10">
+                        <thead className="bg-slate-800/50">
                             <tr>
                                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Select</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Garage</th>
@@ -292,7 +292,7 @@ export default function EstimateApprovalPage() {
                                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Valid Until</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-200 bg-white">
+                        <tbody className="divide-y divide-white/10 bg-slate-900">
                             {quotations.map(quot => {
                                 const isSelected = selectedQuotationId === quot.id;
                                 const isLowest = quot.id === lowestQuotation?.id;
@@ -300,7 +300,7 @@ export default function EstimateApprovalPage() {
                                 return (
                                     <tr
                                         key={quot.id}
-                                        className={`hover:bg-slate-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
+                                        className={`hover:bg-white/5 cursor-pointer ${isSelected ? 'bg-blue-500/10' : ''}`}
                                         onClick={() => setSelectedQuotationId(quot.id)}
                                     >
                                         <td className="whitespace-nowrap px-6 py-4">
@@ -312,22 +312,22 @@ export default function EstimateApprovalPage() {
                                             />
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4">
-                                            <div className="text-sm font-medium text-slate-900">{quot.garageName}</div>
-                                            <div className="text-xs text-slate-500">Submitted {new Date(quot.submittedAt).toLocaleDateString()}</div>
+                                            <div className="text-sm font-medium text-white">{quot.garageName}</div>
+                                            <div className="text-xs text-slate-300">Submitted {new Date(quot.submittedAt).toLocaleDateString()}</div>
                                             {isLowest && (
-                                                <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 border border-green-300 mt-1">
+                                                <span className="inline-flex items-center rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-green-700 border border-green-300 mt-1">
                                                     Lowest Cost
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900">{formatCurrency(quot.partsCost)}</td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900">{formatCurrency(quot.laborCost)}</td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900">{formatCurrency(quot.otherCharges)}</td>
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">{formatCurrency(quot.partsCost)}</td>
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">{formatCurrency(quot.laborCost)}</td>
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">{formatCurrency(quot.otherCharges)}</td>
                                         <td className="whitespace-nowrap px-6 py-4">
                                             <div className="text-sm font-bold text-blue-600">{formatCurrency(quot.totalCost)}</div>
                                         </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900">{quot.estimatedDuration} days</td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900">
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">{quot.estimatedDuration} days</td>
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">
                                             {new Date(quot.validUntil).toLocaleDateString()}
                                         </td>
                                     </tr>
@@ -340,30 +340,30 @@ export default function EstimateApprovalPage() {
 
             {/* Selected Quotation Details */}
             {selectedQuotation && (
-                <div className="rounded-xl border border-blue-200 bg-blue-50 p-6 shadow-sm">
-                    <h3 className="text-lg font-bold text-blue-900 mb-4">Selected Quotation - {selectedQuotation.garageName}</h3>
+                <div className="rounded-xl border border-blue-200 bg-blue-500/10 p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-blue-300 mb-4">Selected Quotation - {selectedQuotation.garageName}</h3>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                         <div>
                             <span className="text-blue-700">Parts Cost:</span>
-                            <span className="ml-2 font-medium text-blue-900">{formatCurrency(selectedQuotation.partsCost)}</span>
+                            <span className="ml-2 font-medium text-blue-300">{formatCurrency(selectedQuotation.partsCost)}</span>
                         </div>
                         <div>
                             <span className="text-blue-700">Labor Cost:</span>
-                            <span className="ml-2 font-medium text-blue-900">{formatCurrency(selectedQuotation.laborCost)}</span>
+                            <span className="ml-2 font-medium text-blue-300">{formatCurrency(selectedQuotation.laborCost)}</span>
                         </div>
                         <div>
                             <span className="text-blue-700">Other Charges:</span>
-                            <span className="ml-2 font-medium text-blue-900">{formatCurrency(selectedQuotation.otherCharges)}</span>
+                            <span className="ml-2 font-medium text-blue-300">{formatCurrency(selectedQuotation.otherCharges)}</span>
                         </div>
                         <div>
                             <span className="text-blue-700">Total Cost:</span>
-                            <span className="ml-2 font-bold text-2xl text-blue-900">{formatCurrency(selectedQuotation.totalCost)}</span>
+                            <span className="ml-2 font-bold text-2xl text-blue-300">{formatCurrency(selectedQuotation.totalCost)}</span>
                         </div>
                     </div>
                     {selectedQuotation.notes && (
                         <div className="mt-4 pt-4 border-t border-blue-200">
                             <p className="text-xs text-blue-700">Notes</p>
-                            <p className="text-sm text-blue-900 mt-1">{selectedQuotation.notes}</p>
+                            <p className="text-sm text-blue-300 mt-1">{selectedQuotation.notes}</p>
                         </div>
                     )}
                 </div>
@@ -372,13 +372,13 @@ export default function EstimateApprovalPage() {
             {/* Approval Modal */}
             {showApprovalModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl">
-                        <div className="p-6 border-b border-slate-200">
+                    <div className="bg-slate-900 rounded-2xl w-full max-w-2xl shadow-2xl">
+                        <div className="p-6 border-b border-white/10">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-bold text-slate-900">
+                                <h3 className="text-lg font-bold text-white">
                                     {approvalAction === 'approve' ? 'Approve Estimate' : 'Reject All Estimates'}
                                 </h3>
-                                <button onClick={() => setShowApprovalModal(false)} className="text-slate-400 hover:text-slate-600">
+                                <button onClick={() => setShowApprovalModal(false)} className="text-slate-400 hover:text-slate-300">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                     </svg>
@@ -389,45 +389,45 @@ export default function EstimateApprovalPage() {
                         <div className="p-6 space-y-4">
                             {approvalAction === 'approve' && selectedQuotation ? (
                                 <>
-                                    <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-                                        <p className="text-sm font-medium text-green-900">You are approving:</p>
-                                        <p className="text-lg font-bold text-green-900 mt-1">{selectedQuotation.garageName}</p>
-                                        <p className="text-2xl font-bold text-green-900 mt-2">{formatCurrency(selectedQuotation.totalCost)}</p>
+                                    <div className="rounded-lg border border-green-200 bg-emerald-500/10 p-4">
+                                        <p className="text-sm font-medium text-emerald-300">You are approving:</p>
+                                        <p className="text-lg font-bold text-emerald-300 mt-1">{selectedQuotation.garageName}</p>
+                                        <p className="text-2xl font-bold text-emerald-300 mt-2">{formatCurrency(selectedQuotation.totalCost)}</p>
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">Comments (Optional)</label>
+                                        <label className="block text-sm font-medium text-slate-300 mb-2">Comments (Optional)</label>
                                         <textarea
                                             rows={3}
                                             value={approvalComments}
                                             onChange={(e) => setApprovalComments(e.target.value)}
-                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                             placeholder="Add any approval notes..."
                                         />
                                     </div>
 
-                                    <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
-                                        <p className="text-sm text-blue-900">
+                                    <div className="rounded-lg bg-blue-500/10 border border-blue-200 p-4">
+                                        <p className="text-sm text-blue-300">
                                             <span className="font-medium">Next Step:</span> Request will move to Estimation Approved status. Work order can be created.
                                         </p>
                                     </div>
                                 </>
                             ) : (
                                 <>
-                                    <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-                                        <p className="text-sm font-medium text-red-900">All {quotations.length} quotation(s) will be rejected</p>
+                                    <div className="rounded-lg border border-red-200 bg-red-500/10 p-4">
+                                        <p className="text-sm font-medium text-red-300">All {quotations.length} quotation(s) will be rejected</p>
                                         <p className="text-sm text-red-700 mt-1">Request will be sent back to Under Estimation for new quotations</p>
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                                        <label className="block text-sm font-medium text-slate-300 mb-2">
                                             Rejection Reason <span className="text-red-600">*</span>
                                         </label>
                                         <textarea
                                             rows={3}
                                             value={rejectionReason}
                                             onChange={(e) => setRejectionReason(e.target.value)}
-                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                             placeholder="Required: Provide reason for rejection..."
                                         />
                                     </div>
@@ -435,10 +435,10 @@ export default function EstimateApprovalPage() {
                             )}
                         </div>
 
-                        <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+                        <div className="p-6 border-t border-white/10 flex justify-end gap-3">
                             <button
                                 onClick={() => setShowApprovalModal(false)}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
                             >
                                 Cancel
                             </button>

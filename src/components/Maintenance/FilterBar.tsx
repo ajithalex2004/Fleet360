@@ -74,12 +74,12 @@ export default function FilterBar({
     };
 
     return (
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4 md:space-y-0 md:flex md:items-center md:gap-4">
+        <div className="bg-slate-900 p-4 rounded-xl border border-white/10 shadow-sm space-y-4 md:space-y-0 md:flex md:items-center md:gap-4">
             {/* Date Range */}
             <div className="flex items-center gap-2">
                 <input
                     type="date"
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="rounded-lg border border-white/15 bg-slate-800 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     value={startDate}
                     onChange={(e) => handleDateChange('start', e.target.value)}
                     placeholder="Start Date"
@@ -87,7 +87,7 @@ export default function FilterBar({
                 <span className="text-slate-400">-</span>
                 <input
                     type="date"
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="rounded-lg border border-white/15 bg-slate-800 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     value={endDate}
                     onChange={(e) => handleDateChange('end', e.target.value)}
                     placeholder="End Date"
@@ -99,42 +99,42 @@ export default function FilterBar({
                 <button
                     type="button"
                     onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
-                    className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    className="flex items-center gap-2 rounded-lg border border-white/15 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5 text-slate-400">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
                     </svg>
                     Status
                     {selectedStatuses.length > 0 && (
-                        <span className="ml-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-600">
+                        <span className="ml-1 rounded-full bg-blue-500/20 px-2 py-0.5 text-xs font-bold text-blue-400">
                             {selectedStatuses.length}
                         </span>
                     )}
                 </button>
 
                 {isStatusDropdownOpen && (
-                    <div className="absolute left-0 top-full z-50 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
-                        <div className="mb-2 border-b border-slate-100 pb-2">
-                            <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50">
+                    <div className="absolute left-0 top-full z-50 mt-2 w-56 rounded-xl border border-white/10 bg-slate-900 p-2 shadow-lg">
+                        <div className="mb-2 border-b border-white/10 pb-2">
+                            <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/5">
                                 <input
                                     type="checkbox"
-                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                    className="rounded border-white/15 text-blue-600 focus:ring-blue-500"
                                     checked={selectedStatuses.length === statusOptions.length && statusOptions.length > 0}
                                     onChange={selectAllStatuses}
                                 />
-                                <span className="text-sm font-medium text-slate-700">Select All</span>
+                                <span className="text-sm font-medium text-slate-300">Select All</span>
                             </label>
                         </div>
                         <div className="max-h-60 overflow-y-auto space-y-1">
                             {statusOptions.map((status) => (
-                                <label key={status} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50">
+                                <label key={status} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/5">
                                     <input
                                         type="checkbox"
-                                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        className="rounded border-white/15 text-blue-600 focus:ring-blue-500"
                                         checked={selectedStatuses.includes(status)}
                                         onChange={() => toggleStatus(status)}
                                     />
-                                    <span className="text-sm text-slate-600">{status}</span>
+                                    <span className="text-sm text-slate-400">{status}</span>
                                 </label>
                             ))}
                         </div>
@@ -152,7 +152,7 @@ export default function FilterBar({
                     </div>
                     <input
                         type="text"
-                        className="block w-full rounded-lg border border-slate-300 bg-slate-50 py-2 pl-10 pr-3 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="block w-full rounded-lg border border-white/15 bg-slate-800 py-2 pl-10 pr-3 text-sm text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                         placeholder={placeholder}
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -175,7 +175,7 @@ export default function FilterBar({
                         onDateRangeChange(defaultStartDate, defaultEndDate);
                         onStatusChange([]);
                     }}
-                    className="rounded-lg border border-slate-300 bg-white p-2 text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                    className="rounded-lg border border-white/15 bg-slate-800 p-2 text-slate-400 hover:bg-white/5 hover:text-slate-300"
                     title="Reset Filters"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">

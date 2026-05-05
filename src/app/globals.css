@@ -54,6 +54,42 @@ body {
   background: #475569;
 }
 
+/* ── C1Chat / TheSys embedded chat overrides ────────────────────────────── */
+/* Force the chat widget to fill its container as a full embedded panel      */
+/* and hide the floating launcher icon (we embed it directly in the layout)  */
+
+/* Root wrapper TheSys injects — make it fill parent */
+[class*="c1-"], [class*="C1"], [data-c1], #c1-chat-root,
+div[class^="crayon"], div[class*=" crayon"] {
+  height: 100% !important;
+  max-height: 100% !important;
+  width: 100% !important;
+}
+
+/* Hide the floating launcher bubble/icon entirely */
+[class*="launcher"], [class*="Launcher"],
+[class*="chat-button"], [class*="ChatButton"],
+[class*="toggle-button"], [class*="fab"],
+button[aria-label*="chat" i], button[aria-label*="Chat" i] {
+  display: none !important;
+}
+
+/* Ensure the inner chat panel is always visible (not hidden behind widget) */
+[class*="panel"], [class*="Panel"],
+[class*="chat-window"], [class*="chatWindow"] {
+  position: relative !important;
+  inset: auto !important;
+  transform: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  width: 100% !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
 /* Glassmorphism Utilities */
 .glass-panel {
   background: var(--glass-bg);
@@ -97,3 +133,28 @@ textarea {
 
 /* Exception for inputs explicitly styled with dark backgrounds if needed later, 
    but for now, most forms are on white/light cards so dark text is safer. */
+/* ── XL AI Smart Mobility: ensure input text is always white on dark backgrounds ── */
+input,
+textarea,
+select {
+  color: white !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgb(100 116 139); /* slate-500 */
+}
+
+/* Ensure select options are readable */
+select option {
+  background-color: rgb(30 41 59); /* slate-800 */
+  color: white;
+}
+
+/* ── Print styles (cargo manifest) ─────────────────────────────────────────── */
+@media print {
+  body { background: white !important; color: black !important; }
+  .print\:hidden { display: none !important; }
+  .print\:block  { display: block !important; }
+  #print-manifest { display: block !important; }
+}

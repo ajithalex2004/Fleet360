@@ -1,23 +1,15 @@
 import { NextResponse } from 'next/server';
-
-const BACKEND_URL = 'http://127.0.0.1:8080/api/garages';
+import { prisma } from '@/lib/prisma';
 
 export async function GET() {
     try {
-        const res = await fetch(BACKEND_URL, { cache: 'no-store' });
-        if (!res.ok) {
-            return NextResponse.json({ error: 'Failed to fetch garages' }, { status: res.status });
-        }
-        const data = await res.json();
-        return NextResponse.json(data, {
-            headers: {
-                'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-                'Pragma': 'no-cache',
-                'Expires': '0',
-            }
+        const garages = await prisma.garage.findMany({
+            where: { deletedAt: null },
+            orderBy: { name: 'asc' }
         });
+        return NextResponse.json(JSON.parse(JSON.stringify(garages)));
     } catch (error) {
-        console.error("PROXY ERROR:", error);
+        console.error('Failed to fetch garages:', error);
         return NextResponse.json({ error: 'Internal Server Error', details: String(error) }, { status: 500 });
     }
 }
@@ -25,20 +17,23 @@ export async function GET() {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const res = await fetch(BACKEND_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
+
+        const garage = await prisma.garage.create({
+            data: {
+                name: body.name,
+                location: body.location,
+                contactPerson: body.contactPerson || body.contact_person,
+                designation: body.designation,
+                email: body.email,
+                contactNumber: body.contactNumber || body.contact_number,
+                specialties: body.specialties || [],
+                isInternal: body.isInternal ?? body.is_internal ?? false,
+            }
         });
 
-        if (!res.ok) {
-            const errorData = await res.text();
-            return NextResponse.json({ error: errorData }, { status: res.status });
-        }
-
-        const data = await res.json();
-        return NextResponse.json(data, { status: 201 });
+        return NextResponse.json(JSON.parse(JSON.stringify(garage)), { status: 201 });
     } catch (error) {
+        console.error('Failed to create garage:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

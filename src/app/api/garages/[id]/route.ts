@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server';
-
-const BACKEND_BASE_url = 'http://127.0.0.1:8080/api/garages';
+import { prisma } from '@/lib/prisma';
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
     try {
-        const res = await fetch(`${BACKEND_BASE_url}/${params.id}`, { cache: 'no-store' });
-        if (!res.ok) {
-            return NextResponse.json({ error: 'Garage not found' }, { status: res.status });
+        const garage = await prisma.garage.findFirst({
+            where: { id: params.id, deletedAt: null }
+        });
+        if (!garage) {
+            return NextResponse.json({ error: 'Garage not found' }, { status: 404 });
         }
-        const data = await res.json();
-        return NextResponse.json(data);
+        return NextResponse.json(JSON.parse(JSON.stringify(garage)));
     } catch (error) {
+        console.error('Failed to fetch garage:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
@@ -18,37 +19,45 @@ export async function GET(request: Request, { params }: { params: { id: string }
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
     try {
         const body = await request.json();
-        const res = await fetch(`${BACKEND_BASE_url}/${params.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
+
+        const data: Record<string, unknown> = {};
+        if (body.name !== undefined) data.name = body.name;
+        if (body.location !== undefined) data.location = body.location;
+        if (body.contactPerson !== undefined) data.contactPerson = body.contactPerson;
+        if (body.contact_person !== undefined) data.contactPerson = body.contact_person;
+        if (body.designation !== undefined) data.designation = body.designation;
+        if (body.email !== undefined) data.email = body.email;
+        if (body.contactNumber !== undefined) data.contactNumber = body.contactNumber;
+        if (body.contact_number !== undefined) data.contactNumber = body.contact_number;
+        if (body.specialties !== undefined) data.specialties = body.specialties;
+        if (body.isInternal !== undefined) data.isInternal = body.isInternal;
+        if (body.is_internal !== undefined) data.isInternal = body.is_internal;
+
+        const updated = await prisma.garage.update({
+            where: { id: params.id },
+            data,
         });
 
-        if (!res.ok) {
-            const errorData = await res.text();
-            return NextResponse.json({ error: errorData }, { status: res.status });
-        }
-
-        const data = await res.json();
-        return NextResponse.json(data);
+        return NextResponse.json(JSON.parse(JSON.stringify(updated)));
     } catch (error) {
+        console.error('Failed to update garage:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
 
+export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+    return PUT(request, { params });
+}
+
 export async function DELETE(request: Request, { params }: { params: { id: string } }) {
     try {
-        const res = await fetch(`${BACKEND_BASE_url}/${params.id}`, {
-            method: 'DELETE',
+        await prisma.garage.update({
+            where: { id: params.id },
+            data: { deletedAt: new Date() },
         });
-
-        if (!res.ok) {
-            const errorData = await res.text();
-            return NextResponse.json({ error: errorData }, { status: res.status });
-        }
-
-        return NextResponse.json({ message: 'Garage deleted' });
+        return NextResponse.json({ success: true });
     } catch (error) {
+        console.error('Failed to delete garage:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

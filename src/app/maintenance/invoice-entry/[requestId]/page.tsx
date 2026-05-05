@@ -202,58 +202,58 @@ export default function InvoiceEntryPage() {
         <div className="space-y-6">
             {/* Header */}
             <div>
-                <h1 className="text-2xl font-bold text-slate-900">Invoice Entry</h1>
+                <h1 className="text-2xl font-bold text-white">Invoice Entry</h1>
                 <p className="mt-1 text-slate-500">Request #{request.id.toUpperCase()}</p>
             </div>
 
             {/* Invoice Details */}
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h3 className="text-lg font-bold text-slate-900 mb-4">Invoice Information</h3>
+            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-white mb-4">Invoice Information</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Invoice Number</label>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">Invoice Number</label>
                         <input
                             type="text"
                             value={invoiceNumber}
                             onChange={(e) => setInvoiceNumber(e.target.value)}
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Invoice Date</label>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">Invoice Date</label>
                         <input
                             type="date"
                             value={invoiceDate}
                             onChange={(e) => setInvoiceDate(e.target.value)}
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Due Date</label>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">Due Date</label>
                         <input
                             type="date"
                             value={dueDate}
                             onChange={(e) => setDueDate(e.target.value)}
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Tax Rate (%)</label>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">Tax Rate (%)</label>
                         <input
                             type="number"
                             value={taxRate * 100}
                             onChange={(e) => setTaxRate(Number(e.target.value) / 100)}
                             step="0.1"
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                         />
                     </div>
                 </div>
             </div>
 
             {/* Line Items */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="p-6 border-b border-slate-200 flex items-center justify-between">
-                    <h3 className="text-lg font-bold text-slate-900">Line Items ({lineItems.length})</h3>
+            <div className="rounded-xl border border-white/10 bg-slate-900 shadow-sm">
+                <div className="p-6 border-b border-white/10 flex items-center justify-between">
+                    <h3 className="text-lg font-bold text-white">Line Items ({lineItems.length})</h3>
                     <button
                         onClick={() => {
                             resetItemForm();
@@ -272,8 +272,8 @@ export default function InvoiceEntryPage() {
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-slate-200">
-                            <thead className="bg-slate-50">
+                        <table className="min-w-full divide-y divide-white/10">
+                            <thead className="bg-slate-800/50">
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Type</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Description</th>
@@ -283,47 +283,47 @@ export default function InvoiceEntryPage() {
                                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-200 bg-white">
+                            <tbody className="divide-y divide-white/10 bg-slate-900">
                                 {lineItems.map((item, index) => (
-                                    <tr key={item.id} className="hover:bg-slate-50">
+                                    <tr key={item.id} className="hover:bg-white/5">
                                         <td className="whitespace-nowrap px-6 py-4">
-                                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${item.type === 'PART' ? 'bg-blue-100 text-blue-700 border-blue-300' :
-                                                    item.type === 'LABOR' ? 'bg-green-100 text-green-700 border-green-300' :
-                                                        'bg-purple-100 text-purple-700 border-purple-300'
+                                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${item.type === 'PART' ? 'bg-blue-500/20 text-blue-700 border-blue-300' :
+                                                    item.type === 'LABOR' ? 'bg-emerald-500/20 text-green-700 border-green-300' :
+                                                        'bg-purple-500/20 text-purple-700 border-purple-300'
                                                 }`}>
                                                 {item.type}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="text-sm text-slate-900">{item.description}</div>
+                                            <div className="text-sm text-white">{item.description}</div>
                                             {item.partNumber && (
-                                                <div className="text-xs text-slate-500">Part #: {item.partNumber}</div>
+                                                <div className="text-xs text-slate-300">Part #: {item.partNumber}</div>
                                             )}
                                             {item.technicianName && (
-                                                <div className="text-xs text-slate-500">Tech: {item.technicianName}</div>
+                                                <div className="text-xs text-slate-300">Tech: {item.technicianName}</div>
                                             )}
                                         </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900">
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">
                                             {item.quantity}
-                                            {item.laborHours && <span className="text-slate-500"> ({item.laborHours}h)</span>}
+                                            {item.laborHours && <span className="text-slate-300"> ({item.laborHours}h)</span>}
                                         </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-900">
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">
                                             {formatCurrency(item.unitPrice)}
                                         </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-white">
                                             {formatCurrency(item.totalPrice)}
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4">
                                             <div className="flex gap-2">
                                                 <button
                                                     onClick={() => handleEditItem(index)}
-                                                    className="text-blue-600 hover:text-blue-800 text-sm"
+                                                    className="text-blue-600 hover:text-blue-300 text-sm"
                                                 >
                                                     Edit
                                                 </button>
                                                 <button
                                                     onClick={() => handleDeleteItem(index)}
-                                                    className="text-red-600 hover:text-red-800 text-sm"
+                                                    className="text-red-600 hover:text-red-300 text-sm"
                                                 >
                                                     Delete
                                                 </button>
@@ -338,31 +338,31 @@ export default function InvoiceEntryPage() {
             </div>
 
             {/* Totals Summary */}
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h3 className="text-lg font-bold text-slate-900 mb-4">Invoice Summary</h3>
+            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-white mb-4">Invoice Summary</h3>
                 <div className="space-y-3">
                     <div className="flex justify-between text-sm">
                         <span className="text-slate-600">Parts Total:</span>
-                        <span className="font-medium text-slate-900">{formatCurrency(totals.partsTotal)}</span>
+                        <span className="font-medium text-white">{formatCurrency(totals.partsTotal)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                         <span className="text-slate-600">Labor Total:</span>
-                        <span className="font-medium text-slate-900">{formatCurrency(totals.laborTotal)}</span>
+                        <span className="font-medium text-white">{formatCurrency(totals.laborTotal)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                         <span className="text-slate-600">Other Charges:</span>
-                        <span className="font-medium text-slate-900">{formatCurrency(totals.otherCharges)}</span>
+                        <span className="font-medium text-white">{formatCurrency(totals.otherCharges)}</span>
                     </div>
-                    <div className="flex justify-between text-sm pt-3 border-t border-slate-200">
+                    <div className="flex justify-between text-sm pt-3 border-t border-white/10">
                         <span className="text-slate-600">Subtotal:</span>
-                        <span className="font-medium text-slate-900">{formatCurrency(totals.subtotal)}</span>
+                        <span className="font-medium text-white">{formatCurrency(totals.subtotal)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                         <span className="text-slate-600">Tax ({(taxRate * 100).toFixed(1)}%):</span>
-                        <span className="font-medium text-slate-900">{formatCurrency(totals.taxAmount)}</span>
+                        <span className="font-medium text-white">{formatCurrency(totals.taxAmount)}</span>
                     </div>
-                    <div className="flex justify-between text-lg font-bold pt-3 border-t-2 border-slate-300">
-                        <span className="text-slate-900">Grand Total:</span>
+                    <div className="flex justify-between text-lg font-bold pt-3 border-t-2 border-white/15">
+                        <span className="text-white">Grand Total:</span>
                         <span className="text-blue-600">{formatCurrency(totals.grandTotal)}</span>
                     </div>
                 </div>
@@ -372,7 +372,7 @@ export default function InvoiceEntryPage() {
             <div className="flex justify-end gap-3">
                 <button
                     onClick={() => router.back()}
-                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
                 >
                     Cancel
                 </button>
@@ -388,17 +388,17 @@ export default function InvoiceEntryPage() {
             {/* Add/Edit Line Item Modal */}
             {showAddItemModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-                        <div className="p-6 border-b border-slate-200 sticky top-0 bg-white">
+                    <div className="bg-slate-900 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="p-6 border-b border-white/10 sticky top-0 bg-slate-900">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-bold text-slate-900">
+                                <h3 className="text-lg font-bold text-white">
                                     {editingItemIndex !== null ? 'Edit' : 'Add'} Line Item
                                 </h3>
                                 <button onClick={() => {
                                     setShowAddItemModal(false);
                                     setEditingItemIndex(null);
                                     resetItemForm();
-                                }} className="text-slate-400 hover:text-slate-600">
+                                }} className="text-slate-400 hover:text-slate-300">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                     </svg>
@@ -408,11 +408,11 @@ export default function InvoiceEntryPage() {
 
                         <div className="p-6 space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Item Type</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Item Type</label>
                                 <select
                                     value={itemForm.type}
                                     onChange={(e) => setItemForm({ ...itemForm, type: e.target.value as any })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                 >
                                     <option value="PART">Part</option>
                                     <option value="LABOR">Labor</option>
@@ -421,36 +421,36 @@ export default function InvoiceEntryPage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Description *</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Description *</label>
                                 <input
                                     type="text"
                                     value={itemForm.description}
                                     onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     placeholder="Enter item description..."
                                 />
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Quantity *</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Quantity *</label>
                                     <input
                                         type="number"
                                         value={itemForm.quantity}
                                         onChange={(e) => setItemForm({ ...itemForm, quantity: Number(e.target.value) })}
                                         min="1"
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Unit Price (AED) *</label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Unit Price (AED) *</label>
                                     <input
                                         type="number"
                                         value={itemForm.unitPrice}
                                         onChange={(e) => setItemForm({ ...itemForm, unitPrice: Number(e.target.value) })}
                                         min="0"
                                         step="0.01"
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                     />
                                 </div>
                             </div>
@@ -458,21 +458,21 @@ export default function InvoiceEntryPage() {
                             {itemForm.type === 'PART' && (
                                 <>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">Part Number</label>
+                                        <label className="block text-sm font-medium text-slate-300 mb-2">Part Number</label>
                                         <input
                                             type="text"
                                             value={itemForm.partNumber}
                                             onChange={(e) => setItemForm({ ...itemForm, partNumber: e.target.value })}
-                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                             placeholder="Enter part number..."
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">Part Source</label>
+                                        <label className="block text-sm font-medium text-slate-300 mb-2">Part Source</label>
                                         <select
                                             value={itemForm.partSource}
                                             onChange={(e) => setItemForm({ ...itemForm, partSource: e.target.value as PartSource })}
-                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                         >
                                             <option value="STOCK">Stock</option>
                                             <option value="ORDERED">Ordered</option>
@@ -485,47 +485,47 @@ export default function InvoiceEntryPage() {
                             {itemForm.type === 'LABOR' && (
                                 <>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">Labor Hours</label>
+                                        <label className="block text-sm font-medium text-slate-300 mb-2">Labor Hours</label>
                                         <input
                                             type="number"
                                             value={itemForm.laborHours}
                                             onChange={(e) => setItemForm({ ...itemForm, laborHours: Number(e.target.value) })}
                                             min="0"
                                             step="0.5"
-                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">Technician Name</label>
+                                        <label className="block text-sm font-medium text-slate-300 mb-2">Technician Name</label>
                                         <input
                                             type="text"
                                             value={itemForm.technicianName}
                                             onChange={(e) => setItemForm({ ...itemForm, technicianName: e.target.value })}
-                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                                             placeholder="Enter technician name..."
                                         />
                                     </div>
                                 </>
                             )}
 
-                            <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
+                            <div className="rounded-lg bg-blue-500/10 border border-blue-200 p-4">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-sm font-medium text-blue-900">Line Total:</span>
-                                    <span className="text-xl font-bold text-blue-900">
+                                    <span className="text-sm font-medium text-blue-300">Line Total:</span>
+                                    <span className="text-xl font-bold text-blue-300">
                                         {formatCurrency(itemForm.quantity * itemForm.unitPrice)}
                                     </span>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="p-6 border-t border-slate-200 flex justify-end gap-3 sticky bottom-0 bg-white">
+                        <div className="p-6 border-t border-white/10 flex justify-end gap-3 sticky bottom-0 bg-slate-900">
                             <button
                                 onClick={() => {
                                     setShowAddItemModal(false);
                                     setEditingItemIndex(null);
                                     resetItemForm();
                                 }}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
                             >
                                 Cancel
                             </button>

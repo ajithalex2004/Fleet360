@@ -98,12 +98,12 @@ export default function JobClosurePage() {
         <div className="space-y-6">
             {/* Header */}
             <div>
-                <h1 className="text-2xl font-bold text-slate-900">Job Closure</h1>
+                <h1 className="text-2xl font-bold text-white">Job Closure</h1>
                 <p className="mt-1 text-slate-500">Request #{request.id.toUpperCase()}</p>
             </div>
 
             {/* Completion Summary */}
-            <div className="rounded-xl border border-green-200 bg-green-50 p-6 shadow-sm">
+            <div className="rounded-xl border border-green-200 bg-emerald-500/10 p-6 shadow-sm">
                 <div className="flex items-center gap-3 mb-4">
                     <div className="rounded-full bg-green-600 p-2">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 text-white">
@@ -111,28 +111,28 @@ export default function JobClosurePage() {
                         </svg>
                     </div>
                     <div>
-                        <h3 className="text-lg font-bold text-green-900">Maintenance Completed</h3>
+                        <h3 className="text-lg font-bold text-emerald-300">Maintenance Completed</h3>
                         <p className="text-sm text-green-700">Ready to close this job</p>
                     </div>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                     <div>
                         <span className="text-green-700">Status:</span>
-                        <span className="ml-2 font-medium text-green-900">{request.status}</span>
+                        <span className="ml-2 font-medium text-emerald-300">{request.status}</span>
                     </div>
                     <div>
                         <span className="text-green-700">Downtime:</span>
-                        <span className="ml-2 font-medium text-green-900">{downtime} days</span>
+                        <span className="ml-2 font-medium text-emerald-300">{downtime} days</span>
                     </div>
                     <div>
                         <span className="text-green-700">Total Cost:</span>
-                        <span className="ml-2 font-medium text-green-900">
+                        <span className="ml-2 font-medium text-emerald-300">
                             {invoice ? formatCurrency(invoice.grandTotal) : 'N/A'}
                         </span>
                     </div>
                     <div>
                         <span className="text-green-700">Completed:</span>
-                        <span className="ml-2 font-medium text-green-900">
+                        <span className="ml-2 font-medium text-emerald-300">
                             {request.completionDate ? new Date(request.completionDate).toLocaleDateString() : 'N/A'}
                         </span>
                     </div>
@@ -140,38 +140,38 @@ export default function JobClosurePage() {
             </div>
 
             {/* Request Details */}
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h3 className="text-lg font-bold text-slate-900 mb-4">Request Details</h3>
+            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-white mb-4">Request Details</h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                         <span className="text-slate-500">Vehicle:</span>
-                        <span className="ml-2 font-medium text-slate-900">
+                        <span className="ml-2 font-medium text-white">
                             {vehicle ? `${vehicle.make} ${vehicle.model} (${vehicle.licensePlate})` : 'N/A'}
                         </span>
                     </div>
                     <div>
                         <span className="text-slate-500">Driver:</span>
-                        <span className="ml-2 font-medium text-slate-900">{driver?.name || 'N/A'}</span>
+                        <span className="ml-2 font-medium text-white">{driver?.name || 'N/A'}</span>
                     </div>
                     <div>
                         <span className="text-slate-500">Maintenance Type:</span>
-                        <span className="ml-2 font-medium text-slate-900">{request.maintenanceType || 'N/A'}</span>
+                        <span className="ml-2 font-medium text-white">{request.maintenanceType || 'N/A'}</span>
                     </div>
                     <div>
                         <span className="text-slate-500">Priority:</span>
-                        <span className="ml-2 font-medium text-slate-900">{request.priority || 'Medium'}</span>
+                        <span className="ml-2 font-medium text-white">{request.priority || 'Medium'}</span>
                     </div>
                     <div className="col-span-2">
                         <span className="text-slate-500">Description:</span>
-                        <p className="text-slate-900 mt-1">{request.description}</p>
+                        <p className="text-white mt-1">{request.description}</p>
                     </div>
                 </div>
             </div>
 
             {/* Workflow Timeline */}
             {request.statusTransitions && request.statusTransitions.length > 0 && (
-                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                    <h3 className="text-lg font-bold text-slate-900 mb-4">Workflow Timeline</h3>
+                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-white mb-4">Workflow Timeline</h3>
                     <div className="space-y-3">
                         {request.statusTransitions.map((transition, index) => (
                             <div key={index} className="flex items-start gap-4">
@@ -182,7 +182,7 @@ export default function JobClosurePage() {
                                     <div className="w-2 h-2 rounded-full bg-blue-600 mt-1.5"></div>
                                 </div>
                                 <div className="flex-1">
-                                    <p className="text-sm font-medium text-slate-900">
+                                    <p className="text-sm font-medium text-white">
                                         {transition.from} → {transition.to}
                                     </p>
                                     <p className="text-xs text-slate-500">
@@ -198,42 +198,42 @@ export default function JobClosurePage() {
 
             {/* Invoice Summary */}
             {invoice && (
-                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                    <h3 className="text-lg font-bold text-slate-900 mb-4">Invoice Summary</h3>
+                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-white mb-4">Invoice Summary</h3>
                     <div className="space-y-3">
                         <div className="flex justify-between text-sm">
                             <span className="text-slate-600">Invoice Number:</span>
-                            <span className="font-medium text-slate-900">{invoice.invoiceNumber}</span>
+                            <span className="font-medium text-white">{invoice.invoiceNumber}</span>
                         </div>
                         <div className="flex justify-between text-sm">
                             <span className="text-slate-600">Parts Total:</span>
-                            <span className="font-medium text-slate-900">{formatCurrency(invoice.partsTotal)}</span>
+                            <span className="font-medium text-white">{formatCurrency(invoice.partsTotal)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
                             <span className="text-slate-600">Labor Total:</span>
-                            <span className="font-medium text-slate-900">{formatCurrency(invoice.laborTotal)}</span>
+                            <span className="font-medium text-white">{formatCurrency(invoice.laborTotal)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
                             <span className="text-slate-600">Other Charges:</span>
-                            <span className="font-medium text-slate-900">{formatCurrency(invoice.otherCharges)}</span>
+                            <span className="font-medium text-white">{formatCurrency(invoice.otherCharges)}</span>
                         </div>
-                        <div className="flex justify-between text-sm pt-3 border-t border-slate-200">
+                        <div className="flex justify-between text-sm pt-3 border-t border-white/10">
                             <span className="text-slate-600">Subtotal:</span>
-                            <span className="font-medium text-slate-900">{formatCurrency(invoice.subtotal)}</span>
+                            <span className="font-medium text-white">{formatCurrency(invoice.subtotal)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
                             <span className="text-slate-600">Tax ({(invoice.taxRate * 100).toFixed(1)}%):</span>
-                            <span className="font-medium text-slate-900">{formatCurrency(invoice.taxAmount)}</span>
+                            <span className="font-medium text-white">{formatCurrency(invoice.taxAmount)}</span>
                         </div>
-                        <div className="flex justify-between text-lg font-bold pt-3 border-t-2 border-slate-300">
-                            <span className="text-slate-900">Grand Total:</span>
+                        <div className="flex justify-between text-lg font-bold pt-3 border-t-2 border-white/15">
+                            <span className="text-white">Grand Total:</span>
                             <span className="text-blue-600">{formatCurrency(invoice.grandTotal)}</span>
                         </div>
-                        <div className="flex justify-between text-sm pt-3 border-t border-slate-200">
+                        <div className="flex justify-between text-sm pt-3 border-t border-white/10">
                             <span className="text-slate-600">Payment Status:</span>
-                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${invoice.paymentStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' :
-                                    invoice.paymentStatus === 'Partially Paid' ? 'bg-yellow-100 text-yellow-700 border-yellow-300' :
-                                        'bg-red-100 text-red-700 border-red-300'
+                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${invoice.paymentStatus === 'Paid' ? 'bg-emerald-500/20 text-green-700 border-green-300' :
+                                    invoice.paymentStatus === 'Partially Paid' ? 'bg-amber-500/20 text-yellow-700 border-yellow-300' :
+                                        'bg-red-500/20 text-red-700 border-red-300'
                                 }`}>
                                 {invoice.paymentStatus}
                             </span>
@@ -243,24 +243,24 @@ export default function JobClosurePage() {
             )}
 
             {/* Closure Notes */}
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h3 className="text-lg font-bold text-slate-900 mb-4">Closure Notes (Optional)</h3>
+            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-white mb-4">Closure Notes (Optional)</h3>
                 <textarea
                     rows={4}
                     value={closureNotes}
                     onChange={(e) => setClosureNotes(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
                     placeholder="Add any final notes or comments about this job..."
                 />
             </div>
 
             {/* Closure Confirmation */}
-            <div className="rounded-xl border border-blue-200 bg-blue-50 p-6">
-                <h3 className="text-base font-bold text-blue-900 mb-2">Closure Confirmation</h3>
-                <p className="text-sm text-blue-800 mb-4">
+            <div className="rounded-xl border border-blue-200 bg-blue-500/10 p-6">
+                <h3 className="text-base font-bold text-blue-300 mb-2">Closure Confirmation</h3>
+                <p className="text-sm text-blue-300 mb-4">
                     Closing this job will:
                 </p>
-                <ul className="text-sm text-blue-800 space-y-1 mb-4 ml-4 list-disc">
+                <ul className="text-sm text-blue-300 space-y-1 mb-4 ml-4 list-disc">
                     <li>Send closure notifications to all stakeholders</li>
                     <li>Update the request status to CLOSED</li>
                     <li>Archive all related documents</li>
@@ -276,7 +276,7 @@ export default function JobClosurePage() {
             <div className="flex justify-end gap-3">
                 <button
                     onClick={() => router.back()}
-                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
                 >
                     Cancel
                 </button>

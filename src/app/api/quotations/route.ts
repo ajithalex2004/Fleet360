@@ -1,32 +1,54 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { QuotationStatus } from '@prisma/client';
+
+export async function GET() {
+    try {
+        const quotations = await prisma.quotation.findMany({
+            where: { deletedAt: null },
+            include: {
+                MaintenanceRequest: true,
+                Garage: true,
+                quotationLabors: true,
+                quotationParts: true,
+                attachments: true,
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        return NextResponse.json(JSON.parse(JSON.stringify(quotations)));
+    } catch (error) {
+        console.error('Failed to fetch quotations:', error);
+        return NextResponse.json({ error: 'Internal Server Error', details: String(error) }, { status: 500 });
+    }
+}
 
 export async function POST(request: Request) {
-    console.log('API /api/quotations hit - Proxying to Backend');
     try {
         const body = await request.json();
-        const res = await fetch('http://127.0.0.1:8080/api/quotations', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(body),
+
+        const quotation = await prisma.quotation.create({
+            data: {
+                maintenanceRequestId: body.maintenanceRequestId || body.maintenance_request_id,
+                garageId: body.garageId || body.garage_id,
+                status: body.status || 'PENDING',
+                quotationDate: body.quotationDate ? new Date(body.quotationDate) : new Date(),
+                validUntil: body.validUntil ? new Date(body.validUntil) : null,
+                laborCost: body.laborCost ?? null,
+                partsCost: body.partsCost ?? null,
+                consumablesCost: body.consumablesCost ?? null,
+                vatAmount: body.vatAmount ?? null,
+                totalCost: body.totalCost ?? null,
+                grandTotal: body.grandTotal ?? null,
+                currency: body.currency || 'AED',
+                estimatedDuration: body.estimatedDuration ? BigInt(body.estimatedDuration) : null,
+                estimatedCompletionDate: body.estimatedCompletionDate ? new Date(body.estimatedCompletionDate) : null,
+                submittedBy: body.submittedBy || body.submitted_by,
+                notes: body.notes,
+            }
         });
 
-        if (!res.ok) {
-            const errorText = await res.text();
-            console.error(`Backend quotation creation failed. Status: ${res.status}, Body: ${errorText}`);
-            return NextResponse.json(
-                { error: 'Failed to create quotation', backendStatus: res.status, backendError: errorText },
-                { status: res.status }
-            );
-        }
-
-        const data = await res.json();
-        return NextResponse.json(data);
+        return NextResponse.json(JSON.parse(JSON.stringify(quotation)), { status: 201 });
     } catch (error) {
-        console.error('Proxy error creating quotation:', error);
+        console.error('Failed to create quotation:', error);
         return NextResponse.json({ error: 'Internal Server Error', details: String(error) }, { status: 500 });
     }
 }
