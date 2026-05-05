@@ -43,10 +43,11 @@ const NAV_HOME = [
 ];
 
 const NAV_RAC = [
-  { href: '/rac', label: 'Fleet', icon: '🚗' },
-  { href: '/rac/bookings', label: 'Bookings', icon: '📅' },
-  { href: '/rac/agreements', label: 'Rental Agreements', icon: '📋' },
-  { href: '/rac/customers', label: 'My Customers', icon: '👥' },
+  { href: '/rac',            label: 'Fleet',              icon: '🚗' },
+  { href: '/rac/customers',  label: 'Customer Portal',    icon: '👥' },
+  { href: '/rac/bookings',   label: 'Bookings',           icon: '📅' },
+  { href: '/rac/agreements', label: 'Rental Agreements',  icon: '📋' },
+  { href: '/rac/invoices',   label: 'Invoices',           icon: '🧾' },
 ];
 
 const NAV_SCHOOL_BUS = [
