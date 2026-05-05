@@ -10,8 +10,9 @@ const NAV_GROUPS = [
   {
     label: 'Overview',
     items: [
-      { href: '/rental',              label: 'Dashboard',            icon: '📊' },
-      { href: '/rental/analytics',    label: 'Analytics & BI',       icon: '📈' },
+      { href: '/rental',                 label: 'Dashboard',         icon: '📊' },
+      { href: '/rental/analytics',       label: 'Analytics & BI',    icon: '📈' },
+      { href: '/rental/analytics/kpi',   label: 'RevPAC Dashboard',  icon: '🎯' },
     ],
   },
   {
