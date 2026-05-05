@@ -1,0 +1,79 @@
+##
+## Gravity Agent Service — Docker Compose
+## ----------------------------------------
+## Deploys the complete AI Agent Ecosystem as a standalone microservice.
+## Works standalone or alongside any existing fleet management platform.
+##
+## Usage:
+##   cp .env.example .env      # add your DATABASE_URL + OPENAI_API_KEY
+##   docker compose up -d
+##   curl http://localhost:3001/api/agents/catalogue
+##
+## Production deployment:
+##   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+version: '3.9'
+
+services:
+  # ── AI Agent Service ──────────────────────────────────────────────────────
+  agent-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gravity/agent-service:latest
+    container_name: gravity-agents
+    restart: unless-stopped
+    ports:
+      - "${AGENT_PORT:-3001}:3001"
+    environment:
+      # Required
+      DATABASE_URL:         ${DATABASE_URL}
+      NODE_ENV:             ${NODE_ENV:-production}
+      # LLM (optional — statistical agents work without it)
+      OPENAI_API_KEY:       ${OPENAI_API_KEY:-}
+      # Agent service settings
+      AGENT_API_KEY:        ${AGENT_API_KEY:-gravity-default-key}
+      NEXT_TELEMETRY_DISABLED: 1
+      PORT:                 3001
+    networks:
+      - gravity-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/agents/catalogue"]
+      interval: 30s
+      timeout:  10s
+      retries:  3
+      start_period: 30s
+    labels:
+      - "com.gravity.service=agent-ecosystem"
+      - "com.gravity.version=1.0.0"
+
+  # ── Optional: Local Postgres (use if DATABASE_URL points to localhost) ────
+  # Comment out if you're using Neon, Supabase, or an external database.
+  postgres:
+    image: postgres:16-alpine
+    container_name: gravity-postgres
+    restart: unless-stopped
+    profiles: ["local-db"]  # only starts with: docker compose --profile local-db up
+    environment:
+      POSTGRES_DB:       gravity_agents
+      POSTGRES_USER:     gravity
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gravity_dev_password}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - gravity-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gravity -d gravity_agents"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+
+networks:
+  gravity-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+    driver: local

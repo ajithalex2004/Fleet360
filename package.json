@@ -7,7 +7,21 @@
         "build": "next build",
         "start": "next start",
         "lint": "next lint",
-        "dev:clean": "rm -rf .next && npm run dev"
+        "dev:clean": "npx rimraf .next && npm run dev",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:coverage": "vitest run --coverage",
+        "test:unit": "vitest run tests/unit",
+        "test:integration": "vitest run tests/integration",
+        "test:e2e": "playwright test",
+        "test:e2e:finance": "playwright test tests/e2e/finance-workflow.spec.ts",
+        "test:e2e:fleet": "playwright test tests/e2e/fleet-workflow.spec.ts",
+        "test:e2e:rac": "playwright test tests/e2e/rac-workflow.spec.ts",
+        "test:e2e:admin": "playwright test tests/e2e/admin-workflow.spec.ts",
+        "test:e2e:cross": "playwright test tests/e2e/cross-module.spec.ts",
+        "test:e2e:ui": "playwright test --ui",
+        "test:e2e:debug": "playwright test --debug",
+        "test:all": "vitest run tests/unit && vitest run tests/integration && playwright test"
     },
     "dependencies": {
         "@crayonai/react-core": "^0.7.6",
@@ -30,6 +44,7 @@
     },
     "devDependencies": {
         "@eslint/eslintrc": "^3",
+        "@playwright/test": "^1.59.1",
         "@prisma/client": "^5.10.0",
         "@tailwindcss/oxide": "^4.1.3",
         "@tailwindcss/postcss": "^4",
@@ -43,7 +58,9 @@
         "prisma": "^5.10.0",
         "tailwindcss": "^4",
         "ts-node": "^10.9.2",
-        "typescript": "^5"
+        "typescript": "^5",
+        "vitest": "^1.6.0",
+        "@vitest/coverage-v8": "^1.6.0"
     },
     "engines": {
         "node": ">=20.9.0"

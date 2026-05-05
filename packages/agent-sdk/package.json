@@ -1,0 +1,32 @@
+{
+  "name": "@gravity/agent-sdk",
+  "version": "1.0.0",
+  "description": "Standalone AI Agent Ecosystem for Fleet Management Platforms — plug into any platform in minutes.",
+  "author": "Gravity Smart Mobility",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "node dist/test/smoke.js"
+  },
+  "keywords": [
+    "fleet-management", "ai-agents", "dispatch-optimiser", "predictive-maintenance",
+    "route-optimisation", "demand-forecasting", "driver-coaching", "incident-triage",
+    "transport-management", "smart-mobility"
+  ],
+  "peerDependencies": {
+    "openai": ">=4.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  },
+  "engines": { "node": ">=18.0.0" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gravity-mobility/agent-sdk"
+  }
+}

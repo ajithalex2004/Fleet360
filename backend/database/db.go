@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"my-c1-project-backend/models"
+	// "my-c1-project-backend/models" // Commented out since AutoMigrate is disabled
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -31,7 +31,8 @@ func Connect() {
 	fmt.Println("Database connection established")
 
 	// Auto Migrate
-	err = DB.AutoMigrate(
+	// Auto Migrate is disabled to prevent conflicts with Prisma schema managed uuid foreign keys.
+	/* err = DB.AutoMigrate(
 		&models.Vehicle{},
 		&models.Driver{},
 		&models.Garage{},
@@ -50,6 +51,6 @@ func Connect() {
 	)
 	if err != nil {
 		log.Fatal("Failed to migrate database:", err)
-	}
-	fmt.Println("Database migrated")
+	} */
+	fmt.Println("Database migration skipped (Prisma Managed)")
 }

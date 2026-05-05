@@ -53,4 +53,5 @@ next-env.d.ts
 /npm
 /p.$disconnect())
 /template-c1@0.1.0
+/playwright
 
