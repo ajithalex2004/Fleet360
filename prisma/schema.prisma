@@ -1785,7 +1785,27 @@ model LeaseInquiry {
   assignedTo        String?  @map("assigned_to")
   branchId          String?  @map("branch_id")
   quotations        LeaseQuotation[]
+  activities        LeaseInquiryActivity[]
   @@map("lease_inquiries")
+}
+
+model LeaseInquiryActivity {
+  id              String    @id @default(uuid())
+  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  inquiryId       String    @map("inquiry_id")
+  activityType    String    @map("activity_type") // NOTE|CALL|EMAIL|MEETING|SMS|WHATSAPP|FOLLOW_UP_DUE
+  subject         String?
+  body            String?
+  outcome         String?   // NO_ANSWER|INTERESTED|NOT_INTERESTED|CALLBACK_REQUESTED|...
+  performedAt     DateTime  @default(now()) @map("performed_at") @db.Timestamptz(6)
+  performedById   String?   @map("performed_by_id")
+  performedByName String?   @map("performed_by_name")
+  followUpAt      DateTime? @map("follow_up_at") @db.Timestamptz(6)
+  followUpDone    Boolean?  @default(false) @map("follow_up_done")
+  inquiry         LeaseInquiry @relation(fields: [inquiryId], references: [id])
+  @@index([inquiryId], map: "idx_lease_inquiry_activities_inquiry_id")
+  @@index([performedAt], map: "idx_lease_inquiry_activities_performed_at")
+  @@map("lease_inquiry_activities")
 }
 
 model LeaseQuotation {
