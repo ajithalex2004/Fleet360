@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withAudit } from '@/lib/with-audit';
 
 export async function GET() {
   try {
@@ -44,43 +45,54 @@ export async function GET() {
   }
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const {
-      lessee, lesseeId, agreementType, leaseType, durationMonths, startDate, endDate,
-      monthlyRate, currency, securityDeposit, mileageCap, branch, vehicles,
-      insuranceIncluded, maintenanceIncluded, driverIncluded, notes, quotationId,
-    } = body;
+export const POST = withAudit(
+  async (request: NextRequest) => {
+    try {
+      const body = await request.json();
+      const {
+        lessee, lesseeId, agreementType, leaseType, durationMonths, startDate, endDate,
+        monthlyRate, currency, securityDeposit, mileageCap, branch, vehicles,
+        insuranceIncluded, maintenanceIncluded, driverIncluded, notes, quotationId,
+      } = body;
 
-    const contractNumber = `LC-${Date.now().toString().slice(-6)}`;
+      const contractNumber = `LC-${Date.now().toString().slice(-6)}`;
 
-    const contract = await (prisma as any).leaseContract.create({
-      data: {
-        contractNumber,
-        agreementType: agreementType ?? 'INDIVIDUAL',
-        leaseType: leaseType ?? 'LONG_TERM',
-        durationMonths: durationMonths ? parseInt(durationMonths) : null,
-        startDate: startDate ? new Date(startDate) : null,
-        endDate: endDate ? new Date(endDate) : null,
-        monthlyRate: monthlyRate ? parseFloat(monthlyRate) : 0,
-        currency: currency ?? 'AED',
-        securityDeposit: securityDeposit ? parseFloat(securityDeposit) : null,
-        mileageCap: mileageCap ? parseInt(mileageCap) : null,
-        branch: branch ?? null,
-        insuranceIncluded: insuranceIncluded ?? false,
-        maintenanceIncluded: maintenanceIncluded ?? false,
-        driverIncluded: driverIncluded ?? false,
-        notes: notes ?? null,
-        status: 'Draft',
-        lesseeId: lesseeId ?? null,
-        ...(quotationId ? { quotationId } : {}),
-      },
-    });
+      const contract = await (prisma as any).leaseContract.create({
+        data: {
+          contractNumber,
+          agreementType: agreementType ?? 'INDIVIDUAL',
+          leaseType: leaseType ?? 'LONG_TERM',
+          durationMonths: durationMonths ? parseInt(durationMonths) : null,
+          startDate: startDate ? new Date(startDate) : null,
+          endDate: endDate ? new Date(endDate) : null,
+          monthlyRate: monthlyRate ? parseFloat(monthlyRate) : 0,
+          currency: currency ?? 'AED',
+          securityDeposit: securityDeposit ? parseFloat(securityDeposit) : null,
+          mileageCap: mileageCap ? parseInt(mileageCap) : null,
+          branch: branch ?? null,
+          insuranceIncluded: insuranceIncluded ?? false,
+          maintenanceIncluded: maintenanceIncluded ?? false,
+          driverIncluded: driverIncluded ?? false,
+          notes: notes ?? null,
+          status: 'Draft',
+          lesseeId: lesseeId ?? null,
+          ...(quotationId ? { quotationId } : {}),
+        },
+      });
 
-    return NextResponse.json(contract, { status: 201 });
-  } catch (e: any) {
-    console.error('POST /api/leasing/contracts-v2 error:', e?.message);
-    return NextResponse.json({ error: e?.message ?? 'Failed to create contract' }, { status: 500 });
-  }
-}
+      return NextResponse.json(contract, { status: 201 });
+    } catch (e: any) {
+      console.error('POST /api/leasing/contracts-v2 error:', e?.message);
+      return NextResponse.json({ error: e?.message ?? 'Failed to create contract' }, { status: 500 });
+    }
+  },
+  {
+    entityType: 'LeaseContract',
+    action: 'CREATE',
+    extractEntity: (body) => ({ id: body?.id, name: body?.contractNumber }),
+    describe: (_req, body) =>
+      body?.contractNumber
+        ? `Created lease contract ${body.contractNumber} (${body.agreementType ?? 'INDIVIDUAL'}, monthly ${body.monthlyRate ?? 0} ${body.currency ?? 'AED'})`
+        : undefined,
+  },
+);
