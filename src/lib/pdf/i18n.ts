@@ -162,6 +162,35 @@ export const pdfStrings = {
   noTransactions: { en: 'No transactions in this period.', ar: 'لا توجد معاملات في هذه الفترة.' },
   txn_INVOICE: { en: 'Invoice', ar: 'فاتورة' },
   txn_PAYMENT: { en: 'Payment', ar: 'دفعة' },
+
+  // ── Rent-A-Car specifics ────────────────────────────────────────────────
+  rentalAgreement: { en: 'Rental Agreement', ar: 'عقد إيجار سيارة' },
+  agreementNo: { en: 'Agreement No.', ar: 'رقم العقد' },
+  pickupDate: { en: 'Pickup Date', ar: 'تاريخ الاستلام' },
+  dropoffDate: { en: 'Drop-off Date', ar: 'تاريخ الإرجاع' },
+  pickupBranch: { en: 'Pickup Branch', ar: 'فرع الاستلام' },
+  dropoffBranch: { en: 'Drop-off Branch', ar: 'فرع الإرجاع' },
+  dailyRateLabel: { en: 'Daily Rate', ar: 'الإيجار اليومي' },
+  totalDays: { en: 'Total Days', ar: 'إجمالي الأيام' },
+  mileageIn: { en: 'Mileage at Pickup', ar: 'الكيلومترات عند الاستلام' },
+  mileageOut: { en: 'Mileage at Return', ar: 'الكيلومترات عند الإرجاع' },
+  fuelIn: { en: 'Fuel at Pickup', ar: 'الوقود عند الاستلام' },
+  fuelOut: { en: 'Fuel at Return', ar: 'الوقود عند الإرجاع' },
+  rentalVehicle: { en: 'Rental Vehicle', ar: 'المركبة المؤجرة' },
+  ancillaries: { en: 'Ancillaries / Add-ons', ar: 'الإضافات' },
+  ancillariesTotal: { en: 'Ancillaries total', ar: 'إجمالي الإضافات' },
+  insuranceTier: { en: 'Insurance', ar: 'التأمين' },
+  rentalCharges: { en: 'Rental Charges', ar: 'رسوم الإيجار' },
+  rentalAgreementPreamble: {
+    en: 'This Rental Agreement is entered into between the Rental Company (Lessor) and the Renter (Lessee) for the short-term rental of the vehicle described below, on the terms and conditions set out herein.',
+    ar: 'تم إبرام عقد الإيجار هذا بين شركة التأجير (المؤجر) والمستأجر لإيجار قصير الأمد للمركبة الموصوفة أدناه، بموجب الشروط والأحكام المنصوص عليها هنا.',
+  },
+  rentalTermsBoilerplate: {
+    en: '1. The vehicle is rented in the condition shown at handover. Any new damage at return is billable per the bodyshop assessment.\n2. Mileage cap and overage rate apply if specified. Excess kilometres are billed at the rate above.\n3. Fuel: vehicle must be returned at the same level shown on this agreement, or refuelled at the prevailing rate.\n4. Cross-border travel requires the appropriate permit and is not permitted without prior written consent.\n5. The renter is responsible for traffic violations, Salik tolls, and parking fines incurred during the rental period.\n6. Late return is charged at hourly rates after the grace period. The vehicle must be returned with valid driving licence and a credit card on file.\n7. Insurance coverage is per the tier selected above. Excess applies for collision damage outside coverage.\n8. This agreement is governed by the laws of the United Arab Emirates.',
+    ar: '1. تُؤجر المركبة بالحالة الموضحة عند التسليم. أي ضرر جديد عند الإرجاع يُحسب وفقاً لتقييم ورشة الإصلاح.\n2. يُطبق الحد الأقصى للكيلومترات ومعدل التجاوز إذا تم تحديده. تُحسب الكيلومترات الزائدة بالسعر أعلاه.\n3. الوقود: يجب إعادة المركبة بنفس مستوى الوقود الموضح في هذا العقد، أو إعادة تعبئتها بالسعر السائد.\n4. السفر عبر الحدود يتطلب التصريح المناسب ولا يُسمح به دون موافقة كتابية مسبقة.\n5. المستأجر مسؤول عن المخالفات المرورية ورسوم سالك وغرامات المواقف خلال فترة الإيجار.\n6. الإرجاع المتأخر يُحسب بالساعة بعد فترة السماح. يجب إعادة المركبة مع رخصة قيادة سارية وبطاقة ائتمان في الملف.\n7. تغطية التأمين وفقاً للمستوى المختار أعلاه. يُطبق التحمل على أضرار التصادم خارج التغطية.\n8. تخضع هذه الاتفاقية لقوانين دولة الإمارات العربية المتحدة.',
+  },
+  renter: { en: 'Renter', ar: 'المستأجر' },
+  rentalCompany: { en: 'Rental Company', ar: 'شركة التأجير' },
 } as const;
 
 export type PdfStringKey = keyof typeof pdfStrings;

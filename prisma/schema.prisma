@@ -1148,6 +1148,29 @@ model RentalPayment {
   @@map("rental_payments")
 }
 
+// Master catalogue of ancillary products that can be attached to rentals.
+// (RentalAdditionalCharge holds the per-agreement instance with actual amount.)
+model RentalAncillary {
+  id                    String    @id @default(uuid())
+  createdAt             DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt             DateTime? @map("deleted_at") @db.Timestamptz(6)
+  code                  String    @unique
+  nameEn                String    @map("name_en")
+  nameAr                String?   @map("name_ar")
+  description           String?
+  category              String?
+  pricingType           String    @map("pricing_type")
+  unitPrice             Decimal   @map("unit_price") @db.Decimal
+  currency              String?   @default("AED")
+  applicableCategories  String?   @map("applicable_categories")
+  isActive              Boolean?  @default(true)
+  sortOrder             Int?      @default(0)
+  notes                 String?
+  @@index([deletedAt], map: "idx_rental_ancillaries_deleted_at")
+  @@map("rental_ancillaries")
+}
+
 model RentalAdditionalCharge {
   id              String          @id @default(uuid())
   createdAt       DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)

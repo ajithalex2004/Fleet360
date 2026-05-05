@@ -48,6 +48,7 @@ const NAV_GROUPS = [
       { href: '/rental/rates',         label: 'Rate Engine',      icon: '⚙️' },
       { href: '/rental/rates/yield',   label: 'Yield Analyzer',   icon: '📊' },
       { href: '/rental/rates/events',  label: 'Rate Events',      icon: '🎉' },
+      { href: '/rental/ancillaries',   label: 'Ancillaries',      icon: '🧰' },
     ],
   },
   {
