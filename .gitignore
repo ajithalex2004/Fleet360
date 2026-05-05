@@ -41,3 +41,16 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# Claude Code session state and worktrees
+/.claude/
+
+# Test artifacts
+/playwright-report
+/test-results
+
+# Accidental terminal-redirect outputs (0-byte files)
+/npm
+/p.$disconnect())
+/template-c1@0.1.0
+
