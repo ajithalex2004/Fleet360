@@ -29,7 +29,10 @@
         "@crayonai/react-core": "^0.7.6",
         "@crayonai/react-ui": "^0.8.31",
         "@crayonai/stream": "^0.6.4",
+        "@fontsource/inter": "^5.2.8",
+        "@fontsource/noto-sans-arabic": "^5.2.10",
         "@radix-ui/react-dialog": "^1.1.15",
+        "@react-pdf/renderer": "^4.5.1",
         "@thesysai/genui-sdk": "^0.6.34",
         "@types/nodemailer": "^7.0.4",
         "@types/uuid": "^10.0.0",
@@ -53,6 +56,7 @@
         "@types/node": "^20",
         "@types/react": "^19",
         "@types/react-dom": "^19",
+        "@vitest/coverage-v8": "^1.6.0",
         "dotenv": "^17.2.3",
         "eslint": "^9",
         "eslint-config-next": "15.2.4",
@@ -61,8 +65,7 @@
         "tailwindcss": "^4",
         "ts-node": "^10.9.2",
         "typescript": "^5",
-        "vitest": "^1.6.0",
-        "@vitest/coverage-v8": "^1.6.0"
+        "vitest": "^1.6.0"
     },
     "engines": {
         "node": ">=20.9.0"

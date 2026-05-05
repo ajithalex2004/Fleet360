@@ -8,6 +8,7 @@ import {
   Check,
   Send,
   FileText,
+  Download,
   X,
   CheckCircle,
 } from 'lucide-react';
@@ -288,6 +289,22 @@ export default function QuotationDetailPage() {
             >
               {quotation.status.replace(/_/g, ' ')}
             </span>
+            <a
+              href={`/api/leasing/quotations/${quotation.id}/pdf?lang=en&download=1`}
+              className="rounded-xl bg-emerald-700/80 border border-emerald-500/30 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 flex items-center gap-2"
+              title="Download bilingual PDF (English layout)"
+            >
+              <Download className="h-4 w-4" />
+              PDF (EN)
+            </a>
+            <a
+              href={`/api/leasing/quotations/${quotation.id}/pdf?lang=ar&download=1`}
+              className="rounded-xl bg-emerald-700/80 border border-emerald-500/30 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 flex items-center gap-2"
+              title="Download bilingual PDF (Arabic layout)"
+            >
+              <Download className="h-4 w-4" />
+              PDF (AR)
+            </a>
             <button
               onClick={() => window.print()}
               className="rounded-xl bg-slate-700 border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-600 flex items-center gap-2"
