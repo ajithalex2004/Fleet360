@@ -18,6 +18,7 @@ const NAV_GROUPS = [
   {
     label: 'Sales Lifecycle',
     items: [
+      { href: '/leasing/lead-channels',      label: 'Lead Channels',      icon: '🔌' },
       { href: '/leasing/inquiries',          label: 'Inquiries',          icon: '📩' },
       { href: '/leasing/quotations/copilot', label: 'AI Co-pilot',        icon: '✨' },
       { href: '/leasing/quotations',         label: 'Quotations',         icon: '💬' },
