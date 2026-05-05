@@ -17,8 +17,9 @@ const NAV_GROUPS = [
   {
     label: 'Sales Pipeline',
     items: [
-      { href: '/rental/inquiries',    label: 'Inquiries',            icon: '🔍' },
-      { href: '/rental/quotations',   label: 'Quotations',           icon: '📋' },
+      { href: '/rental/inquiries',          label: 'Inquiries',     icon: '🔍' },
+      { href: '/rental/bookings/copilot',   label: 'AI Co-pilot',   icon: '✨' },
+      { href: '/rental/quotations',         label: 'Quotations',    icon: '📋' },
     ],
   },
   {
