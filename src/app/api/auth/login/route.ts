@@ -1,0 +1,166 @@
+/**
+ * POST /api/auth/login
+ * Authenticates a user with email + password, signs an xl-session cookie.
+ * Works for any tenant the user belongs to (picks the first active one,
+ * or the one matching ?tenantId query param).
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
+import { prisma } from '@/lib/prisma';
+import { signSession } from '@/lib/tenant-session';
+
+// ── Password verification (matches the PBKDF2 format used in /api/tenants/provision) ──
+
+function verifyPassword(plaintext: string, stored: string): boolean {
+  try {
+    const [salt, hash] = stored.split(':');
+    if (!salt || !hash) return false;
+    const derived = crypto.pbkdf2Sync(plaintext, salt, 100_000, 64, 'sha512').toString('hex');
+    // Constant-time comparison
+    const a = Buffer.from(derived, 'hex');
+    const b = Buffer.from(hash,    'hex');
+    if (a.length !== b.length) return false;
+    return crypto.timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
+const COOKIE_NAME = 'xl-session';
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { email, password, tenantId: preferredTenantId } = body as {
+      email?: string;
+      password?: string;
+      tenantId?: string;
+    };
+
+    if (!email || !password) {
+      return NextResponse.json(
+        { error: 'Bad Request', message: 'Email and password are required' },
+        { status: 400 },
+      );
+    }
+
+    // 1. Find the user by email
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    if (!user) {
+      // Same message for both "not found" and "wrong password" to prevent user enumeration
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'Invalid email or password' },
+        { status: 401 },
+      );
+    }
+
+    if (!user.isActive) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Your account has been disabled. Contact your administrator.' },
+        { status: 403 },
+      );
+    }
+
+    // 2. Fetch password hash via raw SQL (column added outside Prisma schema)
+    const rows = await prisma.$queryRawUnsafe<{ password_hash: string | null }[]>(
+      `SELECT password_hash FROM "User" WHERE id = $1`,
+      user.id,
+    );
+    const passwordHash = rows[0]?.password_hash ?? null;
+
+    if (!passwordHash) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'No password set for this account. Please contact your administrator.' },
+        { status: 401 },
+      );
+    }
+
+    if (!verifyPassword(password, passwordHash)) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'Invalid email or password' },
+        { status: 401 },
+      );
+    }
+
+    // 3. Find an active UserTenant record for this user
+    const userTenants = await prisma.userTenant.findMany({
+      where: { userId: user.id, isActive: true },
+      include: {
+        tenant: { select: { id: true, name: true, code: true, plan: true, isActive: true } },
+        role:   { select: { id: true, name: true, code: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (userTenants.length === 0) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'No active tenant access found for this account.' },
+        { status: 403 },
+      );
+    }
+
+    // Prefer the requested tenantId, otherwise take the first active one
+    const userTenant = preferredTenantId
+      ? (userTenants.find(ut => ut.tenantId === preferredTenantId) ?? userTenants[0])
+      : userTenants[0];
+
+    if (!userTenant.tenant.isActive) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'This tenant account is inactive.' },
+        { status: 403 },
+      );
+    }
+
+    // 4. Sign session cookie (include role so middleware can inject x-user-role)
+    const plan = userTenant.tenant.plan ?? 'TRIAL';
+    const token = await signSession({
+      userId:   user.id,
+      tenantId: userTenant.tenantId,
+      plan,
+      role:     userTenant.role.code,
+    });
+
+    // 5. Build response
+    const responseBody = {
+      ok: true,
+      user: {
+        id:        user.id,
+        email:     user.email,
+        firstName: user.firstName,
+        lastName:  user.lastName,
+        roleCode:  userTenant.role.code,
+        roleName:  userTenant.role.name,
+      },
+      tenant: {
+        id:   userTenant.tenant.id,
+        name: userTenant.tenant.name,
+        code: userTenant.tenant.code,
+        plan,
+      },
+      // Return all tenants so the client can show a tenant-switcher if needed
+      availableTenants: userTenants.map(ut => ({
+        id:   ut.tenant.id,
+        name: ut.tenant.name,
+        code: ut.tenant.code,
+      })),
+    };
+
+    const response = NextResponse.json(responseBody, { status: 200 });
+    response.cookies.set(COOKIE_NAME, token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure:   process.env.NODE_ENV === 'production',
+      maxAge:   86_400, // 24 hours
+      path:     '/',
+    });
+
+    return response;
+  } catch (err) {
+    console.error('[auth/login]', err);
+    return NextResponse.json(
+      { error: 'Internal Server Error', message: 'Login failed. Please try again.' },
+      { status: 500 },
+    );
+  }
+}
