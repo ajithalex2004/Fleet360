@@ -42,6 +42,7 @@ export default function BookingsPage() {
   const [saving, setSaving]             = useState(false);
   const [error, setError]               = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [sweeping, setSweeping] = useState(false);
 
   const [formData, setFormData] = useState({
     customerId: '',
@@ -139,6 +140,43 @@ export default function BookingsPage() {
     }
   };
 
+  const runPenaltySweep = async () => {
+    setSweeping(true);
+    try {
+      const dry = await fetch('/api/rental/bookings/sweep-penalties?dryRun=1', { method: 'POST' });
+      if (!dry.ok) throw new Error('Dry run failed');
+      const dryData = await dry.json();
+      const noShow = dryData.assessments?.filter((a: { kind: string }) => a.kind === 'NO_SHOW').length ?? 0;
+      const lateRet = dryData.assessments?.filter((a: { kind: string }) => a.kind === 'LATE_RETURN').length ?? 0;
+      if (noShow + lateRet === 0) {
+        alert(`Scanned ${dryData.scanned} bookings — no penalties to apply.`);
+        return;
+      }
+      const ok = confirm(
+        `Penalty sweep preview:\n\n` +
+        `  • ${noShow} no-show (will flip status + charge fee)\n` +
+        `  • ${lateRet} late return (will charge fee, status stays ACTIVE)\n\n` +
+        `Apply now?`
+      );
+      if (!ok) return;
+      const real = await fetch('/api/rental/bookings/sweep-penalties', { method: 'POST' });
+      if (!real.ok) throw new Error('Sweep failed');
+      const data = await real.json();
+      alert(
+        `Sweep complete:\n` +
+        `  ${data.counts.noShow} no-show flipped & charged\n` +
+        `  ${data.counts.lateReturn} late-return charged\n` +
+        `  ${data.counts.skipped} skipped (already today)\n` +
+        `  ${data.errors.length} errors`
+      );
+      loadData();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Sweep failed');
+    } finally {
+      setSweeping(false);
+    }
+  };
+
   if (loading) return (
     <div className="flex items-center justify-center h-full">
       <div className="text-slate-400 animate-pulse">Loading bookings...</div>
@@ -153,12 +191,22 @@ export default function BookingsPage() {
           <h1 className="text-4xl font-bold text-white mb-2">Bookings</h1>
           <p className="text-slate-400">Manage all rental bookings - {bookings.length} total</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90 transition-all"
-        >
-          + New Booking
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={runPenaltySweep}
+            disabled={sweeping}
+            title="Detect no-show + late-return bookings and apply penalty fees"
+            className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-300 hover:bg-amber-500/20 transition-all disabled:opacity-50"
+          >
+            {sweeping ? 'Sweeping…' : '⚠ Run Penalty Sweep'}
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90 transition-all"
+          >
+            + New Booking
+          </button>
+        </div>
       </div>
 
       {error && (
