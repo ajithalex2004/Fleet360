@@ -50,6 +50,7 @@ const NAV_GROUPS = [
     label: 'Fleet & Compliance',
     items: [
       { href: '/leasing/insurance',        label: 'Insurance',          icon: '🛡️' },
+      { href: '/leasing/drivers',          label: 'Drivers',            icon: '🧑‍✈️' },
       { href: '/leasing/documents',        label: 'Documents',          icon: '📄' },
       { href: '/leasing/amendments',       label: 'Amendments',         icon: '📝' },
       { href: '/leasing/handover',         label: 'Handover & Return',  icon: '🚗' },

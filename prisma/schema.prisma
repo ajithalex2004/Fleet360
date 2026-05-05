@@ -2001,6 +2001,27 @@ model LeaseAlert {
   @@map("lease_alerts")
 }
 
+model LeaseDriverAllocation {
+  id                String    @id @default(uuid())
+  createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  driverId          String    @map("driver_id")
+  contractId        String    @map("contract_id")
+  contractVehicleId String?   @map("contract_vehicle_id")
+  allocatedAt       DateTime  @default(now()) @map("allocated_at") @db.Timestamptz(6)
+  releasedAt        DateTime? @map("released_at") @db.Timestamptz(6)
+  releaseReason     String?   @map("release_reason")
+  allocatedBy       String?   @map("allocated_by")
+  releasedBy        String?   @map("released_by")
+  notes             String?
+  status            String?   @default("ACTIVE") // ACTIVE|RELEASED
+  @@index([driverId], map: "idx_lease_driver_allocations_driver_id")
+  @@index([contractId], map: "idx_lease_driver_allocations_contract_id")
+  @@index([contractVehicleId], map: "idx_lease_driver_allocations_contract_vehicle_id")
+  @@index([status], map: "idx_lease_driver_allocations_status")
+  @@map("lease_driver_allocations")
+}
+
 model LeaseApprovalStep {
   id              String   @id @default(uuid())
   createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
