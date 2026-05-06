@@ -38,7 +38,7 @@ const navItems: NavItem[] = [
   { name: 'Re-optimise',               href: '/bus-ops/optimisation',    icon: Recycle,         group: 'ops' },
   { name: 'Schedules',                 href: '/bus-ops/schedules',       icon: Clock,           group: 'ops' },
   { name: 'Passengers',                href: '/bus-ops/passengers',      icon: Users,           group: 'people' },
-  { name: 'Staff Members',             href: '/bus-ops/staff',           icon: UserCog,         group: 'people' },
+  { name: 'Staff Register',            href: '/bus-ops/staff',           icon: UserCog,         group: 'people' },
   { name: 'Driver Scores',             href: '/bus-ops/drivers',         icon: Trophy,          group: 'people' },
   { name: 'Analytics',                 href: '/bus-ops/analytics',       icon: LineChart,       group: 'intel' },
   { name: 'Demand Forecast',           href: '/bus-ops/demand-forecast', icon: TrendingUp,      group: 'intel' },
