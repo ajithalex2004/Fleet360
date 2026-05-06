@@ -125,6 +125,12 @@ export default function LoginPage() {
             >
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
+
+            <div className="text-center">
+              <a href="/forgot-password" className="text-xs text-slate-400 hover:text-white">
+                Forgot your password?
+              </a>
+            </div>
           </form>
 
           {/* Divider */}
