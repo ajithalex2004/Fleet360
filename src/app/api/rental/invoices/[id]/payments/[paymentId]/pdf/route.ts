@@ -1,5 +1,5 @@
 /**
- * GET /api/rental/invoices/[invoiceId]/payments/[paymentId]/pdf?lang=en|ar
+ * GET /api/rental/invoices/[id]/payments/[paymentId]/pdf?lang=en|ar
  *
  * Receipt PDF for a single rental payment. Reuses the leasing ReceiptPdf
  * template — adapts RentalInvoicePayment data to its shape.
@@ -25,9 +25,9 @@ const VENDOR = {
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ invoiceId: string; paymentId: string }> },
+  { params }: { params: Promise<{ id: string; paymentId: string }> },
 ) {
-  const { invoiceId, paymentId } = await params;
+  const { id: invoiceId, paymentId } = await params;
   const lang: Lang = req.nextUrl.searchParams.get('lang') === 'ar' ? 'ar' : 'en';
   const download = req.nextUrl.searchParams.get('download') === '1';
 
