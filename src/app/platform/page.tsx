@@ -128,6 +128,13 @@ const modules = [
     tags: ['PWA', 'Mobile', 'Self-Service'], status: 'live',
   },
   {
+    id: 'mobile-apps', title: 'Mobile Apps',
+    description: 'Fleet360 PWA gallery — Driver, Passenger, Counter, Field-Ops. Install once on the phone, work offline-cached, scope-locked per role.',
+    href: '/mobile-apps', icon: '📲',
+    gradient: 'from-fuchsia-600 to-pink-600', glow: 'shadow-fuchsia-500/20', border: 'border-fuchsia-500/30',
+    tags: ['Fleet360', 'PWA', 'Driver', 'Passenger', 'Field'], status: 'live',
+  },
+  {
     id: 'reports', title: 'Reports & Analytics',
     description: 'Cross-module BI — fleet utilization, revenue analysis, driver performance, scheduled report exports',
     href: '/reports', icon: '📊',

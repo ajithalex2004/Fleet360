@@ -20,8 +20,8 @@ export default function DriverLayout({ children }: { children: React.ReactNode }
       <header className="sticky top-0 z-10 bg-gradient-to-r from-violet-700 to-purple-700 px-4 py-3 shadow-lg">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-xs uppercase tracking-wide text-violet-100/70">XL AI Driver</div>
-            <div className="text-base font-bold">Staff Transport</div>
+            <div className="text-xs uppercase tracking-wide text-violet-100/70">Fleet360 STS</div>
+            <div className="text-base font-bold">Driver</div>
           </div>
           <Link href="/bus-ops" className="text-xs text-violet-100/80 hover:text-white">Desktop</Link>
         </div>

@@ -17,8 +17,8 @@ const navItems = [
   { name: 'Analytics',       href: '/bus-ops/analytics',      icon: '📈' },
   { name: 'Demand Forecast', href: '/bus-ops/demand-forecast', icon: '🔮' },
   { name: 'Incidents',       href: '/bus-ops/incidents',      icon: '⚠️' },
-  { name: 'Driver App',      href: '/bus-ops/driver',         icon: '📲' },
-  { name: 'My Bus (Staff)',  href: '/bus-ops/passenger',      icon: '🧑' },
+  { name: 'Fleet360 STS Driver',    href: '/bus-ops/driver',    icon: '📲' },
+  { name: 'Fleet360 STS Passenger', href: '/bus-ops/passenger', icon: '🧑' },
   { name: 'BLE Gateways',    href: '/bus-ops/gateways',       icon: '📡' },
   { name: 'Driver Scores',   href: '/bus-ops/drivers',        icon: '🏆' },
 ];

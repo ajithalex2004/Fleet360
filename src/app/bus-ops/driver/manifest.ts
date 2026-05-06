@@ -2,9 +2,9 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'XL AI Smart Mobility — Bus Driver',
-    short_name: 'Bus Driver',
-    description: 'On-the-road app for staff bus drivers: depart, board, complete, incident.',
+    name: 'Fleet360 STS Driver',
+    short_name: 'F360 Driver',
+    description: 'On-the-road app for staff bus drivers — depart, board, complete, incident, pre-trip safety check.',
     start_url: '/bus-ops/driver',
     scope: '/bus-ops/driver',
     display: 'standalone',

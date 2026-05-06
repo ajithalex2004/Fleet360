@@ -2,9 +2,9 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'XL AI Smart Mobility — My Bus',
-    short_name: 'My Bus',
-    description: 'Staff transport companion: today\'s bus, board check-in (BLE/QR/NFC), absence registration.',
+    name: 'Fleet360 STS Passenger',
+    short_name: 'F360 Passenger',
+    description: 'Staff transport companion — today\'s bus, BLE/NFC/QR boarding, absence registration, waitlist join.',
     start_url: '/bus-ops/passenger',
     scope: '/bus-ops/passenger',
     display: 'standalone',

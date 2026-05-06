@@ -20,8 +20,8 @@ export default function PassengerLayout({ children }: { children: React.ReactNod
       <header className="sticky top-0 z-10 bg-gradient-to-r from-cyan-700 to-sky-700 px-4 py-3 shadow-lg">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-xs uppercase tracking-wide text-cyan-100/70">XL AI</div>
-            <div className="text-base font-bold">My Bus</div>
+            <div className="text-xs uppercase tracking-wide text-cyan-100/70">Fleet360 STS</div>
+            <div className="text-base font-bold">Passenger</div>
           </div>
           <Link href="/bus-ops" className="text-xs text-cyan-100/80 hover:text-white">Desktop</Link>
         </div>
