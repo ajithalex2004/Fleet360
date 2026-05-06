@@ -76,77 +76,74 @@ export default function DriverPerformancePage() {
     }
   };
 
+  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading driver scores...</div></div>;
+
+  const drivers = data?.drivers ?? [];
+  const scoredCount = drivers.filter(d => d.score != null).length;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader
         title="Driver Performance"
-        subtitle="Score = 50% on-time + 30% incident-free + 20% completion. Min 5 trips for a score."
+        subtitle={`${scoredCount} scored · ${drivers.length - scoredCount} insufficient signal · ${drivers.length} total · ${month}`}
         icon={Trophy}
-        accent="amber"
+        accent="violet"
         actions={
           <>
             <input type="month" value={month} onChange={e => setMonth(e.target.value)}
-              className="px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm" />
+              className="px-3 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none" />
             <button onClick={recompute} disabled={recomputing}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50">
-              <RotateCw className={`w-3.5 h-3.5 ${recomputing ? 'animate-spin' : ''}`} />
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50">
+              <RotateCw className={`w-4 h-4 ${recomputing ? 'animate-spin' : ''}`} />
               {recomputing ? 'Recomputing…' : 'Recompute'}
             </button>
           </>
         }
       />
 
-      {error && <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-sm">{error}</div>}
+      {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
 
-      {loading ? (
-        <div className="text-slate-500">Loading…</div>
-      ) : !data || data.drivers.length === 0 ? (
-        <div className="p-8 rounded-xl bg-slate-800/40 border border-slate-700 text-center text-slate-400">
-          No performance data for {month}. Tap <strong>Recompute</strong> to run the scoring engine.
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-white/10">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-800/60">
-              <tr className="text-left text-xs text-slate-400">
-                <th className="px-4 py-3">Driver</th>
-                <th className="px-4 py-3">Licence</th>
-                <th className="px-4 py-3 text-right">Trips</th>
-                <th className="px-4 py-3 text-right">KM</th>
-                <th className="px-4 py-3 text-right">On-time %</th>
-                <th className="px-4 py-3 text-right">Incidents</th>
-                <th className="px-4 py-3 text-right">Fuel km/L</th>
-                <th className="px-4 py-3 text-right">Score</th>
-                <th className="px-4 py-3">Grade</th>
+      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+        {drivers.length === 0 ? (
+          <div className="text-center text-slate-400 py-12">
+            No performance data for {month}. Tap <strong className="text-violet-300">Recompute</strong> to run the scoring engine.
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-white/5">
+                {['Driver', 'Licence', 'Trips', 'KM', 'On-time %', 'Incidents', 'Fuel km/L', 'Score', 'Grade'].map(h => (
+                  <th key={h} className={`px-4 py-3 text-xs font-semibold text-slate-400 ${['Trips','KM','On-time %','Incidents','Fuel km/L','Score'].includes(h) ? 'text-right' : 'text-left'}`}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {data.drivers.map(d => (
-                <tr key={d.driverId} className="border-t border-white/5 hover:bg-white/5">
-                  <td className="px-4 py-3">
-                    <div className="text-white font-medium">{d.name ?? '—'}</div>
-                    <div className="text-[11px] text-slate-500">{d.status ?? '—'}</div>
+              {drivers.map(d => (
+                <tr key={d.driverId} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                  <td className="px-4 py-3 text-sm">
+                    <div className="font-medium text-white">{d.name ?? '—'}</div>
+                    <div className="text-xs text-slate-300">{d.status ?? '—'}</div>
                   </td>
-                  <td className="px-4 py-3 text-xs">
-                    <div className="font-mono text-slate-300">{d.licenseNumber ?? '—'}</div>
-                    <div className="text-slate-500">{d.licenseType ?? ''}</div>
+                  <td className="px-4 py-3 text-sm">
+                    <div className="font-mono text-white">{d.licenseNumber ?? '—'}</div>
+                    <div className="text-xs text-slate-300">{d.licenseType ?? ''}</div>
                   </td>
-                  <td className="px-4 py-3 text-right text-slate-200">{d.totalTrips ?? 0}</td>
-                  <td className="px-4 py-3 text-right text-slate-200">{Math.round(d.totalKm ?? 0).toLocaleString()}</td>
-                  <td className={`px-4 py-3 text-right ${(d.onTimePct ?? 0) >= 90 ? 'text-emerald-300' : (d.onTimePct ?? 0) >= 75 ? 'text-amber-300' : 'text-rose-300'}`}>
+                  <td className="px-4 py-3 text-sm text-right text-white">{d.totalTrips ?? 0}</td>
+                  <td className="px-4 py-3 text-sm text-right text-white">{Math.round(d.totalKm ?? 0).toLocaleString()}</td>
+                  <td className={`px-4 py-3 text-sm text-right font-medium ${(d.onTimePct ?? 0) >= 90 ? 'text-emerald-400' : (d.onTimePct ?? 0) >= 75 ? 'text-amber-400' : 'text-rose-400'}`}>
                     {(d.onTimePct ?? 0).toFixed(1)}%
                   </td>
-                  <td className={`px-4 py-3 text-right ${(d.incidentCount ?? 0) === 0 ? 'text-emerald-300' : (d.incidentCount ?? 0) <= 2 ? 'text-amber-300' : 'text-rose-300'}`}>
+                  <td className={`px-4 py-3 text-sm text-right font-medium ${(d.incidentCount ?? 0) === 0 ? 'text-emerald-400' : (d.incidentCount ?? 0) <= 2 ? 'text-amber-400' : 'text-rose-400'}`}>
                     {d.incidentCount ?? 0}
                   </td>
-                  <td className="px-4 py-3 text-right text-slate-300">{(d.fuelEfficiency ?? 0).toFixed(2)}</td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-sm text-right text-white">{(d.fuelEfficiency ?? 0).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-sm text-right">
                     {d.score != null
-                      ? <span className="text-white font-bold text-lg">{d.score.toFixed(1)}</span>
-                      : <span className="text-slate-500 text-xs italic">insufficient</span>}
+                      ? <span className="text-white font-bold text-base">{d.score.toFixed(1)}</span>
+                      : <span className="text-slate-400 text-xs italic">insufficient</span>}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`inline-block px-3 py-1 rounded-lg text-sm font-bold border ${GRADE_BG[d.grade]}`}>
+                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold border ${GRADE_BG[d.grade]}`}>
                       {d.grade}
                     </span>
                   </td>
@@ -154,10 +151,10 @@ export default function DriverPerformancePage() {
               ))}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </div>
 
-      <div className="bg-slate-800/30 border border-white/5 rounded-xl p-5 text-xs text-slate-400 space-y-2">
+      <div className="bg-slate-800/30 border border-white/5 rounded-2xl p-5 text-xs text-slate-400 space-y-2">
         <p className="text-white font-semibold mb-1">Scoring formula</p>
         <ul className="list-disc pl-5 space-y-1">
           <li><strong>On-time %</strong> — fraction of trips that departed within +5 min of scheduled (50% weight)</li>
