@@ -30,6 +30,7 @@ const PUBLIC_EXACT: Set<string> = new Set([
   '/api/auth/logout',
   '/api/auth/forgot-password',
   '/api/auth/reset-password',
+  '/api/auth/invitation/accept',
   '/forgot-password',
   '/reset-password',
   '/api/tenants/provision',
@@ -45,6 +46,8 @@ const PUBLIC_PREFIXES: string[] = [
   '/track/',
   '/api/admin/session',
   '/api/setup/',      // one-time setup endpoints — protected by SETUP_SECRET, not session
+  '/api/auth/invitation/',  // public lookup by token
+  '/invitation/',           // accept-invitation page
 ];
 
 function isPublicRoute(pathname: string): boolean {

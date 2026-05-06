@@ -487,6 +487,10 @@ export default function TenantsPage() {
                 className="text-xs px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30">
                 Manage
               </Link>
+              <Link href={`/admin/tenants/${t.id}/invitations`}
+                className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30">
+                Invitations
+              </Link>
               <button onClick={() => impersonate(t)}
                 disabled={!t.isActive}
                 className="text-xs px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 disabled:opacity-40 disabled:cursor-not-allowed">
