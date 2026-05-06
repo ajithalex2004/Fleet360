@@ -61,8 +61,13 @@ export default function BusOpsLayout({ children }: { children: React.ReactNode }
   const { tLabel, t } = useLanguage();
 
   // Driver and passenger PWAs bypass the desktop chrome — they own their own
-  // mobile shells (sticky header + bottom tabs).
-  if (pathname?.startsWith('/bus-ops/driver') || pathname?.startsWith('/bus-ops/passenger')) {
+  // mobile shells (sticky header + bottom tabs). Use segment-bounded checks:
+  // `/bus-ops/passengers` (plural admin) and `/bus-ops/drivers` (plural
+  // scoreboard) MUST keep the desktop sidebar.
+  const isPwa =
+    pathname === '/bus-ops/driver' || pathname?.startsWith('/bus-ops/driver/') ||
+    pathname === '/bus-ops/passenger' || pathname?.startsWith('/bus-ops/passenger/');
+  if (isPwa) {
     return <>{children}</>;
   }
 
