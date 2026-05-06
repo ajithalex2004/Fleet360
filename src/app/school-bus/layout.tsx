@@ -43,12 +43,15 @@ export default function SchoolBusLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const { tLabel, t } = useLanguage();
 
-  // Parent PWA bypasses the desktop chrome — owns its own mobile shell.
-  // Use exact-or-segment-bounded checks to avoid matching unintended pages.
+  // Parent + Driver PWAs bypass the desktop chrome — they own their own
+  // mobile shells. Segment-bounded checks (so future plurals don't collide).
   const isParentPwa =
     pathname === '/school-bus/parent' ||
     pathname?.startsWith('/school-bus/parent/');
-  if (isParentPwa) return <>{children}</>;
+  const isDriverPwa =
+    pathname === '/school-bus/driver' ||
+    pathname?.startsWith('/school-bus/driver/');
+  if (isParentPwa || isDriverPwa) return <>{children}</>;
 
   return (
     <ModuleGuard moduleId="school-bus" moduleName="School Bus Transportation" moduleIcon="🏫">

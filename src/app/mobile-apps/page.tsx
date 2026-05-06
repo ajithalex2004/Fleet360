@@ -94,6 +94,19 @@ const APPS: MobileApp[] = [
     module: 'school-bus',
     capabilities: ['Live trip', 'Attendance', 'Absence', 'Alerts'],
   },
+  {
+    id: 'sb-driver',
+    name: 'Fleet360 SchoolBus Driver',
+    audience: 'School Bus Drivers & Attendants',
+    description: 'On-the-road app for school bus drivers. Pre-trip safety check, RFID/code scan boarding + alighting, manifest with medical-alert flagging, incident reporting that auto-pages parents.',
+    href: '/school-bus/driver',
+    icon: BusFront,
+    gradient: 'from-red-700 to-rose-700',
+    ring: 'ring-red-500/40',
+    tag: 'School Bus',
+    module: 'school-bus',
+    capabilities: ['Pre-trip check', 'RFID scan', 'Manifest', 'Incident'],
+  },
 ];
 
 export default function MobileAppsPage() {
