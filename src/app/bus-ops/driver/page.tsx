@@ -81,6 +81,9 @@ export default function DriverTodayPage() {
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
+        if (res.status === 412 && kind === 'depart') {
+          throw new Error('Safety check required first — tap "🛡 Safety Check" above.');
+        }
         throw new Error(d.error ?? 'Action failed');
       }
       await load();
@@ -155,13 +158,21 @@ export default function DriverTodayPage() {
                     Manifest
                   </Link>
                   {status === 'SCHEDULED' && (
-                    <button
-                      onClick={() => action(t.id, 'depart')}
-                      disabled={isBusy}
-                      className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-sm disabled:opacity-50"
-                    >
-                      🚌 Depart
-                    </button>
+                    <>
+                      <Link
+                        href={`/bus-ops/driver/trip/${t.id}/pretrip`}
+                        className="flex-1 text-center py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-sm"
+                      >
+                        🛡 Safety Check
+                      </Link>
+                      <button
+                        onClick={() => action(t.id, 'depart')}
+                        disabled={isBusy}
+                        className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-sm disabled:opacity-50"
+                      >
+                        🚌 Depart
+                      </button>
+                    </>
                   )}
                   {(status === 'DEPARTED' || status === 'IN_TRANSIT') && (
                     <button

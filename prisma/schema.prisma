@@ -1428,6 +1428,24 @@ model StaffTransportRequest {
   @@map("staff_transport_requests")
 }
 
+model BusPreTripCheck {
+  id              String    @id @default(uuid())
+  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  scheduleId      String    @map("schedule_id")
+  vehicleId       String?   @map("vehicle_id")
+  driverId        String?   @map("driver_id")
+  performedAt     DateTime  @default(now()) @map("performed_at") @db.Timestamptz(6)
+  performedBy     String?   @map("performed_by")
+  checkItems      Json      @map("check_items")
+  overallPass     Boolean   @default(true) @map("overall_pass")
+  failCount       Int       @default(0) @map("fail_count")
+  notes           String?
+  signatureData   String?   @map("signature_data")
+  @@index([scheduleId], map: "idx_bus_pretrip_checks_schedule_id")
+  @@index([performedAt], map: "idx_bus_pretrip_checks_performed_at")
+  @@map("bus_pretrip_checks")
+}
+
 model TripIncident {
   id              String        @id @default(uuid())
   createdAt       DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
