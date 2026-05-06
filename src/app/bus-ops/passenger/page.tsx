@@ -137,8 +137,14 @@ function PassengerHomeInner() {
       </div>
 
       {today.trips.length === 0 ? (
-        <div className="p-8 rounded-xl bg-slate-800/40 border border-slate-700 text-center text-sm text-slate-400">
-          No bus trips for you today. Check back tomorrow or submit a request.
+        <div className="p-8 rounded-xl bg-slate-800/40 border border-slate-700 text-center text-sm text-slate-400 space-y-3">
+          <p>No bus trips on your manifest today.</p>
+          <Link
+            href="/bus-ops/passenger/waitlist"
+            className="inline-block px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold"
+          >
+            Join a waitlist
+          </Link>
         </div>
       ) : (
         <div className="space-y-3">
