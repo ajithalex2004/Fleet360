@@ -93,11 +93,27 @@ export default function DriverTripDetailPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <Link href="/bus-ops/driver" className="text-xs text-violet-400 hover:underline">← Today's trips</Link>
-        <Link href={`/bus-ops/driver/trip/${id}/qr`} className="text-xs px-3 py-1.5 rounded-lg bg-violet-600/20 border border-violet-500/40 text-violet-300">
-          Show Boarding QR
-        </Link>
+        <div className="flex gap-2">
+          <a
+            href={`/api/bus-ops/schedules/${id}/manifest/pdf?lang=en&download=1`}
+            target="_blank" rel="noopener noreferrer"
+            className="text-xs px-3 py-1.5 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-300"
+          >
+            Manifest · EN
+          </a>
+          <a
+            href={`/api/bus-ops/schedules/${id}/manifest/pdf?lang=ar&download=1`}
+            target="_blank" rel="noopener noreferrer"
+            className="text-xs px-3 py-1.5 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-300"
+          >
+            Manifest · AR
+          </a>
+          <Link href={`/bus-ops/driver/trip/${id}/qr`} className="text-xs px-3 py-1.5 rounded-lg bg-violet-600/20 border border-violet-500/40 text-violet-300">
+            Show QR
+          </Link>
+        </div>
       </div>
 
       <div className="rounded-2xl bg-slate-800/60 border border-white/10 p-4">
