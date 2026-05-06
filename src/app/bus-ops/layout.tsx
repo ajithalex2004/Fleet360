@@ -15,11 +15,18 @@ const navItems = [
   { name: 'Staff Members',   href: '/bus-ops/staff',          icon: '👨‍💼' },
   { name: 'Analytics',       href: '/bus-ops/analytics',      icon: '📈' },
   { name: 'Incidents',       href: '/bus-ops/incidents',      icon: '⚠️' },
+  { name: 'Driver App',      href: '/bus-ops/driver',         icon: '📲' },
 ];
 
 export default function BusOpsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { tLabel, t } = useLanguage();
+
+  // Driver and passenger PWAs bypass the desktop chrome — they own their own
+  // mobile shells (sticky header + bottom tabs).
+  if (pathname?.startsWith('/bus-ops/driver') || pathname?.startsWith('/bus-ops/passenger')) {
+    return <>{children}</>;
+  }
 
   return (
     <ModuleGuard moduleId="bus-ops" moduleName="Staff Transportation" moduleIcon="🚌">
