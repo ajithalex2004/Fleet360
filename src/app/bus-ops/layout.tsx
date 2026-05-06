@@ -10,6 +10,7 @@ const navItems = [
   { name: 'Dispatch Board',  href: '/bus-ops/dispatch',      icon: '🚌' },
   { name: 'Routes',          href: '/bus-ops/routes',         icon: '🗺️' },
   { name: 'Route Optimizer', href: '/bus-ops/route-planner',  icon: '✨' },
+  { name: 'Re-optimise',     href: '/bus-ops/optimisation',   icon: '♻️' },
   { name: 'Schedules',       href: '/bus-ops/schedules',      icon: '⏰' },
   { name: 'Passengers',      href: '/bus-ops/passengers',     icon: '👥' },
   { name: 'Staff Members',   href: '/bus-ops/staff',          icon: '👨‍💼' },
