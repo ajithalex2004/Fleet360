@@ -35,19 +35,42 @@ export default function LoginPage() {
   const [ssoMode, setSsoMode] = useState(false);
   const [ssoEmail, setSsoEmail] = useState('');
 
+  // Optional white-label branding when arriving via /login?tenant=<code>
+  interface PublicBranding {
+    productName: string | null; tagline: string | null;
+    logoUrl: string | null; primaryColor: string | null;
+    tenantName?: string;
+  }
+  const [branding, setBranding] = useState<PublicBranding | null>(null);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (branding?.primaryColor) {
+      document.documentElement.style.setProperty('--brand-primary', branding.primaryColor);
+    }
+  }, [branding]);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params  = new URLSearchParams(window.location.search);
+
     const ssoFlag = params.get('sso');
     if (ssoFlag && SSO_MESSAGES[ssoFlag]) {
       setError(SSO_MESSAGES[ssoFlag]);
       const emailQ = params.get('email');
       if (emailQ) setSsoEmail(emailQ);
-      // Clean URL so a refresh doesn't keep showing the error.
       const clean = new URL(window.location.href);
       clean.searchParams.delete('sso');
       clean.searchParams.delete('email');
       window.history.replaceState({}, '', clean.toString());
+    }
+
+    const tenantCode = params.get('tenant');
+    if (tenantCode) {
+      fetch(`/api/branding?tenant=${encodeURIComponent(tenantCode)}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d?.branding) setBranding(d.branding); })
+        .catch(() => {});
     }
   }, []);
 
@@ -124,10 +147,20 @@ export default function LoginPage() {
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center space-y-2">
-          <div className="text-4xl font-black text-white tracking-tight">
-            XL <span className="text-blue-500">AI</span>
-          </div>
-          <p className="text-slate-400 text-sm">Smart Mobility Platform</p>
+          {branding?.logoUrl ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img src={branding.logoUrl} alt={branding.productName ?? branding.tenantName ?? ''}
+              className="mx-auto h-10 max-w-[200px] object-contain" />
+          ) : (
+            <div className="text-4xl font-black text-white tracking-tight">
+              {branding?.productName
+                ? <span>{branding.productName}</span>
+                : <>XL <span className="text-blue-500">AI</span></>}
+            </div>
+          )}
+          <p className="text-slate-400 text-sm">
+            {branding?.tagline ?? 'Smart Mobility Platform'}
+          </p>
         </div>
 
         <div className="bg-slate-900 border border-white/10 rounded-2xl p-8 shadow-2xl space-y-6">
