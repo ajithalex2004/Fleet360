@@ -41,6 +41,7 @@
         "next": "15.2.4",
         "nodemailer": "^7.0.11",
         "openai": "^4.91.1",
+        "openid-client": "^6.8.4",
         "papaparse": "^5.5.3",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",

@@ -1,6 +1,23 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+
+const SSO_MESSAGES: Record<string, string> = {
+  'unknown':                  'No SSO configured for that email domain.',
+  'missing-email':            'Enter an email to continue with SSO.',
+  'discovery-failed':         'Couldn’t reach your identity provider. Try again or use password sign-in.',
+  'missing-state':            'SSO session expired. Try again.',
+  'invalid-state':            'SSO session expired or tampered with. Try again.',
+  'config-missing':           'SSO is not currently configured for your tenant.',
+  'no-claims':                'Your identity provider returned no claims.',
+  'no-email':                 'Your identity provider didn’t return an email address.',
+  'domain-not-allowed':       'That email domain isn’t in this tenant’s allowed list.',
+  'tenant-inactive':          'Your tenant is currently inactive.',
+  'no-role':                  'No role available to assign you. Contact your administrator.',
+  'user-not-provisioned':     'Your account isn’t set up yet, and JIT provisioning is disabled. Contact your administrator.',
+  'account-disabled':         'Your account is disabled. Contact your administrator.',
+  'callback-failed':          'SSO sign-in failed. Try again or use password sign-in.',
+};
 
 export default function LoginPage() {
   const [email, setEmail]       = useState('');
@@ -13,6 +30,26 @@ export default function LoginPage() {
   const [mfaStep, setMfaStep] = useState(false);
   const [mfaCode, setMfaCode] = useState('');
   const [useRecovery, setUseRecovery] = useState(false);
+
+  // SSO step
+  const [ssoMode, setSsoMode] = useState(false);
+  const [ssoEmail, setSsoEmail] = useState('');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params  = new URLSearchParams(window.location.search);
+    const ssoFlag = params.get('sso');
+    if (ssoFlag && SSO_MESSAGES[ssoFlag]) {
+      setError(SSO_MESSAGES[ssoFlag]);
+      const emailQ = params.get('email');
+      if (emailQ) setSsoEmail(emailQ);
+      // Clean URL so a refresh doesn't keep showing the error.
+      const clean = new URL(window.location.href);
+      clean.searchParams.delete('sso');
+      clean.searchParams.delete('email');
+      window.history.replaceState({}, '', clean.toString());
+    }
+  }, []);
 
   const submit = useCallback(async (overrides?: { mfaCode?: string; recoveryCode?: string }) => {
     setError(null);
@@ -109,7 +146,28 @@ export default function LoginPage() {
             </div>
           )}
 
-          {!mfaStep ? (
+          {ssoMode ? (
+            <form onSubmit={(e) => {
+                e.preventDefault();
+                if (!ssoEmail.trim() || !/.+@.+\..+/.test(ssoEmail)) { setError('Enter a valid work email.'); return; }
+                window.location.href = `/api/auth/sso/initiate?email=${encodeURIComponent(ssoEmail.trim())}`;
+              }} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Work email</label>
+                <input type="email" value={ssoEmail} onChange={e => setSsoEmail(e.target.value)} required autoFocus
+                  placeholder="you@yourcompany.com"
+                  className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              </div>
+              <button type="submit"
+                className="w-full py-2.5 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-lg text-sm">
+                Continue with SSO
+              </button>
+              <div className="text-center">
+                <button type="button" onClick={() => { setSsoMode(false); setError(null); }}
+                  className="text-xs text-slate-400 hover:text-white">&larr; Sign in with password instead</button>
+              </div>
+            </form>
+          ) : !mfaStep ? (
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Email address</label>
@@ -148,8 +206,10 @@ export default function LoginPage() {
                 {loading ? 'Signing in…' : 'Sign in'}
               </button>
 
-              <div className="text-center">
-                <a href="/forgot-password" className="text-xs text-slate-400 hover:text-white">Forgot your password?</a>
+              <div className="flex items-center justify-between text-xs">
+                <button type="button" onClick={() => { setSsoMode(true); setError(null); }}
+                  className="text-violet-300 hover:text-violet-200 font-medium">Sign in with SSO →</button>
+                <a href="/forgot-password" className="text-slate-400 hover:text-white">Forgot your password?</a>
               </div>
             </form>
           ) : (
@@ -190,7 +250,7 @@ export default function LoginPage() {
             </form>
           )}
 
-          {!mfaStep && (
+          {!mfaStep && !ssoMode && (
             <>
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
