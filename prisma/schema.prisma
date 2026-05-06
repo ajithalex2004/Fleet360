@@ -1428,6 +1428,55 @@ model StaffTransportRequest {
   @@map("staff_transport_requests")
 }
 
+model BleGateway {
+  id                     String    @id @default(uuid())
+  createdAt              DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  vehicleId              String    @unique @map("vehicle_id")
+  gatewayId              String    @unique @map("gateway_id")
+  model                  String?
+  rssiThresholdDbm       Int?      @default(-75) @map("rssi_threshold_dbm")
+  presenceGraceSeconds   Int?      @default(10)  @map("presence_grace_seconds")
+  isActive               Boolean?  @default(true) @map("is_active")
+  lastSeenAt             DateTime? @map("last_seen_at") @db.Timestamptz(6)
+  lastEventAt            DateTime? @map("last_event_at") @db.Timestamptz(6)
+  notes                  String?
+  @@index([gatewayId], map: "idx_ble_gateways_gateway_id")
+  @@map("ble_gateways")
+}
+
+model StaffBleTag {
+  id                  String    @id @default(uuid())
+  createdAt           DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  staffMemberId       String    @unique @map("staff_member_id")
+  tagId               String    @unique @map("tag_id")
+  formFactor          String?   @map("form_factor")
+  issuedAt            DateTime  @default(now()) @map("issued_at") @db.Timestamptz(6)
+  batteryReplacedAt   DateTime? @map("battery_replaced_at") @db.Timestamptz(6)
+  isActive            Boolean?  @default(true) @map("is_active")
+  notes               String?
+  @@index([tagId], map: "idx_staff_ble_tags_tag_id")
+  @@map("staff_ble_tags")
+}
+
+model BleGatewayPresence {
+  id              String    @id @default(uuid())
+  gatewayId       String    @map("gateway_id")
+  vehicleId       String    @map("vehicle_id")
+  tagId           String    @map("tag_id")
+  scheduleId      String?   @map("schedule_id")
+  passengerId     String?   @map("passenger_id")
+  staffMemberId   String?   @map("staff_member_id")
+  firstSeenAt     DateTime  @map("first_seen_at") @db.Timestamptz(6)
+  lastSeenAt      DateTime  @map("last_seen_at") @db.Timestamptz(6)
+  lastRssiDbm     Int?      @map("last_rssi_dbm")
+  isPresent       Boolean   @default(true) @map("is_present")
+  alightedAt      DateTime? @map("alighted_at") @db.Timestamptz(6)
+  @@unique([gatewayId, tagId, scheduleId], map: "uniq_ble_presence")
+  @@index([scheduleId], map: "idx_ble_gateway_presence_schedule")
+  @@map("ble_gateway_presence")
+}
+
 model VehicleBeacon {
   id          String    @id @default(uuid())
   createdAt   DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
