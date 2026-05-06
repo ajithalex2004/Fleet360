@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { Calendar, Plus } from 'lucide-react';
+import { PageHeader } from '@/components/bus-ops/theme';
 
 interface Schedule {
   id: string; tripNumber?: string; routeId: string; route?: { name: string; origin: string; destination: string };
@@ -96,13 +98,17 @@ export default function SchedulesPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Trip Schedules</h1>
-          <p className="text-slate-400">{schedules.length} trips — {counts.SCHEDULED} scheduled · {counts.DEPARTED} departed · {counts.COMPLETED} completed</p>
-        </div>
-        <button onClick={()=>setShowModal(true)} className="rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90">+ New Trip</button>
-      </div>
+      <PageHeader
+        title="Trip Schedules"
+        subtitle={`${schedules.length} trips · ${counts.SCHEDULED} scheduled · ${counts.DEPARTED} departed · ${counts.COMPLETED} completed`}
+        icon={Calendar}
+        accent="emerald"
+        actions={
+          <button onClick={()=>setShowModal(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+            <Plus className="w-4 h-4" /> New Trip
+          </button>
+        }
+      />
 
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
 

@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { Bluetooth, RefreshCw } from 'lucide-react';
+import { PageHeader } from '@/components/bus-ops/theme';
 
 interface Gateway {
   id: string;
@@ -61,17 +63,17 @@ export default function GatewaysAdminPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-3xl font-bold text-white">BLE Gateways</h1>
-          <p className="text-sm text-slate-400 mt-1">
-            In-bus presence detection — auto-refreshes every 30s.
-          </p>
-        </div>
-        <button onClick={load} className="px-4 py-2 rounded-xl bg-slate-700 border border-white/10 text-white text-sm hover:bg-slate-600">
-          Refresh
-        </button>
-      </div>
+      <PageHeader
+        title="BLE Gateways"
+        subtitle="In-bus presence detection · auto-refreshes every 30s."
+        icon={Bluetooth}
+        accent="violet"
+        actions={
+          <button onClick={load} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 border border-white/10 text-white text-xs hover:border-white/20 hover:bg-slate-700 transition-colors">
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          </button>
+        }
+      />
 
       {!secretConfigured && (
         <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/40 text-amber-200 text-sm">

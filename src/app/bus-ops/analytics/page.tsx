@@ -1,9 +1,12 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from 'recharts';
+import { LineChart as LineChartIcon, RefreshCw, Leaf, Wrench, ShieldCheck } from 'lucide-react';
+import { PageHeader } from '@/components/bus-ops/theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -107,16 +110,17 @@ export default function BusOpsAnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Staff Transport Analytics</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Last 30 days performance overview</p>
-        </div>
-        <button onClick={load} className="text-xs text-slate-400 border border-white/10 px-3 py-1.5 rounded-lg hover:border-white/20 hover:text-white transition-colors">
-          ↺ Refresh
-        </button>
-      </div>
+      <PageHeader
+        title="Analytics"
+        subtitle="Last 30 days · trips, on-time SLA, cost per pax, boarding-method adoption"
+        icon={LineChartIcon}
+        accent="violet"
+        actions={
+          <button onClick={load} className="inline-flex items-center gap-1.5 text-xs text-slate-300 border border-white/10 px-3 py-1.5 rounded-lg hover:border-white/20 hover:bg-white/5 transition-colors">
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          </button>
+        }
+      />
 
       {/* KPI row */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -136,24 +140,39 @@ export default function BusOpsAnalyticsPage() {
 
       {/* Cross-module links */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <a href="/sustainability/fleet-carbon" target="_blank" rel="noopener noreferrer"
-           className="rounded-2xl bg-emerald-600/10 border border-emerald-500/40 p-4 hover:bg-emerald-600/20 transition-colors block">
-          <div className="text-xs uppercase tracking-wide text-emerald-300/80">🌱 Sustainability</div>
-          <div className="text-sm font-semibold text-emerald-200 mt-1">Fleet Carbon Dashboard</div>
-          <div className="text-[11px] text-emerald-300/60 mt-0.5">Bus trip CO₂e auto-aggregated · GHG Protocol</div>
-        </a>
-        <a href="/maintenance/action-centre" target="_blank" rel="noopener noreferrer"
-           className="rounded-2xl bg-cyan-600/10 border border-cyan-500/40 p-4 hover:bg-cyan-600/20 transition-colors block">
-          <div className="text-xs uppercase tracking-wide text-cyan-300/80">🔧 Maintenance</div>
-          <div className="text-sm font-semibold text-cyan-200 mt-1">Service Action Centre</div>
-          <div className="text-[11px] text-cyan-300/60 mt-0.5">Bus mileage feeds service-due alerts</div>
-        </a>
-        <a href="/compliance/salik" target="_blank" rel="noopener noreferrer"
-           className="rounded-2xl bg-amber-600/10 border border-amber-500/40 p-4 hover:bg-amber-600/20 transition-colors block">
-          <div className="text-xs uppercase tracking-wide text-amber-300/80">🛣️ Compliance</div>
-          <div className="text-sm font-semibold text-amber-200 mt-1">Salik / Toll Accounts</div>
-          <div className="text-[11px] text-amber-300/60 mt-0.5">Per-vehicle tag balance + auto-recharge</div>
-        </a>
+        <Link href="/sustainability/fleet-carbon"
+           className="group rounded-2xl bg-emerald-600/5 border border-emerald-500/30 p-4 hover:bg-emerald-600/10 hover:border-emerald-500/50 transition-all flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
+            <Leaf className="w-5 h-5 text-white" strokeWidth={1.75} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-wider text-emerald-300/80">Sustainability</div>
+            <div className="text-sm font-semibold text-emerald-100 mt-0.5">Fleet Carbon Dashboard</div>
+            <div className="text-[11px] text-emerald-300/60 mt-0.5">Bus trip CO₂e auto-aggregated · GHG Protocol</div>
+          </div>
+        </Link>
+        <Link href="/maintenance/action-centre"
+           className="group rounded-2xl bg-cyan-600/5 border border-cyan-500/30 p-4 hover:bg-cyan-600/10 hover:border-cyan-500/50 transition-all flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-600 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 shrink-0">
+            <Wrench className="w-5 h-5 text-white" strokeWidth={1.75} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-wider text-cyan-300/80">Maintenance</div>
+            <div className="text-sm font-semibold text-cyan-100 mt-0.5">Service Action Centre</div>
+            <div className="text-[11px] text-cyan-300/60 mt-0.5">Bus mileage feeds service-due alerts</div>
+          </div>
+        </Link>
+        <Link href="/compliance/salik"
+           className="group rounded-2xl bg-amber-600/5 border border-amber-500/30 p-4 hover:bg-amber-600/10 hover:border-amber-500/50 transition-all flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-600 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/20 shrink-0">
+            <ShieldCheck className="w-5 h-5 text-white" strokeWidth={1.75} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-wider text-amber-300/80">Compliance</div>
+            <div className="text-sm font-semibold text-amber-100 mt-0.5">Salik / Toll Accounts</div>
+            <div className="text-[11px] text-amber-300/60 mt-0.5">Per-vehicle tag balance + auto-recharge</div>
+          </div>
+        </Link>
       </div>
 
       {/* SLA + Cost section */}

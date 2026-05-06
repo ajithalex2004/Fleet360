@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { TrendingUp } from 'lucide-react';
+import { PageHeader } from '@/components/bus-ops/theme';
 
 interface ForecastRow {
   routeId: string;
@@ -64,30 +66,30 @@ export default function DemandForecastPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Demand Forecast</h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Predicts next-week pax counts per (route × shift × day) from history. Top 10 risk rows annotated by gpt-4o-mini.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <label className="text-xs text-slate-400 flex items-center gap-2">
-            History:
-            <select value={weeks} onChange={e => setWeeks(Number(e.target.value))}
-              className="px-2 py-1 rounded-lg bg-slate-800 border border-white/10 text-white text-xs">
-              {[2, 4, 6, 8, 12].map(w => <option key={w} value={w}>{w} weeks</option>)}
-            </select>
-          </label>
-          <label className="text-xs text-slate-400 flex items-center gap-2">
-            <input type="checkbox" checked={aiOn} onChange={e => setAiOn(e.target.checked)} className="w-4 h-4" />
-            AI rationale
-          </label>
-          <button onClick={load} disabled={loading} className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm disabled:opacity-50">
-            {loading ? 'Forecasting…' : 'Refresh'}
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Demand Forecast"
+        subtitle="Predicts next-week pax counts per (route × shift × day) from history. Top 10 risk rows annotated by gpt-4o-mini."
+        icon={TrendingUp}
+        accent="violet"
+        actions={
+          <>
+            <label className="text-xs text-slate-400 flex items-center gap-2">
+              History:
+              <select value={weeks} onChange={e => setWeeks(Number(e.target.value))}
+                className="px-2 py-1 rounded-lg bg-slate-800 border border-white/10 text-white text-xs">
+                {[2, 4, 6, 8, 12].map(w => <option key={w} value={w}>{w} weeks</option>)}
+              </select>
+            </label>
+            <label className="text-xs text-slate-400 flex items-center gap-2">
+              <input type="checkbox" checked={aiOn} onChange={e => setAiOn(e.target.checked)} className="w-4 h-4" />
+              AI rationale
+            </label>
+            <button onClick={load} disabled={loading} className="px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50">
+              {loading ? 'Forecasting…' : 'Refresh'}
+            </button>
+          </>
+        }
+      />
 
       {data?.warning && (
         <div className="p-3 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-200 text-sm">{data.warning}</div>

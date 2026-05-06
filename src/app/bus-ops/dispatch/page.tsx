@@ -1,6 +1,8 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { RadioTower, AlertTriangle, RefreshCw, Plus } from 'lucide-react';
+import { PageHeader } from '@/components/bus-ops/theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -327,36 +329,40 @@ export default function BusOpsDispatchPage() {
 
       <div className="space-y-5">
         {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Staff Transport Dispatch</h1>
-            <p className="text-slate-400 text-sm mt-0.5">
-              {schedules.length} trips · {totalPax} passengers · Refreshed {lastRefresh.toLocaleTimeString()}
-            </p>
-          </div>
-          <div className="flex items-center gap-3 flex-wrap">
-            {inTransit > 0 && (
-              <div className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full animate-pulse">
-                🚌 {inTransit} In Transit
-              </div>
-            )}
-            {unassigned > 0 && (
-              <div className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 rounded-full">
-                ⚠️ {unassigned} Unassigned
-              </div>
-            )}
-            <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)}
-              className="bg-slate-800 border border-white/10 rounded-xl px-3 py-1.5 text-sm text-white focus:outline-none focus:border-purple-500/40" />
-            <button onClick={load}
-              className="text-xs text-slate-400 border border-white/10 px-3 py-1.5 rounded-lg hover:border-white/20 hover:text-white transition-colors">
-              ↺ Refresh
-            </button>
-            <Link href="/bus-ops/schedules"
-              className="bg-purple-600 hover:bg-purple-500 text-white font-semibold px-4 py-2 rounded-xl text-sm transition-colors">
-              ➕ New Trip
-            </Link>
-          </div>
-        </div>
+        <PageHeader
+          title="Dispatch Board"
+          subtitle={`${schedules.length} trips · ${totalPax} passengers · refreshed ${lastRefresh.toLocaleTimeString()}`}
+          icon={RadioTower}
+          accent="violet"
+          actions={
+            <>
+              {inTransit > 0 && (
+                <span className="inline-flex items-center gap-1.5 text-xs text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1.5 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  {inTransit} In Transit
+                </span>
+              )}
+              {unassigned > 0 && (
+                <span className="inline-flex items-center gap-1.5 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 rounded-full">
+                  <AlertTriangle className="w-3 h-3" />
+                  {unassigned} Unassigned
+                </span>
+              )}
+              <input
+                type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)}
+                className="bg-slate-800 border border-white/10 rounded-xl px-3 py-1.5 text-sm text-white focus:outline-none focus:border-violet-500/40"
+              />
+              <button onClick={load}
+                className="inline-flex items-center gap-1.5 text-xs text-slate-300 border border-white/10 px-3 py-1.5 rounded-lg hover:border-white/20 hover:bg-white/5 transition-colors">
+                <RefreshCw className="w-3.5 h-3.5" /> Refresh
+              </button>
+              <Link href="/bus-ops/schedules"
+                className="inline-flex items-center gap-1.5 bg-gradient-to-r from-violet-600 to-purple-600 hover:opacity-90 text-white font-semibold px-4 py-2 rounded-xl text-sm transition-opacity">
+                <Plus className="w-3.5 h-3.5" /> New Trip
+              </Link>
+            </>
+          }
+        />
 
         {/* KPI row */}
         <div className="grid grid-cols-4 gap-3">

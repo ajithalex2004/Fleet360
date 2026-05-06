@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { Users, Plus } from 'lucide-react';
+import { PageHeader } from '@/components/bus-ops/theme';
 
 interface Passenger {
   id: string; tripId: string; employeeId?: string; employeeName?: string; department?: string;
@@ -84,13 +86,17 @@ export default function PassengersPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Passenger Management</h1>
-          <p className="text-slate-400">{counts.CONFIRMED} confirmed · {counts.BOARDED} boarded · {counts.ABSENT} absent</p>
-        </div>
-        <button onClick={()=>setShowModal(true)} className="rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90">+ Add Passenger</button>
-      </div>
+      <PageHeader
+        title="Passengers"
+        subtitle={`${counts.CONFIRMED} confirmed · ${counts.BOARDED} boarded · ${counts.ABSENT} absent`}
+        icon={Users}
+        accent="amber"
+        actions={
+          <button onClick={()=>setShowModal(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+            <Plus className="w-4 h-4" /> Add Passenger
+          </button>
+        }
+      />
 
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
 

@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { Recycle, RefreshCw } from 'lucide-react';
+import { PageHeader } from '@/components/bus-ops/theme';
 
 interface PreviewRow {
   routeId: string;
@@ -65,17 +67,18 @@ export default function OptimisationPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Route Optimisation</h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Re-orders existing route stops to minimise total distance — Nearest-Neighbour + 2-opt TSP solver.
-          </p>
-        </div>
-        <button onClick={load} disabled={loading} className="px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white text-sm hover:bg-slate-600 disabled:opacity-50">
-          {loading ? 'Scanning…' : 'Refresh preview'}
-        </button>
-      </div>
+      <PageHeader
+        title="Route Optimisation"
+        subtitle="Re-orders existing route stops to minimise total distance — Nearest-Neighbour + 2-opt TSP solver."
+        icon={Recycle}
+        accent="cyan"
+        actions={
+          <button onClick={load} disabled={loading} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 border border-white/10 text-white text-xs hover:border-white/20 hover:bg-slate-700 disabled:opacity-50 transition-colors">
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? 'Scanning…' : 'Refresh preview'}
+          </button>
+        }
+      />
 
       {error && <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-sm">{error}</div>}
 

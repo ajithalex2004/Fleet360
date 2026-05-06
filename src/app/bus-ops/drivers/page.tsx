@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { Trophy, RotateCw } from 'lucide-react';
+import { PageHeader } from '@/components/bus-ops/theme';
 
 interface PerfRow {
   driverId: string;
@@ -76,22 +78,23 @@ export default function DriverPerformancePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Driver Performance</h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Score = 50% on-time + 30% incident-free + 20% completion. Min 5 trips for a score.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <input type="month" value={month} onChange={e => setMonth(e.target.value)}
-            className="px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm" />
-          <button onClick={recompute} disabled={recomputing}
-            className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm disabled:opacity-50">
-            {recomputing ? 'Recomputing…' : 'Recompute'}
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Driver Performance"
+        subtitle="Score = 50% on-time + 30% incident-free + 20% completion. Min 5 trips for a score."
+        icon={Trophy}
+        accent="amber"
+        actions={
+          <>
+            <input type="month" value={month} onChange={e => setMonth(e.target.value)}
+              className="px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm" />
+            <button onClick={recompute} disabled={recomputing}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50">
+              <RotateCw className={`w-3.5 h-3.5 ${recomputing ? 'animate-spin' : ''}`} />
+              {recomputing ? 'Recomputing…' : 'Recompute'}
+            </button>
+          </>
+        }
+      />
 
       {error && <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-sm">{error}</div>}
 
