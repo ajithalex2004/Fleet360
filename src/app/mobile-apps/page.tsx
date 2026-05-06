@@ -7,6 +7,7 @@ import {
   UserRound,
   ScanLine,
   Wrench,
+  GraduationCap,
   Smartphone,
   ArrowRight,
   Apple,
@@ -79,6 +80,19 @@ const APPS: MobileApp[] = [
     tag: 'Leasing',
     module: 'leasing',
     capabilities: ['Mileage', 'Fuel', 'Traffic fine', 'Bulk capture'],
+  },
+  {
+    id: 'sb-parent',
+    name: 'Fleet360 SchoolBus Parent',
+    audience: 'Parents & Guardians',
+    description: 'Today\'s school bus, ETA at home stop, attendance log, push alerts (departure / boarded / dropped off / no-show), absence registration, medical-alert flag.',
+    href: '/school-bus/parent',
+    icon: GraduationCap,
+    gradient: 'from-orange-600 to-red-600',
+    ring: 'ring-orange-500/40',
+    tag: 'School Bus',
+    module: 'school-bus',
+    capabilities: ['Live trip', 'Attendance', 'Absence', 'Alerts'],
   },
 ];
 
