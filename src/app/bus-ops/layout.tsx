@@ -17,8 +17,6 @@ import {
   LineChart,
   TrendingUp,
   AlertTriangle,
-  Smartphone,
-  UserRound,
   Bluetooth,
   Trophy,
   BusFront,
@@ -29,7 +27,7 @@ interface NavItem {
   name: string;
   href: string;
   icon: LucideIcon;
-  group: 'core' | 'ops' | 'people' | 'intel' | 'apps';
+  group: 'core' | 'ops' | 'people' | 'intel' | 'devices';
 }
 
 const navItems: NavItem[] = [
@@ -45,17 +43,17 @@ const navItems: NavItem[] = [
   { name: 'Analytics',                 href: '/bus-ops/analytics',       icon: LineChart,       group: 'intel' },
   { name: 'Demand Forecast',           href: '/bus-ops/demand-forecast', icon: TrendingUp,      group: 'intel' },
   { name: 'Incidents',                 href: '/bus-ops/incidents',       icon: AlertTriangle,   group: 'intel' },
-  { name: 'Fleet360 STS Driver',       href: '/bus-ops/driver',          icon: Smartphone,      group: 'apps' },
-  { name: 'Fleet360 STS Passenger',    href: '/bus-ops/passenger',       icon: UserRound,       group: 'apps' },
-  { name: 'BLE Gateways',              href: '/bus-ops/gateways',        icon: Bluetooth,       group: 'apps' },
+  // Driver / Passenger PWAs live in /mobile-apps — single source of truth.
+  // BLE Gateways stays here (it's hardware admin, not a mobile app surface).
+  { name: 'BLE Gateways',              href: '/bus-ops/gateways',        icon: Bluetooth,       group: 'devices' },
 ];
 
 const GROUP_LABELS: Record<NavItem['group'], string> = {
-  core:   'Overview',
-  ops:    'Operations',
-  people: 'People',
-  intel:  'Intelligence',
-  apps:   'Mobile & Devices',
+  core:    'Overview',
+  ops:     'Operations',
+  people:  'People',
+  intel:   'Intelligence',
+  devices: 'Devices',
 };
 
 export default function BusOpsLayout({ children }: { children: React.ReactNode }) {
@@ -69,7 +67,7 @@ export default function BusOpsLayout({ children }: { children: React.ReactNode }
   }
 
   // Group items in render order for the sidebar
-  const groupedOrder: NavItem['group'][] = ['core', 'ops', 'people', 'intel', 'apps'];
+  const groupedOrder: NavItem['group'][] = ['core', 'ops', 'people', 'intel', 'devices'];
   const grouped = groupedOrder.map((g) => ({ key: g, label: GROUP_LABELS[g], items: navItems.filter((i) => i.group === g) }));
 
   return (
