@@ -134,6 +134,28 @@ export default function BusOpsAnalyticsPage() {
         <MetricBar label="On-time Departure"  value={kpis.onTimeDeparturePct ?? 0} color="text-amber-400" />
       </div>
 
+      {/* Cross-module links */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <a href="/sustainability/fleet-carbon" target="_blank" rel="noopener noreferrer"
+           className="rounded-2xl bg-emerald-600/10 border border-emerald-500/40 p-4 hover:bg-emerald-600/20 transition-colors block">
+          <div className="text-xs uppercase tracking-wide text-emerald-300/80">🌱 Sustainability</div>
+          <div className="text-sm font-semibold text-emerald-200 mt-1">Fleet Carbon Dashboard</div>
+          <div className="text-[11px] text-emerald-300/60 mt-0.5">Bus trip CO₂e auto-aggregated · GHG Protocol</div>
+        </a>
+        <a href="/maintenance/action-centre" target="_blank" rel="noopener noreferrer"
+           className="rounded-2xl bg-cyan-600/10 border border-cyan-500/40 p-4 hover:bg-cyan-600/20 transition-colors block">
+          <div className="text-xs uppercase tracking-wide text-cyan-300/80">🔧 Maintenance</div>
+          <div className="text-sm font-semibold text-cyan-200 mt-1">Service Action Centre</div>
+          <div className="text-[11px] text-cyan-300/60 mt-0.5">Bus mileage feeds service-due alerts</div>
+        </a>
+        <a href="/compliance/salik" target="_blank" rel="noopener noreferrer"
+           className="rounded-2xl bg-amber-600/10 border border-amber-500/40 p-4 hover:bg-amber-600/20 transition-colors block">
+          <div className="text-xs uppercase tracking-wide text-amber-300/80">🛣️ Compliance</div>
+          <div className="text-sm font-semibold text-amber-200 mt-1">Salik / Toll Accounts</div>
+          <div className="text-[11px] text-amber-300/60 mt-0.5">Per-vehicle tag balance + auto-recharge</div>
+        </a>
+      </div>
+
       {/* SLA + Cost section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 space-y-4">
