@@ -9,6 +9,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { signSession } from '@/lib/tenant-session';
+import { ensureMfaColumns } from '@/lib/auth-mfa-schema';
+import { verifyTotp, verifyRecoveryCode } from '@/lib/totp';
 
 // ── Password verification (matches the PBKDF2 format used in /api/tenants/provision) ──
 
@@ -32,10 +34,12 @@ const COOKIE_NAME = 'xl-session';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email, password, tenantId: preferredTenantId } = body as {
+    const { email, password, tenantId: preferredTenantId, mfaCode, recoveryCode } = body as {
       email?: string;
       password?: string;
       tenantId?: string;
+      mfaCode?: string;
+      recoveryCode?: string;
     };
 
     if (!email || !password) {
@@ -81,6 +85,49 @@ export async function POST(request: NextRequest) {
         { error: 'Unauthorized', message: 'Invalid email or password' },
         { status: 401 },
       );
+    }
+
+    // 2.5 MFA gate (after password verification)
+    await ensureMfaColumns();
+    const mfaRows = await prisma.$queryRawUnsafe<{
+      mfa_enabled: boolean; mfa_secret: string | null; mfa_recovery_codes: string[] | null;
+    }[]>(
+      `SELECT mfa_enabled, mfa_secret, mfa_recovery_codes FROM "User" WHERE id = $1`,
+      user.id,
+    );
+    const mfaRow = mfaRows[0];
+    if (mfaRow?.mfa_enabled) {
+      const code = mfaCode ? String(mfaCode).trim() : '';
+      const rec  = recoveryCode ? String(recoveryCode).trim() : '';
+      if (!code && !rec) {
+        return NextResponse.json(
+          { error: 'MFA required', mfaRequired: true, message: 'Enter your authenticator code.' },
+          { status: 401 },
+        );
+      }
+      let ok = false;
+      let consumedHash: string | null = null;
+      if (code && mfaRow.mfa_secret && verifyTotp(mfaRow.mfa_secret, code)) {
+        ok = true;
+      } else if (rec) {
+        const stored = Array.isArray(mfaRow.mfa_recovery_codes) ? mfaRow.mfa_recovery_codes : [];
+        consumedHash = verifyRecoveryCode(rec, stored);
+        if (consumedHash) ok = true;
+      }
+      if (!ok) {
+        return NextResponse.json(
+          { error: 'Unauthorized', mfaRequired: true, message: 'Invalid authenticator or recovery code.' },
+          { status: 401 },
+        );
+      }
+      // Recovery code consumed → remove it from the list (single-use).
+      if (consumedHash) {
+        const remaining = (mfaRow.mfa_recovery_codes ?? []).filter(h => h !== consumedHash);
+        await prisma.$executeRawUnsafe(
+          `UPDATE "User" SET mfa_recovery_codes = $1::jsonb, "updatedAt" = NOW() WHERE id = $2`,
+          JSON.stringify(remaining), user.id,
+        );
+      }
     }
 
     // 3. Find an active UserTenant record for this user

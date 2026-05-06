@@ -142,6 +142,9 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   requestHeaders.set('x-user-id',     session.userId);
   requestHeaders.set('x-tenant-plan', session.plan);
   requestHeaders.set('x-user-role',   session.role ?? 'TENANT_ADMIN');
+  if (session.impersonatedBy) {
+    requestHeaders.set('x-impersonated-by', session.impersonatedBy);
+  }
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
 

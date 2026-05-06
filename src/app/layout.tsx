@@ -6,6 +6,7 @@ import ClientProviders from "@/components/ClientProviders";
 // ChatWidgetLoader is a 'use client' wrapper — required because ssr:false
 // is not allowed in Server Components (next/dynamic restriction).
 import ChatWidgetLoader from "@/components/Communication/ChatWidgetLoader";
+import ImpersonationBanner from "@/components/ImpersonationBanner";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -20,6 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${inter.className} antialiased`}>
         <ClientProviders>
           <ToastProvider>
+            <ImpersonationBanner />
             {children}
             <ChatWidgetLoader />
           </ToastProvider>

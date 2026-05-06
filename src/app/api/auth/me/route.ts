@@ -19,10 +19,11 @@ type PermRow   = { nav_key: string; enabled: boolean };
 type ModuleRow = { module: string };
 
 export async function GET(request: NextRequest) {
-  const userId   = request.headers.get('x-user-id')     ?? '';
-  const tenantId = request.headers.get('x-tenant-id')   ?? '';
-  const plan     = request.headers.get('x-tenant-plan') ?? 'TRIAL';
-  const role     = request.headers.get('x-user-role')   ?? 'TENANT_ADMIN';
+  const userId        = request.headers.get('x-user-id')        ?? '';
+  const tenantId      = request.headers.get('x-tenant-id')      ?? '';
+  const plan          = request.headers.get('x-tenant-plan')    ?? 'TRIAL';
+  const role          = request.headers.get('x-user-role')      ?? 'TENANT_ADMIN';
+  const impersonatedBy = request.headers.get('x-impersonated-by') ?? '';
 
   if (!userId || !tenantId) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -70,6 +71,7 @@ export async function GET(request: NextRequest) {
       isSuperAdmin,
       navPermissions,
       enabledModules, // [] means "no restriction" for SUPER_ADMIN; non-empty = explicit whitelist
+      impersonatedBy: impersonatedBy || null,
     },
     {
       headers: {
