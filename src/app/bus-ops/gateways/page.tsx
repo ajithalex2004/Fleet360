@@ -61,75 +61,63 @@ export default function GatewaysAdminPage() {
   const onlineCount = gateways.filter(g => g.health === 'ONLINE').length;
   const offlineCount = gateways.filter(g => g.health === 'OFFLINE').length;
 
+  if (loading && gateways.length === 0) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading gateways...</div></div>;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader
         title="BLE Gateways"
-        subtitle="In-bus presence detection · auto-refreshes every 30s."
+        subtitle={`${gateways.length} registered · ${onlineCount} online · ${offlineCount} offline · ${gateways.filter(g => g.health === 'DISABLED').length} disabled · auto-refreshes every 30s`}
         icon={Bluetooth}
         accent="violet"
         actions={
-          <button onClick={load} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 border border-white/10 text-white text-xs hover:border-white/20 hover:bg-slate-700 transition-colors">
-            <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          <button onClick={load} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+            <RefreshCw className="w-4 h-4" /> Refresh
           </button>
         }
       />
 
       {!secretConfigured && (
-        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/40 text-amber-200 text-sm">
-          ⚠ <code>BLE_GATEWAY_SHARED_SECRET</code> is not set on this environment. Gateway
-          ingest will reject all requests until you configure it.
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 text-amber-300 text-sm">
+          ⚠ <code>BLE_GATEWAY_SHARED_SECRET</code> is not set on this environment. Gateway ingest will reject all requests until you configure it.
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Stat label="Total" value={gateways.length} />
-        <Stat label="Online" value={onlineCount} accent="emerald" />
-        <Stat label="Offline" value={offlineCount} accent="rose" />
-        <Stat label="Disabled" value={gateways.filter(g => g.health === 'DISABLED').length} accent="slate" />
-      </div>
-
-      {loading ? (
-        <div className="text-slate-500">Loading…</div>
-      ) : gateways.length === 0 ? (
-        <div className="p-8 rounded-xl bg-slate-800/40 border border-slate-700 text-center text-slate-400">
-          No gateways registered yet. Use{' '}
-          <code className="text-slate-300">PUT /api/bus-ops/vehicles/{'{id}'}/gateway</code>{' '}
-          with{' '}
-          <code className="text-slate-300">{'{ gatewayId, model? }'}</code>{' '}
-          to register a device.
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-white/10">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-800/60">
-              <tr className="text-left text-xs text-slate-400">
-                <th className="px-4 py-3">Gateway ID</th>
-                <th className="px-4 py-3">Vehicle</th>
-                <th className="px-4 py-3">Model</th>
-                <th className="px-4 py-3">RSSI / Grace</th>
-                <th className="px-4 py-3">Last heartbeat</th>
-                <th className="px-4 py-3">Last event</th>
-                <th className="px-4 py-3">Health</th>
+      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+        {gateways.length === 0 ? (
+          <div className="text-center text-slate-400 py-12">
+            No gateways registered yet. Use{' '}
+            <code className="text-slate-300">PUT /api/bus-ops/vehicles/{'{id}'}/gateway</code>{' '}
+            with{' '}
+            <code className="text-slate-300">{'{ gatewayId, model? }'}</code>{' '}
+            to register a device.
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-white/5">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Gateway ID</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Vehicle</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Model</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">RSSI / Grace</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Last heartbeat</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Last event</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Health</th>
               </tr>
             </thead>
             <tbody>
               {gateways.map(g => (
-                <tr key={g.id} className="border-t border-white/5 hover:bg-white/5">
-                  <td className="px-4 py-3 font-mono text-cyan-300 text-xs">{g.gatewayId}</td>
-                  <td className="px-4 py-3 font-mono text-slate-300 text-xs">{g.vehicleId.slice(0, 8)}</td>
-                  <td className="px-4 py-3 text-slate-300">{g.model ?? '—'}</td>
-                  <td className="px-4 py-3 text-xs text-slate-400">
+                <tr key={g.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                  <td className="px-4 py-3 text-sm font-mono text-white">{g.gatewayId}</td>
+                  <td className="px-4 py-3 text-sm font-mono text-white">{g.vehicleId.slice(0, 8)}</td>
+                  <td className="px-4 py-3 text-sm text-white">{g.model ?? '—'}</td>
+                  <td className="px-4 py-3 text-sm text-white">
                     {g.rssiThresholdDbm} dBm · {g.presenceGraceSeconds}s
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-300">
-                    {fmtSecondsAgo(g.lastSeenSecondsAgo)}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-300">
-                    {fmtSecondsAgo(g.lastEventSecondsAgo)}
-                  </td>
+                  <td className="px-4 py-3 text-sm text-white">{fmtSecondsAgo(g.lastSeenSecondsAgo)}</td>
+                  <td className="px-4 py-3 text-sm text-white">{fmtSecondsAgo(g.lastEventSecondsAgo)}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-[11px] border ${HEALTH_PILL[g.health]}`}>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${HEALTH_PILL[g.health]}`}>
                       {g.health}
                     </span>
                   </td>
@@ -137,10 +125,10 @@ export default function GatewaysAdminPage() {
               ))}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </div>
 
-      <div className="bg-slate-800/30 border border-white/5 rounded-xl p-5 text-xs text-slate-400 space-y-2">
+      <div className="bg-slate-800/30 border border-white/5 rounded-2xl p-5 text-xs text-slate-400 space-y-2">
         <h3 className="text-white font-semibold">Integration contract</h3>
         <p>POST <code className="text-slate-300">/api/bus-ops/gateway/events</code> with:</p>
         <ul className="list-disc pl-5 space-y-1">
@@ -155,12 +143,3 @@ export default function GatewaysAdminPage() {
   );
 }
 
-function Stat({ label, value, accent = 'slate' }: { label: string; value: number; accent?: string }) {
-  const cls: Record<string, string> = { slate: 'text-white', emerald: 'text-emerald-300', amber: 'text-amber-300', rose: 'text-rose-300' };
-  return (
-    <div className="rounded-xl bg-slate-800/60 border border-white/10 p-4">
-      <div className={`text-3xl font-bold ${cls[accent]}`}>{value}</div>
-      <div className="text-xs text-slate-400 mt-1">{label}</div>
-    </div>
-  );
-}

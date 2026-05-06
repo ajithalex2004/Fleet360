@@ -114,7 +114,7 @@ export default function RoutesPage() {
         title="Routes"
         subtitle={`${routes.filter(r=>r.isActive).length} active · ${routes.length} total`}
         icon={MapIcon}
-        accent="cyan"
+        accent="violet"
         actions={
           <button onClick={openNew} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
             <Plus className="w-4 h-4" /> New Route
@@ -149,7 +149,7 @@ export default function RoutesPage() {
               <span>Cap: {r.capacity ?? 30}</span>
             </div>
             <div className="flex gap-2 flex-wrap">
-              <button onClick={() => openEdit(r)} className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30">Edit</button>
+              <button onClick={() => openEdit(r)} className="text-xs px-2 py-1 rounded bg-violet-500/20 text-violet-400 border border-violet-500/30 hover:bg-violet-500/30">Edit</button>
               <button onClick={() => openStops(r)} className="text-xs px-2 py-1 rounded bg-violet-500/20 text-violet-400 border border-violet-500/30 hover:bg-violet-500/30">Stops ({r.stops?.length ?? 0})</button>
               <button onClick={() => toggleActive(r)} className="text-xs px-2 py-1 rounded bg-slate-700 text-slate-300 border border-white/10 hover:bg-slate-600">
                 {r.isActive ? 'Deactivate' : 'Activate'}
@@ -172,19 +172,19 @@ export default function RoutesPage() {
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-slate-300 mb-2">Route Name *</label>
                   <input type="text" value={formData.name} onChange={e=>setFormData(p=>({...p,name:e.target.value}))} required placeholder="e.g., Dubai Marina - Business Bay"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none" />
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
                 </div>
                 {[{label:'Origin *',key:'origin',ph:'e.g., Dubai Marina'},{label:'Destination *',key:'destination',ph:'e.g., Business Bay Office'}].map(({label,key,ph})=>(
                   <div key={key}>
                     <label className="block text-sm font-medium text-slate-300 mb-2">{label}</label>
                     <input type="text" value={(formData as any)[key]} onChange={e=>setFormData(p=>({...p,[key]:e.target.value}))} required placeholder={ph}
-                      className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none" />
+                      className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
                   </div>
                 ))}
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Route Type</label>
                   <select value={formData.routeType} onChange={e=>setFormData(p=>({...p,routeType:e.target.value}))}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none">
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
                     {ROUTE_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
@@ -192,13 +192,13 @@ export default function RoutesPage() {
                   <div key={key}>
                     <label className="block text-sm font-medium text-slate-300 mb-2">{label}</label>
                     <input type="number" value={(formData as any)[key]} onChange={e=>setFormData(p=>({...p,[key]:e.target.value}))} placeholder={ph} min="0"
-                      className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none" />
+                      className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
                   </div>
                 ))}
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-slate-300 mb-2">Notes</label>
                   <textarea value={formData.notes} onChange={e=>setFormData(p=>({...p,notes:e.target.value}))} rows={2} placeholder="Additional notes..."
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none" />
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
                 </div>
               </div>
 
@@ -221,7 +221,7 @@ export default function RoutesPage() {
                 </div>
                 <div className="flex gap-2">
                   <input type="text" value={newStop.stopName} onChange={e=>setNewStop(p=>({...p,stopName:e.target.value}))} placeholder="Stop name"
-                    className="flex-1 px-3 py-1.5 rounded-lg bg-slate-700 border border-white/10 text-white text-sm placeholder-slate-500 focus:border-blue-500 focus:outline-none" />
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-slate-700 border border-white/10 text-white text-sm placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
                   <input type="number" value={newStop.estimatedArrivalMins} onChange={e=>setNewStop(p=>({...p,estimatedArrivalMins:e.target.value}))} placeholder="Min"
                     className="w-16 px-3 py-1.5 rounded-lg bg-slate-700 border border-white/10 text-white text-sm placeholder-slate-500 focus:outline-none" />
                   <button type="button" onClick={addStop}
@@ -231,7 +231,7 @@ export default function RoutesPage() {
 
               <div className="flex gap-4 justify-end pt-4">
                 <button type="button" onClick={()=>setShowModal(false)} className="px-6 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5">Cancel</button>
-                <button type="submit" disabled={saving} className="px-6 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:opacity-90 disabled:opacity-50">
+                <button type="submit" disabled={saving} className="px-6 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50">
                   {saving ? 'Saving...' : editRoute ? 'Update' : 'Create'}
                 </button>
               </div>
@@ -268,7 +268,7 @@ export default function RoutesPage() {
             </div>
             <div className="flex gap-2 mb-6">
               <input type="text" value={newStop.stopName} onChange={e=>setNewStop(p=>({...p,stopName:e.target.value}))} placeholder="New stop name"
-                className="flex-1 px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white text-sm placeholder-slate-500 focus:border-blue-500 focus:outline-none" />
+                className="flex-1 px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white text-sm placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
               <input type="text" value={newStop.landmark} onChange={e=>setNewStop(p=>({...p,landmark:e.target.value}))} placeholder="Landmark"
                 className="w-28 px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white text-sm placeholder-slate-500 focus:outline-none" />
               <input type="number" value={newStop.estimatedArrivalMins} onChange={e=>setNewStop(p=>({...p,estimatedArrivalMins:e.target.value}))} placeholder="Min"
@@ -277,7 +277,7 @@ export default function RoutesPage() {
             </div>
             <div className="flex gap-4 justify-end">
               <button onClick={()=>setShowStops(false)} className="px-6 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5">Cancel</button>
-              <button onClick={saveStops} disabled={saving} className="px-6 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:opacity-90 disabled:opacity-50">
+              <button onClick={saveStops} disabled={saving} className="px-6 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50">
                 {saving ? 'Saving...' : 'Save Stops'}
               </button>
             </div>

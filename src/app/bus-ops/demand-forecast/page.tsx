@@ -64,11 +64,15 @@ export default function DemandForecastPage() {
   const overCount = data?.rows.filter(r => (r.capacityRiskPct ?? 0) >= 95).length ?? 0;
   const underCount = data?.rows.filter(r => r.capacityRiskPct != null && r.capacityRiskPct <= 55).length ?? 0;
 
+  if (loading && !data) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading forecast...</div></div>;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader
         title="Demand Forecast"
-        subtitle="Predicts next-week pax counts per (route × shift × day) from history. Top 10 risk rows annotated by gpt-4o-mini."
+        subtitle={data
+          ? `${data.rows.length} forecast rows · ${overCount} over-capacity (≥95%) · ${underCount} under-utilised (≤55%) · ${data.weeksOfHistory} weeks of history`
+          : 'Predicts next-week pax counts per (route × shift × day) from history. Top 10 risk rows annotated by gpt-4o-mini.'}
         icon={TrendingUp}
         accent="violet"
         actions={
@@ -76,15 +80,15 @@ export default function DemandForecastPage() {
             <label className="text-xs text-slate-400 flex items-center gap-2">
               History:
               <select value={weeks} onChange={e => setWeeks(Number(e.target.value))}
-                className="px-2 py-1 rounded-lg bg-slate-800 border border-white/10 text-white text-xs">
+                className="px-3 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none">
                 {[2, 4, 6, 8, 12].map(w => <option key={w} value={w}>{w} weeks</option>)}
               </select>
             </label>
             <label className="text-xs text-slate-400 flex items-center gap-2">
-              <input type="checkbox" checked={aiOn} onChange={e => setAiOn(e.target.checked)} className="w-4 h-4" />
+              <input type="checkbox" checked={aiOn} onChange={e => setAiOn(e.target.checked)} className="w-4 h-4 accent-violet-500" />
               AI rationale
             </label>
-            <button onClick={load} disabled={loading} className="px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50">
+            <button onClick={load} disabled={loading} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50">
               {loading ? 'Forecasting…' : 'Refresh'}
             </button>
           </>
@@ -92,68 +96,55 @@ export default function DemandForecastPage() {
       />
 
       {data?.warning && (
-        <div className="p-3 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-200 text-sm">{data.warning}</div>
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 text-amber-300 text-sm">{data.warning}</div>
       )}
-      {error && <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-sm">{error}</div>}
+      {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
 
-      {data && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Stat label="Forecast rows" value={data.rows.length} />
-          <Stat label="Over-capacity (≥95%)" value={overCount} accent="rose" />
-          <Stat label="Under-utilised (≤55%)" value={underCount} accent="amber" />
-          <Stat label="History" value={`${data.weeksOfHistory} wk`} />
-        </div>
-      )}
-
-      {loading ? (
-        <div className="text-slate-500">Computing baseline + AI rationales…</div>
-      ) : !data || data.rows.length === 0 ? (
-        <div className="p-8 rounded-xl bg-slate-800/40 border border-slate-700 text-center text-slate-400">
-          No forecast yet. Need at least one trip with passengers in the history window.
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-white/10">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-800/60">
-              <tr className="text-left text-xs text-slate-400">
-                <th className="px-4 py-3">Route</th>
-                <th className="px-4 py-3">Shift</th>
-                <th className="px-4 py-3">Day</th>
-                <th className="px-4 py-3 text-right">Forecast</th>
-                <th className="px-4 py-3 text-right">Trend</th>
-                <th className="px-4 py-3 text-right">Capacity</th>
-                <th className="px-4 py-3 text-right">Risk %</th>
-                <th className="px-4 py-3">AI</th>
+      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+        {!data || data.rows.length === 0 ? (
+          <div className="text-center text-slate-400 py-12">
+            No forecast yet. Need at least one trip with passengers in the history window.
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-white/5">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Route</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Shift</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Day</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Forecast</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Trend</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Capacity</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Risk %</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">AI</th>
               </tr>
             </thead>
             <tbody>
               {data.rows.map((r, i) => {
                 const pct = r.capacityRiskPct ?? 0;
-                const pctClass = pct >= 95 ? 'text-rose-300 font-bold' : pct >= 80 ? 'text-amber-300' : pct <= 55 ? 'text-amber-400' : 'text-emerald-300';
+                const pctClass = pct >= 95 ? 'text-rose-400 font-bold' : pct >= 80 ? 'text-amber-400' : pct <= 55 ? 'text-amber-400' : 'text-emerald-400';
                 return (
-                  <tr key={`${r.routeId}-${r.shiftType}-${r.dayOfWeek}-${i}`} className="border-t border-white/5 hover:bg-white/5">
-                    <td className="px-4 py-3">
-                      <div className="text-white font-medium">{r.routeName}</div>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-300 uppercase">{r.shiftType}</td>
-                    <td className="px-4 py-3 text-xs text-slate-300">{DAYS[r.dayOfWeek]}</td>
-                    <td className="px-4 py-3 text-right text-white font-mono">{r.baseline + r.trendDelta}</td>
-                    <td className="px-4 py-3 text-right text-xs">
-                      <span className={r.trendDelta > 0 ? 'text-emerald-300' : r.trendDelta < 0 ? 'text-rose-300' : 'text-slate-500'}>
+                  <tr key={`${r.routeId}-${r.shiftType}-${r.dayOfWeek}-${i}`} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                    <td className="px-4 py-3 text-sm font-medium text-white">{r.routeName}</td>
+                    <td className="px-4 py-3 text-sm text-white uppercase">{r.shiftType}</td>
+                    <td className="px-4 py-3 text-sm text-white">{DAYS[r.dayOfWeek]}</td>
+                    <td className="px-4 py-3 text-sm text-right text-white font-mono">{r.baseline + r.trendDelta}</td>
+                    <td className="px-4 py-3 text-sm text-right">
+                      <span className={r.trendDelta > 0 ? 'text-emerald-400' : r.trendDelta < 0 ? 'text-rose-400' : 'text-slate-300'}>
                         {r.trendDelta > 0 ? '+' : ''}{r.trendDelta}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right text-slate-400">{r.capacity ?? '—'}</td>
-                    <td className={`px-4 py-3 text-right ${pctClass}`}>{r.capacityRiskPct != null ? `${r.capacityRiskPct}%` : '—'}</td>
+                    <td className="px-4 py-3 text-sm text-right text-white">{r.capacity ?? '—'}</td>
+                    <td className={`px-4 py-3 text-sm text-right ${pctClass}`}>{r.capacityRiskPct != null ? `${r.capacityRiskPct}%` : '—'}</td>
                     <td className="px-4 py-3">
                       {r.aiAnnotation ? (
                         <div className="flex items-start gap-1.5 max-w-md">
-                          <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[9px] border ${RISK_PILL[r.aiAnnotation.risk]}`}>{r.aiAnnotation.risk}</span>
-                          <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[9px] border ${CONF_PILL[r.aiAnnotation.confidence]}`}>{r.aiAnnotation.confidence}</span>
-                          <span className="text-[11px] text-slate-300 truncate">{r.aiAnnotation.rationale}</span>
+                          <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium border ${RISK_PILL[r.aiAnnotation.risk]}`}>{r.aiAnnotation.risk}</span>
+                          <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium border ${CONF_PILL[r.aiAnnotation.confidence]}`}>{r.aiAnnotation.confidence}</span>
+                          <span className="text-xs text-slate-300 truncate">{r.aiAnnotation.rationale}</span>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-600">—</span>
+                        <span className="text-xs text-slate-300">—</span>
                       )}
                     </td>
                   </tr>
@@ -161,8 +152,8 @@ export default function DemandForecastPage() {
               })}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="bg-slate-800/30 border border-white/5 rounded-xl p-5 text-xs text-slate-400 space-y-2">
         <p className="text-white font-semibold mb-1">How the forecast works</p>
@@ -178,12 +169,3 @@ export default function DemandForecastPage() {
   );
 }
 
-function Stat({ label, value, accent = 'slate' }: { label: string; value: string | number; accent?: string }) {
-  const cls: Record<string, string> = { slate: 'text-white', rose: 'text-rose-300', amber: 'text-amber-300' };
-  return (
-    <div className="rounded-xl bg-slate-800/60 border border-white/10 p-4">
-      <div className={`text-3xl font-bold ${cls[accent]}`}>{value}</div>
-      <div className="text-xs text-slate-400 mt-1">{label}</div>
-    </div>
-  );
-}

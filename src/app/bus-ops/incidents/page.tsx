@@ -93,9 +93,9 @@ export default function IncidentsPage() {
     <div className="space-y-8">
       <PageHeader
         title="Incidents"
-        subtitle={`${openCount} open · ${critCount} critical · ${incidents.length} total`}
+        subtitle={`${openCount} open · ${critCount} critical · ${incidents.filter(i=>i.status==='RESOLVED').length} resolved · ${incidents.length} total`}
         icon={AlertTriangle}
-        accent="rose"
+        accent="violet"
         actions={
           <button onClick={()=>setShowModal(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
             <Plus className="w-4 h-4" /> Log Incident
@@ -105,24 +105,13 @@ export default function IncidentsPage() {
 
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
 
-      {/* Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[{label:'Open',v:openCount,c:'text-rose-400'},{label:'Critical',v:critCount,c:'text-red-400'},{label:'Resolved',v:incidents.filter(i=>i.status==='RESOLVED').length,c:'text-emerald-400'},{label:'Total',v:incidents.length,c:'text-white'}].map(({label,v,c})=>(
-          <div key={label} className="bg-slate-800/50 border border-white/10 rounded-xl p-4 text-center">
-            <div className={`text-2xl font-bold ${c}`}>{v}</div>
-            <div className="text-xs text-slate-400 mt-1">{label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Filters */}
       <div className="flex gap-4 flex-wrap">
         <select value={statusFilter} onChange={e=>setStatus(e.target.value)}
-          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-rose-500 focus:outline-none">
+          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
           {['All','OPEN','INVESTIGATING','RESOLVED','CLOSED'].map(s=><option key={s} value={s}>{s}</option>)}
         </select>
         <select value={sevFilter} onChange={e=>setSev(e.target.value)}
-          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-rose-500 focus:outline-none">
+          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
           <option value="All">All Severities</option>
           {SEVERITIES.map(s=><option key={s} value={s}>{s}</option>)}
         </select>
@@ -183,46 +172,46 @@ export default function IncidentsPage() {
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Incident Date & Time *</label>
                   <input type="datetime-local" value={formData.incidentDate} onChange={e=>setFormData(p=>({...p,incidentDate:e.target.value}))} required
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-rose-500 focus:outline-none" />
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Incident Type *</label>
                   <select value={formData.incidentType} onChange={e=>setFormData(p=>({...p,incidentType:e.target.value}))} required
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-rose-500 focus:outline-none">
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
                     {TYPES.map(t=><option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Severity</label>
                   <select value={formData.severity} onChange={e=>setFormData(p=>({...p,severity:e.target.value}))}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-rose-500 focus:outline-none">
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
                     {SEVERITIES.map(s=><option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Location</label>
                   <input type="text" value={formData.location} onChange={e=>setFormData(p=>({...p,location:e.target.value}))} placeholder="e.g., Sheikh Zayed Road near Exit 43"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-rose-500 focus:outline-none" />
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Vehicle ID</label>
                   <input type="text" value={formData.vehicleId} onChange={e=>setFormData(p=>({...p,vehicleId:e.target.value}))} placeholder="Optional"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-rose-500 focus:outline-none" />
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Driver ID</label>
                   <input type="text" value={formData.driverId} onChange={e=>setFormData(p=>({...p,driverId:e.target.value}))} placeholder="Optional"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-rose-500 focus:outline-none" />
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-slate-300 mb-2">Description *</label>
                   <textarea value={formData.description} onChange={e=>setFormData(p=>({...p,description:e.target.value}))} required rows={3} placeholder="Describe what happened..."
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-rose-500 focus:outline-none" />
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-slate-300 mb-2">Action Taken</label>
                   <textarea value={formData.actionTaken} onChange={e=>setFormData(p=>({...p,actionTaken:e.target.value}))} rows={2} placeholder="Immediate actions taken..."
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-rose-500 focus:outline-none" />
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div className="flex gap-6 col-span-2">
                   <label className="flex items-center gap-2 text-sm text-slate-300">
@@ -238,13 +227,13 @@ export default function IncidentsPage() {
                   <div className="col-span-2">
                     <label className="block text-sm font-medium text-slate-300 mb-2">Police Report No.</label>
                     <input type="text" value={formData.policeReportNo} onChange={e=>setFormData(p=>({...p,policeReportNo:e.target.value}))} placeholder="Report number"
-                      className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none" />
+                      className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
                   </div>
                 )}
               </div>
               <div className="flex gap-4 justify-end pt-4">
                 <button type="button" onClick={()=>setShowModal(false)} className="px-6 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5">Cancel</button>
-                <button type="submit" disabled={saving} className="px-6 py-2 rounded-lg bg-gradient-to-r from-rose-600 to-pink-600 text-white hover:opacity-90 disabled:opacity-50">
+                <button type="submit" disabled={saving} className="px-6 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50">
                   {saving ? 'Logging...' : 'Log Incident'}
                 </button>
               </div>

@@ -65,87 +65,81 @@ export default function OptimisationPage() {
     }
   };
 
+  if (loading && !data) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading optimisation preview...</div></div>;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader
         title="Route Optimisation"
-        subtitle="Re-orders existing route stops to minimise total distance — Nearest-Neighbour + 2-opt TSP solver."
+        subtitle={data
+          ? `${data.routesScanned} routes scanned · ${data.routesWithMeaningfulSavings} with ≥5% savings · ${data.totalPotentialSavingsKm.toLocaleString()} km potential`
+          : 'Re-orders existing route stops to minimise total distance — Nearest-Neighbour + 2-opt TSP solver.'}
         icon={Recycle}
-        accent="cyan"
+        accent="violet"
         actions={
-          <button onClick={load} disabled={loading} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 border border-white/10 text-white text-xs hover:border-white/20 hover:bg-slate-700 disabled:opacity-50 transition-colors">
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          <button onClick={load} disabled={loading} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             {loading ? 'Scanning…' : 'Refresh preview'}
           </button>
         }
       />
 
-      {error && <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-sm">{error}</div>}
+      {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
 
-      {data && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Stat label="Routes scanned" value={data.routesScanned} />
-          <Stat label="With ≥5% savings" value={data.routesWithMeaningfulSavings} accent="emerald" />
-          <Stat label="Total km savings" value={`${data.totalPotentialSavingsKm.toLocaleString()} km`} accent="emerald" />
-          <Stat label="Last preview" value={new Date(data.runAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} />
-        </div>
-      )}
-
-      {loading ? (
-        <div className="text-slate-500">Loading preview…</div>
-      ) : !data || data.rows.length === 0 ? (
-        <div className="p-8 rounded-xl bg-slate-800/40 border border-slate-700 text-center text-slate-400">
-          No active staff routes found. Build one in <Link href="/bus-ops/route-planner" className="text-emerald-400 underline">Route Planner</Link> first.
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-white/10">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-800/60">
-              <tr className="text-left text-xs text-slate-400">
-                <th className="px-4 py-3">Route</th>
-                <th className="px-4 py-3">Stops</th>
-                <th className="px-4 py-3 text-right">Current km</th>
-                <th className="px-4 py-3 text-right">After km</th>
-                <th className="px-4 py-3 text-right">Saving</th>
-                <th className="px-4 py-3"></th>
+      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+        {!data || data.rows.length === 0 ? (
+          <div className="text-center text-slate-400 py-12">
+            No active staff routes found. Build one in <Link href="/bus-ops/route-planner" className="text-violet-400 underline">Route Planner</Link> first.
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-white/5">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Route</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Stops</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Current km</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">After km</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Saving</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Action</th>
               </tr>
             </thead>
             <tbody>
               {data.rows.map(row => {
                 const tier = row.distanceSavedPct >= 10 ? 'high' : row.distanceSavedPct >= 5 ? 'mid' : 'low';
                 return (
-                  <tr key={row.routeId} className="border-t border-white/5 hover:bg-white/5">
-                    <td className="px-4 py-3">
-                      <div className="text-white font-medium">{row.routeName}</div>
-                      <div className="text-[11px] text-slate-500 font-mono">{row.routeId.slice(0, 8)}</div>
+                  <tr key={row.routeId} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                    <td className="px-4 py-3 text-sm">
+                      <div className="font-medium text-white">{row.routeName}</div>
+                      <div className="text-xs font-mono text-slate-300">{row.routeId.slice(0, 8)}</div>
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">
-                      {row.geoStopCount}/{row.stopCount} geocoded
+                    <td className="px-4 py-3 text-sm text-white">
+                      {row.geoStopCount}/{row.stopCount}
+                      <div className="text-xs text-slate-300">geocoded</div>
                     </td>
                     {row.skipped ? (
-                      <td colSpan={4} className="px-4 py-3 text-xs italic text-slate-500">{row.skipReason}</td>
+                      <td colSpan={4} className="px-4 py-3 text-xs italic text-slate-400">{row.skipReason}</td>
                     ) : (
                       <>
-                        <td className="px-4 py-3 text-right text-slate-300">{row.originalDistanceKm.toFixed(1)}</td>
-                        <td className="px-4 py-3 text-right text-slate-300">{row.optimisedDistanceKm.toFixed(1)}</td>
-                        <td className="px-4 py-3 text-right">
-                          <div className={
-                            tier === 'high' ? 'text-emerald-300 font-semibold' :
-                            tier === 'mid'  ? 'text-amber-300 font-semibold' :
-                            'text-slate-500'
-                          }>
+                        <td className="px-4 py-3 text-sm text-right text-white">{row.originalDistanceKm.toFixed(1)}</td>
+                        <td className="px-4 py-3 text-sm text-right text-white">{row.optimisedDistanceKm.toFixed(1)}</td>
+                        <td className="px-4 py-3 text-sm text-right">
+                          <div className={`font-semibold ${
+                            tier === 'high' ? 'text-emerald-400' :
+                            tier === 'mid'  ? 'text-amber-400' :
+                            'text-slate-400'
+                          }`}>
                             {row.distanceSavedKm.toFixed(1)} km
                           </div>
-                          <div className="text-[10px] text-slate-500">{row.distanceSavedPct.toFixed(1)}%</div>
+                          <div className="text-xs text-slate-300">{row.distanceSavedPct.toFixed(1)}%</div>
                         </td>
                         <td className="px-4 py-3 text-right">
                           <button
                             onClick={() => apply(row)}
                             disabled={applyingId === row.routeId || row.distanceSavedKm <= 0}
-                            className={`text-xs px-3 py-1.5 rounded-lg border disabled:opacity-40 ${
-                              tier === 'high' ? 'bg-emerald-600 border-emerald-500 text-white hover:bg-emerald-500' :
-                              tier === 'mid'  ? 'bg-amber-600/30 border-amber-500/40 text-amber-200 hover:bg-amber-600/50' :
-                              'bg-slate-700/60 border-white/10 text-slate-400'
+                            className={`text-xs px-2 py-1 rounded border disabled:opacity-40 ${
+                              tier === 'high' ? 'bg-violet-500/20 text-violet-400 border-violet-500/30 hover:bg-violet-500/30' :
+                              tier === 'mid'  ? 'bg-amber-500/20 text-amber-400 border-amber-500/30 hover:bg-amber-500/30' :
+                              'bg-slate-700 text-slate-200 border-white/10 hover:bg-slate-600'
                             }`}
                           >
                             {applyingId === row.routeId ? 'Applying…' : 'Apply'}
@@ -158,10 +152,10 @@ export default function OptimisationPage() {
               })}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </div>
 
-      <div className="bg-slate-800/30 border border-white/5 rounded-xl p-5 text-xs text-slate-400 space-y-2">
+      <div className="bg-slate-800/30 border border-white/5 rounded-2xl p-5 text-xs text-slate-400 space-y-2">
         <p className="text-white font-semibold mb-1">How it works</p>
         <ul className="list-disc pl-5 space-y-1">
           <li>Reuses the existing zero-dep TSP solver in <code>src/lib/agents/route-optimiser/tsp.ts</code> — same engine the school-bus agent runs nightly.</li>
@@ -175,12 +169,3 @@ export default function OptimisationPage() {
   );
 }
 
-function Stat({ label, value, accent = 'slate' }: { label: string; value: string | number; accent?: string }) {
-  const cls: Record<string, string> = { slate: 'text-white', emerald: 'text-emerald-300', amber: 'text-amber-300' };
-  return (
-    <div className="rounded-xl bg-slate-800/60 border border-white/10 p-4">
-      <div className={`text-3xl font-bold ${cls[accent]}`}>{value}</div>
-      <div className="text-xs text-slate-400 mt-1">{label}</div>
-    </div>
-  );
-}
