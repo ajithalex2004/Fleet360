@@ -18,6 +18,7 @@ const navItems = [
   { name: 'Driver App',      href: '/bus-ops/driver',         icon: '📲' },
   { name: 'My Bus (Staff)',  href: '/bus-ops/passenger',      icon: '🧑' },
   { name: 'BLE Gateways',    href: '/bus-ops/gateways',       icon: '📡' },
+  { name: 'Driver Scores',   href: '/bus-ops/drivers',        icon: '🏆' },
 ];
 
 export default function BusOpsLayout({ children }: { children: React.ReactNode }) {
