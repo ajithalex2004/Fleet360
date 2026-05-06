@@ -45,22 +45,28 @@ const STAGE_MAP = Object.fromEntries(STAGES.map(s => [s.status, s]));
 // ── Notification helper ───────────────────────────────────────────────────────
 
 async function notifyPassengers(schedule: Schedule, newStatus: string) {
-  const messages: Record<string, string> = {
-    DEPARTED:   `🚌 Your bus (Trip ${schedule.tripNumber ?? schedule.id.slice(0, 6)}) has departed from ${schedule.route?.origin ?? 'the origin'}. Expected arrival: ${schedule.arrivalTime ? new Date(schedule.arrivalTime).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit' }) : 'TBD'}.`,
+  // Real bulk notify via /api/bus-ops/schedules/[id]/notify — sends WhatsApp +
+  // email to all CONFIRMED/BOARDED passengers using their phone/email on
+  // StaffMember. Best-effort, never throws into the dispatch flow.
+  const kind = newStatus === 'CANCELLED' ? 'CANCELLED' : 'CUSTOM';
+  const customMap: Record<string, string> = {
+    DEPARTED:   `🚌 Your bus (Trip ${schedule.tripNumber ?? schedule.id.slice(0, 6)}) has departed from ${schedule.route?.origin ?? 'the origin'}.`,
     IN_TRANSIT: `🛣️ Bus ${schedule.tripNumber ?? ''} is now in transit on route ${schedule.route?.name ?? ''}.`,
     COMPLETED:  `✅ Your transport trip ${schedule.tripNumber ?? ''} has been completed. Have a great day!`,
-    CANCELLED:  `❌ Trip ${schedule.tripNumber ?? ''} has been cancelled. Please arrange alternative transport.`,
   };
-  const msg = messages[newStatus];
-  if (!msg) return;
+  const body = kind === 'CANCELLED'
+    ? { kind: 'CANCELLED', reason: 'Operational decision' }
+    : { kind: 'CUSTOM', customMessage: customMap[newStatus] ?? '' };
+  if (kind === 'CUSTOM' && !body.customMessage) return;
 
-  // Fire WhatsApp to all passengers with phones
-  // (Best-effort — no blocking)
-  for (const p of schedule.passengers ?? []) {
-    if (p.status === 'CONFIRMED' || p.status === 'BOARDED') {
-      // In production, look up staff member phone. Here we just log.
-      console.log(`[Dispatch] Would notify ${p.employeeName}: ${msg}`);
-    }
+  try {
+    await fetch(`/api/bus-ops/schedules/${schedule.id}/notify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    console.error('[Dispatch] notify failed:', err);
   }
 }
 
