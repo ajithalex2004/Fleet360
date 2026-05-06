@@ -16,6 +16,7 @@ const navItems = [
   { name: 'Analytics',       href: '/bus-ops/analytics',      icon: '📈' },
   { name: 'Incidents',       href: '/bus-ops/incidents',      icon: '⚠️' },
   { name: 'Driver App',      href: '/bus-ops/driver',         icon: '📲' },
+  { name: 'My Bus (Staff)',  href: '/bus-ops/passenger',      icon: '🧑' },
 ];
 
 export default function BusOpsLayout({ children }: { children: React.ReactNode }) {

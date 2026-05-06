@@ -1428,6 +1428,49 @@ model StaffTransportRequest {
   @@map("staff_transport_requests")
 }
 
+model VehicleBeacon {
+  id          String    @id @default(uuid())
+  createdAt   DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  vehicleId   String    @unique @map("vehicle_id")
+  bleUuid     String    @map("ble_uuid")
+  major       Int?
+  minor       Int?
+  isActive    Boolean?  @default(true) @map("is_active")
+  notes       String?
+  @@index([bleUuid], map: "idx_vehicle_beacons_ble_uuid")
+  @@map("vehicle_beacons")
+}
+
+model StaffRfidTag {
+  id              String    @id @default(uuid())
+  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  staffMemberId   String    @unique @map("staff_member_id")
+  tagUid          String    @unique @map("tag_uid")
+  issuedAt        DateTime  @default(now()) @map("issued_at") @db.Timestamptz(6)
+  isActive        Boolean?  @default(true) @map("is_active")
+  notes           String?
+  @@map("staff_rfid_tags")
+}
+
+model BoardingEvent {
+  id              String    @id @default(uuid())
+  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  scheduleId      String    @map("schedule_id")
+  passengerId     String?   @map("passenger_id")
+  staffMemberId   String?   @map("staff_member_id")
+  method          String                                       // QR|NFC|BLE|MANUAL
+  direction       String    @default("BOARD")                  // BOARD|ALIGHT
+  identifier      String?
+  stopId          String?   @map("stop_id")
+  performedAt     DateTime  @default(now()) @map("performed_at") @db.Timestamptz(6)
+  performedBy     String?   @map("performed_by")
+  rawPayload      Json?     @map("raw_payload")
+  @@index([scheduleId], map: "idx_boarding_events_schedule_id")
+  @@index([passengerId], map: "idx_boarding_events_passenger_id")
+  @@index([staffMemberId], map: "idx_boarding_events_staff_member_id")
+  @@map("boarding_events")
+}
+
 model BusPreTripCheck {
   id              String    @id @default(uuid())
   createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
