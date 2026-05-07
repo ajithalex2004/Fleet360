@@ -23,7 +23,7 @@ import {
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 const C = {
-  bg:           '#0c1a3e',  // deep navy — distinctly blue, dark enough to make gold pop
+  bg:           '#0a1f44',  // Pantone-style mid-navy
   surface:      'rgba(255,255,255,0.03)',
   border:       'rgba(255,255,255,0.08)',
 
