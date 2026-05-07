@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { CarFront, CheckCircle2, Wrench, AlertTriangle } from 'lucide-react';
+import { PageHeader, KpiCard } from '@/components/ui/page-theme';
 
 interface FleetStats {
   totalVehicles: number;
@@ -67,54 +69,19 @@ export default function FleetDashboard() {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-white mb-2">Fleet Dashboard</h1>
-        <p className="text-slate-400">Overview of your fleet operations</p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Fleet Dashboard"
+        subtitle="Overview of your fleet operations"
+        icon={CarFront}
+        accent="amber"
+      />
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400 text-sm font-medium mb-1">Total Fleet Size</p>
-              <p className="text-3xl font-bold text-white">{stats?.totalVehicles || 0}</p>
-            </div>
-            <div className="text-4xl">🚗</div>
-          </div>
-        </div>
-
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400 text-sm font-medium mb-1">Active Vehicles</p>
-              <p className="text-3xl font-bold text-emerald-400">{stats?.available || 0}</p>
-            </div>
-            <div className="text-4xl">✓</div>
-          </div>
-        </div>
-
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400 text-sm font-medium mb-1">In Maintenance</p>
-              <p className="text-3xl font-bold text-amber-400">{stats?.inMaintenance || 0}</p>
-            </div>
-            <div className="text-4xl">🔧</div>
-          </div>
-        </div>
-
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400 text-sm font-medium mb-1">Expiring Docs (30d)</p>
-              <p className="text-3xl font-bold text-red-400">{stats?.expiringDocs || 0}</p>
-            </div>
-            <div className="text-4xl">⚠️</div>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <KpiCard label="Total fleet size" value={stats?.totalVehicles ?? 0}  icon={CarFront}      accent="default" />
+        <KpiCard label="Active vehicles"  value={stats?.available ?? 0}      icon={CheckCircle2}  accent="emerald" />
+        <KpiCard label="In maintenance"   value={stats?.inMaintenance ?? 0}  icon={Wrench}        accent="amber"   />
+        <KpiCard label="Expiring docs (30d)" value={stats?.expiringDocs ?? 0} icon={AlertTriangle} accent={stats && stats.expiringDocs > 0 ? 'rose' : 'slate'} />
       </div>
 
       {/* Fleet Health Summary */}
