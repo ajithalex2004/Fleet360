@@ -34,6 +34,7 @@ const PUBLIC_EXACT: Set<string> = new Set([
   '/api/auth/sso/initiate',
   '/api/auth/sso/callback',
   '/api/branding',
+  '/api/stripe/webhook',
   '/forgot-password',
   '/reset-password',
   '/api/tenants/provision',
