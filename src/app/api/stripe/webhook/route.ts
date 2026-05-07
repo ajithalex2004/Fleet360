@@ -11,6 +11,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type Stripe from 'stripe';
 import { getStripe, syncSubscriptionToTenant } from '@/lib/billing';
+import {
+  emailPaymentFailed, emailTrialEnding, emailSubscriptionCanceled,
+} from '@/lib/billing-emails';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -40,8 +43,7 @@ export async function POST(req: NextRequest) {
     switch (event.type) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
-      case 'customer.subscription.deleted':
-      case 'customer.subscription.trial_will_end': {
+      case 'customer.subscription.deleted': {
         const sub = event.data.object as Stripe.Subscription;
         await syncSubscriptionToTenant(sub);
         void logAudit({
@@ -49,6 +51,21 @@ export async function POST(req: NextRequest) {
           action: 'UPDATE',
           details: `Stripe ${event.type} → status=${sub.status}`,
         });
+        if (event.type === 'customer.subscription.deleted' || sub.status === 'canceled') {
+          void emailSubscriptionCanceled(sub).catch(() => {});
+        }
+        break;
+      }
+      case 'customer.subscription.trial_will_end': {
+        // Stripe fires this 3 days before trial_end.
+        const sub = event.data.object as Stripe.Subscription;
+        await syncSubscriptionToTenant(sub);
+        void logAudit({
+          entityType: 'Subscription', entityId: sub.id,
+          action: 'UPDATE',
+          details: `Stripe trial_will_end → trial_end=${sub.trial_end}`,
+        });
+        void emailTrialEnding(sub).catch(() => {});
         break;
       }
 
@@ -68,6 +85,7 @@ export async function POST(req: NextRequest) {
           action: 'UPDATE',
           details: `Invoice payment failed: ${invoice.amount_due} ${invoice.currency}`,
         });
+        void emailPaymentFailed(invoice).catch(() => {});
         break;
       }
 
