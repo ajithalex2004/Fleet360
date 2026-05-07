@@ -1,6 +1,10 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import {
+  Package, DollarSign, AlertTriangle, Ban, Gem, Radio,
+} from 'lucide-react';
+import { PageHeader, KpiCard as ThemeKpiCard } from '@/components/ui/page-theme';
 
 interface AssetStats {
   totalAssets: number;
@@ -19,18 +23,6 @@ interface AssetStats {
   todayTransactions: number;
   gatewaysOffline: number;
   domainBreakdown: { domain: string; count: number; totalValue: number }[];
-}
-
-function KpiCard({ label, value, accent, icon }: { label: string; value: React.ReactNode; accent: string; icon: string }) {
-  return (
-    <div className={`bg-slate-900 border border-white/8 rounded-xl p-5 border-l-4 ${accent}`}>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-slate-400 text-xs font-medium uppercase tracking-wide">{label}</span>
-        <span className="text-lg">{icon}</span>
-      </div>
-      <div className="text-2xl font-bold text-white">{value}</div>
-    </div>
-  );
 }
 
 function Skeleton() {
@@ -76,22 +68,25 @@ export default function AssetsDashboard() {
 
   return (
     <div className="p-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Assets & Inventory Dashboard</h1>
-          <p className="text-slate-400 text-sm mt-1">Unified view across all domains</p>
-        </div>
-        <div className="text-slate-500 text-xs">{new Date().toLocaleDateString('en-AE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
-      </div>
+      <PageHeader
+        title="Assets & Inventory"
+        subtitle="Unified view across all domains"
+        icon={Package}
+        accent="cyan"
+        actions={
+          <span className="text-xs text-slate-500">
+            {new Date().toLocaleDateString('en-AE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </span>
+        }
+      />
 
-      {/* Row 1: KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <KpiCard label="Total Assets" value={s.totalAssets?.toLocaleString() ?? '—'} accent="border-l-blue-500" icon="📦" />
-        <KpiCard label="Total Value AED" value={`AED ${(s.totalValue ?? 0).toLocaleString()}`} accent="border-l-yellow-400" icon="💰" />
-        <KpiCard label="Low Stock" value={s.lowStockCount ?? 0} accent="border-l-amber-500" icon="⚠️" />
-        <KpiCard label="Out of Stock" value={s.outOfStockCount ?? 0} accent="border-l-red-500" icon="🚫" />
-        <KpiCard label="HVA Assets" value={s.hvaCount ?? 0} accent="border-l-purple-500" icon="💎" />
-        <KpiCard label="BLE Tags Active" value={bleActive} accent="border-l-emerald-500" icon="📡" />
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <ThemeKpiCard label="Total assets"      value={s.totalAssets?.toLocaleString() ?? '—'}                icon={Package}        accent="cyan"    />
+        <ThemeKpiCard label="Total value AED"   value={`AED ${(s.totalValue ?? 0).toLocaleString()}`}         icon={DollarSign}     accent="amber"   />
+        <ThemeKpiCard label="Low stock"         value={s.lowStockCount ?? 0}                                  icon={AlertTriangle}  accent="amber"   />
+        <ThemeKpiCard label="Out of stock"      value={s.outOfStockCount ?? 0}                                icon={Ban}            accent="rose"    />
+        <ThemeKpiCard label="HVA assets"        value={s.hvaCount ?? 0}                                       icon={Gem}            accent="violet"  />
+        <ThemeKpiCard label="BLE tags active"   value={bleActive}                                             icon={Radio}          accent="emerald" />
       </div>
 
       {/* Row 2: Alert Banners */}
