@@ -299,6 +299,9 @@ export default function PlatformPage() {
             <span className="text-white font-bold text-lg">XL AI Smart Mobility</span>
           </div>
           <div className="flex items-center gap-4">
+            <Link href="/platform/v2" className="rounded-lg bg-gradient-to-r from-violet-600 to-blue-600 px-4 py-1.5 text-sm font-semibold text-white hover:opacity-90 transition-all shadow-lg shadow-violet-500/30">
+              ✨ Try new home
+            </Link>
             <Link href="/customer" className="rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:opacity-90 transition-all">Customer Portal</Link>
             <Link href="/approvals" className="rounded-lg bg-violet-600/20 border border-violet-500/30 px-4 py-1.5 text-sm font-medium text-violet-400 hover:bg-violet-600/30 transition-all">Approvals</Link>
             <Link href="/admin" className="rounded-lg bg-red-600/20 border border-red-500/30 px-4 py-1.5 text-sm font-medium text-red-400 hover:bg-red-600/30 transition-all">Admin</Link>
