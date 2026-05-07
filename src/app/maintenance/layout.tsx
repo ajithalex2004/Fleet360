@@ -55,7 +55,7 @@ const NAV_GROUPS = [
   {
     label: 'Administration',
     items: [
-      { href: '/maintenance/integration-config',            label: 'Integrations',           icon: '🔗' },
+      { href: '/admin/settings/integrations',               label: 'Integrations',           icon: '🔗' },
       { href: '/maintenance/admin/notifications',           label: 'Email / SMS Alerts',     icon: '✉️' },
       { href: '/maintenance/admin/notification-rules',      label: 'Notification Rules',     icon: '📐' },
     ],
