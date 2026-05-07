@@ -1,3 +1,4 @@
+'use client';
 import Link from 'next/link';
 import { Wrench, Inbox, Clock, DollarSign, Activity, Plus } from 'lucide-react';
 import { PageHeader, KpiCard, Panel } from '@/components/ui/page-theme';

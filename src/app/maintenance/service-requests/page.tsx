@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createMaintenanceRequest, getMaintenanceRequests, getServiceRequests, createServiceRequest, updateServiceRequest, sendEmailNotification, getVehicles, getDrivers } from '@/services/mockData';
 import { MaintenanceRequest, MaintenanceStatus, ServiceRequest, AttachmentType } from '@/types/maintenance';
 import FilterBar from '@/components/Maintenance/FilterBar';
 import AssignmentModal from '@/components/Maintenance/AssignmentModal';
+import { buildServiceRequestIdMap, formatServiceRequestId } from '@/lib/service-request-id';
 
 export default function ServiceRequestPage() {
     const router = useRouter();
@@ -20,6 +21,8 @@ export default function ServiceRequestPage() {
 
     const [requests, setRequests] = useState<ServiceRequest[]>([]);
     const [filteredRequests, setFilteredRequests] = useState<ServiceRequest[]>([]);
+    /** Stable UUID → SR2026-10001 mapping, derived from creation order. */
+    const readableIdMap = useMemo(() => buildServiceRequestIdMap(requests), [requests]);
     const [maintenanceRequests, setMaintenanceRequests] = useState<MaintenanceRequest[]>([]);
     const [vehicles, setVehicles] = useState<any[]>([]);
     const [drivers, setDrivers] = useState<any[]>([]);
@@ -480,7 +483,7 @@ export default function ServiceRequestPage() {
 
                                 <div className="relative z-10 flex-1">
                                     <div className="flex justify-between items-start mb-3">
-                                        <span className="text-[10px] font-mono text-slate-500 bg-slate-700/40 px-1.5 py-0.5 rounded">{request.id}</span>
+                                        <span className="text-[11px] font-mono font-semibold text-slate-300 bg-slate-700/40 px-2 py-0.5 rounded" title={request.id}>{formatServiceRequestId(request, readableIdMap)}</span>
                                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${getStatusColor(displayStatus)}`}>
                                             {displayStatus}
                                         </span>

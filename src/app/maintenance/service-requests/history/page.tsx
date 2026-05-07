@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { getServiceRequests, getMaintenanceRequests, getVehicles, getDrivers } from '@/services/api';
 import { ServiceRequest, MaintenanceStatus, MaintenanceRequest, Vehicle, Driver } from '@/types/maintenance';
 import FilterBar from '@/components/Maintenance/FilterBar';
 import TimelineModal from '@/components/Maintenance/TimelineModal';
+import { buildServiceRequestIdMap, formatServiceRequestId } from '@/lib/service-request-id';
 
 export default function ServiceRequestHistoryPage() {
     const router = useRouter();
@@ -18,6 +19,7 @@ export default function ServiceRequestHistoryPage() {
     const [filteredRequests, setFilteredRequests] = useState<ServiceRequest[]>([]);
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [drivers, setDrivers] = useState<Driver[]>([]);
+    const readableIdMap = useMemo(() => buildServiceRequestIdMap(requests), [requests]);
 
     // Timeline Modal State
     const [selectedRequestForTimeline, setSelectedRequestForTimeline] = useState<ServiceRequest | null>(null);
@@ -189,7 +191,7 @@ export default function ServiceRequestHistoryPage() {
                                 <div key={request.id} className="bg-slate-800/50 rounded-lg p-4 relative overflow-hidden border border-white/10 hover:shadow-md transition-all flex flex-col min-h-[200px]">
                                     <div className="relative z-10 flex-1 flex flex-col">
                                         <div className="flex justify-between items-start mb-3">
-                                            <span className="text-[10px] font-mono text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded border border-white/10">{request.id}</span>
+                                            <span className="text-[11px] font-mono font-semibold text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-white/10" title={request.id}>{formatServiceRequestId(request, readableIdMap)}</span>
                                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${getStatusColor(request.status)}`}>
                                                 {request.status}
                                             </span>
