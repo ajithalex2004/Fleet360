@@ -16,8 +16,8 @@ const GO_BACKEND_ROUTES = [
 ].join("|");
 
 const nextConfig: NextConfig = {
-  // Run src/instrumentation.ts on server startup (pre-warms Neon connection)
-  instrumentationHook: true,
+  // Note: src/instrumentation.ts is auto-discovered in Next 15+ — the old
+  // `experimental.instrumentationHook` flag is no longer needed (and warns).
 
   // Tree-shake heavy UI libraries so only used components are bundled
   experimental: {
