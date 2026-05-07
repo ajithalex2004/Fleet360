@@ -14,6 +14,8 @@ import { prisma } from '@/lib/prisma';
 import {
   ensureInvitationTable, generateInvitationToken, INVITATION_TTL_DAYS,
 } from '@/lib/invitations';
+import { requireUnderQuota } from '@/lib/plan-limits';
+import type { PlanCode } from '@/lib/billing';
 import { sendEmail } from '@/lib/email';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -121,6 +123,22 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   if (existing) {
     return NextResponse.json({ ok: false, error: `${email} is already a member of this organisation.` }, { status: 400 });
   }
+
+  // Quota: count active members + outstanding pending invitations against maxUsers.
+  const tenantPlan = (req.headers.get('x-tenant-plan') ?? 'TRIAL') as PlanCode;
+  const [activeCount, pendingRows] = await Promise.all([
+    prisma.userTenant.count({ where: { tenantId, isActive: true } }),
+    prisma.$queryRawUnsafe<{ c: bigint }[]>(
+      `SELECT COUNT(*)::bigint AS c FROM tenant_invitations
+       WHERE tenant_id = $1 AND used_at IS NULL AND revoked = FALSE AND expires_at > NOW()`,
+      tenantId,
+    ).catch(() => []),
+  ]);
+  const pending = pendingRows[0] ? Number(pendingRows[0].c) : 0;
+  const quotaGate = requireUnderQuota({
+    plan: tenantPlan, resource: 'maxUsers', current: activeCount + pending,
+  });
+  if (quotaGate) return quotaGate;
 
   try {
     await ensureInvitationTable();

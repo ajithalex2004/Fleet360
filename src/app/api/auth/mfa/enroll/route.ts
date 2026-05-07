@@ -9,6 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import QRCode from 'qrcode';
 import { prisma } from '@/lib/prisma';
 import { getTenantContext } from '@/lib/tenant-session';
 import { ensureMfaColumns } from '@/lib/auth-mfa-schema';
@@ -43,10 +44,19 @@ export async function POST(req: NextRequest) {
       secret, ctx.userId,
     );
 
+    // Render the otpauth:// URI as an inline PNG data URL so the page can
+    // render <img src={qrDataUrl}> without any client-side QR library.
+    const qrDataUrl = await QRCode.toDataURL(uri, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 240,
+    }).catch(() => null);
+
     return NextResponse.json({
       ok: true,
-      secret,           // shown to user as a fallback (manual entry into authenticator)
-      otpauthUri: uri,  // rendered as QR code
+      secret,            // fallback for manual entry
+      otpauthUri: uri,
+      qrDataUrl,         // PNG data URL ready for <img src={...}>
       issuer,
       account: user.email,
     });

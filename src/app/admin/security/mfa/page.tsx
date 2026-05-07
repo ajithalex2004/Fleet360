@@ -18,7 +18,7 @@ import { useEffect, useState } from 'react';
 import { ShieldCheck, KeyRound, Copy, Check, AlertCircle, RefreshCw } from 'lucide-react';
 
 interface Status { mfaEnabled: boolean; }
-interface EnrolResponse { ok: true; secret: string; otpauthUri: string; issuer: string; account: string; }
+interface EnrolResponse { ok: true; secret: string; otpauthUri: string; qrDataUrl: string | null; issuer: string; account: string; }
 
 export default function MfaSecurityPage() {
   const [status, setStatus] = useState<Status | null>(null);
@@ -180,28 +180,44 @@ export default function MfaSecurityPage() {
       {/* Enrolment step 2: secret displayed, awaiting verification code */}
       {enrol && (
         <form onSubmit={completeEnrol} className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 space-y-5">
-          <h2 className="text-lg font-semibold text-white">Add this key to your authenticator</h2>
+          <h2 className="text-lg font-semibold text-white">Scan with your authenticator</h2>
 
-          <div className="space-y-2">
-            <div className="text-xs uppercase tracking-wide text-slate-400">Account</div>
-            <div className="text-sm text-white">{enrol.issuer} &mdash; {enrol.account}</div>
-          </div>
+          <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-5 items-start">
+            {enrol.qrDataUrl ? (
+              <div className="bg-white p-3 rounded-xl inline-block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={enrol.qrDataUrl} alt="MFA QR code" width={216} height={216} />
+              </div>
+            ) : (
+              <div className="bg-slate-900/60 border border-white/10 rounded-xl p-6 text-xs text-slate-400">
+                QR code unavailable — use the setup key on the right.
+              </div>
+            )}
 
-          <div className="space-y-2">
-            <div className="text-xs uppercase tracking-wide text-slate-400">Setup key</div>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 bg-slate-900/60 border border-white/10 rounded-lg px-3 py-2.5 font-mono text-sm text-emerald-300 break-all">
-                {enrol.secret}
-              </code>
-              <button type="button" onClick={() => copy(enrol.secret, 'secret')}
-                className="px-3 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-200 text-sm inline-flex items-center gap-2">
-                {copied === 'secret' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                {copied === 'secret' ? 'Copied' : 'Copy'}
-              </button>
+            <div className="space-y-3">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-slate-400">Account</div>
+                <div className="text-sm text-white">{enrol.issuer} &mdash; {enrol.account}</div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-xs uppercase tracking-wide text-slate-400">Or enter setup key manually</div>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-slate-900/60 border border-white/10 rounded-lg px-3 py-2.5 font-mono text-xs text-emerald-300 break-all">
+                    {enrol.secret}
+                  </code>
+                  <button type="button" onClick={() => copy(enrol.secret, 'secret')}
+                    className="px-3 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-200 text-sm inline-flex items-center gap-2">
+                    {copied === 'secret' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    {copied === 'secret' ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-500">
+                Open Google Authenticator / 1Password / Authy → scan the QR or paste the key. Account name: {enrol.account}.
+              </p>
             </div>
-            <p className="text-xs text-slate-500">
-              In your authenticator: <strong>Add account → Enter setup key</strong>. Account name: {enrol.account}. Type: Time-based.
-            </p>
           </div>
 
           <div className="space-y-1">

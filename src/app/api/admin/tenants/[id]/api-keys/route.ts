@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureApiKeyTable, generateApiKey } from '@/lib/api-keys';
+import { requirePlan } from '@/lib/plan-limits';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -76,6 +77,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const { id: tenantId } = await params;
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;
+  // API keys require a paid plan (any tier above TRIAL).
+  const gate = requirePlan(req, 'STANDARD');
+  if (gate) return gate;
 
   let body: { name?: string; scopes?: unknown };
   try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }

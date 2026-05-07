@@ -8,7 +8,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Palette, Save, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Palette, Save, AlertCircle, ArrowLeft, Upload } from 'lucide-react';
 
 interface Branding {
   productName:  string | null;
@@ -35,6 +35,8 @@ export default function BrandingPage() {
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
   const [error,  setError]  = useState<string | null>(null);
+
+  const [uploading, setUploading] = useState(false);
 
   const load = useCallback(async () => {
     if (!tenantId) return;
@@ -89,6 +91,23 @@ export default function BrandingPage() {
     }
   };
 
+  const uploadLogo = async (file: File) => {
+    setUploading(true); setError(null); setSaved(false);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`/api/admin/tenants/${tenantId}/branding/logo`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) { setError(data?.error ?? 'Upload failed'); return; }
+      if (data.logoUrl) setLogoUrl(data.logoUrl);
+      setSaved(true); setTimeout(() => setSaved(false), 2500);
+    } catch {
+      setError('Network error during upload.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading branding…</div></div>;
   }
@@ -138,12 +157,21 @@ export default function BrandingPage() {
             </div>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Logo URL (https)</label>
-            <input value={logoUrl} onChange={e => setLogoUrl(e.target.value)}
-              placeholder="https://cdn.example.com/logo.svg"
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-pink-500" />
-            <p className="text-xs text-slate-500">SVG / PNG / WebP. Up to ~200×40 px works best in the chrome.</p>
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Logo</label>
+            <div className="flex items-center gap-2">
+              <input value={logoUrl} onChange={e => setLogoUrl(e.target.value)}
+                placeholder="https://cdn.example.com/logo.svg or upload below"
+                className="flex-1 bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-pink-500" />
+              <label className={`shrink-0 px-3 py-2.5 rounded-lg text-sm inline-flex items-center gap-2 cursor-pointer ${uploading ? 'bg-slate-700/50 text-slate-500' : 'bg-pink-500/20 hover:bg-pink-500/30 border border-pink-500/40 text-pink-200'}`}>
+                <Upload className="w-4 h-4" />
+                {uploading ? 'Uploading…' : 'Upload'}
+                <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" className="hidden"
+                  disabled={uploading}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) void uploadLogo(f); e.target.value = ''; }} />
+              </label>
+            </div>
+            <p className="text-xs text-slate-500">PNG / JPEG / SVG / WebP, up to 1 MB. Around 200×40 px works best in the chrome.</p>
           </div>
 
           <div className="space-y-1">

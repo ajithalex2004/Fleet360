@@ -14,6 +14,7 @@ import { prisma } from '@/lib/prisma';
 import {
   ensureBrandingColumns, getBranding, normalizeHexColor, normalizeUrl,
 } from '@/lib/branding';
+import { requirePlan } from '@/lib/plan-limits';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -44,6 +45,9 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   const { id: tenantId } = await params;
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;
+  // White-label is a Professional-tier feature.
+  const gate = requirePlan(req, 'PROFESSIONAL');
+  if (gate) return gate;
 
   let body: {
     productName?: string | null; tagline?: string | null;

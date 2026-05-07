@@ -16,6 +16,7 @@ import { prisma } from '@/lib/prisma';
 import {
   ensureSsoTable, encryptSecret, getSsoConfigPublic,
 } from '@/lib/sso';
+import { requirePlan } from '@/lib/plan-limits';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -47,6 +48,9 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   const { id: tenantId } = await params;
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;
+  // SSO is a Professional-tier feature.
+  const gate = requirePlan(req, 'PROFESSIONAL');
+  if (gate) return gate;
 
   let body: {
     issuer?: string; clientId?: string; clientSecret?: string;

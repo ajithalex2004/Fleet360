@@ -192,3 +192,66 @@ async function tenantIdForCustomer(customerId: string): Promise<string | null> {
   ).catch(() => []);
   return rows[0]?.id ?? null;
 }
+
+// ── Trial bootstrap ─────────────────────────────────────────────────────────
+
+/**
+ * Start a 14-day trial for a freshly-provisioned tenant. Best-effort:
+ *
+ *  - If Stripe is configured, creates a Customer + a trialing Subscription
+ *    on Standard plan. Webhook will sync plan/status as Stripe fires events.
+ *  - If Stripe is NOT configured (dev env), just records trial_ends_at
+ *    locally so the rest of the app can gate on it.
+ *
+ * Idempotent: a tenant that already has a stripe_customer_id is skipped.
+ */
+export async function startTrialForTenant(tenantId: string, currency: 'usd' | 'aed' = 'usd'): Promise<void> {
+  await ensureBillingColumns();
+  const billing = await getTenantBilling(tenantId);
+  if (!billing) return;
+  if (billing.stripeCustomerId || billing.subscriptionStatus === 'trialing') return;
+
+  const trialEnd = new Date(Date.now() + 14 * 86_400_000);
+
+  if (!isStripeConfigured()) {
+    await prisma.$executeRawUnsafe(
+      `UPDATE tenants SET trial_ends_at = $1, subscription_status = 'trialing', updated_at = NOW() WHERE id = $2`,
+      trialEnd, tenantId,
+    );
+    return;
+  }
+
+  const priceId = getPriceId('STANDARD', currency);
+  if (!priceId) {
+    // Stripe configured but no price — just mark trial locally.
+    await prisma.$executeRawUnsafe(
+      `UPDATE tenants SET trial_ends_at = $1, subscription_status = 'trialing', updated_at = NOW() WHERE id = $2`,
+      trialEnd, tenantId,
+    );
+    return;
+  }
+
+  try {
+    const customerId = await getOrCreateCustomer(tenantId);
+    const stripe = getStripe();
+    const sub = await stripe.subscriptions.create({
+      customer: customerId,
+      items: [{ price: priceId }],
+      trial_period_days: 14,
+      // Don't auto-charge if the trial expires without payment method —
+      // we'll downgrade to TRIAL plan via webhook and let them upgrade.
+      trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
+      payment_settings: { save_default_payment_method: 'on_subscription' },
+      metadata: { tenant_id: tenantId, plan: 'STANDARD', source: 'auto-trial' },
+    });
+    // syncSubscriptionToTenant runs on the corresponding webhook, but also
+    // sync now so the row reflects status before webhooks land.
+    await syncSubscriptionToTenant(sub);
+  } catch {
+    // Best-effort — fall back to local trial flag so signup never blocks.
+    await prisma.$executeRawUnsafe(
+      `UPDATE tenants SET trial_ends_at = $1, subscription_status = 'trialing', updated_at = NOW() WHERE id = $2`,
+      trialEnd, tenantId,
+    );
+  }
+}
