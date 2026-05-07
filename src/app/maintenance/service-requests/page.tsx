@@ -67,10 +67,12 @@ export default function ServiceRequestPage() {
     ]);
 
     const [error, setError] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
 
     // Fetch data
     useEffect(() => {
         const loadData = async () => {
+            setLoading(true);
             try {
                 const [sReqs, mReqs, vehs, drvs] = await Promise.all([
                     getServiceRequests(),
@@ -102,6 +104,8 @@ export default function ServiceRequestPage() {
             } catch (err: any) {
                 console.error("Failed to fetch data:", err);
                 setError("Unable to load service requests. The server might be offline.");
+            } finally {
+                setLoading(false);
             }
         };
         loadData();
@@ -454,6 +458,32 @@ export default function ServiceRequestPage() {
                     />
                 </div>
 
+                {loading ? (
+                    <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                        {[...Array(8)].map((_, i) => (
+                            <div key={i} className="bg-slate-900 rounded-lg p-4 border border-white/10 animate-pulse">
+                                <div className="flex justify-between items-start mb-3">
+                                    <div className="h-4 bg-slate-700/60 rounded w-20" />
+                                    <div className="h-4 bg-slate-700/60 rounded-full w-16" />
+                                </div>
+                                <div className="h-5 bg-slate-700/60 rounded w-3/4 mb-2" />
+                                <div className="h-3 bg-slate-700/40 rounded w-full mb-1" />
+                                <div className="h-3 bg-slate-700/40 rounded w-5/6 mb-4" />
+                                <div className="border-t border-white/5 pt-3 space-y-2">
+                                    <div className="h-3 bg-slate-700/40 rounded w-2/3" />
+                                    <div className="h-3 bg-slate-700/40 rounded w-3/4" />
+                                    <div className="h-3 bg-slate-700/40 rounded w-1/2" />
+                                </div>
+                                <div className="mt-4 h-9 bg-slate-700/40 rounded" />
+                            </div>
+                        ))}
+                    </div>
+                ) : filteredRequests.length === 0 ? (
+                    <div className="bg-slate-900 border border-white/10 rounded-2xl py-12 text-center">
+                        <p className="text-slate-400 text-sm">No service requests match your filters.</p>
+                        <p className="text-slate-600 text-xs mt-1">Try clearing the date range or status filter.</p>
+                    </div>
+                ) : (
                 <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {filteredRequests.map((request) => {
                         const driver = drivers.find(d => d.id === request.requestorId);
@@ -599,6 +629,7 @@ export default function ServiceRequestPage() {
                         );
                     })}
                 </div>
+                )}
             </div>
 
             {/* Create Service Request Form (Moved to Bottom & Compacted) */}
