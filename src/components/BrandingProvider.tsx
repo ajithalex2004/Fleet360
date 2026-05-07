@@ -41,15 +41,18 @@ export default function BrandingProvider() {
   return null;
 }
 
+// Default brand colours (royal-maritime palette). Tenant overrides take precedence.
+const DEFAULT_BRAND_PRIMARY = '#D4AF37'; // gold
+const DEFAULT_BRAND_ACCENT  = '#3B82F6'; // royal blue
+
 function applyBranding(b: Branding | null): void {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
 
-  if (b?.primaryColor) root.style.setProperty('--brand-primary', b.primaryColor);
-  else                 root.style.removeProperty('--brand-primary');
-
-  if (b?.accentColor)  root.style.setProperty('--brand-accent', b.accentColor);
-  else                 root.style.removeProperty('--brand-accent');
+  // --brand-primary / --brand-accent always have a value: tenant override or
+  // the platform-wide default. Components reading these never see "unset".
+  root.style.setProperty('--brand-primary', b?.primaryColor ?? DEFAULT_BRAND_PRIMARY);
+  root.style.setProperty('--brand-accent',  b?.accentColor  ?? DEFAULT_BRAND_ACCENT);
 
   if (b?.productName) {
     document.title = b.productName + (b.tagline ? ` — ${b.tagline}` : '');

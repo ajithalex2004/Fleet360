@@ -37,15 +37,31 @@
 import React from 'react';
 import type { LucideIcon } from 'lucide-react';
 
+/**
+ * Brand-rolled accents (royal-maritime palette).
+ * The original `violet` and `cyan` accents are kept as deprecated
+ * aliases that now resolve to the brand `gold` and `blue` so all
+ * existing module pages adopt the new palette without any caller
+ * changes. Status colours (emerald / amber / rose) are preserved
+ * because they carry semantic meaning.
+ */
 const ACCENTS: Record<string, { text: string; ring: string; bg: string; gradient: string }> = {
-  default: { text: 'text-white',       ring: 'ring-violet-500/40', bg: 'bg-violet-500/10', gradient: 'from-violet-600 to-purple-600' },
-  violet:  { text: 'text-violet-300',  ring: 'ring-violet-500/40', bg: 'bg-violet-500/10', gradient: 'from-violet-600 to-purple-600' },
-  cyan:    { text: 'text-cyan-300',    ring: 'ring-cyan-500/40',   bg: 'bg-cyan-500/10',   gradient: 'from-cyan-600 to-sky-600' },
+  /* Primary brand — champagne gold on navy. */
+  default: { text: 'text-[#E8C547]',   ring: 'ring-[#D4AF37]/40',  bg: 'bg-[#D4AF37]/10',  gradient: 'from-[#D4AF37] to-[#B8860B]' },
+  gold:    { text: 'text-[#E8C547]',   ring: 'ring-[#D4AF37]/40',  bg: 'bg-[#D4AF37]/10',  gradient: 'from-[#D4AF37] to-[#B8860B]' },
+  /* `violet` is now an alias for gold — keeps existing callers working. */
+  violet:  { text: 'text-[#E8C547]',   ring: 'ring-[#D4AF37]/40',  bg: 'bg-[#D4AF37]/10',  gradient: 'from-[#D4AF37] to-[#B8860B]' },
+
+  /* Partner brand — royal blue. */
+  blue:    { text: 'text-blue-300',    ring: 'ring-blue-500/40',   bg: 'bg-blue-500/10',   gradient: 'from-blue-600 to-indigo-700' },
+  /* `cyan` is now an alias for blue. */
+  cyan:    { text: 'text-blue-300',    ring: 'ring-blue-500/40',   bg: 'bg-blue-500/10',   gradient: 'from-blue-600 to-indigo-700' },
+
+  /* Semantic — preserved. */
   emerald: { text: 'text-emerald-300', ring: 'ring-emerald-500/40',bg: 'bg-emerald-500/10',gradient: 'from-emerald-600 to-teal-600' },
   amber:   { text: 'text-amber-300',   ring: 'ring-amber-500/40',  bg: 'bg-amber-500/10',  gradient: 'from-amber-600 to-orange-600' },
   rose:    { text: 'text-rose-300',    ring: 'ring-rose-500/40',   bg: 'bg-rose-500/10',   gradient: 'from-rose-600 to-pink-600' },
   slate:   { text: 'text-slate-300',   ring: 'ring-slate-500/40',  bg: 'bg-slate-500/10',  gradient: 'from-slate-600 to-slate-700' },
-  blue:    { text: 'text-blue-300',    ring: 'ring-blue-500/40',   bg: 'bg-blue-500/10',   gradient: 'from-blue-600 to-indigo-600' },
 };
 
 export type PageAccent = keyof typeof ACCENTS;
