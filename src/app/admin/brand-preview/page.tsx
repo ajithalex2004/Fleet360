@@ -23,7 +23,7 @@ import {
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 const C = {
-  bg:           '#0a1f44',  // Pantone-style mid-navy
+  bg:           '#08152e',  // very deep, almost black-navy
   surface:      'rgba(255,255,255,0.03)',
   border:       'rgba(255,255,255,0.08)',
 
