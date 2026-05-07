@@ -26,7 +26,7 @@ export default function LogisticsLayout({ children }: { children: React.ReactNod
       <PlatformHomeBar moduleName={t('module.logistics')} moduleIcon="🚛" accentColor="from-amber-500 to-orange-600" />
       <div className="flex flex-1 overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-56 flex-shrink-0 bg-slate-900/80 border-r border-white/10 flex flex-col">
+      <aside className="w-56 flex-shrink-0 bg-black border-r border-white/10 flex flex-col">
         <div className="px-4 py-4 border-b border-white/10">
           <div className="flex items-center gap-2">
             <span className="text-xl">🚛</span>

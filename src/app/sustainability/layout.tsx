@@ -27,7 +27,7 @@ export default function SustainabilityLayout({ children }: { children: React.Rea
       <PlatformHomeBar moduleName={t('module.sustainability')} moduleIcon="🌱" accentColor="from-emerald-500 to-green-600" />
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <aside className="w-64 flex-shrink-0 bg-gradient-to-b from-emerald-950/80 to-slate-950 border-r border-emerald-900/30 overflow-y-auto">
+        <aside className="w-64 flex-shrink-0 bg-black border-r border-emerald-900/30 overflow-y-auto">
           <div className="p-4 border-b border-emerald-900/30">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center text-lg shadow-lg shadow-emerald-900/40">

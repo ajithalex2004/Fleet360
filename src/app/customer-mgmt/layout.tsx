@@ -21,7 +21,7 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
     <div className="flex flex-col h-screen bg-slate-900">
       <PlatformHomeBar moduleName="Customer Management" moduleIcon="C" accentColor="from-cyan-500 to-blue-600" />
       <div className="flex flex-1 overflow-hidden">
-        <aside className="w-56 border-r border-white/10 bg-slate-800/30 overflow-y-auto flex-shrink-0">
+        <aside className="w-56 border-r border-white/10 bg-black overflow-y-auto flex-shrink-0">
           <div className="p-4 border-b border-white/10">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold text-sm">C</div>

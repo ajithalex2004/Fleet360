@@ -22,7 +22,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div className="flex flex-col h-screen bg-slate-900">
       <PlatformHomeBar moduleName={t('module.compliance')} moduleIcon="C" accentColor="from-cyan-500 to-blue-600" />
       <div className="flex flex-1 overflow-hidden">
-        <div className="w-64 bg-gradient-to-br from-rose-950 to-slate-900 border-r border-white/10 p-6 overflow-y-auto flex-shrink-0">
+        <div className="w-64 bg-black border-r border-white/10 p-6 overflow-y-auto flex-shrink-0">
           <h2 className="text-lg font-bold text-white mb-6">{t('module.compliance')}</h2>
           <nav className="space-y-2">
             {NAV_ITEMS.map(item => (
