@@ -37,28 +37,7 @@ interface PlatformKPIs {
   finance:        { unpaidInvoices: number; overdueInvoices: number; revenue30d: number };
 }
 
-// ── Module dock (Lucide icons only) ─────────────────────────────────────────
-const MODULES: { id: string; label: string; href: string; icon: LucideIcon; tone: string }[] = [
-  { id: 'agents',         label: 'AI Agents',     href: '/agents',         icon: Bot,           tone: 'violet' },
-  { id: 'fleet',          label: 'Fleet',         href: '/fleet',          icon: CarFront,      tone: 'orange' },
-  { id: 'maintenance',    label: 'Maintenance',   href: '/maintenance',    icon: Wrench,        tone: 'blue' },
-  { id: 'leasing',        label: 'Leasing',       href: '/leasing',        icon: FileText,      tone: 'violet' },
-  { id: 'rental',         label: 'Rent-a-Car',    href: '/rental',         icon: Car,           tone: 'emerald' },
-  { id: 'bus-ops',        label: 'Staff Bus',     href: '/bus-ops',        icon: Bus,           tone: 'purple' },
-  { id: 'school-bus',     label: 'School Bus',    href: '/school-bus',     icon: School,        tone: 'amber' },
-  { id: 'logistics',      label: 'Logistics',     href: '/logistics',      icon: Truck,         tone: 'amber' },
-  { id: 'incidents',      label: 'Incidents',     href: '/incidents',      icon: Siren,         tone: 'rose' },
-  { id: 'driver-mgmt',    label: 'Drivers',       href: '/driver-mgmt',    icon: UserCog,       tone: 'cyan' },
-  { id: 'customer-mgmt',  label: 'Customers',     href: '/customer-mgmt',  icon: Building2,     tone: 'cyan' },
-  { id: 'booking-portal', label: 'Bookings',      href: '/booking-portal', icon: Smartphone,    tone: 'indigo' },
-  { id: 'dispatch',       label: 'Dispatch',      href: '/dispatch',       icon: Radio,         tone: 'blue' },
-  { id: 'finance',        label: 'Finance',       href: '/finance',        icon: Banknote,      tone: 'emerald' },
-  { id: 'compliance',     label: 'Compliance',    href: '/compliance',     icon: Scale,         tone: 'rose' },
-  { id: 'mobile-apps',    label: 'Mobile Apps',   href: '/mobile-apps',    icon: AppWindow,     tone: 'pink' },
-  { id: 'reports',        label: 'Reports',       href: '/reports',        icon: BarChart3,     tone: 'fuchsia' },
-  { id: 'sustainability', label: 'Sustainability',href: '/sustainability', icon: Leaf,          tone: 'emerald' },
-  { id: 'assets',         label: 'Assets',        href: '/assets',         icon: Package,       tone: 'teal' },
-];
+// Module data is built dynamically from KPIs in buildModuleCards() — see bottom of file.
 
 const TONE_CHIP: Record<string, string> = {
   violet:  'text-violet-300  group-hover:text-violet-200  bg-violet-500/10',
@@ -105,11 +84,12 @@ export default function PlatformV2() {
   // ── Derived ─────────────────────────────────────────────────────────────
   const attention = useMemo(() => buildAttention(kpis), [kpis]);
   const inProgress = useMemo(() => buildInProgress(kpis), [kpis]);
-  const filteredModules = useMemo(() => {
+  const moduleCards = useMemo(() => buildModuleCards(kpis), [kpis]);
+  const filteredModuleCards = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return MODULES;
-    return MODULES.filter(m => m.label.toLowerCase().includes(q) || m.id.toLowerCase().includes(q));
-  }, [search]);
+    if (!q) return moduleCards;
+    return moduleCards.filter(m => m.label.toLowerCase().includes(q) || m.id.toLowerCase().includes(q));
+  }, [search, moduleCards]);
 
   return (
     <div className="relative min-h-screen bg-[#06070d] text-white overflow-hidden">
@@ -253,30 +233,31 @@ export default function PlatformV2() {
           </GlassPanel>
         </section>
 
-        {/* ── Module dock ───────────────────────────────────────────── */}
+        {/* ── Modules · live ──────────────────────────────────────── */}
         <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Modules · {filteredModules.length}{search ? ` of ${MODULES.length}` : ''}
-            </h2>
+          <div className="flex items-end justify-between mb-4">
+            <div>
+              <h2 className="text-sm font-semibold text-white">All modules</h2>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                {filteredModuleCards.length}{search ? ` of ${moduleCards.length}` : ` · live data`}
+              </p>
+            </div>
             {search && (
-              <button onClick={() => setSearch('')} className="text-[11px] text-slate-500 hover:text-white">
-                Clear
+              <button onClick={() => setSearch('')} className="text-[11px] text-slate-400 hover:text-white">
+                Clear search
               </button>
             )}
           </div>
 
-          <div className="rounded-2xl bg-white/[0.02] border border-white/[0.06] backdrop-blur-xl p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-            {filteredModules.length === 0 ? (
-              <div className="text-center text-slate-500 text-sm py-6">No modules match &ldquo;{search}&rdquo;.</div>
-            ) : (
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2">
-                {filteredModules.map(m => (
-                  <ModuleTile key={m.id} {...m} />
-                ))}
-              </div>
-            )}
-          </div>
+          {filteredModuleCards.length === 0 ? (
+            <div className="rounded-2xl bg-white/[0.02] border border-white/[0.06] backdrop-blur-xl p-10 text-center text-slate-500 text-sm">
+              No modules match &ldquo;{search}&rdquo;.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {filteredModuleCards.map(m => <ModuleCard key={m.id} {...m} />)}
+            </div>
+          )}
         </section>
 
         {/* Footer link back to old page */}
@@ -399,15 +380,62 @@ function EmptyState({ icon: Icon, text }: { icon: LucideIcon; text: string }) {
   );
 }
 
-function ModuleTile({ label, href, icon: Icon, tone }: { label: string; href: string; icon: LucideIcon; tone: string }) {
+interface ModuleStat { label: string; value: string | number; alert?: boolean; }
+interface ModuleCardData {
+  id: string; label: string; href: string; icon: LucideIcon; tone: string;
+  alert?: boolean;          // shows pulse dot when true
+  stats: ModuleStat[];      // up to 3
+}
+
+function ModuleCard({ label, href, icon: Icon, tone, alert, stats }: ModuleCardData) {
+  const chip   = TONE_CHIP[tone] ?? 'bg-white/[0.04] text-slate-300';
+  const accent = TONE_GLOW[tone] ?? 'shadow-blue-500/10';
+  const ring   = TONE_RING[tone] ?? 'group-hover:border-blue-500/30';
+
   return (
     <Link href={href}
-      className="group flex flex-col items-center gap-2 p-3 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-transparent hover:border-white/[0.10] transition-all
-                 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${TONE_CHIP[tone] ?? 'bg-white/[0.04] text-slate-300'}`}>
-        <Icon className="w-5 h-5" />
+      className={`group relative overflow-hidden rounded-2xl bg-white/[0.02] border border-white/[0.06] backdrop-blur-xl p-5
+                  hover:bg-white/[0.04] ${ring} transition-all
+                  shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_8px_24px_-12px_rgba(0,0,0,0.5)]
+                  hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_24px_48px_-12px_rgba(0,0,0,0.6),0_0_24px_-4px_var(--accent-glow)] ${accent}`}
+      style={{ '--accent-glow': TONE_HEX[tone] ?? '#3b82f6' } as React.CSSProperties}>
+
+      {/* accent strip — appears on hover */}
+      <div className={`absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-current to-transparent opacity-0 group-hover:opacity-40 transition-opacity ${TONE_FG_FULL[tone] ?? 'text-blue-300'}`} />
+
+      <div className="flex items-start justify-between mb-4">
+        <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${chip}
+                         shadow-[inset_0_1px_0_rgba(255,255,255,0.08),inset_0_-1px_0_rgba(0,0,0,0.2)]`}>
+          <Icon className="w-5 h-5" strokeWidth={1.75} />
+        </div>
+        {alert && (
+          <span className="relative flex w-2 h-2 mt-1">
+            <span className="absolute inset-0 rounded-full bg-rose-400 animate-ping opacity-75" />
+            <span className="relative w-2 h-2 rounded-full bg-rose-400" />
+          </span>
+        )}
       </div>
-      <span className="text-[10px] text-slate-400 group-hover:text-white text-center leading-tight font-medium">{label}</span>
+
+      <div className="text-[15px] font-semibold text-white tracking-tight mb-3 group-hover:text-white">
+        {label}
+      </div>
+
+      {stats.length > 0 ? (
+        <div className={`grid gap-3 ${stats.length === 3 ? 'grid-cols-3' : stats.length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          {stats.map(s => (
+            <div key={s.label}>
+              <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1 truncate">{s.label}</div>
+              <div className={`text-xl font-bold tabular-nums ${s.alert ? 'text-rose-300' : 'text-white'}`}>
+                {s.value}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex items-center text-[11px] text-slate-500 group-hover:text-slate-300 transition-colors">
+          Open module <ArrowUpRight className="w-3 h-3 ml-1" />
+        </div>
+      )}
     </Link>
   );
 }
@@ -436,6 +464,43 @@ const STROKE_FOR: Record<string, string> = {
   'text-rose-300':    '#fda4af',
   'text-blue-300':    '#93c5fd',
   'text-violet-300':  '#c4b5fd',
+};
+
+// Per-tone hover ring + glow for ModuleCard
+const TONE_RING: Record<string, string> = {
+  violet:  'group-hover:border-violet-500/30',
+  orange:  'group-hover:border-orange-500/30',
+  blue:    'group-hover:border-blue-500/30',
+  emerald: 'group-hover:border-emerald-500/30',
+  purple:  'group-hover:border-purple-500/30',
+  amber:   'group-hover:border-amber-500/30',
+  rose:    'group-hover:border-rose-500/30',
+  cyan:    'group-hover:border-cyan-500/30',
+  indigo:  'group-hover:border-indigo-500/30',
+  pink:    'group-hover:border-pink-500/30',
+  fuchsia: 'group-hover:border-fuchsia-500/30',
+  teal:    'group-hover:border-teal-500/30',
+};
+const TONE_GLOW: Record<string, string> = {
+  violet:  'hover:shadow-violet-500/10',  orange:  'hover:shadow-orange-500/10',
+  blue:    'hover:shadow-blue-500/10',    emerald: 'hover:shadow-emerald-500/10',
+  purple:  'hover:shadow-purple-500/10',  amber:   'hover:shadow-amber-500/10',
+  rose:    'hover:shadow-rose-500/10',    cyan:    'hover:shadow-cyan-500/10',
+  indigo:  'hover:shadow-indigo-500/10',  pink:    'hover:shadow-pink-500/10',
+  fuchsia: 'hover:shadow-fuchsia-500/10', teal:    'hover:shadow-teal-500/10',
+};
+const TONE_HEX: Record<string, string> = {
+  violet:  '#8b5cf6',  orange:  '#fb923c',  blue:    '#3b82f6',  emerald: '#10b981',
+  purple:  '#a855f7',  amber:   '#f59e0b',  rose:    '#f43f5e',  cyan:    '#06b6d4',
+  indigo:  '#6366f1',  pink:    '#ec4899',  fuchsia: '#d946ef',  teal:    '#14b8a6',
+};
+const TONE_FG_FULL: Record<string, string> = {
+  violet:  'text-violet-400',  orange:  'text-orange-400',
+  blue:    'text-blue-400',    emerald: 'text-emerald-400',
+  purple:  'text-purple-400',  amber:   'text-amber-400',
+  rose:    'text-rose-400',    cyan:    'text-cyan-400',
+  indigo:  'text-indigo-400',  pink:    'text-pink-400',
+  fuchsia: 'text-fuchsia-400', teal:    'text-teal-400',
 };
 
 interface AttentionItem { label: string; detail: string; icon: LucideIcon; href: string; tone: string; }
@@ -519,4 +584,114 @@ function buildPulseSpark(value: number, isPercent = false): number[] {
     out.push(Math.max(0, Math.min(max, seed * 0.85 + wave + drift)));
   }
   return out;
+}
+
+/** Build the rich module cards from live KPI data. */
+function buildModuleCards(k: PlatformKPIs | null): ModuleCardData[] {
+  return [
+    { id: 'agents', label: 'AI Agents', href: '/agents', icon: Bot, tone: 'violet',
+      stats: [{ label: 'Active', value: 10 }, { label: 'Approvals', value: '—' }, { label: 'Triage', value: 'live' }],
+    },
+    { id: 'fleet', label: 'Fleet', href: '/fleet', icon: CarFront, tone: 'orange',
+      alert: !!k && k.fleet.inMaintenance > 0,
+      stats: k ? [
+        { label: 'Total',       value: k.fleet.total },
+        { label: 'Available',   value: k.fleet.available },
+        { label: 'Utilisation', value: `${k.fleet.utilisationRate}%` },
+      ] : [],
+    },
+    { id: 'maintenance', label: 'Maintenance', href: '/maintenance', icon: Wrench, tone: 'blue',
+      alert: !!k && k.fleet.inMaintenance > 0,
+      stats: k ? [
+        { label: 'In service', value: k.fleet.inMaintenance, alert: k.fleet.inMaintenance > 0 },
+        { label: 'Available',  value: k.fleet.available },
+      ] : [],
+    },
+    { id: 'leasing', label: 'Vehicle Leasing', href: '/leasing', icon: FileText, tone: 'violet',
+      stats: [],
+    },
+    { id: 'rental', label: 'Rent-a-Car', href: '/rental', icon: Car, tone: 'emerald',
+      alert: !!k && (k.rac.pendingReturns > 0 || k.rac.openDamageClaims > 0),
+      stats: k ? [
+        { label: 'Active',      value: k.rac.activeAgreements },
+        { label: 'Returns due', value: k.rac.pendingReturns, alert: k.rac.pendingReturns > 0 },
+        { label: 'Available',   value: k.rac.availableFleet },
+      ] : [],
+    },
+    { id: 'bus-ops', label: 'Staff Transport', href: '/bus-ops', icon: Bus, tone: 'purple',
+      stats: k ? [
+        { label: 'In transit', value: k.staffTransport.inTransit },
+        { label: 'Routes',     value: k.staffTransport.activeRoutes },
+        { label: 'Trips today',value: k.staffTransport.todayTrips },
+      ] : [],
+    },
+    { id: 'school-bus', label: 'School Bus', href: '/school-bus', icon: School, tone: 'amber',
+      stats: k ? [
+        { label: 'Students',     value: k.schoolBus.students },
+        { label: 'Routes',       value: k.schoolBus.activeRoutes },
+        { label: 'Trips today',  value: k.schoolBus.todayTrips },
+      ] : [],
+    },
+    { id: 'logistics', label: 'Logistics', href: '/logistics', icon: Truck, tone: 'amber',
+      alert: !!k && k.logistics.pendingBookings > 5,
+      stats: k ? [
+        { label: 'Active trips', value: k.logistics.activeTrips },
+        { label: 'Delivered',    value: k.logistics.deliveredToday },
+        { label: 'Pending',      value: k.logistics.pendingBookings, alert: k.logistics.pendingBookings > 5 },
+      ] : [],
+    },
+    { id: 'incidents', label: 'Incident & Ambulance', href: '/incidents', icon: Siren, tone: 'rose',
+      alert: !!k && (k.incidents.escalated > 0 || k.incidents.critical > 0 || k.ambulance.activeCalls > 0),
+      stats: k ? [
+        { label: 'Open',       value: k.incidents.open,     alert: k.incidents.open > 0 },
+        { label: 'Escalated',  value: k.incidents.escalated, alert: k.incidents.escalated > 0 },
+        { label: 'Ambulances', value: k.ambulance.available },
+      ] : [],
+    },
+    { id: 'driver-mgmt', label: 'Drivers', href: '/driver-mgmt', icon: UserCog, tone: 'cyan',
+      stats: k ? [
+        { label: 'Total',  value: k.drivers.total },
+        { label: 'Active', value: k.drivers.active },
+      ] : [],
+    },
+    { id: 'customer-mgmt', label: 'Customers', href: '/customer-mgmt', icon: Building2, tone: 'cyan',
+      stats: [],
+    },
+    { id: 'booking-portal', label: 'Booking Portal', href: '/booking-portal', icon: Smartphone, tone: 'indigo',
+      stats: k ? [
+        { label: 'Today', value: k.logistics.todayBookings },
+        { label: 'Pending', value: k.logistics.pendingBookings, alert: k.logistics.pendingBookings > 5 },
+      ] : [],
+    },
+    { id: 'dispatch', label: 'Dispatch Control', href: '/dispatch', icon: Radio, tone: 'blue',
+      stats: k ? [
+        { label: 'Logistics', value: k.logistics.activeTrips },
+        { label: 'Staff',     value: k.staffTransport.inTransit },
+        { label: 'School',    value: k.schoolBus.todayTrips },
+      ] : [],
+    },
+    { id: 'finance', label: 'Finance & Billing', href: '/finance', icon: Banknote, tone: 'emerald',
+      alert: !!k && k.finance.overdueInvoices > 0,
+      stats: k ? [
+        { label: 'Revenue 30d', value: `AED ${formatCompact(k.finance.revenue30d)}` },
+        { label: 'Unpaid',      value: k.finance.unpaidInvoices },
+        { label: 'Overdue',     value: k.finance.overdueInvoices, alert: k.finance.overdueInvoices > 0 },
+      ] : [],
+    },
+    { id: 'compliance', label: 'Compliance', href: '/compliance', icon: Scale, tone: 'rose',
+      stats: [],
+    },
+    { id: 'mobile-apps', label: 'Mobile Apps', href: '/mobile-apps', icon: AppWindow, tone: 'pink',
+      stats: [],
+    },
+    { id: 'reports', label: 'Reports & Analytics', href: '/reports', icon: BarChart3, tone: 'fuchsia',
+      stats: [],
+    },
+    { id: 'sustainability', label: 'Sustainability & ESG', href: '/sustainability', icon: Leaf, tone: 'emerald',
+      stats: [],
+    },
+    { id: 'assets', label: 'Assets & Inventory', href: '/assets', icon: Package, tone: 'teal',
+      stats: [],
+    },
+  ];
 }
