@@ -1,6 +1,11 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import {
+  School, CheckCircle2, Map, Calendar, Activity, Wrench, UserCog, Users,
+  AlertTriangle, Bus, Siren,
+} from 'lucide-react';
+import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
 
 interface SchoolBusStats {
   totalVehicles: number;
@@ -19,31 +24,6 @@ interface SchoolBusStats {
     route_name: string | null;
     vehicle_plate: string | null;
   }>;
-}
-
-const TRIP_STATUS: Record<string, string> = {
-  SCHEDULED:  'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  DEPARTED:   'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  IN_TRANSIT: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-  COMPLETED:  'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  CANCELLED:  'bg-rose-500/20 text-rose-400 border-rose-500/30',
-};
-
-function StatCard({ icon, label, value, sub, color = 'text-white', href }: {
-  icon: string; label: string; value: number; sub?: string; color?: string; href?: string;
-}) {
-  const inner = (
-    <div className="bg-slate-900/60 border border-white/10 hover:border-white/20 rounded-2xl p-5 transition-all group">
-      <div className="flex items-start justify-between mb-3">
-        <span className="text-2xl">{icon}</span>
-        {href && <span className="text-slate-600 group-hover:text-slate-300 text-sm transition-colors">→</span>}
-      </div>
-      <div className={`text-3xl font-bold ${color}`}>{value}</div>
-      <div className="text-sm font-medium text-white mt-1">{label}</div>
-      {sub && <div className="text-xs text-slate-500 mt-0.5">{sub}</div>}
-    </div>
-  );
-  return href ? <Link href={href}>{inner}</Link> : inner;
 }
 
 export default function SchoolBusDashboard() {
@@ -66,129 +46,116 @@ export default function SchoolBusDashboard() {
   }, [load]);
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-white">School Bus Transportation</h1>
-          <p className="text-slate-400 mt-1">Student transport operations — routes, trips &amp; safety</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Live · {lastUpdated.toLocaleTimeString()}
-          </div>
-          <Link href="/school-bus/routes"
-            className="text-sm bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-semibold px-4 py-2 rounded-xl transition-colors">
-            Manage Routes
-          </Link>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="School Bus Transportation"
+        subtitle="Student transport operations — routes, trips & safety"
+        icon={School}
+        accent="amber"
+        actions={
+          <>
+            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Live · {lastUpdated.toLocaleTimeString()}
+            </span>
+            <Link href="/school-bus/routes"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition-all shadow-lg shadow-amber-500/30">
+              <Map className="w-4 h-4" /> Manage routes
+            </Link>
+          </>
+        }
+      />
 
       {loading ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[...Array(8)].map((_,i) => <div key={i} className="h-28 bg-slate-800/60 rounded-2xl animate-pulse"/>)}
         </div>
       ) : (
         <>
-          {/* KPI Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard icon="🚌" label="School Buses"       value={stats?.totalVehicles ?? 0}
-              sub="Total school bus fleet" href="/school-bus/routes" />
-            <StatCard icon="✅" label="Available"           value={stats?.availableVehicles ?? 0}
-              color="text-emerald-400" sub="Ready for trips" />
-            <StatCard icon="🗺️" label="Active Routes"      value={stats?.activeRoutes ?? 0}
-              color="text-blue-400" sub="School bus routes" href="/school-bus/routes" />
-            <StatCard icon="📅" label="Today's Trips"      value={stats?.todaySchedules ?? 0}
-              sub="Scheduled for today" />
-            <StatCard icon="🔄" label="In Transit"          value={stats?.inTransit ?? 0}
-              color={stats?.inTransit ?? 0 > 0 ? 'text-amber-400' : 'text-slate-400'}
-              sub="Currently on route" />
-            <StatCard icon="🔧" label="In Maintenance"     value={stats?.inMaintenance ?? 0}
-              color="text-orange-400" sub="Buses under service" />
-            <StatCard icon="👤" label="Drivers"             value={stats?.drivers ?? 0}
-              sub="School bus drivers" />
-            <StatCard icon="👧" label="Students"            value={0}
-              sub="Registered students" href="/school-bus/students" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <KpiCard label="School buses"     value={stats?.totalVehicles ?? 0}     sub="Total fleet"             icon={Bus}            accent="amber"   />
+            <KpiCard label="Available"        value={stats?.availableVehicles ?? 0} sub="Ready for trips"         icon={CheckCircle2}   accent="emerald" />
+            <KpiCard label="Active routes"    value={stats?.activeRoutes ?? 0}      sub="Bus routes"              icon={Map}            accent="cyan"    />
+            <KpiCard label="Today's trips"    value={stats?.todaySchedules ?? 0}    sub="Scheduled today"         icon={Calendar}       accent="default" />
+            <KpiCard label="In transit"       value={stats?.inTransit ?? 0}         sub="Currently on route"      icon={Activity}       accent={(stats?.inTransit ?? 0) > 0 ? 'amber' : 'slate'} />
+            <KpiCard label="In maintenance"   value={stats?.inMaintenance ?? 0}     sub="Buses under service"     icon={Wrench}         accent="rose"    />
+            <KpiCard label="Drivers"          value={stats?.drivers ?? 0}           sub="School bus drivers"      icon={UserCog}        accent="cyan"    />
+            <KpiCard label="Students"         value={0}                              sub="Registered students"     icon={Users}          accent="default" />
           </div>
 
-          {/* Safety notice */}
-          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-5 flex items-start gap-4">
-            <span className="text-3xl flex-shrink-0">⚠️</span>
+          <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 p-5 flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-5 h-5 text-amber-300" />
+            </div>
             <div>
-              <h3 className="text-yellow-300 font-semibold text-sm">Student Safety First</h3>
-              <p className="text-yellow-400/70 text-xs mt-1">
-                All school bus trips require driver check-in, vehicle safety inspection, and student attendance confirmation before departure.
-                Ensure all compliance documents are valid and GPS tracking is active.
+              <h3 className="text-amber-200 font-semibold text-sm">Student safety first</h3>
+              <p className="text-amber-100/70 text-xs mt-1 leading-relaxed">
+                All school bus trips require driver check-in, vehicle safety inspection, and
+                student attendance confirmation before departure. Ensure all compliance documents
+                are valid and GPS tracking is active.
               </p>
             </div>
           </div>
 
-          {/* Today's trips */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-white">Today&apos;s Schedule</h2>
-              <Link href="/bus-ops/schedules" className="text-sm text-yellow-400 hover:text-yellow-300 transition-colors">
-                Full schedule →
-              </Link>
-            </div>
+          <Panel title="Today's schedule" icon={Calendar} accent="amber"
+            actions={<Link href="/bus-ops/schedules" className="text-sm text-amber-300 hover:text-amber-200">Full schedule →</Link>}>
             {stats?.todayTrips && stats.todayTrips.length > 0 ? (
-              <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-white/10 text-slate-400 text-xs uppercase tracking-wider">
-                      <th className="text-left px-5 py-3">Trip No.</th>
-                      <th className="text-left px-5 py-3">Route</th>
-                      <th className="text-left px-5 py-3">Status</th>
-                      <th className="text-left px-5 py-3">Departure</th>
-                      <th className="text-left px-5 py-3">Arrival</th>
-                      <th className="text-left px-5 py-3">Vehicle</th>
+                    <tr className="border-b border-white/10 text-slate-500 text-[11px] uppercase tracking-wider">
+                      <th className="text-left py-2 font-medium">Trip</th>
+                      <th className="text-left py-2 font-medium">Route</th>
+                      <th className="text-left py-2 font-medium">Status</th>
+                      <th className="text-left py-2 font-medium">Departure</th>
+                      <th className="text-left py-2 font-medium">Arrival</th>
+                      <th className="text-left py-2 font-medium">Vehicle</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-white/5">
                     {stats.todayTrips.map(trip => (
-                      <tr key={trip.id} className="border-b border-white/5 last:border-0 hover:bg-slate-800/40 transition-colors">
-                        <td className="px-5 py-3 font-mono text-xs text-white">{trip.trip_no ?? trip.id.slice(0,8)}</td>
-                        <td className="px-5 py-3 text-slate-300">{trip.route_name ?? '—'}</td>
-                        <td className="px-5 py-3">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${TRIP_STATUS[trip.status] ?? TRIP_STATUS.SCHEDULED}`}>
-                            {trip.status}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3 text-slate-400 text-xs">
+                      <tr key={trip.id} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="py-3 font-mono text-xs text-white">{trip.trip_no ?? trip.id.slice(0,8)}</td>
+                        <td className="py-3 text-slate-300">{trip.route_name ?? '—'}</td>
+                        <td className="py-3"><StatusPill status={trip.status} /></td>
+                        <td className="py-3 text-slate-400 text-xs">
                           {trip.departure_time ? new Date(trip.departure_time).toLocaleTimeString('en-AE', { hour:'2-digit', minute:'2-digit' }) : '—'}
                         </td>
-                        <td className="px-5 py-3 text-slate-400 text-xs">
+                        <td className="py-3 text-slate-400 text-xs">
                           {trip.arrival_time ? new Date(trip.arrival_time).toLocaleTimeString('en-AE', { hour:'2-digit', minute:'2-digit' }) : '—'}
                         </td>
-                        <td className="px-5 py-3 text-slate-300 text-xs">{trip.vehicle_plate ?? '—'}</td>
+                        <td className="py-3 text-slate-300 text-xs">{trip.vehicle_plate ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             ) : (
-              <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-12 text-center">
-                <div className="text-4xl mb-3">📅</div>
+              <div className="text-center py-8">
+                <Calendar className="w-10 h-10 text-slate-600 mx-auto mb-2" />
                 <p className="text-slate-400 text-sm">No trips scheduled for today</p>
               </div>
             )}
-          </div>
+          </Panel>
 
-          {/* Quick links */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {[
-              { href: '/school-bus/routes',   icon: '🗺️', label: 'Route Management',    desc: 'Manage school bus routes and stops' },
-              { href: '/school-bus/students', icon: '👧', label: 'Student Registry',     desc: 'Student enrollment and bus assignment' },
-              { href: '/bus-ops/incidents',   icon: '🚨', label: 'Safety & Incidents',   desc: 'Report and track safety incidents' },
-            ].map(link => (
-              <Link key={link.href} href={link.href}
-                className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 hover:border-yellow-500/30 hover:bg-yellow-500/5 transition-all group">
-                <div className="text-3xl mb-3">{link.icon}</div>
-                <h3 className="text-sm font-semibold text-white group-hover:text-yellow-300 transition-colors">{link.label}</h3>
-                <p className="text-xs text-slate-500 mt-1">{link.desc}</p>
-              </Link>
-            ))}
+              { href: '/school-bus/routes',   icon: Map,   label: 'Route management', desc: 'Manage school bus routes and stops' },
+              { href: '/school-bus/students', icon: Users, label: 'Student registry', desc: 'Student enrolment and bus assignment' },
+              { href: '/bus-ops/incidents',   icon: Siren, label: 'Safety & incidents', desc: 'Report and track safety incidents' },
+            ].map(link => {
+              const Icon = link.icon;
+              return (
+                <Link key={link.href} href={link.href}
+                  className="rounded-2xl bg-slate-900/60 border border-white/10 hover:border-amber-500/30 hover:bg-amber-500/5 transition-all p-5 group block">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center mb-3">
+                    <Icon className="w-5 h-5 text-amber-300" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-white group-hover:text-amber-300 transition-colors">{link.label}</h3>
+                  <p className="text-xs text-slate-500 mt-1">{link.desc}</p>
+                </Link>
+              );
+            })}
           </div>
         </>
       )}
