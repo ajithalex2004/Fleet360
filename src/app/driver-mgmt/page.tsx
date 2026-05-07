@@ -1,6 +1,11 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import {
+  UserCog, Users, CheckCircle2, Clock, AlertOctagon, Activity, RefreshCw, Plus,
+  IdCard, Calendar, BarChart3, FileWarning, Check, X, Minus, AlertTriangle,
+} from 'lucide-react';
+import { PageHeader, KpiCard, Panel } from '@/components/ui/page-theme';
 
 interface ComplianceSummary {
   total: number;
@@ -35,20 +40,6 @@ interface ComplianceData {
   issues: ComplianceIssue[];
 }
 
-const alertColors: Record<string, string> = {
-  critical:   'bg-red-500/20 text-red-400 border border-red-500/30',
-  warning:    'bg-amber-500/20 text-amber-400 border border-amber-500/30',
-  incomplete: 'bg-slate-500/20 text-slate-400 border border-slate-500/30',
-  ok:         'bg-green-500/20 text-green-400 border border-green-500/30',
-};
-
-const docStatus: Record<string, { icon: string; cls: string }> = {
-  valid:         { icon: '✓', cls: 'text-green-400' },
-  expiring_soon: { icon: '⚠', cls: 'text-amber-400' },
-  expired:       { icon: '✗', cls: 'text-red-400' },
-  missing:       { icon: '—', cls: 'text-slate-500' },
-};
-
 function fmtDate(s: string | null) {
   if (!s) return '—';
   const d = new Date(s);
@@ -59,29 +50,34 @@ function fmtDate(s: string | null) {
   return label;
 }
 
+function DocCell({ status, date }: { status: string; date: string | null }) {
+  const map = {
+    valid:         { Icon: Check,    cls: 'text-emerald-400' },
+    expiring_soon: { Icon: AlertTriangle, cls: 'text-amber-400' },
+    expired:       { Icon: X,        cls: 'text-rose-400' },
+    missing:       { Icon: Minus,    cls: 'text-slate-500' },
+  } as const;
+  const { Icon, cls } = map[status as keyof typeof map] ?? map.missing;
+  return (
+    <td className="py-3 align-top">
+      <Icon className={`w-4 h-4 ${cls}`} />
+      {date && <div className="text-[11px] text-slate-500 mt-1">{fmtDate(date)}</div>}
+    </td>
+  );
+}
+
 export default function DriverDashboard() {
   const [data, setData] = useState<ComplianceData | null>(null);
-  const [drivers, setDrivers] = useState<{ total: number; active: number }>({ total: 0, active: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
-      const [compRes, driversRes] = await Promise.all([
-        fetch('/api/drivers/compliance'),
-        fetch('/api/drivers?limit=1'),
-      ]);
-      const compData    = await compRes.json();
-      const driversData = await driversRes.json();
-      setData(compData);
-      // driversRes might be array or {data, total}
-      const arr = Array.isArray(driversData) ? driversData : (driversData.data ?? []);
-      setDrivers({
-        total:  compData.summary.total,
-        active: compData.summary.ok + compData.summary.warning,
-      });
-    } catch (e) {
+      const res = await fetch('/api/drivers/compliance');
+      const d = await res.json();
+      setData(d);
+    } catch {
       setError('Failed to load driver compliance data');
     } finally {
       setLoading(false);
@@ -89,24 +85,6 @@ export default function DriverDashboard() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-10 h-10 border-4 border-slate-700 border-t-cyan-500 rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-6 text-red-400">
-        <p className="font-semibold">Failed to load</p>
-        <p className="text-sm mt-1">{error}</p>
-        <button onClick={load} className="mt-3 px-4 py-2 bg-red-500/20 rounded-xl text-sm hover:bg-red-500/30">Retry</button>
-      </div>
-    );
-  }
 
   const s = data?.summary ?? { total: 0, ok: 0, warning: 0, critical: 0, incomplete: 0 };
   const issues = data?.issues ?? [];
@@ -119,191 +97,159 @@ export default function DriverDashboard() {
   const incPct  = s.total > 0 ? Math.round((s.incomplete / s.total) * 100) : 0;
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Driver Management Hub</h1>
-          <p className="text-slate-400 mt-1">Central driver registry — compliance, identity &amp; assignments</p>
-        </div>
-        <div className="flex gap-3">
-          <button onClick={load} className="px-4 py-2 text-sm bg-slate-800 border border-white/10 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors">
-            ↻ Refresh
-          </button>
-          <Link href="/driver-mgmt/profiles" className="px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-teal-500 text-white rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity">
-            + Add Driver
-          </Link>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Driver Management Hub"
+        subtitle="Central driver registry — compliance, identity & assignments"
+        icon={UserCog}
+        accent="cyan"
+        actions={
+          <>
+            <button onClick={load} className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 border border-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 transition-colors">
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
+            </button>
+            <Link href="/driver-mgmt/profiles"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-500 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition-all shadow-lg shadow-cyan-500/30">
+              <Plus className="w-4 h-4" /> Add driver
+            </Link>
+          </>
+        }
+      />
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Drivers',   value: s.total,      icon: '👥', color: 'text-white',       bg: 'from-slate-700/50 to-slate-800/50',   border: 'border-white/10' },
-          { label: 'Compliant (OK)',  value: s.ok,         icon: '✅', color: 'text-green-400',   bg: 'from-green-500/10 to-emerald-500/10', border: 'border-green-500/20' },
-          { label: 'Expiring Soon',   value: s.warning,    icon: '⚠️', color: 'text-amber-400',   bg: 'from-amber-500/10 to-yellow-500/10', border: 'border-amber-500/20' },
-          { label: 'Critical / Expired', value: s.critical + s.incomplete, icon: '🚨', color: 'text-red-400', bg: 'from-red-500/10 to-rose-500/10', border: 'border-red-500/20' },
-        ].map(card => (
-          <div key={card.label} className={`bg-gradient-to-br ${card.bg} border ${card.border} rounded-2xl p-6`}>
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-slate-400 text-sm font-medium">{card.label}</p>
-              <span className="text-2xl">{card.icon}</span>
-            </div>
-            <p className={`text-4xl font-bold ${card.color}`}>{card.value}</p>
+      {error ? (
+        <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-rose-300 flex items-center justify-between">
+          <div>
+            <p className="font-semibold">Failed to load</p>
+            <p className="text-sm mt-1">{error}</p>
           </div>
-        ))}
-      </div>
-
-      {/* Compliance Health Bar */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">Fleet Compliance Health</h2>
-          <span className="text-sm text-slate-400">{s.total} drivers</span>
+          <button onClick={load} className="px-4 py-2 bg-rose-500/20 rounded-xl text-sm hover:bg-rose-500/30">Retry</button>
         </div>
-        <div className="h-3 rounded-full overflow-hidden flex bg-slate-700">
-          <div className="bg-green-500 h-full transition-all" style={{ width: `${okPct}%` }} title={`OK: ${s.ok}`} />
-          <div className="bg-amber-500 h-full transition-all" style={{ width: `${warnPct}%` }} title={`Warning: ${s.warning}`} />
-          <div className="bg-red-500 h-full transition-all" style={{ width: `${critPct}%` }} title={`Critical: ${s.critical}`} />
-          <div className="bg-slate-600 h-full transition-all" style={{ width: `${incPct}%` }} title={`Incomplete: ${s.incomplete}`} />
+      ) : loading ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[...Array(4)].map((_,i) => <div key={i} className="h-28 bg-slate-800/60 rounded-2xl animate-pulse"/>)}
         </div>
-        <div className="flex items-center gap-6 mt-3 text-xs text-slate-400 flex-wrap">
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> OK ({okPct}%)</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-amber-500 inline-block" /> Expiring soon ({warnPct}%)</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-500 inline-block" /> Critical ({critPct}%)</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-slate-600 inline-block" /> Incomplete ({incPct}%)</span>
-        </div>
-      </div>
-
-      {/* Issue Tables */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-
-        {/* Critical Issues */}
-        <div className="bg-slate-800/50 border border-red-500/20 rounded-2xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-white">🚨 Critical / Expired</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Expired documents — immediate action required</p>
-            </div>
-            <span className="text-sm font-bold text-red-400 bg-red-500/10 px-3 py-1 rounded-full border border-red-500/20">{s.critical}</span>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <KpiCard label="Total drivers"         value={s.total}                  icon={Users}        accent="default" />
+            <KpiCard label="Compliant (OK)"        value={s.ok}                     icon={CheckCircle2} accent="emerald" />
+            <KpiCard label="Expiring soon"         value={s.warning}                icon={Clock}        accent="amber"   />
+            <KpiCard label="Critical / Expired"    value={s.critical + s.incomplete} icon={AlertOctagon} accent={s.critical + s.incomplete > 0 ? 'rose' : 'slate'} />
           </div>
-          <div className="overflow-x-auto">
-            {criticalIssues.length === 0 ? (
-              <div className="flex flex-col items-center py-10 text-slate-500">
-                <span className="text-3xl mb-2">✅</span>
-                <p className="text-sm">No critical issues</p>
-              </div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-slate-800/60">
-                  <tr>
-                    {['Driver', 'License', 'Emirates ID', 'Passport', 'Visa'].map(h => (
-                      <th key={h} className="px-4 py-2 text-left text-xs text-slate-500 uppercase">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {criticalIssues.slice(0, 10).map(d => (
-                    <tr key={d.id} className="hover:bg-white/5 transition-colors">
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-white">{d.name}</div>
-                        <div className="text-xs text-slate-500 font-mono">{d.licenseNumber}</div>
-                      </td>
-                      {([
-                        { status: d.compliance.license,    date: d.licenseExpiry },
-                        { status: d.compliance.emiratesId, date: d.emiratesIdExpiry },
-                        { status: d.compliance.passport,   date: d.passportExpiry },
-                        { status: d.compliance.visa,       date: d.visaExpiry },
-                      ] as Array<{ status: string; date: string | null }>).map((doc, i) => {
-                        const s = docStatus[doc.status] ?? docStatus.missing;
-                        return (
-                          <td key={i} className="px-4 py-3">
-                            <span className={`font-bold text-base ${s.cls}`}>{s.icon}</span>
-                            {doc.date && (
-                              <div className="text-xs text-slate-500 mt-0.5">{fmtDate(doc.date)}</div>
-                            )}
+
+          <Panel title="Fleet compliance health" icon={Activity} accent="cyan"
+            actions={<span className="text-xs text-slate-400">{s.total} drivers</span>}>
+            <div className="h-2.5 rounded-full overflow-hidden flex bg-slate-800">
+              <div className="bg-emerald-500 h-full transition-all" style={{ width: `${okPct}%` }}    title={`OK: ${s.ok}`} />
+              <div className="bg-amber-500   h-full transition-all" style={{ width: `${warnPct}%` }}  title={`Warning: ${s.warning}`} />
+              <div className="bg-rose-500    h-full transition-all" style={{ width: `${critPct}%` }}  title={`Critical: ${s.critical}`} />
+              <div className="bg-slate-600   h-full transition-all" style={{ width: `${incPct}%` }}   title={`Incomplete: ${s.incomplete}`} />
+            </div>
+            <div className="flex items-center gap-5 mt-3 text-[11px] text-slate-400 flex-wrap">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" /> OK ({okPct}%)</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500" /> Expiring ({warnPct}%)</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-rose-500" /> Critical ({critPct}%)</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-600" /> Incomplete ({incPct}%)</span>
+            </div>
+          </Panel>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <Panel title="Critical / expired" subtitle="Expired documents — immediate action required" icon={AlertOctagon} accent="rose"
+              actions={<span className="text-xs font-bold text-rose-300 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/30">{s.critical}</span>}>
+              {criticalIssues.length === 0 ? (
+                <div className="text-center py-8">
+                  <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
+                  <p className="text-slate-400 text-sm">No critical issues</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10 text-slate-500 text-[11px] uppercase tracking-wider">
+                        <th className="text-left py-2 font-medium">Driver</th>
+                        <th className="text-left py-2 font-medium">License</th>
+                        <th className="text-left py-2 font-medium">Emirates ID</th>
+                        <th className="text-left py-2 font-medium">Passport</th>
+                        <th className="text-left py-2 font-medium">Visa</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {criticalIssues.slice(0, 10).map(d => (
+                        <tr key={d.id} className="hover:bg-white/[0.02]">
+                          <td className="py-3 align-top">
+                            <div className="font-medium text-white">{d.name}</div>
+                            <div className="text-[11px] text-slate-500 font-mono">{d.licenseNumber}</div>
                           </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
+                          <DocCell status={d.compliance.license}    date={d.licenseExpiry} />
+                          <DocCell status={d.compliance.emiratesId} date={d.emiratesIdExpiry} />
+                          <DocCell status={d.compliance.passport}   date={d.passportExpiry} />
+                          <DocCell status={d.compliance.visa}       date={d.visaExpiry} />
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Panel>
 
-        {/* Warning Issues */}
-        <div className="bg-slate-800/50 border border-amber-500/20 rounded-2xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-white">⚠️ Expiring in 30 Days</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Schedule renewals before expiry</p>
-            </div>
-            <span className="text-sm font-bold text-amber-400 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20">{s.warning}</span>
-          </div>
-          <div className="overflow-x-auto">
-            {warningIssues.length === 0 ? (
-              <div className="flex flex-col items-center py-10 text-slate-500">
-                <span className="text-3xl mb-2">✅</span>
-                <p className="text-sm">No expiring documents</p>
-              </div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-slate-800/60">
-                  <tr>
-                    {['Driver', 'License', 'Emirates ID', 'Passport', 'Visa'].map(h => (
-                      <th key={h} className="px-4 py-2 text-left text-xs text-slate-500 uppercase">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {warningIssues.slice(0, 10).map(d => (
-                    <tr key={d.id} className="hover:bg-white/5 transition-colors">
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-white">{d.name}</div>
-                        <div className="text-xs text-slate-500 font-mono">{d.licenseNumber}</div>
-                      </td>
-                      {([
-                        { status: d.compliance.license,    date: d.licenseExpiry },
-                        { status: d.compliance.emiratesId, date: d.emiratesIdExpiry },
-                        { status: d.compliance.passport,   date: d.passportExpiry },
-                        { status: d.compliance.visa,       date: d.visaExpiry },
-                      ] as Array<{ status: string; date: string | null }>).map((doc, i) => {
-                        const s = docStatus[doc.status] ?? docStatus.missing;
-                        return (
-                          <td key={i} className="px-4 py-3">
-                            <span className={`font-bold text-base ${s.cls}`}>{s.icon}</span>
-                            {doc.date && (
-                              <div className="text-xs text-slate-500 mt-0.5">{fmtDate(doc.date)}</div>
-                            )}
+            <Panel title="Expiring in 30 days" subtitle="Schedule renewals before expiry" icon={Clock} accent="amber"
+              actions={<span className="text-xs font-bold text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/30">{s.warning}</span>}>
+              {warningIssues.length === 0 ? (
+                <div className="text-center py-8">
+                  <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
+                  <p className="text-slate-400 text-sm">No expiring documents</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10 text-slate-500 text-[11px] uppercase tracking-wider">
+                        <th className="text-left py-2 font-medium">Driver</th>
+                        <th className="text-left py-2 font-medium">License</th>
+                        <th className="text-left py-2 font-medium">Emirates ID</th>
+                        <th className="text-left py-2 font-medium">Passport</th>
+                        <th className="text-left py-2 font-medium">Visa</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {warningIssues.slice(0, 10).map(d => (
+                        <tr key={d.id} className="hover:bg-white/[0.02]">
+                          <td className="py-3 align-top">
+                            <div className="font-medium text-white">{d.name}</div>
+                            <div className="text-[11px] text-slate-500 font-mono">{d.licenseNumber}</div>
                           </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                          <DocCell status={d.compliance.license}    date={d.licenseExpiry} />
+                          <DocCell status={d.compliance.emiratesId} date={d.emiratesIdExpiry} />
+                          <DocCell status={d.compliance.passport}   date={d.passportExpiry} />
+                          <DocCell status={d.compliance.visa}       date={d.visaExpiry} />
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Panel>
           </div>
-        </div>
-      </div>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'All Drivers',         href: '/driver-mgmt/profiles', icon: '👥', desc: 'View & manage driver records' },
-          { label: 'Expiring Documents',  href: '/driver-mgmt/profiles?expiring=true', icon: '📋', desc: 'Filter drivers with issues' },
-          { label: 'Shifts & Schedules',  href: '/driver-mgmt/shifts', icon: '🗓', desc: 'Manage driver shifts' },
-          { label: 'Performance',         href: '/driver-mgmt/performance', icon: '📈', desc: 'Driver performance metrics' },
-        ].map(a => (
-          <Link key={a.href} href={a.href}
-            className="bg-slate-800/40 border border-white/10 rounded-2xl p-5 hover:border-cyan-500/30 hover:bg-slate-700/40 transition-all group">
-            <span className="text-3xl block mb-3">{a.icon}</span>
-            <p className="text-white font-semibold text-sm group-hover:text-cyan-400 transition-colors">{a.label}</p>
-            <p className="text-slate-500 text-xs mt-1">{a.desc}</p>
-          </Link>
-        ))}
-      </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              { label: 'All drivers',          href: '/driver-mgmt/profiles',                Icon: Users,       desc: 'View & manage driver records' },
+              { label: 'Expiring documents',   href: '/driver-mgmt/profiles?expiring=true',  Icon: FileWarning, desc: 'Filter drivers with issues' },
+              { label: 'Shifts & schedules',   href: '/driver-mgmt/shifts',                  Icon: Calendar,    desc: 'Manage driver shifts' },
+              { label: 'Performance',          href: '/driver-mgmt/performance',             Icon: BarChart3,   desc: 'Driver performance metrics' },
+            ].map(a => (
+              <Link key={a.href} href={a.href}
+                className="rounded-2xl bg-slate-900/60 border border-white/10 hover:border-cyan-500/30 hover:bg-cyan-500/5 transition-all p-5 group block">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center mb-3">
+                  <a.Icon className="w-5 h-5 text-cyan-300" />
+                </div>
+                <p className="text-white font-semibold text-sm group-hover:text-cyan-300 transition-colors">{a.label}</p>
+                <p className="text-slate-500 text-xs mt-1">{a.desc}</p>
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

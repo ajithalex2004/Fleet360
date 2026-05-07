@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { Building2, Plus } from 'lucide-react';
+import { PageHeader } from '@/components/ui/page-theme';
 
 //  Types 
 interface HNode { id: string; name: string; code?: string; level: string; }
@@ -201,17 +203,18 @@ export default function CustomerPage() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Customer Management</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Manage customers with Region &rarr; Department &rarr; Unit hierarchy</p>
-        </div>
-        <button onClick={openNew}
-          className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-medium hover:opacity-90 text-sm">
-          + New Customer
-        </button>
-      </div>
+      <PageHeader
+        title="Customer Management"
+        subtitle="Manage customers with Region → Department → Unit hierarchy"
+        icon={Building2}
+        accent="cyan"
+        actions={
+          <button onClick={openNew}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition-all shadow-lg shadow-cyan-500/30">
+            <Plus className="w-4 h-4" /> New customer
+          </button>
+        }
+      />
 
       {/* Stats */}
       <div>
