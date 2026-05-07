@@ -23,7 +23,7 @@ import {
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 const C = {
-  bg:           '#08152e',  // very deep, almost black-navy
+  bg:           '#0c1a3e',  // deep navy — royal / maritime
   surface:      'rgba(255,255,255,0.03)',
   border:       'rgba(255,255,255,0.08)',
 
