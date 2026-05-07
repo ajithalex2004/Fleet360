@@ -208,7 +208,7 @@ export default function CounterPage() {
   /* ── RENDER ──────────────────────────────────────────────────────── */
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-[#0c1a3e] text-white">
       {/* Top app bar */}
       <header className="sticky top-0 z-10 bg-gradient-to-r from-teal-700 to-cyan-700 px-4 py-3 shadow-lg flex items-center justify-between">
         <div>

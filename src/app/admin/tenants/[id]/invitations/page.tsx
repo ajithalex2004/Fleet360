@@ -134,11 +134,8 @@ export default function TenantInvitationsPage() {
 
   return (
     <div className="space-y-8 max-w-5xl">
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <Link href="/admin/tenants" className="text-xs text-slate-400 hover:text-white inline-flex items-center gap-1 mb-2">
-            <ArrowLeft className="w-3 h-3" /> Back to tenants
-          </Link>
           <h1 className="text-2xl font-bold text-white inline-flex items-center gap-2">
             <Mail className="w-5 h-5 text-blue-400" /> Invitations
           </h1>
@@ -146,6 +143,10 @@ export default function TenantInvitationsPage() {
             {tenantName ? <>For <strong className="text-white">{tenantName}</strong></> : null}
           </p>
         </div>
+        <Link href="/admin/tenants"
+          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-slate-800 border border-white/10 hover:border-white/20 hover:bg-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:text-white transition-colors">
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to Tenants
+        </Link>
       </div>
 
       {error && (

@@ -16,7 +16,7 @@ export default function PassengerLayout({ children }: { children: React.ReactNod
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col">
+    <div className="min-h-screen bg-[#0c1a3e] text-white flex flex-col">
       <header className="sticky top-0 z-10 bg-gradient-to-r from-cyan-700 to-sky-700 px-4 py-3 shadow-lg">
         <div className="flex items-center justify-between">
           <div>

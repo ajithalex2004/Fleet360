@@ -92,7 +92,7 @@ export default function PlatformV2() {
   }, [search, moduleCards]);
 
   return (
-    <div className="relative min-h-screen bg-[#06070d] text-white overflow-hidden">
+    <div className="relative min-h-screen bg-[#0c1a3e] text-white overflow-hidden">
       {/* ── Animated gradient mesh background ───────────────────────────── */}
       <BackgroundMesh />
 

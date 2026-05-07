@@ -288,7 +288,7 @@ export default function PlatformPage() {
   ].filter(a => a.count > 0) : [];
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
+    <div className="min-h-screen bg-[#0c1a3e] text-white">
       {/* Top nav */}
       <nav className="border-b border-white/10 bg-slate-900/95 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">

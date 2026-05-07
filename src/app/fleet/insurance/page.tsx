@@ -189,7 +189,7 @@ export default function InsurancePage() {
   const labelCls = 'block text-xs text-slate-400 mb-1';
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white p-6">
+    <div className="min-h-screen bg-[#0c1a3e] text-white p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>

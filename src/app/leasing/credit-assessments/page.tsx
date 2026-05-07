@@ -152,7 +152,7 @@ export default function CreditAssessmentsPage() {
   const totalExposure = assessments.reduce((sum, a) => sum + a.currentExposure, 0);
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 p-6">
+    <div className="min-h-screen bg-[#0c1a3e] text-slate-100 p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold">Credit Assessments</h1>

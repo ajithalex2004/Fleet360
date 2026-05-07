@@ -232,7 +232,7 @@ export default function SustainabilityPage() {
   const sc   = data?.scope;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-6 space-y-6">
+    <div className="min-h-screen bg-[#0c1a3e] text-white p-6 space-y-6">
 
       <PageHeader
         title="Sustainability & ESG Dashboard"
