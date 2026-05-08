@@ -8,12 +8,12 @@
 
 import { useMemo } from 'react';
 import { useRuleTab } from './use-rule-tab';
-import { Field, NumberInput, Toggle, SaveBar, Section } from './shared';
+import { Field, NumberInput, Toggle, SaveBar, Section, type RuleTabProps } from './shared';
 import { DEFAULT_EPOD_RULES, type EpodRules } from '@/types/service-rules';
 
-export function EpodTab({ typeId }: { typeId: string }) {
-  const { rules, patch, loading, saving, savedMsg, error, configured, save, reload } =
-    useRuleTab<EpodRules>(typeId, 'epod', DEFAULT_EPOD_RULES);
+export function EpodTab({ typeId, scopeId, scopeLookup }: RuleTabProps) {
+  const { rules, patch, loading, saving, savedMsg, error, configured, ownedScope, save, reload } =
+    useRuleTab<EpodRules>(typeId, 'epod', DEFAULT_EPOD_RULES, scopeId);
 
   const dirty = useMemo(() => JSON.stringify(rules) !== JSON.stringify(DEFAULT_EPOD_RULES) || configured, [rules, configured]);
 
@@ -49,7 +49,8 @@ export function EpodTab({ typeId }: { typeId: string }) {
 
       <SaveBar configured={configured} dirty={dirty} saving={saving} error={error} savedMsg={savedMsg}
         onSave={save} onReset={reload}
-        typeId={typeId} category="epod" onRolledBack={reload} />
+        typeId={typeId} category="epod" scopeId={scopeId} ownedScope={ownedScope}
+        scopeLookup={scopeLookup} onRolledBack={reload} />
     </div>
   );
 }

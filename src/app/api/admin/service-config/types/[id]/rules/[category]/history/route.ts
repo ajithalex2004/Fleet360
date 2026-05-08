@@ -16,6 +16,7 @@ import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth'
 import {
   loadRulesHistory, rollbackToVersion,
 } from '@/lib/service-config/rules-schema';
+import { ensureRootScope, getScope } from '@/lib/service-config/scopes-schema';
 import { RULE_CATEGORIES, type RuleCategory } from '@/types/service-rules';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -37,6 +38,12 @@ function isValidCategory(c: string): c is RuleCategory {
   return (RULE_CATEGORIES as readonly string[]).includes(c);
 }
 
+async function resolveScopeId(tenantId: string, requested: string | null): Promise<string | null> {
+  if (!requested) return await ensureRootScope(tenantId);
+  const scope = await getScope(tenantId, requested);
+  return scope?.id ?? null;
+}
+
 export async function GET(req: NextRequest, { params }: RouteParams) {
   const auth = authorizeServiceConfig(req);
   if (!auth.ok) return auth.res;
@@ -47,9 +54,11 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   if (!(await ownsType(auth.tenantId, id)).ok) {
     return NextResponse.json({ ok: false, error: 'Service type not found' }, { status: 404 });
   }
+  const scopeId = await resolveScopeId(auth.tenantId, req.nextUrl.searchParams.get('scopeId'));
+  if (!scopeId) return NextResponse.json({ ok: false, error: 'Scope not found' }, { status: 404 });
 
-  const versions = await loadRulesHistory(id, category, 50);
-  return NextResponse.json({ ok: true, versions });
+  const versions = await loadRulesHistory(id, category, scopeId, 50);
+  return NextResponse.json({ ok: true, versions, scopeId });
 }
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
@@ -64,19 +73,22 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const owner = await ownsType(auth.tenantId, id);
   if (!owner.ok) return NextResponse.json({ ok: false, error: 'Service type not found' }, { status: 404 });
 
+  const scopeId = await resolveScopeId(auth.tenantId, req.nextUrl.searchParams.get('scopeId'));
+  if (!scopeId) return NextResponse.json({ ok: false, error: 'Scope not found' }, { status: 404 });
+
   let body: { versionId?: string };
   try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
   if (!body.versionId) return NextResponse.json({ ok: false, error: 'versionId is required' }, { status: 400 });
 
   try {
-    const result = await rollbackToVersion(id, category, body.versionId, auth.userId);
+    const result = await rollbackToVersion(id, category, scopeId, body.versionId, auth.userId);
     if (!result.ok) return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
 
     void logAudit({
       tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
       entityType: 'ServiceRules', entityId: id, entityName: `${owner.key}:${category}`,
       action: 'UPDATE',
-      details: `Rolled back ${category} rules for ${owner.key} to version ${body.versionId.slice(0, 8)}`,
+      details: `Rolled back ${category} rules for ${owner.key} (scope ${scopeId.slice(0, 8)}) to version ${body.versionId.slice(0, 8)}`,
     });
 
     return NextResponse.json({ ok: true, rules: result.rules });

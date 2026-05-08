@@ -23,9 +23,10 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import {
-  LINKED_MODULES, LINKED_MODULE_LABEL, SERVICE_TONES,
+  LINKED_MODULES, LINKED_MODULE_LABEL, SERVICE_TONES, SCOPE_LEVELS, SCOPE_LEVEL_LABEL,
   type LinkedModule, type ServiceCategoryWithTypes, type ServiceType,
   type ServiceModuleMapping, type ServiceTone, type DefaultPriority,
+  type ServiceScope, type ScopeLevel,
 } from '@/types/service-config';
 import { SlaTab }        from './tabs/sla-tab';
 import { ApprovalTab }   from './tabs/approval-tab';
@@ -76,6 +77,30 @@ export default function ServiceConfigPage() {
   const [showNewCat, setShowNewCat]           = useState(false);
   const [showNewType, setShowNewType]         = useState<string | null>(null); // categoryId
 
+  // Phase 2E — scope state. scopes is the full list for this tenant;
+  // activeScopeId is the scope currently being edited (root by default).
+  // scopeLookup is fed into each tab so the inheritance chip can render
+  // "Inherited from {scopeName}" without an extra fetch.
+  const [scopes, setScopes]                   = useState<ServiceScope[]>([]);
+  const [activeScopeId, setActiveScopeId]     = useState<string | null>(null);
+  const [showNewScope, setShowNewScope]       = useState(false);
+
+  const scopeLookup = useMemo(() => {
+    const out: Record<string, { name: string; isRoot: boolean }> = {};
+    for (const s of scopes) out[s.id] = { name: s.name, isRoot: s.isRoot };
+    return out;
+  }, [scopes]);
+
+  const loadScopes = useCallback(async () => {
+    const res = await fetch('/api/admin/service-config/scopes');
+    const data = await res.json();
+    if (!res.ok) return;
+    const list: ServiceScope[] = data.scopes ?? [];
+    setScopes(list);
+    // Default active scope to the root if not picked yet.
+    setActiveScopeId(prev => prev ?? list.find(s => s.isRoot)?.id ?? null);
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
@@ -92,12 +117,13 @@ export default function ServiceConfigPage() {
         const firstType = cats.flatMap(c => c.types)[0];
         if (firstType) setSelectedTypeId(firstType.id);
       }
+      await loadScopes();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
       setLoading(false);
     }
-  }, [selectedTypeId]);
+  }, [selectedTypeId, loadScopes]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -242,6 +268,16 @@ export default function ServiceConfigPage() {
                 </div>
               </div>
 
+              {/* Scope picker — Phase 2E. Editing a non-root scope creates
+                  rule overrides that inherit from the parent chain. */}
+              <ScopePicker
+                scopes={scopes}
+                activeScopeId={activeScopeId}
+                onChange={setActiveScopeId}
+                showNewScope={showNewScope}
+                onShowNewScope={setShowNewScope}
+                onScopeCreated={() => { setShowNewScope(false); void loadScopes(); }} />
+
               {/* Tab strip */}
               <div className="flex flex-wrap gap-1 p-2 border-b border-white/5">
                 {TABS.map(t => {
@@ -274,15 +310,15 @@ export default function ServiceConfigPage() {
                     initial={selectedMapping}
                     onSaved={() => void load()} />
                 )}
-                {activeTab === 'formFields' && <FormFieldsTab key={selectedType.type.id} typeId={selectedType.type.id} />}
-                {activeTab === 'sla'        && <SlaTab        key={selectedType.type.id} typeId={selectedType.type.id} />}
-                {activeTab === 'approval'   && <ApprovalTab   key={selectedType.type.id} typeId={selectedType.type.id} />}
-                {activeTab === 'vehicle'    && <VehicleTab    key={selectedType.type.id} typeId={selectedType.type.id} />}
-                {activeTab === 'trip'       && <TripTab       key={selectedType.type.id} typeId={selectedType.type.id} />}
-                {activeTab === 'finance'    && <FinanceTab    key={selectedType.type.id} typeId={selectedType.type.id} />}
-                {activeTab === 'ticketing'  && <TicketingTab  key={selectedType.type.id} typeId={selectedType.type.id} />}
-                {activeTab === 'epod'       && <EpodTab       key={selectedType.type.id} typeId={selectedType.type.id} />}
-                {activeTab === 'automation' && <AutomationTab key={selectedType.type.id} typeId={selectedType.type.id} />}
+                {activeTab === 'formFields' && <FormFieldsTab key={`${selectedType.type.id}:${activeScopeId}`} typeId={selectedType.type.id} scopeId={activeScopeId ?? undefined} scopeLookup={scopeLookup} />}
+                {activeTab === 'sla'        && <SlaTab        key={`${selectedType.type.id}:${activeScopeId}`} typeId={selectedType.type.id} scopeId={activeScopeId ?? undefined} scopeLookup={scopeLookup} />}
+                {activeTab === 'approval'   && <ApprovalTab   key={`${selectedType.type.id}:${activeScopeId}`} typeId={selectedType.type.id} scopeId={activeScopeId ?? undefined} scopeLookup={scopeLookup} />}
+                {activeTab === 'vehicle'    && <VehicleTab    key={`${selectedType.type.id}:${activeScopeId}`} typeId={selectedType.type.id} scopeId={activeScopeId ?? undefined} scopeLookup={scopeLookup} />}
+                {activeTab === 'trip'       && <TripTab       key={`${selectedType.type.id}:${activeScopeId}`} typeId={selectedType.type.id} scopeId={activeScopeId ?? undefined} scopeLookup={scopeLookup} />}
+                {activeTab === 'finance'    && <FinanceTab    key={`${selectedType.type.id}:${activeScopeId}`} typeId={selectedType.type.id} scopeId={activeScopeId ?? undefined} scopeLookup={scopeLookup} />}
+                {activeTab === 'ticketing'  && <TicketingTab  key={`${selectedType.type.id}:${activeScopeId}`} typeId={selectedType.type.id} scopeId={activeScopeId ?? undefined} scopeLookup={scopeLookup} />}
+                {activeTab === 'epod'       && <EpodTab       key={`${selectedType.type.id}:${activeScopeId}`} typeId={selectedType.type.id} scopeId={activeScopeId ?? undefined} scopeLookup={scopeLookup} />}
+                {activeTab === 'automation' && <AutomationTab key={`${selectedType.type.id}:${activeScopeId}`} typeId={selectedType.type.id} scopeId={activeScopeId ?? undefined} scopeLookup={scopeLookup} />}
               </div>
             </>
           )}
@@ -599,5 +635,132 @@ function Toggle({ label, icon: Icon, checked, onChange }: {
         <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${checked ? 'left-4' : 'left-0.5'}`} />
       </span>
     </button>
+  );
+}
+
+// ── Scope picker ────────────────────────────────────────────────────────────
+
+function ScopePicker({
+  scopes, activeScopeId, onChange, showNewScope, onShowNewScope, onScopeCreated,
+}: {
+  scopes: ServiceScope[];
+  activeScopeId: string | null;
+  onChange: (id: string) => void;
+  showNewScope: boolean;
+  onShowNewScope: (b: boolean) => void;
+  onScopeCreated: () => void;
+}) {
+  const active = scopes.find(s => s.id === activeScopeId);
+
+  return (
+    <div className="px-5 py-3 border-b border-white/5 bg-slate-950/40">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Scope</span>
+        <select value={activeScopeId ?? ''}
+          onChange={e => onChange(e.target.value)}
+          className="bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500">
+          {scopes.map(s => (
+            <option key={s.id} value={s.id}>
+              {s.isRoot ? '🏢 ' : '↳ '}
+              {s.name}
+              {!s.isRoot && ` (${SCOPE_LEVEL_LABEL[s.level]})`}
+            </option>
+          ))}
+        </select>
+        {active && !active.isRoot && (
+          <span className="text-[11px] text-blue-300 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30">
+            Editing at {SCOPE_LEVEL_LABEL[active.level]}
+          </span>
+        )}
+        <span className="ml-auto" />
+        <button type="button" onClick={() => onShowNewScope(true)}
+          className="text-xs px-2.5 py-1 rounded-md bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-200 inline-flex items-center gap-1">
+          <Plus className="w-3.5 h-3.5" /> Add scope
+        </button>
+      </div>
+      {showNewScope && (
+        <div className="pt-3">
+          <NewScopeForm
+            scopes={scopes}
+            defaultParentId={activeScopeId ?? scopes.find(s => s.isRoot)?.id ?? ''}
+            onCancel={() => onShowNewScope(false)}
+            onCreated={onScopeCreated} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NewScopeForm({
+  scopes, defaultParentId, onCancel, onCreated,
+}: {
+  scopes: ServiceScope[];
+  defaultParentId: string;
+  onCancel: () => void;
+  onCreated: () => void;
+}) {
+  const [name, setName]               = useState('');
+  const [key, setKey]                 = useState('');
+  const [level, setLevel]             = useState<ScopeLevel>('BRANCH');
+  const [parentScopeId, setParentScopeId] = useState(defaultParentId);
+  const [busy, setBusy]               = useState(false);
+  const [err, setErr]                 = useState<string | null>(null);
+
+  const submit = async () => {
+    if (!name.trim()) { setErr('Name is required'); return; }
+    setBusy(true); setErr(null);
+    try {
+      const res = await fetch('/api/admin/service-config/scopes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          parentScopeId, level,
+          key: key.trim() || name.trim(),
+          name: name.trim(),
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setErr(d?.error ?? 'Create failed'); return; }
+      onCreated();
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="bg-slate-800/60 border border-violet-500/30 rounded-lg p-3 space-y-2">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+        <div className="space-y-1">
+          <label className="text-[10px] text-slate-400 uppercase tracking-wide">Name</label>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Dubai Branch"
+            className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1.5 text-xs text-white" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] text-slate-400 uppercase tracking-wide">Key</label>
+          <input value={key} onChange={e => setKey(e.target.value)} placeholder="auto"
+            className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1.5 text-xs text-white font-mono uppercase" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] text-slate-400 uppercase tracking-wide">Level</label>
+          <select value={level} onChange={e => setLevel(e.target.value as ScopeLevel)}
+            className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1.5 text-xs text-white">
+            {SCOPE_LEVELS.filter(l => l !== 'COMPANY').map(l => (
+              <option key={l} value={l}>{SCOPE_LEVEL_LABEL[l]}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] text-slate-400 uppercase tracking-wide">Parent</label>
+          <select value={parentScopeId} onChange={e => setParentScopeId(e.target.value)}
+            className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1.5 text-xs text-white">
+            {scopes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+      </div>
+      {err && <div className="text-[10px] text-rose-300">{err}</div>}
+      <div className="flex gap-1">
+        <button onClick={submit} disabled={busy} className="px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-white text-xs disabled:opacity-50">
+          {busy ? 'Adding…' : 'Add scope'}
+        </button>
+        <button onClick={onCancel} className="px-2 py-1.5 rounded text-slate-400 hover:text-white text-xs">Cancel</button>
+      </div>
+    </div>
   );
 }

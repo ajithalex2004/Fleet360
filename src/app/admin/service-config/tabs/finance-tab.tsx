@@ -9,15 +9,15 @@
 
 import { useMemo } from 'react';
 import { useRuleTab } from './use-rule-tab';
-import { Field, NumberInput, TextInput, Toggle, Select, SaveBar, Section } from './shared';
+import { Field, NumberInput, TextInput, Toggle, Select, SaveBar, Section, type RuleTabProps } from './shared';
 import {
   DEFAULT_FINANCE_RULES, PRICING_SOURCES, BILLING_TYPES, TAX_RULES,
   type FinanceRules, type PricingSource, type BillingType, type TaxRule,
 } from '@/types/service-rules';
 
-export function FinanceTab({ typeId }: { typeId: string }) {
-  const { rules, patch, loading, saving, savedMsg, error, configured, save, reload } =
-    useRuleTab<FinanceRules>(typeId, 'finance', DEFAULT_FINANCE_RULES);
+export function FinanceTab({ typeId, scopeId, scopeLookup }: RuleTabProps) {
+  const { rules, patch, loading, saving, savedMsg, error, configured, ownedScope, save, reload } =
+    useRuleTab<FinanceRules>(typeId, 'finance', DEFAULT_FINANCE_RULES, scopeId);
 
   const dirty = useMemo(() => JSON.stringify(rules) !== JSON.stringify(DEFAULT_FINANCE_RULES) || configured, [rules, configured]);
 
@@ -82,7 +82,8 @@ export function FinanceTab({ typeId }: { typeId: string }) {
 
       <SaveBar configured={configured} dirty={dirty} saving={saving} error={error} savedMsg={savedMsg}
         onSave={save} onReset={reload}
-        typeId={typeId} category="finance" onRolledBack={reload} />
+        typeId={typeId} category="finance" scopeId={scopeId} ownedScope={ownedScope}
+        scopeLookup={scopeLookup} onRolledBack={reload} />
     </div>
   );
 }

@@ -10,7 +10,7 @@
 
 import { useMemo } from 'react';
 import { useRuleTab } from './use-rule-tab';
-import { Field, NumberInput, TextInput, Toggle, SaveBar, Section } from './shared';
+import { Field, NumberInput, TextInput, Toggle, SaveBar, Section, type RuleTabProps } from './shared';
 import { DEFAULT_SLA_RULES, type SlaRules, type EscalationLevel } from '@/types/service-rules';
 import { Plus, Trash2 } from 'lucide-react';
 
@@ -19,9 +19,9 @@ const WEEKDAYS = [
   { n: 4, label: 'Thu' }, { n: 5, label: 'Fri' }, { n: 6, label: 'Sat' }, { n: 7, label: 'Sun' },
 ];
 
-export function SlaTab({ typeId }: { typeId: string }) {
-  const { rules, patch, loading, saving, savedMsg, error, configured, save, reload } =
-    useRuleTab<SlaRules>(typeId, 'sla', DEFAULT_SLA_RULES);
+export function SlaTab({ typeId, scopeId, scopeLookup }: RuleTabProps) {
+  const { rules, patch, loading, saving, savedMsg, error, configured, ownedScope, save, reload } =
+    useRuleTab<SlaRules>(typeId, 'sla', DEFAULT_SLA_RULES, scopeId);
 
   const dirty = useMemo(() => JSON.stringify(rules) !== JSON.stringify(DEFAULT_SLA_RULES) || configured, [rules, configured]);
 
@@ -141,7 +141,8 @@ export function SlaTab({ typeId }: { typeId: string }) {
 
       <SaveBar configured={configured} dirty={dirty} saving={saving} error={error} savedMsg={savedMsg}
         onSave={save} onReset={reload}
-        typeId={typeId} category="sla" onRolledBack={reload} />
+        typeId={typeId} category="sla" scopeId={scopeId} ownedScope={ownedScope}
+        scopeLookup={scopeLookup} onRolledBack={reload} />
     </div>
   );
 }

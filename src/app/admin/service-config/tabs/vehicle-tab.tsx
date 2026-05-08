@@ -8,7 +8,7 @@
 
 import { useMemo } from 'react';
 import { useRuleTab } from './use-rule-tab';
-import { Field, NumberInput, Toggle, ChipMultiSelect, SaveBar, Section } from './shared';
+import { Field, NumberInput, Toggle, ChipMultiSelect, SaveBar, Section, type RuleTabProps } from './shared';
 import {
   DEFAULT_VEHICLE_RULES, VEHICLE_CLASSES, VEHICLE_USAGES,
   type VehicleRules,
@@ -19,9 +19,9 @@ const SUGGESTED_REQS = [
   'ramp', 'stretcher', 'cargo-tie-downs',
 ];
 
-export function VehicleTab({ typeId }: { typeId: string }) {
-  const { rules, patch, loading, saving, savedMsg, error, configured, save, reload } =
-    useRuleTab<VehicleRules>(typeId, 'vehicle', DEFAULT_VEHICLE_RULES);
+export function VehicleTab({ typeId, scopeId, scopeLookup }: RuleTabProps) {
+  const { rules, patch, loading, saving, savedMsg, error, configured, ownedScope, save, reload } =
+    useRuleTab<VehicleRules>(typeId, 'vehicle', DEFAULT_VEHICLE_RULES, scopeId);
 
   const dirty = useMemo(() => JSON.stringify(rules) !== JSON.stringify(DEFAULT_VEHICLE_RULES) || configured, [rules, configured]);
 
@@ -83,7 +83,8 @@ export function VehicleTab({ typeId }: { typeId: string }) {
 
       <SaveBar configured={configured} dirty={dirty} saving={saving} error={error} savedMsg={savedMsg}
         onSave={save} onReset={reload}
-        typeId={typeId} category="vehicle" onRolledBack={reload} />
+        typeId={typeId} category="vehicle" scopeId={scopeId} ownedScope={ownedScope}
+        scopeLookup={scopeLookup} onRolledBack={reload} />
     </div>
   );
 }

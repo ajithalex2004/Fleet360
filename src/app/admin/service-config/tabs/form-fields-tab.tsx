@@ -19,7 +19,7 @@ import {
   CheckSquare, Square, X,
 } from 'lucide-react';
 import { useRuleTab } from './use-rule-tab';
-import { Field, NumberInput, TextInput, Toggle, Select, SaveBar, Section } from './shared';
+import { Field, NumberInput, TextInput, Toggle, Select, SaveBar, Section, type RuleTabProps } from './shared';
 import {
   DEFAULT_FORM_FIELDS_RULES, type FormFieldsRules, type FormFieldDef,
 } from '@/types/service-rules';
@@ -38,9 +38,9 @@ function newField(): FormFieldDef {
   };
 }
 
-export function FormFieldsTab({ typeId }: { typeId: string }) {
-  const { rules, patch, loading, saving, savedMsg, error, configured, save, reload } =
-    useRuleTab<FormFieldsRules>(typeId, 'formFields', DEFAULT_FORM_FIELDS_RULES);
+export function FormFieldsTab({ typeId, scopeId, scopeLookup }: RuleTabProps) {
+  const { rules, patch, loading, saving, savedMsg, error, configured, ownedScope, save, reload } =
+    useRuleTab<FormFieldsRules>(typeId, 'formFields', DEFAULT_FORM_FIELDS_RULES, scopeId);
 
   // Track which field card is expanded for editing — collapsed by default.
   const [openIdx, setOpenIdx] = useState<number | null>(null);
@@ -108,7 +108,8 @@ export function FormFieldsTab({ typeId }: { typeId: string }) {
 
       <SaveBar configured={configured} dirty={dirty} saving={saving} error={error} savedMsg={savedMsg}
         onSave={save} onReset={reload}
-        typeId={typeId} category="formFields" onRolledBack={reload} />
+        typeId={typeId} category="formFields" scopeId={scopeId} ownedScope={ownedScope}
+        scopeLookup={scopeLookup} onRolledBack={reload} />
     </div>
   );
 }

@@ -9,7 +9,7 @@
 
 import { useMemo } from 'react';
 import { useRuleTab } from './use-rule-tab';
-import { Field, NumberInput, TextInput, Toggle, ChipMultiSelect, SaveBar, Section } from './shared';
+import { Field, NumberInput, TextInput, Toggle, ChipMultiSelect, SaveBar, Section, type RuleTabProps } from './shared';
 import { DEFAULT_APPROVAL_RULES, type ApprovalRules } from '@/types/service-rules';
 
 const SUGGESTED_ROLES = [
@@ -17,9 +17,9 @@ const SUGGESTED_ROLES = [
   'DEPARTMENT_HEAD', 'DIRECT_MANAGER',
 ];
 
-export function ApprovalTab({ typeId }: { typeId: string }) {
-  const { rules, patch, loading, saving, savedMsg, error, configured, save, reload } =
-    useRuleTab<ApprovalRules>(typeId, 'approval', DEFAULT_APPROVAL_RULES);
+export function ApprovalTab({ typeId, scopeId, scopeLookup }: RuleTabProps) {
+  const { rules, patch, loading, saving, savedMsg, error, configured, ownedScope, save, reload } =
+    useRuleTab<ApprovalRules>(typeId, 'approval', DEFAULT_APPROVAL_RULES, scopeId);
 
   const dirty = useMemo(() => JSON.stringify(rules) !== JSON.stringify(DEFAULT_APPROVAL_RULES) || configured, [rules, configured]);
 
@@ -67,7 +67,8 @@ export function ApprovalTab({ typeId }: { typeId: string }) {
 
       <SaveBar configured={configured} dirty={dirty} saving={saving} error={error} savedMsg={savedMsg}
         onSave={save} onReset={reload}
-        typeId={typeId} category="approval" onRolledBack={reload} />
+        typeId={typeId} category="approval" scopeId={scopeId} ownedScope={ownedScope}
+        scopeLookup={scopeLookup} onRolledBack={reload} />
     </div>
   );
 }

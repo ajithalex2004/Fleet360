@@ -14,7 +14,8 @@
 
 import { prisma } from '@/lib/prisma';
 import type { LinkedModule } from '@/types/service-config';
-import { ensureServiceRulesTable, seedRulesIfAbsent } from './rules-schema';
+import { ensureServiceRulesTable, seedRulesIfAbsent, backfillRulesToScope } from './rules-schema';
+import { ensureScopesTable, ensureRootScope } from './scopes-schema';
 import { SYSTEM_TICKET_TYPES } from './system-types-seed';
 import {
   DEFAULT_APPROVAL_RULES, DEFAULT_TICKETING_RULES, DEFAULT_FORM_FIELDS_RULES,
@@ -224,6 +225,11 @@ const SEED: SeedCategory[] = [
  */
 export async function seedServiceConfigForTenant(tenantId: string): Promise<void> {
   await ensureServiceConfigTables();
+  await ensureScopesTable();
+  // Phase 2E — make sure the tenant has its root scope before any
+  // service_rules are seeded. Backfill any existing pre-2E rules onto it.
+  const rootScopeId = await ensureRootScope(tenantId);
+  await backfillRulesToScope(tenantId, rootScopeId);
 
   // Categories — INSERT ... ON CONFLICT DO NOTHING.
   for (const cat of SEED) {
@@ -278,8 +284,9 @@ export async function seedServiceConfigForTenant(tenantId: string): Promise<void
       // rules from TICKET_TYPE_CONFIG so day-one behaviour matches the
       // hardcoded config exactly. Modules read from service_rules and get
       // identical results until an admin overrides via the UI.
+      // Phase 2E — seeded rules attach to the tenant root scope.
       if (t.module.linkedModule === 'SERVICE_TICKETING') {
-        await seedRulesFromTicketingConfig(typeId, t.key as TicketType);
+        await seedRulesFromTicketingConfig(typeId, t.key as TicketType, rootScopeId);
       }
     }
   }
@@ -292,6 +299,7 @@ export async function seedServiceConfigForTenant(tenantId: string): Promise<void
 async function seedRulesFromTicketingConfig(
   serviceTypeId: string,
   ticketType: TicketType,
+  scopeId: string,
 ): Promise<void> {
   await ensureServiceRulesTable();
   const cfg = SYSTEM_TICKET_TYPES[ticketType];
@@ -336,10 +344,10 @@ async function seedRulesFromTicketingConfig(
     vehicleRequired: !!cfg.vehicleRequired,
   };
 
-  await seedRulesIfAbsent(serviceTypeId, 'approval',   approval);
-  await seedRulesIfAbsent(serviceTypeId, 'ticketing',  ticketing);
-  await seedRulesIfAbsent(serviceTypeId, 'formFields', formFields);
-  await seedRulesIfAbsent(serviceTypeId, 'vehicle',    vehicle);
+  await seedRulesIfAbsent(serviceTypeId, 'approval',   approval,   scopeId);
+  await seedRulesIfAbsent(serviceTypeId, 'ticketing',  ticketing,  scopeId);
+  await seedRulesIfAbsent(serviceTypeId, 'formFields', formFields, scopeId);
+  await seedRulesIfAbsent(serviceTypeId, 'vehicle',    vehicle,    scopeId);
 }
 
 /** Process-level cache so we don't re-run the COUNT(*) check on every

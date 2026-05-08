@@ -1,25 +1,31 @@
 /**
- * Read-side helper for the Service Configuration Engine (Phase 2C).
+ * Read-side helper for the Service Configuration Engine.
  *
- * Modules call loadServiceConfig(tenantId, serviceTypeKey) to get a fully
- * merged rule snapshot — base type record, module mapping, and all 8 rule
- * sets (each merged with its category default so missing keys are filled).
+ * Modules call loadServiceConfig(tenantId, serviceTypeKey, scopeId?) to
+ * get a fully merged rule snapshot — base type record, module mapping,
+ * and all 9 rule sets (each merged with its category default so missing
+ * keys are filled).
+ *
+ * Phase 2E — multi-tenant inheritance. The optional `scopeId` arg picks
+ * the leaf scope; the resolver walks up the parent_scope_id chain via
+ * loadScopeChain and the first matching service_rules row wins. Without
+ * a scopeId, the tenant's root scope is used (current behaviour).
  *
  * Authority semantics:
- *   - If a (service_type, category) row exists in service_rules, that
- *     row wins. Anything missing from the row falls back to RULE_DEFAULTS.
- *   - If no row exists, the entire category resolves to RULE_DEFAULTS.
- *   - The returned `configured` map tells callers which categories were
- *     actually saved by an admin vs. running on defaults — useful for
- *     fall-back logic (e.g. "use TICKET_TYPE_CONFIG.requiresApproval if
- *     approval rules were never configured").
+ *   - For each category we look for an active row at any scope in the
+ *     leaf-to-root chain. Closest scope wins.
+ *   - If no row exists anywhere, the category resolves to RULE_DEFAULTS.
+ *   - configuredAtScope[category] tells callers WHICH scope owns the
+ *     resolved value (null when running on defaults). The admin UI uses
+ *     this to render an "inherited from {scope}" indicator.
  *
  * This helper is read-only and idempotent — safe to call on hot paths.
  */
 
 import { prisma } from '@/lib/prisma';
 import { ensureServiceConfigTables, ensureSeededForTenant } from './schema';
-import { ensureServiceRulesTable } from './rules-schema';
+import { ensureServiceRulesTable, loadRulesForChain } from './rules-schema';
+import { ensureRootScope, loadScopeChain } from './scopes-schema';
 import {
   RULE_CATEGORIES, RULE_DEFAULTS,
   type RuleCategory, type RuleShapes,
@@ -57,8 +63,13 @@ export interface ResolvedServiceConfig {
   type: ResolvedServiceType;
   mapping: ResolvedModuleMapping | null;
   rules: RuleShapes;
-  /** True for categories that have a saved row; false when defaults are returned. */
+  /** True for categories that have a saved row anywhere in the scope chain. */
   configured: { [K in RuleCategory]: boolean };
+  /** The scope_id whose row was selected for each category. null when running
+   *  on RULE_DEFAULTS. Used by the admin UI to badge "inherited from {scope}". */
+  configuredAtScope: { [K in RuleCategory]: string | null };
+  /** The scope chain walked, leaf → root. Length 1 == only the root scope. */
+  scopeChain: { id: string; name: string; level: string; isRoot: boolean }[];
 }
 
 interface TypeRow {
@@ -72,27 +83,30 @@ interface MappingRow {
   approval_engine_enabled: boolean; finance_engine_enabled: boolean;
   dispatch_engine_enabled: boolean;
 }
-interface RuleRow {
-  category: string;
-  rules: unknown;
-}
 
 /**
- * Resolve a service config snapshot by `(tenantId, serviceTypeKey)`.
+ * Resolve a service config snapshot by `(tenantId, serviceTypeKey)`,
+ * optionally at a specific scope. When scopeId is omitted, the tenant
+ * root scope is used (so existing callers continue working unchanged).
  *
- * Returns null when the tenant doesn't have that service type — callers
- * should treat this as "no centralised config; use module defaults".
+ * Returns null when the tenant doesn't have that service type.
  */
 export async function loadServiceConfig(
   tenantId: string,
   serviceTypeKey: string,
+  scopeId?: string,
 ): Promise<ResolvedServiceConfig | null> {
   await ensureServiceConfigTables();
   await ensureServiceRulesTable();
-  // Phase 2D — guarantee the tenant has its baseline catalogue and
-  // seeded service-rule rows before any resolver reads. Cached at the
-  // process level so the cost is paid once per tenant per process.
+  // Auto-seed the tenant on first call. ensureSeededForTenant also creates
+  // the root scope and backfills any pre-2E rules to it.
   await ensureSeededForTenant(tenantId);
+
+  // Default to the tenant root when no scope given.
+  const leafScopeId = scopeId ?? await ensureRootScope(tenantId);
+  const chain = await loadScopeChain(tenantId, leafScopeId);
+  if (chain.length === 0) return null;
+  const chainIds = chain.map(s => s.id);
 
   const typeRows = await prisma.$queryRawUnsafe<TypeRow[]>(
     `SELECT id::text, tenant_id, category_id::text, key, name, description, icon, tone,
@@ -105,39 +119,29 @@ export async function loadServiceConfig(
   const t = typeRows[0];
   if (!t) return null;
 
-  const [mappingRows, ruleRows] = await Promise.all([
-    prisma.$queryRawUnsafe<MappingRow[]>(
-      `SELECT linked_module, sub_module,
-              workflow_engine_enabled, notification_engine_enabled,
-              approval_engine_enabled, finance_engine_enabled, dispatch_engine_enabled
-       FROM service_module_mapping
-       WHERE service_type_id = $1::uuid`,
-      t.id,
-    ).catch(() => []),
-    prisma.$queryRawUnsafe<RuleRow[]>(
-      // Phase 2D — only the currently-active version per category.
-      `SELECT category, rules
-       FROM service_rules
-       WHERE service_type_id = $1::uuid AND effective_to IS NULL`,
-      t.id,
-    ).catch(() => []),
-  ]);
+  const mappingRows = await prisma.$queryRawUnsafe<MappingRow[]>(
+    `SELECT linked_module, sub_module,
+            workflow_engine_enabled, notification_engine_enabled,
+            approval_engine_enabled, finance_engine_enabled, dispatch_engine_enabled
+     FROM service_module_mapping
+     WHERE service_type_id = $1::uuid`,
+    t.id,
+  ).catch(() => []);
 
-  // Merge each saved category's rules over its default. Missing categories
-  // resolve to defaults. configured[category] flags whether a row existed.
-  const ruleByCat = new Map(ruleRows.map(r => [r.category, r.rules]));
-  // Build with a loose record then assert at the boundary — RuleShapes is
-  // a discriminated map and TS can't follow the cat-keyed assignment.
+  // Resolve every category against the chain.
   const rules: Record<string, unknown> = {};
   const configured = {} as { [K in RuleCategory]: boolean };
-  for (const cat of RULE_CATEGORIES) {
-    const saved = ruleByCat.get(cat);
-    configured[cat] = saved !== undefined;
+  const configuredAtScope = {} as { [K in RuleCategory]: string | null };
+
+  await Promise.all(RULE_CATEGORIES.map(async (cat) => {
+    const hit = await loadRulesForChain<Record<string, unknown>>(t.id, cat, chainIds);
+    configured[cat] = hit !== null;
+    configuredAtScope[cat] = hit?.scopeId ?? null;
     rules[cat] = {
       ...(RULE_DEFAULTS[cat] as object),
-      ...((saved ?? {}) as object),
+      ...((hit?.rules ?? {}) as object),
     };
-  }
+  }));
 
   const m = mappingRows[0];
   return {
@@ -162,5 +166,7 @@ export async function loadServiceConfig(
       : null,
     rules: rules as unknown as RuleShapes,
     configured,
+    configuredAtScope,
+    scopeChain: chain.map(s => ({ id: s.id, name: s.name, level: s.level, isRoot: s.isRoot })),
   };
 }

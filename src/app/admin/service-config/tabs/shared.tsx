@@ -9,6 +9,16 @@ import { Save, AlertCircle, CheckCircle2, X, Plus, History, RotateCcw, User } fr
 import { useCallback, useEffect, useState } from 'react';
 import type { RuleCategory } from '@/types/service-rules';
 
+/** Props shared by every rule tab. Phase 2E threads the active scope and
+ *  a name-lookup map so each tab can render its inheritance indicator. */
+export interface RuleTabProps {
+  typeId: string;
+  /** Active scope from the page-level scope picker. Undefined = root. */
+  scopeId?: string;
+  /** scope_id → display name + isRoot flag, for the inheritance chip. */
+  scopeLookup?: Record<string, { name: string; isRoot: boolean }>;
+}
+
 export function Field({ label, children, hint, required }: {
   label: string; children: React.ReactNode; hint?: string; required?: boolean;
 }) {
@@ -147,7 +157,7 @@ export function ChipMultiSelect({
 /** Save bar with status messaging — used at the bottom of every tab. */
 export function SaveBar({
   configured, dirty, saving, error, savedMsg, onSave, onReset,
-  typeId, category, onRolledBack,
+  typeId, category, scopeId, ownedScope, scopeLookup, onRolledBack,
 }: {
   configured: boolean;
   dirty: boolean;
@@ -159,17 +169,34 @@ export function SaveBar({
   /** When provided, renders a "History" button that opens the drawer. */
   typeId?: string;
   category?: RuleCategory;
+  /** The scope being edited. History + save flow at this scope. */
+  scopeId?: string;
+  /** Where the active row actually lives — null when running on defaults,
+   *  ancestor scope when inherited, equal to scopeId when overridden here. */
+  ownedScope?: string | null;
+  /** Maps scope_id → display name for the "inherited from {scope}" chip. */
+  scopeLookup?: Record<string, { name: string; isRoot: boolean }>;
   /** Called after a successful rollback so the parent can re-load. */
   onRolledBack?: () => void;
 }) {
   const [historyOpen, setHistoryOpen] = useState(false);
 
+  // Inheritance status for the indicator chip:
+  //   - configured + ownedScope === scopeId → overridden at this scope
+  //   - configured + ownedScope !== scopeId → inherited from ancestor
+  //   - not configured                      → using defaults
+  const inheritedFrom = configured && ownedScope && ownedScope !== scopeId
+    ? scopeLookup?.[ownedScope]
+    : null;
+  const overriddenHere = configured && ownedScope && ownedScope === scopeId;
+
   return (
     <>
-      <div className="flex items-center gap-2 pt-3 border-t border-white/5">
+      <div className="flex items-center gap-2 pt-3 border-t border-white/5 flex-wrap">
         <button onClick={onSave} disabled={saving}
           className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50">
-          <Save className="w-4 h-4" /> {saving ? 'Saving…' : configured ? 'Save changes' : 'Save'}
+          <Save className="w-4 h-4" />
+          {saving ? 'Saving…' : overriddenHere ? 'Save changes' : inheritedFrom ? 'Override at this scope' : 'Save'}
         </button>
         {onReset && dirty && !saving && (
           <button onClick={onReset}
@@ -180,9 +207,20 @@ export function SaveBar({
         {typeId && category && (
           <button onClick={() => setHistoryOpen(true)}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-white/5"
-            title="View change history and roll back">
+            title="View change history at this scope and roll back">
             <History className="w-3.5 h-3.5" /> History
           </button>
+        )}
+        {/* Inheritance indicator chip */}
+        {inheritedFrom && (
+          <span className="text-[11px] text-blue-300 inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-500/10 border border-blue-500/30">
+            <AlertCircle className="w-3 h-3" /> Inherited from <strong>{inheritedFrom.name}</strong>
+          </span>
+        )}
+        {overriddenHere && (
+          <span className="text-[11px] text-emerald-300 inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30">
+            <CheckCircle2 className="w-3 h-3" /> Overridden at this scope
+          </span>
         )}
         {!configured && (
           <span className="text-[11px] text-amber-300/80 inline-flex items-center gap-1">
@@ -205,6 +243,7 @@ export function SaveBar({
         <HistoryDrawer
           typeId={typeId}
           category={category}
+          scopeId={scopeId}
           onClose={() => setHistoryOpen(false)}
           onRolledBack={() => { setHistoryOpen(false); onRolledBack?.(); }} />
       )}
@@ -226,10 +265,12 @@ interface RuleVersion {
 }
 
 function HistoryDrawer({
-  typeId, category, onClose, onRolledBack,
+  typeId, category, scopeId, onClose, onRolledBack,
 }: {
   typeId: string;
   category: RuleCategory;
+  /** History is per-scope. Falls back to root when omitted. */
+  scopeId?: string;
   onClose: () => void;
   onRolledBack: () => void;
 }) {
@@ -238,10 +279,13 @@ function HistoryDrawer({
   const [error, setError]         = useState<string | null>(null);
   const [busyId, setBusyId]       = useState<string | null>(null);
 
+  const qs = scopeId ? `?scopeId=${scopeId}` : '';
+  const url = `/api/admin/service-config/types/${typeId}/rules/${category}/history${qs}`;
+
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const res = await fetch(`/api/admin/service-config/types/${typeId}/rules/${category}/history`);
+      const res = await fetch(url);
       const d = await res.json();
       if (!res.ok) throw new Error(d?.error ?? 'Load failed');
       setVersions(d.versions ?? []);
@@ -250,15 +294,15 @@ function HistoryDrawer({
     } finally {
       setLoading(false);
     }
-  }, [typeId, category]);
+  }, [url]);
 
   useEffect(() => { void load(); }, [load]);
 
   const rollback = async (id: string) => {
-    if (!window.confirm('Roll back to this version? A new active row will be created with these rules; the historical row stays untouched.')) return;
+    if (!window.confirm('Roll back to this version? A new active row will be created at this scope with these rules; the historical row stays untouched.')) return;
     setBusyId(id); setError(null);
     try {
-      const res = await fetch(`/api/admin/service-config/types/${typeId}/rules/${category}/history`, {
+      const res = await fetch(url, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ versionId: id }),
       });

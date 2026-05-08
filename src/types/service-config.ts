@@ -104,3 +104,43 @@ export interface ServiceModuleMapping {
 export interface ServiceCategoryWithTypes extends ServiceCategory {
   types: ServiceType[];
 }
+
+// ─── Multi-tenant scope hierarchy (Phase 2E) ────────────────────────────────
+//
+// Service config is organised as a tree of scopes per tenant. Every tenant
+// has exactly one root scope (level=COMPANY, isRoot=true) auto-created on
+// first read. Admins can carve out branches / regions / departments and
+// override rules at any level. When a resolver looks up a rule for a
+// scope, it walks the parent_scope_id chain until it finds a configured
+// row, so a Branch sees its own override or — failing that — its Region's,
+// then Company's, then Tenant Root's.
+//
+// The level enum is descriptive (a hierarchy hint) — the actual chain is
+// driven by parent_scope_id.
+
+export const SCOPE_LEVELS = ['COMPANY', 'BRANCH', 'REGION', 'DEPARTMENT'] as const;
+export type ScopeLevel = typeof SCOPE_LEVELS[number];
+
+export const SCOPE_LEVEL_LABEL: Record<ScopeLevel, string> = {
+  COMPANY:    'Company',
+  BRANCH:     'Branch',
+  REGION:     'Region',
+  DEPARTMENT: 'Department',
+};
+
+export interface ServiceScope {
+  id: string;
+  tenantId: string;
+  parentScopeId: string | null;
+  level: ScopeLevel;
+  /** Stable code (e.g. "DXB_OPS"). */
+  key: string;
+  name: string;
+  description: string | null;
+  sortOrder: number;
+  /** True for the synthesized tenant-root scope. Cannot be deleted. */
+  isRoot: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+

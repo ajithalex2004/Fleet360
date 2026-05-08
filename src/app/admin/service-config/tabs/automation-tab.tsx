@@ -8,12 +8,12 @@
 
 import { useMemo } from 'react';
 import { useRuleTab } from './use-rule-tab';
-import { Field, NumberInput, Toggle, SaveBar, Section } from './shared';
+import { Field, NumberInput, Toggle, SaveBar, Section, type RuleTabProps } from './shared';
 import { DEFAULT_AUTOMATION_RULES, type AutomationRules } from '@/types/service-rules';
 
-export function AutomationTab({ typeId }: { typeId: string }) {
-  const { rules, patch, loading, saving, savedMsg, error, configured, save, reload } =
-    useRuleTab<AutomationRules>(typeId, 'automation', DEFAULT_AUTOMATION_RULES);
+export function AutomationTab({ typeId, scopeId, scopeLookup }: RuleTabProps) {
+  const { rules, patch, loading, saving, savedMsg, error, configured, ownedScope, save, reload } =
+    useRuleTab<AutomationRules>(typeId, 'automation', DEFAULT_AUTOMATION_RULES, scopeId);
 
   const dirty = useMemo(() => JSON.stringify(rules) !== JSON.stringify(DEFAULT_AUTOMATION_RULES) || configured, [rules, configured]);
 
@@ -61,7 +61,8 @@ export function AutomationTab({ typeId }: { typeId: string }) {
 
       <SaveBar configured={configured} dirty={dirty} saving={saving} error={error} savedMsg={savedMsg}
         onSave={save} onReset={reload}
-        typeId={typeId} category="automation" onRolledBack={reload} />
+        typeId={typeId} category="automation" scopeId={scopeId} ownedScope={ownedScope}
+        scopeLookup={scopeLookup} onRolledBack={reload} />
     </div>
   );
 }

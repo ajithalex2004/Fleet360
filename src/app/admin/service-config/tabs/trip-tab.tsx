@@ -8,15 +8,15 @@
 
 import { useMemo } from 'react';
 import { useRuleTab } from './use-rule-tab';
-import { Field, NumberInput, Toggle, Select, SaveBar, Section } from './shared';
+import { Field, NumberInput, Toggle, Select, SaveBar, Section, type RuleTabProps } from './shared';
 import {
   DEFAULT_TRIP_RULES, DISPATCH_STRATEGIES,
   type TripRules, type DispatchStrategy,
 } from '@/types/service-rules';
 
-export function TripTab({ typeId }: { typeId: string }) {
-  const { rules, patch, loading, saving, savedMsg, error, configured, save, reload } =
-    useRuleTab<TripRules>(typeId, 'trip', DEFAULT_TRIP_RULES);
+export function TripTab({ typeId, scopeId, scopeLookup }: RuleTabProps) {
+  const { rules, patch, loading, saving, savedMsg, error, configured, ownedScope, save, reload } =
+    useRuleTab<TripRules>(typeId, 'trip', DEFAULT_TRIP_RULES, scopeId);
 
   const dirty = useMemo(() => JSON.stringify(rules) !== JSON.stringify(DEFAULT_TRIP_RULES) || configured, [rules, configured]);
 
@@ -62,7 +62,8 @@ export function TripTab({ typeId }: { typeId: string }) {
 
       <SaveBar configured={configured} dirty={dirty} saving={saving} error={error} savedMsg={savedMsg}
         onSave={save} onReset={reload}
-        typeId={typeId} category="trip" onRolledBack={reload} />
+        typeId={typeId} category="trip" scopeId={scopeId} ownedScope={ownedScope}
+        scopeLookup={scopeLookup} onRolledBack={reload} />
     </div>
   );
 }
