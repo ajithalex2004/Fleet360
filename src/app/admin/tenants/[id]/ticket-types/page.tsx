@@ -12,10 +12,25 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Headphones, ArrowLeft, Save, AlertCircle } from 'lucide-react';
-import { TICKET_TYPE_LIST } from '@/lib/service-tickets/config';
+import { getServiceIcon } from '@/lib/service-tickets/icons';
 import type { TicketType, TenantTicketTypeAccess } from '@/types/service-tickets';
+import type { ServiceTone } from '@/types/service-config';
 
-interface Row extends TenantTicketTypeAccess {}
+/** Each matrix row now arrives enriched with presentation metadata
+ *  resolved through the Service Configuration Engine. The endpoint
+ *  attaches it via a join with the tenant's service_types catalogue,
+ *  so this page no longer depends on the legacy TICKET_TYPE_CONFIG. */
+interface RowMeta {
+  label: string;
+  description: string;
+  iconName: string | null;
+  tone: ServiceTone;
+  prefix: string;
+  defaultSlaHours: number;
+}
+interface Row extends TenantTicketTypeAccess {
+  meta: RowMeta | null;
+}
 
 export default function TicketTypesAccessPage() {
   const params   = useParams<{ id: string }>();
@@ -126,34 +141,38 @@ export default function TicketTypesAccessPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
-            {TICKET_TYPE_LIST.map(cfg => {
-              const row = rows.find(r => r.ticketType === cfg.type);
-              if (!row) return null;
-              const Icon = cfg.icon;
+            {rows.map(row => {
+              const meta = row.meta;
+              const Icon = getServiceIcon(meta?.iconName);
+              const tone: ServiceTone = meta?.tone ?? 'violet';
+              const label  = meta?.label ?? row.ticketType;
+              const description = meta?.description ?? '';
+              const prefix = meta?.prefix ?? '';
+              const defaultSla = meta?.defaultSlaHours ?? 24;
               return (
-                <tr key={cfg.type} className="hover:bg-white/[0.02]">
+                <tr key={row.ticketType} className="hover:bg-white/[0.02]">
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${TONE_BG[cfg.tone]}`}>
-                        <Icon className={`w-4 h-4 ${TONE_FG[cfg.tone]}`} strokeWidth={2} />
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${TONE_BG[tone]}`}>
+                        <Icon className={`w-4 h-4 ${TONE_FG[tone]}`} strokeWidth={2} />
                       </div>
                       <div>
-                        <div className="text-white font-medium">{cfg.longLabel}</div>
-                        <div className="text-[11px] text-slate-500 max-w-md leading-tight">{cfg.description}</div>
+                        <div className="text-white font-medium">{label}</div>
+                        <div className="text-[11px] text-slate-500 max-w-md leading-tight">{description}</div>
                       </div>
                     </div>
                   </td>
                   <td className="px-3 py-3">
-                    <code className="text-[11px] font-mono text-slate-300 bg-slate-700/40 px-2 py-0.5 rounded">{cfg.prefix}</code>
+                    <code className="text-[11px] font-mono text-slate-300 bg-slate-700/40 px-2 py-0.5 rounded">{prefix}</code>
                   </td>
                   <td className="px-3 py-3 text-slate-400 text-xs whitespace-nowrap">
-                    {fmtHours(cfg.defaultSlaHours)}
+                    {fmtHours(defaultSla)}
                   </td>
                   <td className="px-3 py-3">
                     <input type="number" min="0" max="8760"
-                      placeholder={String(cfg.defaultSlaHours)}
+                      placeholder={String(defaultSla)}
                       value={row.slaOverrideHours ?? ''}
-                      onChange={e => updateRow(cfg.type, {
+                      onChange={e => updateRow(row.ticketType, {
                         slaOverrideHours: e.target.value === '' ? null : Number(e.target.value),
                       })}
                       disabled={!row.enabled}
@@ -163,7 +182,7 @@ export default function TicketTypesAccessPage() {
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input type="checkbox" className="sr-only peer"
                         checked={row.enabled}
-                        onChange={e => updateRow(cfg.type, { enabled: e.target.checked })} />
+                        onChange={e => updateRow(row.ticketType, { enabled: e.target.checked })} />
                       <div className="w-11 h-6 bg-slate-700 peer-focus:ring-2 peer-focus:ring-violet-500 rounded-full peer-checked:bg-emerald-600 transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-transform peer-checked:after:translate-x-5" />
                     </label>
                   </td>

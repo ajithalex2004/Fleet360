@@ -1,59 +1,48 @@
 /**
- * Per-type configuration for the Service & Support Ticketing module.
+ * Bootstrap data for the 7 system ticket types.
  *
- * One row per ticket type. All UI / SLA / numbering / theming reads
- * from this table — adding a new type is a single object here.
+ * This file replaces the runtime `TICKET_TYPE_CONFIG` map. It is read
+ * **only** by `seedServiceConfigForTenant` to populate `service_categories`,
+ * `service_types`, `service_module_mapping`, and `service_rules` for a
+ * brand-new tenant. After seeding completes (which loadServiceConfig now
+ * guarantees), every consumer reads through resolvers backed by the
+ * database — there is no runtime fallback into this file.
  *
- * Phase 1A: prefix, label, icon, tone, default SLA, default priority.
- * Phase 1C will extend with per-type form fields and per-type
- * workflow state machines.
+ * The icons are stored as Lucide names (strings), resolved client-side
+ * via `src/lib/service-tickets/icons.ts`.
  */
 
-import {
-  Wrench, Calendar, Sparkles, LifeBuoy, Siren, Truck, MessageSquareWarning,
-  type LucideIcon,
-} from 'lucide-react';
-import type {
-  TicketType, TicketPriority, FormFieldDef, ApprovalRule,
-} from '@/types/service-tickets';
+import type { TicketType, FormFieldDef, TicketPriority } from '@/types/service-tickets';
+import type { ServiceTone } from '@/types/service-config';
 
-export interface TicketTypeConfig {
-  type: TicketType;
-  /** 3-letter code in the ticker: ST2026-MNT-0001 etc. */
-  prefix: string;
-  /** Short label for tabs / badges. */
+export interface SystemTicketTypeMeta {
+  /** Short label for tabs / badges (was: TicketTypeConfig.label). */
   label: string;
-  /** Long label for headers / tooltips. */
+  /** Long label for headers / tooltips (was: TicketTypeConfig.longLabel). */
   longLabel: string;
   description: string;
-  icon: LucideIcon;
-  /** Tone key from page-theme accents (gold/blue/emerald/amber/rose/slate). */
-  tone: 'gold' | 'blue' | 'emerald' | 'amber' | 'rose' | 'slate' | 'violet';
-  /** Default SLA — first-response target in hours from creation. */
+  /** Lucide icon name as a string — resolved at render time. */
+  iconName: string;
+  tone: ServiceTone;
+  /** 3-letter code in the readable id (e.g. ST2026-MNT-0001). */
+  prefix: string;
   defaultSlaHours: number;
-  /** Default priority when the requestor doesn't pick one. */
   defaultPriority: TicketPriority;
-  /** Whether tickets of this type can be linked to a vehicle. */
   vehicleRequired: boolean;
-  /** Whether Acknowledge auto-creates a back-office MaintenanceRequest. */
   autoCreatesMaintenanceRequest: boolean;
-  /** Per-type custom field schema (1C). Rendered in the create form and
-   *  shown on the card. */
+  /** Approval rule. Translated to ApprovalRules at seed time. */
+  requiresApproval?: { always?: boolean; highPriorityOnly?: boolean };
   formFields: FormFieldDef[];
-  /** Approval rule (1C). When matched, the ticket starts in 'Awaiting
-   *  Approval' instead of 'Pending'. */
-  requiresApproval?: ApprovalRule;
 }
 
-export const TICKET_TYPE_CONFIG: Record<TicketType, TicketTypeConfig> = {
+export const SYSTEM_TICKET_TYPES: Record<TicketType, SystemTicketTypeMeta> = {
   MAINTENANCE: {
-    type: 'MAINTENANCE',
-    prefix: 'MNT',
     label: 'Maintenance',
     longLabel: 'Maintenance Request',
     description: 'Vehicle breakdown, scheduled servicing, repairs. Acknowledging creates a formal Maintenance Request in the workshop queue.',
-    icon: Wrench,
+    iconName: 'Wrench',
     tone: 'blue',
+    prefix: 'MNT',
     defaultSlaHours: 24,
     defaultPriority: 'Medium',
     vehicleRequired: true,
@@ -72,14 +61,13 @@ export const TICKET_TYPE_CONFIG: Record<TicketType, TicketTypeConfig> = {
     ],
   },
   RENEWAL: {
-    type: 'RENEWAL',
-    prefix: 'REN',
     label: 'Renewal',
     longLabel: 'Renewal Request',
     description: 'Vehicle registration, road permits, driver licence and driver permit renewals. Predictable lead time.',
-    icon: Calendar,
+    iconName: 'Calendar',
     tone: 'gold',
-    defaultSlaHours: 168, // 7 days
+    prefix: 'REN',
+    defaultSlaHours: 168,
     defaultPriority: 'Low',
     vehicleRequired: false,
     autoCreatesMaintenanceRequest: false,
@@ -100,13 +88,12 @@ export const TICKET_TYPE_CONFIG: Record<TicketType, TicketTypeConfig> = {
     ],
   },
   CLEANING: {
-    type: 'CLEANING',
-    prefix: 'CLN',
     label: 'Cleaning',
     longLabel: 'Vehicle Cleaning Request',
     description: 'Interior / exterior detailing, sanitisation, periodic deep cleaning.',
-    icon: Sparkles,
+    iconName: 'Sparkles',
     tone: 'emerald',
+    prefix: 'CLN',
     defaultSlaHours: 48,
     defaultPriority: 'Low',
     vehicleRequired: true,
@@ -123,13 +110,12 @@ export const TICKET_TYPE_CONFIG: Record<TicketType, TicketTypeConfig> = {
     ],
   },
   SUPPORT: {
-    type: 'SUPPORT',
-    prefix: 'SUP',
     label: 'Support',
     longLabel: 'Support Ticket',
     description: 'Platform / app support — login problems, data corrections, configuration help.',
-    icon: LifeBuoy,
+    iconName: 'LifeBuoy',
     tone: 'blue',
+    prefix: 'SUP',
     defaultSlaHours: 24,
     defaultPriority: 'Medium',
     vehicleRequired: false,
@@ -161,13 +147,12 @@ export const TICKET_TYPE_CONFIG: Record<TicketType, TicketTypeConfig> = {
     ],
   },
   INCIDENT: {
-    type: 'INCIDENT',
-    prefix: 'INC',
     label: 'Incident',
     longLabel: 'Incident Report',
     description: 'Accidents, safety incidents, on-road events. High priority — short SLA.',
-    icon: Siren,
+    iconName: 'Siren',
     tone: 'rose',
+    prefix: 'INC',
     defaultSlaHours: 2,
     defaultPriority: 'High',
     vehicleRequired: true,
@@ -187,13 +172,12 @@ export const TICKET_TYPE_CONFIG: Record<TicketType, TicketTypeConfig> = {
     ],
   },
   TOWING: {
-    type: 'TOWING',
-    prefix: 'TOW',
     label: 'Towing',
     longLabel: 'Towing & Recovery',
     description: 'Roadside breakdown recovery, jump-start, flat-tyre, vehicle relocation.',
-    icon: Truck,
+    iconName: 'Truck',
     tone: 'amber',
+    prefix: 'TOW',
     defaultSlaHours: 1,
     defaultPriority: 'High',
     vehicleRequired: true,
@@ -210,13 +194,12 @@ export const TICKET_TYPE_CONFIG: Record<TicketType, TicketTypeConfig> = {
     ],
   },
   COMPLAINT: {
-    type: 'COMPLAINT',
-    prefix: 'COM',
     label: 'Complaint',
     longLabel: 'Complaint or Suggestion',
     description: 'Customer feedback, service complaints, improvement suggestions.',
-    icon: MessageSquareWarning,
+    iconName: 'MessageSquareWarning',
     tone: 'violet',
+    prefix: 'COM',
     defaultSlaHours: 72,
     defaultPriority: 'Medium',
     vehicleRequired: false,
@@ -236,28 +219,7 @@ export const TICKET_TYPE_CONFIG: Record<TicketType, TicketTypeConfig> = {
   },
 };
 
-/**
- * Compute the initial status for a new ticket — `Awaiting Approval` if
- * the type's approval rule matches, else `Pending`.
- */
-export function initialStatusForType(
-  type: TicketType,
-  priority: TicketPriority,
-): 'Awaiting Approval' | 'Pending' {
-  const rule = TICKET_TYPE_CONFIG[type].requiresApproval;
-  if (!rule) return 'Pending';
-  if (rule.always) return 'Awaiting Approval';
-  if (rule.highPriorityOnly && priority === 'High') return 'Awaiting Approval';
-  return 'Pending';
-}
-
-/** Convenience: ordered array for grids, tabs, etc. */
-export const TICKET_TYPE_LIST: TicketTypeConfig[] = (
-  ['MAINTENANCE', 'RENEWAL', 'CLEANING', 'SUPPORT', 'INCIDENT', 'TOWING', 'COMPLAINT'] as TicketType[]
-).map(t => TICKET_TYPE_CONFIG[t]);
-
-/** Lookup by prefix (used when parsing a ticker like ST2026-MNT-0001). */
-export function configByPrefix(prefix: string): TicketTypeConfig | null {
-  const found = TICKET_TYPE_LIST.find(c => c.prefix === prefix.toUpperCase());
-  return found ?? null;
-}
+/** Ordered list of system types — used by the seed only. */
+export const SYSTEM_TICKET_TYPES_ORDER: TicketType[] = [
+  'MAINTENANCE', 'RENEWAL', 'CLEANING', 'SUPPORT', 'INCIDENT', 'TOWING', 'COMPLAINT',
+];

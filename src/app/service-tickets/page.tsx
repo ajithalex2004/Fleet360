@@ -18,26 +18,36 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Headphones, Plus, AlertCircle, Clock, ChevronRight, ArrowUpRight } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
-import { TICKET_TYPE_CONFIG, TICKET_TYPE_LIST } from '@/lib/service-tickets/config';
 import { TICKET_TYPES_ORDER } from '@/types/service-tickets';
 import type { TicketType, ServiceTicket, TenantTicketTypeAccess, FormFieldDef } from '@/types/service-tickets';
+import type { ServiceTone } from '@/types/service-config';
+import { getServiceIcon } from '@/lib/service-tickets/icons';
+import { createMaintenanceRequest } from '@/services/mockData';
 
 /** Map of ticket type → resolved form fields, sourced from
- *  /api/service-tickets/form-fields (Phase 2B.formFields). Empty for
- *  a type means "no extra fields". `undefined` for the whole map means
- *  "still loading; fall back to compile-time TICKET_TYPE_CONFIG". */
+ *  /api/service-tickets/form-fields. Empty array for a type means
+ *  "no extra fields". `undefined` for the whole map means "still loading". */
 type FormFieldsByType = Partial<Record<TicketType, FormFieldDef[]>>;
 
-/** Per-type config flags resolved by the Service Configuration Engine.
- *  Same endpoint as FormFieldsByType to save a round-trip. Used by the
- *  Acknowledge handler (autoCreatesMaintenanceRequest) and the create
- *  form display (vehicleRequired, defaultPriority). */
-type TypeConfigByType = Partial<Record<TicketType, {
+/** Per-type config (presentation + behavioural) sourced from the same
+ *  endpoint. Single source of truth for everything the UI needs to render
+ *  a service-ticket type. */
+interface ServiceTypeConfig {
+  name: string;
+  longLabel: string;
+  description: string;
+  iconName: string | null;
+  tone: ServiceTone;
+  sortOrder: number;
   vehicleRequired: boolean;
   autoCreatesMaintenanceRequest: boolean;
   defaultPriority: 'Low' | 'Medium' | 'High';
-}>>;
-import { createMaintenanceRequest } from '@/services/mockData';
+  defaultSlaHours: number;
+  prefix: string;
+  approvalRequired: boolean;
+  approvalEmergencyBypass: boolean;
+}
+type TypeConfigByType = Partial<Record<TicketType, ServiceTypeConfig>>;
 
 // ── Shared visuals ───────────────────────────────────────────────────────────
 const TONE_BG: Record<string, string> = {
@@ -121,9 +131,16 @@ export default function ServiceTicketsHome() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy]       = useState(false);
 
+  /** Enabled types as a sorted list of (type, config) pairs. Sourced from
+   *  typeConfigByType (Service Configuration Engine), filtered through
+   *  accessMap. Sort order also lives on the type record. */
   const enabledTypes = useMemo(() => {
-    return TICKET_TYPE_LIST.filter(c => accessMap.get(c.type)?.enabled !== false);
-  }, [accessMap]);
+    const types = (Object.keys(typeConfigByType) as TicketType[])
+      .filter(t => accessMap.get(t)?.enabled !== false);
+    return types
+      .map(t => ({ type: t, cfg: typeConfigByType[t]! }))
+      .sort((a, b) => a.cfg.sortOrder - b.cfg.sortOrder);
+  }, [accessMap, typeConfigByType]);
 
   // ── Initial load ──────────────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -225,7 +242,6 @@ export default function ServiceTicketsHome() {
       rejectReason = r.trim() || null;
     }
 
-    const cfg = TICKET_TYPE_CONFIG[ticket.ticketType];
     let extraNote: string | undefined =
       assignee
         ? `${newStatus} to ${assignee}${ticket.assignedTo ? ` (was ${ticket.assignedTo})` : ''}`
@@ -238,12 +254,9 @@ export default function ServiceTicketsHome() {
     let mrId: string | null = null;
 
     // Special case — MAINTENANCE Acknowledge auto-creates a back-office MR.
-    // Phase 2D — flag now resolved through the Service Configuration Engine
-    // (typeConfig is loaded by the parent from /api/service-tickets/form-fields).
-    // Falls back to legacy compile-time TICKET_TYPE_CONFIG if the typeConfig
-    // map hasn't loaded yet.
-    const autoCreatesMR = typeConfigByType[ticket.ticketType]?.autoCreatesMaintenanceRequest
-      ?? cfg.autoCreatesMaintenanceRequest;
+    // Flag resolved through the Service Configuration Engine (typeConfig is
+    // loaded by the parent from /api/service-tickets/form-fields).
+    const autoCreatesMR = !!typeConfigByType[ticket.ticketType]?.autoCreatesMaintenanceRequest;
     if (autoCreatesMR && newStatus === 'Acknowledged') {
       try {
         if (!ticket.vehicleId) { alert('Cannot Acknowledge — no vehicle on this ticket.'); return; }
@@ -301,8 +314,7 @@ export default function ServiceTicketsHome() {
         let note: string | undefined =
           assignee ? `Bulk ${newStatus.toLowerCase()} to ${assignee}${t.assignedTo ? ` (was ${t.assignedTo})` : ''}` : `Bulk ${newStatus.toLowerCase()}`;
 
-        const autoCreatesMR = typeConfigByType[t.ticketType]?.autoCreatesMaintenanceRequest
-          ?? TICKET_TYPE_CONFIG[t.ticketType].autoCreatesMaintenanceRequest;
+        const autoCreatesMR = !!typeConfigByType[t.ticketType]?.autoCreatesMaintenanceRequest;
         if (autoCreatesMR && newStatus === 'Acknowledged' && t.vehicleId) {
           try {
             const mr = await createMaintenanceRequest({
@@ -361,14 +373,14 @@ export default function ServiceTicketsHome() {
       <div className="flex flex-wrap gap-1.5 bg-slate-900/40 border border-white/10 rounded-2xl p-1.5">
         <TabBtn active={activeType === 'ALL'} onClick={() => setActiveType('ALL')}
           label="All" count={countByType.ALL} tone="violet" />
-        {enabledTypes.map(cfg => (
-          <TabBtn key={cfg.type}
-            active={activeType === cfg.type}
-            onClick={() => setActiveType(cfg.type)}
-            label={cfg.label}
-            count={countByType[cfg.type] ?? 0}
+        {enabledTypes.map(({ type, cfg }) => (
+          <TabBtn key={type}
+            active={activeType === type}
+            onClick={() => setActiveType(type)}
+            label={cfg.name}
+            count={countByType[type] ?? 0}
             tone={cfg.tone}
-            Icon={cfg.icon} />
+            Icon={getServiceIcon(cfg.iconName)} />
         ))}
       </div>
 
@@ -409,7 +421,7 @@ export default function ServiceTicketsHome() {
       ) : filtered.length === 0 ? (
         <div className="bg-slate-900 border border-white/10 rounded-2xl py-16 text-center">
           <Headphones className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-          <p className="text-slate-400 text-sm">No tickets {activeType !== 'ALL' && `of type ${TICKET_TYPE_CONFIG[activeType].label}`} yet.</p>
+          <p className="text-slate-400 text-sm">No tickets {activeType !== 'ALL' && `of type ${typeConfigByType[activeType]?.name ?? activeType}`} yet.</p>
           <button onClick={() => setShowForm(true)}
             disabled={enabledTypes.length === 0}
             className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-200 text-sm">
@@ -423,6 +435,7 @@ export default function ServiceTicketsHome() {
               key={t.id}
               ticket={t}
               formFields={formFieldsByType[t.ticketType]}
+              typeConfig={typeConfigByType[t.ticketType]}
               selected={selectedIds.has(t.id)}
               onToggleSelect={() => toggleSelected(t.id)}
               onStatusChange={(status) => handleStatusChange(t, status)}
@@ -467,26 +480,25 @@ function BulkBtn({ label, onClick, disabled, cls }: { label: string; onClick: ()
   );
 }
 
-function TicketCard({ ticket, formFields, selected, onToggleSelect, onStatusChange }: {
+function TicketCard({ ticket, formFields, typeConfig, selected, onToggleSelect, onStatusChange }: {
   ticket: ServiceTicket;
   formFields?: FormFieldDef[];
+  typeConfig?: ServiceTypeConfig;
   selected: boolean;
   onToggleSelect: () => void;
   onStatusChange: (s: 'Acknowledged' | 'Resolved' | 'Assigned' | 'Escalated' | 'Pending' | 'Rejected') => void;
 }) {
-  const cfg = TICKET_TYPE_CONFIG[ticket.ticketType];
-  const Icon = cfg?.icon ?? Headphones;
+  const Icon = getServiceIcon(typeConfig?.iconName);
+  const tone = typeConfig?.tone ?? 'violet';
+  const typeLabel = typeConfig?.name ?? ticket.ticketType;
   const age = pendingAge(ticket);
   const isHigh = ticket.priority === 'High';
   const awaitingApproval = ticket.status === 'Awaiting Approval';
 
-  // Surface fields marked `preview: true` in the resolved per-type schema
-  // as a small strip below the description. Looks up label/options from
-  // the same schema so select values render as the human label, not the
-  // raw value. Phase 2B.formFields — schema sourced from the parent which
-  // loaded it via /api/service-tickets/form-fields (admin-edited rules
-  // first, TICKET_TYPE_CONFIG legacy fallback).
-  const fieldDefs = formFields ?? cfg?.formFields ?? [];
+  // Surface fields marked `preview: true` from the resolved per-type schema
+  // as a small strip below the description. Schema sourced from the parent
+  // which loaded it via /api/service-tickets/form-fields.
+  const fieldDefs = formFields ?? [];
   const previewFields = fieldDefs.filter(f => f.preview);
   const customFields = ticket.customFields ?? {};
   const renderPreviewValue = (f: typeof previewFields[number], v: unknown): string | null => {
@@ -548,11 +560,11 @@ function TicketCard({ ticket, formFields, selected, onToggleSelect, onStatusChan
 
         {/* Type + Title */}
         <div className="flex items-center gap-2 mb-2">
-          <div className={`w-7 h-7 rounded-lg ${TONE_BG[cfg?.tone ?? 'violet']} flex items-center justify-center shrink-0`}>
-            <Icon className={`w-3.5 h-3.5 ${TONE_FG[cfg?.tone ?? 'violet']}`} strokeWidth={2} />
+          <div className={`w-7 h-7 rounded-lg ${TONE_BG[tone]} flex items-center justify-center shrink-0`}>
+            <Icon className={`w-3.5 h-3.5 ${TONE_FG[tone]}`} strokeWidth={2} />
           </div>
-          <span className={`text-[10px] uppercase tracking-wider font-semibold ${TONE_FG[cfg?.tone ?? 'violet']}`}>
-            {cfg?.label ?? ticket.ticketType}
+          <span className={`text-[10px] uppercase tracking-wider font-semibold ${TONE_FG[tone]}`}>
+            {typeLabel}
           </span>
         </div>
         <h4 className="text-sm font-bold text-white mb-1 line-clamp-1" title={ticket.title}>{ticket.title}</h4>
@@ -569,7 +581,7 @@ function TicketCard({ ticket, formFields, selected, onToggleSelect, onStatusChan
               if (f.display === 'badge') {
                 return (
                   <span key={f.key}
-                    className={`text-[10px] px-2 py-0.5 rounded-full border ${TONE_BG[cfg?.tone ?? 'violet']} ${TONE_FG[cfg?.tone ?? 'violet']} border-current/30`}
+                    className={`text-[10px] px-2 py-0.5 rounded-full border ${TONE_BG[tone]} ${TONE_FG[tone]} border-current/30`}
                     title={f.label}>
                     {display}
                   </span>
@@ -687,15 +699,20 @@ function NewTicketForm({
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr]               = useState<string | null>(null);
 
-  const cfg = TICKET_TYPE_CONFIG[ticketType];
-  // Phase 2B.formFields + 2D — prefer admin-edited rules (loaded into the
-  // typeConfigByType / formFieldsByType maps by the parent), fall back to
-  // compile-time TICKET_TYPE_CONFIG.
-  const formFields: FormFieldDef[] = formFieldsByType[ticketType] ?? cfg.formFields ?? [];
+  // Resolved per-type config from the Service Configuration Engine —
+  // delivered by /api/service-tickets/form-fields. Single source of truth
+  // for everything the create form needs. Fallback values cover the brief
+  // window before the parent's mount fetch completes.
   const tc = typeConfigByType[ticketType];
-  const vehicleRequired = tc?.vehicleRequired ?? cfg.vehicleRequired;
-  const autoCreatesMR    = tc?.autoCreatesMaintenanceRequest ?? cfg.autoCreatesMaintenanceRequest;
-  const resolvedDefaultPriority = tc?.defaultPriority ?? cfg.defaultPriority;
+  const formFields: FormFieldDef[] = formFieldsByType[ticketType] ?? [];
+  const vehicleRequired         = !!tc?.vehicleRequired;
+  const autoCreatesMR           = !!tc?.autoCreatesMaintenanceRequest;
+  const resolvedDefaultPriority = tc?.defaultPriority ?? 'Medium';
+  const longLabel               = tc?.longLabel ?? ticketType;
+  const defaultSlaHours         = tc?.defaultSlaHours ?? 24;
+  const willAwaitApproval =
+    !!tc?.approvalRequired
+    && !(tc.approvalEmergencyBypass && priority === 'High');
 
   // Reset per-type custom fields whenever the ticket type changes — different
   // types have different field schemas, so values don't carry across.
@@ -717,7 +734,7 @@ function NewTicketForm({
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setErr(null);
     if (!title.trim()) { setErr('Title is required.'); return; }
-    if (vehicleRequired && !vehicleId.trim()) { setErr(`${cfg.longLabel} requires a vehicle ID.`); return; }
+    if (vehicleRequired && !vehicleId.trim()) { setErr(`${longLabel} requires a vehicle ID.`); return; }
 
     // Client-side mirror of server validation — fail fast before POST.
     for (const f of formFields) {
@@ -725,7 +742,7 @@ function NewTicketForm({
       const v = customFields[f.key];
       const empty = v === undefined || v === null || v === '' || v === false;
       if (empty && f.type !== 'checkbox') {
-        setErr(`${f.label} is required for ${cfg.longLabel}.`);
+        setErr(`${f.label} is required for ${longLabel}.`);
         return;
       }
     }
@@ -770,9 +787,10 @@ function NewTicketForm({
       <div className="space-y-1">
         <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Type</label>
         <div className="flex flex-wrap gap-2">
-          {enabledTypes.map(t => {
-            const c = TICKET_TYPE_CONFIG[t];
-            const Icon = c.icon;
+          {enabledTypes.map((t: TicketType) => {
+            const c = typeConfigByType[t];
+            if (!c) return null;
+            const Icon = getServiceIcon(c.iconName);
             const active = t === ticketType;
             return (
               <button type="button" key={t} onClick={() => setTicketType(t)}
@@ -781,23 +799,21 @@ function NewTicketForm({
                     ? `${TONE_BG[c.tone]} ${TONE_FG[c.tone]} border-current/40`
                     : 'bg-slate-800/50 text-slate-400 border-white/10 hover:border-white/30'
                 }`}>
-                <Icon className="w-3.5 h-3.5" /> {c.label}
+                <Icon className="w-3.5 h-3.5" /> {c.name}
               </button>
             );
           })}
         </div>
         <p className="text-[11px] text-slate-500">
-          Default SLA: <strong className="text-white">{cfg.defaultSlaHours}h</strong> · default priority: <strong className="text-white">{resolvedDefaultPriority}</strong>
+          Default SLA: <strong className="text-white">{defaultSlaHours}h</strong> · default priority: <strong className="text-white">{resolvedDefaultPriority}</strong>
           {autoCreatesMR && <span className="ml-2 text-blue-300">· auto-creates Maintenance Request on Acknowledge</span>}
         </p>
-        {/* Approval-gate hint — surfaced when the rule will fire for this type/priority */}
-        {(cfg.requiresApproval?.always
-          || (cfg.requiresApproval?.highPriorityOnly && priority === 'High')) && (
+        {/* Approval-gate hint — derived server-side from the resolved
+            approval rules. */}
+        {willAwaitApproval && (
           <p className="text-[11px] text-amber-300/90 inline-flex items-center gap-1">
             <AlertCircle className="w-3 h-3" />
-            This ticket will start in <strong className="text-amber-200">Awaiting Approval</strong>
-            {cfg.requiresApproval?.highPriorityOnly && ' (high priority requires approval)'}
-            {cfg.requiresApproval?.always && ' (this type always requires approval)'}.
+            This ticket will start in <strong className="text-amber-200">Awaiting Approval</strong>.
           </p>
         )}
       </div>

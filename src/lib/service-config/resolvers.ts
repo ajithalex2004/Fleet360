@@ -1,91 +1,68 @@
 /**
- * Module-facing resolvers for the Service Configuration Engine (Phase 2C).
+ * Module-facing resolvers for the Service Configuration Engine.
  *
  * Each resolver answers ONE question a downstream module would otherwise
- * answer with hardcoded config — e.g. "should this ticket start in
- * Awaiting Approval?". The resolver consults the central rules and
- * falls back to the legacy hardcoded config when no rules row exists.
- *
- * This is the bridge layer. Modules import resolvers; resolvers know
- * about both the new rules and the old config. Phase 2D shrinks the
- * legacy fallback as more tabs become canonical.
+ * answer with hardcoded config. The resolver consults the database via
+ * loadServiceConfig — which auto-seeds missing tenant data — so the
+ * resolver itself has no fallback path. Defaults come from the
+ * RULE_DEFAULTS map and the seed bootstrap data, never from a runtime
+ * legacy file.
  */
 
 import { loadServiceConfig } from './load';
-import {
-  TICKET_TYPE_CONFIG, initialStatusForType,
-} from '@/lib/service-tickets/config';
 import type { TicketType, TicketPriority, FormFieldDef } from '@/types/service-tickets';
 
 /**
- * Resolve the initial status for a new service-ticket. Authority order:
+ * Resolve the initial status for a new service-ticket.
  *
- *   1. service_rules.approval row (admin-configured) — wins
- *   2. TICKET_TYPE_CONFIG.requiresApproval (legacy hardcoded) — fallback
- *
- * Returns 'Awaiting Approval' or 'Pending'. Callers should pass the
- * tenant's resolved priority (already merged with defaults).
+ *   - approval.approvalRequired = true   → 'Awaiting Approval'
+ *   - approval.emergencyBypassEnabled    → High priority skips the gate
+ *   - else                               → 'Pending'
  */
 export async function resolveTicketInitialStatus(
   tenantId: string,
   ticketType: TicketType,
   priority: TicketPriority,
-): Promise<{ status: 'Awaiting Approval' | 'Pending'; source: 'service_rules' | 'legacy' }> {
+): Promise<{ status: 'Awaiting Approval' | 'Pending'; source: 'service_rules' | 'defaults' }> {
   const cfg = await loadServiceConfig(tenantId, ticketType);
 
-  // No central row at all — fall back to the legacy code path.
-  if (!cfg) {
-    return { status: initialStatusForType(ticketType, priority), source: 'legacy' };
+  // No service type at all (e.g. unknown ticket-type key) — defaults.
+  if (!cfg) return { status: 'Pending', source: 'defaults' };
+
+  const a = cfg.rules.approval;
+  const source = cfg.configured.approval ? 'service_rules' : 'defaults';
+
+  if (a.emergencyBypassEnabled && priority === 'High') {
+    return { status: 'Pending', source };
   }
-
-  // Central path: consult approval rules. Even when configured=false the
-  // resolved object still has defaults, so we treat "configured" as the
-  // signal that an admin has actually decided.
-  if (cfg.configured.approval) {
-    const a = cfg.rules.approval;
-
-    // Emergency bypass: High priority skips the gate when enabled.
-    if (a.emergencyBypassEnabled && priority === 'High') {
-      return { status: 'Pending', source: 'service_rules' };
-    }
-    if (a.approvalRequired) {
-      return { status: 'Awaiting Approval', source: 'service_rules' };
-    }
-    // Auto-approve below threshold doesn't apply here — tickets don't
-    // have an inherent monetary amount yet. That logic lives in the
-    // booking/finance modules and will use the same approval rule shape.
-    return { status: 'Pending', source: 'service_rules' };
+  if (a.approvalRequired) {
+    return { status: 'Awaiting Approval', source };
   }
-
-  // Central row exists but approval was never configured — honour legacy.
-  return { status: initialStatusForType(ticketType, priority), source: 'legacy' };
+  return { status: 'Pending', source };
 }
 
 /**
- * Resolve the SLA target hours for a ticket given its priority. Authority:
- *
- *   1. service_rules.ticketing.priorityMatrix[priority] — wins
- *   2. TICKET_TYPE_CONFIG.defaultSlaHours (legacy single value) — fallback
- *
- * Returns the resolved hours. Used by the SLA aging badge.
+ * Resolve the SLA target hours for a ticket given its priority. Reads
+ * service_rules.ticketing.priorityMatrix; returns the priority-matched
+ * value or Medium as a fallback when the priority key is unexpected.
  */
 export async function resolveTicketSlaHours(
   tenantId: string,
   ticketType: TicketType,
   priority: TicketPriority,
-): Promise<{ hours: number; source: 'service_rules' | 'legacy' }> {
+): Promise<{ hours: number; source: 'service_rules' | 'defaults' }> {
   const cfg = await loadServiceConfig(tenantId, ticketType);
-  if (cfg?.configured.ticketing) {
-    const matrix = cfg.rules.ticketing.priorityMatrix;
-    return { hours: matrix[priority] ?? matrix.Medium, source: 'service_rules' };
-  }
-  return { hours: TICKET_TYPE_CONFIG[ticketType]?.defaultSlaHours ?? 24, source: 'legacy' };
+  if (!cfg) return { hours: 24, source: 'defaults' };
+  const matrix = cfg.rules.ticketing.priorityMatrix;
+  return {
+    hours: matrix[priority] ?? matrix.Medium,
+    source: cfg.configured.ticketing ? 'service_rules' : 'defaults',
+  };
 }
 
 /**
- * Resolve the ticket prefix used in the readable ID. Authority:
- *   1. service_rules.ticketing.ticketPrefix (when non-empty)
- *   2. TICKET_TYPE_CONFIG.prefix (legacy)
+ * Resolve the ticket prefix used in the readable ID. Falls back to
+ * 'GEN' when the type doesn't exist or no prefix is set.
  */
 export async function resolveTicketPrefix(
   tenantId: string,
@@ -93,8 +70,7 @@ export async function resolveTicketPrefix(
 ): Promise<string> {
   const cfg = await loadServiceConfig(tenantId, ticketType);
   const fromRules = cfg?.rules.ticketing.ticketPrefix?.trim();
-  if (cfg?.configured.ticketing && fromRules) return fromRules;
-  return TICKET_TYPE_CONFIG[ticketType]?.prefix ?? 'GEN';
+  return fromRules || 'GEN';
 }
 
 export type SlaMatrix = { Low: number; Medium: number; High: number };
@@ -103,14 +79,6 @@ export type SlaMatrix = { Low: number; Medium: number; High: number };
  * Batch resolve the SLA priority matrix for a set of ticket types in one
  * pass. Used by API routes that return many tickets — keeps the per-ticket
  * SLA computation O(distinct_types) rather than O(tickets).
- *
- * For each requested type the returned matrix follows the same authority
- * order as resolveTicketSlaHours: service_rules.ticketing.priorityMatrix
- * first, TICKET_TYPE_CONFIG.defaultSlaHours legacy fallback second.
- *
- * Tenants without seeded rules (or without that ticket type at all) get
- * a matrix derived from the legacy defaultSlaHours via the same formula
- * the seed uses (Low ≈ 3× SLA, Medium = SLA, High ≈ SLA / 4).
  */
 export async function resolveTicketSlaMatrixBatch(
   tenantId: string,
@@ -121,20 +89,12 @@ export async function resolveTicketSlaMatrixBatch(
 
   await Promise.all(distinct.map(async (type) => {
     const cfg = await loadServiceConfig(tenantId, type);
-
-    if (cfg?.configured.ticketing) {
+    if (cfg) {
       const m = cfg.rules.ticketing.priorityMatrix;
       out.set(type, { Low: m.Low, Medium: m.Medium, High: m.High });
-      return;
+    } else {
+      out.set(type, { Low: 72, Medium: 24, High: 4 });
     }
-    // Legacy fallback — same shape as the 2C seed formula so first-time
-    // tenants and never-seeded tenants converge on identical SLAs.
-    const sla = TICKET_TYPE_CONFIG[type]?.defaultSlaHours ?? 24;
-    out.set(type, {
-      Low:    Math.max(sla * 3, sla),
-      Medium: sla,
-      High:   Math.max(Math.round(sla / 4), 1),
-    });
   }));
 
   return out;
@@ -146,12 +106,7 @@ export function pickSlaHours(matrix: SlaMatrix, priority: TicketPriority): numbe
 }
 
 /**
- * Resolve the per-service form-field schema. Authority order:
- *
- *   1. service_rules.formFields.fields (admin-edited)
- *   2. TICKET_TYPE_CONFIG.formFields (legacy compile-time schema)
- *
- * Used by:
+ * Resolve the per-service form-field schema. Used by:
  *   - /api/service-tickets POST → required-field validation
  *   - /service-tickets NewTicketForm → dynamic field rendering
  *
@@ -160,12 +115,13 @@ export function pickSlaHours(matrix: SlaMatrix, priority: TicketPriority): numbe
 export async function resolveTicketFormFields(
   tenantId: string,
   ticketType: TicketType,
-): Promise<{ fields: FormFieldDef[]; source: 'service_rules' | 'legacy' }> {
+): Promise<{ fields: FormFieldDef[]; source: 'service_rules' | 'defaults' }> {
   const cfg = await loadServiceConfig(tenantId, ticketType);
-  if (cfg?.configured.formFields) {
-    return { fields: cfg.rules.formFields.fields ?? [], source: 'service_rules' };
-  }
-  return { fields: TICKET_TYPE_CONFIG[ticketType]?.formFields ?? [], source: 'legacy' };
+  if (!cfg) return { fields: [], source: 'defaults' };
+  return {
+    fields: cfg.rules.formFields.fields ?? [],
+    source: cfg.configured.formFields ? 'service_rules' : 'defaults',
+  };
 }
 
 /**
@@ -185,48 +141,36 @@ export async function resolveTicketFormFieldsBatch(
   return out;
 }
 
-/**
- * Resolve whether this service requires a vehicle reference. Authority:
- *   1. service_rules.vehicle.vehicleRequired (admin-edited)
- *   2. TICKET_TYPE_CONFIG.vehicleRequired (legacy)
- */
+/** Resolve whether this service requires a vehicle reference. */
 export async function resolveTicketVehicleRequired(
   tenantId: string,
   ticketType: TicketType,
 ): Promise<boolean> {
   const cfg = await loadServiceConfig(tenantId, ticketType);
-  if (cfg?.configured.vehicle) return !!cfg.rules.vehicle.vehicleRequired;
-  return !!TICKET_TYPE_CONFIG[ticketType]?.vehicleRequired;
+  return !!cfg?.rules.vehicle.vehicleRequired;
 }
 
 /**
  * Resolve whether Acknowledging a ticket of this service should auto-create
- * a MaintenanceRequest in the maintenance module (the legacy MAINTENANCE
- * cross-module bridge). Authority:
- *   1. service_rules.ticketing.autoCreatesMaintenanceRequest (admin-edited)
- *   2. TICKET_TYPE_CONFIG.autoCreatesMaintenanceRequest (legacy)
+ * a MaintenanceRequest in the maintenance module (the MAINTENANCE-only
+ * cross-module bridge).
  */
 export async function resolveTicketAutoCreatesMaintenanceRequest(
   tenantId: string,
   ticketType: TicketType,
 ): Promise<boolean> {
   const cfg = await loadServiceConfig(tenantId, ticketType);
-  if (cfg?.configured.ticketing) return !!cfg.rules.ticketing.autoCreatesMaintenanceRequest;
-  return !!TICKET_TYPE_CONFIG[ticketType]?.autoCreatesMaintenanceRequest;
+  return !!cfg?.rules.ticketing.autoCreatesMaintenanceRequest;
 }
 
 /**
  * Resolve the default priority for a service. Lives on the service_types
- * row directly (not in service_rules) — Phase 2A already stored it.
- * Authority:
- *   1. service_types.default_priority (admin-edited via Basic Info tab)
- *   2. TICKET_TYPE_CONFIG.defaultPriority (legacy)
+ * row directly (not in service_rules) — Phase 2A stored it on the row.
  */
 export async function resolveTicketDefaultPriority(
   tenantId: string,
   ticketType: TicketType,
 ): Promise<TicketPriority> {
   const cfg = await loadServiceConfig(tenantId, ticketType);
-  if (cfg?.type.defaultPriority) return cfg.type.defaultPriority;
-  return (TICKET_TYPE_CONFIG[ticketType]?.defaultPriority ?? 'Medium') as TicketPriority;
+  return cfg?.type.defaultPriority ?? 'Medium';
 }

@@ -14,14 +14,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureServiceTicketsTable, nextReadableId } from '@/lib/service-tickets/schema';
-import { TICKET_TYPE_CONFIG } from '@/lib/service-tickets/config';
 import { TICKET_TYPES_ORDER, type TicketType, type TicketPriority } from '@/types/service-tickets';
 import { getTenantEnabledTypes } from '@/lib/service-tickets/access';
+import { loadServiceConfig } from '@/lib/service-config/load';
 import {
-  resolveTicketInitialStatus, resolveTicketPrefix,
+  resolveTicketInitialStatus,
   resolveTicketSlaMatrixBatch, pickSlaHours,
-  resolveTicketFormFields, resolveTicketVehicleRequired,
-  resolveTicketDefaultPriority,
   type SlaMatrix,
 } from '@/lib/service-config/resolvers';
 import { logAudit } from '@/lib/audit';
@@ -155,56 +153,57 @@ export async function POST(req: NextRequest) {
   }
   if (!title) return NextResponse.json({ ok: false, error: 'Title is required.' }, { status: 400 });
 
+  // Load the central service config once. This auto-seeds the tenant on
+  // first call and gives us everything we need (longLabel, defaults,
+  // vehicleRequired, formFields, prefix) without round-tripping the
+  // resolvers. The initial-status resolver still runs separately so its
+  // emergency-bypass logic stays in one place.
+  const cfg = await loadServiceConfig(tenantId, ticketType);
+  if (!cfg) {
+    return NextResponse.json({ ok: false, error: `Unknown service type ${ticketType}.` }, { status: 400 });
+  }
+  const longLabel = cfg.type.name;
+
   // Enforce per-tenant access matrix.
   const enabled = await getTenantEnabledTypes(tenantId);
   if (!enabled.includes(ticketType)) {
     return NextResponse.json({
       ok: false,
-      error: `${TICKET_TYPE_CONFIG[ticketType].longLabel} is not enabled for your tenant. Ask your administrator to enable it.`,
+      error: `${longLabel} is not enabled for your tenant. Ask your administrator to enable it.`,
     }, { status: 403 });
   }
 
-  const cfg = TICKET_TYPE_CONFIG[ticketType];
-  // Phase 2D finish-migration — defaultPriority + vehicleRequired now flow
-  // through the Service Configuration Engine. Resolvers fall back to
-  // TICKET_TYPE_CONFIG when no central row is configured.
-  const resolvedDefaultPriority = await resolveTicketDefaultPriority(tenantId, ticketType);
+  // Default priority lives on the service_types row.
   const priority = (['Low', 'Medium', 'High'].includes(body.priority ?? '')
-    ? body.priority : resolvedDefaultPriority) as 'Low' | 'Medium' | 'High';
+    ? body.priority : cfg.type.defaultPriority) as 'Low' | 'Medium' | 'High';
 
   // Vehicle requirement check.
-  const vehicleRequired = await resolveTicketVehicleRequired(tenantId, ticketType);
-  if (vehicleRequired && !body.vehicleId) {
-    return NextResponse.json({ ok: false, error: `${cfg.longLabel} requires a vehicle.` }, { status: 400 });
+  if (cfg.rules.vehicle.vehicleRequired && !body.vehicleId) {
+    return NextResponse.json({ ok: false, error: `${longLabel} requires a vehicle.` }, { status: 400 });
   }
 
-  // Validate per-type required fields. Phase 2B.formFields — schema now
-  // resolved through service_rules with TICKET_TYPE_CONFIG.formFields as
-  // the legacy fallback. Authority decided by resolveTicketFormFields.
+  // Validate per-type required fields against the resolved schema.
   const customFields = (body.customFields && typeof body.customFields === 'object')
     ? body.customFields
     : {};
-  const { fields: resolvedFormFields } = await resolveTicketFormFields(tenantId, ticketType);
+  const resolvedFormFields = cfg.rules.formFields.fields ?? [];
   for (const f of resolvedFormFields) {
     if (!f.required) continue;
     const v = customFields[f.key];
     const empty = v === undefined || v === null || v === '' || v === false;
     if (empty && f.type !== 'checkbox') {
-      return NextResponse.json({ ok: false, error: `${f.label} is required for ${cfg.longLabel}.` }, { status: 400 });
+      return NextResponse.json({ ok: false, error: `${f.label} is required for ${longLabel}.` }, { status: 400 });
     }
   }
 
-  // Phase 2C — initial status now resolved through the Service Configuration
-  // Engine. The resolver consults service_rules.approval first, then falls
-  // back to TICKET_TYPE_CONFIG.requiresApproval when no central row exists.
+  // Initial status — approval gate lives in resolveTicketInitialStatus.
   const { status: initialStatus, source: statusSource } =
     await resolveTicketInitialStatus(tenantId, ticketType, priority as TicketPriority);
 
   try {
     await ensureServiceTicketsTable();
-    // Phase 2C.x — prefix now resolved through the Service Configuration
-    // Engine so admins can override the 3-letter code without a code change.
-    const resolvedPrefix = await resolveTicketPrefix(tenantId, ticketType);
+    // Prefix lives on the resolved ticketing rules.
+    const resolvedPrefix = (cfg.rules.ticketing.ticketPrefix?.trim()) || 'GEN';
     const readableId = await nextReadableId(tenantId, ticketType, resolvedPrefix);
     const nowIso = new Date().toISOString();
 
@@ -244,7 +243,7 @@ export async function POST(req: NextRequest) {
       entityId: ticket.id,
       entityName: readableId,
       action: 'CREATE',
-      details: `Created ${cfg.longLabel} ${readableId}: ${title} (${priority}) — initial status ${initialStatus} via ${statusSource}`,
+      details: `Created ${longLabel} ${readableId}: ${title} (${priority}) — initial status ${initialStatus} via ${statusSource}`,
     });
 
     // Enrich response with the resolved SLA target — single-type lookup.

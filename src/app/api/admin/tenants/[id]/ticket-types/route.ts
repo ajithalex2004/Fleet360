@@ -10,8 +10,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getTenantAccessMatrix, replaceTenantAccessMatrix } from '@/lib/service-tickets/access';
+import { loadServiceConfig } from '@/lib/service-config/load';
 import { TICKET_TYPES_ORDER } from '@/types/service-tickets';
 import type { TicketType } from '@/types/service-tickets';
+import type { ServiceTone } from '@/types/service-config';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -36,7 +38,25 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   if (!auth.ok) return auth.res;
 
   const matrix = await getTenantAccessMatrix(tenantId);
-  return NextResponse.json({ ok: true, matrix });
+
+  // Enrich each row with presentation metadata sourced from the Service
+  // Configuration Engine. The matrix UI uses this to render the type
+  // label, icon, tone, prefix and default SLA without depending on the
+  // legacy TICKET_TYPE_CONFIG file.
+  const enriched = await Promise.all(matrix.map(async (row) => {
+    const cfg = await loadServiceConfig(tenantId, row.ticketType);
+    const meta = cfg ? {
+      label: cfg.type.name,
+      description: cfg.type.description ?? '',
+      iconName: cfg.type.icon,
+      tone: cfg.type.tone as ServiceTone,
+      prefix: cfg.rules.ticketing.ticketPrefix || '',
+      defaultSlaHours: cfg.rules.ticketing.priorityMatrix.Medium,
+    } : null;
+    return { ...row, meta };
+  }));
+
+  return NextResponse.json({ ok: true, matrix: enriched });
 }
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {

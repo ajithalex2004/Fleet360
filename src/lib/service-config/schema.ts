@@ -15,7 +15,7 @@
 import { prisma } from '@/lib/prisma';
 import type { LinkedModule } from '@/types/service-config';
 import { ensureServiceRulesTable, seedRulesIfAbsent } from './rules-schema';
-import { TICKET_TYPE_CONFIG } from '@/lib/service-tickets/config';
+import { SYSTEM_TICKET_TYPES } from './system-types-seed';
 import {
   DEFAULT_APPROVAL_RULES, DEFAULT_TICKETING_RULES, DEFAULT_FORM_FIELDS_RULES,
   DEFAULT_VEHICLE_RULES,
@@ -294,7 +294,7 @@ async function seedRulesFromTicketingConfig(
   ticketType: TicketType,
 ): Promise<void> {
   await ensureServiceRulesTable();
-  const cfg = TICKET_TYPE_CONFIG[ticketType];
+  const cfg = SYSTEM_TICKET_TYPES[ticketType];
   if (!cfg) return;
 
   // Approval — preserve the highPriorityOnly / always semantics by mapping
@@ -342,14 +342,25 @@ async function seedRulesFromTicketingConfig(
   await seedRulesIfAbsent(serviceTypeId, 'vehicle',    vehicle);
 }
 
-/** Used by the admin GET to make sure the tenant has its baseline catalogue. */
+/** Process-level cache so we don't re-run the COUNT(*) check on every
+ *  hot-path resolver call. Tenants seeded earlier in the lifetime of
+ *  this Node process skip the check entirely. */
+const _seededTenants = new Set<string>();
+
+/**
+ * Used by every entry point that reads from the engine — admin GETs,
+ * the public form-fields endpoint, and (transparently) every resolver
+ * via loadServiceConfig. After this returns, the tenant is guaranteed
+ * to have its baseline catalogue and the 7 system service-rule rows.
+ */
 export async function ensureSeededForTenant(tenantId: string): Promise<void> {
+  if (_seededTenants.has(tenantId)) return;
   await ensureServiceConfigTables();
-  // Cheap existence check — if the tenant has zero rows, seed once.
   const rows = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
     `SELECT COUNT(*)::bigint AS count FROM service_categories WHERE tenant_id = $1`,
     tenantId,
   ).catch(() => [{ count: BigInt(0) }]);
   const count = Number(rows[0]?.count ?? BigInt(0));
   if (count === 0) await seedServiceConfigForTenant(tenantId);
+  _seededTenants.add(tenantId);
 }

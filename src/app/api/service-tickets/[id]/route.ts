@@ -13,8 +13,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureServiceTicketsTable } from '@/lib/service-tickets/schema';
-import { TICKET_TYPE_CONFIG } from '@/lib/service-tickets/config';
 import type { TicketType, TicketPriority } from '@/types/service-tickets';
+import { loadServiceConfig } from '@/lib/service-config/load';
 import {
   resolveTicketSlaMatrixBatch, pickSlaHours, type SlaMatrix,
 } from '@/lib/service-config/resolvers';
@@ -143,7 +143,9 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     const ticket = updated[0];
     if (!ticket) return NextResponse.json({ ok: false, error: 'Update affected no rows' }, { status: 404 });
 
-    const cfg = TICKET_TYPE_CONFIG[ticket.ticket_type as TicketType];
+    // Resolve the ticket's type label from the central catalogue for the
+    // audit log. Cheap: hits the in-process tenant cache after first call.
+    const cfg = await loadServiceConfig(tenantId, ticket.ticket_type as TicketType);
     void logAudit({
       tenantId,
       userId,
@@ -151,7 +153,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       entityId: ticket.id,
       entityName: ticket.readable_id ?? ticket.id,
       action: 'UPDATE',
-      details: `${cfg?.longLabel ?? 'Ticket'} ${ticket.readable_id ?? ticket.id}: ${
+      details: `${cfg?.type.name ?? 'Ticket'} ${ticket.readable_id ?? ticket.id}: ${
         Object.keys(body).filter(k => k !== 'history' && k !== 'attachments' && k !== 'comments').join(', ') || 'updated'
       } → ${ticket.status}`,
     });

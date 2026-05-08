@@ -18,7 +18,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { ensureServiceConfigTables } from './schema';
+import { ensureServiceConfigTables, ensureSeededForTenant } from './schema';
 import { ensureServiceRulesTable } from './rules-schema';
 import {
   RULE_CATEGORIES, RULE_DEFAULTS,
@@ -35,8 +35,11 @@ export interface ResolvedServiceType {
   key: string;
   name: string;
   description: string | null;
+  /** Lucide icon name (string) — resolved client-side via getServiceIcon. */
+  icon: string | null;
   tone: ServiceTone;
   defaultPriority: DefaultPriority;
+  sortOrder: number;
   isSystem: boolean;
 }
 
@@ -60,7 +63,8 @@ export interface ResolvedServiceConfig {
 
 interface TypeRow {
   id: string; tenant_id: string; category_id: string; key: string; name: string;
-  description: string | null; tone: string; default_priority: string; is_system: boolean;
+  description: string | null; icon: string | null; tone: string;
+  default_priority: string; sort_order: number; is_system: boolean;
 }
 interface MappingRow {
   linked_module: string; sub_module: string | null;
@@ -85,10 +89,14 @@ export async function loadServiceConfig(
 ): Promise<ResolvedServiceConfig | null> {
   await ensureServiceConfigTables();
   await ensureServiceRulesTable();
+  // Phase 2D — guarantee the tenant has its baseline catalogue and
+  // seeded service-rule rows before any resolver reads. Cached at the
+  // process level so the cost is paid once per tenant per process.
+  await ensureSeededForTenant(tenantId);
 
   const typeRows = await prisma.$queryRawUnsafe<TypeRow[]>(
-    `SELECT id::text, tenant_id, category_id::text, key, name, description, tone,
-            default_priority, is_system
+    `SELECT id::text, tenant_id, category_id::text, key, name, description, icon, tone,
+            default_priority, sort_order, is_system
      FROM service_types
      WHERE tenant_id = $1 AND key = $2 AND deleted_at IS NULL
      LIMIT 1`,
@@ -135,9 +143,10 @@ export async function loadServiceConfig(
   return {
     type: {
       id: t.id, tenantId: t.tenant_id, categoryId: t.category_id,
-      key: t.key, name: t.name, description: t.description,
+      key: t.key, name: t.name, description: t.description, icon: t.icon,
       tone: t.tone as ServiceTone,
       defaultPriority: t.default_priority as DefaultPriority,
+      sortOrder: t.sort_order ?? 0,
       isSystem: t.is_system,
     },
     mapping: m
