@@ -4,7 +4,7 @@ import Link from 'next/link';
 import {
   Bot, Wrench, FileText, Car, Bus, School, Truck, Siren, CarFront, UserCog,
   Building2, Smartphone, Banknote, Scale, AppWindow, BarChart3, Radio,
-  Leaf, Package,
+  Leaf, Package, Headphones,
   type LucideIcon,
 } from 'lucide-react';
 import TenantSessionBar from '@/components/TenantSessionBar';
@@ -33,6 +33,13 @@ interface ModuleDef {
   tags: string[]; status: string;
 }
 const modules: ModuleDef[] = [
+  {
+    id: 'service-tickets', title: 'Service & Support Ticketing',
+    description: 'One-stop ticketing for Maintenance, Renewal, Cleaning, Support, Incident, Towing & Complaint requests — shared SLA, assignment and notification engines with per-tenant access control.',
+    href: '/service-tickets', icon: Headphones,
+    gradient: 'from-violet-600 to-purple-600', glow: 'shadow-violet-500/20', border: 'border-violet-500/30',
+    tags: ['7 Ticket Types', 'SLA', 'Assignment', 'Audit Trail'], status: 'live',
+  },
   {
     id: 'agents', title: 'AI Agent Ecosystem',
     description: '10 autonomous AI agents — predictive maintenance, route optimisation, incident triage, smart dispatch, driver coaching, demand forecasting, WhatsApp AI, and more. Inline approvals, threshold tuning, and live activity feed.',
