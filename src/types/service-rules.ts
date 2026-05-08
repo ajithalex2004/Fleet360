@@ -19,8 +19,12 @@ export const RULE_CATEGORIES = [
   'ticketing',
   'epod',
   'automation',
+  'formFields',
 ] as const;
 export type RuleCategory = typeof RULE_CATEGORIES[number];
+
+import type { FormFieldDef } from './service-tickets';
+export type { FormFieldDef };
 
 // ── 1. SLA & Workflow ───────────────────────────────────────────────────────
 export interface EscalationLevel {
@@ -247,6 +251,17 @@ export const DEFAULT_AUTOMATION_RULES: AutomationRules = {
   aiRouting: false,
 };
 
+// ── 9. Form fields (per-service request form schema) ────────────────────────
+// The fields shown when creating an instance of this service. Originally
+// hardcoded as TICKET_TYPE_CONFIG[type].formFields; brought into rules in
+// Phase 2B.formFields so admins can edit without code changes.
+export interface FormFieldsRules {
+  fields: FormFieldDef[];
+}
+export const DEFAULT_FORM_FIELDS_RULES: FormFieldsRules = {
+  fields: [],
+};
+
 // ── Discriminated map ───────────────────────────────────────────────────────
 export interface RuleShapes {
   sla:        SlaRules;
@@ -257,6 +272,7 @@ export interface RuleShapes {
   ticketing:  TicketingRules;
   epod:       EpodRules;
   automation: AutomationRules;
+  formFields: FormFieldsRules;
 }
 export const RULE_DEFAULTS: { [K in RuleCategory]: RuleShapes[K] } = {
   sla:        DEFAULT_SLA_RULES,
@@ -267,4 +283,5 @@ export const RULE_DEFAULTS: { [K in RuleCategory]: RuleShapes[K] } = {
   ticketing:  DEFAULT_TICKETING_RULES,
   epod:       DEFAULT_EPOD_RULES,
   automation: DEFAULT_AUTOMATION_RULES,
+  formFields: DEFAULT_FORM_FIELDS_RULES,
 };

@@ -21,6 +21,12 @@ import { PageHeader } from '@/components/ui/page-theme';
 import { TICKET_TYPE_CONFIG, TICKET_TYPE_LIST } from '@/lib/service-tickets/config';
 import { TICKET_TYPES_ORDER } from '@/types/service-tickets';
 import type { TicketType, ServiceTicket, TenantTicketTypeAccess, FormFieldDef } from '@/types/service-tickets';
+
+/** Map of ticket type → resolved form fields, sourced from
+ *  /api/service-tickets/form-fields (Phase 2B.formFields). Empty for
+ *  a type means "no extra fields". `undefined` for the whole map means
+ *  "still loading; fall back to compile-time TICKET_TYPE_CONFIG". */
+type FormFieldsByType = Partial<Record<TicketType, FormFieldDef[]>>;
 import { createMaintenanceRequest } from '@/services/mockData';
 
 // ── Shared visuals ───────────────────────────────────────────────────────────
@@ -92,6 +98,7 @@ export default function ServiceTicketsHome() {
   const [, setTenantId]               = useState<string | null>(null);
   const [userId, setUserId]           = useState<string | null>(null);
   const [accessMap, setAccessMap]     = useState<Map<TicketType, TenantTicketTypeAccess>>(new Map());
+  const [formFieldsByType, setFormFieldsByType] = useState<FormFieldsByType>({});
   const [tickets, setTickets]         = useState<ServiceTicket[]>([]);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState<string | null>(null);
@@ -117,9 +124,10 @@ export default function ServiceTicketsHome() {
       setTenantId(me.tenantId);
       setUserId(me.userId);
 
-      const [matrixRes, ticketsRes] = await Promise.all([
+      const [matrixRes, ticketsRes, fieldsRes] = await Promise.all([
         fetch(`/api/admin/tenants/${me.tenantId}/ticket-types`),
         fetch(`/api/service-tickets`),
+        fetch(`/api/service-tickets/form-fields`),
       ]);
 
       if (matrixRes.ok) {
@@ -128,6 +136,10 @@ export default function ServiceTicketsHome() {
           (data.matrix as TenantTicketTypeAccess[]).map(r => [r.ticketType, r])
         );
         setAccessMap(map);
+      }
+      if (fieldsRes.ok) {
+        const data = await fieldsRes.json();
+        setFormFieldsByType(data.formFields ?? {});
       }
       if (ticketsRes.ok) {
         const data = await ticketsRes.json();
@@ -345,6 +357,7 @@ export default function ServiceTicketsHome() {
       {showForm && (
         <NewTicketForm
           enabledTypes={enabledTypes.map(c => c.type)}
+          formFieldsByType={formFieldsByType}
           onCreated={(t) => {
             setTickets(prev => [t, ...prev]);
             setShowForm(false);
@@ -389,6 +402,7 @@ export default function ServiceTicketsHome() {
             <TicketCard
               key={t.id}
               ticket={t}
+              formFields={formFieldsByType[t.ticketType]}
               selected={selectedIds.has(t.id)}
               onToggleSelect={() => toggleSelected(t.id)}
               onStatusChange={(status) => handleStatusChange(t, status)}
@@ -433,8 +447,9 @@ function BulkBtn({ label, onClick, disabled, cls }: { label: string; onClick: ()
   );
 }
 
-function TicketCard({ ticket, selected, onToggleSelect, onStatusChange }: {
+function TicketCard({ ticket, formFields, selected, onToggleSelect, onStatusChange }: {
   ticket: ServiceTicket;
+  formFields?: FormFieldDef[];
   selected: boolean;
   onToggleSelect: () => void;
   onStatusChange: (s: 'Acknowledged' | 'Resolved' | 'Assigned' | 'Escalated' | 'Pending' | 'Rejected') => void;
@@ -445,10 +460,14 @@ function TicketCard({ ticket, selected, onToggleSelect, onStatusChange }: {
   const isHigh = ticket.priority === 'High';
   const awaitingApproval = ticket.status === 'Awaiting Approval';
 
-  // Surface fields marked `preview: true` in the per-type schema as a small
-  // strip below the description. Looks up label/options from the config so
-  // select values render as the human label, not the raw value.
-  const previewFields = (cfg?.formFields ?? []).filter(f => f.preview);
+  // Surface fields marked `preview: true` in the resolved per-type schema
+  // as a small strip below the description. Looks up label/options from
+  // the same schema so select values render as the human label, not the
+  // raw value. Phase 2B.formFields — schema sourced from the parent which
+  // loaded it via /api/service-tickets/form-fields (admin-edited rules
+  // first, TICKET_TYPE_CONFIG legacy fallback).
+  const fieldDefs = formFields ?? cfg?.formFields ?? [];
+  const previewFields = fieldDefs.filter(f => f.preview);
   const customFields = ticket.customFields ?? {};
   const renderPreviewValue = (f: typeof previewFields[number], v: unknown): string | null => {
     if (v === undefined || v === null || v === '') return null;
@@ -627,10 +646,12 @@ function TicketCard({ ticket, selected, onToggleSelect, onStatusChange }: {
 // ── Create form ──────────────────────────────────────────────────────────────
 function NewTicketForm({
   enabledTypes,
+  formFieldsByType,
   onCreated,
   onCancel,
 }: {
   enabledTypes: TicketType[];
+  formFieldsByType: FormFieldsByType;
   onCreated: (t: ServiceTicket) => void;
   onCancel: () => void;
 }) {
@@ -645,6 +666,9 @@ function NewTicketForm({
   const [err, setErr]               = useState<string | null>(null);
 
   const cfg = TICKET_TYPE_CONFIG[ticketType];
+  // Phase 2B.formFields — prefer admin-edited rules (loaded into
+  // formFieldsByType by the parent), fall back to compile-time config.
+  const formFields: FormFieldDef[] = formFieldsByType[ticketType] ?? cfg.formFields ?? [];
 
   // Reset per-type custom fields whenever the ticket type changes — different
   // types have different field schemas, so values don't carry across.
@@ -669,7 +693,7 @@ function NewTicketForm({
     if (cfg.vehicleRequired && !vehicleId.trim()) { setErr(`${cfg.longLabel} requires a vehicle ID.`); return; }
 
     // Client-side mirror of server validation — fail fast before POST.
-    for (const f of cfg.formFields) {
+    for (const f of formFields) {
       if (!f.required) continue;
       const v = customFields[f.key];
       const empty = v === undefined || v === null || v === '' || v === false;
@@ -784,8 +808,9 @@ function NewTicketForm({
             className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
         </div>
 
-        {/* Per-type dynamic fields — driven by cfg.formFields */}
-        {cfg.formFields.map(f => (
+        {/* Per-type dynamic fields — driven by resolved formFields
+            (admin-edited rules first, compile-time config as fallback). */}
+        {formFields.map(f => (
           <DynamicField key={`${ticketType}:${f.key}`}
             field={f}
             value={customFields[f.key]}

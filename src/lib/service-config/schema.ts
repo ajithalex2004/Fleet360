@@ -17,8 +17,8 @@ import type { LinkedModule } from '@/types/service-config';
 import { ensureServiceRulesTable } from './rules-schema';
 import { TICKET_TYPE_CONFIG } from '@/lib/service-tickets/config';
 import {
-  DEFAULT_APPROVAL_RULES, DEFAULT_TICKETING_RULES,
-  type ApprovalRules, type TicketingRules,
+  DEFAULT_APPROVAL_RULES, DEFAULT_TICKETING_RULES, DEFAULT_FORM_FIELDS_RULES,
+  type ApprovalRules, type TicketingRules, type FormFieldsRules,
 } from '@/types/service-rules';
 import type { TicketType } from '@/types/service-tickets';
 
@@ -319,6 +319,13 @@ async function seedRulesFromTicketingConfig(
     },
   };
 
+  // Form fields — bring the per-type formFields schema into rules so
+  // admins can edit without code changes (Phase 2B.formFields).
+  const formFields: FormFieldsRules = {
+    ...DEFAULT_FORM_FIELDS_RULES,
+    fields: cfg.formFields ?? [],
+  };
+
   await prisma.$executeRawUnsafe(
     `INSERT INTO service_rules (service_type_id, category, rules)
      VALUES ($1::uuid, 'approval', $2::jsonb)
@@ -330,6 +337,12 @@ async function seedRulesFromTicketingConfig(
      VALUES ($1::uuid, 'ticketing', $2::jsonb)
      ON CONFLICT (service_type_id, category) DO NOTHING`,
     serviceTypeId, JSON.stringify(ticketing),
+  );
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO service_rules (service_type_id, category, rules)
+     VALUES ($1::uuid, 'formFields', $2::jsonb)
+     ON CONFLICT (service_type_id, category) DO NOTHING`,
+    serviceTypeId, JSON.stringify(formFields),
   );
 }
 

@@ -19,7 +19,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Settings, Plus, Search, ChevronDown, ChevronRight, Trash2, Save, Folder,
   AlertCircle, Layers, Workflow, Bell, ShieldCheck, DollarSign, Truck,
-  Lock, FileCheck, Sparkles,
+  Lock, FileCheck, Sparkles, FormInput,
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import {
@@ -35,6 +35,7 @@ import { FinanceTab }    from './tabs/finance-tab';
 import { TicketingTab }  from './tabs/ticketing-tab';
 import { EpodTab }       from './tabs/epod-tab';
 import { AutomationTab } from './tabs/automation-tab';
+import { FormFieldsTab } from './tabs/form-fields-tab';
 
 // ── Tone palette (mirrors page-theme) ───────────────────────────────────────
 const TONE_BG: Record<ServiceTone, string> = {
@@ -48,10 +49,11 @@ const TONE_FG: Record<ServiceTone, string> = {
   violet: 'text-violet-300', cyan: 'text-cyan-300',
 };
 
-type TabKey = 'basic' | 'mapping' | 'sla' | 'approval' | 'vehicle' | 'trip' | 'finance' | 'ticketing' | 'epod' | 'automation';
+type TabKey = 'basic' | 'mapping' | 'sla' | 'approval' | 'vehicle' | 'trip' | 'finance' | 'ticketing' | 'epod' | 'automation' | 'formFields';
 const TABS: { key: TabKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { key: 'basic',      label: 'Basic Info',      icon: Layers      },
   { key: 'mapping',    label: 'Module Mapping',  icon: Workflow    },
+  { key: 'formFields', label: 'Form Fields',     icon: FormInput   },
   { key: 'sla',        label: 'SLA & Workflow',  icon: Bell        },
   { key: 'approval',   label: 'Approval',        icon: ShieldCheck },
   { key: 'vehicle',    label: 'Vehicle Rules',   icon: Truck       },
@@ -272,6 +274,7 @@ export default function ServiceConfigPage() {
                     initial={selectedMapping}
                     onSaved={() => void load()} />
                 )}
+                {activeTab === 'formFields' && <FormFieldsTab key={selectedType.type.id} typeId={selectedType.type.id} />}
                 {activeTab === 'sla'        && <SlaTab        key={selectedType.type.id} typeId={selectedType.type.id} />}
                 {activeTab === 'approval'   && <ApprovalTab   key={selectedType.type.id} typeId={selectedType.type.id} />}
                 {activeTab === 'vehicle'    && <VehicleTab    key={selectedType.type.id} typeId={selectedType.type.id} />}

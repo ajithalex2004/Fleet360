@@ -15,7 +15,7 @@ import { loadServiceConfig } from './load';
 import {
   TICKET_TYPE_CONFIG, initialStatusForType,
 } from '@/lib/service-tickets/config';
-import type { TicketType, TicketPriority } from '@/types/service-tickets';
+import type { TicketType, TicketPriority, FormFieldDef } from '@/types/service-tickets';
 
 /**
  * Resolve the initial status for a new service-ticket. Authority order:
@@ -143,4 +143,44 @@ export async function resolveTicketSlaMatrixBatch(
 /** Pick the SLA hours for a single ticket given its priority. */
 export function pickSlaHours(matrix: SlaMatrix, priority: TicketPriority): number {
   return matrix[priority] ?? matrix.Medium;
+}
+
+/**
+ * Resolve the per-service form-field schema. Authority order:
+ *
+ *   1. service_rules.formFields.fields (admin-edited)
+ *   2. TICKET_TYPE_CONFIG.formFields (legacy compile-time schema)
+ *
+ * Used by:
+ *   - /api/service-tickets POST → required-field validation
+ *   - /service-tickets NewTicketForm → dynamic field rendering
+ *
+ * Returns an array (possibly empty) — never null.
+ */
+export async function resolveTicketFormFields(
+  tenantId: string,
+  ticketType: TicketType,
+): Promise<{ fields: FormFieldDef[]; source: 'service_rules' | 'legacy' }> {
+  const cfg = await loadServiceConfig(tenantId, ticketType);
+  if (cfg?.configured.formFields) {
+    return { fields: cfg.rules.formFields.fields ?? [], source: 'service_rules' };
+  }
+  return { fields: TICKET_TYPE_CONFIG[ticketType]?.formFields ?? [], source: 'legacy' };
+}
+
+/**
+ * Batch resolve form-fields for many ticket types in one pass — used by the
+ * /api/service-tickets/form-fields endpoint that the user-facing page hits
+ * once on mount to render the create form.
+ */
+export async function resolveTicketFormFieldsBatch(
+  tenantId: string,
+  ticketTypes: TicketType[],
+): Promise<Map<TicketType, FormFieldDef[]>> {
+  const out = new Map<TicketType, FormFieldDef[]>();
+  await Promise.all(Array.from(new Set(ticketTypes)).map(async (t) => {
+    const { fields } = await resolveTicketFormFields(tenantId, t);
+    out.set(t, fields);
+  }));
+  return out;
 }

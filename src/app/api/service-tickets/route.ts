@@ -20,6 +20,7 @@ import { getTenantEnabledTypes } from '@/lib/service-tickets/access';
 import {
   resolveTicketInitialStatus, resolveTicketPrefix,
   resolveTicketSlaMatrixBatch, pickSlaHours,
+  resolveTicketFormFields,
   type SlaMatrix,
 } from '@/lib/service-config/resolvers';
 import { logAudit } from '@/lib/audit';
@@ -170,11 +171,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: `${cfg.longLabel} requires a vehicle.` }, { status: 400 });
   }
 
-  // Validate per-type required fields
+  // Validate per-type required fields. Phase 2B.formFields — schema now
+  // resolved through service_rules with TICKET_TYPE_CONFIG.formFields as
+  // the legacy fallback. Authority decided by resolveTicketFormFields.
   const customFields = (body.customFields && typeof body.customFields === 'object')
     ? body.customFields
     : {};
-  for (const f of cfg.formFields) {
+  const { fields: resolvedFormFields } = await resolveTicketFormFields(tenantId, ticketType);
+  for (const f of resolvedFormFields) {
     if (!f.required) continue;
     const v = customFields[f.key];
     const empty = v === undefined || v === null || v === '' || v === false;
