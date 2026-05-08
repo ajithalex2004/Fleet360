@@ -53,11 +53,26 @@ const PRIORITY_FG: Record<string, string> = {
 };
 
 // ── SLA aging helper ─────────────────────────────────────────────────────────
-function pendingAge(t: ServiceTicket): { hours: number; tone: 'ok' | 'warn' | 'breach' } | null {
+// Phase 2C.x — thresholds now driven by the ticket's resolved SLA target
+// (warn at 50%, breach at 100%). Falls back to the legacy 24h/72h pair when
+// the API hasn't supplied a target (e.g. tenants pre-2C.x or ticket created
+// before the schema change).
+function pendingAge(t: ServiceTicket): { hours: number; tone: 'ok' | 'warn' | 'breach'; targetHours?: number } | null {
   if (t.status !== 'Pending') return null;
   const start = new Date(t.createdAt).getTime();
   if (!isFinite(start)) return null;
   const hours = Math.max(0, (Date.now() - start) / 3_600_000);
+
+  const target = t.slaTargetHours;
+  if (typeof target === 'number' && target > 0) {
+    const tone: 'ok' | 'warn' | 'breach' =
+      hours >= target ? 'breach'
+      : hours >= target * 0.5 ? 'warn'
+      : 'ok';
+    return { hours, tone, targetHours: target };
+  }
+
+  // Legacy fallback — fixed thresholds.
   return { hours, tone: hours > 72 ? 'breach' : hours > 24 ? 'warn' : 'ok' };
 }
 function ageLabel(h: number): string {
@@ -474,7 +489,15 @@ function TicketCard({ ticket, selected, onToggleSelect, onStatusChange }: {
                 age.tone === 'breach' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
                 : age.tone === 'warn' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                 : 'bg-slate-500/20 text-slate-400 border-slate-500/40'
-              }`} title={age.tone === 'breach' ? 'SLA breach — pending >72h' : age.tone === 'warn' ? 'SLA warn — pending >24h' : 'Pending'}>
+              }`} title={
+                age.targetHours
+                  ? age.tone === 'breach' ? `SLA breach — exceeded ${age.targetHours}h target`
+                    : age.tone === 'warn' ? `SLA warn — past 50% of ${age.targetHours}h target`
+                    : `Pending — within SLA (${age.targetHours}h target)`
+                  : age.tone === 'breach' ? 'SLA breach — pending >72h'
+                    : age.tone === 'warn' ? 'SLA warn — pending >24h'
+                    : 'Pending'
+              }>
                 <Clock className="w-2.5 h-2.5" /> {ageLabel(age.hours)}
               </span>
             )}

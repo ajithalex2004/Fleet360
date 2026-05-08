@@ -145,6 +145,13 @@ export interface ServiceTicket {
    *  for a RENEWAL ticket. */
   customFields?: Record<string, unknown>;
 
+  /** Resolved SLA target in hours for this ticket's priority (Phase 2C.x).
+   *  Populated by API responses via the Service Configuration Engine —
+   *  authority order: service_rules.ticketing.priorityMatrix → legacy
+   *  TICKET_TYPE_CONFIG.defaultSlaHours. UI uses this for the aging
+   *  badge thresholds (warn at 50%, breach at 100%). */
+  slaTargetHours?: number;
+
   /** For MAINTENANCE tickets only — link to the formal MaintenanceRequest
    *  created on Acknowledge (preserves existing /maintenance/requests
    *  cross-module behaviour). */

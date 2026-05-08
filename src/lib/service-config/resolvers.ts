@@ -96,3 +96,51 @@ export async function resolveTicketPrefix(
   if (cfg?.configured.ticketing && fromRules) return fromRules;
   return TICKET_TYPE_CONFIG[ticketType]?.prefix ?? 'GEN';
 }
+
+export type SlaMatrix = { Low: number; Medium: number; High: number };
+
+/**
+ * Batch resolve the SLA priority matrix for a set of ticket types in one
+ * pass. Used by API routes that return many tickets — keeps the per-ticket
+ * SLA computation O(distinct_types) rather than O(tickets).
+ *
+ * For each requested type the returned matrix follows the same authority
+ * order as resolveTicketSlaHours: service_rules.ticketing.priorityMatrix
+ * first, TICKET_TYPE_CONFIG.defaultSlaHours legacy fallback second.
+ *
+ * Tenants without seeded rules (or without that ticket type at all) get
+ * a matrix derived from the legacy defaultSlaHours via the same formula
+ * the seed uses (Low ≈ 3× SLA, Medium = SLA, High ≈ SLA / 4).
+ */
+export async function resolveTicketSlaMatrixBatch(
+  tenantId: string,
+  ticketTypes: TicketType[],
+): Promise<Map<TicketType, SlaMatrix>> {
+  const out = new Map<TicketType, SlaMatrix>();
+  const distinct = Array.from(new Set(ticketTypes));
+
+  await Promise.all(distinct.map(async (type) => {
+    const cfg = await loadServiceConfig(tenantId, type);
+
+    if (cfg?.configured.ticketing) {
+      const m = cfg.rules.ticketing.priorityMatrix;
+      out.set(type, { Low: m.Low, Medium: m.Medium, High: m.High });
+      return;
+    }
+    // Legacy fallback — same shape as the 2C seed formula so first-time
+    // tenants and never-seeded tenants converge on identical SLAs.
+    const sla = TICKET_TYPE_CONFIG[type]?.defaultSlaHours ?? 24;
+    out.set(type, {
+      Low:    Math.max(sla * 3, sla),
+      Medium: sla,
+      High:   Math.max(Math.round(sla / 4), 1),
+    });
+  }));
+
+  return out;
+}
+
+/** Pick the SLA hours for a single ticket given its priority. */
+export function pickSlaHours(matrix: SlaMatrix, priority: TicketPriority): number {
+  return matrix[priority] ?? matrix.Medium;
+}

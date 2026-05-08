@@ -14,7 +14,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureServiceTicketsTable } from '@/lib/service-tickets/schema';
 import { TICKET_TYPE_CONFIG } from '@/lib/service-tickets/config';
-import type { TicketType } from '@/types/service-tickets';
+import type { TicketType, TicketPriority } from '@/types/service-tickets';
+import {
+  resolveTicketSlaMatrixBatch, pickSlaHours, type SlaMatrix,
+} from '@/lib/service-config/resolvers';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -33,7 +36,8 @@ interface Row {
   created_at: string; updated_at: string;
 }
 
-function rowToApi(r: Row) {
+function rowToApi(r: Row, matrix?: SlaMatrix) {
+  const priority = r.priority as TicketPriority;
   return {
     id: r.id, tenantId: r.tenant_id, ticketType: r.ticket_type, readableId: r.readable_id,
     requestorId: r.requestor_id, requestorName: r.requestor_name,
@@ -46,7 +50,14 @@ function rowToApi(r: Row) {
     comments:    Array.isArray(r.comments)    ? r.comments    : [],
     customFields: (r.custom_fields && typeof r.custom_fields === 'object') ? r.custom_fields as Record<string, unknown> : {},
     createdAt: r.created_at, updatedAt: r.updated_at,
+    slaTargetHours: matrix ? pickSlaHours(matrix, priority) : undefined,
   };
+}
+
+/** Resolve the SLA matrix for one ticket's type — used by GET / PATCH. */
+async function matrixFor(tenantId: string, ticketType: string): Promise<SlaMatrix | undefined> {
+  const m = await resolveTicketSlaMatrixBatch(tenantId, [ticketType as TicketType]);
+  return m.get(ticketType as TicketType);
 }
 
 const SELECT_COLS = `id::text, tenant_id, ticket_type, readable_id, requestor_id, requestor_name,
@@ -72,7 +83,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
   const row = await loadTicket(tenantId, id);
   if (!row) return NextResponse.json({ ok: false, error: 'Ticket not found' }, { status: 404 });
-  return NextResponse.json({ ok: true, ticket: rowToApi(row) });
+  const matrix = await matrixFor(tenantId, row.ticket_type);
+  return NextResponse.json({ ok: true, ticket: rowToApi(row, matrix) });
 }
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
@@ -144,7 +156,8 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       } → ${ticket.status}`,
     });
 
-    return NextResponse.json({ ok: true, ticket: rowToApi(ticket) });
+    const matrix = await matrixFor(tenantId, ticket.ticket_type);
+    return NextResponse.json({ ok: true, ticket: rowToApi(ticket, matrix) });
   } catch (err) {
     captureException(err, { context: 'service-tickets.update', tags: { tenantId, id } });
     return NextResponse.json({ ok: false, error: 'Update failed' }, { status: 500 });

@@ -17,7 +17,11 @@ import { ensureServiceTicketsTable, nextReadableId } from '@/lib/service-tickets
 import { TICKET_TYPE_CONFIG } from '@/lib/service-tickets/config';
 import { TICKET_TYPES_ORDER, type TicketType, type TicketPriority } from '@/types/service-tickets';
 import { getTenantEnabledTypes } from '@/lib/service-tickets/access';
-import { resolveTicketInitialStatus } from '@/lib/service-config/resolvers';
+import {
+  resolveTicketInitialStatus, resolveTicketPrefix,
+  resolveTicketSlaMatrixBatch, pickSlaHours,
+  type SlaMatrix,
+} from '@/lib/service-config/resolvers';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -48,7 +52,8 @@ interface Row {
   updated_at: string;
 }
 
-function rowToApi(r: Row) {
+function rowToApi(r: Row, matrix?: SlaMatrix) {
+  const priority = r.priority as TicketPriority;
   return {
     id: r.id,
     tenantId: r.tenant_id,
@@ -71,6 +76,7 @@ function rowToApi(r: Row) {
     customFields: (r.custom_fields && typeof r.custom_fields === 'object') ? r.custom_fields as Record<string, unknown> : {},
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    slaTargetHours: matrix ? pickSlaHours(matrix, priority) : undefined,
   };
 }
 
@@ -114,7 +120,15 @@ export async function GET(req: NextRequest) {
   `;
   const rows = await prisma.$queryRawUnsafe<Row[]>(sql, ...params).catch(() => []);
 
-  return NextResponse.json({ ok: true, tickets: rows.map(rowToApi) });
+  // Phase 2C.x — enrich each ticket with its resolved SLA target hours.
+  // Batched per distinct ticket type so the cost is O(distinct_types).
+  const distinctTypes = Array.from(new Set(rows.map(r => r.ticket_type as TicketType)));
+  const matrices = await resolveTicketSlaMatrixBatch(tenantId, distinctTypes);
+
+  return NextResponse.json({
+    ok: true,
+    tickets: rows.map(r => rowToApi(r, matrices.get(r.ticket_type as TicketType))),
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -177,7 +191,10 @@ export async function POST(req: NextRequest) {
 
   try {
     await ensureServiceTicketsTable();
-    const readableId = await nextReadableId(tenantId, ticketType, cfg.prefix);
+    // Phase 2C.x — prefix now resolved through the Service Configuration
+    // Engine so admins can override the 3-letter code without a code change.
+    const resolvedPrefix = await resolveTicketPrefix(tenantId, ticketType);
+    const readableId = await nextReadableId(tenantId, ticketType, resolvedPrefix);
     const nowIso = new Date().toISOString();
 
     const initialHistory = [{
@@ -219,7 +236,9 @@ export async function POST(req: NextRequest) {
       details: `Created ${cfg.longLabel} ${readableId}: ${title} (${priority}) — initial status ${initialStatus} via ${statusSource}`,
     });
 
-    return NextResponse.json({ ok: true, ticket: rowToApi(ticket) }, { status: 201 });
+    // Enrich response with the resolved SLA target — single-type lookup.
+    const matrices = await resolveTicketSlaMatrixBatch(tenantId, [ticketType]);
+    return NextResponse.json({ ok: true, ticket: rowToApi(ticket, matrices.get(ticketType)) }, { status: 201 });
   } catch (err) {
     captureException(err, { context: 'service-tickets.create', tags: { tenantId, ticketType } });
     return NextResponse.json({ ok: false, error: 'Failed to create ticket' }, { status: 500 });
