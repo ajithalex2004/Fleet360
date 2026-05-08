@@ -10,6 +10,16 @@
  *
  *   const map = buildServiceRequestIdMap(requests);
  *   formatServiceRequestId(request, map)   // "SR2026-10001"
+ *
+ * ── Backend TODO (Go service on :8080) ──────────────────────────────────────
+ * The canonical fix is server-side stamping: on POST /api/service-requests,
+ * compute the next per-year sequence (locked SELECT ... FOR UPDATE on a
+ * counter table or `SELECT MAX(seq) WHERE year=…`) and persist
+ * `readable_id = SR{year}-{seq}` on the row. The Prisma + raw-SQL routes in
+ * src/app/api/service-requests/[id]/route.ts already SELECT readable_id; the
+ * Go backend is the only piece missing this. Once that ships, the helpers in
+ * this file become inert (they return r.readableId verbatim when present)
+ * but stay as a defensive fallback for old rows missing the column.
  */
 
 import type { ServiceRequest } from '@/types/maintenance';

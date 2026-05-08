@@ -8,6 +8,41 @@ import FilterBar from '@/components/Maintenance/FilterBar';
 import AssignmentModal from '@/components/Maintenance/AssignmentModal';
 import { buildServiceRequestIdMap, formatServiceRequestId } from '@/lib/service-request-id';
 
+/**
+ * Append a transition entry to a request's history. Pure helper —
+ * the new history array is what we send to PATCH so reassignment +
+ * status change always leaves an audit trail.
+ */
+function withHistory(req: ServiceRequest, status: string, actor: string, note?: string): ServiceRequest['history'] {
+    return [
+        ...(req.history ?? []),
+        { status, date: new Date().toISOString(), actor, ...(note ? { note } : {}) },
+    ];
+}
+
+/**
+ * Compute the age (in hours) of a Pending request and a tone bucket.
+ * SLA buckets: ok < 24h · warn 24–72h · breach > 72h.
+ */
+function pendingAge(req: ServiceRequest): { hours: number; tone: 'ok' | 'warn' | 'breach' } | null {
+    if (req.status !== 'Pending') return null;
+    const startIso = req.createdAt ?? req.date;
+    if (!startIso) return null;
+    const start = new Date(startIso).getTime();
+    if (!isFinite(start)) return null;
+    const hours = Math.max(0, (Date.now() - start) / 3_600_000);
+    return {
+        hours,
+        tone: hours > 72 ? 'breach' : hours > 24 ? 'warn' : 'ok',
+    };
+}
+
+function ageLabel(h: number): string {
+    if (h < 1)  return `${Math.round(h * 60)}m`;
+    if (h < 24) return `${Math.round(h)}h`;
+    return `${Math.round(h / 24)}d`;
+}
+
 export default function ServiceRequestPage() {
     const router = useRouter();
     const currentUser = {
@@ -50,6 +85,19 @@ export default function ServiceRequestPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalAction, setModalAction] = useState<'Assign' | 'Escalate'>('Assign');
     const [selectedRequestForAction, setSelectedRequestForAction] = useState<ServiceRequest | null>(null);
+
+    // Bulk-select state
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [bulkBusy, setBulkBusy] = useState(false);
+    const toggleSelected = (id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    };
+    const clearSelection = () => setSelectedIds(new Set());
+    const selectAllVisible = () => setSelectedIds(new Set(filteredRequests.map(r => r.id)));
 
     const [formData, setFormData] = useState({
         requestorId: currentUser.id,
@@ -168,6 +216,7 @@ export default function ServiceRequestPage() {
             ...formData,
             status: 'Pending',
             createdAt: new Date().toISOString(),
+            history: [{ status: 'Pending', date: new Date().toISOString(), actor: currentUser.name, note: 'Submitted' }],
             attachments: attachments
                 .filter(a => a.file)
                 .map(a => ({
@@ -266,7 +315,9 @@ export default function ServiceRequestPage() {
                     ...request,
                     status: 'Acknowledged',
                     maintenanceRequestId: mr.id,
-                    date: new Date(request.date).toISOString()
+                    date: new Date(request.date).toISOString(),
+                    history: withHistory(request, 'Acknowledged', currentUser.name,
+                        `Linked to Maintenance Request ${mr.id}`),
                 });
 
                 console.log('Created linked Maintenance Request:', mr.id);
@@ -302,7 +353,8 @@ export default function ServiceRequestPage() {
         await updateServiceRequest({
             ...request,
             status: newStatus,
-            date: new Date(request.date).toISOString()
+            date: new Date(request.date).toISOString(),
+            history: withHistory(request, newStatus, currentUser.name),
         });
 
         // Refresh list
@@ -333,7 +385,16 @@ export default function ServiceRequestPage() {
             ...selectedRequestForAction,
             status: newStatus,
             assignedTo: email,
-            date: new Date(selectedRequestForAction.date).toISOString()
+            date: new Date(selectedRequestForAction.date).toISOString(),
+            history: withHistory(
+                selectedRequestForAction,
+                newStatus,
+                currentUser.name,
+                `${modalAction === 'Assign' ? 'Assigned' : 'Escalated'} to ${email}`
+                + (selectedRequestForAction.assignedTo
+                    ? ` (was ${selectedRequestForAction.assignedTo})`
+                    : '')
+            ),
         });
 
         // Send Email Notification
@@ -372,6 +433,83 @@ export default function ServiceRequestPage() {
         });
         setRequests(activeRequests);
         setFilteredRequests(activeRequests);
+    };
+
+    /** Refresh the active queue after a bulk action. Pulled out so the bulk
+     *  handlers don't each duplicate the filter logic. */
+    const refreshActiveList = async () => {
+        const [allReqs, allMrs] = await Promise.all([getServiceRequests(), getMaintenanceRequests()]);
+        const active = allReqs.filter(r => {
+            if (['Resolved', 'Completed', 'Rejected', 'Closed'].includes(r.status)) return false;
+            if (r.maintenanceRequestId) {
+                const linkedMr = allMrs.find((mr: MaintenanceRequest) => mr.id === r.maintenanceRequestId);
+                if (linkedMr && [MaintenanceStatus.CLOSED, MaintenanceStatus.MAINTENANCE_COMPLETED, MaintenanceStatus.REJECTED].includes(linkedMr.status)) return false;
+            }
+            return true;
+        });
+        setRequests(active);
+        setFilteredRequests(active);
+    };
+
+    /** Apply a status update to every selected request in parallel.
+     *  For Assign / Escalate, prompts for the shared assignee email once. */
+    const handleBulkStatusChange = async (newStatus: 'Acknowledged' | 'Resolved' | 'Assigned' | 'Escalated') => {
+        if (selectedIds.size === 0 || bulkBusy) return;
+        const targets = requests.filter(r => selectedIds.has(r.id));
+        if (targets.length === 0) return;
+
+        let assignee: string | null = null;
+        if (newStatus === 'Assigned' || newStatus === 'Escalated') {
+            assignee = window.prompt(
+                `${newStatus === 'Assigned' ? 'Assign' : 'Escalate'} ${targets.length} request(s) to which email?`,
+                ''
+            );
+            if (!assignee) return;
+            const trimmed = assignee.trim();
+            if (!/.+@.+\..+/.test(trimmed)) {
+                alert('Please enter a valid email.');
+                return;
+            }
+            assignee = trimmed;
+        }
+
+        if (!window.confirm(
+            `Apply "${newStatus}"${assignee ? ` (assignee: ${assignee})` : ''} to ${targets.length} request(s)?`
+        )) return;
+
+        setBulkBusy(true);
+        try {
+            await Promise.all(targets.map(req =>
+                updateServiceRequest({
+                    ...req,
+                    status: newStatus,
+                    ...(assignee ? { assignedTo: assignee } : {}),
+                    date: new Date(req.date).toISOString(),
+                    history: withHistory(req, newStatus, currentUser.name,
+                        assignee
+                            ? `Bulk ${newStatus.toLowerCase()} to ${assignee}`
+                            + (req.assignedTo ? ` (was ${req.assignedTo})` : '')
+                            : `Bulk ${newStatus.toLowerCase()}`),
+                })
+            ));
+
+            if (assignee && (newStatus === 'Assigned' || newStatus === 'Escalated')) {
+                await sendEmailNotification(
+                    assignee,
+                    `Bulk ${newStatus}: ${targets.length} Service Requests`,
+                    `${targets.length} service requests have been ${newStatus.toLowerCase()} to you:\n\n` +
+                    targets.map(t => `· ${formatServiceRequestId(t, readableIdMap)} — ${t.serviceType} (${t.priority})`).join('\n')
+                );
+            }
+            await refreshActiveList();
+            clearSelection();
+            alert(`${targets.length} request(s) updated to "${newStatus}".`);
+        } catch (err) {
+            console.error('Bulk action failed', err);
+            alert('Bulk action failed for one or more requests. Refresh and try again.');
+        } finally {
+            setBulkBusy(false);
+        }
     };
 
     const getStatusColor = (status: string) => {
@@ -446,7 +584,7 @@ export default function ServiceRequestPage() {
                 </div>
 
                 {/* Filter Bar */}
-                <div className="mb-6">
+                <div className="mb-4">
                     <FilterBar
                         onSearch={setSearchTerm}
                         onDateRangeChange={(start, end) => setDateRange({ start, end })}
@@ -457,6 +595,43 @@ export default function ServiceRequestPage() {
                         defaultEndDate={todayStr}
                     />
                 </div>
+
+                {/* Bulk action toolbar — appears when ≥ 1 row selected */}
+                {selectedIds.size > 0 && (
+                    <div className="sticky top-0 z-30 mb-4 flex items-center gap-2 flex-wrap rounded-xl bg-blue-600/15 border border-blue-500/40 backdrop-blur-md px-4 py-2.5 shadow-lg shadow-blue-500/20">
+                        <span className="text-sm font-semibold text-white">
+                            {selectedIds.size} selected
+                        </span>
+                        <span className="text-xs text-slate-400 hidden sm:inline">
+                            {selectedIds.size < filteredRequests.length && (
+                                <button onClick={selectAllVisible} className="underline hover:text-white">
+                                    Select all {filteredRequests.length}
+                                </button>
+                            )}
+                        </span>
+                        <span className="ml-auto" />
+                        <button onClick={() => handleBulkStatusChange('Acknowledged')} disabled={bulkBusy}
+                            className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold">
+                            ✓ Acknowledge
+                        </button>
+                        <button onClick={() => handleBulkStatusChange('Assigned')} disabled={bulkBusy}
+                            className="text-xs px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold">
+                            → Assign
+                        </button>
+                        <button onClick={() => handleBulkStatusChange('Escalated')} disabled={bulkBusy}
+                            className="text-xs px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-semibold">
+                            ↑ Escalate
+                        </button>
+                        <button onClick={() => handleBulkStatusChange('Resolved')} disabled={bulkBusy}
+                            className="text-xs px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold">
+                            ✓ Resolve
+                        </button>
+                        <button onClick={clearSelection} disabled={bulkBusy}
+                            className="text-xs px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-300">
+                            Clear
+                        </button>
+                    </div>
+                )}
 
                 {loading ? (
                     <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -504,19 +679,53 @@ export default function ServiceRequestPage() {
                         const isHighPriority = request.priority === 'High';
 
                         return (
-                            <div key={request.id} className={`bg-slate-900 rounded-lg p-4 relative overflow-hidden group border shadow-sm hover:shadow-md transition-all flex flex-col ${isHighPriority ? 'border-red-300 ring-1 ring-red-100' : 'border-white/10'}`}>
+                            <div key={request.id}
+                                className={`bg-slate-900 rounded-lg p-4 relative overflow-hidden group border shadow-sm hover:shadow-md transition-all flex flex-col ${
+                                    isHighPriority ? 'border-red-300 ring-1 ring-red-100' : 'border-white/10'
+                                } ${selectedIds.has(request.id) ? 'ring-2 ring-blue-500/60' : ''}`}>
                                 {isHighPriority && (
                                     <div className="absolute top-0 right-0 w-0 h-0 border-t-[40px] border-r-[40px] border-t-red-500 border-r-transparent z-20">
                                         <span className="absolute -top-[34px] left-[6px] text-white text-[10px] font-bold rotate-45">!</span>
                                     </div>
                                 )}
 
+                                {/* Multi-select checkbox — top-left, hover-revealed unless this card is selected */}
+                                <label
+                                    className={`absolute top-2 left-2 z-30 cursor-pointer transition-opacity ${
+                                        selectedIds.has(request.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                                    }`}
+                                    onClick={e => e.stopPropagation()}
+                                    title="Select for bulk action">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedIds.has(request.id)}
+                                        onChange={() => toggleSelected(request.id)}
+                                        className="w-4 h-4 accent-blue-500 rounded border-slate-600 bg-slate-800"
+                                    />
+                                </label>
+
                                 <div className="relative z-10 flex-1">
-                                    <div className="flex justify-between items-start mb-3">
+                                    <div className="flex justify-between items-start mb-3 gap-2">
                                         <span className="text-[11px] font-mono font-semibold text-slate-300 bg-slate-700/40 px-2 py-0.5 rounded" title={request.id}>{formatServiceRequestId(request, readableIdMap)}</span>
-                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${getStatusColor(displayStatus)}`}>
-                                            {displayStatus}
-                                        </span>
+                                        <div className="flex items-center gap-1.5">
+                                            {(() => {
+                                                const age = pendingAge(request);
+                                                if (!age) return null;
+                                                const tone =
+                                                    age.tone === 'breach' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
+                                                    : age.tone === 'warn'   ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                                    : 'bg-slate-500/20 text-slate-400 border-slate-500/40';
+                                                return (
+                                                    <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold border tabular-nums ${tone}`}
+                                                        title={age.tone === 'breach' ? 'SLA breach — pending >72h' : age.tone === 'warn' ? 'SLA warn — pending >24h' : 'Pending'}>
+                                                        ⏱ {ageLabel(age.hours)}
+                                                    </span>
+                                                );
+                                            })()}
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${getStatusColor(displayStatus)}`}>
+                                                {displayStatus}
+                                            </span>
+                                        </div>
                                     </div>
 
                                     <h4 className="text-sm font-bold text-white mb-1 line-clamp-1" title={request.serviceType}>

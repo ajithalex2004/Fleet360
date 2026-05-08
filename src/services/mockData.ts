@@ -177,8 +177,13 @@ export const getSchedules = () => Promise.resolve(mockSchedules);
 
 import { sendNotification } from '../utils/notifications';
 
+/**
+ * Sends an email via /api/notifications/send → Prisma integrationConfig →
+ * nodemailer. Configure SMTP at /admin/settings/integrations. Falls back
+ * to a logged "mock success" if SMTP isn't configured (route's own behaviour).
+ */
 export const sendEmailNotification = async (to: string, subject: string, body: string) => {
-    console.log(`[EMAIL-MOCK-OVERRIDE] To: ${to}, Subject: ${subject}`);
+    console.log(`[email] sending to ${to}: ${subject}`);
     await sendNotification(to, subject, body, 'Email', 'Service Request Update');
     return Promise.resolve();
 };
