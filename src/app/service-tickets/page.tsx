@@ -27,6 +27,16 @@ import type { TicketType, ServiceTicket, TenantTicketTypeAccess, FormFieldDef } 
  *  a type means "no extra fields". `undefined` for the whole map means
  *  "still loading; fall back to compile-time TICKET_TYPE_CONFIG". */
 type FormFieldsByType = Partial<Record<TicketType, FormFieldDef[]>>;
+
+/** Per-type config flags resolved by the Service Configuration Engine.
+ *  Same endpoint as FormFieldsByType to save a round-trip. Used by the
+ *  Acknowledge handler (autoCreatesMaintenanceRequest) and the create
+ *  form display (vehicleRequired, defaultPriority). */
+type TypeConfigByType = Partial<Record<TicketType, {
+  vehicleRequired: boolean;
+  autoCreatesMaintenanceRequest: boolean;
+  defaultPriority: 'Low' | 'Medium' | 'High';
+}>>;
 import { createMaintenanceRequest } from '@/services/mockData';
 
 // ── Shared visuals ───────────────────────────────────────────────────────────
@@ -99,6 +109,7 @@ export default function ServiceTicketsHome() {
   const [userId, setUserId]           = useState<string | null>(null);
   const [accessMap, setAccessMap]     = useState<Map<TicketType, TenantTicketTypeAccess>>(new Map());
   const [formFieldsByType, setFormFieldsByType] = useState<FormFieldsByType>({});
+  const [typeConfigByType, setTypeConfigByType] = useState<TypeConfigByType>({});
   const [tickets, setTickets]         = useState<ServiceTicket[]>([]);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState<string | null>(null);
@@ -140,6 +151,7 @@ export default function ServiceTicketsHome() {
       if (fieldsRes.ok) {
         const data = await fieldsRes.json();
         setFormFieldsByType(data.formFields ?? {});
+        setTypeConfigByType(data.typeConfig ?? {});
       }
       if (ticketsRes.ok) {
         const data = await ticketsRes.json();
@@ -226,7 +238,13 @@ export default function ServiceTicketsHome() {
     let mrId: string | null = null;
 
     // Special case — MAINTENANCE Acknowledge auto-creates a back-office MR.
-    if (cfg.autoCreatesMaintenanceRequest && newStatus === 'Acknowledged') {
+    // Phase 2D — flag now resolved through the Service Configuration Engine
+    // (typeConfig is loaded by the parent from /api/service-tickets/form-fields).
+    // Falls back to legacy compile-time TICKET_TYPE_CONFIG if the typeConfig
+    // map hasn't loaded yet.
+    const autoCreatesMR = typeConfigByType[ticket.ticketType]?.autoCreatesMaintenanceRequest
+      ?? cfg.autoCreatesMaintenanceRequest;
+    if (autoCreatesMR && newStatus === 'Acknowledged') {
       try {
         if (!ticket.vehicleId) { alert('Cannot Acknowledge — no vehicle on this ticket.'); return; }
         const mr = await createMaintenanceRequest({
@@ -279,12 +297,13 @@ export default function ServiceTicketsHome() {
     setBulkBusy(true);
     try {
       const updates = await Promise.all(targets.map(async t => {
-        const cfg = TICKET_TYPE_CONFIG[t.ticketType];
         let mrId: string | null = null;
         let note: string | undefined =
           assignee ? `Bulk ${newStatus.toLowerCase()} to ${assignee}${t.assignedTo ? ` (was ${t.assignedTo})` : ''}` : `Bulk ${newStatus.toLowerCase()}`;
 
-        if (cfg.autoCreatesMaintenanceRequest && newStatus === 'Acknowledged' && t.vehicleId) {
+        const autoCreatesMR = typeConfigByType[t.ticketType]?.autoCreatesMaintenanceRequest
+          ?? TICKET_TYPE_CONFIG[t.ticketType].autoCreatesMaintenanceRequest;
+        if (autoCreatesMR && newStatus === 'Acknowledged' && t.vehicleId) {
           try {
             const mr = await createMaintenanceRequest({
               vehicleId: t.vehicleId,
@@ -358,6 +377,7 @@ export default function ServiceTicketsHome() {
         <NewTicketForm
           enabledTypes={enabledTypes.map(c => c.type)}
           formFieldsByType={formFieldsByType}
+          typeConfigByType={typeConfigByType}
           onCreated={(t) => {
             setTickets(prev => [t, ...prev]);
             setShowForm(false);
@@ -647,11 +667,13 @@ function TicketCard({ ticket, formFields, selected, onToggleSelect, onStatusChan
 function NewTicketForm({
   enabledTypes,
   formFieldsByType,
+  typeConfigByType,
   onCreated,
   onCancel,
 }: {
   enabledTypes: TicketType[];
   formFieldsByType: FormFieldsByType;
+  typeConfigByType: TypeConfigByType;
   onCreated: (t: ServiceTicket) => void;
   onCancel: () => void;
 }) {
@@ -666,9 +688,14 @@ function NewTicketForm({
   const [err, setErr]               = useState<string | null>(null);
 
   const cfg = TICKET_TYPE_CONFIG[ticketType];
-  // Phase 2B.formFields — prefer admin-edited rules (loaded into
-  // formFieldsByType by the parent), fall back to compile-time config.
+  // Phase 2B.formFields + 2D — prefer admin-edited rules (loaded into the
+  // typeConfigByType / formFieldsByType maps by the parent), fall back to
+  // compile-time TICKET_TYPE_CONFIG.
   const formFields: FormFieldDef[] = formFieldsByType[ticketType] ?? cfg.formFields ?? [];
+  const tc = typeConfigByType[ticketType];
+  const vehicleRequired = tc?.vehicleRequired ?? cfg.vehicleRequired;
+  const autoCreatesMR    = tc?.autoCreatesMaintenanceRequest ?? cfg.autoCreatesMaintenanceRequest;
+  const resolvedDefaultPriority = tc?.defaultPriority ?? cfg.defaultPriority;
 
   // Reset per-type custom fields whenever the ticket type changes — different
   // types have different field schemas, so values don't carry across.
@@ -679,7 +706,7 @@ function NewTicketForm({
   // When the type's defaultPriority differs from current selection AND the
   // user hasn't started typing, snap to it. We only do this on type change.
   useEffect(() => {
-    setPriority(p => (p === 'Low' || p === 'Medium' || p === 'High') ? cfg.defaultPriority : p);
+    setPriority(p => (p === 'Low' || p === 'Medium' || p === 'High') ? resolvedDefaultPriority : p);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticketType]);
 
@@ -690,7 +717,7 @@ function NewTicketForm({
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setErr(null);
     if (!title.trim()) { setErr('Title is required.'); return; }
-    if (cfg.vehicleRequired && !vehicleId.trim()) { setErr(`${cfg.longLabel} requires a vehicle ID.`); return; }
+    if (vehicleRequired && !vehicleId.trim()) { setErr(`${cfg.longLabel} requires a vehicle ID.`); return; }
 
     // Client-side mirror of server validation — fail fast before POST.
     for (const f of formFields) {
@@ -760,8 +787,8 @@ function NewTicketForm({
           })}
         </div>
         <p className="text-[11px] text-slate-500">
-          Default SLA: <strong className="text-white">{cfg.defaultSlaHours}h</strong> · default priority: <strong className="text-white">{cfg.defaultPriority}</strong>
-          {cfg.autoCreatesMaintenanceRequest && <span className="ml-2 text-blue-300">· auto-creates Maintenance Request on Acknowledge</span>}
+          Default SLA: <strong className="text-white">{cfg.defaultSlaHours}h</strong> · default priority: <strong className="text-white">{resolvedDefaultPriority}</strong>
+          {autoCreatesMR && <span className="ml-2 text-blue-300">· auto-creates Maintenance Request on Acknowledge</span>}
         </p>
         {/* Approval-gate hint — surfaced when the rule will fire for this type/priority */}
         {(cfg.requiresApproval?.always
@@ -801,10 +828,10 @@ function NewTicketForm({
         </div>
         <div className="space-y-1 md:col-span-2">
           <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
-            Vehicle ID {cfg.vehicleRequired && <span className="text-rose-400">*</span>}
+            Vehicle ID {vehicleRequired && <span className="text-rose-400">*</span>}
           </label>
           <input value={vehicleId} onChange={e => setVehicleId(e.target.value)}
-            placeholder={cfg.vehicleRequired ? 'Required for this ticket type' : 'Optional'}
+            placeholder={vehicleRequired ? 'Required for this ticket type' : 'Optional'}
             className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
         </div>
 

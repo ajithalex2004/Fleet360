@@ -184,3 +184,49 @@ export async function resolveTicketFormFieldsBatch(
   }));
   return out;
 }
+
+/**
+ * Resolve whether this service requires a vehicle reference. Authority:
+ *   1. service_rules.vehicle.vehicleRequired (admin-edited)
+ *   2. TICKET_TYPE_CONFIG.vehicleRequired (legacy)
+ */
+export async function resolveTicketVehicleRequired(
+  tenantId: string,
+  ticketType: TicketType,
+): Promise<boolean> {
+  const cfg = await loadServiceConfig(tenantId, ticketType);
+  if (cfg?.configured.vehicle) return !!cfg.rules.vehicle.vehicleRequired;
+  return !!TICKET_TYPE_CONFIG[ticketType]?.vehicleRequired;
+}
+
+/**
+ * Resolve whether Acknowledging a ticket of this service should auto-create
+ * a MaintenanceRequest in the maintenance module (the legacy MAINTENANCE
+ * cross-module bridge). Authority:
+ *   1. service_rules.ticketing.autoCreatesMaintenanceRequest (admin-edited)
+ *   2. TICKET_TYPE_CONFIG.autoCreatesMaintenanceRequest (legacy)
+ */
+export async function resolveTicketAutoCreatesMaintenanceRequest(
+  tenantId: string,
+  ticketType: TicketType,
+): Promise<boolean> {
+  const cfg = await loadServiceConfig(tenantId, ticketType);
+  if (cfg?.configured.ticketing) return !!cfg.rules.ticketing.autoCreatesMaintenanceRequest;
+  return !!TICKET_TYPE_CONFIG[ticketType]?.autoCreatesMaintenanceRequest;
+}
+
+/**
+ * Resolve the default priority for a service. Lives on the service_types
+ * row directly (not in service_rules) — Phase 2A already stored it.
+ * Authority:
+ *   1. service_types.default_priority (admin-edited via Basic Info tab)
+ *   2. TICKET_TYPE_CONFIG.defaultPriority (legacy)
+ */
+export async function resolveTicketDefaultPriority(
+  tenantId: string,
+  ticketType: TicketType,
+): Promise<TicketPriority> {
+  const cfg = await loadServiceConfig(tenantId, ticketType);
+  if (cfg?.type.defaultPriority) return cfg.type.defaultPriority;
+  return (TICKET_TYPE_CONFIG[ticketType]?.defaultPriority ?? 'Medium') as TicketPriority;
+}

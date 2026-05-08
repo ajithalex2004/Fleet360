@@ -14,11 +14,13 @@
 
 import { prisma } from '@/lib/prisma';
 import type { LinkedModule } from '@/types/service-config';
-import { ensureServiceRulesTable } from './rules-schema';
+import { ensureServiceRulesTable, seedRulesIfAbsent } from './rules-schema';
 import { TICKET_TYPE_CONFIG } from '@/lib/service-tickets/config';
 import {
   DEFAULT_APPROVAL_RULES, DEFAULT_TICKETING_RULES, DEFAULT_FORM_FIELDS_RULES,
+  DEFAULT_VEHICLE_RULES,
   type ApprovalRules, type TicketingRules, type FormFieldsRules,
+  type VehicleRules,
 } from '@/types/service-rules';
 import type { TicketType } from '@/types/service-tickets';
 
@@ -305,9 +307,9 @@ async function seedRulesFromTicketingConfig(
     emergencyBypassEnabled: false,
   };
 
-  // Ticketing — prefix and a sensible priority matrix derived from
-  // defaultSlaHours. We give Low ~3x SLA and High ~1/4 SLA as a starting
-  // point; admins can tune via the Ticketing tab.
+  // Ticketing — prefix, priority matrix from defaultSlaHours, and the
+  // MAINTENANCE-only auto-create-MR bridge flag (only true for the
+  // MAINTENANCE service type).
   const sla = cfg.defaultSlaHours;
   const ticketing: TicketingRules = {
     ...DEFAULT_TICKETING_RULES,
@@ -317,6 +319,7 @@ async function seedRulesFromTicketingConfig(
       Medium: sla,
       High:   Math.max(Math.round(sla / 4), 1),
     },
+    autoCreatesMaintenanceRequest: !!cfg.autoCreatesMaintenanceRequest,
   };
 
   // Form fields — bring the per-type formFields schema into rules so
@@ -326,24 +329,17 @@ async function seedRulesFromTicketingConfig(
     fields: cfg.formFields ?? [],
   };
 
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO service_rules (service_type_id, category, rules)
-     VALUES ($1::uuid, 'approval', $2::jsonb)
-     ON CONFLICT (service_type_id, category) DO NOTHING`,
-    serviceTypeId, JSON.stringify(approval),
-  );
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO service_rules (service_type_id, category, rules)
-     VALUES ($1::uuid, 'ticketing', $2::jsonb)
-     ON CONFLICT (service_type_id, category) DO NOTHING`,
-    serviceTypeId, JSON.stringify(ticketing),
-  );
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO service_rules (service_type_id, category, rules)
-     VALUES ($1::uuid, 'formFields', $2::jsonb)
-     ON CONFLICT (service_type_id, category) DO NOTHING`,
-    serviceTypeId, JSON.stringify(formFields),
-  );
+  // Vehicle — vehicleRequired migrates from TICKET_TYPE_CONFIG into the
+  // central VehicleRules.vehicleRequired flag (Phase 2D finish-migration).
+  const vehicle: VehicleRules = {
+    ...DEFAULT_VEHICLE_RULES,
+    vehicleRequired: !!cfg.vehicleRequired,
+  };
+
+  await seedRulesIfAbsent(serviceTypeId, 'approval',   approval);
+  await seedRulesIfAbsent(serviceTypeId, 'ticketing',  ticketing);
+  await seedRulesIfAbsent(serviceTypeId, 'formFields', formFields);
+  await seedRulesIfAbsent(serviceTypeId, 'vehicle',    vehicle);
 }
 
 /** Used by the admin GET to make sure the tenant has its baseline catalogue. */

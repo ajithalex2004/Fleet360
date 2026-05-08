@@ -89,6 +89,9 @@ export const VEHICLE_USAGES = [
   'Logistics', 'Ambulance', 'Limousine', 'Internal',
 ] as const;
 export interface VehicleRules {
+  /** When true, requests of this service must reference a vehicle. Used
+   *  by /api/service-tickets POST to block submission without vehicleId. */
+  vehicleRequired: boolean;
   vehicleClasses: string[];
   vehicleTypes: string[];
   vehicleGroups: string[];
@@ -98,6 +101,7 @@ export interface VehicleRules {
   specialRequirements: string[]; // wheelchair, oxygen, child seat, etc.
 }
 export const DEFAULT_VEHICLE_RULES: VehicleRules = {
+  vehicleRequired: false,
   vehicleClasses: [],
   vehicleTypes: [],
   vehicleGroups: [],
@@ -193,6 +197,10 @@ export interface TicketingRules {
   escalationMatrix: TicketingEscalationStep[];
   customerNotificationEnabled: boolean;
   internalNotesEnabled: boolean;
+  /** MAINTENANCE-only bridge — when true, Acknowledging a ticket of this
+   *  service auto-creates a MaintenanceRequest in the maintenance module.
+   *  Migrated from TICKET_TYPE_CONFIG.autoCreatesMaintenanceRequest. */
+  autoCreatesMaintenanceRequest: boolean;
 }
 export const DEFAULT_TICKETING_RULES: TicketingRules = {
   ticketPrefix: '',
@@ -203,6 +211,7 @@ export const DEFAULT_TICKETING_RULES: TicketingRules = {
   escalationMatrix: [],
   customerNotificationEnabled: true,
   internalNotesEnabled: true,
+  autoCreatesMaintenanceRequest: false,
 };
 
 // ── 7. EPOD (Electronic Proof Of Delivery) ──────────────────────────────────

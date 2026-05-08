@@ -20,7 +20,8 @@ import { getTenantEnabledTypes } from '@/lib/service-tickets/access';
 import {
   resolveTicketInitialStatus, resolveTicketPrefix,
   resolveTicketSlaMatrixBatch, pickSlaHours,
-  resolveTicketFormFields,
+  resolveTicketFormFields, resolveTicketVehicleRequired,
+  resolveTicketDefaultPriority,
   type SlaMatrix,
 } from '@/lib/service-config/resolvers';
 import { logAudit } from '@/lib/audit';
@@ -164,10 +165,16 @@ export async function POST(req: NextRequest) {
   }
 
   const cfg = TICKET_TYPE_CONFIG[ticketType];
-  const priority = (['Low', 'Medium', 'High'].includes(body.priority ?? '') ? body.priority : cfg.defaultPriority) as 'Low' | 'Medium' | 'High';
+  // Phase 2D finish-migration — defaultPriority + vehicleRequired now flow
+  // through the Service Configuration Engine. Resolvers fall back to
+  // TICKET_TYPE_CONFIG when no central row is configured.
+  const resolvedDefaultPriority = await resolveTicketDefaultPriority(tenantId, ticketType);
+  const priority = (['Low', 'Medium', 'High'].includes(body.priority ?? '')
+    ? body.priority : resolvedDefaultPriority) as 'Low' | 'Medium' | 'High';
 
   // Vehicle requirement check.
-  if (cfg.vehicleRequired && !body.vehicleId) {
+  const vehicleRequired = await resolveTicketVehicleRequired(tenantId, ticketType);
+  if (vehicleRequired && !body.vehicleId) {
     return NextResponse.json({ ok: false, error: `${cfg.longLabel} requires a vehicle.` }, { status: 400 });
   }
 

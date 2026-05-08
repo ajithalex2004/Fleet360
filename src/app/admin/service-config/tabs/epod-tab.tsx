@@ -48,7 +48,8 @@ export function EpodTab({ typeId }: { typeId: string }) {
       </Section>
 
       <SaveBar configured={configured} dirty={dirty} saving={saving} error={error} savedMsg={savedMsg}
-        onSave={save} onReset={reload} />
+        onSave={save} onReset={reload}
+        typeId={typeId} category="epod" onRolledBack={reload} />
     </div>
   );
 }

@@ -1,12 +1,13 @@
 'use client';
 
 /**
- * Form primitives reused by all 8 rule tabs — Field, Toggle, NumberInput,
- * TextInput, Select, ChipMultiSelect, SaveBar.
+ * Form primitives reused by all rule tabs — Field, Toggle, NumberInput,
+ * TextInput, Select, ChipMultiSelect, SaveBar, Section, HistoryDrawer.
  */
 
-import { Save, AlertCircle, CheckCircle2, X, Plus } from 'lucide-react';
-import { useState } from 'react';
+import { Save, AlertCircle, CheckCircle2, X, Plus, History, RotateCcw, User } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import type { RuleCategory } from '@/types/service-rules';
 
 export function Field({ label, children, hint, required }: {
   label: string; children: React.ReactNode; hint?: string; required?: boolean;
@@ -146,6 +147,7 @@ export function ChipMultiSelect({
 /** Save bar with status messaging — used at the bottom of every tab. */
 export function SaveBar({
   configured, dirty, saving, error, savedMsg, onSave, onReset,
+  typeId, category, onRolledBack,
 }: {
   configured: boolean;
   dirty: boolean;
@@ -154,34 +156,197 @@ export function SaveBar({
   savedMsg: string | null;
   onSave: () => void;
   onReset?: () => void;
+  /** When provided, renders a "History" button that opens the drawer. */
+  typeId?: string;
+  category?: RuleCategory;
+  /** Called after a successful rollback so the parent can re-load. */
+  onRolledBack?: () => void;
 }) {
+  const [historyOpen, setHistoryOpen] = useState(false);
+
   return (
-    <div className="flex items-center gap-2 pt-3 border-t border-white/5">
-      <button onClick={onSave} disabled={saving}
-        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50">
-        <Save className="w-4 h-4" /> {saving ? 'Saving…' : configured ? 'Save changes' : 'Save'}
-      </button>
-      {onReset && dirty && !saving && (
-        <button onClick={onReset}
-          className="px-3 py-2 rounded-lg text-slate-400 hover:text-white text-sm">
-          Reset
+    <>
+      <div className="flex items-center gap-2 pt-3 border-t border-white/5">
+        <button onClick={onSave} disabled={saving}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50">
+          <Save className="w-4 h-4" /> {saving ? 'Saving…' : configured ? 'Save changes' : 'Save'}
         </button>
+        {onReset && dirty && !saving && (
+          <button onClick={onReset}
+            className="px-3 py-2 rounded-lg text-slate-400 hover:text-white text-sm">
+            Reset
+          </button>
+        )}
+        {typeId && category && (
+          <button onClick={() => setHistoryOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-white/5"
+            title="View change history and roll back">
+            <History className="w-3.5 h-3.5" /> History
+          </button>
+        )}
+        {!configured && (
+          <span className="text-[11px] text-amber-300/80 inline-flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" /> Using defaults — not yet saved
+          </span>
+        )}
+        {savedMsg && (
+          <span className="text-xs text-emerald-300 inline-flex items-center gap-1 ml-auto">
+            <CheckCircle2 className="w-3 h-3" /> {savedMsg}
+          </span>
+        )}
+        {error && (
+          <span className="text-xs text-rose-300 inline-flex items-center gap-1 ml-auto">
+            <AlertCircle className="w-3 h-3" /> {error}
+          </span>
+        )}
+      </div>
+
+      {historyOpen && typeId && category && (
+        <HistoryDrawer
+          typeId={typeId}
+          category={category}
+          onClose={() => setHistoryOpen(false)}
+          onRolledBack={() => { setHistoryOpen(false); onRolledBack?.(); }} />
       )}
-      {!configured && (
-        <span className="text-[11px] text-amber-300/80 inline-flex items-center gap-1">
-          <AlertCircle className="w-3 h-3" /> Using defaults — not yet saved
-        </span>
-      )}
-      {savedMsg && (
-        <span className="text-xs text-emerald-300 inline-flex items-center gap-1 ml-auto">
-          <CheckCircle2 className="w-3 h-3" /> {savedMsg}
-        </span>
-      )}
-      {error && (
-        <span className="text-xs text-rose-300 inline-flex items-center gap-1 ml-auto">
-          <AlertCircle className="w-3 h-3" /> {error}
-        </span>
-      )}
+    </>
+  );
+}
+
+// ── History drawer ──────────────────────────────────────────────────────────
+
+interface RuleVersion {
+  id: string;
+  category: string;
+  rules: unknown;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+  active: boolean;
+}
+
+function HistoryDrawer({
+  typeId, category, onClose, onRolledBack,
+}: {
+  typeId: string;
+  category: RuleCategory;
+  onClose: () => void;
+  onRolledBack: () => void;
+}) {
+  const [versions, setVersions]   = useState<RuleVersion[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState<string | null>(null);
+  const [busyId, setBusyId]       = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const res = await fetch(`/api/admin/service-config/types/${typeId}/rules/${category}/history`);
+      const d = await res.json();
+      if (!res.ok) throw new Error(d?.error ?? 'Load failed');
+      setVersions(d.versions ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Load failed');
+    } finally {
+      setLoading(false);
+    }
+  }, [typeId, category]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const rollback = async (id: string) => {
+    if (!window.confirm('Roll back to this version? A new active row will be created with these rules; the historical row stays untouched.')) return;
+    setBusyId(id); setError(null);
+    try {
+      const res = await fetch(`/api/admin/service-config/types/${typeId}/rules/${category}/history`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ versionId: id }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setError(d?.error ?? 'Rollback failed'); return; }
+      onRolledBack();
+    } finally { setBusyId(null); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-stretch justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="relative w-full max-w-md bg-slate-900 border-l border-white/10 shadow-2xl overflow-y-auto"
+        onClick={e => e.stopPropagation()}>
+        <div className="sticky top-0 bg-slate-900 border-b border-white/10 px-5 py-4 flex items-center gap-2 z-10">
+          <History className="w-4 h-4 text-violet-300" />
+          <h3 className="text-sm font-semibold text-white">Change history</h3>
+          <span className="text-xs text-slate-500 font-mono">{category}</span>
+          <button onClick={onClose} className="ml-auto p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-2">
+          {loading && (
+            <div className="space-y-2">
+              {[...Array(3)].map((_, i) => <div key={i} className="h-20 rounded-lg bg-slate-800/40 animate-pulse" />)}
+            </div>
+          )}
+          {error && (
+            <div className="text-xs text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded px-3 py-2">{error}</div>
+          )}
+          {!loading && versions.length === 0 && (
+            <div className="text-center text-slate-500 text-sm py-8">No saved versions yet.</div>
+          )}
+          {versions.map(v => (
+            <VersionRow key={v.id}
+              version={v}
+              busy={busyId === v.id}
+              onRollback={() => rollback(v.id)} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VersionRow({ version, busy, onRollback }: {
+  version: RuleVersion;
+  busy: boolean;
+  onRollback: () => void;
+}) {
+  const from = new Date(version.effectiveFrom);
+  const to = version.effectiveTo ? new Date(version.effectiveTo) : null;
+  const fmt = (d: Date) => d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+
+  return (
+    <div className={`rounded-lg border px-3 py-2.5 ${
+      version.active
+        ? 'bg-emerald-500/10 border-emerald-500/40'
+        : 'bg-slate-800/40 border-white/10'
+    }`}>
+      <div className="flex items-start gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 mb-1">
+            {version.active && (
+              <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-500/20 px-1.5 py-0.5 rounded">
+                Active
+              </span>
+            )}
+            <span className="text-[11px] font-mono text-slate-400">{version.id.slice(0, 8)}</span>
+          </div>
+          <div className="text-[11px] text-slate-300">
+            {fmt(from)} {to ? <>→ {fmt(to)}</> : <span className="text-slate-500">→ now</span>}
+          </div>
+          {version.updatedBy && (
+            <div className="text-[10px] text-slate-500 inline-flex items-center gap-1 mt-1">
+              <User className="w-3 h-3" /> {version.updatedBy}
+            </div>
+          )}
+        </div>
+        {!version.active && (
+          <button type="button" onClick={onRollback} disabled={busy}
+            className="text-[10px] px-2 py-1 rounded bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-200 inline-flex items-center gap-1 disabled:opacity-50">
+            <RotateCcw className="w-3 h-3" /> {busy ? 'Rolling back…' : 'Rollback'}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

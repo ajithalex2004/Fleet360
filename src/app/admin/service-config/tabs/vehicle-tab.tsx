@@ -8,7 +8,7 @@
 
 import { useMemo } from 'react';
 import { useRuleTab } from './use-rule-tab';
-import { Field, NumberInput, ChipMultiSelect, SaveBar, Section } from './shared';
+import { Field, NumberInput, Toggle, ChipMultiSelect, SaveBar, Section } from './shared';
 import {
   DEFAULT_VEHICLE_RULES, VEHICLE_CLASSES, VEHICLE_USAGES,
   type VehicleRules,
@@ -29,6 +29,11 @@ export function VehicleTab({ typeId }: { typeId: string }) {
 
   return (
     <div className="space-y-6 max-w-3xl">
+      <Section title="Eligibility gate" hint="Whether this service can run without a linked vehicle">
+        <Toggle label="Vehicle required" hint="Block ticket creation when no vehicle is selected"
+          checked={rules.vehicleRequired} onChange={v => patch({ vehicleRequired: v })} />
+      </Section>
+
       <Section title="Class & usage">
         <Field label="Vehicle classes" hint="Empty = all allowed">
           <ChipMultiSelect values={rules.vehicleClasses}
@@ -77,7 +82,8 @@ export function VehicleTab({ typeId }: { typeId: string }) {
       </Section>
 
       <SaveBar configured={configured} dirty={dirty} saving={saving} error={error} savedMsg={savedMsg}
-        onSave={save} onReset={reload} />
+        onSave={save} onReset={reload}
+        typeId={typeId} category="vehicle" onRolledBack={reload} />
     </div>
   );
 }

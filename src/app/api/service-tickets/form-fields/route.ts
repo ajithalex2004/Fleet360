@@ -1,42 +1,69 @@
 /**
  * GET /api/service-tickets/form-fields
- *   Tenant-scoped — returns the resolved formFields schema for every
- *   ticket type the tenant has access to, in one round-trip. The
- *   user-facing /service-tickets page loads this once on mount so the
- *   create form can render dynamically without N+1 fetches.
+ *   Tenant-scoped — returns the resolved formFields schema AND the
+ *   per-type config flags the user-facing page needs at render time.
+ *   One round-trip on mount so the create form and Acknowledge handler
+ *   work without N+1 fetches.
  *
- * Response: { ok: true, formFields: { [TicketType]: FormFieldDef[] } }
+ * Response shape:
+ *   { ok: true,
+ *     formFields: { [TicketType]: FormFieldDef[] },
+ *     typeConfig: { [TicketType]: {
+ *         vehicleRequired: boolean,
+ *         autoCreatesMaintenanceRequest: boolean,
+ *         defaultPriority: 'Low' | 'Medium' | 'High',
+ *     } } }
  *
- * Authority order (per resolver):
- *   1. service_rules.formFields.fields (admin-edited)
- *   2. TICKET_TYPE_CONFIG.formFields (legacy compile-time fallback)
+ * Each value is resolved through the Service Configuration Engine —
+ * service_rules first, TICKET_TYPE_CONFIG legacy fallback.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveTicketFormFieldsBatch } from '@/lib/service-config/resolvers';
+import {
+  resolveTicketFormFieldsBatch, resolveTicketVehicleRequired,
+  resolveTicketAutoCreatesMaintenanceRequest, resolveTicketDefaultPriority,
+} from '@/lib/service-config/resolvers';
 import { getTenantEnabledTypes } from '@/lib/service-tickets/access';
-import { TICKET_TYPES_ORDER, type TicketType, type FormFieldDef } from '@/types/service-tickets';
+import {
+  TICKET_TYPES_ORDER,
+  type TicketType, type TicketPriority, type FormFieldDef,
+} from '@/types/service-tickets';
 import { captureException } from '@/lib/sentry';
 
 export const runtime = 'nodejs';
+
+interface TypeConfigEntry {
+  vehicleRequired: boolean;
+  autoCreatesMaintenanceRequest: boolean;
+  defaultPriority: TicketPriority;
+}
 
 export async function GET(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id');
   if (!tenantId) return NextResponse.json({ ok: false, error: 'Not authenticated' }, { status: 401 });
 
   try {
-    // Resolve for every type the tenant is allowed to use — clients can
-    // ignore the rest. We default to the full type list when the tenant
-    // has no access matrix configured (every type enabled).
     const enabled = await getTenantEnabledTypes(tenantId);
     const types: TicketType[] = enabled.length > 0 ? enabled : [...TICKET_TYPES_ORDER];
 
-    const matrix = await resolveTicketFormFieldsBatch(tenantId, types);
+    const fieldsMatrix = await resolveTicketFormFieldsBatch(tenantId, types);
+
+    // Resolve per-type flags in parallel.
+    const flagEntries = await Promise.all(types.map(async (t) => {
+      const [vehicleRequired, autoMR, defaultPriority] = await Promise.all([
+        resolveTicketVehicleRequired(tenantId, t),
+        resolveTicketAutoCreatesMaintenanceRequest(tenantId, t),
+        resolveTicketDefaultPriority(tenantId, t),
+      ]);
+      return [t, { vehicleRequired, autoCreatesMaintenanceRequest: autoMR, defaultPriority }] as const;
+    }));
 
     const formFields: Record<string, FormFieldDef[]> = {};
-    for (const t of types) formFields[t] = matrix.get(t) ?? [];
+    const typeConfig: Record<string, TypeConfigEntry> = {};
+    for (const t of types) formFields[t] = fieldsMatrix.get(t) ?? [];
+    for (const [t, c] of flagEntries) typeConfig[t] = c;
 
-    return NextResponse.json({ ok: true, formFields });
+    return NextResponse.json({ ok: true, formFields, typeConfig });
   } catch (err) {
     captureException(err, { context: 'service-tickets.form-fields.list' });
     return NextResponse.json({ ok: false, error: 'Failed to resolve form fields' }, { status: 500 });

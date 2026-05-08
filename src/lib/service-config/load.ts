@@ -107,9 +107,10 @@ export async function loadServiceConfig(
       t.id,
     ).catch(() => []),
     prisma.$queryRawUnsafe<RuleRow[]>(
+      // Phase 2D — only the currently-active version per category.
       `SELECT category, rules
        FROM service_rules
-       WHERE service_type_id = $1::uuid`,
+       WHERE service_type_id = $1::uuid AND effective_to IS NULL`,
       t.id,
     ).catch(() => []),
   ]);

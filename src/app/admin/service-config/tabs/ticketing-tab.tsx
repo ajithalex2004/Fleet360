@@ -122,8 +122,16 @@ export function TicketingTab({ typeId }: { typeId: string }) {
           checked={rules.internalNotesEnabled} onChange={v => patch({ internalNotesEnabled: v })} />
       </Section>
 
+      <Section title="Cross-module bridge"
+        hint="MAINTENANCE-only: when enabled, Acknowledging a ticket also creates a MaintenanceRequest in the maintenance module">
+        <Toggle label="Auto-create Maintenance Request on Acknowledge"
+          checked={rules.autoCreatesMaintenanceRequest}
+          onChange={v => patch({ autoCreatesMaintenanceRequest: v })} />
+      </Section>
+
       <SaveBar configured={configured} dirty={dirty} saving={saving} error={error} savedMsg={savedMsg}
-        onSave={save} onReset={reload} />
+        onSave={save} onReset={reload}
+        typeId={typeId} category="ticketing" onRolledBack={reload} />
     </div>
   );
 }
