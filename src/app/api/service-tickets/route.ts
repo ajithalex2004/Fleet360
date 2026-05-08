@@ -14,9 +14,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureServiceTicketsTable, nextReadableId } from '@/lib/service-tickets/schema';
-import { TICKET_TYPE_CONFIG, initialStatusForType } from '@/lib/service-tickets/config';
+import { TICKET_TYPE_CONFIG } from '@/lib/service-tickets/config';
 import { TICKET_TYPES_ORDER, type TicketType, type TicketPriority } from '@/types/service-tickets';
 import { getTenantEnabledTypes } from '@/lib/service-tickets/access';
+import { resolveTicketInitialStatus } from '@/lib/service-config/resolvers';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -168,9 +169,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Determine initial status — Awaiting Approval for approval-gated types,
-  // else Pending. Falls back to Pending if no rule matches.
-  const initialStatus = initialStatusForType(ticketType, priority as TicketPriority);
+  // Phase 2C — initial status now resolved through the Service Configuration
+  // Engine. The resolver consults service_rules.approval first, then falls
+  // back to TICKET_TYPE_CONFIG.requiresApproval when no central row exists.
+  const { status: initialStatus, source: statusSource } =
+    await resolveTicketInitialStatus(tenantId, ticketType, priority as TicketPriority);
 
   try {
     await ensureServiceTicketsTable();
@@ -213,7 +216,7 @@ export async function POST(req: NextRequest) {
       entityId: ticket.id,
       entityName: readableId,
       action: 'CREATE',
-      details: `Created ${cfg.longLabel} ${readableId}: ${title} (${priority})`,
+      details: `Created ${cfg.longLabel} ${readableId}: ${title} (${priority}) — initial status ${initialStatus} via ${statusSource}`,
     });
 
     return NextResponse.json({ ok: true, ticket: rowToApi(ticket) }, { status: 201 });

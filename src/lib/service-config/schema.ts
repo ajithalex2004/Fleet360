@@ -14,6 +14,13 @@
 
 import { prisma } from '@/lib/prisma';
 import type { LinkedModule } from '@/types/service-config';
+import { ensureServiceRulesTable } from './rules-schema';
+import { TICKET_TYPE_CONFIG } from '@/lib/service-tickets/config';
+import {
+  DEFAULT_APPROVAL_RULES, DEFAULT_TICKETING_RULES,
+  type ApprovalRules, type TicketingRules,
+} from '@/types/service-rules';
+import type { TicketType } from '@/types/service-tickets';
 
 let _ensured = false;
 
@@ -264,8 +271,66 @@ export async function seedServiceConfigForTenant(tenantId: string): Promise<void
         t.module.workflow, t.module.notification, t.module.approval,
         t.module.finance, t.module.dispatch,
       );
+
+      // Phase 2C — for the 7 system ticket types, seed approval + ticketing
+      // rules from TICKET_TYPE_CONFIG so day-one behaviour matches the
+      // hardcoded config exactly. Modules read from service_rules and get
+      // identical results until an admin overrides via the UI.
+      if (t.module.linkedModule === 'SERVICE_TICKETING') {
+        await seedRulesFromTicketingConfig(typeId, t.key as TicketType);
+      }
     }
   }
+}
+
+/**
+ * Seed approval + ticketing rules for one ticket-type-backed service type
+ * from TICKET_TYPE_CONFIG. Idempotent — does not overwrite admin edits.
+ */
+async function seedRulesFromTicketingConfig(
+  serviceTypeId: string,
+  ticketType: TicketType,
+): Promise<void> {
+  await ensureServiceRulesTable();
+  const cfg = TICKET_TYPE_CONFIG[ticketType];
+  if (!cfg) return;
+
+  // Approval — preserve the highPriorityOnly / always semantics by mapping
+  // to the new approval rule shape.
+  const approval: ApprovalRules = {
+    ...DEFAULT_APPROVAL_RULES,
+    approvalRequired: !!cfg.requiresApproval?.always,
+    // highPriorityOnly is conveyed by emergencyBypass=false + approvalRequired
+    // staying false here (the helper handles the High-priority path explicitly).
+    emergencyBypassEnabled: false,
+  };
+
+  // Ticketing — prefix and a sensible priority matrix derived from
+  // defaultSlaHours. We give Low ~3x SLA and High ~1/4 SLA as a starting
+  // point; admins can tune via the Ticketing tab.
+  const sla = cfg.defaultSlaHours;
+  const ticketing: TicketingRules = {
+    ...DEFAULT_TICKETING_RULES,
+    ticketPrefix: cfg.prefix,
+    priorityMatrix: {
+      Low:    Math.max(sla * 3, sla),
+      Medium: sla,
+      High:   Math.max(Math.round(sla / 4), 1),
+    },
+  };
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO service_rules (service_type_id, category, rules)
+     VALUES ($1::uuid, 'approval', $2::jsonb)
+     ON CONFLICT (service_type_id, category) DO NOTHING`,
+    serviceTypeId, JSON.stringify(approval),
+  );
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO service_rules (service_type_id, category, rules)
+     VALUES ($1::uuid, 'ticketing', $2::jsonb)
+     ON CONFLICT (service_type_id, category) DO NOTHING`,
+    serviceTypeId, JSON.stringify(ticketing),
+  );
 }
 
 /** Used by the admin GET to make sure the tenant has its baseline catalogue. */
