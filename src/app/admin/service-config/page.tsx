@@ -27,6 +27,14 @@ import {
   type LinkedModule, type ServiceCategoryWithTypes, type ServiceType,
   type ServiceModuleMapping, type ServiceTone, type DefaultPriority,
 } from '@/types/service-config';
+import { SlaTab }        from './tabs/sla-tab';
+import { ApprovalTab }   from './tabs/approval-tab';
+import { VehicleTab }    from './tabs/vehicle-tab';
+import { TripTab }       from './tabs/trip-tab';
+import { FinanceTab }    from './tabs/finance-tab';
+import { TicketingTab }  from './tabs/ticketing-tab';
+import { EpodTab }       from './tabs/epod-tab';
+import { AutomationTab } from './tabs/automation-tab';
 
 // ── Tone palette (mirrors page-theme) ───────────────────────────────────────
 const TONE_BG: Record<ServiceTone, string> = {
@@ -41,17 +49,17 @@ const TONE_FG: Record<ServiceTone, string> = {
 };
 
 type TabKey = 'basic' | 'mapping' | 'sla' | 'approval' | 'vehicle' | 'trip' | 'finance' | 'ticketing' | 'epod' | 'automation';
-const TABS: { key: TabKey; label: string; icon: React.ComponentType<{ className?: string }>; phase: '2A' | '2B' }[] = [
-  { key: 'basic',      label: 'Basic Info',     icon: Layers,      phase: '2A' },
-  { key: 'mapping',    label: 'Module Mapping', icon: Workflow,    phase: '2A' },
-  { key: 'sla',        label: 'SLA & Workflow', icon: Bell,        phase: '2B' },
-  { key: 'approval',   label: 'Approval',       icon: ShieldCheck, phase: '2B' },
-  { key: 'vehicle',    label: 'Vehicle Rules',  icon: Truck,       phase: '2B' },
-  { key: 'trip',       label: 'Trip & Dispatch',icon: Truck,       phase: '2B' },
-  { key: 'finance',    label: 'Finance',        icon: DollarSign,  phase: '2B' },
-  { key: 'ticketing',  label: 'Ticketing',      icon: FileCheck,   phase: '2B' },
-  { key: 'epod',       label: 'EPOD',           icon: Lock,        phase: '2B' },
-  { key: 'automation', label: 'Automation',     icon: Sparkles,    phase: '2B' },
+const TABS: { key: TabKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { key: 'basic',      label: 'Basic Info',      icon: Layers      },
+  { key: 'mapping',    label: 'Module Mapping',  icon: Workflow    },
+  { key: 'sla',        label: 'SLA & Workflow',  icon: Bell        },
+  { key: 'approval',   label: 'Approval',        icon: ShieldCheck },
+  { key: 'vehicle',    label: 'Vehicle Rules',   icon: Truck       },
+  { key: 'trip',       label: 'Trip & Dispatch', icon: Truck       },
+  { key: 'finance',    label: 'Finance',         icon: DollarSign  },
+  { key: 'ticketing',  label: 'Ticketing',       icon: FileCheck   },
+  { key: 'epod',       label: 'EPOD',            icon: Lock        },
+  { key: 'automation', label: 'Automation',      icon: Sparkles    },
 ];
 
 export default function ServiceConfigPage() {
@@ -237,18 +245,14 @@ export default function ServiceConfigPage() {
                 {TABS.map(t => {
                   const Icon = t.icon;
                   const active = activeTab === t.key;
-                  const stub = t.phase !== '2A';
                   return (
                     <button key={t.key} onClick={() => setActiveTab(t.key)}
                       className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                         active
                           ? 'bg-violet-500/20 text-violet-200 ring-1 ring-violet-500/40'
-                          : stub
-                            ? 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-                            : 'text-slate-300 hover:bg-white/5'
+                          : 'text-slate-300 hover:bg-white/5'
                       }`}>
                       <Icon className="w-3.5 h-3.5" /> {t.label}
-                      {stub && <span className="ml-1 text-[9px] uppercase tracking-wider opacity-60">soon</span>}
                     </button>
                   );
                 })}
@@ -268,9 +272,14 @@ export default function ServiceConfigPage() {
                     initial={selectedMapping}
                     onSaved={() => void load()} />
                 )}
-                {activeTab !== 'basic' && activeTab !== 'mapping' && (
-                  <ComingSoon tab={TABS.find(t => t.key === activeTab)!} />
-                )}
+                {activeTab === 'sla'        && <SlaTab        key={selectedType.type.id} typeId={selectedType.type.id} />}
+                {activeTab === 'approval'   && <ApprovalTab   key={selectedType.type.id} typeId={selectedType.type.id} />}
+                {activeTab === 'vehicle'    && <VehicleTab    key={selectedType.type.id} typeId={selectedType.type.id} />}
+                {activeTab === 'trip'       && <TripTab       key={selectedType.type.id} typeId={selectedType.type.id} />}
+                {activeTab === 'finance'    && <FinanceTab    key={selectedType.type.id} typeId={selectedType.type.id} />}
+                {activeTab === 'ticketing'  && <TicketingTab  key={selectedType.type.id} typeId={selectedType.type.id} />}
+                {activeTab === 'epod'       && <EpodTab       key={selectedType.type.id} typeId={selectedType.type.id} />}
+                {activeTab === 'automation' && <AutomationTab key={selectedType.type.id} typeId={selectedType.type.id} />}
               </div>
             </>
           )}
@@ -550,22 +559,6 @@ function ModuleMappingTab({
         </button>
         {msg && <span className={`text-xs ${msg === 'Saved.' ? 'text-emerald-300' : 'text-rose-300'}`}>{msg}</span>}
       </div>
-    </div>
-  );
-}
-
-// ── Stub for tabs that come online in 2B ────────────────────────────────────
-
-function ComingSoon({ tab }: { tab: { label: string; icon: React.ComponentType<{ className?: string }> } }) {
-  const Icon = tab.icon;
-  return (
-    <div className="py-12 text-center text-slate-500 text-sm">
-      <Icon className="w-8 h-8 mx-auto mb-3 text-slate-600" />
-      <p className="text-slate-400 font-semibold mb-1">{tab.label} — coming in Phase 2B</p>
-      <p className="text-[11px] max-w-md mx-auto">
-        This tab will federate the existing engine configs into the service-level rule layer.
-        Until then, manage these settings in their existing admin pages.
-      </p>
     </div>
   );
 }
