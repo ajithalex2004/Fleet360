@@ -34,11 +34,16 @@ export async function ensureServiceTicketsTable(): Promise<void> {
       history                 JSONB        NOT NULL DEFAULT '[]'::jsonb,
       attachments             JSONB        NOT NULL DEFAULT '[]'::jsonb,
       comments                JSONB        NOT NULL DEFAULT '[]'::jsonb,
+      custom_fields           JSONB        NOT NULL DEFAULT '{}'::jsonb,
       created_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
       updated_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
       deleted_at              TIMESTAMPTZ
     )
   `);
+  // 1C migration — add column if upgrading from a 1B schema.
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE service_tickets ADD COLUMN IF NOT EXISTS custom_fields JSONB NOT NULL DEFAULT '{}'::jsonb`,
+  ).catch(() => {});
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_service_tickets_tenant ON service_tickets (tenant_id) WHERE deleted_at IS NULL`);
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_service_tickets_type   ON service_tickets (tenant_id, ticket_type) WHERE deleted_at IS NULL`);
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_service_tickets_status ON service_tickets (tenant_id, status) WHERE deleted_at IS NULL`);

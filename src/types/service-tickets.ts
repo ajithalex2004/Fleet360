@@ -31,9 +31,12 @@ export const TICKET_TYPES_ORDER: TicketType[] = [
   'COMPLAINT',
 ];
 
-/** Status workflow — Phase 1A uses the same set as Service Requests for
- *  every type. Phase 1C will allow per-type divergence. */
+/** Status workflow — common across types. Approval-gated types start in
+ *  'Awaiting Approval' instead of 'Pending'; once approved they enter the
+ *  normal flow. The user's spec keeps the core workflow consistent — per-
+ *  type intermediate states are deferred. */
 export type TicketStatus =
+  | 'Awaiting Approval'   // 1C: approval-gated initial state
   | 'Pending'
   | 'Acknowledged'
   | 'Assigned'
@@ -45,6 +48,39 @@ export type TicketStatus =
   | 'Closed';
 
 export type TicketPriority = 'Low' | 'Medium' | 'High';
+
+/** Form field schema for per-type custom fields (1C). Renders dynamically
+ *  in the create form and surfaces on the card. */
+export interface FormFieldDef {
+  /** stable key used in customFields JSONB */
+  key: string;
+  /** human label */
+  label: string;
+  type: 'text' | 'textarea' | 'select' | 'number' | 'date' | 'datetime' | 'checkbox';
+  required?: boolean;
+  /** for type === 'select' */
+  options?: { value: string; label: string }[];
+  placeholder?: string;
+  /** for type === 'number' */
+  min?: number;
+  max?: number;
+  /** show this field on the card preview (top 1-2 only — others stay
+   *  in the detail drawer) */
+  preview?: boolean;
+  /** how to display on cards: 'text' (verbatim), 'badge' (pill) */
+  display?: 'text' | 'badge';
+}
+
+/** Approval rule (1C) — when set on a TicketTypeConfig, matching tickets
+ *  start in 'Awaiting Approval' instead of 'Pending'. Approval is
+ *  surfaced as Approve/Reject buttons (TENANT_ADMIN role). */
+export interface ApprovalRule {
+  /** All tickets of this type require approval before entering the
+   *  normal workflow. */
+  always?: boolean;
+  /** Only tickets with priority === 'High' require approval. */
+  highPriorityOnly?: boolean;
+}
 
 /** History entry — same shape as ServiceRequest.history so the
  *  TimelineModal component can read both. */
@@ -102,6 +138,12 @@ export interface ServiceTicket {
 
   /** Email or user ID of the assignee. */
   assignedTo?: string;
+
+  /** Per-type custom field values (1C). Schema lives in
+   *  TicketTypeConfig.formFields; values are keyed by FormFieldDef.key.
+   *  e.g. { documentType: 'mulkiya', currentExpiryDate: '2026-09-01' }
+   *  for a RENEWAL ticket. */
+  customFields?: Record<string, unknown>;
 
   /** For MAINTENANCE tickets only — link to the formal MaintenanceRequest
    *  created on Acknowledge (preserves existing /maintenance/requests

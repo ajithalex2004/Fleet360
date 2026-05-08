@@ -14,8 +14,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureServiceTicketsTable, nextReadableId } from '@/lib/service-tickets/schema';
-import { TICKET_TYPE_CONFIG } from '@/lib/service-tickets/config';
-import { TICKET_TYPES_ORDER, type TicketType } from '@/types/service-tickets';
+import { TICKET_TYPE_CONFIG, initialStatusForType } from '@/lib/service-tickets/config';
+import { TICKET_TYPES_ORDER, type TicketType, type TicketPriority } from '@/types/service-tickets';
 import { getTenantEnabledTypes } from '@/lib/service-tickets/access';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -42,6 +42,7 @@ interface Row {
   history: unknown;
   attachments: unknown;
   comments: unknown;
+  custom_fields: unknown;
   created_at: string;
   updated_at: string;
 }
@@ -66,6 +67,7 @@ function rowToApi(r: Row) {
     history: Array.isArray(r.history) ? r.history : [],
     attachments: Array.isArray(r.attachments) ? r.attachments : [],
     comments: Array.isArray(r.comments) ? r.comments : [],
+    customFields: (r.custom_fields && typeof r.custom_fields === 'object') ? r.custom_fields as Record<string, unknown> : {},
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -102,7 +104,7 @@ export async function GET(req: NextRequest) {
   const sql = `
     SELECT id::text, tenant_id, ticket_type, readable_id, requestor_id, requestor_name,
            vehicle_id, related_driver_id, title, description, priority, status,
-           due_date::text, assigned_to, maintenance_request_id, history, attachments, comments,
+           due_date::text, assigned_to, maintenance_request_id, history, attachments, comments, custom_fields,
            created_at::text, updated_at::text
     FROM service_tickets
     WHERE ${conditions.join(' AND ')}
@@ -123,6 +125,7 @@ export async function POST(req: NextRequest) {
     ticketType?: string; title?: string; description?: string;
     priority?: string; vehicleId?: string; relatedDriverId?: string;
     dueDate?: string; requestorName?: string;
+    customFields?: Record<string, unknown>;
   };
   try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
 
@@ -152,34 +155,51 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: `${cfg.longLabel} requires a vehicle.` }, { status: 400 });
   }
 
+  // Validate per-type required fields
+  const customFields = (body.customFields && typeof body.customFields === 'object')
+    ? body.customFields
+    : {};
+  for (const f of cfg.formFields) {
+    if (!f.required) continue;
+    const v = customFields[f.key];
+    const empty = v === undefined || v === null || v === '' || v === false;
+    if (empty && f.type !== 'checkbox') {
+      return NextResponse.json({ ok: false, error: `${f.label} is required for ${cfg.longLabel}.` }, { status: 400 });
+    }
+  }
+
+  // Determine initial status — Awaiting Approval for approval-gated types,
+  // else Pending. Falls back to Pending if no rule matches.
+  const initialStatus = initialStatusForType(ticketType, priority as TicketPriority);
+
   try {
     await ensureServiceTicketsTable();
     const readableId = await nextReadableId(tenantId, ticketType, cfg.prefix);
     const nowIso = new Date().toISOString();
 
     const initialHistory = [{
-      status: 'Pending',
+      status: initialStatus,
       date: nowIso,
       actor: body.requestorName ?? userId,
-      note: 'Submitted',
+      note: initialStatus === 'Awaiting Approval' ? 'Submitted — awaiting approval' : 'Submitted',
     }];
 
     const inserted = await prisma.$queryRawUnsafe<Row[]>(
       `INSERT INTO service_tickets (
          tenant_id, ticket_type, readable_id, requestor_id, requestor_name,
          vehicle_id, related_driver_id, title, description, priority, status, due_date,
-         history
+         history, custom_fields
        ) VALUES (
-         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'Pending', $11::date, $12::jsonb
+         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::date, $13::jsonb, $14::jsonb
        )
        RETURNING id::text, tenant_id, ticket_type, readable_id, requestor_id, requestor_name,
                  vehicle_id, related_driver_id, title, description, priority, status,
-                 due_date::text, assigned_to, maintenance_request_id, history, attachments, comments,
+                 due_date::text, assigned_to, maintenance_request_id, history, attachments, comments, custom_fields,
                  created_at::text, updated_at::text`,
       tenantId, ticketType, readableId, userId, body.requestorName ?? null,
       body.vehicleId ?? null, body.relatedDriverId ?? null,
-      title, description || null, priority, body.dueDate ?? null,
-      JSON.stringify(initialHistory),
+      title, description || null, priority, initialStatus, body.dueDate ?? null,
+      JSON.stringify(initialHistory), JSON.stringify(customFields),
     );
 
     const ticket = inserted[0];

@@ -20,7 +20,7 @@ import { Headphones, Plus, AlertCircle, Clock, ChevronRight, ArrowUpRight } from
 import { PageHeader } from '@/components/ui/page-theme';
 import { TICKET_TYPE_CONFIG, TICKET_TYPE_LIST } from '@/lib/service-tickets/config';
 import { TICKET_TYPES_ORDER } from '@/types/service-tickets';
-import type { TicketType, ServiceTicket, TenantTicketTypeAccess } from '@/types/service-tickets';
+import type { TicketType, ServiceTicket, TenantTicketTypeAccess, FormFieldDef } from '@/types/service-tickets';
 import { createMaintenanceRequest } from '@/services/mockData';
 
 // ── Shared visuals ───────────────────────────────────────────────────────────
@@ -35,6 +35,7 @@ const TONE_FG: Record<string, string> = {
   violet: 'text-violet-300',
 };
 const STATUS_BADGE: Record<string, string> = {
+  'Awaiting Approval': 'bg-amber-500/30 text-amber-200 border-amber-500/60 ring-1 ring-amber-500/30',
   Pending:      'bg-amber-500/20 text-amber-300 border-amber-500/40',
   Acknowledged: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
   Assigned:     'bg-violet-500/20 text-violet-300 border-violet-500/40',
@@ -163,7 +164,7 @@ export default function ServiceTicketsHome() {
 
   const handleStatusChange = async (
     ticket: ServiceTicket,
-    newStatus: 'Acknowledged' | 'Resolved' | 'Assigned' | 'Escalated',
+    newStatus: 'Acknowledged' | 'Resolved' | 'Assigned' | 'Escalated' | 'Pending' | 'Rejected',
   ) => {
     let assignee: string | null = null;
     if (newStatus === 'Assigned' || newStatus === 'Escalated') {
@@ -174,11 +175,26 @@ export default function ServiceTicketsHome() {
       assignee = trimmed;
     }
 
+    // Approval gate — confirm and capture an optional reason for Reject.
+    let rejectReason: string | null = null;
+    if (ticket.status === 'Awaiting Approval' && newStatus === 'Pending') {
+      if (!window.confirm(`Approve ${ticket.readableId ?? 'this ticket'}? It will move to Pending.`)) return;
+    }
+    if (ticket.status === 'Awaiting Approval' && newStatus === 'Rejected') {
+      const r = window.prompt(`Reject ${ticket.readableId ?? 'this ticket'} — reason (optional):`, '');
+      if (r === null) return; // user cancelled
+      rejectReason = r.trim() || null;
+    }
+
     const cfg = TICKET_TYPE_CONFIG[ticket.ticketType];
     let extraNote: string | undefined =
       assignee
         ? `${newStatus} to ${assignee}${ticket.assignedTo ? ` (was ${ticket.assignedTo})` : ''}`
-        : undefined;
+        : newStatus === 'Pending' && ticket.status === 'Awaiting Approval'
+          ? 'Approved — moved to Pending'
+          : newStatus === 'Rejected'
+            ? rejectReason ? `Rejected: ${rejectReason}` : 'Rejected'
+            : undefined;
 
     let mrId: string | null = null;
 
@@ -406,12 +422,32 @@ function TicketCard({ ticket, selected, onToggleSelect, onStatusChange }: {
   ticket: ServiceTicket;
   selected: boolean;
   onToggleSelect: () => void;
-  onStatusChange: (s: 'Acknowledged' | 'Resolved' | 'Assigned' | 'Escalated') => void;
+  onStatusChange: (s: 'Acknowledged' | 'Resolved' | 'Assigned' | 'Escalated' | 'Pending' | 'Rejected') => void;
 }) {
   const cfg = TICKET_TYPE_CONFIG[ticket.ticketType];
   const Icon = cfg?.icon ?? Headphones;
   const age = pendingAge(ticket);
   const isHigh = ticket.priority === 'High';
+  const awaitingApproval = ticket.status === 'Awaiting Approval';
+
+  // Surface fields marked `preview: true` in the per-type schema as a small
+  // strip below the description. Looks up label/options from the config so
+  // select values render as the human label, not the raw value.
+  const previewFields = (cfg?.formFields ?? []).filter(f => f.preview);
+  const customFields = ticket.customFields ?? {};
+  const renderPreviewValue = (f: typeof previewFields[number], v: unknown): string | null => {
+    if (v === undefined || v === null || v === '') return null;
+    if (f.type === 'select') {
+      const opt = f.options?.find(o => o.value === v);
+      return opt?.label ?? String(v);
+    }
+    if (f.type === 'date' || f.type === 'datetime') {
+      const s = String(v);
+      return s.includes('T') ? s.replace('T', ' ').slice(0, 16) : s;
+    }
+    if (f.type === 'checkbox') return v ? 'Yes' : null;
+    return String(v);
+  };
 
   return (
     <div className={`bg-slate-900 rounded-lg p-4 relative overflow-hidden group border shadow-sm hover:shadow-md transition-all flex flex-col ${
@@ -462,6 +498,30 @@ function TicketCard({ ticket, selected, onToggleSelect, onStatusChange }: {
           <p className="text-xs text-slate-500 mb-3 line-clamp-2 h-8">{ticket.description}</p>
         )}
 
+        {/* Per-type preview fields — chips for badges, plain rows for text */}
+        {previewFields.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 mb-3">
+            {previewFields.map(f => {
+              const display = renderPreviewValue(f, customFields[f.key]);
+              if (!display) return null;
+              if (f.display === 'badge') {
+                return (
+                  <span key={f.key}
+                    className={`text-[10px] px-2 py-0.5 rounded-full border ${TONE_BG[cfg?.tone ?? 'violet']} ${TONE_FG[cfg?.tone ?? 'violet']} border-current/30`}
+                    title={f.label}>
+                    {display}
+                  </span>
+                );
+              }
+              return (
+                <span key={f.key} className="text-[10px] text-slate-400" title={f.label}>
+                  <span className="text-slate-500">{f.label}:</span> <span className="text-slate-300">{display}</span>
+                </span>
+              );
+            })}
+          </div>
+        )}
+
         {/* Details */}
         <div className="space-y-1.5 text-xs border-t border-white/5 pt-3">
           {ticket.vehicleId && (
@@ -500,6 +560,18 @@ function TicketCard({ ticket, selected, onToggleSelect, onStatusChange }: {
 
       {/* Actions */}
       <div className="flex flex-wrap gap-1.5 mt-4">
+        {awaitingApproval && (
+          <>
+            <button onClick={() => onStatusChange('Pending')}
+              className="text-[11px] px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold inline-flex items-center gap-1">
+              ✓ Approve
+            </button>
+            <button onClick={() => onStatusChange('Rejected')}
+              className="text-[11px] px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold inline-flex items-center gap-1">
+              ✕ Reject
+            </button>
+          </>
+        )}
         {ticket.status === 'Pending' && (
           <button onClick={() => onStatusChange('Acknowledged')}
             className="text-[11px] px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold inline-flex items-center gap-1">
@@ -545,15 +617,45 @@ function NewTicketForm({
   const [priority, setPriority]     = useState<'Low' | 'Medium' | 'High'>('Medium');
   const [vehicleId, setVehicleId]   = useState('');
   const [dueDate, setDueDate]       = useState('');
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>({});
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr]               = useState<string | null>(null);
 
   const cfg = TICKET_TYPE_CONFIG[ticketType];
 
+  // Reset per-type custom fields whenever the ticket type changes — different
+  // types have different field schemas, so values don't carry across.
+  useEffect(() => {
+    setCustomFields({});
+  }, [ticketType]);
+
+  // When the type's defaultPriority differs from current selection AND the
+  // user hasn't started typing, snap to it. We only do this on type change.
+  useEffect(() => {
+    setPriority(p => (p === 'Low' || p === 'Medium' || p === 'High') ? cfg.defaultPriority : p);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticketType]);
+
+  const setField = (key: string, value: unknown) => {
+    setCustomFields(prev => ({ ...prev, [key]: value }));
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setErr(null);
     if (!title.trim()) { setErr('Title is required.'); return; }
     if (cfg.vehicleRequired && !vehicleId.trim()) { setErr(`${cfg.longLabel} requires a vehicle ID.`); return; }
+
+    // Client-side mirror of server validation — fail fast before POST.
+    for (const f of cfg.formFields) {
+      if (!f.required) continue;
+      const v = customFields[f.key];
+      const empty = v === undefined || v === null || v === '' || v === false;
+      if (empty && f.type !== 'checkbox') {
+        setErr(`${f.label} is required for ${cfg.longLabel}.`);
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       const res = await fetch('/api/service-tickets', {
@@ -566,6 +668,7 @@ function NewTicketForm({
           priority,
           vehicleId: vehicleId.trim() || undefined,
           dueDate: dueDate || undefined,
+          customFields: Object.keys(customFields).length ? customFields : undefined,
         }),
       });
       const data = await res.json();
@@ -613,6 +716,16 @@ function NewTicketForm({
           Default SLA: <strong className="text-white">{cfg.defaultSlaHours}h</strong> · default priority: <strong className="text-white">{cfg.defaultPriority}</strong>
           {cfg.autoCreatesMaintenanceRequest && <span className="ml-2 text-blue-300">· auto-creates Maintenance Request on Acknowledge</span>}
         </p>
+        {/* Approval-gate hint — surfaced when the rule will fire for this type/priority */}
+        {(cfg.requiresApproval?.always
+          || (cfg.requiresApproval?.highPriorityOnly && priority === 'High')) && (
+          <p className="text-[11px] text-amber-300/90 inline-flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" />
+            This ticket will start in <strong className="text-amber-200">Awaiting Approval</strong>
+            {cfg.requiresApproval?.highPriorityOnly && ' (high priority requires approval)'}
+            {cfg.requiresApproval?.always && ' (this type always requires approval)'}.
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -647,6 +760,14 @@ function NewTicketForm({
             placeholder={cfg.vehicleRequired ? 'Required for this ticket type' : 'Optional'}
             className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
         </div>
+
+        {/* Per-type dynamic fields — driven by cfg.formFields */}
+        {cfg.formFields.map(f => (
+          <DynamicField key={`${ticketType}:${f.key}`}
+            field={f}
+            value={customFields[f.key]}
+            onChange={v => setField(f.key, v)} />
+        ))}
       </div>
 
       <div className="flex justify-end gap-2">
@@ -658,5 +779,93 @@ function NewTicketForm({
         </button>
       </div>
     </form>
+  );
+}
+
+// ── Dynamic per-type form field ─────────────────────────────────────────────
+// Renders a single field from cfg.formFields. Knows about all 7 input types.
+// Layout: text/textarea/select span 2 cols; numbers/dates/checkboxes 1 col.
+function DynamicField({
+  field, value, onChange,
+}: {
+  field: FormFieldDef;
+  value: unknown;
+  onChange: (v: unknown) => void;
+}) {
+  const span = field.type === 'textarea' || field.type === 'select' || field.type === 'text'
+    ? 'md:col-span-2' : '';
+  const labelEl = (
+    <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
+      {field.label} {field.required && <span className="text-rose-400">*</span>}
+    </label>
+  );
+
+  if (field.type === 'checkbox') {
+    return (
+      <div className="space-y-1 md:col-span-2">
+        <label className="inline-flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
+          <input type="checkbox"
+            checked={!!value}
+            onChange={e => onChange(e.target.checked)}
+            className="w-4 h-4 accent-violet-500 rounded" />
+          <span>{field.label}{field.required && <span className="ml-1 text-rose-400">*</span>}</span>
+        </label>
+      </div>
+    );
+  }
+
+  if (field.type === 'select') {
+    return (
+      <div className={`space-y-1 ${span}`}>
+        {labelEl}
+        <select value={(value as string) ?? ''}
+          onChange={e => onChange(e.target.value || undefined)}
+          required={field.required}
+          className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+          <option value="">— Select —</option>
+          {field.options?.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  if (field.type === 'textarea') {
+    return (
+      <div className={`space-y-1 ${span}`}>
+        {labelEl}
+        <textarea
+          value={(value as string) ?? ''}
+          onChange={e => onChange(e.target.value)}
+          placeholder={field.placeholder}
+          required={field.required}
+          rows={3}
+          className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+      </div>
+    );
+  }
+
+  // text / number / date / datetime — same input shape, different `type` attr.
+  const inputType =
+    field.type === 'number'   ? 'number'           :
+    field.type === 'date'     ? 'date'             :
+    field.type === 'datetime' ? 'datetime-local'   : 'text';
+
+  return (
+    <div className={`space-y-1 ${span}`}>
+      {labelEl}
+      <input type={inputType}
+        value={(value as string | number | undefined) ?? ''}
+        onChange={e => {
+          const v = e.target.value;
+          onChange(field.type === 'number' ? (v === '' ? undefined : Number(v)) : v);
+        }}
+        placeholder={field.placeholder}
+        min={field.min}
+        max={field.max}
+        required={field.required}
+        className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+    </div>
   );
 }

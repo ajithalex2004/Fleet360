@@ -29,7 +29,7 @@ interface Row {
   title: string; description: string | null;
   priority: string; status: string; due_date: string | null;
   assigned_to: string | null; maintenance_request_id: string | null;
-  history: unknown; attachments: unknown; comments: unknown;
+  history: unknown; attachments: unknown; comments: unknown; custom_fields: unknown;
   created_at: string; updated_at: string;
 }
 
@@ -44,13 +44,14 @@ function rowToApi(r: Row) {
     history:     Array.isArray(r.history)     ? r.history     : [],
     attachments: Array.isArray(r.attachments) ? r.attachments : [],
     comments:    Array.isArray(r.comments)    ? r.comments    : [],
+    customFields: (r.custom_fields && typeof r.custom_fields === 'object') ? r.custom_fields as Record<string, unknown> : {},
     createdAt: r.created_at, updatedAt: r.updated_at,
   };
 }
 
 const SELECT_COLS = `id::text, tenant_id, ticket_type, readable_id, requestor_id, requestor_name,
   vehicle_id, related_driver_id, title, description, priority, status, due_date::text,
-  assigned_to, maintenance_request_id, history, attachments, comments,
+  assigned_to, maintenance_request_id, history, attachments, comments, custom_fields,
   created_at::text, updated_at::text`;
 
 async function loadTicket(tenantId: string, id: string): Promise<Row | null> {
@@ -107,9 +108,10 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   setIf('vehicle_id',             body.vehicleId);
   setIf('related_driver_id',      body.relatedDriverId);
   setIf('maintenance_request_id', body.maintenanceRequestId);
-  if (body.history     !== undefined) { sets.push(`history = $${p}::jsonb`);     params2.push(JSON.stringify(body.history));     p++; }
-  if (body.attachments !== undefined) { sets.push(`attachments = $${p}::jsonb`); params2.push(JSON.stringify(body.attachments)); p++; }
-  if (body.comments    !== undefined) { sets.push(`comments = $${p}::jsonb`);    params2.push(JSON.stringify(body.comments));    p++; }
+  if (body.history      !== undefined) { sets.push(`history = $${p}::jsonb`);       params2.push(JSON.stringify(body.history));      p++; }
+  if (body.attachments  !== undefined) { sets.push(`attachments = $${p}::jsonb`);   params2.push(JSON.stringify(body.attachments));  p++; }
+  if (body.comments     !== undefined) { sets.push(`comments = $${p}::jsonb`);      params2.push(JSON.stringify(body.comments));     p++; }
+  if (body.customFields !== undefined) { sets.push(`custom_fields = $${p}::jsonb`); params2.push(JSON.stringify(body.customFields)); p++; }
 
   if (sets.length === 0) {
     return NextResponse.json({ ok: false, error: 'No updatable fields in body' }, { status: 400 });
