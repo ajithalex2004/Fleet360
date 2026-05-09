@@ -66,12 +66,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       data: { status: nextStatus, updatedAt: new Date() },
     });
 
-    // Side Effects & Notifications
-    const amountStr = `${quotation.currency} ${Number(quotation.totalMonthlyRate ?? 0).toLocaleString()}`;
-    const customerEmail = customRecipient || (quotation as any).lessee?.email || 'customer@example.com'; 
-    
+    // ── Side Effects & Notifications ──
+    // Customer name is now a relation field; the schema dropped the
+    // denormalized 'lesseeName' column. Read through the loaded lessee
+    // relation with a sensible fallback for any orphan rows.
+    const lesseeName    = quotation.lessee?.name ?? 'Customer';
+    const lesseeEmail   = quotation.lessee?.email ?? 'customer@example.com';
+    const quotationNo   = quotation.quotationNumber ?? '(unnumbered)';
+    const currency      = quotation.currency ?? 'AED';
+    const amountStr     = `${currency} ${Number(quotation.totalMonthlyRate ?? 0).toLocaleString()}`;
+    const customerEmail = customRecipient || lesseeEmail;
+
     if (nextStatus === 'PENDING_APPROVAL') {
-      const template = generateInternalApprovalEmail(quotation.quotationNumber, quotation.lesseeName, amountStr);
+      const template = generateInternalApprovalEmail(quotationNo, lesseeName, amountStr);
       await sendEmail({
         to: [{ email: 'approvals@xl-mobility.ai', name: 'Internal Approvers' }],
         ...template
@@ -79,22 +86,27 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     if (nextStatus === 'SENT_TO_CUSTOMER') {
-      // Fetch full details for the enterprise-grade template
+      // Fetch full details for the enterprise-grade template. Include
+      // lessee so we can read the customer name + email off the relation.
       const fullQuotation = await prisma.leaseQuotation.findUnique({
         where: { id: params.id },
-        include: { vehicles: true, lineItems: true }
+        include: { vehicles: true, lineItems: true, lessee: true }
       });
 
       if (fullQuotation) {
+        const fqLesseeName  = fullQuotation.lessee?.name ?? 'Customer';
+        const fqLesseeEmail = fullQuotation.lessee?.email ?? 'customer@example.com';
+        const fqQuotationNo = fullQuotation.quotationNumber ?? '(unnumbered)';
+
         const html = quotationEmailHtml({
-          quotationNumber: fullQuotation.quotationNumber,
-          lesseeName: fullQuotation.lesseeName,
+          quotationNumber: fqQuotationNo,
+          lesseeName: fqLesseeName,
           leaseType: fullQuotation.leaseType as any,
           durationMonths: fullQuotation.durationMonths ?? undefined,
           startDate: fullQuotation.startDate?.toISOString(),
           endDate: fullQuotation.endDate?.toISOString(),
           validUntil: fullQuotation.validUntil?.toISOString(),
-          currency: fullQuotation.currency,
+          currency: fullQuotation.currency ?? undefined,
           totalMonthlyRate: Number(fullQuotation.totalMonthlyRate || 0),
           totalContractValue: Number(fullQuotation.totalContractValue || 0),
           securityDeposit: Number(fullQuotation.securityDeposit || 0),
@@ -110,17 +122,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         });
 
         // Handle multiple recipients
-        const toRecipients = customRecipient 
-          ? customRecipient.split(/[,;]/).map(email => ({ email: email.trim(), name: fullQuotation.lesseeName }))
-          : [{ email: (fullQuotation.lessee as any)?.email || 'customer@example.com', name: fullQuotation.lesseeName }];
+        const toRecipients = customRecipient
+          ? customRecipient.split(/[,;]/).map((email: string) => ({ email: email.trim(), name: fqLesseeName }))
+          : [{ email: fqLesseeEmail, name: fqLesseeName }];
 
         await sendEmail({
           to: toRecipients,
-          subject: `Lease Quotation from XL AI Smart Mobility - ${fullQuotation.quotationNumber}`,
+          subject: `Lease Quotation from XL AI Smart Mobility - ${fqQuotationNo}`,
           htmlBody: html
         });
       }
-      
+
       // Update inquiry status
       if (quotation.inquiryId) {
         await prisma.leaseInquiry.update({
@@ -131,7 +143,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     if (nextStatus === 'PENDING_CREDIT_APPROVAL') {
-      const template = generateCreditReviewEmail(quotation.quotationNumber, quotation.lesseeName);
+      const template = generateCreditReviewEmail(quotationNo, lesseeName);
       await sendEmail({
         to: [{ email: 'credit@xl-mobility.ai', name: 'Credit Team' }],
         ...template
@@ -139,10 +151,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     if (nextStatus === 'DELIVERED') {
-      const template = generateHandoverEmail(quotation.quotationNumber, quotation.lesseeName);
-      const toRecipients = customRecipient 
-          ? customRecipient.split(/[,;]/).map(email => ({ email: email.trim(), name: quotation.lesseeName }))
-          : [{ email: (quotation as any).lessee?.email || 'customer@example.com', name: quotation.lesseeName }];
+      const template = generateHandoverEmail(quotationNo, lesseeName);
+      const toRecipients = customRecipient
+          ? customRecipient.split(/[,;]/).map((email: string) => ({ email: email.trim(), name: lesseeName }))
+          : [{ email: customerEmail, name: lesseeName }];
 
       await sendEmail({
         to: toRecipients,
