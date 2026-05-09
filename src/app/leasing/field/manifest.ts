@@ -7,7 +7,7 @@ import type { MetadataRoute } from 'next';
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'XL AI Smart Mobility — Leasing Field',
+    name: 'Fleet360 — Leasing Field',
     short_name: 'Lease Field',
     description: 'Mobile field-ops capture for leasing: mileage, fuel, traffic fines.',
     start_url: '/leasing/field',

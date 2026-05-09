@@ -108,7 +108,7 @@ export function notifyTripStatusChange(payload: TripNotificationPayload): void {
           ${driverName   ? `<p style="color:#94a3b8;font-size:12px;margin:4px 0 0">Driver: <span style="color:#f8fafc">${driverName}</span></p>` : ''}
           ${vehiclePlate ? `<p style="color:#94a3b8;font-size:12px;margin:4px 0 0">Vehicle: <span style="color:#f8fafc">${vehiclePlate}</span></p>` : ''}
         </div>
-        <p style="color:#475569;font-size:11px;margin-top:16px">XL AI Smart Mobility Platform</p>
+        <p style="color:#475569;font-size:11px;margin-top:16px">Fleet360 Platform</p>
       </div>
     </div>
   `;

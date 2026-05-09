@@ -9,11 +9,11 @@ import { captureException } from '@/lib/sentry';
 export const runtime = 'nodejs';
 
 const VENDOR = {
-  name: 'XL AI Smart Mobility',
+  name: 'Fleet360',
   tagline: 'UAE Smart Transport Management',
   address: 'Dubai, United Arab Emirates',
   phone: '',
-  email: 'finance@xl-mobility.ai',
+  email: 'finance@fleet360.app',
   trn: '',
 };
 

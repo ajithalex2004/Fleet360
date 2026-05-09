@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import { transformStream } from '@crayonai/stream';
 import { DBMessage, getMessageStore } from '../../chat/messageStore';
 
-const SYSTEM_PROMPT = `You are the XL AI Smart Mobility Operations Assistant — an expert AI embedded in a Smart Transport Management Platform used by fleet operators, dispatchers, and operations managers in the UAE.
+const SYSTEM_PROMPT = `You are the Fleet360 Operations Assistant — an expert AI embedded in a Smart Transport Management Platform used by fleet operators, dispatchers, and operations managers in the UAE.
 
 You have real-time access to the following live data via tools:
 - Fleet status (vehicle counts by status, lifecycle, and usage)

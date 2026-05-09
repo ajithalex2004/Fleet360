@@ -215,7 +215,7 @@ export function PreBillingPdf({ data, lang }: { data: PreBillingPdfData; lang: L
     <Document
       title={`${t('statement', lang)} ${data.statementNo}`}
       author={data.vendor.name}
-      creator="XL AI Smart Mobility Platform"
+      creator="Fleet360 Platform"
     >
       <Page size="A4" style={[styles.page, { fontFamily: font, direction: dir }]}>
         {/* HEADER */}

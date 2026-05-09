@@ -42,7 +42,7 @@ async function testEmail(
   toEmail?: string,
 ): Promise<NextResponse> {
   const provider  = settings['email_provider'] ?? 'none';
-  const fromName  = settings['email_from_name']    || 'XL AI Smart Mobility';
+  const fromName  = settings['email_from_name']    || 'Fleet360';
   // For SMTP, the authenticated sender MUST be the SMTP username (Exchange/O365 enforces this).
   // Fall back to email_from_address only for non-SMTP providers.
   const smtpUser  = settings['smtp_username'] || '';
@@ -127,7 +127,7 @@ async function testSmtp(
     const info = await transporter.sendMail({
       from:    `"${fromName}" <${fromAddr}>`,
       to:      recipient,
-      subject: '✅ XL AI Smart Mobility — SMTP Test Successful',
+      subject: '✅ Fleet360 — SMTP Test Successful',
       html: `
         <!DOCTYPE html>
         <html>
@@ -155,7 +155,7 @@ async function testSmtp(
             </table>
             <hr style="border-color:rgba(255,255,255,0.1);margin:24px 0;"/>
             <p style="color:#475569;font-size:11px;margin:0;">
-              XL AI Smart Mobility Platform — Notification Settings Test<br/>
+              Fleet360 Platform — Notification Settings Test<br/>
               Sent at ${new Date().toUTCString()}
             </p>
           </div>

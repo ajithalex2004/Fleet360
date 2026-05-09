@@ -185,7 +185,7 @@ export const AGENT_CATALOGUE = [
   },
   {
     id: 'ops-assistant' as AgentId,
-    name: 'XL AI Ops Assistant',
+    name: 'Fleet360 Ops Assistant',
     description: 'Conversational operations assistant with 7 fleet tools. TheSys GPT-5, SSE streaming, live data access.',
     version: '1.0.0',
     status: 'live',

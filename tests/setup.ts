@@ -1,5 +1,5 @@
 /**
- * Global test setup for XL AI Smart Mobility Platform.
+ * Global test setup for Fleet360 Platform.
  *
  * What this file does:
  *  - Loads .env.test (fallback: .env) so DATABASE_URL and SESSION_SECRET are available

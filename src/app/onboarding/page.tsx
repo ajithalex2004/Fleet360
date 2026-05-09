@@ -520,7 +520,7 @@ export default function OnboardingPage() {
       <div className="border-b border-white/10 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-sm font-bold">XL</div>
-          <span className="font-semibold text-white">XL AI Smart Mobility</span>
+          <span className="font-semibold text-white">Fleet360</span>
         </div>
         <span className="text-slate-400 text-sm">Create your organisation</span>
       </div>

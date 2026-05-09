@@ -117,7 +117,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <div className="min-w-0">
                 <p className="text-white font-semibold text-sm truncate">{t('module.admin')}</p>
                 <p className="text-slate-400 text-xs truncate">
-                  {loading ? '…' : (me?.tenantName || 'XL AI Smart Mobility')}
+                  {loading ? '…' : (me?.tenantName || 'Fleet360')}
                 </p>
               </div>
             </div>

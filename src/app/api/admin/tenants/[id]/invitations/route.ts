@@ -167,7 +167,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
     const send = await sendEmail({
       to: email,
-      subject: `You've been invited to ${tenant.name} on XL AI Smart Mobility`,
+      subject: `You've been invited to ${tenant.name} on Fleet360`,
       text: [
         `You've been invited to join ${tenant.name} as ${role.name}.`,
         '',
@@ -177,7 +177,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         'If you didn\'t expect this, you can safely ignore the email.',
       ].join('\n'),
       html:
-        `<p>You&rsquo;ve been invited to join <strong>${escapeHtml(tenant.name)}</strong> as <strong>${escapeHtml(role.name)}</strong> on XL AI Smart Mobility.</p>` +
+        `<p>You&rsquo;ve been invited to join <strong>${escapeHtml(tenant.name)}</strong> as <strong>${escapeHtml(role.name)}</strong> on Fleet360.</p>` +
         `<p><a href="${acceptUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:white;border-radius:8px;text-decoration:none">Accept invitation</a></p>` +
         `<p style="color:#666;font-size:12px">Or copy this link: <code>${acceptUrl}</code><br/>Valid for ${INVITATION_TTL_DAYS} days.</p>` +
         `<p style="color:#666;font-size:12px">If you didn&rsquo;t expect this, ignore the email.</p>`,

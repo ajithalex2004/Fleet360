@@ -113,7 +113,7 @@ export default function InvitationAcceptPage() {
 
       {existingUser ? (
         <p className="text-slate-300 text-sm">
-          We found an existing XL AI account for <strong>{info.email}</strong>.
+          We found an existing Fleet360 account for <strong>{info.email}</strong>.
           Enter your password to add this organisation to your account.
         </p>
       ) : (

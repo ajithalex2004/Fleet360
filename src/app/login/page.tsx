@@ -155,11 +155,11 @@ export default function LoginPage() {
             <div className="text-4xl font-black text-white tracking-tight">
               {branding?.productName
                 ? <span>{branding.productName}</span>
-                : <>XL <span className="text-blue-500">AI</span></>}
+                : <>Fleet<span className="text-blue-500">360</span></>}
             </div>
           )}
           <p className="text-slate-400 text-sm">
-            {branding?.tagline ?? 'Smart Mobility Platform'}
+            {branding?.tagline ?? 'Fleet Management Platform'}
           </p>
         </div>
 
@@ -290,7 +290,7 @@ export default function LoginPage() {
                   <div className="w-full border-t border-white/10" />
                 </div>
                 <div className="relative flex justify-center">
-                  <span className="bg-slate-900 px-3 text-xs text-slate-500">New to XL AI?</span>
+                  <span className="bg-slate-900 px-3 text-xs text-slate-500">New to Fleet360?</span>
                 </div>
               </div>
 
@@ -303,7 +303,7 @@ export default function LoginPage() {
           )}
         </div>
 
-        <p className="text-center text-xs text-slate-600">XL AI Smart Mobility · Multi-Tenant Platform</p>
+        <p className="text-center text-xs text-slate-600">Fleet360 · Multi-Tenant Platform</p>
       </div>
     </div>
   );

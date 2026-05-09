@@ -128,7 +128,7 @@ export async function sendBookingConfirmedWhatsApp(
     `🔁 Return: ${booking.dropoffLocation ?? 'same'}, ${fmtDate(booking.dropoffDate)}\n` +
     `💰 Total: ${fmtMoney(booking.totalAmount, booking.currency)}\n\n` +
     `Please bring a valid driving licence and credit card. Reply to this message for any changes.\n\n` +
-    `— XL AI Smart Mobility`;
+    `— Fleet360`;
   return sendWhatsApp({ to: customer.phone, body });
 }
 
@@ -145,7 +145,7 @@ export async function sendBookingActivatedWhatsApp(
     `🔁 Return by ${fmtDate(booking.dropoffDate)}\n` +
     `📍 Drop-off: ${booking.dropoffLocation ?? 'pickup branch'}\n\n` +
     `Drive safely. For roadside assistance call our 24/7 line. Salik tolls and traffic fines incurred during the rental are billed to you.\n\n` +
-    `— XL AI Smart Mobility`;
+    `— Fleet360`;
   return sendWhatsApp({ to: customer.phone, body });
 }
 
@@ -162,6 +162,6 @@ export async function sendBookingReturnReminderWhatsApp(
     `🔁 ${fmtDate(booking.dropoffDate)}\n` +
     `📍 ${booking.dropoffLocation ?? 'pickup branch'}\n\n` +
     `Late returns incur hourly charges past the 30-minute grace window. Need an extension? Reply to this message.\n\n` +
-    `— XL AI Smart Mobility`;
+    `— Fleet360`;
   return sendWhatsApp({ to: customer.phone, body });
 }

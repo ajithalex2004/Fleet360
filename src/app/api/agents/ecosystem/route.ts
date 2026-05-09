@@ -269,7 +269,7 @@ export async function GET() {
       },
       {
         id: 'ops-assistant',
-        name: 'XL AI Ops Assistant',
+        name: 'Fleet360 Ops Assistant',
         model: 'TheSys GPT-5',
         endpoint: 'POST /api/operations/simple-chat',
         stats7d: opsStats,

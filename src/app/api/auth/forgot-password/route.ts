@@ -73,22 +73,22 @@ export async function POST(req: NextRequest) {
 
     const sendResult = await sendEmail({
       to: email,
-      subject: 'Reset your XL AI Smart Mobility password',
+      subject: 'Reset your Fleet360 password',
       text: [
         `Hi ${user.username},`,
         '',
-        'You (or someone using your email) requested a password reset for XL AI Smart Mobility.',
+        'You (or someone using your email) requested a password reset for Fleet360.',
         '',
         `Reset your password here (valid for ${TOKEN_TTL_MIN} minutes):`,
         resetUrl,
         '',
         'If you did not request this, ignore this email — your password remains unchanged.',
         '',
-        '— XL AI Smart Mobility',
+        '— Fleet360',
       ].join('\n'),
       html:
         `<p>Hi ${escapeHtml(user.username)},</p>` +
-        `<p>You (or someone using your email) requested a password reset for XL AI Smart Mobility.</p>` +
+        `<p>You (or someone using your email) requested a password reset for Fleet360.</p>` +
         `<p><a href="${resetUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:white;border-radius:8px;text-decoration:none">Reset password</a></p>` +
         `<p style="color:#666;font-size:12px">Or copy this link: <code>${resetUrl}</code><br/>Valid for ${TOKEN_TTL_MIN} minutes.</p>` +
         `<p style="color:#666;font-size:12px">If you did not request this, ignore this email — your password remains unchanged.</p>`,

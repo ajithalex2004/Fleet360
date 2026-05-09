@@ -29,11 +29,11 @@ import { logAudit } from '@/lib/audit';
 export const runtime = 'nodejs';
 
 const VENDOR = {
-  name: 'XL AI Smart Mobility — Rent-A-Car',
+  name: 'Fleet360 — Rent-A-Car',
   tagline: 'UAE Smart Transport Management',
   address: 'Dubai, United Arab Emirates',
   phone: '+971 4 000 0000',
-  email: 'rental@xl-mobility.ai',
+  email: 'rental@fleet360.app',
   trn: '',
 };
 

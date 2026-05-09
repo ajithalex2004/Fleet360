@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     }
 
     const secret = generateTotpSecret();
-    const issuer = 'XL AI Smart Mobility';
+    const issuer = 'Fleet360';
     const uri = provisioningUri({ issuer, account: user.email, secretBase32: secret });
 
     await prisma.$executeRawUnsafe(

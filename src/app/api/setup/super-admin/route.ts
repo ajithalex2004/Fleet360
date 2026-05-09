@@ -8,7 +8,7 @@
  *
  * What it does:
  *  1. Verifies the secret matches SETUP_SECRET in .env
- *  2. Creates a "XL AI Platform" tenant (or finds existing one) with plan=ENTERPRISE
+ *  2. Creates a "Fleet360 Platform" tenant (or finds existing one) with plan=ENTERPRISE
  *  3. Creates the user (or finds existing by email)
  *  4. Sets password_hash on the user
  *  5. Ensures a SUPER_ADMIN role exists on the platform tenant
@@ -23,7 +23,7 @@ import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 
 const PLATFORM_TENANT_DOMAIN = 'xl-ai-platform.internal';
-const PLATFORM_TENANT_NAME   = 'XL AI Smart Mobility — Platform';
+const PLATFORM_TENANT_NAME   = 'Fleet360 — Platform';
 
 function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');

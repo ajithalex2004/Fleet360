@@ -62,7 +62,7 @@ export function ReceiptPdf({ data, lang }: { data: ReceiptPdfData; lang: Lang })
   const pmKey = data.paymentMethod ? `pm_${data.paymentMethod}` as any : null;
 
   return (
-    <Document title={`${t('receipt', lang)} ${data.receiptNumber}`} author={data.vendor.name} creator="XL AI Smart Mobility Platform">
+    <Document title={`${t('receipt', lang)} ${data.receiptNumber}`} author={data.vendor.name} creator="Fleet360 Platform">
       <Page size="A4" style={[s.page, { fontFamily: font, direction: dir }]}>
         {/* Header */}
         <View style={s.header}>

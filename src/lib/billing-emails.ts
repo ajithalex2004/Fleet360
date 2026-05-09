@@ -12,7 +12,7 @@ import { sendEmail } from '@/lib/email';
 import { getTenantBilling } from '@/lib/billing';
 import { prisma } from '@/lib/prisma';
 
-const APP = 'XL AI Smart Mobility';
+const APP = 'Fleet360';
 
 function appUrl(path = ''): string {
   const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';

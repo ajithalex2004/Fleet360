@@ -73,7 +73,7 @@ export function StatementPdf({ data, lang }: { data: StatementPdfData; lang: Lan
   const dir = dirFor(lang); const font = fontFor(lang); const ccy = data.currency;
 
   return (
-    <Document title={`${t('accountStatement', lang)} — ${data.lessee.name}`} author={data.vendor.name} creator="XL AI Smart Mobility Platform">
+    <Document title={`${t('accountStatement', lang)} — ${data.lessee.name}`} author={data.vendor.name} creator="Fleet360 Platform">
       <Page size="A4" style={[s.page, { fontFamily: font, direction: dir }]}>
         {/* Header */}
         <View style={s.header}>

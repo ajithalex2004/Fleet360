@@ -379,7 +379,7 @@ export async function triggerWorkflow(params: {
       subject: firstStep.emailSubject ??
         `Action Required: ${params.referenceNumber} awaiting your approval`,
       body: firstStep.emailBody ??
-        `Dear Approver,\n\n${params.referenceNumber} (${params.referenceType}) has been submitted for your approval.\n\nStep: ${firstStep.stepName}\nSubmitted by: ${params.initiatedByEmail}\n\nPlease log in to XL AI Smart Mobility to review and approve.`,
+        `Dear Approver,\n\n${params.referenceNumber} (${params.referenceType}) has been submitted for your approval.\n\nStep: ${firstStep.stepName}\nSubmitted by: ${params.initiatedByEmail}\n\nPlease log in to Fleet360 to review and approve.`,
       instanceId, referenceNumber: params.referenceNumber,
       referenceType: params.referenceType, stepName: firstStep.stepName,
     });
@@ -442,7 +442,7 @@ export async function advanceWorkflow(
         subject: nextStep.emailSubject ??
           `Action Required: ${instance[0].referenceNumber}  Step ${nextStep.stepOrder}: ${nextStep.stepName}`,
         body: nextStep.emailBody ??
-          `Dear Approver,\n\n${instance[0].referenceNumber} requires your approval.\n\nStep: ${nextStep.stepName}\n\nPlease log in to XL AI Smart Mobility to review.`,
+          `Dear Approver,\n\n${instance[0].referenceNumber} requires your approval.\n\nStep: ${nextStep.stepName}\n\nPlease log in to Fleet360 to review.`,
         instanceId, referenceNumber: instance[0].referenceNumber,
         referenceType: instance[0].referenceType, stepName: nextStep.stepName,
       });
@@ -532,7 +532,7 @@ async function sendWorkflowEmail(params: {
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f8fafc;padding:24px;border-radius:12px;">
         <div style="background:linear-gradient(135deg,#6366f1,#4f46e5);padding:24px;border-radius:10px;margin-bottom:24px;">
           <h1 style="color:white;margin:0;font-size:20px;">Action Required</h1>
-          <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;">XL AI Smart Mobility</p>
+          <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;">Fleet360</p>
         </div>
         <div style="background:white;border-radius:10px;padding:24px;border:1px solid #e2e8f0;">
           <h2 style="color:#1e293b;margin:0 0 16px;font-size:18px;">${params.stepName}</h2>
@@ -543,7 +543,7 @@ async function sendWorkflowEmail(params: {
           <pre style="font-family:Arial,sans-serif;white-space:pre-wrap;color:#374151;line-height:1.6;">${params.body}</pre>
           <a href="${approvalUrl}" style="display:inline-block;margin-top:20px;background:#6366f1;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">Review &amp; Approve</a>
         </div>
-        <p style="color:#94a3b8;font-size:12px;margin-top:16px;text-align:center;">XL AI Smart Mobility Platform</p>
+        <p style="color:#94a3b8;font-size:12px;margin-top:16px;text-align:center;">Fleet360 Platform</p>
       </div>
     `;
     await transporter.sendMail({

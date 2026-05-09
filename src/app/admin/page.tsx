@@ -48,7 +48,7 @@ export default function AdminOverview() {
     <div className="space-y-6">
       <PageHeader
         title="Platform Administration"
-        subtitle="Multi-tenant access control for XL AI Smart Mobility"
+        subtitle="Multi-tenant access control for Fleet360"
         icon={Settings}
         accent="rose"
       />

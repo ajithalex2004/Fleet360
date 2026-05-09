@@ -245,7 +245,7 @@ export function QuotationPdf({ data, lang }: { data: QuotationPdfData; lang: Lan
     <Document
       title={`${t('quotation', lang)} ${data.quotationNumber}`}
       author={data.vendor.name}
-      creator="XL AI Smart Mobility Platform"
+      creator="Fleet360 Platform"
       producer="@react-pdf/renderer"
     >
       <Page size="A4" style={[styles.page, { fontFamily: font, direction: dir }]}>
