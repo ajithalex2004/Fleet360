@@ -35,12 +35,8 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 // ── Map Component (dynamic import of Mapbox) ──────────────────────────────────
-
-declare global {
-  interface Window {
-    mapboxgl: typeof import('mapbox-gl');
-  }
-}
+// Window.mapboxgl is declared globally in components/route-optimizer/MapView.tsx
+// — single source of truth so the two declarations don't conflict.
 
 function LiveTrackingMap({
   trips,
