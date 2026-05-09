@@ -1,0 +1,21 @@
+#!/bin/sh
+# Pre-commit hook — solo-dev safety net.
+# Enable once with: git config core.hooksPath scripts/githooks
+#
+# Skips with: git commit --no-verify  (use sparingly)
+
+set -e
+
+# Skip if no JS/TS staged (e.g. docs-only commits)
+STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|js|jsx|mjs)$' || true)
+if [ -z "$STAGED" ]; then
+  exit 0
+fi
+
+echo "[pre-commit] Lint…"
+npm run lint --silent || { echo "[pre-commit] lint failed"; exit 1; }
+
+echo "[pre-commit] Typecheck…"
+npm run typecheck --silent || { echo "[pre-commit] typecheck failed"; exit 1; }
+
+echo "[pre-commit] OK"

@@ -346,6 +346,18 @@ export default function ContractsV2Page() {
                         className="px-2.5 py-1 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 text-xs hover:bg-blue-500/30 transition-all font-medium">
                         View
                       </button>
+                      <a
+                        href={`/api/leasing/contracts-v2/${c.id}/pdf?lang=en&download=1`}
+                        className="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs hover:bg-emerald-500/30 transition-all font-medium"
+                        title="Download bilingual lease agreement (EN layout)">
+                        PDF·EN
+                      </a>
+                      <a
+                        href={`/api/leasing/contracts-v2/${c.id}/pdf?lang=ar&download=1`}
+                        className="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs hover:bg-emerald-500/30 transition-all font-medium"
+                        title="Download bilingual lease agreement (AR layout)">
+                        PDF·AR
+                      </a>
                       <button
                         onClick={() => { setShowAddVehicle(c); setNewVehicleForm({ type: '', make: '', model: '', licensePlate: '', driver: '', monthlyRate: '' }); setAddVehicleMsg(''); }}
                         className="px-2.5 py-1 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs hover:bg-indigo-500/30 transition-all font-medium">

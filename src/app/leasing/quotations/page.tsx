@@ -780,7 +780,7 @@ export default function LeaseQuotationsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 p-8">
+    <div className="min-h-screen bg-[#0c1a3e] p-8">
       <Suspense fallback={null}>
         <SearchParamsReader onFromInquiry={prefillFromInquiry} />
       </Suspense>

@@ -34,6 +34,12 @@ export default function DocumentsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [sweepBusy, setSweepBusy] = useState(false);
+  const [sweepResult, setSweepResult] = useState<string | null>(null);
+  const [classifyBusy, setClassifyBusy] = useState(false);
+  const [classifyHint, setClassifyHint] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormData>({
     entityType: 'CONTRACT',
     entityId: '',
@@ -90,30 +96,122 @@ export default function DocumentsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedFile) {
+      alert('Pick a file to upload.');
+      return;
+    }
+    setUploading(true);
     try {
-      const response = await fetch('/api/leasing/documents', {
+      const fd = new FormData();
+      fd.append('file', selectedFile);
+      fd.append('entityType', formData.entityType);
+      fd.append('entityId', formData.entityId);
+      fd.append('docType', formData.docType);
+      fd.append('docName', formData.docName || selectedFile.name);
+      if (formData.issueDate) fd.append('issueDate', formData.issueDate);
+      if (formData.expiryDate) fd.append('expiryDate', formData.expiryDate);
+      if (formData.notes) fd.append('notes', formData.notes);
+
+      const response = await fetch('/api/leasing/documents/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: fd,
       });
-      if (response.ok) {
-        setFormData({
-          entityType: 'CONTRACT',
-          entityId: '',
-          docType: 'TRADE_LICENSE',
-          docName: '',
-          fileName: '',
-          fileUrl: '',
-          issueDate: '',
-          expiryDate: '',
-          uploadedBy: '',
-          notes: '',
-        });
-        setShowModal(false);
-        fetchDocuments();
+      const json = await response.json();
+      if (!response.ok) {
+        alert(json.error ?? `Upload failed (${response.status})`);
+        return;
       }
+      setFormData({
+        entityType: 'CONTRACT',
+        entityId: '',
+        docType: 'TRADE_LICENSE',
+        docName: '',
+        fileName: '',
+        fileUrl: '',
+        issueDate: '',
+        expiryDate: '',
+        uploadedBy: '',
+        notes: '',
+      });
+      setSelectedFile(null);
+      setShowModal(false);
+      fetchDocuments();
     } catch (error) {
-      console.error('Failed to create document:', error);
+      console.error('Failed to upload document:', error);
+      alert(error instanceof Error ? error.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleClassify = async () => {
+    if (!selectedFile) {
+      setClassifyHint('Pick an image first.');
+      return;
+    }
+    if (!selectedFile.type.startsWith('image/')) {
+      setClassifyHint('AI classification only works on images (PNG/JPEG/WebP) in v1.0. PDF support coming in v1.1.');
+      return;
+    }
+    setClassifyBusy(true);
+    setClassifyHint(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', selectedFile);
+      if (formData.docType) fd.append('expectedDocType', formData.docType);
+      const res = await fetch('/api/leasing/documents/classify', { method: 'POST', body: fd });
+      const json = await res.json();
+      if (!res.ok) {
+        setClassifyHint(json.error ?? `Classifier returned ${res.status}`);
+        return;
+      }
+      const c = json.classification as {
+        docType: string;
+        suggestedName: string;
+        expiryDate: string | null;
+        issueDate: string | null;
+        confidence: string;
+        warnings: string[];
+      };
+
+      // Map classifier types that aren't in LeaseDocument enum to OTHER (until v1.1).
+      const allowed = new Set(['TRADE_LICENSE', 'EMIRATES_ID', 'PASSPORT', 'MOA', 'SIGNED_AGREEMENT', 'INSURANCE', 'VEHICLE_PHOTO', 'OTHER']);
+      const mappedType = allowed.has(c.docType) ? c.docType : 'OTHER';
+
+      setFormData((prev) => ({
+        ...prev,
+        docType: mappedType,
+        docName: c.suggestedName || prev.docName,
+        issueDate: c.issueDate ?? prev.issueDate,
+        expiryDate: c.expiryDate ?? prev.expiryDate,
+      }));
+      const warnSuffix = c.warnings.length > 0 ? ` · ${c.warnings.length} warning${c.warnings.length === 1 ? '' : 's'}` : '';
+      setClassifyHint(`AI: ${c.docType} (${c.confidence})${warnSuffix} — review and submit.`);
+    } catch (err) {
+      setClassifyHint(err instanceof Error ? err.message : 'Classification failed');
+    } finally {
+      setClassifyBusy(false);
+    }
+  };
+
+  const handleRunSweep = async () => {
+    setSweepBusy(true);
+    setSweepResult(null);
+    try {
+      const res = await fetch('/api/leasing/documents/sweep-expiry', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) {
+        setSweepResult(`Error: ${json.error ?? res.status}`);
+        return;
+      }
+      setSweepResult(
+        `Scanned ${json.scanned} · ${json.hits.length} hits · ${json.alertsCreated} new alerts · ${json.statusUpdates} status updates.`,
+      );
+      fetchDocuments();
+    } catch (error) {
+      setSweepResult(error instanceof Error ? error.message : 'Sweep failed');
+    } finally {
+      setSweepBusy(false);
     }
   };
 
@@ -176,13 +274,29 @@ export default function DocumentsPage() {
           <h1 className="text-4xl font-bold text-white mb-2">Documents</h1>
           <p className="text-slate-400">Manage contracts, licenses, and related documents</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90 transition-all"
-        >
-          + Upload Document
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={handleRunSweep}
+            disabled={sweepBusy}
+            className="rounded-xl bg-amber-700/40 border border-amber-500/40 px-4 py-3 text-sm font-medium text-amber-100 hover:bg-amber-600/40 disabled:opacity-50 transition-all"
+            title="Scan all documents for expiring/expired status, create alerts"
+          >
+            {sweepBusy ? 'Sweeping…' : 'Run Expiry Sweep'}
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90 transition-all"
+          >
+            + Upload Document
+          </button>
+        </div>
       </div>
+
+      {sweepResult && (
+        <div className="rounded-lg bg-slate-800/60 border border-slate-700 px-4 py-2 text-sm text-slate-200">
+          {sweepResult}
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="flex gap-4 flex-wrap">
@@ -336,30 +450,38 @@ export default function DocumentsPage() {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">File Name</label>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    File <span className="text-slate-500 text-xs">(PDF, image, Office doc — max 25 MB)</span>
+                  </label>
                   <input
-                    type="text"
-                    name="fileName"
-                    value={formData.fileName}
-                    onChange={handleInputChange}
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.txt"
+                    onChange={(e) => { setSelectedFile(e.target.files?.[0] ?? null); setClassifyHint(null); }}
                     required
-                    placeholder="license.pdf"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full text-sm text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-slate-600 file:text-white hover:file:bg-slate-500"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">File URL</label>
-                  <input
-                    type="url"
-                    name="fileUrl"
-                    value={formData.fileUrl}
-                    onChange={handleInputChange}
-                    required
-                    placeholder="https://..."
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
-                  />
+                  {selectedFile && (
+                    <div className="mt-2 flex items-center justify-between gap-3 flex-wrap">
+                      <p className="text-xs text-slate-400">
+                        {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleClassify}
+                        disabled={classifyBusy || !selectedFile.type.startsWith('image/')}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white font-medium hover:opacity-90 disabled:opacity-40"
+                        title={selectedFile.type.startsWith('image/') ? 'Auto-fill type, name, and expiry from the image' : 'AI classify works on images only (v1.0)'}
+                      >
+                        ✨ {classifyBusy ? 'Classifying…' : 'Auto-classify with AI'}
+                      </button>
+                    </div>
+                  )}
+                  {classifyHint && (
+                    <p className="mt-2 text-xs text-violet-300 bg-violet-900/20 border border-violet-500/30 rounded px-2 py-1">
+                      {classifyHint}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -415,13 +537,14 @@ export default function DocumentsPage() {
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
-                  className="flex-1 rounded-lg bg-blue-600 text-white font-medium py-2 hover:bg-blue-700 transition-colors"
+                  disabled={uploading || !selectedFile}
+                  className="flex-1 rounded-lg bg-blue-600 text-white font-medium py-2 hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
-                  Upload
+                  {uploading ? 'Uploading…' : 'Upload'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={() => { setShowModal(false); setSelectedFile(null); }}
                   className="flex-1 rounded-lg bg-slate-700 text-white font-medium py-2 hover:bg-slate-600 transition-colors"
                 >
                   Cancel

@@ -1,6 +1,8 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { Bot, RefreshCw } from 'lucide-react';
+import { PageHeader } from '@/components/ui/page-theme';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface LastRun {
@@ -560,23 +562,18 @@ export default function AgentsPage() {
         </div>
       )}
 
-      {/* Page header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            🤖 AI Agent Ecosystem
-          </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            10 agents · autonomous intelligence across every module · real-time control
-          </p>
-        </div>
-        <button
-          onClick={loadData}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 border border-white/10 hover:border-white/20 text-slate-300 text-sm font-medium transition-all"
-        >
-          <span className="text-base">⟳</span> Refresh
-        </button>
-      </div>
+      <PageHeader
+        title="AI Agent Ecosystem"
+        subtitle="10 agents · autonomous intelligence across every module · real-time control"
+        icon={Bot}
+        accent="violet"
+        actions={
+          <button onClick={loadData}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 border border-white/10 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 transition-colors">
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          </button>
+        }
+      />
 
       {/* Command Strip — Impact KPIs */}
       {loading ? (

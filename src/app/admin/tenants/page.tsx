@@ -389,6 +389,29 @@ export default function TenantsPage() {
     load();
   };
 
+  const impersonate = async (t: TenantRow) => {
+    const ok = window.confirm(
+      `Impersonate ${t.name}?\n\nYou'll be signed in as a tenant admin for 1 hour.\n` +
+      `Every action is audited as your account. Use the amber banner at the top to stop.`
+    );
+    if (!ok) return;
+    try {
+      const res = await fetch('/api/admin/impersonate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: t.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data?.error ?? 'Could not impersonate.');
+        return;
+      }
+      window.location.href = '/platform';
+    } catch {
+      alert('Network error — could not impersonate.');
+    }
+  };
+
   // ── tab nav ───────────────────────────────────────────────────────────────
   const tabIndex = TABS.findIndex(t => t.key === activeTab);
 
@@ -464,6 +487,31 @@ export default function TenantsPage() {
                 className="text-xs px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30">
                 Manage
               </Link>
+              <Link href={`/admin/tenants/${t.id}/invitations`}
+                className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30">
+                Invitations
+              </Link>
+              <Link href={`/admin/tenants/${t.id}/api-keys`}
+                className="text-xs px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30">
+                API Keys
+              </Link>
+              <Link href={`/admin/tenants/${t.id}/sso`}
+                className="text-xs px-3 py-1.5 rounded-lg bg-violet-500/20 text-violet-300 border border-violet-500/30 hover:bg-violet-500/30">
+                SSO
+              </Link>
+              <Link href={`/admin/tenants/${t.id}/branding`}
+                className="text-xs px-3 py-1.5 rounded-lg bg-pink-500/20 text-pink-300 border border-pink-500/30 hover:bg-pink-500/30">
+                Branding
+              </Link>
+              <Link href={`/admin/tenants/${t.id}/ticket-types`}
+                className="text-xs px-3 py-1.5 rounded-lg bg-violet-500/20 text-violet-300 border border-violet-500/30 hover:bg-violet-500/30">
+                Ticket Types
+              </Link>
+              <button onClick={() => impersonate(t)}
+                disabled={!t.isActive}
+                className="text-xs px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 disabled:opacity-40 disabled:cursor-not-allowed">
+                Impersonate
+              </button>
               <button onClick={() => toggleActive(t)}
                 className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${t.isActive
                   ? 'bg-rose-500/20 text-rose-400 border-rose-500/30 hover:bg-rose-500/30'

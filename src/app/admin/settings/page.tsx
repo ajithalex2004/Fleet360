@@ -404,7 +404,7 @@ export default function PlatformSettingsPage() {
 
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-[#0c1a3e] text-white">
       {/* Sticky header */}
       <div className="sticky top-0 z-10 bg-slate-950/95 backdrop-blur border-b border-white/10 px-8 py-4 flex items-center justify-between">
         <div>

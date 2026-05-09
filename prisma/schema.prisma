@@ -988,6 +988,30 @@ model PricingRule {
   @@map("pricing_rules")
 }
 
+// Yield-management event calendar — applied as a multiplier layer on top of
+// the base rate. Used for festival surcharges (DSF, Eid, F1) and demand-low
+// discounts (deep summer).
+model RateEvent {
+  id                    String    @id @default(uuid())
+  createdAt             DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt             DateTime? @map("deleted_at") @db.Timestamptz(6)
+  eventCode             String    @unique @map("event_code")
+  name                  String
+  description           String?
+  dateFrom              DateTime  @map("date_from") @db.Timestamptz(6)
+  dateTo                DateTime  @map("date_to") @db.Timestamptz(6)
+  multiplier            Decimal   @db.Decimal
+  applicableCategories  String?   @map("applicable_categories")
+  applicableChannels    String?   @map("applicable_channels")
+  priority              Int?      @default(0)
+  isActive              Boolean?  @default(true)
+  notes                 String?
+  @@index([isActive, dateFrom, dateTo], map: "idx_rate_events_active_dates")
+  @@index([deletedAt], map: "idx_rate_events_deleted_at")
+  @@map("rate_events")
+}
+
 // Rate quote snapshot -- saved when a booking is created
 model RentalRateQuote {
   id                  String    @id @default(uuid())
@@ -1122,6 +1146,29 @@ model RentalPayment {
   notes           String?
   agreement       RentalAgreement @relation(fields: [agreementId], references: [id])
   @@map("rental_payments")
+}
+
+// Master catalogue of ancillary products that can be attached to rentals.
+// (RentalAdditionalCharge holds the per-agreement instance with actual amount.)
+model RentalAncillary {
+  id                    String    @id @default(uuid())
+  createdAt             DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt             DateTime? @map("deleted_at") @db.Timestamptz(6)
+  code                  String    @unique
+  nameEn                String    @map("name_en")
+  nameAr                String?   @map("name_ar")
+  description           String?
+  category              String?
+  pricingType           String    @map("pricing_type")
+  unitPrice             Decimal   @map("unit_price") @db.Decimal
+  currency              String?   @default("AED")
+  applicableCategories  String?   @map("applicable_categories")
+  isActive              Boolean?  @default(true)
+  sortOrder             Int?      @default(0)
+  notes                 String?
+  @@index([deletedAt], map: "idx_rental_ancillaries_deleted_at")
+  @@map("rental_ancillaries")
 }
 
 model RentalAdditionalCharge {
@@ -1379,6 +1426,116 @@ model StaffTransportRequest {
   notes           String?
   staffMember     StaffMember @relation(fields: [staffMemberId], references: [id])
   @@map("staff_transport_requests")
+}
+
+model BleGateway {
+  id                     String    @id @default(uuid())
+  createdAt              DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  vehicleId              String    @unique @map("vehicle_id")
+  gatewayId              String    @unique @map("gateway_id")
+  model                  String?
+  rssiThresholdDbm       Int?      @default(-75) @map("rssi_threshold_dbm")
+  presenceGraceSeconds   Int?      @default(10)  @map("presence_grace_seconds")
+  isActive               Boolean?  @default(true) @map("is_active")
+  lastSeenAt             DateTime? @map("last_seen_at") @db.Timestamptz(6)
+  lastEventAt            DateTime? @map("last_event_at") @db.Timestamptz(6)
+  notes                  String?
+  @@index([gatewayId], map: "idx_ble_gateways_gateway_id")
+  @@map("ble_gateways")
+}
+
+model StaffBleTag {
+  id                  String    @id @default(uuid())
+  createdAt           DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  staffMemberId       String    @unique @map("staff_member_id")
+  tagId               String    @unique @map("tag_id")
+  formFactor          String?   @map("form_factor")
+  issuedAt            DateTime  @default(now()) @map("issued_at") @db.Timestamptz(6)
+  batteryReplacedAt   DateTime? @map("battery_replaced_at") @db.Timestamptz(6)
+  isActive            Boolean?  @default(true) @map("is_active")
+  notes               String?
+  @@index([tagId], map: "idx_staff_ble_tags_tag_id")
+  @@map("staff_ble_tags")
+}
+
+model BleGatewayPresence {
+  id              String    @id @default(uuid())
+  gatewayId       String    @map("gateway_id")
+  vehicleId       String    @map("vehicle_id")
+  tagId           String    @map("tag_id")
+  scheduleId      String?   @map("schedule_id")
+  passengerId     String?   @map("passenger_id")
+  staffMemberId   String?   @map("staff_member_id")
+  firstSeenAt     DateTime  @map("first_seen_at") @db.Timestamptz(6)
+  lastSeenAt      DateTime  @map("last_seen_at") @db.Timestamptz(6)
+  lastRssiDbm     Int?      @map("last_rssi_dbm")
+  isPresent       Boolean   @default(true) @map("is_present")
+  alightedAt      DateTime? @map("alighted_at") @db.Timestamptz(6)
+  @@unique([gatewayId, tagId, scheduleId], map: "uniq_ble_presence")
+  @@index([scheduleId], map: "idx_ble_gateway_presence_schedule")
+  @@map("ble_gateway_presence")
+}
+
+model VehicleBeacon {
+  id          String    @id @default(uuid())
+  createdAt   DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  vehicleId   String    @unique @map("vehicle_id")
+  bleUuid     String    @map("ble_uuid")
+  major       Int?
+  minor       Int?
+  isActive    Boolean?  @default(true) @map("is_active")
+  notes       String?
+  @@index([bleUuid], map: "idx_vehicle_beacons_ble_uuid")
+  @@map("vehicle_beacons")
+}
+
+model StaffRfidTag {
+  id              String    @id @default(uuid())
+  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  staffMemberId   String    @unique @map("staff_member_id")
+  tagUid          String    @unique @map("tag_uid")
+  issuedAt        DateTime  @default(now()) @map("issued_at") @db.Timestamptz(6)
+  isActive        Boolean?  @default(true) @map("is_active")
+  notes           String?
+  @@map("staff_rfid_tags")
+}
+
+model BoardingEvent {
+  id              String    @id @default(uuid())
+  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  scheduleId      String    @map("schedule_id")
+  passengerId     String?   @map("passenger_id")
+  staffMemberId   String?   @map("staff_member_id")
+  method          String                                       // QR|NFC|BLE|MANUAL
+  direction       String    @default("BOARD")                  // BOARD|ALIGHT
+  identifier      String?
+  stopId          String?   @map("stop_id")
+  performedAt     DateTime  @default(now()) @map("performed_at") @db.Timestamptz(6)
+  performedBy     String?   @map("performed_by")
+  rawPayload      Json?     @map("raw_payload")
+  @@index([scheduleId], map: "idx_boarding_events_schedule_id")
+  @@index([passengerId], map: "idx_boarding_events_passenger_id")
+  @@index([staffMemberId], map: "idx_boarding_events_staff_member_id")
+  @@map("boarding_events")
+}
+
+model BusPreTripCheck {
+  id              String    @id @default(uuid())
+  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  scheduleId      String    @map("schedule_id")
+  vehicleId       String?   @map("vehicle_id")
+  driverId        String?   @map("driver_id")
+  performedAt     DateTime  @default(now()) @map("performed_at") @db.Timestamptz(6)
+  performedBy     String?   @map("performed_by")
+  checkItems      Json      @map("check_items")
+  overallPass     Boolean   @default(true) @map("overall_pass")
+  failCount       Int       @default(0) @map("fail_count")
+  notes           String?
+  signatureData   String?   @map("signature_data")
+  @@index([scheduleId], map: "idx_bus_pretrip_checks_schedule_id")
+  @@index([performedAt], map: "idx_bus_pretrip_checks_performed_at")
+  @@map("bus_pretrip_checks")
 }
 
 model TripIncident {
@@ -1738,7 +1895,27 @@ model LeaseInquiry {
   assignedTo        String?  @map("assigned_to")
   branchId          String?  @map("branch_id")
   quotations        LeaseQuotation[]
+  activities        LeaseInquiryActivity[]
   @@map("lease_inquiries")
+}
+
+model LeaseInquiryActivity {
+  id              String    @id @default(uuid())
+  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  inquiryId       String    @map("inquiry_id")
+  activityType    String    @map("activity_type") // NOTE|CALL|EMAIL|MEETING|SMS|WHATSAPP|FOLLOW_UP_DUE
+  subject         String?
+  body            String?
+  outcome         String?   // NO_ANSWER|INTERESTED|NOT_INTERESTED|CALLBACK_REQUESTED|...
+  performedAt     DateTime  @default(now()) @map("performed_at") @db.Timestamptz(6)
+  performedById   String?   @map("performed_by_id")
+  performedByName String?   @map("performed_by_name")
+  followUpAt      DateTime? @map("follow_up_at") @db.Timestamptz(6)
+  followUpDone    Boolean?  @default(false) @map("follow_up_done")
+  inquiry         LeaseInquiry @relation(fields: [inquiryId], references: [id])
+  @@index([inquiryId], map: "idx_lease_inquiry_activities_inquiry_id")
+  @@index([performedAt], map: "idx_lease_inquiry_activities_performed_at")
+  @@map("lease_inquiry_activities")
 }
 
 model LeaseQuotation {
@@ -1834,6 +2011,8 @@ model LeaseContract2 {
   monthlyRate          Decimal  @map("monthly_rate") @db.Decimal
   totalContractValue   Decimal? @map("total_contract_value") @db.Decimal
   mileageCap           Int?     @map("mileage_cap")
+  // AED per km charged for over-cap usage. NULL falls back to platform default 0.50.
+  mileageOverageRate   Decimal? @map("mileage_overage_rate") @db.Decimal
   securityDeposit      Decimal? @map("security_deposit") @db.Decimal
   currency             String?  @default("AED")
   insuranceIncluded    Boolean? @default(false) @map("insurance_included")
@@ -1950,6 +2129,27 @@ model LeaseAlert {
   resolvedAt      DateTime? @map("resolved_at") @db.Timestamptz(6)
   contract        LeaseContract2? @relation(fields: [contractId], references: [id])
   @@map("lease_alerts")
+}
+
+model LeaseDriverAllocation {
+  id                String    @id @default(uuid())
+  createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  driverId          String    @map("driver_id")
+  contractId        String    @map("contract_id")
+  contractVehicleId String?   @map("contract_vehicle_id")
+  allocatedAt       DateTime  @default(now()) @map("allocated_at") @db.Timestamptz(6)
+  releasedAt        DateTime? @map("released_at") @db.Timestamptz(6)
+  releaseReason     String?   @map("release_reason")
+  allocatedBy       String?   @map("allocated_by")
+  releasedBy        String?   @map("released_by")
+  notes             String?
+  status            String?   @default("ACTIVE") // ACTIVE|RELEASED
+  @@index([driverId], map: "idx_lease_driver_allocations_driver_id")
+  @@index([contractId], map: "idx_lease_driver_allocations_contract_id")
+  @@index([contractVehicleId], map: "idx_lease_driver_allocations_contract_vehicle_id")
+  @@index([status], map: "idx_lease_driver_allocations_status")
+  @@map("lease_driver_allocations")
 }
 
 model LeaseApprovalStep {

@@ -1,6 +1,8 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { FileText } from 'lucide-react';
+import { PageHeader } from '@/components/ui/page-theme';
 
 interface KPIs {
   activeContracts: number;
@@ -88,12 +90,13 @@ export default function LeasingDashboard() {
   const kpis = analyticsData?.kpis;
 
   return (
-    <div className="space-y-8">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-4xl font-bold text-white mb-2">Leasing Dashboard</h1>
-        <p className="text-gray-400">Overview of all vehicle leasing contracts and operations</p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Leasing Dashboard"
+        subtitle="Overview of all vehicle leasing contracts and operations"
+        icon={FileText}
+        accent="violet"
+      />
 
       {/* Alert Strip */}
       {kpis && ((kpis.overdueAmount ?? 0) > 0 || (kpis.totalUnbilled ?? 0) > 10000 || (kpis.expiringPolicies ?? 0) > 0) && (

@@ -18,9 +18,12 @@ const NAV_GROUPS = [
   {
     label: 'Sales Lifecycle',
     items: [
+      { href: '/leasing/lead-channels',      label: 'Lead Channels',      icon: '🔌' },
       { href: '/leasing/inquiries',          label: 'Inquiries',          icon: '📩' },
+      { href: '/leasing/quotations/copilot', label: 'AI Co-pilot',        icon: '✨' },
       { href: '/leasing/quotations',         label: 'Quotations',         icon: '💬' },
       { href: '/leasing/contracts-v2',       label: 'Agreements',         icon: '📜' },
+      { href: '/leasing/contracts-v2/qa',    label: 'Contract Q&A (AI)',  icon: '💬' },
       { href: '/leasing/renewals',           label: 'Renewals',           icon: '🔄' },
       { href: '/leasing/early-terminations', label: 'Early Termination',  icon: '🚫' },
     ],
@@ -42,12 +45,14 @@ const NAV_GROUPS = [
       { href: '/leasing/traffic-fines',  label: 'Traffic Fines',      icon: '🚦' },
       { href: '/leasing/fuel',           label: 'Fuel Management',    icon: '⛽' },
       { href: '/leasing/mileage',        label: 'Mileage & Overage',  icon: '🛣️' },
+      { href: '/leasing/field',          label: 'Field App (mobile)', icon: '📲' },
     ],
   },
   {
     label: 'Fleet & Compliance',
     items: [
       { href: '/leasing/insurance',        label: 'Insurance',          icon: '🛡️' },
+      { href: '/leasing/drivers',          label: 'Drivers',            icon: '🧑‍✈️' },
       { href: '/leasing/documents',        label: 'Documents',          icon: '📄' },
       { href: '/leasing/amendments',       label: 'Amendments',         icon: '📝' },
       { href: '/leasing/handover',         label: 'Handover & Return',  icon: '🚗' },
@@ -82,13 +87,19 @@ export default function LeasingLayout({ children }: { children: React.ReactNode 
   const isActive = (href: string) =>
     href === '/leasing' ? pathname === '/leasing' : pathname.startsWith(href);
 
+  // Field PWA bypasses the desktop chrome — operators are on phones, the
+  // sidebar is dead weight there. The field route owns its own mobile shell.
+  if (pathname?.startsWith('/leasing/field')) {
+    return <>{children}</>;
+  }
+
   return (
     <ModuleGuard moduleId="leasing" moduleName="Vehicle Leasing" moduleIcon="📋">
     <div className="flex flex-col h-screen bg-slate-900">
       <PlatformHomeBar moduleName={t('module.leasing')} moduleIcon="VL" accentColor="from-violet-500 to-purple-600" />
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <div className="w-64 bg-gradient-to-br from-violet-950 to-slate-900 border-r border-white/10 p-4 overflow-y-auto flex-shrink-0">
+        <div className="w-64 bg-black border-r border-white/10 p-4 overflow-y-auto flex-shrink-0">
           <h2 className="text-base font-bold text-white mb-4 px-2">{t('module.leasing')}</h2>
           <nav className="space-y-5">
             {NAV_GROUPS.map(group => (

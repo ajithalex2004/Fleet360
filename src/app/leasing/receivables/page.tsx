@@ -26,11 +26,24 @@ interface DunningLog {
 
 interface FormData extends DunningLog {}
 
+interface SweepResult {
+  dryRun: boolean;
+  scanned: number;
+  sent: { reminder_30: number; notice_60: number; final_90: number };
+  markedOverdue: number;
+  skipped: number;
+  errors: { invoiceId: string; message: string }[];
+  aging: { current: number; d1to30: number; d31to60: number; d61to90: number; d90plus: number; total: number };
+}
+
 export default function ReceivablesPage() {
   const [receivables, setReceivables] = useState<Receivable[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [showDunningModal, setShowDunningModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [sweepBusy, setSweepBusy] = useState(false);
+  const [sweepResult, setSweepResult] = useState<SweepResult | null>(null);
+  const [sweepError, setSweepError] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormData>({
     contractId: '',
     activityType: 'EMAIL',
@@ -108,6 +121,30 @@ export default function ReceivablesPage() {
     setExpandedRows(newExpanded);
   };
 
+  const handleRunSweep = async (dryRun: boolean) => {
+    setSweepBusy(true);
+    setSweepError(null);
+    setSweepResult(null);
+    try {
+      const res = await fetch(
+        `/api/leasing/receivables/dunning/sweep${dryRun ? '?dryRun=1' : ''}`,
+        { method: 'POST' },
+      );
+      const json = await res.json();
+      if (!res.ok) {
+        setSweepError(json.error ?? `Server returned ${res.status}`);
+        return;
+      }
+      setSweepResult(json as SweepResult);
+      // Refresh the receivables view (status changes may have happened).
+      fetchReceivables();
+    } catch (err) {
+      setSweepError(err instanceof Error ? err.message : 'Sweep failed');
+    } finally {
+      setSweepBusy(false);
+    }
+  };
+
   const totalAR = receivables.reduce((sum, r) => sum + r.totalOutstanding, 0);
   const totalOverdue = receivables.reduce((sum, r) => sum + r.overdue1to30 + r.overdue31to60 + r.overdue61to90 + r.overdue90plus, 0);
   const collectionRate = totalAR > 0 ? (((totalAR - totalOverdue) / totalAR) * 100).toFixed(2) : '0.00';
@@ -144,13 +181,67 @@ export default function ReceivablesPage() {
           <h1 className="text-4xl font-bold text-white mb-2">Accounts Receivable</h1>
           <p className="text-slate-400">Monitor outstanding payments and aging</p>
         </div>
-        <button
-          onClick={() => setShowDunningModal(true)}
-          className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90 transition-all"
-        >
-          + Log Dunning Activity
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => handleRunSweep(true)}
+            disabled={sweepBusy}
+            className="rounded-xl bg-slate-700 border border-white/10 px-4 py-3 text-sm font-medium text-slate-200 hover:bg-slate-600 disabled:opacity-50 transition-all"
+            title="Preview without sending emails or writing activities"
+          >
+            {sweepBusy ? '…' : 'Preview Dunning'}
+          </button>
+          <button
+            onClick={() => handleRunSweep(false)}
+            disabled={sweepBusy}
+            className="rounded-xl bg-amber-700/40 border border-amber-500/40 px-4 py-3 text-sm font-medium text-amber-100 hover:bg-amber-600/40 disabled:opacity-50 transition-all"
+            title="Send 30/60/90-day reminders to all overdue lessees"
+          >
+            {sweepBusy ? 'Sweeping…' : 'Run Dunning Sweep'}
+          </button>
+          <button
+            onClick={() => setShowDunningModal(true)}
+            className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90 transition-all"
+          >
+            + Log Manual Activity
+          </button>
+        </div>
       </div>
+
+      {sweepError && (
+        <div className="rounded-xl bg-rose-900/30 border border-rose-700 p-4 text-rose-200 text-sm">
+          {sweepError}
+        </div>
+      )}
+
+      {sweepResult && (
+        <div className={`rounded-xl border p-5 ${sweepResult.dryRun ? 'bg-slate-800/40 border-slate-700' : 'bg-emerald-900/20 border-emerald-700'}`}>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <span className={`text-xs font-semibold uppercase tracking-wider ${sweepResult.dryRun ? 'text-slate-400' : 'text-emerald-300'}`}>
+                {sweepResult.dryRun ? 'Dunning Preview (no emails sent)' : 'Dunning Sweep Complete'}
+              </span>
+              <div className="text-sm text-slate-300 mt-1">
+                Scanned <strong className="text-white">{sweepResult.scanned}</strong> invoice{sweepResult.scanned === 1 ? '' : 's'} · skipped {sweepResult.skipped}
+                {sweepResult.errors.length > 0 && <> · <span className="text-rose-300">{sweepResult.errors.length} error{sweepResult.errors.length === 1 ? '' : 's'}</span></>}
+              </div>
+            </div>
+            <button onClick={() => setSweepResult(null)} className="text-slate-500 hover:text-white text-xs">
+              Dismiss
+            </button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+            <SweepStat label="30-day reminders" value={sweepResult.sent.reminder_30} tone="amber" />
+            <SweepStat label="60-day notices" value={sweepResult.sent.notice_60} tone="orange" />
+            <SweepStat label="90-day final" value={sweepResult.sent.final_90} tone="rose" />
+            <SweepStat label="Marked OVERDUE" value={sweepResult.markedOverdue} tone="slate" />
+            <SweepStat
+              label="Aging total"
+              value={`AED ${(sweepResult.aging.total ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
+              tone="slate"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-3 gap-6">
@@ -422,6 +513,23 @@ export default function ReceivablesPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── small inline helper for the sweep summary ──────────────────────────── */
+
+function SweepStat({ label, value, tone }: { label: string; value: number | string; tone: 'amber' | 'orange' | 'rose' | 'slate' }) {
+  const toneClasses = {
+    amber: 'bg-amber-500/10 border-amber-500/30 text-amber-200',
+    orange: 'bg-orange-500/10 border-orange-500/30 text-orange-200',
+    rose: 'bg-rose-500/10 border-rose-500/30 text-rose-200',
+    slate: 'bg-slate-700/50 border-slate-600 text-slate-200',
+  }[tone];
+  return (
+    <div className={`rounded-lg border px-3 py-2 ${toneClasses}`}>
+      <div className="text-[10px] uppercase tracking-wider opacity-75">{label}</div>
+      <div className="text-base font-bold mt-0.5">{value}</div>
     </div>
   );
 }

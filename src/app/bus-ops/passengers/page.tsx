@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { Users, Plus } from 'lucide-react';
+import { PageHeader } from '@/components/bus-ops/theme';
 
 interface Passenger {
   id: string; tripId: string; employeeId?: string; employeeName?: string; department?: string;
@@ -84,37 +86,30 @@ export default function PassengersPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Passenger Management</h1>
-          <p className="text-slate-400">{counts.CONFIRMED} confirmed · {counts.BOARDED} boarded · {counts.ABSENT} absent</p>
-        </div>
-        <button onClick={()=>setShowModal(true)} className="rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90">+ Add Passenger</button>
-      </div>
+      <PageHeader
+        title="Passengers"
+        subtitle={`${counts.CONFIRMED} confirmed · ${counts.BOARDED} boarded · ${counts.ABSENT} absent · ${passengers.length} total`}
+        icon={Users}
+        accent="violet"
+        actions={
+          <button onClick={()=>setShowModal(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+            <Plus className="w-4 h-4" /> Add Passenger
+          </button>
+        }
+      />
 
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
 
-      {/* Filters */}
       <div className="flex gap-4 flex-wrap">
         <select value={tripFilter} onChange={e=>setTripFilter(e.target.value)}
-          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-amber-500 focus:outline-none">
+          className="flex-1 min-w-48 max-w-sm px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
           <option value="">All Trips</option>
           {schedules.map(s=><option key={s.id} value={s.id}>{s.tripNumber ?? s.id.slice(0,8)} — {s.route?.name}</option>)}
         </select>
         <select value={statusFilter} onChange={e=>setStatus(e.target.value)}
-          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-amber-500 focus:outline-none">
+          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
           {['All','CONFIRMED','BOARDED','ABSENT','NO_SHOW'].map(s=><option key={s} value={s}>{s}</option>)}
         </select>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-4 gap-4">
-        {[{label:'Total',v:passengers.length,c:'text-white'},{label:'Confirmed',v:counts.CONFIRMED,c:'text-blue-400'},{label:'Boarded',v:counts.BOARDED,c:'text-emerald-400'},{label:'Absent',v:counts.ABSENT,c:'text-rose-400'}].map(({label,v,c})=>(
-          <div key={label} className="bg-slate-800/50 border border-white/10 rounded-xl p-4 text-center">
-            <div className={`text-2xl font-bold ${c}`}>{v}</div>
-            <div className="text-xs text-slate-400 mt-1">{label}</div>
-          </div>
-        ))}
       </div>
 
       <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
@@ -170,7 +165,7 @@ export default function PassengersPage() {
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">Trip *</label>
                 <select value={formData.tripId} onChange={e=>setFormData(p=>({...p,tripId:e.target.value}))} required
-                  className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-amber-500 focus:outline-none">
+                  className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
                   <option value="">Select trip</option>
                   {schedules.map(s=><option key={s.id} value={s.id}>{s.tripNumber ?? s.id.slice(0,8)} — {s.route?.name} ({new Date(s.departureTime).toLocaleDateString()})</option>)}
                 </select>
@@ -186,13 +181,13 @@ export default function PassengersPage() {
                   <div key={key}>
                     <label className="block text-sm font-medium text-slate-300 mb-2">{label}</label>
                     <input type="text" value={(formData as any)[key]} onChange={e=>setFormData(p=>({...p,[key]:e.target.value}))} placeholder={ph} required={required}
-                      className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none" />
+                      className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
                   </div>
                 ))}
               </div>
               <div className="flex gap-4 justify-end pt-4">
                 <button type="button" onClick={()=>setShowModal(false)} className="px-6 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5">Cancel</button>
-                <button type="submit" disabled={saving} className="px-6 py-2 rounded-lg bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:opacity-90 disabled:opacity-50">
+                <button type="submit" disabled={saving} className="px-6 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50">
                   {saving ? 'Adding...' : 'Add Passenger'}
                 </button>
               </div>

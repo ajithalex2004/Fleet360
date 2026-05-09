@@ -428,7 +428,7 @@ export default function OnboardingPage() {
     const token = provisionData?.verificationToken;
 
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-[#0c1a3e] flex items-center justify-center p-4">
         <div className="w-full max-w-lg space-y-5">
           <div className="text-center space-y-2">
             <div className="text-5xl">{domainAlreadyVerified || verified ? '✅' : '🎉'}</div>
@@ -515,7 +515,7 @@ export default function OnboardingPage() {
   const STEP_LABELS = ['Verify Domain', 'Company Details', 'Admin Account', 'Select Modules'];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col">
+    <div className="min-h-screen bg-[#0c1a3e] text-white flex flex-col">
       {/* Header */}
       <div className="border-b border-white/10 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">

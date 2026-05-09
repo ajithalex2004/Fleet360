@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { Banknote, RefreshCw, X } from 'lucide-react';
+import { PageHeader } from '@/components/ui/page-theme';
 
 interface ModuleStat {
   label: string;
@@ -119,35 +121,37 @@ export default function FinanceDashboard() {
   );
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Finance Hub</h1>
-          <p className="text-slate-400 mt-1">Cross-module financial aggregation — read-only reporting layer</p>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-400">From</label>
-            <input type="date" value={from} onChange={e => setFrom(e.target.value)}
-              className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500/50" />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-400">To</label>
-            <input type="date" value={to} onChange={e => setTo(e.target.value)}
-              className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500/50" />
-          </div>
-          {(from || to) && (
-            <button onClick={() => { setFrom(''); setTo(''); }}
-              className="px-3 py-2 text-xs text-slate-400 hover:text-white bg-slate-800 border border-white/10 rounded-lg">
-              Clear
+    <div className="space-y-6">
+      <PageHeader
+        title="Finance Hub"
+        subtitle="Cross-module financial aggregation — read-only reporting layer"
+        icon={Banknote}
+        accent="emerald"
+        actions={
+          <>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-400">From</label>
+              <input type="date" value={from} onChange={e => setFrom(e.target.value)}
+                className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500/50" />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-400">To</label>
+              <input type="date" value={to} onChange={e => setTo(e.target.value)}
+                className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500/50" />
+            </div>
+            {(from || to) && (
+              <button onClick={() => { setFrom(''); setTo(''); }}
+                className="inline-flex items-center gap-1 rounded-lg bg-slate-800 border border-white/10 px-3 py-2 text-xs text-slate-400 hover:text-white">
+                <X className="w-3 h-3" /> Clear
+              </button>
+            )}
+            <button onClick={load}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 border border-white/10 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700">
+              <RefreshCw className="w-3.5 h-3.5" /> Refresh
             </button>
-          )}
-          <button onClick={load} className="px-4 py-2 text-sm bg-slate-800 border border-white/10 text-slate-300 rounded-xl hover:bg-slate-700">
-            ↻ Refresh
-          </button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {error && (
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-2.5 flex items-center gap-3 text-sm">

@@ -22,7 +22,7 @@ export default function BookingPortalLayout({ children }: { children: React.Reac
       <PlatformHomeBar moduleName="Booking Portal" moduleIcon="🎫" accentColor="from-violet-500 to-purple-600" />
       <div className="flex flex-1 overflow-hidden">
       {/* Sidebar */}
-      <div className="w-64 border-r border-white/10 bg-slate-800/30 overflow-y-auto">
+      <div className="w-64 border-r border-white/10 bg-black overflow-y-auto">
         {/* Header */}
         <div className="p-6 border-b border-white/10">
           <div className="flex items-center gap-3">

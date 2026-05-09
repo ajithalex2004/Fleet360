@@ -301,6 +301,20 @@ function AgreementCard({ agreement, onAction }: {
             🧾
           </Link>
         )}
+        <a
+          href={`/api/rental/agreements/${agreement.id}/pdf?lang=en&download=1`}
+          className="text-xs text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 px-3 py-2 rounded-xl transition-colors"
+          title="Download bilingual rental agreement (EN layout)"
+        >
+          PDF·EN
+        </a>
+        <a
+          href={`/api/rental/agreements/${agreement.id}/pdf?lang=ar&download=1`}
+          className="text-xs text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 px-3 py-2 rounded-xl transition-colors"
+          title="Download bilingual rental agreement (AR layout)"
+        >
+          PDF·AR
+        </a>
       </div>
     </div>
   );

@@ -1,0 +1,162 @@
+# Known Gaps — STS v1.0
+
+Issues we are deliberately *not* fixing for STS v1.0. Each entry has a written
+rationale and a target version. **Do not delete or "stretch v1.0" fix any of
+these without re-baselining the SoW.**
+
+## TENANT-001 — Query-level tenant scoping on leasing models
+**Status:** open · **Target:** v1.1 · **Owner:** core
+
+Leasing models (`Lessee`, `LeaseContract*`, `LeaseQuotation`, `LeaseInvoice`,
+`LeaseReceipt`, etc.) do not have a `tenantId` column. The middleware
+([src/middleware.ts](../src/middleware.ts)) already verifies the session and
+injects `x-tenant-id` per request, but query handlers do not filter by it.
+
+**Why deferred:** STS is the only operational tenant in v1.0. The platform's
+multi-tenant data scoping migration affects 20+ tables and requires:
+- Schema migration adding `tenant_id` column on every leasing table
+- Backfill assigning existing rows to a default tenant
+- Update every Prisma query to include `where: { tenantId }`
+- A regression test pass
+
+This is ~5–8 dev-days. Out of scope for July 2026 STS go-live; will run as
+v1.1 work in Q4 2026 before onboarding the second customer.
+
+**Mitigation now:** STS deployment is single-tenant. `assertCanWrite()` from
+[src/lib/access-control.ts](../src/lib/access-control.ts) still enforces
+plan-based write gates.
+
+**Risk if STS adds a sub-tenant before v1.1:** A user from sub-tenant B would
+see sub-tenant A's data. Acceptable only because no sub-tenants exist.
+
+---
+
+## OBS-001 — Database backups beyond Neon's automatic PITR
+**Status:** accepted · **Target:** v1.0 (acceptance) · **Owner:** ops
+
+Production database is Neon Postgres, which provides 7-day point-in-time
+restore on the Pro plan automatically. We are *not* writing custom backup
+scripts because:
+1. Neon's PITR is more reliable than ad-hoc `pg_dump` cron jobs
+2. Solo-dev capacity is better spent on features
+
+**Action required from STS go-live:** Confirm Neon plan is Pro tier (not Free)
+so PITR is enabled.
+
+---
+
+## SEC-001 — Hardcoded admin password in setpw.js
+**Status:** acknowledged · **Target:** rotate before go-live · **Owner:** athom
+
+`setpw.js:6` contains `PASSWORD='Admin@1234'` and is in git history (commit
+`d934693`). This is a dev-only utility for resetting the local admin user;
+it does NOT run in production. However:
+
+- Before STS go-live, change the production `alex@exlsolutions.ae` password
+  to a random secret (use `scripts/reset-admin-password.js` interactively).
+- After rotation, this is purely a dev-tool with a known weak default.
+
+**Risk:** Low if production password is rotated; high if it isn't.
+
+---
+
+## SEC-002 — Rotate Neon credentials
+**Status:** acknowledged · **Target:** before go-live · **Owner:** athom
+
+`.env.test` (gitignored) contains a real Neon Postgres password
+(`npg_7ndWFKRYEOt6`). The credential has lived in the OneDrive-synced project
+folder for 4+ months, which is not the same threat model as plain text on the
+network but is broader than acceptable for a production DB credential.
+
+Before STS go-live, regenerate the Neon database credentials and update
+`.env.test` (and any other `.env*` files) with the new value.
+
+---
+
+## STORAGE-001 — Local file storage incompatible with Vercel production
+**Status:** open · **Target:** before STS production cutover · **Owner:** ops
+
+`src/lib/storage/index.ts` ships a `LocalFileStorage` adapter that writes to
+`public/uploads/...` on disk. This works for **local development** and
+**self-hosted Docker** with a persistent volume, but **breaks on Vercel** because
+serverless functions have ephemeral filesystems — files written during a request
+are gone the next request.
+
+**Affected feature:** Phase 1d document upload at
+[/leasing/documents](../src/app/leasing/documents/page.tsx).
+
+**Mitigation:** the storage layer is already abstracted behind a `FileStorage`
+interface. Production swap is one new file:
+- `S3FileStorage` — for AWS deployment (use `@aws-sdk/client-s3`)
+- `VercelBlobStorage` — for Vercel deployment (use `@vercel/blob`)
+
+Then update `getStorage()` in `src/lib/storage/index.ts` to read
+`STORAGE_BACKEND=local|vercel-blob|s3` from env and instantiate the right one.
+
+**Estimated effort:** 1–2 days (install SDK, write adapter, test, env vars).
+Must happen before STS production deploy if hosting on Vercel.
+
+---
+
+## KNOWN-PRISMA-001 — RESOLVED 2026-05-05
+**Status:** ✅ resolved · **Resolution:** upgraded to Prisma 5.22.0
+
+Was: `prisma generate` failed on Node 22 with a misleading "Invalid character"
+error on Prisma 5.10.0. Resolved by upgrading to Prisma 5.22.0 (last 5.x line)
+which has Node 22 compatibility. **Avoided** Prisma 7.x because it introduced
+breaking schema changes (datasource `url` moved to `prisma.config.ts`, new
+PrismaClient constructor signature) that would require multi-day refactor.
+
+Code cleanup: removed the `(contract as any).mileageOverageRate` cast in
+`src/app/api/leasing/mileage-readings/route.ts`.
+
+**Note for future Prisma upgrades:** stay on the 5.x line (5.22.x) until
+Prisma 7's `prisma.config.ts` / adapter pattern is needed. Skipping 6.x is
+fine — it was a short-lived series.
+
+---
+
+## KNOWN-TS-001 — Pre-existing TypeScript errors across the codebase
+**Status:** open · **Target:** v1.0 cleanup sprint · **Owner:** core
+
+`tsc --noEmit` reports ~100 pre-existing errors across:
+- `prisma/seed.ts` — references removed enum names (MaintenanceStatus, AlertSeverity, AlertType, ActionStatus) and fields that have been renamed in newer migrations
+- `scripts/*.ts` — legacy ts-node helper scripts with var/const redeclarations and missing types
+- `src/app/api/admin/seed/leasing/route.ts` — `quantity` field on a model that doesn't have it
+- `src/app/admin/users/page.tsx` — type narrowing issues
+- `src/app/api/alerts/[id]/route.ts` — `assignedDate` field that no longer exists
+- `src/app/api/assets/ble/stats/route.ts` — BigInt literals in pre-ES2020 target
+- A handful of others
+
+**Why deferred:** None of these errors affect runtime — most are in dev-tooling
+or seed scripts that aren't part of the user-visible app. Fixing all of them
+is a 2–3 day sweep with risk of unintentional behavioural changes.
+
+**Mitigation now:** CI workflow runs `npm run typecheck` with
+`continue-on-error: true` — typecheck failures show as advisory yellow ⚠ on
+PRs but don't block merges. Same for `lint` and `test:unit` to avoid
+false-positive blocks while the codebase stabilises.
+
+**Trigger to re-enforce:** Run a focused cleanup sprint (one per file area:
+seed → scripts → admin pages → api routes) and remove the `continue-on-error`
+flags from `.github/workflows/ci.yml` step-by-step as each area goes green.
+
+**Risk:** New code lands with type errors and they accumulate. Mitigation:
+this `KNOWN_GAPS` entry is the source of truth; review weekly. Solo-dev
+discipline matters here.
+
+---
+
+## A11Y-001 — Bilingual UI: Arabic font / RTL polish
+**Status:** open · **Target:** v1.0 (foundation only), v1.1 (full polish)
+
+[LanguageContext.tsx](../src/contexts/LanguageContext.tsx) provides
+EN/AR translations for nav and module labels. v1.0 will:
+- Wire the dictionary into all leasing pages (most still hardcode English)
+- Set `<html dir="rtl">` correctly on language switch (already implemented)
+- Use Noto Sans Arabic in PDF templates (Phase 1a)
+
+v1.1 will polish:
+- Right-aligned numeric tables, mirrored icons, full UI string coverage
+- Hijri calendar option for renewal letters
+- Bidi text rendering edge cases in mixed-language documents

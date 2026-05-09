@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { UserCog, UserPlus } from 'lucide-react';
+import { PageHeader } from '@/components/bus-ops/theme';
 
 interface StaffMember {
   id: string; employeeId?: string; name: string; department?: string; designation?: string;
@@ -78,13 +80,17 @@ export default function StaffPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Staff Register</h1>
-          <p className="text-slate-400">{staff.filter(s=>s.isActive).length} active / {staff.length} total staff on transport</p>
-        </div>
-        <button onClick={openNew} className="rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90">+ Register Staff</button>
-      </div>
+      <PageHeader
+        title="Staff Register"
+        subtitle={`${staff.filter(s=>s.isActive).length} active · ${staff.length} total on transport`}
+        icon={UserCog}
+        accent="violet"
+        actions={
+          <button onClick={openNew} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+            <UserPlus className="w-4 h-4" /> Register Staff
+          </button>
+        }
+      />
 
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
 

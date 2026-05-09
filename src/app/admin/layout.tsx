@@ -108,7 +108,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <PlatformHomeBar moduleName={t('module.admin')} moduleIcon="A" accentColor="from-red-500 to-rose-600" />
 
       <div className="flex flex-1 overflow-hidden">
-        <aside className="w-64 flex-shrink-0 border-r border-white/10 bg-slate-950 overflow-y-auto">
+        <aside className="w-64 flex-shrink-0 border-r border-white/10 bg-black overflow-y-auto">
 
           {/* Identity block */}
           <div className="p-4 border-b border-white/10">

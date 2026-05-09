@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { paginate, paginatedResponse } from '@/lib/pagination';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
+import { requireUnderQuota } from '@/lib/plan-limits';
+import type { PlanCode } from '@/lib/billing';
 
 const toCamel = (s: string) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 const rowToCamel = (r: Record<string, unknown>) =>
@@ -79,6 +81,19 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   await ensureFleetSchema();
   try {
+    // Quota: vehicles per plan.
+    const tenantId = req.headers.get('x-tenant-id') ?? '';
+    const tenantPlan = (req.headers.get('x-tenant-plan') ?? 'TRIAL') as PlanCode;
+    if (tenantId) {
+      const rows = await prisma.$queryRawUnsafe<{ c: bigint }[]>(
+        `SELECT COUNT(*)::bigint AS c FROM vehicles WHERE tenant_id::text = $1 AND deleted_at IS NULL`,
+        tenantId,
+      ).catch(() => []);
+      const current = rows[0] ? Number(rows[0].c) : 0;
+      const gate = requireUnderQuota({ plan: tenantPlan, resource: 'maxVehicles', current });
+      if (gate) return gate;
+    }
+
     const body = await req.json();
 
     const id = crypto.randomUUID();

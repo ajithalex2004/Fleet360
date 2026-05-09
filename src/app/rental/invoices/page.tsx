@@ -397,6 +397,22 @@ export default function RentalInvoicesPage() {
           </div>
 
           {/* Actions */}
+          <div className="flex gap-2 flex-wrap mb-2">
+            <a
+              href={`/api/rental/invoices/${selected.id}/pdf?lang=en&download=1`}
+              className="px-3 py-2 rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 text-xs font-medium"
+              title="Download bilingual tax invoice (EN layout)"
+            >
+              PDF·EN
+            </a>
+            <a
+              href={`/api/rental/invoices/${selected.id}/pdf?lang=ar&download=1`}
+              className="px-3 py-2 rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 text-xs font-medium"
+              title="Download bilingual tax invoice (AR layout)"
+            >
+              PDF·AR
+            </a>
+          </div>
           {!['PAID','VOID','CANCELLED'].includes(selected.status) && (
             <div className="flex gap-2 flex-wrap">
               {Number(selected.balanceDue) > 0 && (

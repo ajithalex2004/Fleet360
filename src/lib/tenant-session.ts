@@ -88,6 +88,9 @@ export interface SessionPayload {
   tenantId: string;
   plan: string;
   role: string; // e.g. 'SUPER_ADMIN' | 'TENANT_ADMIN'
+  /** Set when a SUPER_ADMIN is impersonating this user — value is the
+   *  impersonator's userId. Used to render the banner and audit actions. */
+  impersonatedBy?: string;
   exp: number;
 }
 
@@ -99,10 +102,14 @@ export async function signSession(payload: {
   tenantId: string;
   plan: string;
   role: string;
+  impersonatedBy?: string;
+  /** Override TTL in ms (default 24 h). Impersonation uses a shorter TTL. */
+  ttlMs?: number;
 }): Promise<string> {
+  const { ttlMs, ...rest } = payload;
   const fullPayload: SessionPayload = {
-    ...payload,
-    exp: Date.now() + TOKEN_TTL_MS,
+    ...rest,
+    exp: Date.now() + (ttlMs ?? TOKEN_TTL_MS),
   };
   const encodedPayload = toBase64Url(JSON.stringify(fullPayload));
   const signature = await hmacSign(encodedPayload);
@@ -115,7 +122,7 @@ export async function signSession(payload: {
  */
 export async function verifySession(
   token: string,
-): Promise<{ userId: string; tenantId: string; plan: string; role: string } | null> {
+): Promise<{ userId: string; tenantId: string; plan: string; role: string; impersonatedBy?: string } | null> {
   try {
     const dotIndex = token.lastIndexOf('.');
     if (dotIndex === -1) return null;
@@ -133,10 +140,11 @@ export async function verifySession(
     }
 
     return {
-      userId:   payload.userId,
-      tenantId: payload.tenantId,
-      plan:     payload.plan,
-      role:     payload.role ?? 'TENANT_ADMIN',
+      userId:         payload.userId,
+      tenantId:       payload.tenantId,
+      plan:           payload.plan,
+      role:           payload.role ?? 'TENANT_ADMIN',
+      ...(payload.impersonatedBy ? { impersonatedBy: payload.impersonatedBy } : {}),
     };
   } catch {
     return null;

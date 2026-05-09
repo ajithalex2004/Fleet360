@@ -1,14 +1,23 @@
 @import "tailwindcss";
 
 :root {
-  /* Base Colors - Deep Space Theme */
-  --bg-primary: #0f172a;
-  /* Slate 900 */
-  --bg-secondary: #1e293b;
-  /* Slate 800 */
-  --accent-primary: #3b82f6;
-  /* Blue 500 */
-  --accent-glow: rgba(59, 130, 246, 0.5);
+  /* Base Colors — Royal / Maritime Brand */
+  --bg-primary: #0c1a3e;
+  /* Deep navy — brand base */
+  --bg-secondary: #102450;
+  /* Slightly lighter navy for radial gradient stop */
+  --accent-primary: #D4AF37;
+  /* Champagne gold — primary brand accent */
+  --accent-glow: rgba(212, 175, 55, 0.5);
+
+  /* Brand tokens — read by BrandingProvider for tenant white-label override */
+  --brand-navy: #0c1a3e;
+  --brand-navy-light: #102450;
+  --brand-gold: #D4AF37;
+  --brand-gold-bright: #E8C547;
+  --brand-gold-deep: #B8860B;
+  --brand-blue: #3b82f6;
+  --brand-blue-bright: #60a5fa;
 
   /* Text Colors */
   --text-primary: #f8fafc;
@@ -17,8 +26,8 @@
   /* Slate 400 */
 
   /* Glassmorphism Variables */
-  --glass-bg: rgba(30, 41, 59, 0.7);
-  /* Slate 800 with opacity */
+  --glass-bg: rgba(15, 36, 80, 0.7);
+  /* Navy with opacity */
   --glass-border: rgba(255, 255, 255, 0.1);
   --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
@@ -29,7 +38,7 @@
 }
 
 body {
-  background: radial-gradient(circle at top right, #1e293b, #0f172a);
+  background: radial-gradient(circle at top right, #102450, #0c1a3e);
   color: var(--text-primary);
   font-family: var(--font-sans), system-ui, sans-serif;
   min-height: 100vh;
@@ -42,16 +51,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: #0c1a3e;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #1e3a8a;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #3b82f6;
 }
 
 /* ── C1Chat / TheSys embedded chat overrides ────────────────────────────── */

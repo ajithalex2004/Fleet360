@@ -10,15 +10,17 @@ const NAV_GROUPS = [
   {
     label: 'Overview',
     items: [
-      { href: '/rental',              label: 'Dashboard',            icon: '📊' },
-      { href: '/rental/analytics',    label: 'Analytics & BI',       icon: '📈' },
+      { href: '/rental',                 label: 'Dashboard',         icon: '📊' },
+      { href: '/rental/analytics',       label: 'Analytics & BI',    icon: '📈' },
+      { href: '/rental/analytics/kpi',   label: 'RevPAC Dashboard',  icon: '🎯' },
     ],
   },
   {
     label: 'Sales Pipeline',
     items: [
-      { href: '/rental/inquiries',    label: 'Inquiries',            icon: '🔍' },
-      { href: '/rental/quotations',   label: 'Quotations',           icon: '📋' },
+      { href: '/rental/inquiries',          label: 'Inquiries',     icon: '🔍' },
+      { href: '/rental/bookings/copilot',   label: 'AI Co-pilot',   icon: '✨' },
+      { href: '/rental/quotations',         label: 'Quotations',    icon: '📋' },
     ],
   },
   {
@@ -26,6 +28,8 @@ const NAV_GROUPS = [
     items: [
       { href: '/rental/bookings',     label: 'Bookings',             icon: '📅' },
       { href: '/rental/availability', label: 'Vehicle Availability', icon: '🚗' },
+      { href: '/rental/counter',      label: 'Counter PWA',          icon: '📲' },
+      { href: '/rental/channels',     label: 'Channel Manager',      icon: '🔌' },
     ],
   },
   {
@@ -34,16 +38,20 @@ const NAV_GROUPS = [
       { href: '/rental/agreements',    label: 'Rental Agreements',   icon: '📄' },
       { href: '/rental/renewals',      label: 'Renewals',            icon: '🔄' },
       { href: '/rental/handover',      label: 'Handover & Return',   icon: '🔑' },
-      { href: '/rental/damage-claims', label: 'Damage Claims',       icon: '⚠️' },
-      { href: '/rental/transfers',     label: 'Vehicle Transfers',   icon: '🔀' },
+      { href: '/rental/damage-claims',     label: 'Damage Claims',       icon: '⚠️' },
+      { href: '/rental/damage-claims/ai',  label: 'Damage AI Studio',    icon: '🤖' },
+      { href: '/rental/transfers',         label: 'Vehicle Transfers',   icon: '🔀' },
     ],
   },
   {
     label: 'Billing',
     items: [
-      { href: '/rental/invoices', label: 'Invoices',    icon: '🧾' },
-      { href: '/rental/pricing',  label: 'Pricing',     icon: '💰' },
-      { href: '/rental/rates',    label: 'Rate Engine', icon: '⚙️' },
+      { href: '/rental/invoices',      label: 'Invoices',         icon: '🧾' },
+      { href: '/rental/pricing',       label: 'Pricing',          icon: '💰' },
+      { href: '/rental/rates',         label: 'Rate Engine',      icon: '⚙️' },
+      { href: '/rental/rates/yield',   label: 'Yield Analyzer',   icon: '📊' },
+      { href: '/rental/rates/events',  label: 'Rate Events',      icon: '🎉' },
+      { href: '/rental/ancillaries',   label: 'Ancillaries',      icon: '🧰' },
     ],
   },
   {
@@ -77,7 +85,7 @@ export default function RentalLayout({ children }: { children: React.ReactNode }
       <PlatformHomeBar moduleName={t('module.rental')} moduleIcon="RC" accentColor="from-teal-500 to-cyan-600" />
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <div className="w-64 bg-gradient-to-br from-teal-950 to-slate-900 border-r border-white/10 p-4 overflow-y-auto flex-shrink-0">
+        <div className="w-64 bg-black border-r border-white/10 p-4 overflow-y-auto flex-shrink-0">
           <h2 className="text-base font-bold text-white mb-4 px-2">{t('module.rental')}</h2>
           <nav className="space-y-5">
             {NAV_GROUPS.map(group => (

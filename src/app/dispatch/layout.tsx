@@ -45,7 +45,7 @@ export default function DispatchLayout({ children }: { children: React.ReactNode
       />
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <aside className="w-64 flex-shrink-0 border-r border-white/10 bg-slate-950 overflow-y-auto">
+        <aside className="w-64 flex-shrink-0 border-r border-white/10 bg-black overflow-y-auto">
           <div className="p-5 border-b border-white/10">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-xl">

@@ -46,6 +46,25 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     const results = await prisma.$transaction(ops);
+
+    // Propagate end-mileage to the Vehicle so the existing Maintenance
+    // alert engine (Maintenance/alert-config + ServiceSchedule) can see
+    // accumulating km from staff bus operations. Best-effort — never
+    // fails the trip completion.
+    if (body.endMileage != null && schedule.vehicleId) {
+      const km = Number(body.endMileage);
+      if (Number.isFinite(km) && km > 0) {
+        try {
+          await prisma.vehicle.update({
+            where: { id: schedule.vehicleId },
+            data: { currentMileage: BigInt(Math.round(km)), odometerReading: BigInt(Math.round(km)) },
+          });
+        } catch (err) {
+          console.warn('[bus-ops complete] vehicle mileage propagation failed:', err);
+        }
+      }
+    }
+
     return NextResponse.json({ schedule: results[0] });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to complete' }, { status: 500 });

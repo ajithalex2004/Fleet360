@@ -1,6 +1,8 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { Smartphone, Plus } from 'lucide-react';
+import { PageHeader } from '@/components/ui/page-theme';
 
 interface Booking {
   id: string;
@@ -159,18 +161,19 @@ export default function BookingPortal() {
   const completed = bookings.filter(b => b.status === 'COMPLETED').length;
 
   return (
-    <div className="space-y-8">
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Booking Portal</h1>
-          <p className="text-slate-400 mt-1">Unified transport booking across all services</p>
-        </div>
-        <Link href="/booking-portal/new"
-          className="bg-gradient-to-r from-violet-600 to-purple-600 hover:opacity-90 text-white font-semibold px-5 py-2.5 rounded-xl text-sm transition-all shadow-lg shadow-violet-500/20">
-          ➕ New Booking
-        </Link>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Booking Portal"
+        subtitle="Unified transport booking across all services"
+        icon={Smartphone}
+        accent="violet"
+        actions={
+          <Link href="/booking-portal/new"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition-all shadow-lg shadow-violet-500/30">
+            <Plus className="w-4 h-4" /> New booking
+          </Link>
+        }
+      />
 
       {/* ── Summary tiles ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { Calendar, Plus } from 'lucide-react';
+import { PageHeader } from '@/components/bus-ops/theme';
 
 interface Schedule {
   id: string; tripNumber?: string; routeId: string; route?: { name: string; origin: string; destination: string };
@@ -96,24 +98,28 @@ export default function SchedulesPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Trip Schedules</h1>
-          <p className="text-slate-400">{schedules.length} trips — {counts.SCHEDULED} scheduled · {counts.DEPARTED} departed · {counts.COMPLETED} completed</p>
-        </div>
-        <button onClick={()=>setShowModal(true)} className="rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90">+ New Trip</button>
-      </div>
+      <PageHeader
+        title="Trip Schedules"
+        subtitle={`${schedules.length} trips · ${counts.SCHEDULED} scheduled · ${counts.DEPARTED} departed · ${counts.COMPLETED} completed`}
+        icon={Calendar}
+        accent="violet"
+        actions={
+          <button onClick={()=>setShowModal(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+            <Plus className="w-4 h-4" /> New Trip
+          </button>
+        }
+      />
 
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
 
       {/* Filters */}
       <div className="flex gap-4 flex-wrap">
         <select value={statusFilter} onChange={e=>setStatus(e.target.value)}
-          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-emerald-500 focus:outline-none">
+          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
           {['All','SCHEDULED','DEPARTED','IN_TRANSIT','COMPLETED','CANCELLED'].map(s=><option key={s} value={s}>{s}</option>)}
         </select>
         <input type="date" value={dateFilter} onChange={e=>setDate(e.target.value)}
-          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-emerald-500 focus:outline-none" />
+          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />
         {dateFilter && <button onClick={()=>setDate('')} className="text-sm text-slate-400 hover:text-white">Clear date</button>}
       </div>
 
@@ -190,7 +196,7 @@ export default function SchedulesPage() {
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-slate-300 mb-2">Route *</label>
                   <select value={formData.routeId} onChange={e=>setFormData(p=>({...p,routeId:e.target.value}))} required
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-emerald-500 focus:outline-none">
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
                     <option value="">Select route</option>
                     {routes.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}
                   </select>
@@ -199,54 +205,54 @@ export default function SchedulesPage() {
                   <div key={key}>
                     <label className="block text-sm font-medium text-slate-300 mb-2">{label}</label>
                     <input type={type} value={(formData as any)[key]} onChange={e=>setFormData(p=>({...p,[key]:e.target.value}))} required={required}
-                      className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-emerald-500 focus:outline-none" />
+                      className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />
                   </div>
                 ))}
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Shift Type</label>
                   <select value={formData.shiftType} onChange={e=>setFormData(p=>({...p,shiftType:e.target.value}))}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-emerald-500 focus:outline-none">
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
                     {SHIFT_TYPES.map(s=><option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Direction</label>
                   <select value={formData.direction} onChange={e=>setFormData(p=>({...p,direction:e.target.value}))}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-emerald-500 focus:outline-none">
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
                     {DIRECTIONS.map(d=><option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Frequency</label>
                   <select value={formData.frequency} onChange={e=>setFormData(p=>({...p,frequency:e.target.value}))}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-emerald-500 focus:outline-none">
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
                     {FREQUENCIES.map(f=><option key={f} value={f}>{f}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Capacity</label>
                   <input type="number" value={formData.capacity} onChange={e=>setFormData(p=>({...p,capacity:e.target.value}))} min="1" placeholder="30"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none" />
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Vehicle ID</label>
                   <input type="text" value={formData.vehicleId} onChange={e=>setFormData(p=>({...p,vehicleId:e.target.value}))} placeholder="Optional"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none" />
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Driver ID</label>
                   <input type="text" value={formData.driverId} onChange={e=>setFormData(p=>({...p,driverId:e.target.value}))} placeholder="Optional"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none" />
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-slate-300 mb-2">Notes</label>
                   <textarea value={formData.notes} onChange={e=>setFormData(p=>({...p,notes:e.target.value}))} rows={2} placeholder="Additional notes..."
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none" />
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
                 </div>
               </div>
               <div className="flex gap-4 justify-end pt-4">
                 <button type="button" onClick={()=>setShowModal(false)} className="px-6 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5">Cancel</button>
-                <button type="submit" disabled={saving} className="px-6 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:opacity-90 disabled:opacity-50">
+                <button type="submit" disabled={saving} className="px-6 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50">
                   {saving ? 'Creating...' : 'Create Trip'}
                 </button>
               </div>

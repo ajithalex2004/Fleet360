@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { Car } from 'lucide-react';
+import { PageHeader } from '@/components/ui/page-theme';
 
 interface Booking {
   id: string;
@@ -75,12 +77,13 @@ export default function RentalDashboard() {
   );
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-4xl font-bold text-white mb-2">RAC Dashboard</h1>
-        <p className="text-slate-400">Rent-a-Car — Real-time overview</p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="RAC Dashboard"
+        subtitle="Rent-a-Car — Real-time overview"
+        icon={Car}
+        accent="emerald"
+      />
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">

@@ -312,7 +312,22 @@ export default function ReceiptsPage() {
                 <td className="px-4 py-4 text-sm text-white">{receipt.receivedBy}</td>
                 <td className="px-4 py-4 text-sm text-slate-200">{receipt.branch}</td>
                 <td className="px-4 py-4 text-sm">
-                  <button className="text-blue-400 hover:text-blue-300 font-medium">View</button>
+                  <div className="flex items-center gap-2 text-xs">
+                    <a
+                      href={`/api/leasing/receipts/${receipt.id}/pdf?lang=en&download=1`}
+                      className="text-emerald-400 hover:text-emerald-300"
+                      title="Download bilingual receipt (EN layout)"
+                    >
+                      PDF·EN
+                    </a>
+                    <a
+                      href={`/api/leasing/receipts/${receipt.id}/pdf?lang=ar&download=1`}
+                      className="text-emerald-400 hover:text-emerald-300"
+                      title="Download bilingual receipt (AR layout)"
+                    >
+                      PDF·AR
+                    </a>
+                  </div>
                 </td>
               </tr>
             ))}

@@ -421,6 +421,9 @@ export async function POST(request: NextRequest) {
       }).catch(() => {});
     }
 
+    // Start a 14-day trial subscription (best-effort — won't block signup).
+    void import('@/lib/billing').then(m => m.startTrialForTenant(tenant.id)).catch(() => {});
+
     // Set session cookie — newly provisioned users always start as TENANT_ADMIN
     const sessionToken = await signSession({
       userId:   user.id,

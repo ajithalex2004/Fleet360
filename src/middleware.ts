@@ -28,6 +28,15 @@ const PUBLIC_EXACT: Set<string> = new Set([
   '/api/auth/session',
   '/api/auth/login',
   '/api/auth/logout',
+  '/api/auth/forgot-password',
+  '/api/auth/reset-password',
+  '/api/auth/invitation/accept',
+  '/api/auth/sso/initiate',
+  '/api/auth/sso/callback',
+  '/api/branding',
+  '/api/stripe/webhook',
+  '/forgot-password',
+  '/reset-password',
   '/api/tenants/provision',
   '/api/tenants/verify-domain',
   '/api/admin/session',
@@ -41,6 +50,8 @@ const PUBLIC_PREFIXES: string[] = [
   '/track/',
   '/api/admin/session',
   '/api/setup/',      // one-time setup endpoints — protected by SETUP_SECRET, not session
+  '/api/auth/invitation/',  // public lookup by token
+  '/invitation/',           // accept-invitation page
 ];
 
 function isPublicRoute(pathname: string): boolean {
@@ -138,6 +149,9 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   requestHeaders.set('x-user-id',     session.userId);
   requestHeaders.set('x-tenant-plan', session.plan);
   requestHeaders.set('x-user-role',   session.role ?? 'TENANT_ADMIN');
+  if (session.impersonatedBy) {
+    requestHeaders.set('x-impersonated-by', session.impersonatedBy);
+  }
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
 

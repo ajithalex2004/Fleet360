@@ -1,9 +1,12 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from 'recharts';
+import { LineChart as LineChartIcon, RefreshCw, Leaf, Wrench, ShieldCheck } from 'lucide-react';
+import { PageHeader } from '@/components/bus-ops/theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -12,12 +15,18 @@ interface Analytics {
     totalTrips: number; completedTrips: number; cancelledTrips: number; inTransitTrips: number;
     completionRate: number; cancellationRate: number; totalPassengers: number;
     totalRoutes: number; totalStaff: number; avgOccupancy: number;
+    onTimeDeparturePct?: number; onTimeArrivalPct?: number;
+    avgDepartureDelayMin?: number; avgArrivalDelayMin?: number;
+    costPerTrip?: number; costPerPassenger?: number; costPerKm?: number; totalCost?: number;
+    costBreakdown?: { fuel: number; driver: number; vehicle: number };
   };
   charts: {
     daily:   Array<{ day: string; trips: number; passengers: number }>;
     byShift: Array<{ name: string; value: number }>;
     byRoute: Array<{ name: string; trips: number; passengers: number }>;
     byHour:  Array<{ hour: string; trips: number }>;
+    slaByRoute?: Array<{ name: string; trips: number; ontimePct: number; avgDelayMin: number }>;
+    boardingMethods?: Array<{ method: string; count: number }>;
   };
 }
 
@@ -101,16 +110,17 @@ export default function BusOpsAnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Staff Transport Analytics</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Last 30 days performance overview</p>
-        </div>
-        <button onClick={load} className="text-xs text-slate-400 border border-white/10 px-3 py-1.5 rounded-lg hover:border-white/20 hover:text-white transition-colors">
-          ↺ Refresh
-        </button>
-      </div>
+      <PageHeader
+        title="Analytics"
+        subtitle="Last 30 days · trips, on-time SLA, cost per pax, boarding-method adoption"
+        icon={LineChartIcon}
+        accent="violet"
+        actions={
+          <button onClick={load} className="inline-flex items-center gap-1.5 text-xs text-slate-300 border border-white/10 px-3 py-1.5 rounded-lg hover:border-white/20 hover:bg-white/5 transition-colors">
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          </button>
+        }
+      />
 
       {/* KPI row */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -125,8 +135,126 @@ export default function BusOpsAnalyticsPage() {
       <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 grid grid-cols-1 md:grid-cols-3 gap-6">
         <MetricBar label="Completion Rate"    value={kpis.completionRate}   color="text-emerald-400" />
         <MetricBar label="Seat Utilisation"   value={kpis.avgOccupancy}     color="text-purple-400" />
-        <MetricBar label="On-time Departure"  value={Math.max(0, 100 - kpis.cancellationRate)} color="text-amber-400" />
+        <MetricBar label="On-time Departure"  value={kpis.onTimeDeparturePct ?? 0} color="text-amber-400" />
       </div>
+
+      {/* Cross-module links */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <Link href="/sustainability/fleet-carbon"
+           className="group rounded-2xl bg-emerald-600/5 border border-emerald-500/30 p-4 hover:bg-emerald-600/10 hover:border-emerald-500/50 transition-all flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
+            <Leaf className="w-5 h-5 text-white" strokeWidth={1.75} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-wider text-emerald-300/80">Sustainability</div>
+            <div className="text-sm font-semibold text-emerald-100 mt-0.5">Fleet Carbon Dashboard</div>
+            <div className="text-[11px] text-emerald-300/60 mt-0.5">Bus trip CO₂e auto-aggregated · GHG Protocol</div>
+          </div>
+        </Link>
+        <Link href="/maintenance/action-centre"
+           className="group rounded-2xl bg-cyan-600/5 border border-cyan-500/30 p-4 hover:bg-cyan-600/10 hover:border-cyan-500/50 transition-all flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-600 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 shrink-0">
+            <Wrench className="w-5 h-5 text-white" strokeWidth={1.75} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-wider text-cyan-300/80">Maintenance</div>
+            <div className="text-sm font-semibold text-cyan-100 mt-0.5">Service Action Centre</div>
+            <div className="text-[11px] text-cyan-300/60 mt-0.5">Bus mileage feeds service-due alerts</div>
+          </div>
+        </Link>
+        <Link href="/compliance/salik"
+           className="group rounded-2xl bg-amber-600/5 border border-amber-500/30 p-4 hover:bg-amber-600/10 hover:border-amber-500/50 transition-all flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-600 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/20 shrink-0">
+            <ShieldCheck className="w-5 h-5 text-white" strokeWidth={1.75} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-wider text-amber-300/80">Compliance</div>
+            <div className="text-sm font-semibold text-amber-100 mt-0.5">Salik / Toll Accounts</div>
+            <div className="text-[11px] text-amber-300/60 mt-0.5">Per-vehicle tag balance + auto-recharge</div>
+          </div>
+        </Link>
+      </div>
+
+      {/* SLA + Cost section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 space-y-4">
+          <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">On-time SLA (last 30 days)</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-3xl font-bold text-emerald-400">{kpis.onTimeDeparturePct ?? 0}%</p>
+              <p className="text-xs text-slate-500 mt-0.5">Departure ≤ +5 min</p>
+              <p className="text-[10px] text-slate-600 mt-1">avg delay {kpis.avgDepartureDelayMin ?? 0} min</p>
+            </div>
+            <div>
+              <p className="text-3xl font-bold text-cyan-400">{kpis.onTimeArrivalPct ?? 0}%</p>
+              <p className="text-xs text-slate-500 mt-0.5">Arrival ≤ +10 min</p>
+              <p className="text-[10px] text-slate-600 mt-1">avg delay {kpis.avgArrivalDelayMin ?? 0} min</p>
+            </div>
+          </div>
+          {(charts.slaByRoute ?? []).length > 0 && (
+            <div className="border-t border-white/5 pt-3 space-y-1.5">
+              <p className="text-[10px] text-slate-500 uppercase">Worst on-time routes</p>
+              {charts.slaByRoute!.map(r => (
+                <div key={r.name} className="flex items-center justify-between text-xs">
+                  <span className="text-slate-300 truncate">{r.name}</span>
+                  <span className={r.ontimePct >= 80 ? 'text-emerald-400' : r.ontimePct >= 60 ? 'text-amber-400' : 'text-rose-400'}>
+                    {r.ontimePct}% on-time · {r.avgDelayMin} min avg
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 space-y-4">
+          <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">Cost (last 30 days)</p>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <p className="text-2xl font-bold text-white">AED {(kpis.costPerTrip ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+              <p className="text-xs text-slate-500 mt-0.5">per trip</p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-white">AED {(kpis.costPerPassenger ?? 0).toFixed(2)}</p>
+              <p className="text-xs text-slate-500 mt-0.5">per passenger</p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-white">AED {(kpis.costPerKm ?? 0).toFixed(2)}</p>
+              <p className="text-xs text-slate-500 mt-0.5">per km</p>
+            </div>
+          </div>
+          {kpis.costBreakdown && (
+            <div className="border-t border-white/5 pt-3 space-y-1.5 text-xs">
+              <p className="text-[10px] text-slate-500 uppercase">Breakdown · total AED {(kpis.totalCost ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+              <div className="flex items-center justify-between"><span className="text-slate-400">⛽ Fuel</span><span className="text-amber-300">AED {kpis.costBreakdown.fuel.toLocaleString()}</span></div>
+              <div className="flex items-center justify-between"><span className="text-slate-400">🧑‍✈️ Driver</span><span className="text-cyan-300">AED {kpis.costBreakdown.driver.toLocaleString()}</span></div>
+              <div className="flex items-center justify-between"><span className="text-slate-400">🚌 Vehicle</span><span className="text-violet-300">AED {kpis.costBreakdown.vehicle.toLocaleString()}</span></div>
+            </div>
+          )}
+          <p className="text-[10px] text-slate-600 italic">
+            Defaults: AED 2.95/L fuel · AED 30/hr driver · AED 0.50/km vehicle. Override via env BUS_FUEL_AED_PER_L / BUS_DRIVER_AED_PER_HR / BUS_VEHICLE_AED_PER_KM.
+          </p>
+        </div>
+      </div>
+
+      {/* Boarding-method mix */}
+      {(charts.boardingMethods ?? []).length > 0 && (
+        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5">
+          <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-3">Boarding method adoption (last 30 days)</p>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {(charts.boardingMethods ?? []).map(m => {
+              const total = charts.boardingMethods!.reduce((s, x) => s + x.count, 0);
+              const pct = total > 0 ? Math.round((m.count / total) * 100) : 0;
+              return (
+                <div key={m.method} className="rounded-xl bg-slate-800/60 border border-white/10 p-3 text-center">
+                  <p className="text-2xl font-bold text-white">{m.count}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{m.method.replace('_', ' ')}</p>
+                  <p className="text-[10px] text-slate-600 mt-1">{pct}%</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Charts row 1: Daily trend + Hour heatmap */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

@@ -1,0 +1,17 @@
+{
+  "name": "Fleet360 — Counter",
+  "short_name": "Counter",
+  "description": "Mobile counter operations for RAC handover, return, and damage walkaround.",
+  "start_url": "/rental/counter",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0d9488",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}
