@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	// "my-c1-project-backend/models" // Commented out since AutoMigrate is disabled
+	// "fleet360-backend/models" // Commented out since AutoMigrate is disabled
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"

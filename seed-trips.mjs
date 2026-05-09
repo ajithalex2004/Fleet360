@@ -2,7 +2,7 @@
  * School Bus Demo Trip Seeder
  * Seeds realistic UAE school bus trips + telemetry events
  */
-import { PrismaClient } from '/sessions/lucid-loving-bohr/mnt/my-c1-project/node_modules/@prisma/client/index.js';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient({
   datasources: { db: { url: process.env.DATABASE_URL } },

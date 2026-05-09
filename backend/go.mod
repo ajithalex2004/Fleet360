@@ -1,4 +1,4 @@
-module my-c1-project-backend
+module fleet360-backend
 
 go 1.21
 

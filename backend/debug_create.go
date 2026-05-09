@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"my-c1-project-backend/database"
-	"my-c1-project-backend/models"
+	"fleet360-backend/database"
+	"fleet360-backend/models"
 
 	"github.com/joho/godotenv"
 )
