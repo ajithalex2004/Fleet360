@@ -251,7 +251,7 @@ async function sendOtpEmail(toEmail: string, otp: string, domain: string): Promi
   const username   = s['smtp_username'];
   const password   = s['smtp_password'];
   const encryption = s['smtp_encryption'] || 'tls';
-  const fromName   = s['email_from_name'] || 'XL AI Smart Mobility';
+  const fromName   = s['email_from_name'] || 'Fleet360';
   const fromAddr   = username || s['email_from_address'] || '';
 
   if (!host || !username || !password) {
@@ -291,7 +291,7 @@ async function sendOtpEmail(toEmail: string, otp: string, domain: string): Promi
         <div style="max-width:460px;margin:0 auto;background:#1e293b;border-radius:12px;padding:32px;border:1px solid rgba(255,255,255,0.1);">
           <h2 style="color:#60a5fa;margin-top:0;font-size:20px;">Domain Verification</h2>
           <p style="color:#94a3b8;margin-bottom:8px;">
-            You're registering <strong style="color:#e2e8f0;">${domain}</strong> on the XL AI Smart Mobility platform.
+            You're registering <strong style="color:#e2e8f0;">${domain}</strong> on the Fleet360 platform.
           </p>
           <p style="color:#94a3b8;">Enter this code to verify you own the domain:</p>
           <div style="background:#0f172a;border-radius:8px;padding:24px;text-align:center;margin:24px 0;border:1px solid rgba(96,165,250,0.3);">

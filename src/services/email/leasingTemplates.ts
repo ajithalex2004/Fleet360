@@ -1,10 +1,10 @@
 import { EmailTemplate, EmailRecipient } from './emailService';
 
 /**
- * XL AI Smart Mobility - Leasing Workflow Email Templates
+ * Fleet360 - Leasing Workflow Email Templates
  */
 
-const BRAND_NAME = 'XL AI Smart Mobility';
+const BRAND_NAME = 'Fleet360';
 const BRAND_COLOR = '#2563eb'; // Deep Tech Blue
 
 /**
@@ -33,7 +33,7 @@ function wrapBaseTemplate(title: string, contentHtml: string): string {
 <body>
   <div class="container">
     <div class="header">
-      <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; opacity: 0.8;">XL AI Smart Mobility</div>
+      <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; opacity: 0.8;">Fleet360</div>
       <h1>${title}</h1>
     </div>
     <div class="content">

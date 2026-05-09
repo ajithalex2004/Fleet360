@@ -65,7 +65,7 @@ export type AgentId =
   // ── Conversational agents ─────────────────────────────────────────────────
   | 'whatsapp-agent'           // Twilio webhook → regex intent → auto-reply
   | 'chat-widget'              // Platform chat widget — TheSys GPT-5, SSE
-  | 'ops-assistant';           // XL AI Ops Assistant — TheSys GPT-5, 7 tools
+  | 'ops-assistant';           // Fleet360 Ops Assistant — TheSys GPT-5, 7 tools
 
 /** Distinguishes always-on conversational agents from on-demand batch agents */
 export type AgentType = 'BATCH' | 'CONVERSATIONAL';

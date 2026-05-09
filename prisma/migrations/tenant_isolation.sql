@@ -1,5 +1,5 @@
 -- ============================================================
--- Tenant Isolation Migration — XL AI Smart Mobility
+-- Tenant Isolation Migration — Fleet360
 -- All statements are idempotent (safe to run multiple times).
 -- NOTE: tenant_id columns were already added in a prior run.
 --       This script handles backfill, indexes, RLS, and helper fn.

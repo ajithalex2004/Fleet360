@@ -1113,7 +1113,7 @@ export default function WorkflowsPage() {
                     <textarea value={editWfForm.defaultEmailBody}
                       onChange={e => setEditWfForm(p => ({ ...p, defaultEmailBody: e.target.value }))}
                       rows={8}
-                      placeholder={'Dear Approver,\n\nA new request {referenceNumber} has been submitted and requires your approval.\n\nStep: {stepName}\nSubmitted by: {submittedBy}\n\nPlease click the link below to review and take action.\n\n{approvalUrl}\n\nRegards,\nXL AI Smart Mobility'}
+                      placeholder={'Dear Approver,\n\nA new request {referenceNumber} has been submitted and requires your approval.\n\nStep: {stepName}\nSubmitted by: {submittedBy}\n\nPlease click the link below to review and take action.\n\n{approvalUrl}\n\nRegards,\nFleet360'}
                       className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500/50 resize-none font-mono leading-relaxed" />
                   </div>
                   {editWfForm.defaultEmailSubject || editWfForm.defaultEmailBody ? (

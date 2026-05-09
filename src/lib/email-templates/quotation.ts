@@ -56,7 +56,7 @@ export function quotationEmailHtml(q: {
   <tr><td style="background:linear-gradient(135deg,#1e40af 0%,#4338ca 100%);padding:32px 40px;">
     <table width="100%"><tr>
       <td>
-        <div style="color:#93c5fd;font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">XL AI Smart Mobility</div>
+        <div style="color:#93c5fd;font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">Fleet360</div>
         <div style="color:#ffffff;font-size:28px;font-weight:700;letter-spacing:-0.5px;">Lease Quotation</div>
         <div style="color:#bfdbfe;font-size:15px;margin-top:6px;">${q.quotationNumber}</div>
       </td>
@@ -75,7 +75,7 @@ export function quotationEmailHtml(q: {
       Dear <strong>${q.lesseeName}</strong>,
     </p>
     <p style="margin:12px 0 0;color:#6b7280;font-size:14px;line-height:1.7;">
-      Thank you for your interest. Please find below your vehicle lease quotation from <strong>XL AI Smart Mobility</strong>.
+      Thank you for your interest. Please find below your vehicle lease quotation from <strong>Fleet360</strong>.
       This quotation is valid until <strong>${fmtDate(q.validUntil)}</strong>.
     </p>
   </td></tr>
@@ -160,7 +160,7 @@ export function quotationEmailHtml(q: {
   <tr><td style="background:#1e293b;padding:20px 40px;">
     <table width="100%"><tr>
       <td style="color:#94a3b8;font-size:12px;">
-        <strong style="color:#e2e8f0;">XL AI Smart Mobility</strong><br>
+        <strong style="color:#e2e8f0;">Fleet360</strong><br>
         This quotation is computer-generated and valid for the period stated above.
       </td>
       <td align="right" style="color:#64748b;font-size:11px;vertical-align:bottom;">
@@ -178,7 +178,7 @@ export function quotationEmailHtml(q: {
 
 export function quotationEmailText(q: { quotationNumber: string; lesseeName: string; totalMonthlyRate?: number; totalContractValue?: number; currency?: string; validUntil?: string }): string {
   const currency = q.currency ?? 'AED';
-  return `XL AI Smart Mobility - Lease Quotation ${q.quotationNumber}
+  return `Fleet360 - Lease Quotation ${q.quotationNumber}
 
 Dear ${q.lesseeName},
 
@@ -189,6 +189,6 @@ Total Monthly Rate: ${currency} ${(q.totalMonthlyRate ?? 0).toLocaleString('en-A
 Total Contract Value: ${currency} ${(q.totalContractValue ?? 0).toLocaleString('en-AE')}
 Valid Until: ${q.validUntil ? new Date(q.validUntil).toLocaleDateString('en-AE') : '-'}
 
-Thank you for choosing XL AI Smart Mobility.
+Thank you for choosing Fleet360.
 `;
 }

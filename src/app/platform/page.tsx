@@ -296,7 +296,7 @@ export default function PlatformPage() {
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-white text-base shadow-lg shadow-blue-500/30">
               XL
             </div>
-            <span className="text-white font-bold text-lg">XL AI Smart Mobility</span>
+            <span className="text-white font-bold text-lg">Fleet360</span>
           </div>
           <div className="flex items-center gap-4">
             <Link href="/customer" className="rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:opacity-90 transition-all">Customer Portal</Link>
@@ -315,8 +315,7 @@ export default function PlatformPage() {
             <span className="text-blue-300 text-xs font-medium">All Systems Operational</span>
           </div>
           <h1 className="text-5xl font-bold text-white mb-4 tracking-tight">
-            XL AI{' '}
-            <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">Smart Mobility</span>
+            <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">Fleet360</span>
           </h1>
           {/* Personalised welcome for logged-in tenant */}
           {isAuthenticated && user && tenant && (
@@ -561,7 +560,7 @@ export default function PlatformPage() {
 
         {/* Footer */}
         <div className="border-t border-white/5 pt-8 flex items-center justify-between text-xs text-slate-600">
-          <span>XL AI Smart Mobility  v2.0.0</span>
+          <span>Fleet360  v2.0.0</span>
           <span>Next.js 15 · PostgreSQL · Prisma</span>
         </div>
       </div>

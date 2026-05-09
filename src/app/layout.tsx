@@ -10,7 +10,7 @@ import ChatWidgetLoader from "@/components/Communication/ChatWidgetLoader";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "XL AI Smart Mobility",
+  title: "Fleet360",
   description: "Unified Transport Management Platform",
 };
 

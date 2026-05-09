@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       platform: {
-        name: 'XL AI Smart Mobility',
+        name: 'Fleet360',
         version: '2.0.0',
         stack: 'Next.js 15 + Go + PostgreSQL + Prisma',
         modules: PLATFORM_MODULES.length,

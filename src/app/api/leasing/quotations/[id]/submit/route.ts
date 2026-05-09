@@ -79,7 +79,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             monthlyRate: Number(v.monthlyRate ?? 0),
           })),
           notes:        quotation.notes ?? undefined,
-          companyName:  emailConfig.fromName  ?? 'XL AI Smart Mobility',
+          companyName:  emailConfig.fromName  ?? 'Fleet360',
           contactEmail,
         });
 
@@ -95,9 +95,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         const toAddress = recipientEmail || contactEmail;
 
         await transport.sendMail({
-          from:    `"${emailConfig.fromName ?? 'XL AI Smart Mobility'}" <${emailConfig.senderEmail ?? emailConfig.username}>`,
+          from:    `"${emailConfig.fromName ?? 'Fleet360'}" <${emailConfig.senderEmail ?? emailConfig.username}>`,
           to:      toAddress,
-          subject: `Lease Quotation ${quotation.quotationNumber ?? params.id} - XL AI Smart Mobility`,
+          subject: `Lease Quotation ${quotation.quotationNumber ?? params.id} - Fleet360`,
           text:    textBody,
           html:    htmlBody,
         });

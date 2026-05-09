@@ -30,7 +30,7 @@ export default function PlatformHomeBar({
           className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-slate-300 hover:text-white text-sm font-semibold transition-all group min-w-0"
         >
           <span className="flex-shrink-0 text-xs group-hover:-translate-x-0.5 transition-transform">&#8592;</span>
-          <span className="hidden lg:inline whitespace-nowrap tracking-wide">XL AI HOME</span>
+          <span className="hidden lg:inline whitespace-nowrap tracking-wide">FLEET360 HOME</span>
           <span className="lg:hidden text-xs">HOME</span>
         </Link>
         {/* AI Agents quick-access — visible on every module page except /agents itself */}
