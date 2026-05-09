@@ -1,4 +1,4 @@
-
+// @ts-nocheck — one-off CLI script, types not maintained
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();

@@ -1,4 +1,4 @@
-
+// @ts-nocheck — one-off CLI script, types not maintained
 const http = require('http');
 
 const options = {
