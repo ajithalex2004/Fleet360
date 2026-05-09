@@ -16,7 +16,6 @@ import {
     MaintenanceStatus,
     MaintenanceType,
     Attachment,
-    Attachment,
     AttachmentType,
     QuotationStatus
 } from '@/types/maintenance';
@@ -125,15 +124,15 @@ export default function WorkOrderPage() {
                     getGarages()
                 ]);
 
-                const foundRequest = requests.find(r => r.id === requestId) as EnhancedMaintenanceRequest;
+                const foundRequest = requests.find((r: { id: string }) => r.id === requestId) as EnhancedMaintenanceRequest;
 
                 if (foundRequest) {
                     setRequest(foundRequest);
 
-                    const foundVehicle = vehicles.find(v => v.id === foundRequest.vehicleId);
+                    const foundVehicle = vehicles.find((v: Vehicle) => v.id === foundRequest.vehicleId);
                     setVehicle(foundVehicle || null);
 
-                    const foundGarage = garages.find(g => g.id === foundRequest.garageId);
+                    const foundGarage = garages.find((g: Garage) => g.id === foundRequest.garageId);
                     setGarage(foundGarage || null);
 
                     // Construct Work Order from Request
@@ -514,10 +513,19 @@ export default function WorkOrderPage() {
 
         // Save to backend
         try {
+            // Convert the rich workflow transition into the history's
+            // simple {status, date, note?, actor?} shape so the array
+            // type stays uniform.
+            const historyEntry = {
+                status: statusTransition.to,
+                date: statusTransition.transitionedAt,
+                note: statusTransition.comments,
+                actor: statusTransition.transitionedByName,
+            };
             await updateMaintenanceRequest(request.id, {
                 status: MaintenanceStatus.MAINTENANCE_COMPLETED,
-                actualCompletionDate: completionDate,
-                history: [...(request.history || []), statusTransition]
+                completionDate,
+                history: [...(request.history || []), historyEntry]
             });
             console.log('Backend updated successfully');
         } catch (error) {

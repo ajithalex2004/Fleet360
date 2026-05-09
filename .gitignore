@@ -33,6 +33,10 @@ yarn-error.log*
 # backend runtime logs (regenerated each run)
 backend/*.log
 
+# Go build artifacts
+backend/*.exe
+backend/cmd/*/*.exe
+
 # env files (can opt-in for committing if needed)
 .env*
 # .env.example is the documented template — safe to commit (no real secrets)
