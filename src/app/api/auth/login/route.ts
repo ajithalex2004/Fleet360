@@ -62,11 +62,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. Fetch password hash via raw SQL (column added outside Prisma schema)
-    const rows = await prisma.$queryRawUnsafe<{ password_hash: string | null }[]>(
-      `SELECT password_hash FROM "User" WHERE id = $1`,
-      user.id,
-    );
+    // 2. Fetch password hash via raw SQL (column added outside Prisma schema).
+    // Use the $queryRaw template tag (safer parameterisation) instead of
+    // $queryRawUnsafe — works reliably across Prisma 5.10–5.22, where the
+    // unsafe variant could fail with 'e.map is not a function' under certain
+    // engine versions.
+    const rows = await prisma.$queryRaw<{ password_hash: string | null }[]>`
+      SELECT password_hash FROM "User" WHERE id = ${user.id}
+    `;
     const passwordHash = rows[0]?.password_hash ?? null;
 
     if (!passwordHash) {
