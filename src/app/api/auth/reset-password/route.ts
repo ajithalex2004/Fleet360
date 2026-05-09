@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       `SELECT t.id::text, t.user_id::text, t.expires_at::text, t.used_at::text, t.revoked,
               u.email, u.username
        FROM password_reset_tokens t
-       JOIN users u ON u.id::text = t.user_id::text
+       JOIN "User" u ON u.id = t.user_id::text
        WHERE t.token_hash = $1
        LIMIT 1`,
       tokenHash,
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
 
     await prisma.$transaction([
       prisma.$executeRawUnsafe(
-        `UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2::uuid`,
+        `UPDATE "User" SET password_hash = $1, "updatedAt" = NOW() WHERE id = $2`,
         hash, row.user_id,
       ),
       prisma.$executeRawUnsafe(
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
       prisma.$executeRawUnsafe(
         `UPDATE password_reset_tokens
            SET revoked = TRUE
-         WHERE user_id = $1::uuid AND id != $2::uuid AND used_at IS NULL AND revoked = FALSE`,
+         WHERE user_id = $1 AND id != $2::uuid AND used_at IS NULL AND revoked = FALSE`,
         row.user_id, row.id,
       ),
     ]);

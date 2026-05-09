@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     await ensurePasswordResetTable();
 
     const userRows = await prisma.$queryRawUnsafe<Array<{ id: string; username: string }>>(
-      `SELECT id::text, username FROM users WHERE LOWER(email) = $1 AND COALESCE(is_active, TRUE) = TRUE LIMIT 1`,
+      `SELECT id, username FROM "User" WHERE LOWER(email) = $1 AND COALESCE(is_active, TRUE) = TRUE LIMIT 1`,
       email,
     ).catch(() => [] as Array<{ id: string; username: string }>);
 
@@ -53,11 +53,11 @@ export async function POST(req: NextRequest) {
     }
     const user = userRows[0];
 
-    // Throttle: max 3 active tokens per user — older ones get expired.
+    // Throttle: revoke any active tokens for this user.
     await prisma.$executeRawUnsafe(
       `UPDATE password_reset_tokens
-         SET used_at = NOW(), revoked = TRUE
-       WHERE user_id = $1::uuid AND used_at IS NULL AND revoked = FALSE
+         SET revoked = TRUE
+       WHERE user_id = $1 AND used_at IS NULL AND revoked = FALSE
          AND expires_at > NOW()`,
       user.id,
     ).catch(() => {});
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
 
     await prisma.$executeRawUnsafe(
       `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
-       VALUES ($1::uuid, $2, $3)`,
+       VALUES ($1, $2, $3)`,
       user.id, hash, expiresAt,
     );
 
@@ -117,7 +117,7 @@ async function ensurePasswordResetTable(): Promise<void> {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
       id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id     UUID         NOT NULL,
+      user_id     TEXT         NOT NULL,
       token_hash  TEXT         NOT NULL,
       created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
       expires_at  TIMESTAMPTZ  NOT NULL,
