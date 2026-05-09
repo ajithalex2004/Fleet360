@@ -1,29 +1,33 @@
 'use client';
 /**
- * Dispatch Module — Overview Dashboard
- * Entry point for the standalone Dispatch Control module.
+ * Dispatch Module — Overview Dashboard.
+ * Migrated to the shared page-theme primitives (Phase 2 pilot).
  */
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import {
+  Radio, ClipboardList, Car, CheckCircle2, AlertTriangle, UserCheck, BarChart3,
+  Shuffle, Siren, Bus, ArrowRight, ListChecks,
+} from 'lucide-react';
+import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
 
-interface KPI { label: string; value: string | number; sub?: string; color: string; icon: string; }
-
-function KPICard({ kpi }: { kpi: KPI }) {
-  return (
-    <div className="rounded-2xl bg-slate-900 border border-white/10 p-5">
-      <div className="flex items-start justify-between mb-3">
-        <span className="text-2xl">{kpi.icon}</span>
-        <span className={`text-3xl font-bold ${kpi.color}`}>{kpi.value}</span>
-      </div>
-      <p className="text-slate-300 text-sm font-medium">{kpi.label}</p>
-      {kpi.sub && <p className="text-slate-500 text-xs mt-0.5">{kpi.sub}</p>}
-    </div>
-  );
+interface DispatchJob {
+  id: string;
+  service_type: 'PASSENGER' | 'FREIGHT' | 'DELIVERY' | 'AMBULANCE' | 'TECHNICIAN' | 'SCHOOL_BUS';
+  priority:    string;
+  status:      string;
+  attempt_count: number;
 }
+interface DispatchDriver { id: string; status: 'AVAILABLE' | 'BUSY' | 'BREAK' | 'OFF_DUTY' }
+
+const SVC_LABEL: Record<string, string> = {
+  PASSENGER:'Passenger', FREIGHT:'Freight', DELIVERY:'Delivery',
+  AMBULANCE:'Ambulance', TECHNICIAN:'Technician', SCHOOL_BUS:'School bus',
+};
 
 export default function DispatchOverview() {
-  const [jobs,    setJobs]    = useState<any[]>([]);
-  const [drivers, setDrivers] = useState<any[]>([]);
+  const [jobs,    setJobs]    = useState<DispatchJob[]>([]);
+  const [drivers, setDrivers] = useState<DispatchDriver[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -36,154 +40,128 @@ export default function DispatchOverview() {
     }).finally(() => setLoading(false));
   }, []);
 
-  const active    = jobs.filter(j => ['PENDING','SEARCHING','OFFERED','RETRYING'].includes(j.status)).length;
-  const inProgress= jobs.filter(j => j.status === 'IN_PROGRESS').length;
-  const completed = jobs.filter(j => j.status === 'COMPLETED').length;
-  const failed    = jobs.filter(j => ['FAILED','ESCALATED'].includes(j.status)).length;
-  const available = drivers.filter(d => d.status === 'AVAILABLE').length;
-  const acceptance= jobs.length > 0
+  const active     = jobs.filter(j => ['PENDING','SEARCHING','OFFERED','RETRYING'].includes(j.status)).length;
+  const inProgress = jobs.filter(j => j.status === 'IN_PROGRESS').length;
+  const completed  = jobs.filter(j => j.status === 'COMPLETED').length;
+  const failed     = jobs.filter(j => ['FAILED','ESCALATED'].includes(j.status)).length;
+  const available  = drivers.filter(d => d.status === 'AVAILABLE').length;
+  const acceptance = jobs.length > 0
     ? Math.round((jobs.filter(j => ['ACCEPTED','IN_PROGRESS','COMPLETED'].includes(j.status)).length / jobs.length) * 100)
     : 0;
 
-  const kpis: KPI[] = [
-    { label: 'Active Jobs',       value: loading ? '…' : active,      color: 'text-blue-400',    icon: '📋', sub: 'Pending + Searching' },
-    { label: 'In Progress',       value: loading ? '…' : inProgress,  color: 'text-cyan-400',    icon: '🚗', sub: 'Currently en route' },
-    { label: 'Completed Today',   value: loading ? '…' : completed,   color: 'text-emerald-400', icon: '✅', sub: 'Delivered successfully' },
-    { label: 'Exceptions',        value: loading ? '…' : failed,      color: 'text-red-400',     icon: '⚠️', sub: 'Failed or escalated' },
-    { label: 'Available Drivers', value: loading ? '…' : available,   color: 'text-green-400',   icon: '👤', sub: 'Ready to be dispatched' },
-    { label: 'Acceptance Rate',   value: loading ? '…' : `${acceptance}%`, color: 'text-yellow-400', icon: '📊', sub: 'Jobs accepted by drivers' },
-  ];
-
   const recentJobs = jobs.slice(0, 8);
 
-  const STATUS_COLOR: Record<string, string> = {
-    PENDING:'text-slate-400', SEARCHING:'text-blue-400', OFFERED:'text-yellow-400',
-    ACCEPTED:'text-green-400', IN_PROGRESS:'text-cyan-400', COMPLETED:'text-emerald-400',
-    RETRYING:'text-orange-400', ESCALATED:'text-red-400', FAILED:'text-red-600', CANCELLED:'text-slate-600',
-  };
-  const SVC_ICON: Record<string, string> = {
-    PASSENGER:'🚗', FREIGHT:'🚚', DELIVERY:'📦', AMBULANCE:'🚑', TECHNICIAN:'🔧', SCHOOL_BUS:'🚌',
-  };
-
   return (
-    <div className="space-y-8 max-w-6xl">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-white">🚦 Dispatch Control</h1>
-          <p className="text-slate-400 mt-1">Real-time operations overview · Auto-refreshes on page open</p>
-        </div>
-        <Link href="/dispatch/command"
-          className="flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-sm hover:opacity-90 transition-all shadow-lg shadow-blue-500/20">
-          🚦 Open Command Centre
-          <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded">LIVE</span>
-        </Link>
-      </div>
-
-      {/* KPI Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {kpis.map(k => <KPICard key={k.label} kpi={k} />)}
-      </div>
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-3 gap-4">
-        {[
-          { label: 'Command Centre',  href: '/dispatch/command', icon: '🚦', desc: 'Live 3-panel control tower',  color: 'from-blue-600 to-cyan-600' },
-          { label: 'Jobs Queue',      href: '/dispatch/jobs',    icon: '📋', desc: 'Full job list with filters',   color: 'from-slate-700 to-slate-600' },
-          { label: 'Merge Optimizer', href: '/dispatch/merge',   icon: '🔀', desc: 'Trip merge recommendations',  color: 'from-violet-600 to-purple-600' },
-        ].map(a => (
-          <Link key={a.href} href={a.href}
-            className={`rounded-2xl bg-gradient-to-br ${a.color} p-5 hover:opacity-90 transition-all group`}>
-            <span className="text-3xl block mb-3">{a.icon}</span>
-            <p className="text-white font-bold text-sm">{a.label}</p>
-            <p className="text-white/60 text-xs mt-0.5">{a.desc}</p>
+    <div className="space-y-6 max-w-6xl">
+      <PageHeader
+        title="Dispatch Control"
+        subtitle="Real-time operations overview — jobs, drivers, exceptions."
+        icon={Radio}
+        accent="blue"
+        actions={
+          <Link href="/dispatch/command"
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition-all shadow-lg shadow-blue-500/30">
+            <Radio className="w-4 h-4" /> Command Centre
+            <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded">LIVE</span>
           </Link>
-        ))}
+        }
+      />
+
+      {/* KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <KpiCard label="Active jobs"       value={loading ? '…' : active}            sub="Pending + searching"  icon={ClipboardList} accent="blue"    />
+        <KpiCard label="In progress"       value={loading ? '…' : inProgress}        sub="En route"             icon={Car}           accent="cyan"    />
+        <KpiCard label="Completed today"   value={loading ? '…' : completed}         sub="Delivered"            icon={CheckCircle2}  accent="emerald" />
+        <KpiCard label="Exceptions"        value={loading ? '…' : failed}            sub="Failed or escalated"  icon={AlertTriangle} accent="rose"    />
+        <KpiCard label="Available drivers" value={loading ? '…' : available}         sub="Ready to dispatch"    icon={UserCheck}     accent="emerald" />
+        <KpiCard label="Acceptance rate"   value={loading ? '…' : `${acceptance}%`}  sub="Accepted / total"     icon={BarChart3}     accent="amber"   />
       </div>
 
-      {/* Ambulance cross-link — managed in the Incident & Ambulance module */}
+      {/* Quick actions */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <ShortcutTile href="/dispatch/command" icon={Radio}        title="Command Centre"  desc="Live 3-panel control tower"  accent="blue"   />
+        <ShortcutTile href="/dispatch/jobs"    icon={ListChecks}   title="Jobs queue"      desc="Full job list with filters"  accent="slate"  />
+        <ShortcutTile href="/dispatch/merge"   icon={Shuffle}      title="Merge optimizer" desc="Trip merge recommendations"  accent="violet" />
+      </div>
+
+      {/* Cross-links */}
       <Link href="/incidents/ambulance/dispatch"
-        className="flex items-center justify-between gap-4 rounded-2xl bg-red-500/5 border border-red-500/20 px-5 py-4 hover:bg-red-500/10 transition-all group">
-        <div className="flex items-center gap-4">
-          <span className="text-3xl">🚑</span>
+        className="flex items-center justify-between gap-4 rounded-2xl bg-rose-500/5 border border-rose-500/20 px-5 py-4 hover:bg-rose-500/10 transition-all group">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-rose-500/10 flex items-center justify-center">
+            <Siren className="w-5 h-5 text-rose-300" />
+          </div>
           <div>
-            <p className="text-white font-semibold text-sm">Ambulance Dispatch</p>
+            <p className="text-white font-semibold text-sm">Ambulance dispatch</p>
             <p className="text-slate-500 text-xs mt-0.5">
-              Emergency response, P1/P2/P3 SLA timers, fleet availability and MOHAP/DHA compliance — managed in the Incident & Ambulance module
+              P1/P2/P3 SLA timers, fleet availability and MOHAP/DHA compliance — managed in Incident &amp; Ambulance.
             </p>
           </div>
         </div>
-        <span className="text-red-400 text-sm font-semibold group-hover:text-red-300 flex-shrink-0">
-          Open Dispatch Board →
+        <span className="text-rose-300 text-sm font-semibold group-hover:text-rose-200 inline-flex items-center gap-1 shrink-0">
+          Open <ArrowRight className="w-4 h-4" />
         </span>
       </Link>
 
-      {/* School Bus cross-link — managed in its own module */}
       <Link href="/school-bus/dispatch"
         className="flex items-center justify-between gap-4 rounded-2xl bg-amber-500/5 border border-amber-500/20 px-5 py-4 hover:bg-amber-500/10 transition-all group">
-        <div className="flex items-center gap-4">
-          <span className="text-3xl">🚌</span>
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-amber-500/10 flex items-center justify-center">
+            <Bus className="w-5 h-5 text-amber-300" />
+          </div>
           <div>
-            <p className="text-white font-semibold text-sm">School Bus Transportation</p>
+            <p className="text-white font-semibold text-sm">School Bus transportation</p>
             <p className="text-slate-500 text-xs mt-0.5">
-              Routes, student manifests, departure management and UAE compliance — managed in the School Bus module
+              Routes, student manifests, departure management and UAE compliance — managed in the School Bus module.
             </p>
           </div>
         </div>
-        <span className="text-amber-400 text-sm font-semibold group-hover:text-amber-300 flex-shrink-0">
-          Open Dispatch Board →
+        <span className="text-amber-300 text-sm font-semibold group-hover:text-amber-200 inline-flex items-center gap-1 shrink-0">
+          Open <ArrowRight className="w-4 h-4" />
         </span>
       </Link>
 
-      {/* Recent jobs + driver summary */}
-      <div className="grid md:grid-cols-3 gap-6">
-        {/* Recent Jobs */}
-        <div className="md:col-span-2 rounded-2xl bg-slate-900 border border-white/10 overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-            <h2 className="text-white font-semibold">Recent Jobs</h2>
-            <Link href="/dispatch/jobs" className="text-blue-400 text-xs hover:text-blue-300">View all →</Link>
-          </div>
+      {/* Recent jobs + driver pool */}
+      <div className="grid md:grid-cols-3 gap-4">
+        <Panel title="Recent jobs" icon={ClipboardList} accent="blue" className="md:col-span-2"
+          actions={<Link href="/dispatch/jobs" className="text-xs text-blue-400 hover:text-blue-300">View all →</Link>}>
           {loading ? (
-            <p className="text-slate-500 text-sm p-5">Loading…</p>
+            <p className="text-slate-500 text-sm">Loading…</p>
           ) : recentJobs.length === 0 ? (
-            <p className="text-slate-500 text-sm p-5 text-center">No jobs yet</p>
+            <p className="text-slate-500 text-sm text-center py-4">No jobs yet</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/5 text-slate-500 text-xs">
-                  <th className="text-left px-5 py-2.5">Job</th>
-                  <th className="text-left px-3 py-2.5">Service</th>
-                  <th className="text-left px-3 py-2.5">Priority</th>
-                  <th className="text-left px-3 py-2.5">Status</th>
-                  <th className="text-left px-3 py-2.5">Attempts</th>
+                <tr className="border-b border-white/5 text-slate-500 text-[11px] uppercase tracking-wider">
+                  <th className="text-left py-2 font-medium">Job</th>
+                  <th className="text-left py-2 font-medium">Service</th>
+                  <th className="text-left py-2 font-medium">Priority</th>
+                  <th className="text-left py-2 font-medium">Status</th>
+                  <th className="text-left py-2 font-medium">Attempts</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {recentJobs.map(j => (
                   <tr key={j.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="px-5 py-3 font-mono text-xs text-slate-400">{j.id.slice(0, 12)}…</td>
-                    <td className="px-3 py-3 text-slate-300">{SVC_ICON[j.service_type]} {j.service_type}</td>
-                    <td className="px-3 py-3">
-                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                        j.priority === 'P1' || j.priority === 'EMERGENCY' ? 'bg-red-500/20 text-red-400'
-                        : j.priority === 'URGENT' || j.priority === 'P2'  ? 'bg-orange-500/20 text-orange-400'
-                        : 'bg-slate-700 text-slate-400'
+                    <td className="py-3 font-mono text-xs text-slate-400">{j.id.slice(0, 12)}…</td>
+                    <td className="py-3 text-slate-300">{SVC_LABEL[j.service_type] ?? j.service_type}</td>
+                    <td className="py-3">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                        j.priority === 'P1' || j.priority === 'EMERGENCY'  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                        : j.priority === 'URGENT' || j.priority === 'P2'    ? 'bg-orange-500/20 text-orange-300 border-orange-500/40'
+                        : 'bg-slate-700 text-slate-300 border-slate-600'
                       }`}>{j.priority}</span>
                     </td>
-                    <td className={`px-3 py-3 text-xs font-semibold ${STATUS_COLOR[j.status] ?? 'text-slate-400'}`}>
-                      {j.status}
-                    </td>
-                    <td className="px-3 py-3 text-slate-400 text-xs">{j.attempt_count}</td>
+                    <td className="py-3"><StatusPill status={j.status} /></td>
+                    <td className="py-3 text-slate-400 text-xs">{j.attempt_count}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
-        </div>
+        </Panel>
 
-        {/* Driver status summary */}
-        <div className="rounded-2xl bg-slate-900 border border-white/10 p-5">
-          <h2 className="text-white font-semibold mb-4">Driver Pool</h2>
+        <Panel title="Driver pool" icon={UserCheck} accent="emerald">
           {loading ? (
             <p className="text-slate-500 text-sm">Loading…</p>
           ) : (
@@ -191,12 +169,12 @@ export default function DispatchOverview() {
               {(['AVAILABLE','BUSY','BREAK','OFF_DUTY'] as const).map(s => {
                 const n   = drivers.filter(d => d.status === s).length;
                 const pct = drivers.length > 0 ? (n / drivers.length) * 100 : 0;
-                const col = { AVAILABLE:'bg-green-500', BUSY:'bg-yellow-500', BREAK:'bg-blue-500', OFF_DUTY:'bg-slate-600' }[s];
+                const col = { AVAILABLE:'bg-emerald-500', BUSY:'bg-amber-500', BREAK:'bg-blue-500', OFF_DUTY:'bg-slate-600' }[s];
                 return (
                   <div key={s}>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-slate-400">{s.replace('_', ' ')}</span>
-                      <span className="text-white font-semibold">{n}</span>
+                      <span className="text-white font-semibold tabular-nums">{n}</span>
                     </div>
                     <div className="h-1.5 rounded-full bg-slate-800">
                       <div className={`h-1.5 rounded-full ${col} transition-all`} style={{ width: `${pct}%` }} />
@@ -204,17 +182,38 @@ export default function DispatchOverview() {
                   </div>
                 );
               })}
-              <div className="pt-3 border-t border-white/10 text-xs text-slate-500">
+              <div className="pt-3 border-t border-white/10 text-[11px] text-slate-500">
                 {drivers.length} total drivers tracked
               </div>
             </div>
           )}
           <Link href="/dispatch/command"
-            className="mt-4 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-semibold hover:bg-blue-500/20 transition-all">
-            View Live Map →
+            className="mt-4 flex items-center justify-center gap-1.5 w-full py-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs font-semibold hover:bg-blue-500/20 transition-all">
+            View live map <ArrowRight className="w-3 h-3" />
           </Link>
-        </div>
+        </Panel>
       </div>
     </div>
+  );
+}
+
+interface ShortcutTileProps {
+  href: string; title: string; desc: string;
+  icon: React.ComponentType<{ className?: string }>;
+  accent: 'blue' | 'slate' | 'violet';
+}
+function ShortcutTile({ href, title, desc, icon: Icon, accent }: ShortcutTileProps) {
+  const tone = {
+    blue:   { grad: 'from-blue-600/30 to-cyan-600/20',     icon: 'text-blue-300',   ring: 'border-blue-500/30 hover:border-blue-500/50' },
+    slate:  { grad: 'from-slate-700/40 to-slate-600/20',   icon: 'text-slate-300',  ring: 'border-white/10 hover:border-white/20' },
+    violet: { grad: 'from-violet-600/30 to-purple-600/20', icon: 'text-violet-300', ring: 'border-violet-500/30 hover:border-violet-500/50' },
+  }[accent];
+  return (
+    <Link href={href}
+      className={`group rounded-2xl bg-gradient-to-br ${tone.grad} border ${tone.ring} p-4 transition-all hover:scale-[1.01]`}>
+      <Icon className={`w-6 h-6 ${tone.icon} mb-3`} />
+      <p className="text-white font-semibold text-sm">{title}</p>
+      <p className="text-slate-400 text-xs mt-0.5">{desc}</p>
+    </Link>
   );
 }

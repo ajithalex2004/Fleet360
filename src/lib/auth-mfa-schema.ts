@@ -1,6 +1,9 @@
 /**
- * Idempotent ALTER TABLE for MFA columns on the users table.
+ * Idempotent ALTER TABLE for MFA columns on the User table.
  * Called from each MFA route to guarantee the columns exist before queries.
+ *
+ * Note: Prisma's User model has no @@map override, so the underlying
+ * Postgres table is "User" (capitalised, quoted).
  */
 
 import { prisma } from '@/lib/prisma';

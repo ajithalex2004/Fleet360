@@ -956,7 +956,7 @@ export default function SpmDashboardPage() {
   const s = stats;
 
   return (
-    <div className="p-8 space-y-6 min-h-screen bg-slate-950">
+    <div className="p-8 space-y-6 min-h-screen bg-[#0c1a3e]">
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       {/* Error Banner */}

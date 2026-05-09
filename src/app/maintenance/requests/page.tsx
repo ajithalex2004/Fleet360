@@ -109,6 +109,7 @@ export default function MaintenanceRequestsPage() {
     const [filteredRequests, setFilteredRequests] = useState<MaintenanceRequest[]>([]);
     const [vehicles, setVehicles] = useState<Record<string, Vehicle>>({});
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
 
 

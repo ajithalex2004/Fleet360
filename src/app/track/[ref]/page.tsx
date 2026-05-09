@@ -224,7 +224,7 @@ export default function TrackPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-[#0c1a3e] text-white">
       {/* Top nav bar */}
       <header className="border-b border-white/10 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between gap-4">

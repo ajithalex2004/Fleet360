@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { Leaf, RefreshCw, Download } from 'lucide-react';
+import { PageHeader } from '@/components/ui/page-theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -230,50 +232,41 @@ export default function SustainabilityPage() {
   const sc   = data?.scope;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-6 space-y-6">
+    <div className="min-h-screen bg-[#0c1a3e] text-white p-6 space-y-6">
 
-      {/* ── Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-2xl font-bold text-white">Sustainability &amp; ESG Dashboard</h1>
+      <PageHeader
+        title="Sustainability & ESG Dashboard"
+        subtitle={`GHG Protocol Project Standard · ISO 14064-1:2018 · UAE Net Zero 2050 Aligned${data ? ` · ${fmtDate(data.period.start)} – ${fmtDate(data.period.end)}` : ''}`}
+        icon={Leaf}
+        accent="emerald"
+        actions={
+          <>
             {cert && (
-              <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-semibold ${cert.bg} ${cert.color}`}>
+              <span className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold ${cert.bg} ${cert.color}`}>
                 {cert.icon} {cert.label}
               </span>
             )}
-          </div>
-          <p className="text-slate-400 text-sm">
-            GHG Protocol Project Standard · ISO 14064-1:2018 · UAE Net Zero 2050 Aligned
-            {data && <span className="ml-2 text-slate-500">· {fmtDate(data.period.start)} – {fmtDate(data.period.end)}</span>}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Period selector */}
-          <select
-            value={months}
-            onChange={e => setMonths(parseInt(e.target.value))}
-            className="bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none"
-          >
-            <option value={3}>Last 3 months</option>
-            <option value={6}>Last 6 months</option>
-            <option value={12}>Last 12 months</option>
-            <option value={24}>Last 24 months</option>
-          </select>
-          <button
-            onClick={load}
-            className="px-4 py-2 rounded-xl border border-white/10 text-sm text-slate-300 hover:bg-slate-800 transition-colors"
-          >
-            ↺ Refresh
-          </button>
-          <button
-            onClick={() => window.print()}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-sm font-semibold transition-colors"
-          >
-            Export Report
-          </button>
-        </div>
-      </div>
+            <select
+              value={months}
+              onChange={e => setMonths(parseInt(e.target.value))}
+              className="bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none"
+            >
+              <option value={3}>Last 3 months</option>
+              <option value={6}>Last 6 months</option>
+              <option value={12}>Last 12 months</option>
+              <option value={24}>Last 24 months</option>
+            </select>
+            <button onClick={load}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 transition-colors">
+              <RefreshCw className="w-3.5 h-3.5" /> Refresh
+            </button>
+            <button onClick={() => window.print()}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition-all shadow-lg shadow-emerald-500/30">
+              <Download className="w-4 h-4" /> Export
+            </button>
+          </>
+        }
+      />
 
       {/* ── UAE compliance banner ── */}
       <div className="bg-gradient-to-r from-emerald-900/30 to-green-900/20 border border-emerald-500/20 rounded-2xl px-5 py-3 flex items-center justify-between gap-4 flex-wrap">

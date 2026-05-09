@@ -1,15 +1,13 @@
 /**
  * POST /api/auth/reset-password
- *
  * Body: { token, newPassword }
  *
- * - Hash the supplied token (sha256) and look up an active row in
- *   password_reset_tokens.
- * - Verify not expired, not used, not revoked.
- * - Validate the new password against DEFAULT_PASSWORD_POLICY.
- * - Update users.password (PBKDF2 hash format).
- * - Mark the token used and revoke any other active tokens for this user.
- * - Audit log.
+ *  - sha256(token) → look up password_reset_tokens row
+ *  - verify not used / not revoked / not expired
+ *  - validate new password against DEFAULT_PASSWORD_POLICY
+ *  - update "User".password_hash (PBKDF2 hex)
+ *  - mark token used + revoke any other active tokens for this user
+ *  - audit log
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -26,7 +24,7 @@ export const runtime = 'nodejs';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const token = String(body?.token ?? '').trim();
+    const token       = String(body?.token ?? '').trim();
     const newPassword = String(body?.newPassword ?? '');
 
     if (!token || token.length < 32) {
@@ -38,10 +36,10 @@ export async function POST(req: NextRequest) {
       id: string; user_id: string; expires_at: string; used_at: string | null; revoked: boolean;
       email: string; username: string;
     }>>(
-      `SELECT t.id::text, t.user_id::text, t.expires_at::text, t.used_at::text, t.revoked,
+      `SELECT t.id::text, t.user_id, t.expires_at::text, t.used_at::text, t.revoked,
               u.email, u.username
        FROM password_reset_tokens t
-       JOIN "User" u ON u.id = t.user_id::text
+       JOIN "User" u ON u.id = t.user_id
        WHERE t.token_hash = $1
        LIMIT 1`,
       tokenHash,
@@ -77,7 +75,7 @@ export async function POST(req: NextRequest) {
         `UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1::uuid`,
         row.id,
       ),
-      // Revoke any other active tokens for this user — single-use trail.
+      // Single-use trail: revoke any other still-active tokens for this user.
       prisma.$executeRawUnsafe(
         `UPDATE password_reset_tokens
            SET revoked = TRUE

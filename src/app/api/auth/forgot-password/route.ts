@@ -1,14 +1,13 @@
 /**
  * POST /api/auth/forgot-password
- *
  * Body: { email }
- * Always returns 200 with a generic message (anti-enumeration).
  *
- * If a user exists for the email we mint a 32-byte hex token, hash it
- * (sha256), persist hash + 60-min expiry, and email a reset link.
+ * Always returns 200 with a generic message (anti-enumeration). When a user
+ * is actually found we mint a 32-byte hex token, hash it (sha256), persist
+ * hash + 60 min expiry, and email a reset link.
  *
- * The token itself is sent in the email (and never stored). The hash is
- * checked on /api/auth/reset-password.
+ * The raw token is sent in the email (and never stored). The hash is checked
+ * on /api/auth/reset-password.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -35,7 +34,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Generic response — never reveal whether the email exists.
-  const genericResponse = NextResponse.json({
+  const generic = () => NextResponse.json({
     ok: true,
     message: 'If an account exists for that email, a reset link has been sent.',
   });
@@ -48,12 +47,10 @@ export async function POST(req: NextRequest) {
       email,
     ).catch(() => [] as Array<{ id: string; username: string }>);
 
-    if (userRows.length === 0) {
-      return genericResponse;
-    }
+    if (userRows.length === 0) return generic();
     const user = userRows[0];
 
-    // Throttle: revoke any active tokens for this user.
+    // Single active token: revoke any prior outstanding tokens for this user.
     await prisma.$executeRawUnsafe(
       `UPDATE password_reset_tokens
          SET revoked = TRUE
@@ -92,7 +89,7 @@ export async function POST(req: NextRequest) {
       html:
         `<p>Hi ${escapeHtml(user.username)},</p>` +
         `<p>You (or someone using your email) requested a password reset for Fleet360.</p>` +
-        `<p><a href="${resetUrl}" style="display:inline-block;padding:10px 18px;background:#7c3aed;color:white;border-radius:8px;text-decoration:none">Reset password</a></p>` +
+        `<p><a href="${resetUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:white;border-radius:8px;text-decoration:none">Reset password</a></p>` +
         `<p style="color:#666;font-size:12px">Or copy this link: <code>${resetUrl}</code><br/>Valid for ${TOKEN_TTL_MIN} minutes.</p>` +
         `<p style="color:#666;font-size:12px">If you did not request this, ignore this email — your password remains unchanged.</p>`,
     });
@@ -106,10 +103,10 @@ export async function POST(req: NextRequest) {
       details: `Password reset requested. Email send: ${sendResult.sent ? 'OK' : `failed (${sendResult.reason ?? 'unknown'})`}.`,
     });
 
-    return genericResponse;
+    return generic();
   } catch (err) {
     captureException(err, { context: 'auth.forgot-password' });
-    return genericResponse; // still generic — never leak existence
+    return generic(); // still generic — never leak existence
   }
 }
 

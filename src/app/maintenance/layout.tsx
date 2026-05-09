@@ -55,7 +55,7 @@ const NAV_GROUPS = [
   {
     label: 'Administration',
     items: [
-      { href: '/maintenance/integration-config',            label: 'Integrations',           icon: '🔗' },
+      { href: '/admin/settings/integrations',               label: 'Integrations',           icon: '🔗' },
       { href: '/maintenance/admin/notifications',           label: 'Email / SMS Alerts',     icon: '✉️' },
       { href: '/maintenance/admin/notification-rules',      label: 'Notification Rules',     icon: '📐' },
     ],
@@ -75,7 +75,7 @@ export default function MaintenanceLayout({ children }: { children: React.ReactN
       <PlatformHomeBar moduleName={t('module.maintenance')} moduleIcon="VM" accentColor="from-blue-500 to-indigo-600" />
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <div className="w-64 bg-gradient-to-br from-blue-950 to-slate-900 border-r border-white/10 p-4 overflow-y-auto flex-shrink-0">
+        <div className="w-64 bg-black border-r border-white/10 p-4 overflow-y-auto flex-shrink-0">
           <h2 className="text-base font-bold text-white mb-4 px-2">{t('module.maintenance')}</h2>
           <nav className="space-y-5">
             {NAV_GROUPS.map(group => (

@@ -254,14 +254,14 @@ export default function QuotationDetailPage() {
 
   if (loading || !quotation) {
     return (
-      <div className="min-h-screen bg-slate-900 p-8 flex items-center justify-center">
+      <div className="min-h-screen bg-[#0c1a3e] p-8 flex items-center justify-center">
         <div className="text-slate-400">Loading quotation...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 p-8 print:bg-white" style={{ colorScheme: 'light' }}>
+    <div className="min-h-screen bg-[#0c1a3e] p-8 print:bg-white" style={{ colorScheme: 'light' }}>
       <div className="mx-auto max-w-7xl">
         {/* Top Bar */}
         <div className="mb-8 flex items-center justify-between">

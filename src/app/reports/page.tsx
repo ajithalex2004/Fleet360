@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { BarChart3 } from 'lucide-react';
+import { PageHeader } from '@/components/ui/page-theme';
 import Link from 'next/link';
 
 interface ScheduledReport {
@@ -98,12 +100,13 @@ export default function ReportsDashboard() {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-4xl font-bold text-white mb-2">Reports & Analytics</h1>
-        <p className="text-slate-400">Generate and track business intelligence reports</p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Reports & Analytics"
+        subtitle="Generate and track business intelligence reports"
+        icon={BarChart3}
+        accent="violet"
+      />
 
       {/* KPI Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

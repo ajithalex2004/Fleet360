@@ -889,6 +889,9 @@ export interface EnhancedMaintenanceRequest extends MaintenanceRequest {
 
 export interface ServiceRequest {
     id: string;
+    /** Human-friendly ticker like "SR2026-10001". Optional — derived in
+     *  the UI from creation order if the backend hasn't supplied one. */
+    readableId?: string;
     requestorId: string;
     serviceType: string;
     vehicleId: string;

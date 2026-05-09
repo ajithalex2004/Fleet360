@@ -80,7 +80,7 @@ export default function BusOpsLayout({ children }: { children: React.ReactNode }
       <div className="flex flex-col h-screen w-full overflow-hidden bg-slate-950">
         <PlatformHomeBar moduleName={t('module.bus_ops')} moduleIcon="B" accentColor="from-purple-500 to-pink-600" />
         <div className="flex flex-1 overflow-hidden">
-          <aside className="w-64 flex-shrink-0 border-r border-white/5 bg-slate-950/95 overflow-y-auto">
+          <aside className="w-64 flex-shrink-0 border-r border-white/5 bg-black overflow-y-auto">
             <div className="p-5 border-b border-white/5">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/30">

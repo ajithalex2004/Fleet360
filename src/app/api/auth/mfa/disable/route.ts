@@ -1,18 +1,20 @@
 /**
  * POST /api/auth/mfa/disable
  *
- * Body: { password, code }
+ * Body: { password, code? , recoveryCode? }
  *
- * Requires both the user's password AND a current TOTP code (or a
- * recovery code). This protects against a stolen session being used
- * to weaken the account.
+ * Re-authenticates the user (password is required) AND requires either a
+ * valid TOTP code or a valid recovery code, then clears all MFA state.
+ *
+ * Stops a session-hijacker from disabling MFA without the second factor.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getTenantContext } from '@/lib/tenant-session';
+import { ensureMfaColumns } from '@/lib/auth-mfa-schema';
 import { verifyTotp, verifyRecoveryCode } from '@/lib/totp';
 import { verifyPassword } from '@/lib/password-policy';
-import { ensureMfaColumns } from '@/lib/auth-mfa-schema';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -20,41 +22,48 @@ export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   try {
-    const userId = req.headers.get('x-user-id');
-    if (!userId) return NextResponse.json({ ok: false, error: 'Not authenticated' }, { status: 401 });
-
-    const body = await req.json();
-    const password = String(body?.password ?? '');
-    const code = String(body?.code ?? '').trim();
-
-    if (!password) return NextResponse.json({ ok: false, error: 'Password is required' }, { status: 400 });
-    if (!code) return NextResponse.json({ ok: false, error: 'TOTP or recovery code is required' }, { status: 400 });
-
+    const ctx = getTenantContext(req);
     await ensureMfaColumns();
 
+    const body = await req.json().catch(() => ({}));
+    const password     = String(body?.password ?? '');
+    const code         = body?.code         ? String(body.code).trim()         : null;
+    const recoveryCode = body?.recoveryCode ? String(body.recoveryCode).trim() : null;
+
+    if (!password) {
+      return NextResponse.json({ ok: false, error: 'Password is required.' }, { status: 400 });
+    }
+    if (!code && !recoveryCode) {
+      return NextResponse.json({ ok: false, error: 'Provide either an authenticator code or a recovery code.' }, { status: 400 });
+    }
+
     const rows = await prisma.$queryRawUnsafe<Array<{
-      password_hash: string | null; mfa_enabled: boolean | null;
-      mfa_secret: string | null; mfa_recovery_codes: string[] | null;
+      password_hash: string | null; mfa_enabled: boolean; mfa_secret: string | null;
+      mfa_recovery_codes: string[] | null;
     }>>(
-      `SELECT password_hash, mfa_enabled, mfa_secret, mfa_recovery_codes FROM "User" WHERE id = $1`,
-      userId,
-    ).catch(() => []);
-    if (rows.length === 0) return NextResponse.json({ ok: false, error: 'User not found' }, { status: 404 });
+      `SELECT password_hash, mfa_enabled, mfa_secret, mfa_recovery_codes
+       FROM "User" WHERE id = $1 LIMIT 1`,
+      ctx.userId,
+    );
     const row = rows[0];
-
-    if (!row.mfa_enabled) return NextResponse.json({ ok: false, error: 'MFA is not enabled' }, { status: 400 });
-    if (!verifyPassword(password, row.password_hash)) {
-      return NextResponse.json({ ok: false, error: 'Incorrect password' }, { status: 401 });
+    if (!row) return NextResponse.json({ ok: false, error: 'User not found' }, { status: 404 });
+    if (!row.mfa_enabled) return NextResponse.json({ ok: false, error: 'MFA is not enabled.' }, { status: 400 });
+    if (!row.password_hash || !verifyPassword(password, row.password_hash)) {
+      return NextResponse.json({ ok: false, error: 'Wrong password.' }, { status: 401 });
     }
 
-    let codeOk = false;
-    if (/^\d{6}$/.test(code) && row.mfa_secret) {
-      codeOk = verifyTotp(row.mfa_secret, code);
-    } else if (row.mfa_recovery_codes) {
-      const r = verifyRecoveryCode(code, row.mfa_recovery_codes);
-      codeOk = r.ok;
+    let secondFactorOk = false;
+    if (code && row.mfa_secret) {
+      secondFactorOk = verifyTotp(row.mfa_secret, code);
     }
-    if (!codeOk) return NextResponse.json({ ok: false, error: 'Invalid code' }, { status: 401 });
+    if (!secondFactorOk && recoveryCode) {
+      const stored = Array.isArray(row.mfa_recovery_codes) ? row.mfa_recovery_codes : [];
+      const matched = verifyRecoveryCode(recoveryCode, stored);
+      if (matched) secondFactorOk = true;
+    }
+    if (!secondFactorOk) {
+      return NextResponse.json({ ok: false, error: 'Second factor verification failed.' }, { status: 401 });
+    }
 
     await prisma.$executeRawUnsafe(
       `UPDATE "User"
@@ -65,18 +74,22 @@ export async function POST(req: NextRequest) {
              mfa_enrolled_at = NULL,
              "updatedAt" = NOW()
        WHERE id = $1`,
-      userId,
+      ctx.userId,
     );
 
     void logAudit({
-      userId, userRole: 'USER',
-      entityType: 'User', entityId: userId,
+      tenantId: ctx.tenantId,
+      userId: ctx.userId,
+      userRole: 'USER',
+      entityType: 'User',
+      entityId: ctx.userId,
       action: 'UPDATE',
-      details: 'MFA disabled by user (password + code re-verified).',
+      details: 'MFA disabled by user (password + second-factor confirmed).',
     });
 
-    return NextResponse.json({ ok: true, mfaEnabled: false });
+    return NextResponse.json({ ok: true });
   } catch (err) {
+    if (err instanceof NextResponse) return err;
     captureException(err, { context: 'auth.mfa.disable' });
     return NextResponse.json({ ok: false, error: 'Disable failed' }, { status: 500 });
   }

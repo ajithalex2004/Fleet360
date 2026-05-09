@@ -225,7 +225,7 @@ export default function QuotationsPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-950 p-6 space-y-6">
+    <div className="min-h-screen bg-[#0c1a3e] p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

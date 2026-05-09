@@ -72,7 +72,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div className="flex flex-col h-screen bg-slate-900">
       <PlatformHomeBar moduleName={t('module.fleet')} moduleIcon="F" accentColor="from-orange-500 to-amber-600" />
       <div className="flex flex-1 overflow-hidden">
-        <div className="w-64 border-r border-white/10 bg-slate-800/30 overflow-y-auto flex-shrink-0">
+        <div className="w-64 border-r border-white/10 bg-black overflow-y-auto flex-shrink-0">
           <div className="p-5 border-b border-white/10 flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white font-bold text-sm">FM</div>
             <div>

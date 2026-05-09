@@ -1,33 +1,29 @@
 /**
- * Password policy + hashing — Smart Mobility platform.
+ * Password policy + hashing helpers.
  *
- * Hash format matches the existing PBKDF2 scheme already used by
- * /api/auth/login and /api/tenants/provision: `salt:hashHex` where
- *   - salt: 16 random bytes hex
- *   - hash: pbkdf2(plaintext, salt, 100_000, 64, sha512) hex
- * No bcrypt dep; uses Node's built-in crypto.
+ * Hash format matches /api/auth/login: `salt:hash` hex (PBKDF2-SHA512,
+ * 100k iterations, 64-byte derived key).
+ *
+ * Reset-token format: 32 random bytes hex, stored as sha256 hash so the
+ * raw token never lands in the database.
  */
 
 import crypto from 'crypto';
 
-/* ── Policy ────────────────────────────────────────────────────────────── */
-
-export interface PasswordPolicyOptions {
+export interface PasswordPolicy {
   minLength: number;
-  requireUppercase: boolean;
-  requireLowercase: boolean;
+  requireUpper: boolean;
+  requireLower: boolean;
   requireDigit: boolean;
   requireSymbol: boolean;
-  /** Block top-N most common passwords. */
   rejectCommon: boolean;
-  /** Reject passwords that contain the user's email/username (case-insensitive). */
-  rejectIdentifier: boolean;
+  rejectIdentifier: boolean; // refuse passwords containing email/username
 }
 
-export const DEFAULT_PASSWORD_POLICY: PasswordPolicyOptions = {
+export const DEFAULT_PASSWORD_POLICY: PasswordPolicy = {
   minLength: 10,
-  requireUppercase: true,
-  requireLowercase: true,
+  requireUpper: true,
+  requireLower: true,
   requireDigit: true,
   requireSymbol: true,
   rejectCommon: true,
@@ -35,10 +31,10 @@ export const DEFAULT_PASSWORD_POLICY: PasswordPolicyOptions = {
 };
 
 const COMMON_PASSWORDS = new Set([
-  'password', 'password1', 'password123', 'qwerty', 'abc123', '123456', '12345678',
-  'admin', 'admin123', 'welcome', 'welcome1', 'letmein', 'iloveyou', '1q2w3e4r',
-  'changeme', 'monkey', 'dragon', 'sunshine', 'trustno1', 'azerty', 'qwerty123',
-  'p@ssword', 'p@ssw0rd', 'password!', 'admin@123', 'tripexl', 'tripxl', 'fleet360',
+  'password', 'password1', 'password123', 'qwerty', 'qwerty123',
+  '12345678', '123456789', '1234567890', 'letmein', 'welcome',
+  'admin', 'admin123', 'iloveyou', 'monkey', 'football', 'dragon',
+  'baseball', 'sunshine', 'master', 'hello123', 'shadow', 'abc123',
 ]);
 
 export interface ValidationResult {
@@ -47,54 +43,45 @@ export interface ValidationResult {
 }
 
 export function validatePassword(
-  plaintext: string,
-  identifiers: { email?: string; username?: string } = {},
-  policy: PasswordPolicyOptions = DEFAULT_PASSWORD_POLICY,
+  pw: string,
+  identity: { email?: string; username?: string },
+  policy: PasswordPolicy = DEFAULT_PASSWORD_POLICY,
 ): ValidationResult {
   const errors: string[] = [];
-  if (typeof plaintext !== 'string' || plaintext.length === 0) {
-    return { ok: false, errors: ['Password is required.'] };
+  if (typeof pw !== 'string') {
+    return { ok: false, errors: ['Password is required'] };
   }
-  if (plaintext.length < policy.minLength) {
-    errors.push(`Must be at least ${policy.minLength} characters.`);
-  }
-  if (policy.requireUppercase && !/[A-Z]/.test(plaintext)) {
-    errors.push('Must contain at least one uppercase letter.');
-  }
-  if (policy.requireLowercase && !/[a-z]/.test(plaintext)) {
-    errors.push('Must contain at least one lowercase letter.');
-  }
-  if (policy.requireDigit && !/\d/.test(plaintext)) {
-    errors.push('Must contain at least one digit.');
-  }
-  if (policy.requireSymbol && !/[^A-Za-z0-9]/.test(plaintext)) {
-    errors.push('Must contain at least one symbol (e.g. !@#$%).');
-  }
-  if (policy.rejectCommon && COMMON_PASSWORDS.has(plaintext.toLowerCase())) {
-    errors.push('Password is too common — pick something less guessable.');
+  if (pw.length < policy.minLength) errors.push(`Must be at least ${policy.minLength} characters`);
+  if (policy.requireUpper  && !/[A-Z]/.test(pw))    errors.push('Must contain an uppercase letter');
+  if (policy.requireLower  && !/[a-z]/.test(pw))    errors.push('Must contain a lowercase letter');
+  if (policy.requireDigit  && !/\d/.test(pw))       errors.push('Must contain a digit');
+  if (policy.requireSymbol && !/[^A-Za-z0-9]/.test(pw)) errors.push('Must contain a symbol');
+
+  if (policy.rejectCommon && COMMON_PASSWORDS.has(pw.toLowerCase())) {
+    errors.push('That password is on a list of breached passwords — choose something else');
   }
   if (policy.rejectIdentifier) {
-    const lower = plaintext.toLowerCase();
-    const email = identifiers.email?.toLowerCase();
-    const username = identifiers.username?.toLowerCase();
-    if (email && lower.includes(email.split('@')[0])) errors.push('Cannot contain your email.');
-    if (username && lower.includes(username)) errors.push('Cannot contain your username.');
+    const lower = pw.toLowerCase();
+    const emailLocal = identity.email?.split('@')[0]?.toLowerCase();
+    if (emailLocal && emailLocal.length >= 4 && lower.includes(emailLocal)) {
+      errors.push('Password must not contain your email');
+    }
+    const uname = identity.username?.toLowerCase();
+    if (uname && uname.length >= 4 && lower.includes(uname)) {
+      errors.push('Password must not contain your username');
+    }
   }
   return { ok: errors.length === 0, errors };
 }
 
-/* ── Hashing ───────────────────────────────────────────────────────────── */
-
-/** Produces `salt:hashHex` matching the existing login route's expected format. */
+/** Returns `salt:hash` hex matching the format /api/auth/login expects. */
 export function hashPassword(plaintext: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = crypto.pbkdf2Sync(plaintext, salt, 100_000, 64, 'sha512').toString('hex');
   return `${salt}:${hash}`;
 }
 
-/** Verify against `salt:hashHex`. Constant-time. */
-export function verifyPassword(plaintext: string, stored: string | null | undefined): boolean {
-  if (!stored) return false;
+export function verifyPassword(plaintext: string, stored: string): boolean {
   try {
     const [salt, hash] = stored.split(':');
     if (!salt || !hash) return false;
@@ -108,14 +95,13 @@ export function verifyPassword(plaintext: string, stored: string | null | undefi
   }
 }
 
-/* ── One-time-token helpers (password reset) ───────────────────────────── */
-
-export function generateResetToken(): { token: string; hash: string } {
-  const token = crypto.randomBytes(32).toString('hex');
-  const hash = crypto.createHash('sha256').update(token).digest('hex');
-  return { token, hash };
+/** sha256 hex — used for reset-token storage so raw token never lands in DB. */
+export function hashToken(raw: string): string {
+  return crypto.createHash('sha256').update(raw).digest('hex');
 }
 
-export function hashToken(token: string): string {
-  return crypto.createHash('sha256').update(token).digest('hex');
+/** 32 random bytes as hex (the value sent in the reset-link URL). */
+export function generateResetToken(): { token: string; hash: string } {
+  const token = crypto.randomBytes(32).toString('hex');
+  return { token, hash: hashToken(token) };
 }

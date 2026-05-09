@@ -11,6 +11,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { randomUUID } from 'crypto';
+import { requireUnderQuota } from '@/lib/plan-limits';
+import type { PlanCode } from '@/lib/billing';
 
 // All modules in the platform — used for moduleAccess validation
 const ALL_MODULES = [
@@ -105,6 +107,14 @@ export async function POST(req: NextRequest) {
     }
     if (!email?.trim()) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+    }
+
+    // Quota: count active members in the target tenant against maxUsers.
+    if (tenantId) {
+      const tenantPlan = (req.headers.get('x-tenant-plan') ?? 'TRIAL') as PlanCode;
+      const current = await prisma.userTenant.count({ where: { tenantId, isActive: true } });
+      const gate = requireUnderQuota({ plan: tenantPlan, resource: 'maxUsers', current });
+      if (gate) return gate;
     }
 
     // Validate moduleAccess keys if provided

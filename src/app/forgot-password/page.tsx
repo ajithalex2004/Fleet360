@@ -1,18 +1,18 @@
 'use client';
 
-import React, { useState } from 'react';
-import Link from 'next/link';
-import { Mail } from 'lucide-react';
+import { useState } from 'react';
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [email, setEmail]     = useState('');
+  const [loading, setLoading] = useState(false);
+  const [sent, setSent]       = useState(false);
+  const [error, setError]     = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setBusy(true); setError(null);
+    setError(null);
+    if (!email.trim()) { setError('Please enter your email.'); return; }
+    setLoading(true);
     try {
       const res = await fetch('/api/auth/forgot-password', {
         method: 'POST',
@@ -20,63 +20,73 @@ export default function ForgotPasswordPage() {
         body: JSON.stringify({ email: email.trim() }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Request failed');
-      setDone(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Request failed');
+      if (!res.ok) {
+        setError(data.error ?? 'Could not send reset link.');
+      } else {
+        setSent(true);
+      }
+    } catch {
+      setError('Network error — please try again.');
     } finally {
-      setBusy(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-8 backdrop-blur-md shadow-2xl">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-600 to-purple-600 flex items-center justify-center">
-              <Mail className="w-6 h-6 text-white" strokeWidth={1.75} />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">Forgot password?</h1>
-              <p className="text-xs text-slate-400">We'll email you a reset link.</p>
-            </div>
+    <div className="min-h-screen bg-[#0c1a3e] flex items-center justify-center p-4">
+      <div className="w-full max-w-sm space-y-8">
+        <div className="text-center space-y-2">
+          <div className="text-4xl font-black text-white tracking-tight">
+            XL <span className="text-blue-500">AI</span>
+          </div>
+          <p className="text-slate-400 text-sm">Smart Mobility Platform</p>
+        </div>
+
+        <div className="bg-slate-900 border border-white/10 rounded-2xl p-8 shadow-2xl space-y-6">
+          <div>
+            <h1 className="text-xl font-bold text-white">Reset your password</h1>
+            <p className="text-slate-400 text-sm mt-1">
+              {sent
+                ? "Check your inbox — if an account exists for that email, we've sent a reset link."
+                : 'Enter the email on your account and we’ll send you a reset link.'}
+            </p>
           </div>
 
-          {done ? (
-            <div className="space-y-4">
-              <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-sm text-emerald-200">
-                If an account exists for that email, a reset link has been sent. The link is valid for 60 minutes.
-              </div>
-              <Link href="/login" className="block text-center text-sm text-violet-400 hover:text-violet-300">
-                ← Back to sign in
-              </Link>
+          {error && (
+            <div className="bg-red-950/50 border border-red-500/40 rounded-lg px-4 py-3 text-red-300 text-sm">
+              {error}
             </div>
-          ) : (
+          )}
+
+          {!sent ? (
             <form onSubmit={submit} className="space-y-4">
-              <div>
-                <label className="block text-xs uppercase tracking-wide text-slate-400 mb-1.5 font-semibold">Work email</label>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Email address</label>
                 <input
-                  type="email" required value={email} onChange={e => setEmail(e.target.value)}
-                  placeholder="you@company.com" autoComplete="email" autoFocus
-                  className="w-full px-4 py-3 rounded-xl bg-slate-800/60 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none"
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="you@yourcompany.com"
+                  autoComplete="email"
+                  className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
                 />
               </div>
-
-              {error && (
-                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-sm text-rose-300">{error}</div>
-              )}
-
-              <button type="submit" disabled={busy || !email}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white font-semibold hover:opacity-90 disabled:opacity-50">
-                {busy ? 'Sending…' : 'Send reset link'}
+              <button type="submit" disabled={loading}
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold rounded-lg text-sm">
+                {loading ? 'Sending…' : 'Send reset link'}
               </button>
-
-              <Link href="/login" className="block text-center text-sm text-slate-400 hover:text-white">
-                ← Back to sign in
-              </Link>
             </form>
+          ) : (
+            <div className="bg-emerald-950/30 border border-emerald-500/30 rounded-lg p-4 text-emerald-300 text-sm">
+              The link expires in 60 minutes. Didn&rsquo;t get it? Check your spam folder, or
+              <button onClick={() => setSent(false)} className="ml-1 underline">try again</button>.
+            </div>
           )}
+
+          <div className="text-center">
+            <a href="/login" className="text-xs text-slate-400 hover:text-white">&larr; Back to sign in</a>
+          </div>
         </div>
       </div>
     </div>

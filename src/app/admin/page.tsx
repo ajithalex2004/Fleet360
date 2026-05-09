@@ -1,6 +1,8 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { Settings } from 'lucide-react';
+import { PageHeader } from '@/components/ui/page-theme';
 
 export default function AdminOverview() {
   const [stats, setStats] = useState({ tenants: 0, users: 0, roles: 0, permissions: 0 });
@@ -43,11 +45,13 @@ export default function AdminOverview() {
   ];
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-4xl font-bold text-white mb-2">Platform Administration</h1>
-        <p className="text-slate-400">Multi-tenant access control for Fleet360</p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Platform Administration"
+        subtitle="Multi-tenant access control for Fleet360"
+        icon={Settings}
+        accent="rose"
+      />
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

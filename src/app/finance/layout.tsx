@@ -100,7 +100,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <PlatformHomeBar moduleName={t('module.finance')} moduleIcon="FN" accentColor="from-green-500 to-emerald-600" />
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <div className="w-64 bg-gradient-to-br from-emerald-950 to-slate-900 border-r border-white/10 p-4 overflow-y-auto flex-shrink-0">
+        <div className="w-64 bg-black border-r border-white/10 p-4 overflow-y-auto flex-shrink-0">
           <h2 className="text-base font-bold text-white mb-4 px-2">{t('module.finance')}</h2>
           <nav className="space-y-5">
             {NAV_GROUPS.map(group => (

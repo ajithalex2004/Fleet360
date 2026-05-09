@@ -1,6 +1,12 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import {
+  Bot, Wrench, FileText, Car, Bus, School, Truck, Siren, CarFront, UserCog,
+  Building2, Smartphone, Banknote, Scale, AppWindow, BarChart3, Radio,
+  Leaf, Package, Headphones,
+  type LucideIcon,
+} from 'lucide-react';
 import TenantSessionBar from '@/components/TenantSessionBar';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useAccessControl } from '@/hooks/useAccessControl';
@@ -20,11 +26,24 @@ interface PlatformKPIs {
 }
 
 // ── Module registry ────────────────────────────────────────────────────────────
-const modules = [
+interface ModuleDef {
+  id: string; title: string; description: string; href: string;
+  icon: LucideIcon;
+  gradient: string; glow: string; border: string;
+  tags: string[]; status: string;
+}
+const modules: ModuleDef[] = [
+  {
+    id: 'service-tickets', title: 'Service & Support Ticketing',
+    description: 'One-stop ticketing for Maintenance, Renewal, Cleaning, Support, Incident, Towing & Complaint requests — shared SLA, assignment and notification engines with per-tenant access control.',
+    href: '/service-tickets', icon: Headphones,
+    gradient: 'from-violet-600 to-purple-600', glow: 'shadow-violet-500/20', border: 'border-violet-500/30',
+    tags: ['7 Ticket Types', 'SLA', 'Assignment', 'Audit Trail'], status: 'live',
+  },
   {
     id: 'agents', title: 'AI Agent Ecosystem',
     description: '10 autonomous AI agents — predictive maintenance, route optimisation, incident triage, smart dispatch, driver coaching, demand forecasting, WhatsApp AI, and more. Inline approvals, threshold tuning, and live activity feed.',
-    href: '/agents', icon: '🤖',
+    href: '/agents', icon: Bot,
     gradient: 'from-violet-600 to-purple-700', glow: 'shadow-violet-500/20', border: 'border-violet-500/30',
     tags: ['Predictive AI', 'Auto-Triage', 'Smart Dispatch', 'WhatsApp AI'], status: 'live',
   },
@@ -32,133 +51,133 @@ const modules = [
     id: 'maintenance',
     title: 'Vehicle Maintenance',
     description: 'Full lifecycle maintenance workflow — service requests, quotations, work orders, invoices, predictive analytics',
-    href: '/maintenance', icon: '🔧',
+    href: '/maintenance', icon: Wrench,
     gradient: 'from-blue-600 to-indigo-600', glow: 'shadow-blue-500/20', border: 'border-blue-500/30',
     tags: ['Workflow', 'Quotations', 'Work Orders', 'Analytics'], status: 'live',
   },
   {
     id: 'leasing', title: 'Vehicle Leasing',
     description: 'Long-term lease contract management, payment schedules, lessee profiles, vehicle returns',
-    href: '/leasing', icon: '📋',
+    href: '/leasing', icon: FileText,
     gradient: 'from-violet-600 to-purple-600', glow: 'shadow-violet-500/20', border: 'border-violet-500/30',
     tags: ['Contracts', 'Payments', 'Lessees', 'Returns'], status: 'live',
   },
   {
     id: 'rental', title: 'Rent-a-Car',
     description: 'Short-term vehicle rentals, booking engine, customer KYC, dynamic pricing, damage claims',
-    href: '/rental', icon: '🚗',
+    href: '/rental', icon: Car,
     gradient: 'from-emerald-600 to-teal-600', glow: 'shadow-emerald-500/20', border: 'border-emerald-500/30',
     tags: ['Bookings', 'Customers', 'Pricing', 'Damage Claims'], status: 'live',
   },
   {
     id: 'bus-ops', title: 'Staff Transportation',
     description: 'Bus route management, trip scheduling, passenger roster, boarding tracking, dispatch board',
-    href: '/bus-ops', icon: '🚌',
+    href: '/bus-ops', icon: Bus,
     gradient: 'from-purple-600 to-pink-600', glow: 'shadow-purple-500/20', border: 'border-purple-500/30',
     tags: ['Routes', 'Schedules', 'Passengers', 'Dispatch'], status: 'live',
   },
   {
     id: 'school-bus', title: 'School Bus Transportation',
     description: 'Student registry, RFID attendance tracking, guardian notifications, safety compliance and trip scheduling',
-    href: '/school-bus', icon: '🏫',
+    href: '/school-bus', icon: School,
     gradient: 'from-yellow-500 to-amber-500', glow: 'shadow-yellow-500/20', border: 'border-yellow-500/30',
     tags: ['Students', 'Routes', 'Safety', 'Attendance'], status: 'live',
   },
   {
     id: 'logistics', title: 'Logistics Management',
     description: 'End-to-end logistics trip management — fleet dispatch, delivery tracking, route optimization, driver assignment',
-    href: '/logistics', icon: '🚛',
+    href: '/logistics', icon: Truck,
     gradient: 'from-amber-600 to-yellow-600', glow: 'shadow-amber-500/20', border: 'border-amber-500/30',
     tags: ['Dispatch', 'Delivery', 'Routing', 'Fleet'], status: 'live',
   },
   {
     id: 'incidents', title: 'Incident & Ambulance',
     description: 'Real-time incident reporting, ambulance dispatch, emergency response coordination and compliance tracking',
-    href: '/incidents', icon: '🚨',
+    href: '/incidents', icon: Siren,
     gradient: 'from-red-600 to-rose-600', glow: 'shadow-red-500/20', border: 'border-red-500/30',
     tags: ['Emergency', 'Ambulance', 'Compliance', 'Safety'], status: 'live',
   },
   {
     id: 'fleet', title: 'Fleet Management',
     description: 'Vehicle document vault, fuel management, traffic fines, TCO analysis, asset lifecycle tracking',
-    href: '/fleet', icon: '🚘',
+    href: '/fleet', icon: CarFront,
     gradient: 'from-orange-600 to-amber-600', glow: 'shadow-orange-500/20', border: 'border-orange-500/30',
     tags: ['Documents', 'Fuel Logs', 'Fines', 'TCO'], status: 'live',
   },
   {
     id: 'driver-mgmt', title: 'Driver Management',
     description: 'Driver onboarding, document tracking, shift management, training records, performance scoring',
-    href: '/driver-mgmt', icon: '👤',
+    href: '/driver-mgmt', icon: UserCog,
     gradient: 'from-cyan-600 to-blue-600', glow: 'shadow-cyan-500/20', border: 'border-cyan-500/30',
     tags: ['Onboarding', 'Shifts', 'Training', 'Performance'], status: 'live',
   },
   {
     id: 'customer-mgmt', title: 'Customer Management',
     description: 'Customer master with 3-level hierarchy (Region, Department, Unit), financial & billing settings',
-    href: '/customer-mgmt', icon: '🏢',
+    href: '/customer-mgmt', icon: Building2,
     gradient: 'from-cyan-600 to-blue-600', glow: 'shadow-cyan-500/20', border: 'border-cyan-500/30',
     tags: ['Hierarchy', 'Billing', 'Bookings', 'Communication'], status: 'live',
   },
   {
     id: 'booking-portal', title: 'Booking Portal',
     description: 'Unified self-service booking across all transport services — rentals, leasing, shuttles, executive vehicles',
-    href: '/booking-portal', icon: '📲',
+    href: '/booking-portal', icon: Smartphone,
     gradient: 'from-indigo-600 to-violet-600', glow: 'shadow-indigo-500/20', border: 'border-indigo-500/30',
     tags: ['Self-Service', 'Approvals', 'Multi-Service'], status: 'live',
   },
   {
     id: 'finance', title: 'Finance & Billing',
     description: 'Invoicing, payment processing, credit notes, VAT compliance (UAE 5%), budget vs actual tracking',
-    href: '/finance', icon: '💰',
+    href: '/finance', icon: Banknote,
     gradient: 'from-green-600 to-emerald-600', glow: 'shadow-green-500/20', border: 'border-green-500/30',
     tags: ['Invoices', 'Payments', 'VAT', 'Budgets'], status: 'live',
   },
   {
     id: 'compliance', title: 'Compliance & Regulatory',
     description: 'RTA compliance, insurance policies, road permits, Salik accounts, regulatory document tracking',
-    href: '/compliance', icon: '⚖️',
+    href: '/compliance', icon: Scale,
     gradient: 'from-rose-600 to-red-600', glow: 'shadow-rose-500/20', border: 'border-rose-500/30',
     tags: ['RTA', 'Insurance', 'Permits', 'Salik'], status: 'live',
   },
   {
     id: 'customer', title: 'Customer App',
     description: 'Mobile-first portal for renters, lessees and staff — bookings, shuttle schedules, account management',
-    href: '/customer', icon: '📱',
+    href: '/customer', icon: Smartphone,
     gradient: 'from-sky-600 to-cyan-600', glow: 'shadow-sky-500/20', border: 'border-sky-500/30',
     tags: ['PWA', 'Mobile', 'Self-Service'], status: 'live',
   },
   {
     id: 'mobile-apps', title: 'Mobile Apps',
     description: 'Fleet360 PWA gallery — Driver, Passenger, Counter, Field-Ops. Install once on the phone, work offline-cached, scope-locked per role.',
-    href: '/mobile-apps', icon: '📲',
+    href: '/mobile-apps', icon: AppWindow,
     gradient: 'from-fuchsia-600 to-pink-600', glow: 'shadow-fuchsia-500/20', border: 'border-fuchsia-500/30',
     tags: ['Fleet360', 'PWA', 'Driver', 'Passenger', 'Field'], status: 'live',
   },
   {
     id: 'reports', title: 'Reports & Analytics',
     description: 'Cross-module BI — fleet utilization, revenue analysis, driver performance, scheduled report exports',
-    href: '/reports', icon: '📊',
+    href: '/reports', icon: BarChart3,
     gradient: 'from-fuchsia-600 to-indigo-600', glow: 'shadow-fuchsia-500/20', border: 'border-fuchsia-500/30',
     tags: ['Fleet', 'Revenue', 'Drivers', 'Power BI'], status: 'live',
   },
   {
     id: 'dispatch', title: 'Dispatch Control',
     description: 'Real-time dispatch command centre — auto-dispatch engine, trip merge optimizer, job queue, driver availability, school bus & ambulance dispatch',
-    href: '/dispatch', icon: '🚦',
+    href: '/dispatch', icon: Radio,
     gradient: 'from-blue-600 to-cyan-600', glow: 'shadow-blue-500/20', border: 'border-blue-500/30',
     tags: ['Command Centre', 'Auto-Dispatch', 'Merge Optimizer', 'Live Map'], status: 'live',
   },
   {
     id: 'sustainability', title: 'Sustainability & ESG',
     description: 'GHG Protocol / ISO 14064 verified CO₂ measurement — Scope 1/2/3 emissions, modal shift, fleet decarbonisation and UAE Net Zero 2050 compliance',
-    href: '/sustainability', icon: '🌱',
+    href: '/sustainability', icon: Leaf,
     gradient: 'from-emerald-500 to-green-600', glow: 'shadow-emerald-500/20', border: 'border-emerald-500/30',
     tags: ['GHG Protocol', 'ISO 14064', 'UAE Net Zero', 'ESG'], status: 'live',
   },
   {
     id: 'assets', title: 'Assets & Inventory',
     description: 'Unified cross-domain asset registry — HVA tracking with calibration & insurance, medical supplies with seal logs, BLE tagging, stock management, field dispatch, and reverse logistics',
-    href: '/assets', icon: '🏗️',
+    href: '/assets', icon: Package,
     gradient: 'from-cyan-600 to-teal-600', glow: 'shadow-cyan-500/20', border: 'border-cyan-500/30',
     tags: ['HVA', 'BLE Tracking', 'Medical', 'Stock Ops'], status: 'live',
   },
@@ -288,7 +307,7 @@ export default function PlatformPage() {
   ].filter(a => a.count > 0) : [];
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
+    <div className="min-h-screen bg-[#0c1a3e] text-white">
       {/* Top nav */}
       <nav className="border-b border-white/10 bg-slate-900/95 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -299,6 +318,9 @@ export default function PlatformPage() {
             <span className="text-white font-bold text-lg">Fleet360</span>
           </div>
           <div className="flex items-center gap-4">
+            <Link href="/platform/v2" className="rounded-lg bg-gradient-to-r from-violet-600 to-blue-600 px-4 py-1.5 text-sm font-semibold text-white hover:opacity-90 transition-all shadow-lg shadow-violet-500/30">
+              ✨ Try new home
+            </Link>
             <Link href="/customer" className="rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:opacity-90 transition-all">Customer Portal</Link>
             <Link href="/approvals" className="rounded-lg bg-violet-600/20 border border-violet-500/30 px-4 py-1.5 text-sm font-medium text-violet-400 hover:bg-violet-600/30 transition-all">Approvals</Link>
             <Link href="/admin" className="rounded-lg bg-red-600/20 border border-red-500/30 px-4 py-1.5 text-sm font-medium text-red-400 hover:bg-red-600/30 transition-all">Admin</Link>
@@ -487,8 +509,8 @@ export default function PlatformPage() {
                     </div>
                     <div className="p-6">
                       <div className="flex items-start gap-4 mb-4">
-                        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${mod.gradient} flex items-center justify-center text-2xl flex-shrink-0 shadow-lg grayscale`}>
-                          {mod.icon}
+                        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${mod.gradient} flex items-center justify-center flex-shrink-0 shadow-lg grayscale`}>
+                          <mod.icon className="w-6 h-6 text-white" strokeWidth={1.75} />
                         </div>
                         <div>
                           <h3 className="text-slate-400 font-semibold text-base">{mod.title}</h3>
@@ -520,8 +542,8 @@ export default function PlatformPage() {
                     <span className="text-emerald-400 text-[10px] font-medium">LIVE</span>
                   </div>
                   <div className="flex items-start gap-4 mb-4">
-                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${mod.gradient} flex items-center justify-center text-2xl flex-shrink-0 shadow-lg`}>
-                      {mod.icon}
+                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${mod.gradient} flex items-center justify-center flex-shrink-0 shadow-lg`}>
+                      <mod.icon className="w-6 h-6 text-white" strokeWidth={1.75} />
                     </div>
                     <div>
                       <h3 className="text-white font-semibold text-base group-hover:text-blue-300 transition-colors">{mod.title}</h3>

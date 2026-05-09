@@ -14,15 +14,17 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getBranding } from '@/lib/branding';
 
 type PermRow   = { nav_key: string; enabled: boolean };
 type ModuleRow = { module: string };
 
 export async function GET(request: NextRequest) {
-  const userId   = request.headers.get('x-user-id')     ?? '';
-  const tenantId = request.headers.get('x-tenant-id')   ?? '';
-  const plan     = request.headers.get('x-tenant-plan') ?? 'TRIAL';
-  const role     = request.headers.get('x-user-role')   ?? 'TENANT_ADMIN';
+  const userId        = request.headers.get('x-user-id')        ?? '';
+  const tenantId      = request.headers.get('x-tenant-id')      ?? '';
+  const plan          = request.headers.get('x-tenant-plan')    ?? 'TRIAL';
+  const role          = request.headers.get('x-user-role')      ?? 'TENANT_ADMIN';
+  const impersonatedBy = request.headers.get('x-impersonated-by') ?? '';
 
   if (!userId || !tenantId) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -30,8 +32,8 @@ export async function GET(request: NextRequest) {
 
   const isSuperAdmin = role === 'SUPER_ADMIN';
 
-  // Fetch nav permissions + enabled modules in parallel
-  const [navPermissions, enabledModules, tenantName] = await Promise.all([
+  // Fetch nav permissions + enabled modules + branding in parallel
+  const [navPermissions, enabledModules, tenantName, branding] = await Promise.all([
     // 1. Nav permissions (admin sidebar toggles)
     isSuperAdmin
       ? Promise.resolve({} as Record<string, boolean>)
@@ -58,6 +60,9 @@ export async function GET(request: NextRequest) {
       `SELECT name FROM tenants WHERE id = $1 LIMIT 1`,
       tenantId,
     ).then(rows => rows[0]?.name ?? '').catch(() => ''),
+
+    // 4. White-label branding (best-effort)
+    getBranding(tenantId).catch(() => null),
   ]);
 
   return NextResponse.json(
@@ -70,6 +75,8 @@ export async function GET(request: NextRequest) {
       isSuperAdmin,
       navPermissions,
       enabledModules, // [] means "no restriction" for SUPER_ADMIN; non-empty = explicit whitelist
+      impersonatedBy: impersonatedBy || null,
+      branding,
     },
     {
       headers: {

@@ -1,74 +1,68 @@
 /**
  * POST /api/auth/mfa/enroll
  *
- * Step 1 of TOTP enrolment. Authenticated user requests a fresh secret +
- * provisioning URI. They scan the QR (or copy the secret) into their
- * authenticator app, then call /enroll/verify with a 6-digit code to
- * complete enrolment.
+ * Starts MFA enrolment for the logged-in user. Generates a base32 secret,
+ * stores it in pending_mfa_secret (so an abandoned enrolment doesn't lock
+ * the user out), and returns the secret + provisioning URI for the QR code.
  *
- * The secret is stored as `pending_mfa_secret` until verified — so a
- * crashed-out half-enrolment doesn't lock the user out.
+ * Caller must finish with /api/auth/mfa/enroll/verify to flip mfa_enabled = TRUE.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import QRCode from 'qrcode';
 import { prisma } from '@/lib/prisma';
-import { generateTotpSecret, provisioningUri } from '@/lib/totp';
+import { getTenantContext } from '@/lib/tenant-session';
 import { ensureMfaColumns } from '@/lib/auth-mfa-schema';
-import { logAudit } from '@/lib/audit';
+import { generateTotpSecret, provisioningUri } from '@/lib/totp';
 import { captureException } from '@/lib/sentry';
 
 export const runtime = 'nodejs';
 
-const ISSUER = 'Fleet360';
-
 export async function POST(req: NextRequest) {
   try {
-    const userId = req.headers.get('x-user-id');
-    if (!userId) {
-      return NextResponse.json({ ok: false, error: 'Not authenticated' }, { status: 401 });
-    }
+    const ctx = getTenantContext(req);
     await ensureMfaColumns();
 
-    const rows = await prisma.$queryRawUnsafe<Array<{ email: string; mfa_enabled: boolean | null }>>(
-      `SELECT email, mfa_enabled FROM "User" WHERE id = $1`, userId,
-    ).catch(() => []);
+    const rows = await prisma.$queryRawUnsafe<Array<{ email: string; username: string; mfa_enabled: boolean }>>(
+      `SELECT email, username, mfa_enabled FROM "User" WHERE id = $1 LIMIT 1`,
+      ctx.userId,
+    );
     if (rows.length === 0) {
       return NextResponse.json({ ok: false, error: 'User not found' }, { status: 404 });
     }
-    if (rows[0].mfa_enabled) {
-      return NextResponse.json({ ok: false, error: 'MFA is already enabled. Disable it first to re-enrol.' }, { status: 409 });
+    const user = rows[0];
+    if (user.mfa_enabled) {
+      return NextResponse.json({ ok: false, error: 'MFA is already enabled. Disable it first to re-enrol.' }, { status: 400 });
     }
 
-    const { base32 } = generateTotpSecret(20);
-    const uri = provisioningUri({
-      accountName: rows[0].email,
-      issuer: ISSUER,
-      secretBase32: base32,
-    });
+    const secret = generateTotpSecret();
+    const issuer = 'Fleet360';
+    const uri = provisioningUri({ issuer, account: user.email, secretBase32: secret });
 
     await prisma.$executeRawUnsafe(
       `UPDATE "User" SET pending_mfa_secret = $1, "updatedAt" = NOW() WHERE id = $2`,
-      base32, userId,
+      secret, ctx.userId,
     );
 
-    void logAudit({
-      userId,
-      userRole: 'USER',
-      entityType: 'User',
-      entityId: userId,
-      action: 'UPDATE',
-      details: 'MFA enrolment started — secret issued, awaiting code verification.',
-    });
+    // Render the otpauth:// URI as an inline PNG data URL so the page can
+    // render <img src={qrDataUrl}> without any client-side QR library.
+    const qrDataUrl = await QRCode.toDataURL(uri, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 240,
+    }).catch(() => null);
 
     return NextResponse.json({
       ok: true,
-      secret: base32,
-      provisioningUri: uri,
-      issuer: ISSUER,
-      qrCodeUrl: `https://chart.googleapis.com/chart?cht=qr&chs=240x240&chld=M|0&chl=${encodeURIComponent(uri)}`,
+      secret,            // fallback for manual entry
+      otpauthUri: uri,
+      qrDataUrl,         // PNG data URL ready for <img src={...}>
+      issuer,
+      account: user.email,
     });
   } catch (err) {
+    if (err instanceof NextResponse) return err;
     captureException(err, { context: 'auth.mfa.enroll' });
-    return NextResponse.json({ ok: false, error: 'Enrolment start failed' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: 'Failed to start MFA enrolment' }, { status: 500 });
   }
 }

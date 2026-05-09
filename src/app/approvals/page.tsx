@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { ClipboardCheck } from 'lucide-react';
+import { PageHeader } from '@/components/ui/page-theme';
 
 interface PendingApproval {
   stepInstanceId: string;
@@ -198,31 +200,31 @@ export default function ApprovalsPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-white mb-1">Approvals Inbox</h1>
-          <p className="text-slate-400 text-sm">Review and action pending workflow approvals</p>
-        </div>
-        {/* View Toggle */}
-        <div className="flex items-center gap-1 bg-slate-800/60 border border-white/10 rounded-xl p-1">
-          <button
-            onClick={() => { setViewMode('my'); setSelectedApproval(null); }}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${viewMode === 'my' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}>
-            My Approvals
-          </button>
-          <button
-            onClick={() => { setViewMode('all'); setSelectedApproval(null); }}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${viewMode === 'all' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}>
-            All Pending
-            {allPending.length > 0 && viewMode !== 'all' && (
-              <span className="ml-2 px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-xs font-bold">
-                {allPending.length}
-              </span>
-            )}
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Approvals Inbox"
+        subtitle="Review and action pending workflow approvals"
+        icon={ClipboardCheck}
+        accent="violet"
+        actions={
+          <div className="flex items-center gap-1 bg-slate-800/60 border border-white/10 rounded-xl p-1">
+            <button
+              onClick={() => { setViewMode('my'); setSelectedApproval(null); }}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${viewMode === 'my' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+              My approvals
+            </button>
+            <button
+              onClick={() => { setViewMode('all'); setSelectedApproval(null); }}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${viewMode === 'all' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+              All pending
+              {allPending.length > 0 && viewMode !== 'all' && (
+                <span className="ml-2 px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold">
+                  {allPending.length}
+                </span>
+              )}
+            </button>
+          </div>
+        }
+      />
 
       {/* MY APPROVALS VIEW */}
       {viewMode === 'my' && (

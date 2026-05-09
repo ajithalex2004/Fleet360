@@ -1,6 +1,11 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import {
+  Truck, CheckCircle2, MapPin, Inbox, ClipboardCheck, Wrench, UserCog,
+  TrendingUp, Plus, Map, Users,
+} from 'lucide-react';
+import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
 
 interface LogisticsStats {
   totalVehicles: number;
@@ -21,34 +26,6 @@ interface LogisticsStats {
     customer_name: string | null;
     created_at: string | null;
   }>;
-}
-
-const STATUS_BADGE: Record<string, string> = {
-  PENDING:   'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  CONFIRMED: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  ACTIVE:    'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  COMPLETED: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
-  CANCELLED: 'bg-red-500/20 text-red-400 border-red-500/30',
-};
-
-function StatCard({
-  icon, label, value, sub, color = 'text-white', href,
-}: {
-  icon: string; label: string; value: number | string;
-  sub?: string; color?: string; href?: string;
-}) {
-  const inner = (
-    <div className="glass-card rounded-2xl p-5 border border-white/10 hover:border-white/20 transition-all group">
-      <div className="flex items-start justify-between mb-3">
-        <span className="text-2xl">{icon}</span>
-        {href && <span className="text-slate-600 group-hover:text-slate-300 text-sm transition-colors">→</span>}
-      </div>
-      <div className={`text-3xl font-bold ${color}`}>{value}</div>
-      <div className="text-sm font-medium text-white mt-1">{label}</div>
-      {sub && <div className="text-xs text-slate-500 mt-0.5">{sub}</div>}
-    </div>
-  );
-  return href ? <Link href={href}>{inner}</Link> : inner;
 }
 
 export default function LogisticsDashboard() {
@@ -78,102 +55,85 @@ export default function LogisticsDashboard() {
     : 0;
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Logistics Management</h1>
-          <p className="text-slate-400 mt-1">Real-time fleet dispatch &amp; delivery tracking</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Live · {lastUpdated.toLocaleTimeString()}
-          </div>
-          <Link href="/logistics/trips"
-            className="text-sm bg-amber-500 hover:bg-amber-400 text-white font-semibold px-4 py-2 rounded-xl transition-colors">
-            + New Trip
-          </Link>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Logistics Management"
+        subtitle="Real-time fleet dispatch & delivery tracking"
+        icon={Truck}
+        accent="amber"
+        actions={
+          <>
+            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Live · {lastUpdated.toLocaleTimeString()}
+            </span>
+            <Link href="/logistics/trips"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition-all shadow-lg shadow-amber-500/30">
+              <Plus className="w-4 h-4" /> New trip
+            </Link>
+          </>
+        }
+      />
 
       {loading ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[...Array(8)].map((_, i) => <div key={i} className="h-28 bg-slate-800/60 rounded-2xl animate-pulse" />)}
         </div>
       ) : (
         <>
-          {/* KPI Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard icon="🚛" label="Fleet Vehicles" value={stats?.totalVehicles ?? 0}
-              sub="Logistics fleet" href="/logistics/vehicles" />
-            <StatCard icon="✅" label="Available Now" value={stats?.availableVehicles ?? 0}
-              color="text-emerald-400" sub="Ready to dispatch" href="/logistics/vehicles" />
-            <StatCard icon="🗺️" label="Active Trips" value={stats?.activeTrips ?? 0}
-              color="text-blue-400" sub="Confirmed & in-transit" href="/logistics/trips" />
-            <StatCard icon="📋" label="Pending" value={stats?.pendingBookings ?? 0}
-              color="text-amber-400" sub="Awaiting dispatch" href="/logistics/trips" />
-            <StatCard icon="✔️" label="Completed Today" value={stats?.completedToday ?? 0}
-              color="text-emerald-400" sub="Trips finished today" />
-            <StatCard icon="🔧" label="In Maintenance" value={stats?.inMaintenance ?? 0}
-              color="text-orange-400" sub="Logistics vehicles" href="/logistics/vehicles" />
-            <StatCard icon="👤" label="Drivers" value={stats?.drivers ?? 0}
-              sub="Logistics-assigned" href="/logistics/drivers" />
-            <div className="glass-card rounded-2xl p-5 border border-white/10">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-2xl">📈</span>
-                <span className={`text-sm font-bold ${utilPct >= 70 ? 'text-emerald-400' : utilPct >= 40 ? 'text-amber-400' : 'text-red-400'}`}>
-                  {utilPct}%
-                </span>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <KpiCard label="Fleet vehicles"   value={stats?.totalVehicles ?? 0}     sub="Logistics fleet"        icon={Truck}          accent="amber"   />
+            <KpiCard label="Available now"    value={stats?.availableVehicles ?? 0} sub="Ready to dispatch"      icon={CheckCircle2}   accent="emerald" />
+            <KpiCard label="Active trips"     value={stats?.activeTrips ?? 0}       sub="In transit"             icon={MapPin}         accent="cyan"    />
+            <KpiCard label="Pending"          value={stats?.pendingBookings ?? 0}   sub="Awaiting dispatch"      icon={Inbox}          accent="amber"   />
+            <KpiCard label="Completed today"  value={stats?.completedToday ?? 0}    sub="Trips finished today"   icon={ClipboardCheck} accent="emerald" />
+            <KpiCard label="In maintenance"   value={stats?.inMaintenance ?? 0}     sub="Out of service"         icon={Wrench}         accent="rose"    />
+            <KpiCard label="Drivers"          value={stats?.drivers ?? 0}           sub="Logistics-assigned"     icon={UserCog}        accent="cyan"    />
+
+            {/* Utilisation tile with progress bar */}
+            <div className="rounded-2xl bg-slate-900/60 border border-white/10 p-4 hover:border-white/20 transition-colors">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Utilisation</span>
+                <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                  <TrendingUp className="w-3.5 h-3.5 text-amber-300" />
+                </div>
               </div>
-              <div className="h-2 bg-slate-700 rounded-full overflow-hidden mb-2">
-                <div
-                  className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full transition-all"
-                  style={{ width: `${utilPct}%` }}
-                />
+              <div className={`text-3xl font-bold ${utilPct >= 70 ? 'text-emerald-300' : utilPct >= 40 ? 'text-amber-300' : 'text-rose-300'}`}>
+                {utilPct}%
               </div>
-              <div className="text-sm font-medium text-white">Fleet Utilization</div>
-              <div className="text-xs text-slate-500 mt-0.5">Active vs available</div>
+              <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden mt-2">
+                <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full transition-all" style={{ width: `${utilPct}%` }} />
+              </div>
+              <div className="text-xs text-slate-500 mt-1">Active vs available</div>
             </div>
           </div>
 
-          {/* Recent Trips */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-white">Recent Trips</h2>
-              <Link href="/logistics/trips" className="text-sm text-amber-400 hover:text-amber-300 transition-colors">
-                View all →
-              </Link>
-            </div>
+          <Panel title="Recent trips" icon={MapPin} accent="amber"
+            actions={<Link href="/logistics/trips" className="text-sm text-amber-300 hover:text-amber-200">View all →</Link>}>
             {stats?.recentTrips && stats.recentTrips.length > 0 ? (
-              <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-white/10 text-slate-400 text-xs uppercase tracking-wider">
-                      <th className="text-left px-5 py-3">Booking Ref</th>
-                      <th className="text-left px-5 py-3">Status</th>
-                      <th className="text-left px-5 py-3">Route</th>
-                      <th className="text-left px-5 py-3">Customer</th>
-                      <th className="text-left px-5 py-3">Date</th>
+                    <tr className="border-b border-white/10 text-slate-500 text-[11px] uppercase tracking-wider">
+                      <th className="text-left py-2 font-medium">Booking</th>
+                      <th className="text-left py-2 font-medium">Status</th>
+                      <th className="text-left py-2 font-medium">Route</th>
+                      <th className="text-left py-2 font-medium">Customer</th>
+                      <th className="text-left py-2 font-medium">Date</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {stats.recentTrips.map((trip, i) => (
-                      <tr key={trip.id}
-                        className={`border-b border-white/5 last:border-0 hover:bg-slate-800/40 transition-colors ${i % 2 === 0 ? '' : 'bg-slate-900/20'}`}>
-                        <td className="px-5 py-3 font-mono text-xs text-white">{trip.booking_ref}</td>
-                        <td className="px-5 py-3">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_BADGE[trip.status] ?? STATUS_BADGE.PENDING}`}>
-                            {trip.status}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3 text-slate-300">
+                  <tbody className="divide-y divide-white/5">
+                    {stats.recentTrips.map(trip => (
+                      <tr key={trip.id} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="py-3 font-mono text-xs text-white">{trip.booking_ref}</td>
+                        <td className="py-3"><StatusPill status={trip.status} /></td>
+                        <td className="py-3 text-slate-300">
                           {trip.origin_location && trip.destination
                             ? `${trip.origin_location} → ${trip.destination}`
                             : trip.origin_location ?? trip.destination ?? '—'}
                         </td>
-                        <td className="px-5 py-3 text-slate-300">{trip.customer_name ?? '—'}</td>
-                        <td className="px-5 py-3 text-slate-400 text-xs">
+                        <td className="py-3 text-slate-300">{trip.customer_name ?? '—'}</td>
+                        <td className="py-3 text-slate-400 text-xs">
                           {trip.start_date ? new Date(trip.start_date).toLocaleDateString('en-AE') : '—'}
                         </td>
                       </tr>
@@ -182,28 +142,32 @@ export default function LogisticsDashboard() {
                 </table>
               </div>
             ) : (
-              <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-12 text-center">
-                <div className="text-4xl mb-3">🚛</div>
+              <div className="text-center py-8">
+                <Truck className="w-10 h-10 text-slate-600 mx-auto mb-2" />
                 <p className="text-slate-400 text-sm">No logistics trips found</p>
                 <p className="text-slate-600 text-xs mt-1">Trips with service_type = LOGISTICS will appear here</p>
               </div>
             )}
-          </div>
+          </Panel>
 
-          {/* Quick links */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {[
-              { href: '/logistics/trips',    icon: '🗺️', label: 'Trips & Dispatch',  desc: 'Manage active and pending trips' },
-              { href: '/logistics/vehicles', icon: '🚛', label: 'Fleet Vehicles',     desc: 'Logistics-assigned vehicle inventory' },
-              { href: '/logistics/drivers',  icon: '👤', label: 'Driver Assignment',  desc: 'Assign and track logistics drivers' },
-            ].map(link => (
-              <Link key={link.href} href={link.href}
-                className="glass-card rounded-2xl p-5 border border-white/10 hover:border-amber-500/30 hover:bg-amber-500/5 transition-all group">
-                <div className="text-3xl mb-3">{link.icon}</div>
-                <h3 className="text-sm font-semibold text-white group-hover:text-amber-300 transition-colors">{link.label}</h3>
-                <p className="text-xs text-slate-500 mt-1">{link.desc}</p>
-              </Link>
-            ))}
+              { href: '/logistics/trips',    icon: Map,   label: 'Trips & dispatch', desc: 'Manage active and pending trips',           accent: 'amber'   as const },
+              { href: '/logistics/vehicles', icon: Truck, label: 'Fleet vehicles',   desc: 'Logistics-assigned vehicle inventory',     accent: 'amber'   as const },
+              { href: '/logistics/drivers',  icon: Users, label: 'Driver assignment',desc: 'Assign and track logistics drivers',       accent: 'cyan'    as const },
+            ].map(link => {
+              const Icon = link.icon;
+              return (
+                <Link key={link.href} href={link.href}
+                  className="rounded-2xl bg-slate-900/60 border border-white/10 hover:border-amber-500/30 hover:bg-amber-500/5 transition-all p-5 group block">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center mb-3">
+                    <Icon className="w-5 h-5 text-amber-300" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-white group-hover:text-amber-300 transition-colors">{link.label}</h3>
+                  <p className="text-xs text-slate-500 mt-1">{link.desc}</p>
+                </Link>
+              );
+            })}
           </div>
         </>
       )}
