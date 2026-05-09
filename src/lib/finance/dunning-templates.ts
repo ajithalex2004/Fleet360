@@ -30,9 +30,9 @@ export interface DunningTemplateInput {
 }
 
 const VENDOR_DEFAULT = {
-  name: 'XL AI Smart Mobility',
+  name: 'Fleet360',
   phone: '',
-  email: 'finance@xl-mobility.ai',
+  email: 'finance@fleet360.app',
 };
 
 const fmtMoney = (n: number, currency: string) =>
@@ -56,10 +56,10 @@ export function renderDunningEmail(input: DunningTemplateInput): Bilingual {
 
   const enBody = bodies
     .en(input, product)
-    .replace('{{vendor}}', vendor.name ?? 'XL AI');
+    .replace('{{vendor}}', vendor.name ?? 'Fleet360');
   const arBody = bodies
     .ar(input, product)
-    .replace('{{vendor}}', vendor.name ?? 'XL AI');
+    .replace('{{vendor}}', vendor.name ?? 'Fleet360');
 
   const htmlBody = `
 <!doctype html>

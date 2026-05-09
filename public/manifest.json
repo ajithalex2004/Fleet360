@@ -1,5 +1,5 @@
 {
-  "name": "XL AI Smart Mobility — Counter",
+  "name": "Fleet360 — Counter",
   "short_name": "Counter",
   "description": "Mobile counter operations for RAC handover, return, and damage walkaround.",
   "start_url": "/rental/counter",

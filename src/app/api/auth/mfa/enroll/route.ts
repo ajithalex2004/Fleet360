@@ -19,7 +19,7 @@ import { captureException } from '@/lib/sentry';
 
 export const runtime = 'nodejs';
 
-const ISSUER = 'XL AI Smart Mobility';
+const ISSUER = 'Fleet360';
 
 export async function POST(req: NextRequest) {
   try {

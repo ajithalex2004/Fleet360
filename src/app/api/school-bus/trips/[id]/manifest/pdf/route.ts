@@ -21,7 +21,7 @@ import { captureException } from '@/lib/sentry';
 export const runtime = 'nodejs';
 
 const VENDOR = {
-  name: 'XL AI Smart Mobility — School Bus',
+  name: 'Fleet360 — School Bus',
   tagline: 'UAE Smart Transport Management',
   phone: '+971 4 000 0000',
 };

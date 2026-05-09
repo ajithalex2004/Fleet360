@@ -5,7 +5,7 @@
 
 export const colors = {
   // Brand
-  primary: '#1a5e47',         // deep teal — XL AI brand accent
+  primary: '#1a5e47',         // deep teal — Fleet360 brand accent
   primaryLight: '#2e8b6f',
   accent: '#0ea5e9',           // sky blue for emphasis
 

@@ -26,7 +26,7 @@ export default function FieldLayout({ children }: { children: React.ReactNode })
       <header className="sticky top-0 z-10 bg-gradient-to-r from-emerald-700 to-teal-700 px-4 py-3 shadow-lg">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-xs uppercase tracking-wide text-emerald-100/70">XL AI Field</div>
+            <div className="text-xs uppercase tracking-wide text-emerald-100/70">Fleet360 Field</div>
             <div className="text-base font-bold">Leasing Operations</div>
           </div>
           <Link href="/leasing" className="text-xs text-emerald-100/80 hover:text-white">Desktop</Link>

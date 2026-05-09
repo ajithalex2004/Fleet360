@@ -77,7 +77,7 @@ export function InvoicePdf({ data, lang }: { data: InvoicePdfData; lang: Lang })
   const dir = dirFor(lang); const font = fontFor(lang); const ccy = data.currency;
 
   return (
-    <Document title={`${t('invoice', lang)} ${data.invoiceNo}`} author={data.vendor.name} creator="XL AI Smart Mobility Platform">
+    <Document title={`${t('invoice', lang)} ${data.invoiceNo}`} author={data.vendor.name} creator="Fleet360 Platform">
       <Page size="A4" style={[s.page, { fontFamily: font, direction: dir }]}>
         {/* Header */}
         <View style={s.header}>

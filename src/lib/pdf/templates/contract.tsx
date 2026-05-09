@@ -90,7 +90,7 @@ export function ContractPdf({ data, lang }: { data: ContractPdfData; lang: Lang 
   const months = data.durationMonths ?? Math.ceil((new Date(data.endDate).getTime() - new Date(data.startDate).getTime()) / (30.44 * 86400000));
 
   return (
-    <Document title={`${t('contract', lang)} ${data.contractNumber}`} author={data.vendor.name} creator="XL AI Smart Mobility Platform">
+    <Document title={`${t('contract', lang)} ${data.contractNumber}`} author={data.vendor.name} creator="Fleet360 Platform">
       <Page size="A4" style={[s.page, { fontFamily: font, direction: dir }]}>
         {/* Header */}
         <View style={s.header}>

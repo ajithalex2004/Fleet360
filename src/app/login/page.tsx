@@ -56,9 +56,9 @@ export default function LoginPage() {
         {/* Logo / Brand */}
         <div className="text-center space-y-2">
           <div className="text-4xl font-black text-white tracking-tight">
-            XL <span className="text-blue-500">AI</span>
+            Fleet<span className="text-blue-500">360</span>
           </div>
-          <p className="text-slate-400 text-sm">Smart Mobility Platform</p>
+          <p className="text-slate-400 text-sm">Fleet Management Platform</p>
         </div>
 
         {/* Card */}
