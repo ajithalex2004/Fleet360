@@ -5,19 +5,33 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const {
+      // Phase 2 canonical keying — preferred for new callers. The engine
+      // resolves these via the service-type / scope chain.
+      serviceTypeId, tenantId, scopeId,
+      // Legacy keying — still accepted. Engine falls back to (module,
+      // procedure) lookup when serviceTypeId isn't supplied or doesn't
+      // resolve to an active workflow.
       module, procedure,
       referenceType, referenceId, referenceNumber,
       initiatedByEmail, initiatedByName,
       contextData,
     } = body;
 
-    if (!module || !procedure || !referenceId) {
-      return NextResponse.json({ error: 'module, procedure and referenceId are required' }, { status: 400 });
+    if (!referenceId) {
+      return NextResponse.json({ error: 'referenceId is required' }, { status: 400 });
+    }
+    // At least one of the two keying paths must be supplied.
+    if (!(serviceTypeId && tenantId) && !(module && procedure)) {
+      return NextResponse.json(
+        { error: 'Either (serviceTypeId + tenantId) or (module + procedure) is required to resolve a workflow.' },
+        { status: 400 },
+      );
     }
 
     const result = await triggerWorkflow({
+      serviceTypeId, tenantId, scopeId,
       module, procedure,
-      referenceType: referenceType ?? module,
+      referenceType: referenceType ?? module ?? 'UNKNOWN',
       referenceId, referenceNumber: referenceNumber ?? referenceId,
       initiatedByEmail: initiatedByEmail ?? 'system',
       initiatedByName: initiatedByName ?? null,

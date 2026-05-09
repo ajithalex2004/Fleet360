@@ -27,6 +27,22 @@ async function _doInit(): Promise<void> {
         "updatedAt" TIMESTAMP DEFAULT NOW()
       );
 
+      -- ── Phase 2 of the Service-Configuration ↔ Workflow merge ─────────
+      -- Move workflows from the legacy (module, procedure) global keying
+      -- to a per-service-type, per-tenant model so:
+      --   • each WorkflowDefinition belongs to a specific ServiceType
+      --     (matches the L2 hierarchy admins already configure)
+      --   • workflows are tenant-scoped (multi-tenant correctness fix —
+      --     they were previously shared across every tenant)
+      --   • Phase 2E scope inheritance can override workflows at branch /
+      --     region / department level via the same scope chain that
+      --     resolves SLA + Approval rules.
+      -- Columns are nullable during transition; legacy rows resolve via
+      -- (module, procedure) fallback in triggerWorkflow().
+      ALTER TABLE "WorkflowDefinition" ADD COLUMN IF NOT EXISTS "serviceTypeId" TEXT;
+      ALTER TABLE "WorkflowDefinition" ADD COLUMN IF NOT EXISTS "tenantId"      TEXT;
+      ALTER TABLE "WorkflowDefinition" ADD COLUMN IF NOT EXISTS "scopeId"       UUID;
+
       CREATE TABLE IF NOT EXISTS "WorkflowStep" (
         id TEXT PRIMARY KEY,
         "workflowId" TEXT NOT NULL,
@@ -64,6 +80,44 @@ async function _doInit(): Promise<void> {
       ALTER TABLE "WorkflowDefinition" ADD COLUMN IF NOT EXISTS "defaultSlaHours" INTEGER DEFAULT 24;
       ALTER TABLE "WorkflowDefinition" ADD COLUMN IF NOT EXISTS "defaultEscalationEmail" TEXT;
       ALTER TABLE "WorkflowDefinition" ADD COLUMN IF NOT EXISTS "defaultEscalationHours" INTEGER DEFAULT 48;
+
+      -- Indexes for the new resolution paths.
+      CREATE INDEX IF NOT EXISTS idx_workflow_def_servicetype
+        ON "WorkflowDefinition" ("serviceTypeId") WHERE "serviceTypeId" IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_workflow_def_tenant
+        ON "WorkflowDefinition" ("tenantId") WHERE "tenantId" IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_workflow_def_scope
+        ON "WorkflowDefinition" ("scopeId") WHERE "scopeId" IS NOT NULL;
+
+      -- Idempotent backfill — only fills rows where serviceTypeId is still
+      -- NULL AND there is exactly one tenant with a service_type matching
+      -- the workflow procedure key. Ambiguous matches (same key under
+      -- multiple tenants) are left for manual reconciliation since cloning
+      -- one global workflow into N tenant copies would silently change
+      -- runtime behaviour. Guarded by the existence of service_types since
+      -- that table is created lazily by the service-config module.
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'service_types'
+      ) THEN
+        WITH unique_matches AS (
+          SELECT st.key,
+                 MIN(st.id::text)    AS id,
+                 MIN(st.tenant_id)   AS tenant_id,
+                 COUNT(*)            AS n
+          FROM service_types st
+          WHERE st.deleted_at IS NULL
+          GROUP BY st.key
+          HAVING COUNT(*) = 1
+        )
+        UPDATE "WorkflowDefinition" wd
+        SET "serviceTypeId" = um.id,
+            "tenantId"      = um.tenant_id,
+            "updatedAt"     = NOW()
+        FROM unique_matches um
+        WHERE wd."serviceTypeId" IS NULL
+          AND wd.procedure = um.key;
+      END IF;
 
       CREATE TABLE IF NOT EXISTS "WorkflowInstance" (
         id TEXT PRIMARY KEY,
@@ -106,14 +160,29 @@ export async function ensureWorkflowTables() {
   await _ensureWorkflowTablesOnce();
 }
 
-//  Workflow Definition CRUD 
-export async function listWorkflows(module?: string) {
+//  Workflow Definition CRUD
+/**
+ * List workflows with optional filters. Backward-compatible signature —
+ * pass a string for the legacy module-only filter, or an options object
+ * for the Phase 2 service-type / tenant filters.
+ */
+export async function listWorkflows(filter?: string | {
+  module?: string;
+  serviceTypeId?: string;
+  tenantId?: string;
+}) {
   await ensureWorkflowTables();
-  const rows: any[] = module
-    ? await prisma.$queryRawUnsafe(
-        `SELECT * FROM "WorkflowDefinition" WHERE module = $1 ORDER BY module, procedure`, module)
-    : await prisma.$queryRawUnsafe(
-        `SELECT * FROM "WorkflowDefinition" ORDER BY module, procedure`);
+  const opts = typeof filter === 'string' ? { module: filter } : (filter ?? {});
+  const where: string[] = [];
+  const args: any[] = [];
+  let p = 1;
+  if (opts.module)        { where.push(`module = $${p++}`);              args.push(opts.module); }
+  if (opts.serviceTypeId) { where.push(`"serviceTypeId" = $${p++}`);     args.push(opts.serviceTypeId); }
+  if (opts.tenantId)      { where.push(`"tenantId" = $${p++}`);          args.push(opts.tenantId); }
+  const sql = where.length
+    ? `SELECT * FROM "WorkflowDefinition" WHERE ${where.join(' AND ')} ORDER BY module, procedure`
+    : `SELECT * FROM "WorkflowDefinition" ORDER BY module, procedure`;
+  const rows: any[] = await prisma.$queryRawUnsafe(sql, ...args);
   if (!rows.length) return [];
   const ids = rows.map(r => r.id);
   const counts: any[] = await prisma.$queryRawUnsafe(
@@ -129,9 +198,80 @@ export async function listWorkflows(module?: string) {
   (instances as any[]).forEach((c: any) => { instanceMap[c.workflowId] = parseInt(c.count); });
   return rows.map(r => ({
     ...r,
-    stepCount: countMap[r.id] ?? 0,
+    stepCount:       countMap[r.id] ?? 0,
     activeInstances: instanceMap[r.id] ?? 0,
   }));
+}
+
+/**
+ * Phase 3 — canonical resolver. Returns the active workflow for a given
+ * service type at a given scope, walking the scope chain up to the tenant
+ * root. Falls back to a tenant-wide (scopeId IS NULL) workflow if no
+ * scope-specific one exists. Returns null when nothing is configured.
+ *
+ * Consumers should prefer this over the legacy (module, procedure) lookup.
+ */
+export async function getActiveWorkflowForServiceType(args: {
+  serviceTypeId: string;
+  tenantId: string;
+  /** Optional active scope. When provided, the resolver walks parent
+   *  scopes via service_scopes.parent_scope_id until a matching workflow
+   *  is found, or reaches the tenant root. */
+  scopeId?: string | null;
+}): Promise<{ id: string; name: string; isActive: boolean } | null> {
+  await ensureWorkflowTables();
+  const { serviceTypeId, tenantId, scopeId } = args;
+
+  // Build the scope chain (leaf → root) so we resolve overrides correctly.
+  let scopeChain: string[] = [];
+  if (scopeId) {
+    try {
+      const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+        `WITH RECURSIVE chain AS (
+           SELECT id::text, parent_scope_id, 0 AS depth
+             FROM service_scopes
+            WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL
+           UNION ALL
+           SELECT s.id::text, s.parent_scope_id, c.depth + 1
+             FROM service_scopes s
+             JOIN chain c ON s.id = c.parent_scope_id
+            WHERE s.tenant_id = $2 AND s.deleted_at IS NULL
+         )
+         SELECT id FROM chain ORDER BY depth ASC`,
+        scopeId, tenantId,
+      );
+      scopeChain = rows.map(r => r.id);
+    } catch { scopeChain = [scopeId]; }
+  }
+
+  // 1) Walk the scope chain, leaf-first.
+  for (const sId of scopeChain) {
+    const rows = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT id, name, "isActive"
+         FROM "WorkflowDefinition"
+        WHERE "serviceTypeId" = $1
+          AND "tenantId"      = $2
+          AND "scopeId"       = $3::uuid
+          AND "isActive"      = true
+        LIMIT 1`,
+      serviceTypeId, tenantId, sId,
+    );
+    if (rows[0]) return rows[0];
+  }
+
+  // 2) Tenant-wide (scopeId IS NULL) — applies when no scope override.
+  const tenantWide = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT id, name, "isActive"
+       FROM "WorkflowDefinition"
+      WHERE "serviceTypeId" = $1
+        AND "tenantId"      = $2
+        AND "scopeId"       IS NULL
+        AND "isActive"      = true
+      ORDER BY "createdAt" ASC
+      LIMIT 1`,
+    serviceTypeId, tenantId,
+  );
+  return tenantWide[0] ?? null;
 }
 
 export async function getWorkflowWithSteps(id: string) {
@@ -146,13 +286,21 @@ export async function getWorkflowWithSteps(id: string) {
 
 export async function createWorkflow(data: {
   name: string; module: string; procedure: string; description?: string;
+  // Phase 2 — canonical service-type / tenant linkage. Optional during the
+  // transition; the legacy (module, procedure) keying still works.
+  serviceTypeId?: string | null;
+  tenantId?:      string | null;
+  scopeId?:       string | null;
 }) {
   await ensureWorkflowTables();
   const id = randomUUID();
   await prisma.$executeRawUnsafe(
-    `INSERT INTO "WorkflowDefinition" (id, name, module, procedure, description)
-     VALUES ($1,$2,$3,$4,$5)`,
-    id, data.name, data.module, data.procedure, data.description ?? null);
+    `INSERT INTO "WorkflowDefinition"
+       (id, name, module, procedure, description,
+        "serviceTypeId", "tenantId", "scopeId")
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid)`,
+    id, data.name, data.module, data.procedure, data.description ?? null,
+    data.serviceTypeId ?? null, data.tenantId ?? null, data.scopeId ?? null);
   return id;
 }
 
@@ -312,20 +460,50 @@ export async function deleteStep(stepId: string) {
 
 //  Workflow Engine
 export async function triggerWorkflow(params: {
-  module: string; procedure: string;
+  // Canonical Phase 2 keying — preferred for new callers.
+  serviceTypeId?: string;
+  tenantId?:      string;
+  scopeId?:       string | null;
+  // Legacy keying — still supported. If serviceTypeId is provided, the
+  // resolver tries that first and only falls back to (module, procedure).
+  module?:    string;
+  procedure?: string;
   referenceType: string; referenceId: string; referenceNumber: string;
   initiatedByEmail: string; initiatedByName?: string;
   contextData?: Record<string, any>;
   force?: boolean; // set true to re-trigger even if already in progress
 }) {
   await ensureWorkflowTables();
-  const wfRows: any[] = await prisma.$queryRawUnsafe(
-    `SELECT * FROM "WorkflowDefinition"
-     WHERE module=$1 AND procedure=$2 AND "isActive"=true LIMIT 1`,
-    params.module, params.procedure);
+
+  // Resolution order:
+  //   1) (serviceTypeId, tenantId, scopeId) — Phase 2 canonical path
+  //   2) (module, procedure)                — legacy fallback
+  let wfRows: any[] = [];
+  if (params.serviceTypeId && params.tenantId) {
+    const found = await getActiveWorkflowForServiceType({
+      serviceTypeId: params.serviceTypeId,
+      tenantId:      params.tenantId,
+      scopeId:       params.scopeId ?? null,
+    });
+    if (found) {
+      wfRows = await prisma.$queryRawUnsafe(
+        `SELECT * FROM "WorkflowDefinition" WHERE id = $1 LIMIT 1`,
+        found.id,
+      );
+    }
+  }
+  if (!wfRows.length && params.module && params.procedure) {
+    wfRows = await prisma.$queryRawUnsafe(
+      `SELECT * FROM "WorkflowDefinition"
+       WHERE module=$1 AND procedure=$2 AND "isActive"=true LIMIT 1`,
+      params.module, params.procedure);
+  }
   if (!wfRows.length) {
-    console.warn(`[Workflow] No active workflow for module=${params.module} procedure=${params.procedure}`);
-    return { error: `No active workflow found for ${params.module} / ${params.procedure}. Please define and activate one in Admin > Workflow Management.` };
+    const key = params.serviceTypeId
+      ? `serviceType=${params.serviceTypeId} tenant=${params.tenantId}`
+      : `module=${params.module} procedure=${params.procedure}`;
+    console.warn(`[Workflow] No active workflow for ${key}`);
+    return { error: `No active workflow found for ${key}. Please define and activate one in Admin > Service Configuration > Workflow.` };
   }
 
   const wf = wfRows[0];

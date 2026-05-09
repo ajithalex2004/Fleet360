@@ -10,6 +10,7 @@
 import { useMemo } from 'react';
 import { useRuleTab } from './use-rule-tab';
 import { Field, NumberInput, TextInput, Toggle, SaveBar, Section, type RuleTabProps } from './shared';
+import { NotifyPicker } from './notify-picker';
 import {
   DEFAULT_TICKETING_RULES,
   type TicketingRules, type TicketingEscalationStep,
@@ -93,18 +94,27 @@ export function TicketingTab({ typeId, scopeId, scopeLookup }: RuleTabProps) {
         {rules.escalationMatrix.length === 0 && (
           <p className="text-[11px] text-slate-500">No escalation steps yet.</p>
         )}
+        {rules.escalationMatrix.length > 0 && (
+          <div className="grid grid-cols-[80px_1fr_2fr_auto] gap-2 items-end px-1 text-[10px] uppercase tracking-wider text-slate-500">
+            <span>Level</span>
+            <span>Hours</span>
+            <span>Escalate to</span>
+            <span />
+          </div>
+        )}
         {rules.escalationMatrix.map((s, i) => (
-          <div key={i} className="grid grid-cols-[80px_1fr_2fr_auto] gap-2 items-center">
+          <div key={i} className="grid grid-cols-[80px_1fr_2fr_auto] gap-2 items-start">
             <NumberInput value={s.level} min={1}
               onChange={v => updateEscalation(i, { level: v ?? 1 })} />
             <NumberInput value={s.afterHours} min={0}
               onChange={v => updateEscalation(i, { afterHours: v ?? 0 })}
               placeholder="hours" />
-            <TextInput value={s.escalateTo}
-              onChange={e => updateEscalation(i, { escalateTo: e.target.value })}
-              placeholder="email or role" />
+            <NotifyPicker
+              value={s.escalateTo}
+              onChange={v => updateEscalation(i, { escalateTo: v })}
+              placeholder="email, role:CODE, or email:a@b.com,c@d.com" />
             <button type="button" onClick={() => removeEscalation(i)}
-              className="p-2 rounded-lg text-rose-300 hover:bg-rose-500/10">
+              className="p-2 rounded-lg text-rose-300 hover:bg-rose-500/10 mt-1">
               <Trash2 className="w-4 h-4" />
             </button>
           </div>
