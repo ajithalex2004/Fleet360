@@ -37,7 +37,7 @@ export async function sendEmail(params: SendEmailParams): Promise<EmailLog> {
     const recipients = params.to.map(r => r.email).join(', ');
     const ccList = params.cc?.map(r => r.email).join(', ');
     let transport: any;
-    let fromAddress = process.env.EMAIL_FROM || '"XL AI Smart Mobility" <noreply@xl-mobility.ai>';
+    let fromAddress = process.env.EMAIL_FROM || '"Fleet360" <noreply@fleet360.app>';
 
     // Try Database configuration first
     const dbConfig = await prisma.integrationConfig.findFirst({
@@ -55,7 +55,7 @@ export async function sendEmail(params: SendEmailParams): Promise<EmailLog> {
             },
             tls: { rejectUnauthorized: false },
         });
-        fromAddress = `"${dbConfig.fromName || 'XL AI Smart Mobility'}" <${dbConfig.senderEmail || dbConfig.username}>`;
+        fromAddress = `"${dbConfig.fromName || 'Fleet360'}" <${dbConfig.senderEmail || dbConfig.username}>`;
         console.log(`[EMAIL SERVICE] Using DATABASE configuration for: ${recipients}`);
     } else if (process.env.SMTP_HOST && process.env.SMTP_USER) {
         // Fallback to ENV configuration

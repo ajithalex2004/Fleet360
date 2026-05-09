@@ -1,5 +1,5 @@
 /**
- * Next.js Edge Middleware — Multi-tenant auth + rate limiting for XL AI Smart Mobility.
+ * Next.js Edge Middleware — Multi-tenant auth + rate limiting for Fleet360.
  *
  * Responsibilities:
  *  1. Verify xl-session cookie and set x-tenant-id / x-user-id / x-tenant-plan headers

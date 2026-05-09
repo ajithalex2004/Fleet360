@@ -80,7 +80,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (nextStatus === 'PENDING_APPROVAL') {
       const template = generateInternalApprovalEmail(quotationNo, lesseeName, amountStr);
       await sendEmail({
-        to: [{ email: 'approvals@xl-mobility.ai', name: 'Internal Approvers' }],
+        to: [{ email: 'approvals@fleet360.app', name: 'Internal Approvers' }],
         ...template
       });
     }
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
         await sendEmail({
           to: toRecipients,
-          subject: `Lease Quotation from XL AI Smart Mobility - ${fqQuotationNo}`,
+          subject: `Lease Quotation from Fleet360 - ${fqQuotationNo}`,
           htmlBody: html
         });
       }
@@ -145,7 +145,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (nextStatus === 'PENDING_CREDIT_APPROVAL') {
       const template = generateCreditReviewEmail(quotationNo, lesseeName);
       await sendEmail({
-        to: [{ email: 'credit@xl-mobility.ai', name: 'Credit Team' }],
+        to: [{ email: 'credit@fleet360.app', name: 'Credit Team' }],
         ...template
       });
     }

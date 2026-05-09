@@ -133,7 +133,7 @@ textarea {
 
 /* Exception for inputs explicitly styled with dark backgrounds if needed later, 
    but for now, most forms are on white/light cards so dark text is safer. */
-/* ── XL AI Smart Mobility: ensure input text is always white on dark backgrounds ── */
+/* ── Fleet360: ensure input text is always white on dark backgrounds ── */
 input,
 textarea,
 select {

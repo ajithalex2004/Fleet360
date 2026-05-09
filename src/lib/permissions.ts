@@ -1,6 +1,6 @@
 // ============================================================
 // PERMISSION DEFINITIONS & UTILITIES
-// XL AI Smart Mobility - RBAC System
+// Fleet360 - RBAC System
 // ============================================================
 
 export const MODULES = [

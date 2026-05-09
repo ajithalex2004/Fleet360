@@ -1001,7 +1001,7 @@ export default function VendorQuotePage() {
             </main >
 
             <footer className="py-3 text-center text-[11px] text-slate-400">
-                Powered by TRIPXL.AI
+                Powered by Fleet360
             </footer>
         </div >
     );

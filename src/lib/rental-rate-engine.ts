@@ -1,5 +1,5 @@
 /**
- * XL AI Smart Mobility — Rental Rate Engine
+ * Fleet360 — Rental Rate Engine
  * Calculates the best-matching rate for a booking request,
  * applying seasonal multipliers, customer-type discounts,
  * location surcharges, promo codes, and insurance coverage.

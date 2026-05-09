@@ -27,7 +27,7 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
               <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold text-sm">C</div>
               <div>
                 <p className="text-white font-semibold text-sm">Customers</p>
-                <p className="text-slate-400 text-xs">XL AI Smart Mobility</p>
+                <p className="text-slate-400 text-xs">Fleet360</p>
               </div>
             </div>
           </div>

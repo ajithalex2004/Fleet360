@@ -690,7 +690,7 @@ export default function SustainabilityPage() {
           {/* ── GHG Protocol footer ── */}
           <div className="border-t border-white/5 pt-4 text-center">
             <p className="text-xs text-slate-600">
-              XL AI Smart Mobility Sustainability Report · Calculated per GHG Protocol Project Standard (2005) &amp; ISO 14064-1:2018 ·
+              Fleet360 Sustainability Report · Calculated per GHG Protocol Project Standard (2005) &amp; ISO 14064-1:2018 ·
               UAE Ministry of Energy &amp; Infrastructure grid factor (2023) · IPCC AR6 WGIII emission factors ·
               This report is prepared for internal management and external disclosure purposes.
               Third-party verification recommended for regulatory submission.

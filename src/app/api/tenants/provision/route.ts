@@ -87,7 +87,7 @@ async function sendVerificationEmail(opts: {
     const verifyUrl = `${opts.baseUrl}/api/tenants/verify-domain?token=${opts.token}&tenantId=${opts.tenantId}`;
 
     await transporter.sendMail({
-      from:    process.env.SMTP_FROM ?? '"XL AI Smart Mobility" <noreply@xl-mobility.com>',
+      from:    process.env.SMTP_FROM ?? '"Fleet360" <noreply@xl-mobility.com>',
       to:      opts.to,
       subject: `Verify your domain — ${opts.tenantName}`,
       html: `
@@ -95,7 +95,7 @@ async function sendVerificationEmail(opts: {
         <html>
         <body style="font-family:Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:40px;">
           <div style="max-width:480px;margin:0 auto;background:#1e293b;border-radius:12px;padding:32px;">
-            <h2 style="color:#3b82f6;margin-top:0;">Welcome to XL AI Smart Mobility</h2>
+            <h2 style="color:#3b82f6;margin-top:0;">Welcome to Fleet360</h2>
             <p>Hello, <strong>${opts.tenantName}</strong> is almost ready.</p>
             <p>Click the button below to verify your domain and activate all platform features:</p>
             <a href="${verifyUrl}"

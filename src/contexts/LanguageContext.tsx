@@ -82,7 +82,7 @@ const translations: Record<string, Record<Language, string>> = {
   // Platform
   'platform.title':  { en: 'Smart Mobility Platform',      ar: 'منصة التنقل الذكي' },
   'platform.tagline':{ en: 'UAE Smart Transport Management', ar: 'إدارة النقل الذكي في الإمارات' },
-  'platform.home':   { en: 'XL AI Platform Home',          ar: 'الرئيسية' },
+  'platform.home':   { en: 'Fleet360 Home',          ar: 'الرئيسية' },
   // Modules
   'module.finance':      { en: 'Finance ERP',          ar: 'المالية' },
   'module.leasing':      { en: 'Vehicle Leasing',      ar: 'تأجير المركبات' },

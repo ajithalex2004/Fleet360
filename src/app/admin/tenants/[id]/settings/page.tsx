@@ -357,7 +357,7 @@ export default function TenantSettingsPage() {
             </div>
             {s.emailNotificationsEnabled && (
               <div className="grid grid-cols-3 gap-4">
-                {[{l:'SMTP Host',k:'smtpHost',ph:'smtp.gmail.com'},{l:'SMTP Port',k:'smtpPort',ph:'587'},{l:'Username',k:'smtpUser',ph:'user@domain.com'},{l:'Password',k:'smtpPass',ph:'**hidden**',pwd:true},{l:'From Email',k:'smtpFromEmail',ph:'noreply@company.com'},{l:'From Name',k:'smtpFromName',ph:'XL AI Smart Mobility'}].map(({l,k,ph,pwd})=>(
+                {[{l:'SMTP Host',k:'smtpHost',ph:'smtp.gmail.com'},{l:'SMTP Port',k:'smtpPort',ph:'587'},{l:'Username',k:'smtpUser',ph:'user@domain.com'},{l:'Password',k:'smtpPass',ph:'**hidden**',pwd:true},{l:'From Email',k:'smtpFromEmail',ph:'noreply@company.com'},{l:'From Name',k:'smtpFromName',ph:'Fleet360'}].map(({l,k,ph,pwd})=>(
                   <Field key={k} label={l}>
                     <input type={pwd ? 'password' : 'text'} value={(s as any)[k] ?? ''} onChange={e => set(k as keyof Settings, e.target.value)} placeholder={ph}
                       className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none text-sm" />

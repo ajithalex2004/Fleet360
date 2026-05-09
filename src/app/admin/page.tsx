@@ -46,7 +46,7 @@ export default function AdminOverview() {
     <div className="space-y-8">
       <div>
         <h1 className="text-4xl font-bold text-white mb-2">Platform Administration</h1>
-        <p className="text-slate-400">Multi-tenant access control for XL AI Smart Mobility</p>
+        <p className="text-slate-400">Multi-tenant access control for Fleet360</p>
       </div>
 
       {/* Stats */}

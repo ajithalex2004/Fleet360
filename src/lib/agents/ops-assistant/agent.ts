@@ -1,5 +1,5 @@
 /**
- * XL AI Ops Assistant — Ecosystem Wrapper
+ * Fleet360 Ops Assistant — Ecosystem Wrapper
  * -----------------------------------------
  * The actual Ops Assistant runs at POST /api/operations/simple-chat
  * via SSE streaming. Uses TheSys GPT-5 with 7 fleet management tools.
@@ -101,7 +101,7 @@ async function runOpsAssistantStats(event: AgentEvent): Promise<AgentRunResult> 
 
 export const OPS_ASSISTANT_AGENT: AgentDefinition = {
   id:          'ops-assistant',
-  name:        'XL AI Ops Assistant',
+  name:        'Fleet360 Ops Assistant',
   description: 'Conversational operations assistant with 6 fleet management tools. Powered by TheSys GPT-5 with SSE streaming. Always calls tools to show live data visually.',
   version:     '1.0.0',
   agentType:   'CONVERSATIONAL',
