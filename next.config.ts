@@ -16,8 +16,8 @@ const GO_BACKEND_ROUTES = [
 ].join("|");
 
 const nextConfig: NextConfig = {
-  // Run src/instrumentation.ts on server startup (pre-warms Neon connection)
-  instrumentationHook: true,
+  // Note: 'instrumentationHook' was removed in Next.js 15+ — the
+  // src/instrumentation.ts file is now picked up automatically.
 
   // Tree-shake heavy UI libraries so only used components are bundled
   experimental: {
