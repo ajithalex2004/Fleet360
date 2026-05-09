@@ -141,9 +141,11 @@ export default function DispatchAnalyticsPage() {
     ? Math.round((driverStats.busy / driverStats.total) * 100)
     : 0;
 
-  // Service breakdown
-  const serviceBreakdown = Array.from(
-    jobs.reduce((map, j) => {
+  // Service breakdown — explicit reducer type so jobs: any[] doesn't
+  // erode the result to unknown[]. Iterate values() instead of [k, v]
+  // entries so Array.from gives ServiceBreakdown[] directly.
+  const serviceBreakdown: ServiceBreakdown[] = Array.from(
+    jobs.reduce<Map<string, ServiceBreakdown>>((map, j) => {
       const k = j.service_type ?? 'UNKNOWN';
       if (!map.has(k)) map.set(k, { service_type: k, count: 0, completed: 0, failed: 0 });
       const e = map.get(k)!;
@@ -151,10 +153,8 @@ export default function DispatchAnalyticsPage() {
       if (j.status === 'COMPLETED') e.completed++;
       if (['FAILED','ESCALATED'].includes(j.status)) e.failed++;
       return map;
-    }, new Map<string, ServiceBreakdown>())
-  )
-    .map(([,v]) => v)
-    .sort((a, b) => b.count - a.count);
+    }, new Map<string, ServiceBreakdown>()).values()
+  ).sort((a, b) => b.count - a.count);
 
   // Priority breakdown
   const priorityCounts = ['P1','EMERGENCY','URGENT','P2','NORMAL','P3','SCHEDULED'].map(p => ({

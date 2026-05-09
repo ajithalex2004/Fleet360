@@ -208,10 +208,19 @@ export interface MaintenanceRequest {
     actualPartsCost?: number; // Cost of parts used
     actualLaborCost?: number; // Labor charges
     actualOtherCost?: number; // Miscellaneous costs
+    actualCosts?: ActualCosts; // Structured breakdown — persisted as JSON in actualCostsData column
     currency?: 'AED';
     scheduledDate?: string; // ISO Date
     completionDate?: string; // ISO Date
     comments: Comment[];
+
+    // Work-order execution payload — page-side rich types; the schema
+    // stores each as JSON-serialized text via raw SQL (work_log,
+    // parts_used, checklist_items, assigned_technicians columns).
+    workLog?: WorkLogEntry[];
+    partsUsed?: PartUsage[];
+    checklistItems?: ChecklistItem[];
+    assignedTechnicians?: Technician[];
 
     // Status Timeline
     statusTimeline?: Partial<Record<MaintenanceStatus, string>>; // ISO Date for each status
@@ -395,6 +404,8 @@ export interface ActualCosts {
 
 export interface WorkOrder {
     id: string;
+    /** Human-readable WO number, e.g. "WO-241001". Falls back to id when absent. */
+    workOrderNo?: string;
     requestId: string;
     garageId: string;
     quotationId?: string;

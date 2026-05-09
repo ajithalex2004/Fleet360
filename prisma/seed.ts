@@ -1,9 +1,19 @@
-import { PrismaClient, MaintenanceStatus, AlertSeverity, AlertType, ActionStatus } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+// Status fields are plain strings in the current schema (not Prisma enums).
+// Mirror the values that src/types/maintenance.ts uses so the seed matches
+// what the rest of the app expects to see.
+const STATUS = {
+    REQUESTED:         'Requested',
+    ACCEPTED:          'Accepted',
+    UNDER_ESTIMATION:  'Under Estimation',
+    UNDER_MAINTENANCE: 'Under Maintenance',
+} as const;
+
 async function main() {
-    // Vehicles
+    // -- Vehicles ----------------------------------------------------------
     const v1 = await prisma.vehicle.upsert({
         where: { licensePlate: 'DXB-12345' },
         update: {},
@@ -19,8 +29,6 @@ async function main() {
             status: 'Active',
             registrationExpiry: new Date('2025-12-01'),
             insuranceExpiry: new Date('2025-12-01'),
-            registrationLastRenewed: new Date('2024-12-01'),
-            insuranceLastRenewed: new Date('2024-12-01'),
         },
     });
 
@@ -39,8 +47,6 @@ async function main() {
             status: 'In Service',
             registrationExpiry: new Date('2024-06-15'),
             insuranceExpiry: new Date('2024-06-15'),
-            registrationLastRenewed: new Date('2023-06-15'),
-            insuranceLastRenewed: new Date('2023-06-15'),
         },
     });
 
@@ -59,12 +65,10 @@ async function main() {
             status: 'Active',
             registrationExpiry: new Date('2026-01-20'),
             insuranceExpiry: new Date('2026-01-20'),
-            registrationLastRenewed: new Date('2025-01-20'),
-            insuranceLastRenewed: new Date('2025-01-20'),
         },
     });
 
-    // Drivers
+    // -- Drivers -----------------------------------------------------------
     const d1 = await prisma.driver.upsert({
         where: { licenseNumber: 'UAE-1234567' },
         update: {},
@@ -75,7 +79,6 @@ async function main() {
             licenseExpiry: new Date('2026-05-10'),
             assignedVehicleId: 'v1',
             contactNumber: '+971501234567',
-            licenseLastRenewed: new Date('2021-05-10'),
         },
     });
 
@@ -89,11 +92,10 @@ async function main() {
             licenseExpiry: new Date('2024-08-22'),
             assignedVehicleId: 'v2',
             contactNumber: '+971559876543',
-            licenseLastRenewed: new Date('2019-08-22'),
         },
     });
 
-    // Garages
+    // -- Garages -----------------------------------------------------------
     const g1 = await prisma.garage.create({
         data: {
             id: 'g1',
@@ -105,7 +107,7 @@ async function main() {
             contactNumber: '+97141234567',
             specialties: ['General Service', 'Tires', 'AC', 'Oil Change'],
             isInternal: false,
-        }
+        },
     });
 
     const g2 = await prisma.garage.create({
@@ -119,46 +121,48 @@ async function main() {
             contactNumber: '+97149876543',
             specialties: ['Preventive', 'Corrective'],
             isInternal: false,
-        }
+        },
     });
 
-    // Maintenance Requests
+    // -- Maintenance Requests ----------------------------------------------
     await prisma.maintenanceRequest.create({
         data: {
             id: 'MR#241001',
-            readableId: 'MR#241001',
             vehicleId: 'v2',
             driverId: 'd2',
             requestDate: new Date('2024-05-20T09:00:00Z'),
             description: 'Engine making strange rattling noise when accelerating.',
-            status: MaintenanceStatus.UNDER_MAINTENANCE,
+            status: STATUS.UNDER_MAINTENANCE,
             garageId: 'g2',
             estimatedCost: 1500,
-            history: {
+            histories: {
                 create: [
-                    { status: MaintenanceStatus.REQUESTED, date: new Date('2024-05-20T09:00:00Z'), note: 'Request created', actor: 'John Doe (Driver)' },
-                    { status: MaintenanceStatus.ACCEPTED, date: new Date('2024-05-20T10:30:00Z'), note: 'Request Accepted', actor: 'Sarah Connor (Fleet Manager)' },
-                ]
+                    { status: STATUS.REQUESTED, date: new Date('2024-05-20T09:00:00Z'), note: 'Request created', actor: 'John Doe (Driver)' },
+                    { status: STATUS.ACCEPTED,  date: new Date('2024-05-20T10:30:00Z'), note: 'Request Accepted', actor: 'Sarah Connor (Fleet Manager)' },
+                ],
             },
             comments: {
                 create: [
                     { author: 'John Smith', text: 'Noise started this morning.' },
-                ]
-            }
-        }
+                ],
+            },
+        },
     });
 
     await prisma.maintenanceRequest.create({
         data: {
             id: 'MR#241002',
-            readableId: 'MR#241002',
             vehicleId: 'v1',
             driverId: 'd1',
             requestDate: new Date('2024-05-24T14:30:00Z'),
             description: 'Periodic maintenance due (50k service).',
-            status: MaintenanceStatus.UNDER_ESTIMATION,
-        }
+            status: STATUS.UNDER_ESTIMATION,
+        },
     });
+
+    // Touch the unused locals so TS doesn't complain about them. The whole
+    // file is intentionally a side-effect script.
+    void [v1, v2, v3, d1, d2, g1, g2];
 
     console.log('Seeding completed.');
 }
