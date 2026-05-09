@@ -1,35 +1,34 @@
 /**
- * Node-only instrumentation body.
+ * Node-runtime-only instrumentation. Imported dynamically from
+ * src/instrumentation.ts after a NEXT_RUNTIME === 'nodejs' guard so the
+ * Edge compiler never sees the Node APIs (process.on, etc.) and doesn't
+ * emit "A Node.js API is used in the Edge Runtime" warnings.
  *
- * Imported dynamically by instrumentation.ts only when running in the
- * Node runtime, so Turbopack never analyses these `process.on` calls
- * for the Edge runtime.
- *
- *  - Pre-warms the Neon connection (cold-start tax can be 3-8s)
- *  - Wires unhandled rejection / uncaught exception handlers into Sentry
+ * - Wires unhandled rejection / uncaught exception handlers into Sentry.
+ * - Pre-warms the Neon connection so the first real user request doesn't
+ *   pay the cold-start penalty.
  */
 
-import { captureException, sentryEnabled } from '@/lib/sentry';
-import { prisma } from '@/lib/prisma';
-
-// Global error handlers → Sentry
-try {
-  process.on('unhandledRejection', (reason) => {
-    console.error('[unhandledRejection]', reason);
-    captureException(reason, { level: 'error', context: 'unhandledRejection' });
-  });
-  process.on('uncaughtException', (err) => {
-    console.error('[uncaughtException]', err);
-    captureException(err, { level: 'fatal', context: 'uncaughtException' });
-  });
-  if (sentryEnabled) console.log('[Startup] Sentry configured');
-} catch (err) {
-  console.warn('[Startup] Sentry handler registration failed:', err);
-}
-
-// Neon pre-warm
-(async () => {
+export async function registerNode(): Promise<void> {
+  // Global error handlers → Sentry
   try {
+    const { captureException, sentryEnabled } = await import('@/lib/sentry');
+    process.on('unhandledRejection', (reason) => {
+      console.error('[unhandledRejection]', reason);
+      captureException(reason, { level: 'error', context: 'unhandledRejection' });
+    });
+    process.on('uncaughtException', (err) => {
+      console.error('[uncaughtException]', err);
+      captureException(err, { level: 'fatal', context: 'uncaughtException' });
+    });
+    if (sentryEnabled) console.log('[Startup] Sentry configured');
+  } catch (err) {
+    console.warn('[Startup] Sentry handler registration failed:', err);
+  }
+
+  // Neon pre-warm
+  try {
+    const { prisma } = await import('@/lib/prisma');
     const t0 = Date.now();
     await prisma.$queryRaw`SELECT 1`;
     console.log(`[Startup] Neon pre-warm OK — ${Date.now() - t0} ms`);
@@ -37,4 +36,4 @@ try {
     // Non-fatal — the app works without a warm connection; just slower first load
     console.warn('[Startup] Neon pre-warm failed (will retry on first request):', err);
   }
-})();
+}

@@ -16,8 +16,8 @@ const GO_BACKEND_ROUTES = [
 ].join("|");
 
 const nextConfig: NextConfig = {
-  // Note: src/instrumentation.ts is auto-discovered in Next 15+ — the old
-  // `experimental.instrumentationHook` flag is no longer needed (and warns).
+  // Note: 'instrumentationHook' was removed in Next.js 15+ — the
+  // src/instrumentation.ts file is now picked up automatically.
 
   // Tree-shake heavy UI libraries so only used components are bundled
   experimental: {
