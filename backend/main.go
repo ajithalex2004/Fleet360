@@ -1,10 +1,10 @@
 package main
 
 import (
-	"my-c1-project-backend/database"
-	"my-c1-project-backend/handlers"
-	"my-c1-project-backend/models"
-	"my-c1-project-backend/seed"
+	"fleet360-backend/database"
+	"fleet360-backend/handlers"
+	"fleet360-backend/models"
+	"fleet360-backend/seed"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
