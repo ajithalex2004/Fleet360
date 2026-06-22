@@ -205,3 +205,61 @@ describe('quoteShipment', () => {
     expect(r.total).toBe(900);
   });
 });
+
+// ── Day 4: applyContractQuoteToInput populates quotedContractId + margin ────
+
+import { applyContractQuoteToInput } from '@/lib/logistics/rate-engine';
+
+describe('applyContractQuoteToInput (Day 4 — contract id & margin)', () => {
+  it('writes quotedContractId on a successful match', async () => {
+    mockMatch.mockResolvedValueOnce([
+      { ...baseContract, id: 'win-1', contractNo: 'RC-WIN', baseRate: 1000 },
+    ]);
+    const { input } = await applyContractQuoteToInput({
+      tenantId: 't1',
+      originName: 'Dubai', destinationName: 'Abu Dhabi',
+      customerRateAmount: null,
+    });
+    expect(input.quotedContractId).toBe('win-1');
+    expect(input.customerRateAmount).toBe(1000);
+  });
+
+  it('computes margin = customer_rate - carrier_cost when both known', async () => {
+    mockMatch.mockResolvedValueOnce([
+      { ...baseContract, baseRate: 1500 },
+    ]);
+    const { input } = await applyContractQuoteToInput({
+      tenantId: 't1',
+      originName: 'Dubai', destinationName: 'Abu Dhabi',
+      customerRateAmount: null,
+      carrierCostAmount: 900,
+    });
+    expect(input.customerRateAmount).toBe(1500);
+    expect(input.marginAmount).toBe(600);
+  });
+
+  it('does not compute margin when carrier cost is unknown', async () => {
+    mockMatch.mockResolvedValueOnce([
+      { ...baseContract, baseRate: 1500 },
+    ]);
+    const { input } = await applyContractQuoteToInput({
+      tenantId: 't1',
+      originName: 'Dubai', destinationName: 'Abu Dhabi',
+      customerRateAmount: null,
+    });
+    expect(input.marginAmount).toBeUndefined();
+  });
+
+  it('handles negative margin (carrier cost > contracted rate) without clamping', async () => {
+    mockMatch.mockResolvedValueOnce([
+      { ...baseContract, baseRate: 800 },
+    ]);
+    const { input } = await applyContractQuoteToInput({
+      tenantId: 't1',
+      originName: 'Dubai', destinationName: 'Abu Dhabi',
+      customerRateAmount: null,
+      carrierCostAmount: 1000,  // overpaid carrier — operator needs to see the loss
+    });
+    expect(input.marginAmount).toBe(-200);
+  });
+});

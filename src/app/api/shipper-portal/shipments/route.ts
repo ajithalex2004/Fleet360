@@ -236,11 +236,24 @@ export async function POST(req: NextRequest) {
     // themselves — if no contract matches, the order still goes through
     // with customerRateAmount=null and a `rateQuote.reason=no-lane-match`
     // record so dispatch knows to set a price manually.
-    const { input: quotedInput } = await applyContractQuoteToInput(input);
+    const { input: quotedInput, quote } = await applyContractQuoteToInput(input);
 
     const created = await createShipmentOrder(quotedInput);
     if (!created) {
       return NextResponse.json({ error: 'Shipment creation failed' }, { status: 500 });
+    }
+
+    // Persist the winning contract id in the dedicated column so dispatch
+    // can query "shipments under contract RC-X" without parsing JSONB.
+    // Best-effort: column may not exist on very old tenants that haven't
+    // run ensureLogisticsDomainTables yet — non-fatal in that case.
+    if (quote?.matched && quote.contractId) {
+      await prisma.$executeRawUnsafe(
+        `UPDATE logistics_shipment_orders
+            SET quoted_contract_id = $1, updated_at = NOW()
+          WHERE id = $2 AND tenant_id = $3`,
+        quote.contractId, (created as { id: string }).id, auth.tenantId,
+      ).catch(() => { /* non-fatal */ });
     }
 
     // Tag the row with sourceChannel column too (in addition to metadata)

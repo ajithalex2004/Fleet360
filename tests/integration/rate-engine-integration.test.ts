@@ -201,4 +201,26 @@ describe('applyContractQuoteToInput (live DB)', () => {
     expect(meta.rateQuote?.matched).toBe(false);
     expect(meta.rateQuote?.reason).toBe('no-lane-match');
   });
+
+  it('persists quotedContractId on a match so dispatch can filter by contract (Day 4)', async () => {
+    const { input } = await applyContractQuoteToInput({
+      tenantId: TENANT_ID,
+      cargoOwnerCustomerId: CUSTOMER_ID,
+      originName: 'Dubai', destinationName: 'Abu Dhabi',
+      customerRateAmount: null,
+    });
+    expect(input.quotedContractId).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('computes margin on the input when carrier cost is supplied (Day 4)', async () => {
+    const { input } = await applyContractQuoteToInput({
+      tenantId: TENANT_ID,
+      cargoOwnerCustomerId: CUSTOMER_ID,
+      originName: 'Dubai', destinationName: 'Abu Dhabi',
+      customerRateAmount: null,
+      carrierCostAmount: 600,  // customer rate is 900 for this customer's contract
+    });
+    expect(input.customerRateAmount).toBe(900);
+    expect(input.marginAmount).toBe(300);
+  });
 });

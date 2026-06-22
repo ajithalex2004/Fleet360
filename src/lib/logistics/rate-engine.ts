@@ -345,10 +345,14 @@ export interface ShipmentInputForQuote {
   bookingMode?: string | null;
   customerRateAmount?: number | null;
   carrierCostAmount?: number | null;
+  marginAmount?: number | null;
   currency?: string | null;
   pickupWindowFrom?: string | Date | null;
   metadata?: Record<string, unknown> | null;
   assignedCarrierId?: string | null;
+  /** Set by applyContractQuoteToInput on a successful match. Persisted via
+      post-insert UPDATE (the column may be absent on very old tenants). */
+  quotedContractId?: string | null;
 }
 
 /**
@@ -371,7 +375,16 @@ export interface ShipmentInputForQuote {
  */
 export async function applyContractQuoteToInput<T extends ShipmentInputForQuote>(
   input: T,
-): Promise<{ input: T & { metadata: Record<string, unknown> }; quote: QuoteShipmentResult | null }> {
+): Promise<{
+  /**
+   * The input with metadata.rateQuote always populated, and (on a match)
+   * customerRateAmount, currency, quotedContractId, and marginAmount
+   * patched in. Typed as T & ShipmentInputForQuote so callers see those
+   * optional fields without us widening to a synthetic shape.
+   */
+  input: T & ShipmentInputForQuote & { metadata: Record<string, unknown> };
+  quote: QuoteShipmentResult | null;
+}> {
   const withMetadata = { ...input, metadata: input.metadata ?? {} };
 
   if (input.customerRateAmount != null && input.customerRateAmount > 0) {
@@ -416,12 +429,26 @@ export async function applyContractQuoteToInput<T extends ShipmentInputForQuote>
     },
   };
 
+  // When the contract sets the customer rate and the operator has already
+  // booked a carrier (carrierCostAmount set), we can also compute margin
+  // server-side. Operators previously had to do this in the dispatch UI,
+  // which meant margin was only known after a shipment hit a status that
+  // triggered the calc. Doing it here means it's recorded on day-1.
+  const computedMargin = quote.matched && input.carrierCostAmount != null
+    ? Math.round((quote.total - input.carrierCostAmount) * 100) / 100
+    : undefined;
+
   const patched = {
     ...input,
     metadata: { ...(input.metadata ?? {}), ...auditPatch },
     ...(quote.matched
-      ? { customerRateAmount: quote.total, currency: quote.currency }
+      ? {
+          customerRateAmount: quote.total,
+          currency: quote.currency,
+          quotedContractId: quote.contractId,
+        }
       : {}),
+    ...(computedMargin !== undefined ? { marginAmount: computedMargin } : {}),
   };
 
   return { input: patched, quote };
