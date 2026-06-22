@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { addTrackingEvent } from '@/lib/logistics/domain';
 import { recomputeShipmentEta } from '@/lib/logistics/eta-notifier';
+import { evaluateShipmentGeofences } from '@/lib/logistics/geofence-service';
 
 export const runtime = 'nodejs';
 
@@ -69,11 +70,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       console.error('[tracking ingest] ETA recompute failed', e);
     }
 
+    // Evaluate geofences (arrival/departure/route-deviation). Best-effort.
+    let geofence: Awaited<ReturnType<typeof evaluateShipmentGeofences>> | null = null;
+    try {
+      geofence = await evaluateShipmentGeofences({ tenantId, shipmentOrderId: id });
+    } catch (e) {
+      console.error('[tracking ingest] geofence eval failed', e);
+    }
+
     return NextResponse.json({
       ingested: true,
       eta: etaResult?.prediction ?? null,
       notified: etaResult?.notified ?? false,
       notifyReason: etaResult?.notifyDecision?.reason ?? null,
+      geofenceEvents: geofence?.events ?? [],
+      alertsRaised: geofence?.raised ?? 0,
     }, { status: 201 });
   } catch (e) {
     console.error('[tracking ingest]', e);
