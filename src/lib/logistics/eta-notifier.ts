@@ -209,8 +209,13 @@ export async function recomputeShipmentEta(args: {
     laneAverageSpeedKmh: num(ship.lane_avg_speed),
   });
 
-  // 4) Persist the ETA where customer-tracking reads it: the latest event's
-  //    metadata.etaAt. (eventRows[0] is the most recent ping.)
+  // 4) Persist the ETA in two places, both best-effort:
+  //    (a) the latest tracking event's metadata (audit + secondary readers)
+  //    (b) the latest telematics event's eta_at column — this is what the
+  //        customer-tracking view actually reads (its latest_telematics CTE).
+  //        A telematics provider may have supplied no ETA, or a worse one;
+  //        we overwrite it with the ML prediction so the customer sees our
+  //        dynamic estimate.
   const latestEventId = eventRows[0]?.id ?? null;
   if (prediction.etaAt && latestEventId) {
     await prisma.$executeRawUnsafe(
@@ -220,6 +225,21 @@ export async function recomputeShipmentEta(args: {
         WHERE id = $4 AND tenant_id = $5`,
       prediction.etaAt, prediction.method, prediction.confidence, latestEventId, args.tenantId,
     ).catch(() => { /* non-fatal */ });
+  }
+  if (prediction.etaAt) {
+    // eta_confidence is a numeric 0–1 score in the telematics schema; map our
+    // confidence enum onto it.
+    const confScore = prediction.confidence === 'high' ? 0.9 : prediction.confidence === 'medium' ? 0.6 : 0.3;
+    await prisma.$executeRawUnsafe(
+      `UPDATE logistics_telematics_events
+          SET eta_at = $1::timestamptz, eta_confidence = $2::numeric
+        WHERE id = (
+          SELECT id FROM logistics_telematics_events
+           WHERE shipment_order_id = $3 AND tenant_id = $4
+           ORDER BY event_time DESC LIMIT 1
+        )`,
+      prediction.etaAt, confScore, args.shipmentOrderId, args.tenantId,
+    ).catch(() => { /* table/row may be absent — non-fatal */ });
   }
 
   // 5) Decide + send.

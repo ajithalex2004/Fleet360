@@ -90,6 +90,35 @@ describe('recomputeShipmentEta (live DB)', () => {
     expect(ev[0]?.metadata?.etaMethod).toBe('observed-speed');
   }, 60_000);
 
+  it('writes the predicted ETA into the latest telematics event (customer-tracking surface)', async () => {
+    // Seed a telematics event with NO eta_at — simulating a provider ping
+    // that didn't supply an ETA. Recompute should fill it with our prediction.
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO logistics_telematics_events
+         (tenant_id, shipment_order_id, latitude, longitude, event_time, created_at)
+       VALUES ($1,$2,25.2790,55.31,'2026-06-22T08:04:30Z'::timestamptz, NOW())`,
+      TENANT, SHIP,
+    ).catch(() => { /* table is lazy-created elsewhere; skip if absent */ });
+
+    const r = await recomputeShipmentEta({
+      tenantId: TENANT, shipmentOrderId: SHIP, now: '2026-06-22T08:05:00Z',
+      suppressNotifications: true,
+    });
+    expect(r.prediction?.etaAt).toBeTruthy();
+
+    const tel = await prisma.$queryRawUnsafe<Array<{ eta_at: string | null; eta_confidence: string | number | null }>>(
+      `SELECT eta_at::text, eta_confidence::text FROM logistics_telematics_events
+        WHERE shipment_order_id = $1 AND tenant_id = $2
+        ORDER BY event_time DESC LIMIT 1`,
+      SHIP, TENANT,
+    ).catch(() => []);
+    // Only assert when the telematics table exists in this DB.
+    if (tel.length) {
+      expect(tel[0].eta_at).toBeTruthy();
+      expect(Number(tel[0].eta_confidence)).toBeGreaterThan(0);  // numeric score written
+    }
+  }, 60_000);
+
   it('returns a "shipment not found" result for an unknown id without throwing', async () => {
     const r = await recomputeShipmentEta({
       tenantId: TENANT, shipmentOrderId: randomUUID(), suppressNotifications: true,
