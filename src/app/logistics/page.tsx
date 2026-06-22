@@ -8,6 +8,7 @@ import {
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
 import ChauffeurDriverIcon from '@/components/icons/ChauffeurDriverIcon';
 import RateCoveragePanel from '@/components/logistics/RateCoveragePanel';
+import LaneProfitabilityPanel from '@/components/logistics/LaneProfitabilityPanel';
 
 interface LogisticsStats {
   totalVehicles: number;
@@ -111,6 +112,8 @@ export default function LogisticsDashboard() {
           </div>
 
           <RateCoveragePanel />
+
+          <LaneProfitabilityPanel />
 
           <Panel title="Recent trips" icon={MapPin} accent="amber"
             actions={<Link href="/logistics/trips" className="text-sm text-amber-300 hover:text-amber-200">View all →</Link>}>

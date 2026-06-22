@@ -62,8 +62,8 @@ export async function GET(req: NextRequest) {
         AND rc.tenant_id = s.tenant_id
        WHERE s.tenant_id = $1
          AND s.deleted_at IS NULL
-         AND s.created_at >= $2
-         AND s.created_at < $3
+         AND s.created_at >= $2::timestamptz
+         AND s.created_at <  $3::timestamptz
          AND ($4::text IS NULL OR s.status = $4)`,
       tenantId, from.toISOString(), to.toISOString(), status ?? null,
     ).catch(() => [] as CoverageRow[]);
