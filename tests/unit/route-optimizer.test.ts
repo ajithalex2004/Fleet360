@@ -293,6 +293,39 @@ describe('optimizeRoutes', () => {
     expect(pickup.arriveMin).toBe(600);  // waited until window open
   });
 
+  it('spreads load across vehicles instead of cramming one truck past HOS', () => {
+    // 3 shipments, each a short hop, but the legs between them are long enough
+    // that merging all 3 onto one truck would blow past the HOS limit. With
+    // 3 vehicles available, the solver should use more than one rather than
+    // produce a single HOS-violating mega-route.
+    const n = 7; // depot + 3 pickups + 3 deliveries
+    const dist = (i: number, j: number) => (i === j ? 0 : 30);
+    // 150min per leg: a single shipment route is 3×150+30=480min (fits the
+    // 600min HOS limit), but any 2-shipment merge is ≥5×150+60=810min (exceeds
+    // it), so the HOS-aware merge ceiling forces one shipment per vehicle.
+    const input: SolverInput = {
+      distances: symmetricMatrix(n, dist),
+      durations: symmetricMatrix(n, (i, j) => (i === j ? 0 : 150)),
+      shipments: [
+        shipment('a', 1, 2, 100),
+        shipment('b', 3, 4, 100),
+        shipment('c', 5, 6, 100),
+      ],
+      vehicles: [
+        vehicle('V1', 1000, { maxDriveMin: 600 }),
+        vehicle('V2', 1000, { maxDriveMin: 600 }),
+        vehicle('V3', 1000, { maxDriveMin: 600 }),
+      ],
+    };
+    const r = optimizeRoutes(input);
+    // All assigned, and NO route should carry an HOS violation — the merge
+    // ceiling forced a split.
+    expect(r.summary.shipmentsUnassigned).toBe(0);
+    const hosViolations = r.routes.flatMap(rt => rt.violations).filter(v => v.kind === 'HOS');
+    expect(hosViolations.length).toBe(0);
+    expect(r.summary.vehiclesUsed).toBeGreaterThan(1);
+  });
+
   it('flags an HOS violation when the route exceeds the driver drive limit', () => {
     const input: SolverInput = {
       distances: symmetricMatrix(3, () => 100),

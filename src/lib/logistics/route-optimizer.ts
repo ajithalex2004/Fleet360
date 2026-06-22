@@ -156,15 +156,19 @@ export function optimizeRoutes(input: SolverInput): RouteOptimizerResult {
     shipmentIds: new Set([s.shipmentId]),
   }));
 
-  // Reference capacity for merge feasibility: use the LARGEST vehicle, since
-  // a route only needs to fit *some* vehicle. Per-vehicle assignment happens
-  // after merging.
+  // Reference ceilings for merge feasibility: use the LARGEST vehicle and the
+  // most generous driver limit, since a route only needs to fit *some*
+  // vehicle. Per-vehicle assignment happens after merging.
   const maxCapKg = Math.max(...vehicles.map(v => v.capacityKg));
   const maxCapCbm = Math.max(...vehicles.map(v => v.capacityCbm));
+  const maxDriveMin = Math.max(...vehicles.map(v => v.maxDriveMin));
   const shipmentById = new Map(shipments.map(s => [s.shipmentId, s]));
 
-  // 2) Clarke-Wright savings merges.
-  routes = clarkeWrightMerge(routes, distances, shipmentById, maxCapKg, maxCapCbm);
+  // 2) Clarke-Wright savings merges. HOS-aware: a merge that would push the
+  //    route past even the most generous driver's drive-time limit is
+  //    rejected, so the solver spreads load across vehicles instead of
+  //    cramming one truck into a 14-hour day.
+  routes = clarkeWrightMerge(routes, distances, durations, shipmentById, maxCapKg, maxCapCbm, maxDriveMin);
 
   // 3) 2-opt improvement within each route.
   routes = routes.map(r => ({ ...r, stops: twoOptImprove(r.stops, distances) }));
@@ -194,9 +198,11 @@ interface Saving { i: number; j: number; value: number; }
 function clarkeWrightMerge(
   routes: InternalRoute[],
   distances: number[][],
+  durations: number[][],
   shipmentById: Map<string, SolverShipment>,
   maxCapKg: number,
   maxCapCbm: number,
+  maxDriveMin: number,
 ): InternalRoute[] {
   // Savings are computed between the LAST stop of route a and the FIRST stop
   // of route b: saving = d(last_a, depot) + d(depot, first_b) - d(last_a, first_b).
@@ -232,6 +238,11 @@ function clarkeWrightMerge(
       const mergedStops = [...a.stops, ...b.stops];
       if (!routeFeasibleCapacity(mergedStops, shipmentById, maxCapKg, maxCapCbm)) continue;
       if (!pickupBeforeDelivery(mergedStops)) continue;
+      // HOS ceiling: reject merges that would exceed the most generous
+      // driver's drive-time budget. Keeps the solver from collapsing
+      // everything onto one truck when spreading across idle vehicles
+      // yields workable routes.
+      if (routeDurationMin(mergedStops, durations) > maxDriveMin) continue;
 
       const merged: InternalRoute = {
         stops: mergedStops,
@@ -504,6 +515,21 @@ function routeDistance(stops: SolverStop[], distances: number[][]): number {
     total += distances[stops[i].matrixIndex][stops[i + 1].matrixIndex];
   }
   total += distances[stops[stops.length - 1].matrixIndex][DEPOT];
+  return total;
+}
+
+/**
+ * Total working time of a route in minutes: depot→first travel, then for each
+ * stop its service time plus travel to the next, then last→depot. This is what
+ * HOS limits gate against — driving plus on-stop time, not just driving.
+ */
+function routeDurationMin(stops: SolverStop[], durations: number[][]): number {
+  let total = durations[DEPOT][stops[0].matrixIndex];
+  for (let i = 0; i < stops.length; i++) {
+    total += stops[i].serviceDurationMin;
+    const nextIndex = i < stops.length - 1 ? stops[i + 1].matrixIndex : DEPOT;
+    total += durations[stops[i].matrixIndex][nextIndex];
+  }
   return total;
 }
 
