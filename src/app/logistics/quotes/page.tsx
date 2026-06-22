@@ -12,6 +12,7 @@ import {
   type LogisticsMasterDataItem,
 } from '@/components/logistics/master-data-fields';
 import ContractedRateLookup from '@/components/logistics/ContractedRateLookup';
+import AccessorialPreviewPanel from '@/components/logistics/AccessorialPreviewPanel';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -248,6 +249,19 @@ function QuoteCalculator({ onSaved }: { onSaved: () => void }) {
             destination={form.destination}
             vehicleType={form.vehicleType}
             serviceLevel={form.shipmentType}
+          />
+
+          {/* Auto-applied accessorials — what the rule engine will tack on at
+              booking. Operators consistently underquote by forgetting these; the
+              panel surfaces them so the final price reflects what gets billed. */}
+          <AccessorialPreviewPanel
+            cargoValue={form.cargoValueAED ? parseFloat(form.cargoValueAED) : null}
+            weightKg={form.weightTonnes ? parseFloat(form.weightTonnes) * 1000 : null}
+            distanceKm={form.distanceKm ? parseFloat(form.distanceKm) : null}
+            vehicleType={form.vehicleType}
+            shipmentType={form.shipmentType}
+            isHazmat={form.isHazmat}
+            requiresCustoms={form.requiresCustoms}
           />
 
           <h2 className="text-sm font-semibold text-white pt-2">Shipment Details</h2>

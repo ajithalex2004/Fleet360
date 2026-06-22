@@ -276,4 +276,30 @@ describe('applyAccessorialCatalog', () => {
     expect(applied.find(a => a.code === 'FUEL')?.reason).toContain('8% of base_rate=500');
     expect(applied.find(a => a.code === 'MULTI_DROP')?.reason).toContain('30/stop × 2 stops');
   });
+
+  it("uses the catalog row's taxable when the rule blob doesn't set it (no silent VAT)", () => {
+    // The CUSTOMS entry has catalog taxable=false AND rule taxable=false,
+    // so we make a tweaked catalog where the rule blob omits taxable.
+    const tweaked: CatalogEntry[] = [{
+      ...catalog.find(c => c.code === 'CUSTOMS')!,
+      autoApplyRule: { type: 'flat', amount: 200, conditions: { requiresCrossBorder: true } },
+      taxable: false,
+    }];
+    const applied = applyAccessorialCatalog(tweaked, {
+      originCountry: 'AE', destinationCountry: 'SA',
+    });
+    expect(applied[0].taxable).toBe(false);
+  });
+
+  it("rule-level taxable=true beats catalog taxable=false (rule override wins)", () => {
+    const tweaked: CatalogEntry[] = [{
+      ...catalog.find(c => c.code === 'CUSTOMS')!,
+      autoApplyRule: { type: 'flat', amount: 200, taxable: true, conditions: { requiresCrossBorder: true } },
+      taxable: false,
+    }];
+    const applied = applyAccessorialCatalog(tweaked, {
+      originCountry: 'AE', destinationCountry: 'SA',
+    });
+    expect(applied[0].taxable).toBe(true);
+  });
 });

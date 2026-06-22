@@ -362,6 +362,16 @@ export function applyAccessorialCatalog(
     if (!rule) continue;
     const verdict = evaluateRule(rule, ctx);
     if (!verdict.applies) continue;
+
+    // Taxable resolution: rule-level `taxable` overrides the catalog
+    // row's column. Otherwise the catalog's `taxable` is the default
+    // (e.g. a CUSTOMS row stored with taxable=false stays tax-exempt
+    // even if the rule blob doesn't restate it). Without this, every
+    // rule that omits `taxable` would silently apply 5% VAT.
+    const ruleRaw = entry.autoApplyRule as Record<string, unknown> | null;
+    const ruleSetTaxable = ruleRaw && typeof ruleRaw === 'object' && 'taxable' in ruleRaw;
+    const finalTaxable = ruleSetTaxable ? verdict.taxable : entry.taxable;
+
     applied.push({
       catalogId: entry.id,
       code: entry.code,
@@ -369,7 +379,7 @@ export function applyAccessorialCatalog(
       chargeType: entry.chargeType,
       amount: verdict.amount,
       currency: verdict.currency ?? entry.currency ?? 'AED',
-      taxable: verdict.taxable,
+      taxable: finalTaxable,
       reason: verdict.reason,
     });
   }
