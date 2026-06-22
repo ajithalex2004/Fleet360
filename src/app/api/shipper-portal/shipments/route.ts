@@ -18,6 +18,7 @@ import {
   type LogisticsShipmentCreateInput,
 } from '@/lib/logistics/domain';
 import { applyContractQuoteToInput } from '@/lib/logistics/rate-engine';
+import { applyAutoAccessorialsToShipment } from '@/lib/logistics/accessorial-engine';
 
 export const runtime = 'nodejs';
 
@@ -255,6 +256,36 @@ export async function POST(req: NextRequest) {
         quote.contractId, (created as { id: string }).id, auth.tenantId,
       ).catch(() => { /* non-fatal */ });
     }
+
+    // Auto-apply accessorial catalog rules — fuel surcharge, customs,
+    // multi-drop, weight-based handling, etc. Each rule that fires writes
+    // a freight_charges row tagged metadata.autoApplied=true with the
+    // human-readable reason. Operators can still add/edit/remove these
+    // via the standard accessorial endpoints; the auto-applier just
+    // ensures the obvious ones aren't silently dropped at booking time.
+    const isHazmat = body.cargoLines?.some(c => c.isHazmat) ?? false;
+    await applyAutoAccessorialsToShipment({
+      tenantId: auth.tenantId,
+      shipmentOrderId: (created as { id: string }).id,
+      actorUserId: auth.userId,
+      context: {
+        baseRate: quote?.matched ? quote.baseRate : null,
+        subtotal: quote?.matched ? quote.subtotal : null,
+        cargoValue: null, // shipper-portal form doesn't capture this yet
+        distanceKm: null, // no geocoding wired up on portal submissions
+        weightKg: totalWeightKg > 0 ? totalWeightKg : null,
+        stopsCount: 2,    // pickup + delivery; multi-drop happens via /logistics/dispatch
+        vehicleType: body.requestedVehicleType ?? null,
+        shipmentType: body.shipmentType ?? null,
+        isHazmat,
+        requiresCustoms: false, // explicit flag not in portal form
+        originCountry: body.pickup?.country ?? null,
+        destinationCountry: body.delivery?.country ?? null,
+      },
+    }).catch(e => {
+      // Non-fatal: the shipment is already created. Log and move on.
+      console.error('[shipper-portal/shipments] accessorial auto-apply failed', e);
+    });
 
     // Tag the row with sourceChannel column too (in addition to metadata)
     // so operator-side dispatch filters can use plain SQL.

@@ -375,3 +375,105 @@ export function applyAccessorialCatalog(
   }
   return applied;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Day-2 wiring: load catalog + apply + persist to logistics_freight_charges.
+// Kept under a clear divider so the pure evaluator above remains DB-free
+// and unit-testable without mocks.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { listAccessorialCatalog, addShipmentAccessorialCharge } from './domain';
+
+/** UAE-standard 5% VAT. Switched off per-rule via taxable=false. */
+const DEFAULT_VAT_RATE = 0.05;
+
+export interface AutoApplyResult {
+  applied: AppliedAccessorial[];
+  /** IDs of freight_charges rows written (one per applied accessorial). */
+  chargeIds: string[];
+  /** Sum of all auto-applied amounts (pre-tax). */
+  totalAmount: number;
+  /** Sum of computed VAT/tax across applied charges. */
+  totalTax: number;
+}
+
+/**
+ * Load the tenant's accessorial catalog, evaluate every rule against the
+ * given shipment context, and write a freight_charges row for each one
+ * that fires. Idempotent only by virtue of the caller calling it ONCE
+ * per shipment — no dedup against existing freight_charges rows.
+ *
+ * Best-effort: a row insert failing does NOT abort the others. We log
+ * and continue. The auto-applier is a margin-recovery aid, not a hard
+ * invariant — a single failed insert shouldn't reject the whole booking.
+ */
+export async function applyAutoAccessorialsToShipment(args: {
+  tenantId: string;
+  shipmentOrderId: string;
+  actorUserId: string;
+  context: AccessorialContext;
+}): Promise<AutoApplyResult> {
+  const rawCatalog = await listAccessorialCatalog({
+    tenantId: args.tenantId,
+    status: 'ACTIVE',
+    limit: 500,
+  });
+
+  // Map the domain shape → CatalogEntry shape the pure evaluator expects.
+  const catalog: CatalogEntry[] = rawCatalog.map(r => ({
+    id: r.id,
+    code: r.code,
+    name: r.name,
+    chargeType: r.chargeType,
+    defaultAmount: r.defaultAmount,
+    currency: r.currency,
+    taxable: r.taxable,
+    autoApplyRule: r.autoApplyRule,
+    status: r.status,
+  }));
+
+  const applied = applyAccessorialCatalog(catalog, args.context);
+
+  const chargeIds: string[] = [];
+  let totalAmount = 0;
+  let totalTax = 0;
+
+  for (const a of applied) {
+    const taxAmount = a.taxable ? round2(a.amount * DEFAULT_VAT_RATE) : 0;
+    try {
+      const charge = await addShipmentAccessorialCharge({
+        tenantId: args.tenantId,
+        shipmentOrderId: args.shipmentOrderId,
+        catalogId: a.catalogId,
+        code: a.code,
+        name: a.name,
+        chargeSide: 'CUSTOMER',
+        quantity: 1,
+        unitRate: a.amount,
+        amount: a.amount,
+        taxAmount,
+        currency: a.currency,
+        actorUserId: args.actorUserId,
+        metadata: {
+          autoApplied: true,
+          reason: a.reason,
+          chargeType: a.chargeType,
+        },
+      });
+      const id = (charge as { id?: string })?.id;
+      if (id) chargeIds.push(id);
+      totalAmount += a.amount;
+      totalTax += taxAmount;
+    } catch (e) {
+      // Non-fatal: log and keep going. One bad rule shouldn't sink booking.
+      console.error('[applyAutoAccessorials] failed to write', a.code, e instanceof Error ? e.message : e);
+    }
+  }
+
+  return {
+    applied,
+    chargeIds,
+    totalAmount: round2(totalAmount),
+    totalTax: round2(totalTax),
+  };
+}
