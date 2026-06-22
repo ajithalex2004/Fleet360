@@ -1,6 +1,17 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import {
+  combineMasterOptions,
+  LogisticsMessage,
+  masterLabel,
+  masterValue,
+  readLogisticsApiError,
+  type LogisticsApiError,
+  useLogisticsMasterData,
+  type LogisticsMasterDataItem,
+} from '@/components/logistics/master-data-fields';
+import ContractedRateLookup from '@/components/logistics/ContractedRateLookup';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -39,6 +50,14 @@ const VEHICLE_TYPES  = [
   'Flatbed / Low-bed', 'Tanker', 'Reefer Truck',
 ];
 
+const DEFAULT_VEHICLE_TYPE_OPTIONS: LogisticsMasterDataItem[] = VEHICLE_TYPES.map((label, index) => ({
+  id: `quote-vehicle-type-${index}`,
+  type: 'VEHICLE_TYPE',
+  code: label.toUpperCase().replace(/[^A-Z0-9]+/g, '_'),
+  label,
+  status: 'ACTIVE',
+}));
+
 const STATUS_BADGE: Record<string, string> = {
   DRAFT:    'bg-slate-500/20 text-slate-400 border-slate-500/30',
   SENT:     'bg-blue-500/20 text-blue-400 border-blue-500/30',
@@ -53,6 +72,7 @@ function fmt(n: number) { return `AED ${n.toLocaleString('en-AE', { minimumFract
 // ── Quote Calculator ──────────────────────────────────────────────────────────
 
 function QuoteCalculator({ onSaved }: { onSaved: () => void }) {
+  const masterData = useLogisticsMasterData(['CUSTOMER', 'SHIPPER', 'PICKUP_LOCATION', 'AIRPORT', 'COUNTRY', 'SERVICE_TYPE', 'VEHICLE_TYPE']);
   const [form, setForm] = useState({
     customerName:       '',
     customerEmail:      '',
@@ -77,7 +97,14 @@ function QuoteCalculator({ onSaved }: { onSaved: () => void }) {
   const [saving, setSaving] = useState(false);
   const [calcing, setCalcing] = useState(false);
   const [error,  setError]  = useState('');
+  const [apiError, setApiError] = useState<LogisticsApiError | null>(null);
   const [saved,  setSaved]  = useState('');
+  const customerOptions = combineMasterOptions(masterData.optionsFor('CUSTOMER'), masterData.optionsFor('SHIPPER'));
+  const locationOptions = combineMasterOptions(masterData.optionsFor('PICKUP_LOCATION'), masterData.optionsFor('AIRPORT'), masterData.optionsFor('COUNTRY'));
+  const serviceTypeOptions = masterData.optionsFor('SERVICE_TYPE');
+  const vehicleTypeOptions = masterData.optionsFor('VEHICLE_TYPE').length
+    ? masterData.optionsFor('VEHICLE_TYPE')
+    : DEFAULT_VEHICLE_TYPE_OPTIONS;
 
   const set = (k: string, v: string | boolean) =>
     setForm(p => ({ ...p, [k]: v }));
@@ -86,7 +113,7 @@ function QuoteCalculator({ onSaved }: { onSaved: () => void }) {
     if (!form.distanceKm || !form.weightTonnes) {
       setError('Distance and weight are required'); return;
     }
-    setCalcing(true); setError(''); setCalc(null);
+    setCalcing(true); setError(''); setApiError(null); setCalc(null);
     try {
       const res = await fetch('/api/logistics/quotes', {
         method: 'POST',
@@ -104,7 +131,11 @@ function QuoteCalculator({ onSaved }: { onSaved: () => void }) {
           requiresCustoms:   form.requiresCustoms,
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const parsed = await readLogisticsApiError(res);
+        setApiError(parsed);
+        throw new Error(parsed.message);
+      }
       setCalc(await res.json());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Calculation failed');
@@ -113,7 +144,7 @@ function QuoteCalculator({ onSaved }: { onSaved: () => void }) {
 
   const handleSave = async () => {
     if (!calc) return;
-    setSaving(true); setError('');
+    setSaving(true); setError(''); setApiError(null);
     try {
       const res = await fetch('/api/logistics/quotes', {
         method: 'POST',
@@ -126,7 +157,11 @@ function QuoteCalculator({ onSaved }: { onSaved: () => void }) {
           validDays:        parseInt(form.validDays),
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const parsed = await readLogisticsApiError(res);
+        setApiError(parsed);
+        throw new Error(parsed.message);
+      }
       const data = await res.json();
       setSaved(data.quoteNo);
       setCalc(null);
@@ -151,7 +186,7 @@ function QuoteCalculator({ onSaved }: { onSaved: () => void }) {
         {/* ── Left: Input form ──── */}
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-white">Customer & Route</h2>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="hidden grid-cols-2 gap-3">
             {[
               { k: 'customerName',  l: 'Customer Name',   p: 'Company or contact name', span: true },
               { k: 'customerEmail', l: 'Email',           p: 'customer@company.com' },
@@ -167,6 +202,53 @@ function QuoteCalculator({ onSaved }: { onSaved: () => void }) {
               </div>
             ))}
           </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Customer / Shipper</label>
+              <select value={form.customerName} onChange={e => set('customerName', e.target.value)}
+                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40">
+                <option value="">{masterData.loading ? 'Loading customers...' : 'Select customer / shipper'}</option>
+                {customerOptions.map(item => <option key={`${item.type}-${item.code}`} value={masterValue(item)}>{masterLabel(item)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Email</label>
+              <input value={form.customerEmail} onChange={e => set('customerEmail', e.target.value)} placeholder="customer@company.com"
+                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Phone</label>
+              <input value={form.customerPhone} onChange={e => set('customerPhone', e.target.value)} placeholder="+971 50 000 0000"
+                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Origin</label>
+              <select value={form.origin} onChange={e => set('origin', e.target.value)}
+                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40">
+                <option value="">Select origin</option>
+                {locationOptions.map(item => <option key={`origin-${item.type}-${item.code}`} value={masterValue(item)}>{masterLabel(item)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Destination</label>
+              <select value={form.destination} onChange={e => set('destination', e.target.value)}
+                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40">
+                <option value="">Select destination</option>
+                {locationOptions.map(item => <option key={`destination-${item.type}-${item.code}`} value={masterValue(item)}>{masterLabel(item)}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Live contracted-rate preview — fires as soon as origin/destination are picked.
+              Shown alongside the freeform calculator so operators can compare the
+              ad-hoc quote against the contracted baseline before saving. */}
+          <ContractedRateLookup
+            origin={form.origin}
+            destination={form.destination}
+            vehicleType={form.vehicleType}
+            serviceLevel={form.shipmentType}
+          />
 
           <h2 className="text-sm font-semibold text-white pt-2">Shipment Details</h2>
           <div className="grid grid-cols-2 gap-3">
@@ -186,14 +268,16 @@ function QuoteCalculator({ onSaved }: { onSaved: () => void }) {
               <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Shipment Type *</label>
               <select value={form.shipmentType} onChange={e => set('shipmentType', e.target.value)}
                 className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40">
-                {SHIPMENT_TYPES.map(t => <option key={t}>{t}</option>)}
+                {(serviceTypeOptions.length ? serviceTypeOptions : SHIPMENT_TYPES.map(code => ({ id: code, type: 'SERVICE_TYPE', code, label: code, status: 'ACTIVE' }))).map(item => (
+                  <option key={`${item.type}-${item.code}`} value={item.code}>{masterLabel(item)}</option>
+                ))}
               </select>
             </div>
             <div>
               <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Vehicle Type</label>
               <select value={form.vehicleType} onChange={e => set('vehicleType', e.target.value)}
                 className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40">
-                {VEHICLE_TYPES.map(t => <option key={t}>{t}</option>)}
+                {vehicleTypeOptions.map(item => <option key={`${item.type}-${item.id}`} value={masterValue(item)}>{masterLabel(item)}</option>)}
               </select>
             </div>
             <div>
@@ -233,7 +317,25 @@ function QuoteCalculator({ onSaved }: { onSaved: () => void }) {
             ))}
           </div>
 
-          {error && (
+          {masterData.error && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-2.5 text-amber-200 text-xs">{masterData.error}</div>
+          )}
+
+          {apiError && (
+            <LogisticsMessage
+              type="error"
+              title="Quote validation failed"
+              message={apiError.message}
+              issues={apiError.issues}
+              warnings={apiError.warnings}
+            />
+          )}
+
+          {!apiError && error && (
+            <LogisticsMessage type="error" title="Quote action failed" message={error} />
+          )}
+
+          {false && error && (
             <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-2.5 text-red-400 text-xs">⚠️ {error}</div>
           )}
 
