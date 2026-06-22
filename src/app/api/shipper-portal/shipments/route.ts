@@ -17,6 +17,7 @@ import {
   createShipmentOrder,
   type LogisticsShipmentCreateInput,
 } from '@/lib/logistics/domain';
+import { applyContractQuoteToInput } from '@/lib/logistics/rate-engine';
 
 export const runtime = 'nodejs';
 
@@ -230,7 +231,14 @@ export async function POST(req: NextRequest) {
   } as LogisticsShipmentCreateInput;
 
   try {
-    const created = await createShipmentOrder(input);
+    // Look up the contracted rate for this customer × lane × vehicle and
+    // populate customerRateAmount + audit metadata. Shippers never quote
+    // themselves — if no contract matches, the order still goes through
+    // with customerRateAmount=null and a `rateQuote.reason=no-lane-match`
+    // record so dispatch knows to set a price manually.
+    const { input: quotedInput } = await applyContractQuoteToInput(input);
+
+    const created = await createShipmentOrder(quotedInput);
     if (!created) {
       return NextResponse.json({ error: 'Shipment creation failed' }, { status: 500 });
     }

@@ -218,16 +218,18 @@ export async function quoteShipment(input: QuoteShipmentInput): Promise<QuoteShi
   const shipmentDate = (input.shipmentDate ?? new Date().toISOString()).slice(0, 10);
 
   // 1) Candidate lookup — matchLaneRateContracts handles lane string matching
-  //    and ACTIVE filtering. It does NOT enforce effective-date window, so
-  //    we re-gate below.
+  //    and ACTIVE filtering. We deliberately DON'T pass customerId/carrierId
+  //    here: the underlying listRateContracts SQL filter excludes generic
+  //    contracts when a specific id is provided (it does `customer_id = $3`
+  //    instead of `customer_id = $3 OR customer_id IS NULL`). Pulling all
+  //    candidates and scoping in JS lets generic + customer-specific compete.
+  //    It also keeps the engine independent of that SQL quirk.
   const candidates = await matchLaneRateContracts({
     tenantId: input.tenantId,
     origin: input.origin,
     destination: input.destination,
     vehicleType: input.vehicleType,
     serviceLevel: input.serviceLevel,
-    customerId: input.customerId,
-    carrierId: input.carrierId,
     limit: 50,
   });
 
@@ -252,8 +254,12 @@ export async function quoteShipment(input: QuoteShipmentInput): Promise<QuoteShi
     return { ...emptyResultBase(), matched: false, reason: 'no-active-contract', currency: DEFAULT_CURRENCY };
   }
 
+  // A contract locked to a specific customer only applies when that
+  // customer is the requester. If the request has no customerId we
+  // exclude all customer-locked contracts — operator quote previews
+  // should never accidentally apply someone else's private rate.
   const correctCustomer = inWindow.filter(c =>
-    !c.customerId || !input.customerId || c.customerId === input.customerId,
+    !c.customerId || c.customerId === input.customerId,
   );
 
   if (!correctCustomer.length) {
@@ -316,4 +322,107 @@ function toIsoDate(d: string | Date | null | undefined): string | null {
   if (!d) return null;
   if (typeof d === 'string') return d.slice(0, 10);
   return d.toISOString().slice(0, 10);
+}
+
+// ── Wiring helper for createShipmentOrder callers ──────────────────────────
+
+/**
+ * The minimal shape of a shipment-create input that the engine cares about.
+ * Kept structural (not importing LogisticsShipmentCreateInput) so we don't
+ * introduce a circular dep between rate-engine ↔ domain.
+ */
+export interface ShipmentInputForQuote {
+  tenantId: string;
+  cargoOwnerCustomerId?: string | null;
+  originName?: string | null;
+  originAddress?: string | null;
+  originCity?: string | null;
+  destinationName?: string | null;
+  destinationAddress?: string | null;
+  destinationCity?: string | null;
+  requestedVehicleType?: string | null;
+  shipmentType?: string | null;
+  bookingMode?: string | null;
+  customerRateAmount?: number | null;
+  carrierCostAmount?: number | null;
+  currency?: string | null;
+  pickupWindowFrom?: string | Date | null;
+  metadata?: Record<string, unknown> | null;
+  assignedCarrierId?: string | null;
+}
+
+/**
+ * Decide whether the input deserves an auto-quote and (if so) return a
+ * patched copy with customer_rate_amount and quote-audit metadata filled in.
+ *
+ * The caller is the API endpoint that's about to invoke createShipmentOrder.
+ * Returning a patched COPY (rather than mutating in place) keeps the engine
+ * pure — easier to test, easier to reason about when something looks wrong.
+ *
+ * Skip rules — return the input unchanged:
+ *   - customerRateAmount already set (operator entered a manual price)
+ *   - origin/destination not yet known (form is mid-fill)
+ *   - bookingMode is explicitly 'SPOT' or 'MARKETPLACE' — those go through
+ *     the RFQ / spot-bidding paths, not contracts
+ *
+ * Mismatches (no-lane-match, no-active-contract) DON'T fail the caller —
+ * the input comes back unchanged but with a `quoteMissReason` in metadata so
+ * the operator can see why no rate was applied.
+ */
+export async function applyContractQuoteToInput<T extends ShipmentInputForQuote>(
+  input: T,
+): Promise<{ input: T & { metadata: Record<string, unknown> }; quote: QuoteShipmentResult | null }> {
+  const withMetadata = { ...input, metadata: input.metadata ?? {} };
+
+  if (input.customerRateAmount != null && input.customerRateAmount > 0) {
+    return { input: withMetadata, quote: null };
+  }
+
+  const mode = (input.bookingMode || 'CONTRACT').toUpperCase();
+  if (mode === 'SPOT' || mode === 'MARKETPLACE') {
+    return { input: withMetadata, quote: null };
+  }
+
+  const origin = (input.originName || input.originAddress || input.originCity || '').trim();
+  const destination = (input.destinationName || input.destinationAddress || input.destinationCity || '').trim();
+  if (!origin || !destination) return { input: withMetadata, quote: null };
+
+  const quote = await quoteShipment({
+    tenantId: input.tenantId,
+    origin,
+    destination,
+    vehicleType: input.requestedVehicleType ?? null,
+    serviceLevel: input.shipmentType ?? null,
+    customerId: input.cargoOwnerCustomerId ?? null,
+    carrierId: input.assignedCarrierId ?? null,
+    shipmentDate: toIsoDate(input.pickupWindowFrom) ?? null,
+  });
+
+  // Always record what happened (matched or not) — silent quote failures
+  // are how silent margin loss starts.
+  const auditPatch = {
+    rateQuote: {
+      matched: quote.matched,
+      reason: quote.reason,
+      contractId: quote.contractId,
+      contractNo: quote.contractNo,
+      baseRate: quote.baseRate,
+      fuelSurchargePct: quote.fuelSurchargePct,
+      fuelSurchargeAmount: quote.fuelSurchargeAmount,
+      subtotal: quote.subtotal,
+      total: quote.total,
+      currency: quote.currency,
+      appliedAt: new Date().toISOString(),
+    },
+  };
+
+  const patched = {
+    ...input,
+    metadata: { ...(input.metadata ?? {}), ...auditPatch },
+    ...(quote.matched
+      ? { customerRateAmount: quote.total, currency: quote.currency }
+      : {}),
+  };
+
+  return { input: patched, quote };
 }
