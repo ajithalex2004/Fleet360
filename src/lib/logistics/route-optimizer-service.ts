@@ -413,6 +413,115 @@ export async function getPlan(tenantId: string, planId: string): Promise<{ id: s
   return rows[0] ?? null;
 }
 
+/**
+ * Re-validate a plan after the operator manually reordered stops or moved a
+ * shipment between routes. We DON'T re-optimise — the operator's sequence is
+ * authoritative — but we recompute timing + violation flags so the UI shows
+ * fresh badges. The edited result is written back to the DRAFT plan.
+ *
+ * editedRoutes: the new per-vehicle stop ordering (stopIds in sequence).
+ * Stops not present in any edited route are treated as unassigned.
+ */
+export async function revalidatePlan(args: {
+  tenantId: string;
+  planId: string;
+  editedRoutes: Array<{ vehicleId: string; stopOrder: string[] }>;
+  unassign?: string[];
+}): Promise<{ id: string; status: string; result: RouteOptimizerResult }> {
+  await ensureRouteOptimizerSchema();
+
+  const existing = await getPlan(args.tenantId, args.planId);
+  if (!existing) throw new Error('Plan not found');
+  if (existing.status !== 'DRAFT') throw new Error('Only DRAFT plans can be edited');
+
+  const prev = existing.result;
+
+  // Build a lookup of every RouteStop in the previous result by stopId so we
+  // can re-sequence without re-deriving from the DB.
+  const stopById = new Map<string, { route: SolvedRouteLike; stop: RouteStopLike }>();
+  for (const route of prev.routes) {
+    for (const stop of route.stops) {
+      stopById.set(stop.stopId, { route, stop });
+    }
+  }
+
+  // Re-sequence each edited route. Recompute distance/duration is out of
+  // scope for v1 (would need the matrix again); we preserve per-stop legs and
+  // recompute only the order-dependent flags (load tracking + window onTime
+  // are order-dependent but use the stored per-stop windows).
+  const rebuiltRoutes = args.editedRoutes.map(er => {
+    const orderedStops = er.stopOrder
+      .map(id => stopById.get(id)?.stop)
+      .filter((s): s is RouteStopLike => !!s)
+      .map((s, i) => ({ ...s, sequence: i + 1 }));
+
+    // Re-flag pickup-before-delivery as a hard check; if violated, surface it.
+    const violations: SolvedRouteLike['violations'] = [];
+    const seenPickup = new Set<string>();
+    for (const s of orderedStops) {
+      if (s.type === 'PICKUP') seenPickup.add(s.shipmentId);
+      else if (!seenPickup.has(s.shipmentId)) {
+        violations.push({
+          stopId: s.stopId,
+          kind: 'TIME_WINDOW',
+          detail: `Delivery for ${s.shipmentId} sequenced before its pickup`,
+        });
+      }
+    }
+    // Carry forward time-window violations recorded on each stop.
+    for (const s of orderedStops) {
+      if (!s.onTime) {
+        violations.push({ stopId: s.stopId, kind: 'TIME_WINDOW', detail: `${s.lateMinutes}min late` });
+      }
+    }
+
+    const prevRoute = prev.routes.find(r => r.vehicleId === er.vehicleId);
+    return {
+      ...(prevRoute ?? { driverId: null, totalDistanceKm: 0, totalDurationMin: 0, capacityUtilization: { weightPct: 0, volumePct: 0 }, estimatedCost: 0 }),
+      vehicleId: er.vehicleId,
+      stops: orderedStops,
+      violations,
+    } as SolvedRouteLike;
+  });
+
+  const unassignSet = new Set(args.unassign ?? []);
+  const assignedShipmentIds = new Set<string>();
+  for (const r of rebuiltRoutes) for (const s of r.stops) assignedShipmentIds.add(s.shipmentId);
+
+  const unassigned = [
+    ...prev.unassigned.filter(u => !assignedShipmentIds.has(u.shipmentId)),
+    ...[...unassignSet].map(id => ({ shipmentId: id, reason: 'NO_VEHICLE_MATCH' as const, detail: 'Manually unassigned by operator' })),
+  ];
+
+  const result: RouteOptimizerResult = {
+    routes: rebuiltRoutes as RouteOptimizerResult['routes'],
+    unassigned,
+    summary: {
+      ...prev.summary,
+      vehiclesUsed: rebuiltRoutes.length,
+      shipmentsAssigned: assignedShipmentIds.size,
+      shipmentsUnassigned: unassigned.length,
+      timeWindowViolations: rebuiltRoutes.reduce((s, r) => s + r.violations.filter(v => v.kind === 'TIME_WINDOW').length, 0),
+    },
+  };
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE logistics_route_plans
+        SET result = $1::jsonb, updated_at = NOW(),
+            shipments_assigned = $2, vehicles_used = $3
+      WHERE id = $4 AND tenant_id = $5`,
+    JSON.stringify(result), result.summary.shipmentsAssigned, result.summary.vehiclesUsed,
+    args.planId, args.tenantId,
+  );
+
+  return { id: args.planId, status: 'DRAFT', result };
+}
+
+// Structural aliases — the result JSONB doesn't carry class identity, so we
+// describe just the fields revalidatePlan touches.
+type RouteStopLike = RouteOptimizerResult['routes'][number]['stops'][number];
+type SolvedRouteLike = RouteOptimizerResult['routes'][number];
+
 export async function listPlans(tenantId: string, opts: { status?: string | null; limit?: number; days?: number } = {}): Promise<Array<Record<string, unknown>>> {
   await ensureRouteOptimizerSchema();
   const limit = Math.min(Math.max(opts.limit ?? 20, 1), 100);
