@@ -43,6 +43,7 @@ const ALL_NAV: NavItem[] = [
   // ── Super Admin only — never shown to Tenant Admins ─────────────────────────
   { href: '/admin/tenants',                label: 'Tenants',           icon: 'T',  superOnly: true },
   { href: '/admin/service-config',         label: 'Service Configuration', icon: '🧩', superOnly: true },
+  { href: '/admin/shipper-portal-config',  label: 'Shipper Portal',    icon: '🚢', superOnly: true },
   { href: '/admin/info',                   label: 'Platform Info',     icon: 'ℹ️', superOnly: true },
   { href: '/admin/settings/notifications', label: 'Notifications',     icon: '🔔', superOnly: true },
   { href: '/admin/settings/integrations',  label: 'Integrations & ERP',icon: '🔗', superOnly: true },

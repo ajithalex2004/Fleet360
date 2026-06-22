@@ -52,6 +52,11 @@ const PUBLIC_PREFIXES: string[] = [
   '/api/setup/',      // one-time setup endpoints — protected by SETUP_SECRET, not session
   '/api/auth/invitation/',  // public lookup by token
   '/invitation/',           // accept-invitation page
+  // Shipper portal — separate auth domain (shipper-portal-session cookie).
+  // The portal's own requireShipperPortal() guards every protected endpoint;
+  // the middleware just lets traffic through so it can reach them.
+  '/shipper-portal',         // covers /shipper-portal, /shipper-portal/login, /shipper-portal/setup, etc.
+  '/api/shipper-portal/',    // every portal API endpoint enforces its own session
 ];
 
 function isPublicRoute(pathname: string): boolean {
