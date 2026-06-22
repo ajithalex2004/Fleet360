@@ -17,7 +17,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Route as RouteIcon, Truck, Package, Play, Check, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Route as RouteIcon, Truck, Package, Play, Check, AlertTriangle, RefreshCw, GripVertical, X } from 'lucide-react';
 import { PageHeader, Panel } from '@/components/ui/page-theme';
 
 // ── Types mirror the API response (RouteOptimizerResult) ───────────────────
@@ -88,6 +88,9 @@ export default function VrpPlannerPage() {
   const [plan, setPlan] = useState<OptimizeResponse | null>(null);
   const [committed, setCommitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  // Which stop is currently being dragged, and from which vehicle's route.
+  const [drag, setDrag] = useState<{ stopId: string; vehicleId: string } | null>(null);
 
   // ── Load selectable vehicles + shipments ─────────────────────────────────
   useEffect(() => {
@@ -157,6 +160,73 @@ export default function VrpPlannerPage() {
     setPlan(null);
     setCommitted(false);
   }, [plan]);
+
+  // ── Manual edit: POST the new per-route stop order + unassign list to
+  //    /edit, which re-validates (without re-optimising) and returns fresh
+  //    violation badges. We merge the result back into the plan, preserving
+  //    planId + geocodeFailures (the /edit response only carries result).
+  const applyEdit = useCallback(async (
+    routes: Array<{ vehicleId: string; stopOrder: string[] }>,
+    unassign?: string[],
+  ) => {
+    if (!plan) return;
+    setEditing(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/logistics/planner/plans/${plan.planId}/edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ routes, unassign }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Edit failed (${res.status})`);
+      }
+      const edited = await res.json() as { result: OptimizeResult };
+      setPlan(p => p ? { ...p, result: edited.result } : p);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Edit failed');
+    } finally {
+      setEditing(false);
+    }
+  }, [plan]);
+
+  // Current per-route stop order, used as the baseline for any edit.
+  const currentRouteOrders = useCallback((): Array<{ vehicleId: string; stopOrder: string[] }> => {
+    if (!plan) return [];
+    return plan.result.routes.map(r => ({ vehicleId: r.vehicleId, stopOrder: r.stops.map(s => s.stopId) }));
+  }, [plan]);
+
+  // Drop target: reorder `draggedStopId` to sit before `targetStopId` within
+  // the same route. Cross-route moves aren't supported in v1 (the solver's
+  // capacity feasibility would need re-checking); within-route reorder covers
+  // the common "operator knows this stop should come first" case.
+  const handleDropBefore = useCallback((vehicleId: string, targetStopId: string) => {
+    if (!drag || drag.vehicleId !== vehicleId || drag.stopId === targetStopId) { setDrag(null); return; }
+    const orders = currentRouteOrders();
+    const route = orders.find(o => o.vehicleId === vehicleId);
+    if (!route) { setDrag(null); return; }
+    const without = route.stopOrder.filter(id => id !== drag.stopId);
+    const targetIdx = without.indexOf(targetStopId);
+    without.splice(targetIdx, 0, drag.stopId);
+    route.stopOrder = without;
+    setDrag(null);
+    applyEdit(orders);
+  }, [drag, currentRouteOrders, applyEdit]);
+
+  // Remove a shipment from its route → unassigned.
+  const unassignShipment = useCallback((shipmentId: string, vehicleId: string) => {
+    const orders = currentRouteOrders();
+    const route = orders.find(o => o.vehicleId === vehicleId);
+    if (!route || !plan) return;
+    // Drop both stops of this shipment from the route order.
+    const stopIdsToRemove = new Set(
+      plan.result.routes.find(r => r.vehicleId === vehicleId)?.stops
+        .filter(s => s.shipmentId === shipmentId).map(s => s.stopId) ?? [],
+    );
+    route.stopOrder = route.stopOrder.filter(id => !stopIdsToRemove.has(id));
+    applyEdit(orders, [shipmentId]);
+  }, [currentRouteOrders, plan, applyEdit]);
 
   const canOptimize = selectedVehicles.size > 0 && selectedShipments.size > 0 && !optimizing;
 
@@ -301,18 +371,37 @@ export default function VrpPlannerPage() {
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-slate-400 mb-3">
-                    {route.totalDistanceKm}km · {fmtDuration(route.totalDurationMin)} · {route.capacityUtilization.weightPct}% capacity · AED {route.estimatedCost.toLocaleString()}
+                  <div className="text-xs text-slate-400 mb-3 flex items-center justify-between">
+                    <span>
+                      {route.totalDistanceKm}km · {fmtDuration(route.totalDurationMin)} · {route.capacityUtilization.weightPct}% capacity · AED {route.estimatedCost.toLocaleString()}
+                    </span>
+                    {!committed && <span className="text-slate-600 text-[10px]">drag to reorder</span>}
                   </div>
-                  <ol className="space-y-1 text-xs">
+                  <ol className={`space-y-1 text-xs ${editing ? 'opacity-50 pointer-events-none' : ''}`}>
                     {route.stops.map(stop => (
-                      <li key={stop.stopId} className={`flex items-center gap-2 ${stop.onTime ? '' : 'text-amber-300'}`}>
+                      <li key={stop.stopId}
+                        draggable={!committed}
+                        onDragStart={() => setDrag({ stopId: stop.stopId, vehicleId: route.vehicleId })}
+                        onDragOver={e => { if (drag?.vehicleId === route.vehicleId) e.preventDefault(); }}
+                        onDrop={e => { e.preventDefault(); handleDropBefore(route.vehicleId, stop.stopId); }}
+                        className={`group flex items-center gap-2 rounded px-1 py-0.5 ${stop.onTime ? '' : 'text-amber-300'} ${
+                          drag?.stopId === stop.stopId ? 'opacity-40' : ''
+                        } ${!committed ? 'hover:bg-white/5 cursor-grab' : ''}`}>
+                        {!committed && <GripVertical className="w-3 h-3 text-slate-600 flex-shrink-0" />}
                         <span className="font-mono text-slate-500 w-4">{stop.sequence}</span>
                         <span className={`w-1.5 h-1.5 rounded-full ${stop.type === 'PICKUP' ? 'bg-cyan-400' : 'bg-emerald-400'}`} />
                         <span className="text-slate-300">{stop.type === 'PICKUP' ? 'Pickup' : 'Drop'}</span>
                         <span className="font-mono text-slate-500">{stop.shipmentId.slice(0, 8)}</span>
                         <span className="text-slate-500">{fmtTime(stop.arriveMin)}</span>
                         {!stop.onTime && <AlertTriangle className="w-3 h-3 text-amber-400" />}
+                        {!committed && stop.type === 'PICKUP' && (
+                          <button
+                            onClick={() => unassignShipment(stop.shipmentId, route.vehicleId)}
+                            title="Remove shipment from route"
+                            className="ml-auto opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 transition-opacity">
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ol>
