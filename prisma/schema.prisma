@@ -2561,6 +2561,14 @@ model Tenant {
   industry           String?
   // Contact & identity
   domain             String?
+  // CORS allow-list for this tenant: comma-separated list of browser origins
+  // (scheme+host+port) that may call the Go backend on this tenant's behalf,
+  // e.g. "https://fleet.clientA.com,https://staging.fleet.clientA.com". The
+  // Go backend reads this column and merges it with the ALLOWED_ORIGINS env
+  // var to build the live CORS allow-list. NULL means this tenant relies on
+  // the env baseline only. Onboarding a tenant is a single UPDATE — no
+  // recompile or container restart needed.
+  allowedOrigins     String?        @map("allowed_origins")
   address            String?
   contactName        String?        @map("contact_name")
   contactEmail       String?        @map("contact_email")

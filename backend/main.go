@@ -36,6 +36,7 @@ import (
 	"os"
 	"strings"
 
+	"fleet360-backend/corsorigin"
 	"fleet360-backend/database"
 	"fleet360-backend/handlers"
 	"fleet360-backend/seed"
@@ -72,11 +73,20 @@ func main() {
 func runServer() {
 	log.Println("[serve] starting HTTP server on :8080")
 
+	// CORS allow-list: env baseline + tenant-derived (refreshed every minute).
+	// Onboarding a new enterprise tenant is an UPDATE on tenants.allowed_origins
+	// — no recompile, no container restart, no .env edit. See backend/corsorigin
+	// for the merge semantics.
+	corsorigin.LoadBaseline()
+	if err := corsorigin.RefreshFromDB(database.DB); err != nil {
+		log.Printf("[cors] initial DB load failed (serving with env baseline only): %v", err)
+	}
+	corsorigin.StartRefresher(database.DB, corsorigin.DefaultRefreshInterval)
+
 	r := gin.Default()
 
-	// CORS Configuration
 	config := cors.DefaultConfig()
-	config.AllowOrigins = []string{"http://localhost:3000"}
+	config.AllowOriginFunc = func(origin string) bool { return corsorigin.IsAllowed(origin) }
 	config.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
 	config.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization"}
 	r.Use(cors.New(config))
