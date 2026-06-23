@@ -156,6 +156,7 @@ model AlertConfig {
   createdAt            DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt            DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId             String    @map("tenant_id")
   alertFor             String?   @map("alert_for")
   alertType            String?   @map("alert_type")
   frequency            String?
@@ -167,6 +168,7 @@ model AlertConfig {
   assignedIds          String[]  @map("assigned_ids")
 
   @@index([deletedAt], map: "idx_alert_configs_deleted_at")
+  @@index([tenantId], map: "idx_alert_configs_tenant_id")
   @@map("alert_configs")
 }
 
@@ -175,6 +177,7 @@ model Alert {
   createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId          String    @map("tenant_id")
   type              String?
   title             String?
   description       String?
@@ -185,6 +188,7 @@ model Alert {
   assignedTo        String?   @map("assigned_to")
 
   @@index([deletedAt], map: "idx_alerts_deleted_at")
+  @@index([tenantId], map: "idx_alerts_tenant_id")
   @@map("alerts")
 }
 
@@ -193,6 +197,7 @@ model Attachment {
   createdAt              DateTime?             @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime?             @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt              DateTime?             @map("deleted_at") @db.Timestamptz(6)
+  tenantId               String                @map("tenant_id")
   maintenanceRequestId   String?               @map("maintenance_request_id")
   serviceRequestId       String?               @map("service_request_id")
   quotationId            String?               @map("quotation_id")
@@ -208,6 +213,7 @@ model Attachment {
   WorkOrder              WorkOrder?            @relation(fields: [workOrderId], references: [id])
 
   @@index([deletedAt], map: "idx_attachments_deleted_at")
+  @@index([tenantId], map: "idx_attachments_tenant_id")
   @@map("attachments")
 }
 
@@ -216,6 +222,7 @@ model Comment {
   createdAt              DateTime?             @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime?             @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt              DateTime?             @map("deleted_at") @db.Timestamptz(6)
+  tenantId               String                @map("tenant_id")
   maintenanceRequestId   String?               @map("maintenance_request_id")
   author                 String?
   text                   String?
@@ -223,6 +230,7 @@ model Comment {
   MaintenanceRequest     MaintenanceRequest?   @relation(fields: [maintenanceRequestId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_maintenance_requests_comments")
 
   @@index([deletedAt], map: "idx_comments_deleted_at")
+  @@index([tenantId], map: "idx_comments_tenant_id")
   @@map("comments")
 }
 
@@ -231,6 +239,7 @@ model Driver {
   createdAt             DateTime?              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt             DateTime?              @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt             DateTime?              @map("deleted_at") @db.Timestamptz(6)
+  tenantId              String                 @map("tenant_id")
 
   // -- Identity (Driver Hub core fields) --------------------------------------
   name                  String?
@@ -269,6 +278,7 @@ model Driver {
 
   @@index([deletedAt], map: "idx_drivers_deleted_at")
   @@index([status], map: "idx_drivers_status")
+  @@index([tenantId], map: "idx_drivers_tenant_id")
   @@map("drivers")
 }
 
@@ -277,6 +287,7 @@ model Garage {
   createdAt            DateTime?              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime?              @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt            DateTime?              @map("deleted_at") @db.Timestamptz(6)
+  tenantId             String                 @map("tenant_id")
   name                 String?
   location             String?
   contactPerson        String?                @map("contact_person")
@@ -290,6 +301,7 @@ model Garage {
   workOrders           WorkOrder[]
 
   @@index([deletedAt], map: "idx_garages_deleted_at")
+  @@index([tenantId], map: "idx_garages_tenant_id")
   @@map("garages")
 }
 
@@ -298,6 +310,7 @@ model StatusHistory {
   createdAt              DateTime?             @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime?             @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt              DateTime?             @map("deleted_at") @db.Timestamptz(6)
+  tenantId               String                @map("tenant_id")
   maintenanceRequestId   String?               @map("maintenance_request_id")
   serviceRequestId       String?               @map("service_request_id")
   status                 String?
@@ -308,6 +321,7 @@ model StatusHistory {
   ServiceRequest         ServiceRequest?       @relation(fields: [serviceRequestId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_service_requests_history")
 
   @@index([deletedAt], map: "idx_histories_deleted_at")
+  @@index([tenantId], map: "idx_histories_tenant_id")
   @@map("histories")
 }
 
@@ -355,6 +369,7 @@ model MaintenanceRequest {
   createdAt            DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime?     @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt            DateTime?     @map("deleted_at") @db.Timestamptz(6)
+  tenantId             String        @map("tenant_id")
   vehicleId            String?       @map("vehicle_id")
   driverId             String?       @map("driver_id")
   requestDate          DateTime?     @map("request_date") @db.Timestamptz(6)
@@ -394,6 +409,7 @@ model MaintenanceRequest {
   @@index([driverId], map: "idx_maintenance_requests_driver_id")
   @@index([garageId], map: "idx_maintenance_requests_garage_id")
   @@index([status], map: "idx_maintenance_requests_status")
+  @@index([tenantId], map: "idx_maintenance_requests_tenant_id")
   @@map("maintenance_requests")
 }
 
@@ -436,6 +452,7 @@ model Quotation {
   createdAt               DateTime?             @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt               DateTime?             @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt               DateTime?             @map("deleted_at") @db.Timestamptz(6)
+  tenantId                String                @map("tenant_id")
   quotationDate           DateTime?             @map("quotation_date") @db.Timestamptz(6)
   validUntil              DateTime?             @map("valid_until") @db.Timestamptz(6)
   laborCost               Decimal?              @map("labor_cost") @db.Decimal
@@ -463,6 +480,7 @@ model Quotation {
   @@index([maintenanceRequestId], map: "idx_quotations_maintenance_request_id")
   @@index([garageId], map: "idx_quotations_garage_id")
   @@index([status], map: "idx_quotations_status")
+  @@index([tenantId], map: "idx_quotations_tenant_id")
   @@map("quotations")
 }
 
@@ -471,6 +489,7 @@ model ServiceRequest {
   createdAt            DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime?     @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt            DateTime?     @map("deleted_at") @db.Timestamptz(6)
+  tenantId             String        @map("tenant_id")
   requestorId          String?       @map("requestor_id")
   serviceType          String?       @map("service_type")
   vehicleId            String?       @map("vehicle_id")
@@ -485,6 +504,7 @@ model ServiceRequest {
   histories            StatusHistory[]
 
   @@index([deletedAt], map: "idx_service_requests_deleted_at")
+  @@index([tenantId], map: "idx_service_requests_tenant_id")
   @@map("service_requests")
 }
 
@@ -493,6 +513,7 @@ model Vehicle {
   createdAt            DateTime?              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime?              @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt            DateTime?              @map("deleted_at") @db.Timestamptz(6)
+  tenantId             String                 @map("tenant_id")
 
   // -- Identity (Fleet Hub core fields) ---------------------------------------
   make                 String?
@@ -555,6 +576,7 @@ model Vehicle {
   @@index([deletedAt], map: "idx_vehicles_deleted_at")
   @@index([vehicleUsage], map: "idx_vehicles_usage")
   @@index([status], map: "idx_vehicles_status")
+  @@index([tenantId], map: "idx_vehicles_tenant_id")
   @@map("vehicles")
 }
 
