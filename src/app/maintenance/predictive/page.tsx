@@ -11,7 +11,7 @@ export default function PredictiveMaintenancePage() {
     useEffect(() => {
         const fetchPredictions = async () => {
             try {
-                const response = await fetch('http://localhost:8080/api/maintenance/predictive');
+                const response = await fetch('http://localhost:8080/api/v1/maintenance/predictive');
                 if (response.ok) {
                     const data = await response.json();
                     setPredictions(data.predictions || []);

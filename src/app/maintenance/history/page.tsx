@@ -39,10 +39,10 @@ export default function MaintenanceHistoryPage() {
         const loadData = async () => {
             try {
                 const [mReqsRes, sReqsRes, vehsRes, drvsRes] = await Promise.all([
-                    fetch('http://localhost:8080/api/maintenance-requests'),
-                    fetch('http://localhost:8080/api/service-requests'),
-                    fetch('http://localhost:8080/api/vehicles'),
-                    fetch('http://localhost:8080/api/drivers')
+                    fetch('http://localhost:8080/api/v1/maintenance/requests'),
+                    fetch('http://localhost:8080/api/v1/service/requests'),
+                    fetch('http://localhost:8080/api/v1/fleet/vehicles'),
+                    fetch('http://localhost:8080/api/v1/fleet/drivers')
                 ]);
 
                 const mReqs = await mReqsRes.json();
