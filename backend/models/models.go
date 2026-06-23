@@ -55,19 +55,109 @@ func (m *Model) BeforeCreate(tx *gorm.DB) (err error) {
 }
 
 // Vehicle
+// Vehicle is the Go-side mirror of Prisma's `vehicles` table. Until this
+// expansion the struct carried only the DMV-registration slice (~9
+// fields); the Prisma schema has ~40 columns and the Go backend was blind
+// to most of them. That blindness blocked downstream work — predictive
+// maintenance couldn't differentiate a school bus from a rental car,
+// fuel-cost calcs couldn't read fuelType, hierarchy/branch filters
+// couldn't run server-side. This struct now mirrors prisma/schema.prisma
+// (`model Vehicle { ... }`) field-for-field so any column the database
+// stores is readable + writable from Go handlers and GORM scopes.
+//
+// No schema migration is needed: every field already exists on the
+// `vehicles` table via the Prisma schema; this commit only teaches GORM
+// how to map them. Existing rows are read transparently because GORM
+// ignores DB columns the struct doesn't name AND treats missing-column
+// values as zero; both directions are forward-compatible.
+//
+// Field-type conventions:
+//   - Nullable strings → plain `string` (zero value = "" = NULL on read)
+//   - Nullable times that may be unset → `*time.Time` so we can
+//     distinguish "never set" from "epoch zero" (matches the existing
+//     CompletionDate / ExpectedEndDate pattern on MaintenanceRequest)
+//   - Decimals → float64 (matches the existing cost-field pattern across
+//     the codebase; precision loss is acceptable at AED granularity)
+//
+// The two pre-existing time.Time fields (RegistrationExpiry,
+// InsuranceExpiry) are kept as non-pointer for backward compatibility
+// with any handler / serializer that consumes them. New nullable times
+// use *time.Time to honour the Prisma schema's nullability.
 type Vehicle struct {
 	Model
-	TenantID           string    `gorm:"not null;index;column:tenant_id" json:"tenantId"`
-	Make               string    `json:"make"`
-	VehicleModel       string    `gorm:"column:model" json:"model"`
-	Type               string    `json:"type"`
-	Year               int       `json:"year"`
-	LicensePlate       string    `gorm:"uniqueIndex" json:"licensePlate"`
-	VIN                string    `gorm:"uniqueIndex" json:"vin"`
-	CurrentMileage     int       `json:"currentMileage"`
-	Status             string    `json:"status"`
-	RegistrationExpiry time.Time `json:"registrationExpiry"`
-	InsuranceExpiry    time.Time `json:"insuranceExpiry"`
+	TenantID string `gorm:"not null;index;column:tenant_id" json:"tenantId"`
+
+	// -- Identity (Fleet Hub core fields) -------------------------------------
+	Make         string `json:"make"`
+	VehicleModel string `gorm:"column:model" json:"model"`
+	Type         string `json:"type"`
+	Year         int    `json:"year"`
+	LicensePlate string `gorm:"uniqueIndex;column:license_plate" json:"licensePlate"`
+	VIN          string `gorm:"uniqueIndex;column:vin" json:"vin"`
+	Color        string `gorm:"column:color" json:"color"`
+	FuelType     string `gorm:"column:fuel_type" json:"fuelType"`
+
+	// -- Classification (three orthogonal axes) -------------------------------
+	// Usage = what the vehicle is FOR (RENTAL | STAFF | SCHOOL_BUS |
+	//   LOGISTICS | AMBULANCE | POOL | EXECUTIVE). Drives the maintenance
+	//   schedule defaults and the fleet KPI rollups.
+	// Group = body type (ECONOMY | LUXURY | BUS | VAN | PICKUP | SUV).
+	// Class = size tier (COMPACT | MID_SIZE | FULL_SIZE).
+	VehicleUsage    string `gorm:"column:vehicle_usage" json:"vehicleUsage"`
+	VehicleGroup    string `gorm:"column:vehicle_group" json:"vehicleGroup"`
+	VehicleClass    string `gorm:"column:vehicle_class" json:"vehicleClass"`
+	SeatingCapacity int    `gorm:"column:seating_capacity" json:"seatingCapacity"`
+
+	// -- Operational ----------------------------------------------------------
+	// CurrentMileage is the canonical odometer; OdometerReading is a
+	// separately-captured reading retained from a legacy column. Phase B
+	// (live location) will introduce a separate time-series table for
+	// per-reading history.
+	Status          string  `json:"status"`
+	CurrentMileage  int     `gorm:"column:current_mileage" json:"currentMileage"`
+	OdometerReading int     `gorm:"column:odometer_reading" json:"odometerReading"`
+	FuelLevel       float64 `gorm:"column:fuel_level" json:"fuelLevel"`
+
+	// -- Fleet extended fields ------------------------------------------------
+	// Hierarchy / branch fields are denormalized flat strings today
+	// (Phase C will normalize into a vehicle_groups tree); they still
+	// work as filter keys.
+	// DeviceID is the OBD-II tracker's physical id — kept as a column
+	// rather than a separate Devices table because devices rarely move
+	// between vehicles in this fleet topology.
+	VehicleCode     string     `gorm:"column:vehicle_code" json:"vehicleCode"`
+	VehicleTypeID   string     `gorm:"column:vehicle_type_id" json:"vehicleTypeId"`
+	LifecycleStage  string     `gorm:"column:lifecycle_stage" json:"lifecycleStage"`
+	AcquisitionType string     `gorm:"column:acquisition_type" json:"acquisitionType"`
+	PurchaseDate    *time.Time `gorm:"column:purchase_date" json:"purchaseDate"`
+	PurchasePrice   float64    `gorm:"column:purchase_price" json:"purchasePrice"`
+	Emirate         string     `gorm:"column:emirate" json:"emirate"`
+	PlateNumber     string     `gorm:"column:plate_number" json:"plateNumber"`
+	PlateCode       string     `gorm:"column:plate_code" json:"plateCode"`
+	PlateCategory   string     `gorm:"column:plate_category" json:"plateCategory"`
+	RegistrationNo  string     `gorm:"column:registration_no" json:"registrationNo"`
+	ChassisNo       string     `gorm:"column:chassis_no" json:"chassisNo"`
+	HierarchyID     string     `gorm:"column:hierarchy_id" json:"hierarchyId"`
+	HierarchyName   string     `gorm:"column:hierarchy_name" json:"hierarchyName"`
+	BranchID        string     `gorm:"column:branch_id" json:"branchId"`
+	BranchName      string     `gorm:"column:branch_name" json:"branchName"`
+	DeviceID        string     `gorm:"column:device_id" json:"deviceId"`
+	SimCardNo       string     `gorm:"column:sim_card_no" json:"simCardNo"`
+	Category        string     `gorm:"column:category" json:"category"`
+	Notes           string     `gorm:"column:notes" json:"notes"`
+
+	// -- Compliance -----------------------------------------------------------
+	// RegistrationExpiry / InsuranceExpiry pre-existed as non-pointer
+	// time.Time; preserved as-is to avoid touching consumers. New
+	// nullable date field MulkiyaExpiry uses *time.Time so a NULL DB
+	// value serialises as JSON null rather than the epoch zero.
+	RegistrationExpiry time.Time  `gorm:"column:registration_expiry" json:"registrationExpiry"`
+	InsuranceExpiry    time.Time  `gorm:"column:insurance_expiry" json:"insuranceExpiry"`
+	MulkiyaExpiry      *time.Time `gorm:"column:mulkiya_expiry" json:"mulkiyaExpiry"`
+
+	// -- Ownership / assignment -----------------------------------------------
+	AssignedDriverID string `gorm:"column:assigned_driver_id" json:"assignedDriverId"`
+	GarageID         string `gorm:"column:garage_id" json:"garageId"`
 }
 
 // Driver
