@@ -1,6 +1,9 @@
 package main
 
 import (
+	"log"
+	"os"
+
 	"fleet360-backend/database"
 	"fleet360-backend/handlers"
 	"fleet360-backend/models"
@@ -21,8 +24,27 @@ func main() {
 	// Cleanup invalid data
 	database.DB.Where("id = ''").Delete(&models.MaintenanceRequest{})
 
-	// Seed Database
-	seed.Seed()
+	// Seed Database — only in development/test. The shallow count-check inside
+	// seed.Seed() is not a strong enough barrier: a fresh-install or empty-
+	// table state in production would still dump demo data into a real
+	// customer DB. We guard at the application layer with an explicit env
+	// gate and log every path so operators can confirm what happened.
+	//
+	// Belt-and-braces note: production deployments must set GO_ENV=production
+	// (or any value other than "development"/"test") on the host/container.
+	// The default case below is the safety net — an unset or unrecognised
+	// GO_ENV will NOT seed, and it will log loudly so the misconfiguration is
+	// visible in startup logs rather than swallowed silently.
+	env := os.Getenv("GO_ENV")
+	switch env {
+	case "development", "test":
+		log.Printf("[startup] GO_ENV=%q — seeding database", env)
+		seed.Seed()
+	case "production":
+		log.Println("[startup] GO_ENV=production — seed skipped")
+	default:
+		log.Printf("[startup] GO_ENV=%q (unrecognised or unset) — seed skipped; expected development|test|production", env)
+	}
 
 	r := gin.Default()
 
