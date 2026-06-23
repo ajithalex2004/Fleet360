@@ -109,6 +109,16 @@ export default function LoginPage() {
         'xl_mobility_session',
         JSON.stringify({ userId: data.user.id, tenantId: data.tenant.id }),
       );
+      // Stash the JWT for the Go backend. The Authorization-Bearer
+      // fetcher in src/lib/auth/backend-fetch.ts reads from this key.
+      // Login response may include backendToken=null when JWT_SECRET is
+      // unconfigured on the server — fall back to clearing the slot so
+      // a stale token from a previous login isn't reused.
+      if (data.backendToken) {
+        localStorage.setItem('xl_backend_token', data.backendToken);
+      } else {
+        localStorage.removeItem('xl_backend_token');
+      }
       window.location.href = '/platform';
     } catch {
       setError('Network error. Please check your connection and try again.');

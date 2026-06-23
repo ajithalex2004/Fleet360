@@ -33,7 +33,9 @@ const EXPIRY_PILL: Record<string, string> = {
 };
 
 const fmt = (d: string | null) => d ? new Date(d).toLocaleDateString('en-GB') : '—';
-const displayName = (d: Driver) => d.name ?? [d.firstName, d.lastName].filter(Boolean).join(' ') || '—';
+// Mixing ?? with || requires explicit grouping. Intent: d.name if set,
+// else "First Last" if non-empty, else em-dash.
+const displayName = (d: Driver) => d.name ?? ([d.firstName, d.lastName].filter(Boolean).join(' ') || '—');
 
 export default function LeasingDriversPage() {
   const [drivers, setDrivers] = useState<Driver[]>([]);

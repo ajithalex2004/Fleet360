@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"fmt"
+	"fleet360-backend/auth"
 	"fleet360-backend/database"
+	"fleet360-backend/logging"
 	"fleet360-backend/models"
 	"fleet360-backend/objectstore"
 	"net/http"
@@ -13,12 +15,34 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
+
+// requireTenant pulls the tenant id from the authenticated request context
+// (populated by auth.Middleware on /api/v1) and aborts the request with
+// 401 if it's missing. Handlers call this at the top, then either:
+//
+//   - pass `c` to auth.WithTenant when scoping reads/updates/deletes, OR
+//   - set the returned tid on the model's TenantID before db.Create
+//
+// Returns "" if the request was unauthenticated AND aborts the gin context
+// — callers should `return` immediately when this happens.
+func requireTenant(c *gin.Context) string {
+	tid := auth.TenantID(c)
+	if tid == "" {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing tenant context"})
+		return ""
+	}
+	return tid
+}
 
 // GetVehicles
 func GetVehicles(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
 	var vehicles []models.Vehicle
-	if err := database.DB.Find(&vehicles).Error; err != nil {
+	if err := database.DB.Scopes(auth.WithTenant(c)).Find(&vehicles).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -27,11 +51,19 @@ func GetVehicles(c *gin.Context) {
 
 // CreateVehicle
 func CreateVehicle(c *gin.Context) {
+	tid := requireTenant(c)
+	if tid == "" {
+		return
+	}
 	var input models.Vehicle
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	// Always stamp tenant from the validated token — never trust a
+	// client-supplied tenantId field; that would let a token-holder
+	// write rows into other tenants.
+	input.TenantID = tid
 
 	// Ensure status is valid if not provided (optional)
 	if input.Status == "" {
@@ -52,6 +84,9 @@ func CreateVehicle(c *gin.Context) {
 
 // UpdateVehicle
 func UpdateVehicle(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
 	id := c.Param("id")
 	var input models.Vehicle
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -60,13 +95,15 @@ func UpdateVehicle(c *gin.Context) {
 	}
 
 	var vehicle models.Vehicle
-	if err := database.DB.Where("id = ?", id).First(&vehicle).Error; err != nil {
+	if err := database.DB.Scopes(auth.WithTenant(c)).Where("id = ?", id).First(&vehicle).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Vehicle not found"})
 		return
 	}
 
-	// Update fields
-	if err := database.DB.Model(&vehicle).Omit("ID").Updates(input).Error; err != nil {
+	// Prevent client from overriding tenant via the request body —
+	// preserve the loaded row's TenantID regardless of what was sent.
+	input.TenantID = vehicle.TenantID
+	if err := database.DB.Model(&vehicle).Omit("ID", "TenantID").Updates(input).Error; err != nil {
 		if strings.Contains(err.Error(), "23505") { // Unique constraint violation
 			c.JSON(http.StatusConflict, gin.H{"error": "License Plate or VIN already exists."})
 			return
@@ -80,40 +117,49 @@ func UpdateVehicle(c *gin.Context) {
 
 // DeleteVehicle
 func DeleteVehicle(c *gin.Context) {
+	tid := requireTenant(c)
+	if tid == "" {
+		return
+	}
 	id := c.Param("id")
 
-	// Start atomic transaction for cascade delete
+	// Start atomic transaction for cascade delete. Every nested Pluck /
+	// Delete is tenant-scoped — a token-holder from tenant A can't
+	// accidentally cascade-delete tenant B's data even if vehicle IDs
+	// somehow collided.
 	tx := database.DB.Begin()
 
-	// 1. Find dependent Maintenance Requests
+	// 1. Find dependent Maintenance Requests (this tenant only).
 	var mrIDs []string
-	tx.Model(&models.MaintenanceRequest{}).Where("vehicle_id = ?", id).Pluck("id", &mrIDs)
+	tx.Model(&models.MaintenanceRequest{}).Where("tenant_id = ? AND vehicle_id = ?", tid, id).Pluck("id", &mrIDs)
 
 	if len(mrIDs) > 0 {
-		// Delete MR dependencies
-		if err := tx.Unscoped().Where("maintenance_request_id IN ?", mrIDs).Delete(&models.History{}).Error; err != nil {
+		// Delete MR dependencies. tenant_id filter is structurally redundant
+		// (the maintenance_request_id IN clause already restricts us to this
+		// tenant's MRs via the Pluck above) but kept as defence-in-depth.
+		if err := tx.Unscoped().Where("tenant_id = ? AND maintenance_request_id IN ?", tid, mrIDs).Delete(&models.History{}).Error; err != nil {
 			tx.Rollback()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete history: " + err.Error()})
 			return
 		}
-		if err := tx.Unscoped().Where("maintenance_request_id IN ?", mrIDs).Delete(&models.Comment{}).Error; err != nil {
+		if err := tx.Unscoped().Where("tenant_id = ? AND maintenance_request_id IN ?", tid, mrIDs).Delete(&models.Comment{}).Error; err != nil {
 			tx.Rollback()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete comments: " + err.Error()})
 			return
 		}
-		if err := tx.Unscoped().Where("maintenance_request_id IN ?", mrIDs).Delete(&models.Attachment{}).Error; err != nil {
+		if err := tx.Unscoped().Where("tenant_id = ? AND maintenance_request_id IN ?", tid, mrIDs).Delete(&models.Attachment{}).Error; err != nil {
 			tx.Rollback()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete attachments: " + err.Error()})
 			return
 		}
 		// Quotations
-		if err := tx.Unscoped().Where("maintenance_request_id IN ?", mrIDs).Delete(&models.Quotation{}).Error; err != nil {
+		if err := tx.Unscoped().Where("tenant_id = ? AND maintenance_request_id IN ?", tid, mrIDs).Delete(&models.Quotation{}).Error; err != nil {
 			tx.Rollback()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete quotations: " + err.Error()})
 			return
 		}
 		// Delete MRs
-		if err := tx.Unscoped().Where("vehicle_id = ?", id).Delete(&models.MaintenanceRequest{}).Error; err != nil {
+		if err := tx.Unscoped().Where("tenant_id = ? AND vehicle_id = ?", tid, id).Delete(&models.MaintenanceRequest{}).Error; err != nil {
 			tx.Rollback()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete maintenance requests: " + err.Error()})
 			return
@@ -122,36 +168,36 @@ func DeleteVehicle(c *gin.Context) {
 
 	// 2. Find dependent Service Requests
 	var srIDs []string
-	tx.Model(&models.ServiceRequest{}).Where("vehicle_id = ?", id).Pluck("id", &srIDs)
+	tx.Model(&models.ServiceRequest{}).Where("tenant_id = ? AND vehicle_id = ?", tid, id).Pluck("id", &srIDs)
 
 	if len(srIDs) > 0 {
-		if err := tx.Unscoped().Where("service_request_id IN ?", srIDs).Delete(&models.History{}).Error; err != nil {
+		if err := tx.Unscoped().Where("tenant_id = ? AND service_request_id IN ?", tid, srIDs).Delete(&models.History{}).Error; err != nil {
 			tx.Rollback()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete SR history: " + err.Error()})
 			return
 		}
-		if err := tx.Unscoped().Where("service_request_id IN ?", srIDs).Delete(&models.Attachment{}).Error; err != nil {
+		if err := tx.Unscoped().Where("tenant_id = ? AND service_request_id IN ?", tid, srIDs).Delete(&models.Attachment{}).Error; err != nil {
 			tx.Rollback()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete SR attachments: " + err.Error()})
 			return
 		}
 		// Delete SRs
-		if err := tx.Unscoped().Where("vehicle_id = ?", id).Delete(&models.ServiceRequest{}).Error; err != nil {
+		if err := tx.Unscoped().Where("tenant_id = ? AND vehicle_id = ?", tid, id).Delete(&models.ServiceRequest{}).Error; err != nil {
 			tx.Rollback()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete service requests: " + err.Error()})
 			return
 		}
 	}
 
-	// 3. Unassign Drivers
-	if err := tx.Model(&models.Driver{}).Where("assigned_vehicle_id = ?", id).Update("assigned_vehicle_id", nil).Error; err != nil {
+	// 3. Unassign Drivers (this tenant's drivers only)
+	if err := tx.Model(&models.Driver{}).Where("tenant_id = ? AND assigned_vehicle_id = ?", tid, id).Update("assigned_vehicle_id", nil).Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to unassign drivers: " + err.Error()})
 		return
 	}
 
-	// 4. Finally, Hard Delete the Vehicle
-	if err := tx.Unscoped().Where("id = ?", id).Delete(&models.Vehicle{}).Error; err != nil {
+	// 4. Finally, Hard Delete the Vehicle (this tenant only)
+	if err := tx.Unscoped().Where("tenant_id = ? AND id = ?", tid, id).Delete(&models.Vehicle{}).Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -163,8 +209,12 @@ func DeleteVehicle(c *gin.Context) {
 
 // GetMaintenanceRequests
 func GetMaintenanceRequests(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
 	var requests []models.MaintenanceRequest
-	if err := database.DB.Preload("Vehicle").
+	if err := database.DB.Scopes(auth.WithTenant(c)).
+		Preload("Vehicle").
 		Preload("Driver").
 		Preload("Garage").
 		Preload("History").
@@ -178,10 +228,14 @@ func GetMaintenanceRequests(c *gin.Context) {
 
 // GetMaintenanceRequest
 func GetMaintenanceRequest(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
 	id := c.Param("id")
 	var request models.MaintenanceRequest
 	// Preload all associations needed for the details page
-	if err := database.DB.Preload("Vehicle").
+	if err := database.DB.Scopes(auth.WithTenant(c)).
+		Preload("Vehicle").
 		Preload("Driver").
 		Preload("Garage").
 		Preload("History").
@@ -202,11 +256,18 @@ func GetMaintenanceRequest(c *gin.Context) {
 
 // CreateMaintenanceRequest
 func CreateMaintenanceRequest(c *gin.Context) {
+	tid := requireTenant(c)
+	if tid == "" {
+		return
+	}
 	var input models.MaintenanceRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	// Stamp tenant from validated token. Cascading History rows
+	// (created below) inherit the same tenant.
+	input.TenantID = tid
 
 	// Belt-and-braces: the Model.BeforeCreate hook (models.go) is the primary
 	// guarantee that every row gets a UUID, but we set it here explicitly so a
@@ -222,14 +283,17 @@ func CreateMaintenanceRequest(c *gin.Context) {
 		input.Status = models.StatusRequested
 	}
 
-	// Add initial history
+	// Add initial history. tenant_id mirrors the parent — never resolve it
+	// from the JWT here directly so a refactor that detaches history from
+	// the parent can't silently land it in a different tenant.
 	input.History = []models.History{
 		{
-			Model:  models.Model{ID: uuid.New().String()},
-			Status: models.StatusRequested,
-			Date:   input.RequestDate,
-			Note:   "Request created",
-			Actor:  "System", // In a real app, get from context/JWT
+			Model:    models.Model{ID: uuid.New().String()},
+			TenantID: tid,
+			Status:   models.StatusRequested,
+			Date:     input.RequestDate,
+			Note:     "Request created",
+			Actor:    "System", // In a real app, get from context/JWT
 		},
 	}
 
@@ -243,6 +307,10 @@ func CreateMaintenanceRequest(c *gin.Context) {
 
 // UpdateMaintenanceRequest
 func UpdateMaintenanceRequest(c *gin.Context) {
+	tid := requireTenant(c)
+	if tid == "" {
+		return
+	}
 	id := c.Param("id")
 	var input models.MaintenanceRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -251,7 +319,7 @@ func UpdateMaintenanceRequest(c *gin.Context) {
 	}
 
 	var request models.MaintenanceRequest
-	if err := database.DB.Where("id = ?", id).First(&request).Error; err != nil {
+	if err := database.DB.Scopes(auth.WithTenant(c)).Where("id = ?", id).First(&request).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Maintenance request not found"})
 		return
 	}
@@ -259,8 +327,10 @@ func UpdateMaintenanceRequest(c *gin.Context) {
 	// Capture old status to check for changes
 	oldStatus := request.Status
 
-	// Update fields
-	if err := database.DB.Model(&request).Omit("ID").Updates(input).Error; err != nil {
+	// Update fields. Preserve TenantID — client must not be able to
+	// re-parent a row into another tenant via a forged request body.
+	input.TenantID = request.TenantID
+	if err := database.DB.Model(&request).Omit("ID", "TenantID").Updates(input).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -270,6 +340,7 @@ func UpdateMaintenanceRequest(c *gin.Context) {
 	// Since we bound to 'input', check if input.Status is non-empty and different
 	if input.Status != "" && input.Status != oldStatus {
 		newHistory := models.History{
+			TenantID:             tid,
 			MaintenanceRequestID: &request.ID,
 			Status:               input.Status,
 			Date:                 time.Now(),
@@ -280,19 +351,21 @@ func UpdateMaintenanceRequest(c *gin.Context) {
 	}
 
 	// Explicitly replace associations if provided
+	log := logging.L()
 	if len(input.Attachments) > 0 {
-		fmt.Printf("[DEBUG] Updating Attachments for Request %s. Count: %d\n", request.ID, len(input.Attachments))
-		for i, att := range input.Attachments {
-			fmt.Printf("  [%d] ID: %s, URL: %s, Type: %s\n", i, att.ID, att.URL, att.Type)
-		}
+		log.Debug("updating attachments",
+			zap.String("request_id", request.ID),
+			zap.Int("count", len(input.Attachments)),
+		)
 		if err := database.DB.Model(&request).Association("Attachments").Replace(input.Attachments); err != nil {
-			fmt.Printf("[ERROR] Failed to replace attachments: %v\n", err)
+			log.Error("failed to replace attachments",
+				zap.String("request_id", request.ID),
+				zap.Error(err),
+			)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update attachments: " + err.Error()})
 			return
 		}
-		fmt.Println("[DEBUG] Attachments updated successfully")
-	} else {
-		fmt.Printf("[DEBUG] No attachments to update (Input len=0)\n")
+		log.Debug("attachments updated successfully", zap.String("request_id", request.ID))
 	}
 
 	if len(input.Quotations) > 0 {
@@ -303,15 +376,18 @@ func UpdateMaintenanceRequest(c *gin.Context) {
 	}
 
 	// Return the updated request (reload to get fresh data including history)
-	database.DB.Preload("Vehicle").Preload("Driver").Preload("Garage").Preload("History").Preload("Attachments").First(&request)
+	database.DB.Scopes(auth.WithTenant(c)).Preload("Vehicle").Preload("Driver").Preload("Garage").Preload("History").Preload("Attachments").First(&request)
 
 	c.JSON(http.StatusOK, request)
 }
 
 // GetServiceRequests
 func GetServiceRequests(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
 	var requests []models.ServiceRequest
-	if err := database.DB.Preload("History").Find(&requests).Error; err != nil {
+	if err := database.DB.Scopes(auth.WithTenant(c)).Preload("History").Find(&requests).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -320,8 +396,11 @@ func GetServiceRequests(c *gin.Context) {
 
 // GetDrivers
 func GetDrivers(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
 	var drivers []models.Driver
-	if err := database.DB.Find(&drivers).Error; err != nil {
+	if err := database.DB.Scopes(auth.WithTenant(c)).Find(&drivers).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -330,9 +409,12 @@ func GetDrivers(c *gin.Context) {
 
 // GetDriver
 func GetDriver(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
 	id := c.Param("id")
 	var driver models.Driver
-	if err := database.DB.First(&driver, "id = ?", id).Error; err != nil {
+	if err := database.DB.Scopes(auth.WithTenant(c)).First(&driver, "id = ?", id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Driver not found"})
 		return
 	}
@@ -341,9 +423,12 @@ func GetDriver(c *gin.Context) {
 
 // GetVehicle
 func GetVehicle(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
 	id := c.Param("id")
 	var vehicle models.Vehicle
-	if err := database.DB.First(&vehicle, "id = ?", id).Error; err != nil {
+	if err := database.DB.Scopes(auth.WithTenant(c)).First(&vehicle, "id = ?", id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Vehicle not found"})
 		return
 	}
@@ -352,32 +437,40 @@ func GetVehicle(c *gin.Context) {
 
 // CreateServiceRequest
 func CreateServiceRequest(c *gin.Context) {
+	tid := requireTenant(c)
+	if tid == "" {
+		return
+	}
 	var input models.ServiceRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	input.TenantID = tid
 
-	// Add initial history
+	// Add initial history. tenant_id mirrors parent.
 	input.History = []models.History{
 		{
-			Status: "Pending",
-			Date:   input.Date,
-			Note:   "Service Request Created",
-			Actor:  "System",
+			TenantID: tid,
+			Status:   "Pending",
+			Date:     input.Date,
+			Note:     "Service Request Created",
+			Actor:    "System",
 		},
 	}
 
 	// Ensure status is Pending
 	input.Status = "Pending"
 
-	// Generate ID explicitly to avoid GORM hook conflicts
+	// Generate ID explicitly to avoid GORM hook conflicts.
+	// Scope the "last seq" lookup to this tenant so SR sequences don't
+	// collide across customers.
 	if input.ID == "" {
 		currentYear := time.Now().Format("06")
 		prefix := "SR" + currentYear
 		var lastRequest models.ServiceRequest
 		// Find last request, ignoring error (if not found, start at 1001)
-		database.DB.Where("id LIKE ?", prefix+"%").Order("id desc").First(&lastRequest)
+		database.DB.Scopes(auth.WithTenant(c)).Where("id LIKE ?", prefix+"%").Order("id desc").First(&lastRequest)
 
 		nextSeq := 1001
 		if lastRequest.ID != "" && len(lastRequest.ID) >= 8 {
@@ -399,6 +492,10 @@ func CreateServiceRequest(c *gin.Context) {
 
 // UpdateServiceRequest
 func UpdateServiceRequest(c *gin.Context) {
+	tid := requireTenant(c)
+	if tid == "" {
+		return
+	}
 	id := c.Param("id")
 	var input models.ServiceRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -407,22 +504,24 @@ func UpdateServiceRequest(c *gin.Context) {
 	}
 
 	var request models.ServiceRequest
-	if err := database.DB.Where("id = ?", id).First(&request).Error; err != nil {
+	if err := database.DB.Scopes(auth.WithTenant(c)).Where("id = ?", id).First(&request).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Service request not found"})
 		return
 	}
 
 	oldStatus := request.Status
 
-	// Update fields
-	if err := database.DB.Model(&request).Omit("ID").Updates(input).Error; err != nil {
+	// Preserve tenant on update
+	input.TenantID = request.TenantID
+	if err := database.DB.Model(&request).Omit("ID", "TenantID").Updates(input).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Capture history for status change
+	// Capture history for status change. tenant_id mirrors the parent.
 	if input.Status != "" && input.Status != oldStatus {
 		newHistory := models.History{
+			TenantID:         tid,
 			ServiceRequestID: &request.ID,
 			// Status field in History is typed MaintenanceStatus, but ServiceRequest status is string.
 			// Casting or mapping might be needed. For now assuming strictly compatible string.
@@ -439,11 +538,16 @@ func UpdateServiceRequest(c *gin.Context) {
 
 // CreateQuotation
 func CreateQuotation(c *gin.Context) {
+	tid := requireTenant(c)
+	if tid == "" {
+		return
+	}
 	var input models.Quotation
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	input.TenantID = tid
 
 	// Default status if not provided
 	if input.Status == "" {
@@ -460,6 +564,10 @@ func CreateQuotation(c *gin.Context) {
 
 // UpdateQuotation
 func UpdateQuotation(c *gin.Context) {
+	tid := requireTenant(c)
+	if tid == "" {
+		return
+	}
 	id := c.Param("id")
 	var input models.Quotation
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -470,15 +578,19 @@ func UpdateQuotation(c *gin.Context) {
 	// Start atomic transaction
 	tx := database.DB.Begin()
 
-	// 1. Verify existence
+	// 1. Verify existence (scoped to this tenant — can't fetch another
+	// tenant's quotation even by guessing the id).
 	var existing models.Quotation
-	if err := tx.First(&existing, "id = ?", id).Error; err != nil {
+	if err := tx.Scopes(auth.WithTenant(c)).First(&existing, "id = ?", id).Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusNotFound, gin.H{"error": "Quotation not found"})
 		return
 	}
 
-	// 2. Clear existing Parts and Labor for replacement
+	// 2. Clear existing Parts and Labor for replacement.
+	// QuotationPart / QuotationLabor inherit ownership via quotation_id,
+	// which is already restricted to this tenant by the existence check
+	// above — no separate tenant_id columns on those child tables.
 	if err := tx.Where("quotation_id = ?", id).Delete(&models.QuotationPart{}).Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to clear existing parts"})
@@ -489,6 +601,9 @@ func UpdateQuotation(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to clear existing labor"})
 		return
 	}
+	// Preserve TenantID on the input from the existing record.
+	input.TenantID = existing.TenantID
+	_ = tid // tid is captured in `auth.WithTenant(c)` scope; reference for future use
 
 	// 3. Update main fields and associations
 	// Re-assign ID to parts/labor to ensure link and CLEAR IDs to force creation
@@ -517,8 +632,11 @@ func UpdateQuotation(c *gin.Context) {
 
 // GetGarages
 func GetGarages(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
 	var garages []models.Garage
-	if err := database.DB.Find(&garages).Error; err != nil {
+	if err := database.DB.Scopes(auth.WithTenant(c)).Find(&garages).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -527,6 +645,9 @@ func GetGarages(c *gin.Context) {
 
 // PatchQuotation
 func PatchQuotation(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
 	id := c.Param("id")
 	var input models.Quotation
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -535,13 +656,14 @@ func PatchQuotation(c *gin.Context) {
 	}
 
 	var quotation models.Quotation
-	if err := database.DB.First(&quotation, "id = ?", id).Error; err != nil {
+	if err := database.DB.Scopes(auth.WithTenant(c)).First(&quotation, "id = ?", id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Quotation not found"})
 		return
 	}
 
-	// Use Updates to only update non-zero fields
-	if err := database.DB.Model(&quotation).Updates(&input).Error; err != nil {
+	// Preserve TenantID on partial update
+	input.TenantID = quotation.TenantID
+	if err := database.DB.Model(&quotation).Omit("TenantID").Updates(&input).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -551,14 +673,21 @@ func PatchQuotation(c *gin.Context) {
 
 // CreateGarage
 func CreateGarage(c *gin.Context) {
+	tid := requireTenant(c)
+	if tid == "" {
+		return
+	}
 	var input models.Garage
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	input.TenantID = tid
 
 	// Force new UUID to avoid collisions
-	fmt.Printf("[Update] Creating Garage with Input ID: %s (Replacing with new UUID)\n", input.ID)
+	logging.L().Debug("creating garage with fresh UUID (replacing client-supplied ID)",
+		zap.String("client_supplied_id", input.ID),
+	)
 	input.ID = uuid.New().String()
 
 	if err := database.DB.Create(&input).Error; err != nil {
@@ -571,6 +700,9 @@ func CreateGarage(c *gin.Context) {
 
 // UpdateGarage
 func UpdateGarage(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
 	id := c.Param("id")
 	var input models.Garage
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -579,13 +711,14 @@ func UpdateGarage(c *gin.Context) {
 	}
 
 	var garage models.Garage
-	if err := database.DB.Where("id = ?", id).First(&garage).Error; err != nil {
+	if err := database.DB.Scopes(auth.WithTenant(c)).Where("id = ?", id).First(&garage).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Garage not found"})
 		return
 	}
 
-	// Update fields
-	if err := database.DB.Model(&garage).Omit("ID").Updates(input).Error; err != nil {
+	// Preserve TenantID on update
+	input.TenantID = garage.TenantID
+	if err := database.DB.Model(&garage).Omit("ID", "TenantID").Updates(input).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -594,13 +727,20 @@ func UpdateGarage(c *gin.Context) {
 }
 
 // GetPredictiveMaintenance (Heuristic Engine)
-// GetPredictiveMaintenance (Heuristic Engine)
-// GetPredictiveMaintenance (Heuristic Engine)
 func GetPredictiveMaintenance(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
 	var vehicles []models.Vehicle
-	// Try to fetch vehicles, but don't crash if it fails
-	if err := database.DB.Find(&vehicles).Error; err != nil {
-		fmt.Printf("Error fetching vehicles for predictive maintenance: %v\n", err)
+	// Try to fetch this tenant's vehicles. Predictive maintenance must
+	// only consider the requesting tenant's fleet — leaking another
+	// tenant's mileage data would be a side-channel data leak via
+	// statistical inference.
+	if err := database.DB.Scopes(auth.WithTenant(c)).Find(&vehicles).Error; err != nil {
+		logging.L().Warn("failed to fetch vehicles for predictive maintenance, proceeding with empty list",
+			zap.String("tenant_id", auth.TenantID(c)),
+			zap.Error(err),
+		)
 		// Proceed with empty list instead of 500
 		vehicles = []models.Vehicle{}
 	}
@@ -760,8 +900,11 @@ func GetPredictiveMaintenance(c *gin.Context) {
 
 // GetAlertConfigs
 func GetAlertConfigs(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
 	var configs []models.AlertConfig
-	if err := database.DB.Find(&configs).Error; err != nil {
+	if err := database.DB.Scopes(auth.WithTenant(c)).Find(&configs).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -770,11 +913,16 @@ func GetAlertConfigs(c *gin.Context) {
 
 // CreateAlertConfig
 func CreateAlertConfig(c *gin.Context) {
+	tid := requireTenant(c)
+	if tid == "" {
+		return
+	}
 	var input models.AlertConfig
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	input.TenantID = tid
 
 	if err := database.DB.Create(&input).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -786,6 +934,9 @@ func CreateAlertConfig(c *gin.Context) {
 
 // UpdateAlertConfig
 func UpdateAlertConfig(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
 	id := c.Param("id")
 	var input models.AlertConfig
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -794,25 +945,29 @@ func UpdateAlertConfig(c *gin.Context) {
 	}
 
 	var config models.AlertConfig
-	if err := database.DB.Where("id = ?", id).First(&config).Error; err != nil {
+	if err := database.DB.Scopes(auth.WithTenant(c)).Where("id = ?", id).First(&config).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Alert Config not found"})
 		return
 	}
 
-	if err := database.DB.Model(&config).Omit("ID").Updates(input).Error; err != nil {
+	input.TenantID = config.TenantID
+	if err := database.DB.Model(&config).Omit("ID", "TenantID").Updates(input).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Fetch updated
-	database.DB.First(&config, "id = ?", id)
+	// Fetch updated (scoped — a same-id row in another tenant would never load)
+	database.DB.Scopes(auth.WithTenant(c)).First(&config, "id = ?", id)
 	c.JSON(http.StatusOK, config)
 }
 
 // DeleteAlertConfig
 func DeleteAlertConfig(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
 	id := c.Param("id")
-	if err := database.DB.Where("id = ?", id).Delete(&models.AlertConfig{}).Error; err != nil {
+	if err := database.DB.Scopes(auth.WithTenant(c)).Where("id = ?", id).Delete(&models.AlertConfig{}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -919,11 +1074,16 @@ func GetSignedURL(c *gin.Context) {
 
 // CreateAlert
 func CreateAlert(c *gin.Context) {
+	tid := requireTenant(c)
+	if tid == "" {
+		return
+	}
 	var input models.Alert
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	input.TenantID = tid
 
 	// Default status if missing
 	if input.Status == "" {

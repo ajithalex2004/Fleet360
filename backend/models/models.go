@@ -57,6 +57,7 @@ func (m *Model) BeforeCreate(tx *gorm.DB) (err error) {
 // Vehicle
 type Vehicle struct {
 	Model
+	TenantID           string    `gorm:"not null;index;column:tenant_id" json:"tenantId"`
 	Make               string    `json:"make"`
 	VehicleModel       string    `gorm:"column:model" json:"model"`
 	Type               string    `json:"type"`
@@ -72,6 +73,7 @@ type Vehicle struct {
 // Driver
 type Driver struct {
 	Model
+	TenantID          string    `gorm:"not null;index;column:tenant_id" json:"tenantId"`
 	Name              string    `json:"name"`
 	LicenseNumber     string    `gorm:"uniqueIndex" json:"licenseNumber"`
 	LicenseExpiry     time.Time `json:"licenseExpiry"`
@@ -83,6 +85,7 @@ type Driver struct {
 // Garage
 type Garage struct {
 	Model
+	TenantID      string         `gorm:"not null;index;column:tenant_id" json:"tenantId"`
 	Name          string         `json:"name"`
 	Location      string         `json:"location"`
 	ContactPerson string         `json:"contactPerson"`
@@ -140,6 +143,7 @@ type ActualCosts struct {
 // MaintenanceRequest
 type MaintenanceRequest struct {
 	Model
+	TenantID            string            `gorm:"not null;index;column:tenant_id" json:"tenantId"`
 	VehicleID           string            `json:"vehicleId"`
 	Vehicle             Vehicle           `gorm:"foreignKey:VehicleID" json:"vehicle"`
 	DriverID            string            `json:"driverId"`
@@ -211,6 +215,7 @@ func (mr *MaintenanceRequest) BeforeCreate(tx *gorm.DB) (err error) {
 
 type Comment struct {
 	Model
+	TenantID             string    `gorm:"not null;index;column:tenant_id" json:"tenantId"`
 	MaintenanceRequestID string    `json:"maintenanceRequestId"`
 	Author               string    `json:"author"`
 	Text                 string    `json:"text"`
@@ -219,6 +224,7 @@ type Comment struct {
 
 type History struct {
 	Model
+	TenantID             string            `gorm:"not null;index;column:tenant_id" json:"tenantId"`
 	MaintenanceRequestID *string           `json:"maintenanceRequestId"`
 	ServiceRequestID     *string           `json:"serviceRequestId"`
 	Status               MaintenanceStatus `json:"status"`
@@ -229,6 +235,7 @@ type History struct {
 
 type Attachment struct {
 	Model
+	TenantID             string  `gorm:"not null;index;column:tenant_id" json:"tenantId"`
 	MaintenanceRequestID *string `json:"maintenanceRequestId"`
 	ServiceRequestID     *string `json:"serviceRequestId"`
 	QuotationID          *string `json:"quotationId"`
@@ -240,6 +247,7 @@ type Attachment struct {
 // ServiceRequest
 type ServiceRequest struct {
 	Model
+	TenantID             string       `gorm:"not null;index;column:tenant_id" json:"tenantId"`
 	RequestorID          string       `json:"requestorId"`
 	ServiceType          string       `json:"serviceType"`
 	VehicleID            *string      `json:"vehicleId"`
@@ -292,6 +300,7 @@ func (sr *ServiceRequest) BeforeCreate(tx *gorm.DB) (err error) {
 // Alert
 type Alert struct {
 	Model
+	TenantID        string        `gorm:"not null;index;column:tenant_id" json:"tenantId"`
 	Type            AlertType     `json:"type"`
 	Title           string        `json:"title"`
 	Description     string        `json:"description"`
@@ -305,6 +314,7 @@ type Alert struct {
 // AlertConfig (Rules)
 type AlertConfig struct {
 	Model
+	TenantID            string         `gorm:"not null;index;column:tenant_id" json:"tenantId"`
 	AlertFor            string         `json:"alertFor"`
 	AlertType           string         `json:"alertType"`
 	Frequency           string         `json:"frequency"`
@@ -343,6 +353,7 @@ type InvoiceLineItem struct {
 // Quotation
 type Quotation struct {
 	Model
+	TenantID                string             `gorm:"not null;index;column:tenant_id" json:"tenantId"`
 	QuotationDate           time.Time          `json:"quotationDate"`
 	ValidUntil              time.Time          `json:"validUntil"`
 	LaborCost               float64            `json:"laborCost"`

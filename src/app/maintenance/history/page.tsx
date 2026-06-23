@@ -6,6 +6,7 @@ import { getMaintenanceRequests, getServiceRequests, getVehicles, getDrivers } f
 import { MaintenanceRequest, MaintenanceStatus, ServiceRequest } from '@/types/maintenance';
 import FilterBar from '@/components/Maintenance/FilterBar';
 import TimelineModal, { TimelineItem } from '@/components/Maintenance/TimelineModal';
+import { backendFetch } from '@/lib/auth/backend-fetch';
 
 // Unified type for display
 type HistoryItem = MaintenanceRequest | ServiceRequest;
@@ -39,10 +40,10 @@ export default function MaintenanceHistoryPage() {
         const loadData = async () => {
             try {
                 const [mReqsRes, sReqsRes, vehsRes, drvsRes] = await Promise.all([
-                    fetch('http://localhost:8080/api/v1/maintenance/requests'),
-                    fetch('http://localhost:8080/api/v1/service/requests'),
-                    fetch('http://localhost:8080/api/v1/fleet/vehicles'),
-                    fetch('http://localhost:8080/api/v1/fleet/drivers')
+                    backendFetch('http://localhost:8080/api/v1/maintenance/requests'),
+                    backendFetch('http://localhost:8080/api/v1/service/requests'),
+                    backendFetch('http://localhost:8080/api/v1/fleet/vehicles'),
+                    backendFetch('http://localhost:8080/api/v1/fleet/drivers')
                 ]);
 
                 const mReqs = await mReqsRes.json();

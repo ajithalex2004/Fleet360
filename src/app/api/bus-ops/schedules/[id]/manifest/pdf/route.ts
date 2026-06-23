@@ -69,7 +69,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       boardedAt: p.boardedAt,
     }));
 
-    const driverName = driver?.name ?? [driver?.firstName, driver?.lastName].filter(Boolean).join(' ') || null;
+    // Mixing ?? with || requires explicit grouping (TS / SWC strict).
+    // Intent: driver.name if set, else "First Last" if non-empty, else null.
+    const driverName = driver?.name ?? ([driver?.firstName, driver?.lastName].filter(Boolean).join(' ') || null);
 
     const data: BusManifestPdfData = {
       manifestNo: `MAN-${schedule.tripNumber ?? id.slice(0, 8)}-${new Date().toISOString().slice(0, 10)}`,

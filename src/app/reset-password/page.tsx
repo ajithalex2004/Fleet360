@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { Suspense, useState, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 const RULES = [
@@ -11,7 +11,21 @@ const RULES = [
   { test: (p: string) => /[^A-Za-z0-9]/.test(p),   label: 'One symbol' },
 ];
 
+// Next.js 15 requires useSearchParams to live under a Suspense boundary
+// when the route is statically prerendered. Wrap the body so the build
+// step can prerender the page shell while leaving the search-params-
+// dependent inner subtree for client-side render. Without this, `next
+// build` errors with "useSearchParams() should be wrapped in a suspense
+// boundary".
 export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={null}>
+      <ResetPasswordInner />
+    </Suspense>
+  );
+}
+
+function ResetPasswordInner() {
   const params = useSearchParams();
   const token  = params.get('token') ?? '';
 

@@ -64,7 +64,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       model: vehicle.model ?? model ?? '',
       licensePlate: vehicle.licensePlate ?? licensePlate,
       driver: vehicle.driverName ?? vehicle.driver ?? driver ?? '',
-      monthlyRate: vehicle.monthlyRate ?? parseFloat(monthlyRate) || 0,
+      // Mixing ?? with || requires explicit grouping. Intent:
+      // vehicle.monthlyRate if defined, else parseFloat(monthlyRate), or 0 if NaN.
+      monthlyRate: vehicle.monthlyRate ?? (parseFloat(monthlyRate) || 0),
       status: vehicle.status ?? 'Active',
     }, { status: 201 });
   } catch (e: any) {

@@ -1,22 +1,25 @@
 package seed
 
 import (
-	"fmt"
 	"fleet360-backend/database"
+	"fleet360-backend/logging"
 	"fleet360-backend/models"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 func Seed() {
+	log := logging.L()
 	// Check if data exists
 	var count int64
 	database.DB.Model(&models.Vehicle{}).Count(&count)
 	if count > 0 {
-		fmt.Println("Database already seeded")
+		log.Info("database already seeded — skipping", zap.Int64("vehicle_count", count))
 		return
 	}
 
-	fmt.Println("Seeding database...")
+	log.Info("seeding database")
 
 	// Vehicles
 	vehicles := []models.Vehicle{
@@ -134,5 +137,5 @@ func Seed() {
 	}
 	database.DB.Create(&serviceRequests)
 
-	fmt.Println("Database seeded successfully")
+	log.Info("database seeded successfully")
 }

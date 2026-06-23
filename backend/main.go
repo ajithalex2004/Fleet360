@@ -34,6 +34,7 @@ import (
 	"os"
 	"strings"
 
+	"fleet360-backend/auth"
 	"fleet360-backend/corsorigin"
 	"fleet360-backend/database"
 	"fleet360-backend/handlers"
@@ -91,12 +92,24 @@ func runServer() {
 	corsorigin.StartRefresher(database.DB, corsorigin.DefaultRefreshInterval)
 
 	// Object store (S3-compatible: AWS S3 in prod, self-hosted MinIO in
-	// dev). Fatal on init failure — accepting uploads with no working
-	// storage backend is worse than refusing to boot.
+	// dev). In production, init failure is fatal — accepting uploads
+	// against a broken storage backend is worse than refusing to boot.
+	// In dev, init failure logs a warning and the binary continues —
+	// developers shouldn't be forced to run MinIO locally just to
+	// exercise non-upload endpoints, and Put/PresignedGetURL already
+	// return errors when called against an uninitialised client so the
+	// failure surfaces clearly at upload time rather than silently.
 	if err := objectstore.Init(context.Background()); err != nil {
-		log.Fatal("object store init failed", zap.Error(err))
+		if os.Getenv("GO_ENV") == "production" {
+			log.Fatal("object store init failed", zap.Error(err))
+		}
+		log.Warn("object store init failed (non-production, continuing without upload support)",
+			zap.String("go_env", os.Getenv("GO_ENV")),
+			zap.Error(err),
+		)
+	} else {
+		log.Info("object store ready")
 	}
-	log.Info("object store ready")
 
 	// Gin in release mode shuts off its colour console banner; structured
 	// log lines come from ginzap instead. Production observability tools
@@ -135,7 +148,15 @@ func runServer() {
 // (e.g. retiring v1/quotations in favour of a v2 shape) is self-contained
 // — the surrounding domains keep working untouched.
 func registerV1Routes(r *gin.Engine) {
-	v1 := r.Group("/api/v1")
+	// Every /api/v1/* request must carry a valid Bearer JWT issued by the
+	// Next.js login endpoint. auth.Middleware validates the signature,
+	// expiry, issuer, and HS256 algorithm, then stuffs the user_id,
+	// tenant_id, and role into the gin context. Handlers read those via
+	// auth.TenantID(c) / auth.UserID(c) / auth.RoleCode(c) and apply
+	// auth.WithTenant(c) as a GORM scope on every query.
+	//
+	// Unauthenticated requests get 401 with no handler invocation.
+	v1 := r.Group("/api/v1", auth.Middleware())
 
 	fleet := v1.Group("/fleet")
 	{
