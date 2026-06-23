@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { signSession } from '@/lib/tenant-session';
+import { signJwtForBackend } from '@/lib/auth/jwt';
 import { ensureMfaColumns } from '@/lib/auth-mfa-schema';
 import { verifyTotp, verifyRecoveryCode } from '@/lib/totp';
 
@@ -171,6 +172,25 @@ export async function POST(request: NextRequest) {
       role:     userTenant.role.code,
     });
 
+    // 4b. Sign a JWT for the Go backend (Authorization: Bearer <token>).
+    // This is independent of the xl-session cookie above — that cookie is
+    // for the Next.js side (HMAC-signed JSON, ~Edge-runtime-friendly),
+    // while the JWT below is the standard HS256-signed format the Go
+    // backend validates via golang-jwt/jwt (backend/auth/jwt.go).
+    // Missing JWT_SECRET is non-fatal for login itself — the user can
+    // still use Next.js-side features that don't hit the Go backend. We
+    // log the failure but don't 500 the login.
+    let backendToken: string | null = null;
+    try {
+      backendToken = await signJwtForBackend({
+        userId:   user.id,
+        tenantId: userTenant.tenantId,
+        role:     userTenant.role.code,
+      });
+    } catch (err) {
+      console.warn('[auth/login] backend JWT sign failed (Go-backend features unavailable):', err);
+    }
+
     // 5. Build response
     const responseBody = {
       ok: true,
@@ -194,6 +214,12 @@ export async function POST(request: NextRequest) {
         name: ut.tenant.name,
         code: ut.tenant.code,
       })),
+      // Bearer JWT for the Go backend. Browser stashes this in
+      // localStorage and attaches as `Authorization: Bearer <token>` on
+      // calls to http://<go-host>:8080/api/v1/*. Null when JWT_SECRET is
+      // unconfigured — clients should handle the absence by skipping
+      // Go-backend calls gracefully.
+      backendToken,
     };
 
     const response = NextResponse.json(responseBody, { status: 200 });
