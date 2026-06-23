@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"fleet360-backend/database"
 	"fleet360-backend/models"
+	"fleet360-backend/objectstore"
 	"net/http"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -820,7 +820,21 @@ func DeleteAlertConfig(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// UploadFile handles file uploads and returns the file URL
+// UploadFile streams the incoming multipart upload to the configured S3-
+// compatible object store (MinIO in self-hosted dev, AWS S3 / Azure Blob in
+// prod) and returns a presigned GET URL for immediate display alongside
+// the stable object key for long-term storage.
+//
+// Why both `url` and `objectKey` in the response?
+//
+//   - `objectKey` is stable and belongs in the database. The frontend
+//     stores it on the attachment / vehicle / driver row.
+//   - `url` is a presigned GET valid for 7 days (objectstore.PresignedGetTTL).
+//     Use it for the immediate response render. For long-lived UIs, call
+//     GET /api/files/sign?key={objectKey} to refresh on demand.
+//
+// This contract decouples URL lifetime from row lifetime, which is the
+// enterprise pattern AWS, Samsara, Geotab et al. use.
 func UploadFile(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -828,33 +842,78 @@ func UploadFile(c *gin.Context) {
 		return
 	}
 
-	// Create uploads directory if it doesn't exist
-	uploadDir := "./uploads"
-	if _, err := os.Stat(uploadDir); os.IsNotExist(err) {
-		os.Mkdir(uploadDir, 0755)
+	src, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to read uploaded file"})
+		return
+	}
+	defer src.Close()
+
+	// MIME from the client is advisory but we forward it so the bucket
+	// serves the right Content-Type on download. If the client lies, the
+	// browser's response handler is the one fooled — the object store
+	// itself is content-agnostic.
+	contentType := file.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
 	}
 
-	// Generate unique filename to prevent overwrites
-	// Using timestamp-originalName to avoid collision
-	filename := fmt.Sprintf("%d-%s", time.Now().UnixNano(), file.Filename)
-	filepath := fmt.Sprintf("%s/%s", uploadDir, filename)
+	key := objectstore.DerivedKey(file.Filename, time.Now().UTC())
 
-	if err := c.SaveUploadedFile(file, filepath); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to save file"})
+	if err := objectstore.Put(c.Request.Context(), key, src, file.Size, contentType); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Object store write failed: %v", err)})
 		return
 	}
 
-	// Return the public URL
-	scheme := "http"
-	if c.Request.TLS != nil {
-		scheme = "https"
+	signedURL, err := objectstore.PresignedGetURL(c.Request.Context(), key, objectstore.PresignedGetTTL)
+	if err != nil {
+		// Upload succeeded but signing failed. Surface the key so the
+		// caller can retry signing via /api/files/sign rather than
+		// re-uploading.
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":     fmt.Sprintf("Upload succeeded but URL signing failed: %v", err),
+			"objectKey": key,
+		})
+		return
 	}
-	fileURL := fmt.Sprintf("%s://%s/uploads/%s", scheme, c.Request.Host, filename)
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":  "File uploaded successfully",
-		"url":      fileURL,
-		"fileName": file.Filename,
+		"message":   "File uploaded successfully",
+		"url":       signedURL,
+		"objectKey": key,
+		"fileName":  file.Filename,
+	})
+}
+
+// GetSignedURL returns a fresh presigned GET URL for the given object key.
+// Frontend stores the stable `objectKey` returned by UploadFile in the
+// database and calls this endpoint when it needs a usable URL.
+//
+//   GET /api/files/sign?key=uploads/2026/06/23/172000000-invoice.pdf
+//
+// 400 if `key` is missing or has the wrong shape (must start with
+// "uploads/" to prevent callers requesting URLs for arbitrary keys outside
+// our naming scheme — defence-in-depth against future bucket layouts that
+// hold non-public objects under different prefixes).
+func GetSignedURL(c *gin.Context) {
+	key := strings.TrimSpace(c.Query("key"))
+	if key == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "key query parameter required"})
+		return
+	}
+	if !strings.HasPrefix(key, "uploads/") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "key must reference an uploaded asset"})
+		return
+	}
+
+	signedURL, err := objectstore.PresignedGetURL(c.Request.Context(), key, objectstore.PresignedGetTTL)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("sign failed: %v", err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"url":       signedURL,
+		"objectKey": key,
 	})
 }
 

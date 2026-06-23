@@ -32,6 +32,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"strings"
@@ -39,6 +40,7 @@ import (
 	"fleet360-backend/corsorigin"
 	"fleet360-backend/database"
 	"fleet360-backend/handlers"
+	"fleet360-backend/objectstore"
 	"fleet360-backend/seed"
 
 	"github.com/gin-contrib/cors"
@@ -83,6 +85,14 @@ func runServer() {
 	}
 	corsorigin.StartRefresher(database.DB, corsorigin.DefaultRefreshInterval)
 
+	// Object store (S3-compatible: AWS S3 in prod, self-hosted MinIO in
+	// dev). Fatal on init failure — accepting uploads with no working
+	// storage backend is worse than refusing to boot.
+	if err := objectstore.Init(context.Background()); err != nil {
+		log.Fatalf("[serve] object store init failed: %v", err)
+	}
+	log.Println("[serve] object store ready")
+
 	r := gin.Default()
 
 	config := cors.DefaultConfig()
@@ -121,10 +131,16 @@ func runServer() {
 		api.GET("/maintenance/predictive", handlers.GetPredictiveMaintenance)
 		api.POST("/alerts", handlers.CreateAlert)
 		api.POST("/upload", handlers.UploadFile)
+		api.GET("/files/sign", handlers.GetSignedURL)
 	}
 
-	// Serve static files from uploads directory
-	r.Static("/uploads", "./uploads")
+	// Static `/uploads` serving was removed when uploads moved to the
+	// object store (commit chore/backend-hardening). Pod-local FS reads
+	// can't work across replicas, and presigned GET URLs are signed by the
+	// bucket — the binary no longer needs to be on the read path at all.
+	// Migrating pre-existing files from local FS to the bucket is an
+	// operator step (`aws s3 sync ./uploads s3://<bucket>/uploads/`); see
+	// the chore/backend-hardening PR for the rationale.
 
 	r.Run(":8080")
 }

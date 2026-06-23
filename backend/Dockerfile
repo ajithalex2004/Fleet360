@@ -4,9 +4,11 @@
 #
 # Stage 1 (build): pinned Go on Alpine, fully reproducible from go.mod / go.sum.
 # Stage 2 (runtime): distroless/static — no shell, no package manager, ~2 MB
-# base. The final image carries only the statically-linked backend binary, a
-# CA bundle (inherited from distroless/static), and the uploads/ directory the
-# server writes into.
+# base. The final image carries only the statically-linked backend binary plus
+# a CA bundle (inherited from distroless/static). Uploads are streamed to the
+# configured S3-compatible object store (S3_* env vars) rather than written
+# to the container filesystem, so the image is fully stateless and replicas
+# share storage without coordination.
 #
 # Entrypoint pins `serve` so a container started with no args boots the HTTP
 # server. `seed` and `cleanup` remain reachable for one-shot operator pods:
@@ -37,14 +39,16 @@ FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
 
 COPY --from=build /out/backend /app/backend
-# Pre-create the uploads directory under the nonroot user so the server can
-# write to it without needing a writable rootfs anywhere else.
-COPY --from=build --chown=nonroot:nonroot /src/uploads /app/uploads
 
 # Production default. Operators can override via the runtime env at deploy
 # time, but the default is the safe one — runSeed refuses to seed when this
 # is "production".
 ENV GO_ENV=production
+# Required object-store env vars at runtime (orchestrator injects values):
+#   S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET
+# Optional:
+#   S3_REGION, S3_USE_SSL (default true)
+# objectstore.Init() refuses to boot if any required var is missing.
 
 EXPOSE 8080
 USER nonroot:nonroot
