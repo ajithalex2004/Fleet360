@@ -101,7 +101,7 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
       if (!userId || !tenantId) { setIsLoading(false); return; }
 
       const res = await fetch(`/api/admin/session?userId=${userId}&tenantId=${tenantId}`);
-      if (!res.ok) { localStorage.removeItem(SESSION_KEY); clearCache(); setIsLoading(false); return; }
+      if (!res.ok) { localStorage.removeItem(SESSION_KEY); localStorage.removeItem('xl_backend_token'); clearCache(); setIsLoading(false); return; }
       const data = await res.json();
 
       const perms = data.permissions ?? [];
