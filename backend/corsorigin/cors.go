@@ -22,12 +22,14 @@ package corsorigin
 
 import (
 	"context"
-	"log"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"fleet360-backend/logging"
+
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -82,7 +84,7 @@ func Snapshot() []string {
 func LoadBaseline() int {
 	raw := strings.TrimSpace(os.Getenv(envVar))
 	if raw == "" {
-		log.Printf("[cors] WARN: %s unset — no baseline origins; tenant-derived origins only", envVar)
+		logging.L().Warn("CORS baseline env unset; tenant-derived origins only", zap.String("env_var", envVar))
 		return 0
 	}
 	baseline := parseList(raw)
@@ -95,7 +97,7 @@ func LoadBaseline() int {
 	c.origins = baseline
 	count := len(baseline)
 	c.mu.Unlock()
-	log.Printf("[cors] baseline loaded — %d origin(s) from %s", count, envVar)
+	logging.L().Info("CORS baseline loaded", zap.Int("origins", count), zap.String("env_var", envVar))
 	return count
 }
 
@@ -134,7 +136,7 @@ func RefreshFromDB(db *gorm.DB) error {
 	c.origins = set
 	count := len(set)
 	c.mu.Unlock()
-	log.Printf("[cors] refreshed from DB — %d origin(s) total (%d tenant row(s))", count, len(rows))
+	logging.L().Info("CORS refreshed from DB", zap.Int("origins_total", count), zap.Int("tenant_rows", len(rows)))
 	return nil
 }
 
@@ -154,7 +156,7 @@ func StartRefresher(db *gorm.DB, interval time.Duration) context.CancelFunc {
 				return
 			case <-t.C:
 				if err := RefreshFromDB(db); err != nil {
-					log.Printf("[cors] refresh failed (keeping previous snapshot): %v", err)
+					logging.L().Warn("CORS refresh failed (keeping previous snapshot)", zap.Error(err))
 				}
 			}
 		}

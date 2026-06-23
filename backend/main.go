@@ -4,25 +4,23 @@
 //   serve — boot the HTTP server on :8080 (default; this is what runs in prod)
 //   seed  — populate the database with demo data (developer-only operator command)
 //
-// Note on the absent "cleanup" subcommand: there used to be a third subcommand
-// that hard-deleted maintenance_requests rows with id=''. That subcommand has
-// been removed because the underlying problem it patched is now blocked at
-// three layers — (1) explicit uuid.New() assignment in the create handler,
-// (2) the Model.BeforeCreate GORM hook, and (3) a CHECK("id" <> '')
-// constraint at the Postgres level (see prisma/migrations/
-// 20260623120000_add_id_not_empty_check_constraints/migration.sql).
-// Bad rows can no longer be created, so there is nothing for a cleanup
-// command to delete. The enterprise principle is "fix the source of bad
-// data, not the symptom" — keeping the cleanup as a subcommand would
-// implicitly suggest bad data is expected.
-//
 // Why subcommands instead of "just guard seed.Seed() with an env check"?
-// Because the production binary's serve path now has NO route to seed code at
-// all. A misconfigured GO_ENV, a backup/restore cycle, a fresh install on a
-// new tenant — none of them can accidentally inject demo data into a real
-// customer database, because the seed function isn't on the serve path.
-// Compliance/audit answer becomes structural ("production runs `backend serve`,
-// which can't reach seed") rather than configuration ("we check an env var").
+// Because the production binary's serve path now has NO route to seed code
+// at all. A misconfigured GO_ENV, a backup/restore cycle, a fresh install
+// on a new tenant — none of them can accidentally inject demo data into a
+// real customer database, because the seed function isn't on the serve
+// path. Compliance/audit answer becomes structural ("production runs
+// `backend serve`, which can't reach seed") rather than configuration
+// ("we check an env var").
+//
+// HTTP surface (versioned, domain-grouped):
+//
+//   /api/v1/fleet/...        vehicles, drivers, garages
+//   /api/v1/maintenance/...  maintenance requests, predictive maintenance
+//   /api/v1/service/...      service requests
+//   /api/v1/quotations/...   quotations
+//   /api/v1/alerts/...       alerts + alert configs
+//   /api/v1/files/...        upload, sign (S3-compatible object store)
 //
 // Dev workflow:
 //   go run . serve     (or just `go run .` — defaults to serve)
@@ -33,24 +31,29 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 	"strings"
 
 	"fleet360-backend/corsorigin"
 	"fleet360-backend/database"
 	"fleet360-backend/handlers"
+	"fleet360-backend/logging"
 	"fleet360-backend/objectstore"
 	"fleet360-backend/seed"
 
+	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"go.uber.org/zap"
 )
 
 func main() {
-	// All commands need env + DB; loading them here keeps each runX small.
+	// All commands need env + DB + logger; loading them here keeps each
+	// runX small.
 	godotenv.Load()
+	logging.Init()
+	defer logging.Sync() //nolint:errcheck — known stdout-on-Linux quirk; safe to ignore
 	database.Connect()
 
 	cmd := "serve"
@@ -58,22 +61,24 @@ func main() {
 		cmd = os.Args[1]
 	}
 
+	log := logging.L()
 	switch strings.ToLower(cmd) {
 	case "serve":
 		runServer()
 	case "seed":
 		runSeed()
 	default:
-		log.Fatalf("unknown command %q — expected: serve | seed", cmd)
+		log.Fatal("unknown command", zap.String("cmd", cmd), zap.String("expected", "serve | seed"))
 	}
 }
 
-// runServer boots the HTTP server. It does NOT call seed.Seed() or the
-// cleanup delete — those live in dedicated subcommands operators invoke
-// explicitly. Production deployments invoke this command only, so demo data
-// can never land in a real customer database via a misconfigured startup.
+// runServer boots the HTTP server. It does NOT call seed.Seed() — that
+// lives in a dedicated subcommand operators invoke explicitly. Production
+// deployments invoke this command only, so demo data can never land in a
+// real customer database via a misconfigured startup.
 func runServer() {
-	log.Println("[serve] starting HTTP server on :8080")
+	log := logging.L()
+	log.Info("starting HTTP server", zap.String("addr", ":8080"))
 
 	// CORS allow-list: env baseline + tenant-derived (refreshed every minute).
 	// Onboarding a new enterprise tenant is an UPDATE on tenants.allowed_origins
@@ -81,7 +86,7 @@ func runServer() {
 	// for the merge semantics.
 	corsorigin.LoadBaseline()
 	if err := corsorigin.RefreshFromDB(database.DB); err != nil {
-		log.Printf("[cors] initial DB load failed (serving with env baseline only): %v", err)
+		log.Warn("CORS initial DB load failed (serving with env baseline only)", zap.Error(err))
 	}
 	corsorigin.StartRefresher(database.DB, corsorigin.DefaultRefreshInterval)
 
@@ -89,11 +94,23 @@ func runServer() {
 	// dev). Fatal on init failure — accepting uploads with no working
 	// storage backend is worse than refusing to boot.
 	if err := objectstore.Init(context.Background()); err != nil {
-		log.Fatalf("[serve] object store init failed: %v", err)
+		log.Fatal("object store init failed", zap.Error(err))
 	}
-	log.Println("[serve] object store ready")
+	log.Info("object store ready")
 
-	r := gin.Default()
+	// Gin in release mode shuts off its colour console banner; structured
+	// log lines come from ginzap instead. Production observability tools
+	// (Datadog / CloudWatch / ELK / Azure Monitor) prefer the structured
+	// shape over Gin's default text format.
+	if os.Getenv("GO_ENV") == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	r := gin.New()
+	// ginzap.Ginzap emits one structured log entry per request.
+	// ginzap.RecoveryWithZap catches panics, logs the stack trace, and
+	// returns 500 — replaces Gin's default text recovery.
+	r.Use(ginzap.Ginzap(log, "", true))
+	r.Use(ginzap.RecoveryWithZap(log, true))
 
 	config := cors.DefaultConfig()
 	config.AllowOriginFunc = func(origin string) bool { return corsorigin.IsAllowed(origin) }
@@ -101,48 +118,76 @@ func runServer() {
 	config.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization"}
 	r.Use(cors.New(config))
 
-	// Routes
-	api := r.Group("/api")
-	{
-		api.GET("/vehicles", handlers.GetVehicles)
-		api.GET("/vehicles/:id", handlers.GetVehicle)
-		api.POST("/vehicles", handlers.CreateVehicle)
-		api.PATCH("/vehicles/:id", handlers.UpdateVehicle)
-		api.DELETE("/vehicles/:id", handlers.DeleteVehicle)
-		api.GET("/maintenance-requests", handlers.GetMaintenanceRequests)
-		api.GET("/maintenance-requests/:id", handlers.GetMaintenanceRequest)
-		api.POST("/maintenance-requests", handlers.CreateMaintenanceRequest)
-		api.PATCH("/maintenance-requests/:id", handlers.UpdateMaintenanceRequest)
-		api.GET("/service-requests", handlers.GetServiceRequests)
-		api.POST("/service-requests", handlers.CreateServiceRequest)
-		api.PATCH("/service-requests/:id", handlers.UpdateServiceRequest)
-		api.GET("/drivers", handlers.GetDrivers)
-		api.GET("/drivers/:id", handlers.GetDriver)
-		api.POST("/quotations", handlers.CreateQuotation)
-		api.PUT("/quotations/:id", handlers.UpdateQuotation)
-		api.PATCH("/quotations/:id", handlers.PatchQuotation)
-		api.GET("/garages", handlers.GetGarages)
-		api.POST("/garages", handlers.CreateGarage)
-		api.PUT("/garages/:id", handlers.UpdateGarage)
-		api.GET("/alert-configs", handlers.GetAlertConfigs)
-		api.POST("/alert-configs", handlers.CreateAlertConfig)
-		api.PATCH("/alert-configs/:id", handlers.UpdateAlertConfig)
-		api.DELETE("/alert-configs/:id", handlers.DeleteAlertConfig)
-		api.GET("/maintenance/predictive", handlers.GetPredictiveMaintenance)
-		api.POST("/alerts", handlers.CreateAlert)
-		api.POST("/upload", handlers.UploadFile)
-		api.GET("/files/sign", handlers.GetSignedURL)
-	}
+	registerV1Routes(r)
 
 	// Static `/uploads` serving was removed when uploads moved to the
-	// object store (commit chore/backend-hardening). Pod-local FS reads
-	// can't work across replicas, and presigned GET URLs are signed by the
-	// bucket — the binary no longer needs to be on the read path at all.
-	// Migrating pre-existing files from local FS to the bucket is an
-	// operator step (`aws s3 sync ./uploads s3://<bucket>/uploads/`); see
-	// the chore/backend-hardening PR for the rationale.
+	// object store. Pod-local FS reads can't work across replicas, and
+	// presigned GET URLs are signed by the bucket — the binary no longer
+	// needs to be on the read path at all.
 
-	r.Run(":8080")
+	if err := r.Run(":8080"); err != nil {
+		log.Fatal("HTTP server exited with error", zap.Error(err))
+	}
+}
+
+// registerV1Routes wires the /api/v1/... surface. Grouped by domain rather
+// than flat under /api so the deprecation lifecycle of any one resource
+// (e.g. retiring v1/quotations in favour of a v2 shape) is self-contained
+// — the surrounding domains keep working untouched.
+func registerV1Routes(r *gin.Engine) {
+	v1 := r.Group("/api/v1")
+
+	fleet := v1.Group("/fleet")
+	{
+		fleet.GET("/vehicles", handlers.GetVehicles)
+		fleet.GET("/vehicles/:id", handlers.GetVehicle)
+		fleet.POST("/vehicles", handlers.CreateVehicle)
+		fleet.PATCH("/vehicles/:id", handlers.UpdateVehicle)
+		fleet.DELETE("/vehicles/:id", handlers.DeleteVehicle)
+		fleet.GET("/drivers", handlers.GetDrivers)
+		fleet.GET("/drivers/:id", handlers.GetDriver)
+		fleet.GET("/garages", handlers.GetGarages)
+		fleet.POST("/garages", handlers.CreateGarage)
+		fleet.PUT("/garages/:id", handlers.UpdateGarage)
+	}
+
+	maint := v1.Group("/maintenance")
+	{
+		maint.GET("/requests", handlers.GetMaintenanceRequests)
+		maint.GET("/requests/:id", handlers.GetMaintenanceRequest)
+		maint.POST("/requests", handlers.CreateMaintenanceRequest)
+		maint.PATCH("/requests/:id", handlers.UpdateMaintenanceRequest)
+		maint.GET("/predictive", handlers.GetPredictiveMaintenance)
+	}
+
+	service := v1.Group("/service")
+	{
+		service.GET("/requests", handlers.GetServiceRequests)
+		service.POST("/requests", handlers.CreateServiceRequest)
+		service.PATCH("/requests/:id", handlers.UpdateServiceRequest)
+	}
+
+	quotations := v1.Group("/quotations")
+	{
+		quotations.POST("", handlers.CreateQuotation)
+		quotations.PUT("/:id", handlers.UpdateQuotation)
+		quotations.PATCH("/:id", handlers.PatchQuotation)
+	}
+
+	alerts := v1.Group("/alerts")
+	{
+		alerts.POST("", handlers.CreateAlert)
+		alerts.GET("/configs", handlers.GetAlertConfigs)
+		alerts.POST("/configs", handlers.CreateAlertConfig)
+		alerts.PATCH("/configs/:id", handlers.UpdateAlertConfig)
+		alerts.DELETE("/configs/:id", handlers.DeleteAlertConfig)
+	}
+
+	files := v1.Group("/files")
+	{
+		files.POST("/upload", handlers.UploadFile)
+		files.GET("/sign", handlers.GetSignedURL)
+	}
 }
 
 // runSeed populates the database with demo data via seed.Seed(). Even though
@@ -151,18 +196,18 @@ func runServer() {
 // `backend seed` against a prod DSN by mistake gets a loud refusal, not a
 // silent data dump. Exit code 1 on refusal so CI / scripts can detect it.
 func runSeed() {
+	log := logging.L()
 	env := os.Getenv("GO_ENV")
 	switch env {
 	case "development", "test":
-		log.Printf("[seed] GO_ENV=%q — seeding database", env)
+		log.Info("seeding database", zap.String("go_env", env))
 		seed.Seed()
-		log.Println("[seed] done")
+		log.Info("seed done")
 	case "production":
-		log.Println("[seed] GO_ENV=production — refusing to seed a production database")
+		log.Error("refusing to seed a production database", zap.String("go_env", env))
 		os.Exit(1)
 	default:
-		log.Printf("[seed] GO_ENV=%q (unrecognised or unset) — refusing to seed; set GO_ENV=development or test to allow", env)
+		log.Error("refusing to seed: GO_ENV not set to development or test", zap.String("go_env", env))
 		os.Exit(1)
 	}
 }
-
