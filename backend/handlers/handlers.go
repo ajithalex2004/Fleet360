@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"fleet360-backend/auth"
 	"fleet360-backend/database"
+	"fleet360-backend/logging"
 	"fleet360-backend/models"
 	"fleet360-backend/objectstore"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 // requireTenant pulls the tenant id from the authenticated request context
@@ -349,19 +351,21 @@ func UpdateMaintenanceRequest(c *gin.Context) {
 	}
 
 	// Explicitly replace associations if provided
+	log := logging.L()
 	if len(input.Attachments) > 0 {
-		fmt.Printf("[DEBUG] Updating Attachments for Request %s. Count: %d\n", request.ID, len(input.Attachments))
-		for i, att := range input.Attachments {
-			fmt.Printf("  [%d] ID: %s, URL: %s, Type: %s\n", i, att.ID, att.URL, att.Type)
-		}
+		log.Debug("updating attachments",
+			zap.String("request_id", request.ID),
+			zap.Int("count", len(input.Attachments)),
+		)
 		if err := database.DB.Model(&request).Association("Attachments").Replace(input.Attachments); err != nil {
-			fmt.Printf("[ERROR] Failed to replace attachments: %v\n", err)
+			log.Error("failed to replace attachments",
+				zap.String("request_id", request.ID),
+				zap.Error(err),
+			)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update attachments: " + err.Error()})
 			return
 		}
-		fmt.Println("[DEBUG] Attachments updated successfully")
-	} else {
-		fmt.Printf("[DEBUG] No attachments to update (Input len=0)\n")
+		log.Debug("attachments updated successfully", zap.String("request_id", request.ID))
 	}
 
 	if len(input.Quotations) > 0 {
@@ -681,7 +685,9 @@ func CreateGarage(c *gin.Context) {
 	input.TenantID = tid
 
 	// Force new UUID to avoid collisions
-	fmt.Printf("[Update] Creating Garage with Input ID: %s (Replacing with new UUID)\n", input.ID)
+	logging.L().Debug("creating garage with fresh UUID (replacing client-supplied ID)",
+		zap.String("client_supplied_id", input.ID),
+	)
 	input.ID = uuid.New().String()
 
 	if err := database.DB.Create(&input).Error; err != nil {
@@ -731,7 +737,10 @@ func GetPredictiveMaintenance(c *gin.Context) {
 	// tenant's mileage data would be a side-channel data leak via
 	// statistical inference.
 	if err := database.DB.Scopes(auth.WithTenant(c)).Find(&vehicles).Error; err != nil {
-		fmt.Printf("Error fetching vehicles for predictive maintenance: %v\n", err)
+		logging.L().Warn("failed to fetch vehicles for predictive maintenance, proceeding with empty list",
+			zap.String("tenant_id", auth.TenantID(c)),
+			zap.Error(err),
+		)
 		// Proceed with empty list instead of 500
 		vehicles = []models.Vehicle{}
 	}
