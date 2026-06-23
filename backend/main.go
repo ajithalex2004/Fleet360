@@ -185,6 +185,12 @@ func registerV1Routes(r *gin.Engine) {
 		fleet.POST("/groups", handlers.CreateVehicleGroup)
 		fleet.GET("/groups", handlers.GetVehicleGroups)
 		fleet.GET("/groups/tree", handlers.GetVehicleGroupTree)
+		fleet.PATCH("/groups/:id", handlers.UpdateVehicleGroup)
+		fleet.DELETE("/groups/:id", handlers.DeleteVehicleGroup)
+		// Aggregate "vehicles under this region/department/unit"
+		// (recursive CTE — walks the three-level tree and returns
+		// every vehicle attached to a UNIT below the supplied id).
+		fleet.GET("/groups/:id/vehicles", handlers.GetVehiclesInGroup)
 		fleet.PUT("/vehicles/:id/group", handlers.AssignVehicleGroup)
 
 		// Fuel-type reference table (Phase C continuation): cost /

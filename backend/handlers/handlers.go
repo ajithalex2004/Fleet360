@@ -1479,6 +1479,206 @@ func GetVehicleGroupTree(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"tree": roots, "count": len(groups)})
 }
 
+// UpdateVehicleGroup patches editable attributes on a group row.
+// Level and parent_id are NOT mutable — changing those would risk
+// orphaning descendants or violating the trigger's level rule. To
+// "move" a group, delete and recreate.
+//
+//	PATCH /api/v1/fleet/groups/:id
+//	{ "code"?: string, "name"?: string, "description"?: string,
+//	  "isActive"?: boolean }
+func UpdateVehicleGroup(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
+	id := c.Param("id")
+
+	var existing models.VehicleGroup
+	if err := database.DB.Scopes(auth.WithTenant(c)).
+		Where("id = ?", id).First(&existing).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+		return
+	}
+
+	// Accept only the editable fields; ignore anything else the
+	// client sent (especially level / parentId / tenantId).
+	var patch struct {
+		Code        *string `json:"code"`
+		Name        *string `json:"name"`
+		Description *string `json:"description"`
+		IsActive    *bool   `json:"isActive"`
+	}
+	if err := c.ShouldBindJSON(&patch); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	updates := map[string]interface{}{}
+	if patch.Code != nil {
+		code := strings.TrimSpace(*patch.Code)
+		if code == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "code cannot be empty"})
+			return
+		}
+		updates["code"] = code
+	}
+	if patch.Name != nil {
+		name := strings.TrimSpace(*patch.Name)
+		if name == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "name cannot be empty"})
+			return
+		}
+		updates["name"] = name
+	}
+	if patch.Description != nil {
+		updates["description"] = *patch.Description
+	}
+	if patch.IsActive != nil {
+		updates["is_active"] = *patch.IsActive
+	}
+
+	if len(updates) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no editable fields supplied"})
+		return
+	}
+
+	if err := database.DB.Model(&existing).Updates(updates).Error; err != nil {
+		if strings.Contains(err.Error(), "uniq_vehicle_groups_tenant_level_code") || strings.Contains(err.Error(), "23505") {
+			c.JSON(http.StatusConflict, gin.H{"error": "code conflicts with another group at the same level in this tenant"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, existing)
+}
+
+// DeleteVehicleGroup soft-deletes a group. Refuses (409) if the group
+// still has children OR vehicles attached — deleting a non-empty group
+// would orphan its subtree and break tenant rollups silently. The
+// operator must detach first (PATCH children, PATCH vehicles).
+//
+//	DELETE /api/v1/fleet/groups/:id
+func DeleteVehicleGroup(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
+	id := c.Param("id")
+
+	var existing models.VehicleGroup
+	if err := database.DB.Scopes(auth.WithTenant(c)).
+		Where("id = ?", id).First(&existing).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+		return
+	}
+
+	// Refuse if children exist.
+	var childCount int64
+	if err := database.DB.Scopes(auth.WithTenant(c)).
+		Model(&models.VehicleGroup{}).
+		Where("parent_id = ?", id).
+		Count(&childCount).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if childCount > 0 {
+		c.JSON(http.StatusConflict, gin.H{
+			"error":      "group has child groups — delete or detach them first",
+			"childCount": childCount,
+		})
+		return
+	}
+
+	// Refuse if vehicles are attached.
+	var vehicleCount int64
+	if err := database.DB.Scopes(auth.WithTenant(c)).
+		Model(&models.Vehicle{}).
+		Where("vehicle_group_id = ?", id).
+		Count(&vehicleCount).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if vehicleCount > 0 {
+		c.JSON(http.StatusConflict, gin.H{
+			"error":        "group has vehicles attached — detach them first",
+			"vehicleCount": vehicleCount,
+		})
+		return
+	}
+
+	if err := database.DB.Delete(&existing).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+// GetVehiclesInGroup returns every vehicle attached to this group OR
+// any of its descendants. The hierarchy is three levels deep, so the
+// recursive CTE walks at most two steps from REGION → DEPARTMENT →
+// UNIT before resolving the IN clause.
+//
+//	GET /api/v1/fleet/groups/:id/vehicles
+//
+// This is the aggregate query the advisor asked for: "show me all
+// vehicles in region X" works without the application needing to know
+// the group's level — passing a UNIT id returns just its vehicles;
+// a DEPARTMENT id returns vehicles under all its units; a REGION id
+// returns the whole region's fleet. One endpoint, three semantics.
+func GetVehiclesInGroup(c *gin.Context) {
+	tid := requireTenant(c)
+	if tid == "" {
+		return
+	}
+	id := c.Param("id")
+
+	// Verify the root group exists in this tenant first — otherwise an
+	// attacker who guesses a valid group id in another tenant would
+	// get an empty array (no leak), but a 404 is a clearer answer.
+	var root models.VehicleGroup
+	if err := database.DB.Scopes(auth.WithTenant(c)).
+		Where("id = ?", id).First(&root).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+		return
+	}
+
+	// Recursive CTE: start with the requested group, walk down via
+	// parent_id matching id, collect every descendant. Then JOIN on
+	// vehicle_group_id IN (descendants).
+	//
+	// tenant_id appears in both the CTE seed AND the vehicles select
+	// for defence-in-depth (the WithTenant scope already filters, but
+	// the CTE bypasses gorm scopes so we apply tenancy by hand).
+	var vehicles []models.Vehicle
+	err := database.DB.Raw(`
+		WITH RECURSIVE descendants AS (
+			SELECT id FROM vehicle_groups
+			WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+			UNION ALL
+			SELECT g.id FROM vehicle_groups g
+			INNER JOIN descendants d ON g.parent_id = d.id
+			WHERE g.tenant_id = ? AND g.deleted_at IS NULL
+		)
+		SELECT v.* FROM vehicles v
+		WHERE v.tenant_id = ?
+		  AND v.vehicle_group_id IN (SELECT id FROM descendants)
+		  AND v.deleted_at IS NULL
+		ORDER BY v.license_plate ASC NULLS LAST
+	`, id, tid, tid, tid).Scan(&vehicles).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"groupId":    id,
+		"groupLevel": root.Level,
+		"groupName":  root.Name,
+		"vehicles":   vehicles,
+		"count":      len(vehicles),
+	})
+}
+
 // AssignVehicleGroup attaches a vehicle to a UNIT-level group. The
 // vehicle's vehicle_group_id column does the assignment; the FK and
 // application checks enforce that the target group is UNIT-level and
