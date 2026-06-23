@@ -1,9 +1,20 @@
 // Fleet360 backend entrypoint.
 //
-// The binary is dispatched on its first argv to one of three subcommands:
-//   serve   — boot the HTTP server on :8080 (default; this is what runs in prod)
-//   seed    — populate the database with demo data (developer-only operator command)
-//   cleanup — remove rows with malformed primary keys (manual operator command)
+// The binary is dispatched on its first argv to one of two subcommands:
+//   serve — boot the HTTP server on :8080 (default; this is what runs in prod)
+//   seed  — populate the database with demo data (developer-only operator command)
+//
+// Note on the absent "cleanup" subcommand: there used to be a third subcommand
+// that hard-deleted maintenance_requests rows with id=''. That subcommand has
+// been removed because the underlying problem it patched is now blocked at
+// three layers — (1) explicit uuid.New() assignment in the create handler,
+// (2) the Model.BeforeCreate GORM hook, and (3) a CHECK("id" <> '')
+// constraint at the Postgres level (see prisma/migrations/
+// 20260623120000_add_id_not_empty_check_constraints/migration.sql).
+// Bad rows can no longer be created, so there is nothing for a cleanup
+// command to delete. The enterprise principle is "fix the source of bad
+// data, not the symptom" — keeping the cleanup as a subcommand would
+// implicitly suggest bad data is expected.
 //
 // Why subcommands instead of "just guard seed.Seed() with an env check"?
 // Because the production binary's serve path now has NO route to seed code at
@@ -16,7 +27,6 @@
 // Dev workflow:
 //   go run . serve     (or just `go run .` — defaults to serve)
 //   go run . seed      explicit demo-data load
-//   go run . cleanup   explicit data hygiene pass
 //
 // Production deployment should always be: `./backend serve`.
 package main
@@ -28,7 +38,6 @@ import (
 
 	"fleet360-backend/database"
 	"fleet360-backend/handlers"
-	"fleet360-backend/models"
 	"fleet360-backend/seed"
 
 	"github.com/gin-contrib/cors"
@@ -51,10 +60,8 @@ func main() {
 		runServer()
 	case "seed":
 		runSeed()
-	case "cleanup":
-		runCleanup()
 	default:
-		log.Fatalf("unknown command %q — expected: serve | seed | cleanup", cmd)
+		log.Fatalf("unknown command %q — expected: serve | seed", cmd)
 	}
 }
 
@@ -133,22 +140,3 @@ func runSeed() {
 	}
 }
 
-// runCleanup removes rows with malformed primary keys (id = ''). Such rows
-// should not exist; their presence indicates an INSERT path that didn't
-// generate an ID. Manual operator command — explicit invocation only, never
-// from runServer.
-//
-// Uses .Unscoped() so the delete is a hard DELETE rather than GORM's default
-// soft-delete (which would set deleted_at and leave the bad rows in the table).
-// Soft-deleting a malformed row has no value — the row is unrecoverable garbage
-// regardless of audit trail, and leaving it physically present means every
-// subsequent query against the table still has to filter past it.
-func runCleanup() {
-	log.Println("[cleanup] hard-deleting maintenance_requests rows with id=''")
-	result := database.DB.Unscoped().Where("id = ?", "").Delete(&models.MaintenanceRequest{})
-	if result.Error != nil {
-		log.Printf("[cleanup] FAILED: %v", result.Error)
-		os.Exit(1)
-	}
-	log.Printf("[cleanup] done — %d row(s) hard-deleted", result.RowsAffected)
-}
