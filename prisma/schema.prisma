@@ -582,6 +582,13 @@ model Vehicle {
   // backwards compatibility; this is the new normalized hierarchy edge.
   orgGroup             VehicleGroup?          @relation("VehicleByGroup", fields: [vehicleGroupId], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_vehicles_vehicle_group")
 
+  // Normalized fuel reference. The denormalized fuelType string above
+  // stays for backwards compatibility; cost / emissions calculations
+  // should read this FK so they pick up density / cost / CO2 from the
+  // reference row rather than mapping a string.
+  fuelTypeId           String?                @map("fuel_type_id")
+  fuelTypeRef          FuelType?              @relation("VehicleByFuelType", fields: [fuelTypeId], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_vehicles_fuel_type")
+
   // -- Live location (Phase B) -----------------------------------------------
   // Denormalized "most recent known position" so a fleet-map query reads
   // every vehicle's current state in one row without joining the
@@ -606,7 +613,55 @@ model Vehicle {
   @@index([status], map: "idx_vehicles_status")
   @@index([tenantId], map: "idx_vehicles_tenant_id")
   @@index([vehicleGroupId], map: "idx_vehicles_vehicle_group_id")
+  @@index([fuelTypeId], map: "idx_vehicles_fuel_type_id")
   @@map("vehicles")
+}
+
+// FuelType is the normalized reference table for fuel attributes used
+// in cost / emissions / range calculations. Replaces the
+// `vehicles.fuel_type` free-form string with a typed FK + a row that
+// carries the physics each fuel needs:
+//
+//   densityKgPerL   — mass per litre, for converting litres → kg in
+//                     emissions / weight calculations.
+//   costPerLitreAed — current pump cost in AED. Tenant-overridable
+//                     long-term; for the MVP it lives on the global
+//                     reference row.
+//   co2KgPerL       — kilograms of CO2 emitted per litre burned. Used
+//                     for fleet-emissions rollups.
+//
+// Tenant scope: rows are tenant-scoped because fuel cost varies per
+// operator (corporate discount, subsidy, regional market). The
+// (tenant_id, code) tuple is unique among live rows.
+model FuelType {
+  id              String    @id @default(uuid())
+  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId        String    @map("tenant_id")
+
+  // Short code: "DIESEL", "PETROL_95", "PETROL_98", "EV", "HYBRID",
+  // "LPG", "CNG". Stored uppercase by convention; the create handler
+  // upper-cases on insert so client casing doesn't matter.
+  code            String
+  name            String
+  // Pump category for grouping in reports. nullable for fuel types
+  // that don't fit (EV, hybrid).
+  category        String?
+
+  // Physics. All numeric, all nullable so a tenant can create a row
+  // before knowing every value and fill in later.
+  densityKgPerL   Decimal?  @map("density_kg_per_l") @db.Decimal(10, 4)
+  costPerLitreAed Decimal?  @map("cost_per_litre_aed") @db.Decimal(10, 4)
+  co2KgPerL       Decimal?  @map("co2_kg_per_l") @db.Decimal(10, 4)
+
+  isActive        Boolean?  @default(true) @map("is_active")
+
+  vehicles        Vehicle[] @relation("VehicleByFuelType")
+
+  @@unique([tenantId, code], map: "uniq_fuel_types_tenant_code")
+  @@index([tenantId], map: "idx_fuel_types_tenant_id")
+  @@map("fuel_types")
 }
 
 // VehicleGroupLevel locks the org tree to exactly three tiers — Region

@@ -1550,6 +1550,139 @@ func AssignVehicleGroup(c *gin.Context) {
 	})
 }
 
+// ─── Fuel type CRUD ─────────────────────────────────────────────────────
+//
+// Tenant-scoped reference rows for fuel kinds. Cost / emissions /
+// range calculations should read from these rather than parsing the
+// legacy vehicles.fuel_type free-form string.
+
+// CreateFuelType mints one fuel-type reference row.
+//
+//	POST /api/v1/fleet/fuel-types
+//	{
+//	  "code": "DIESEL", "name": "Diesel", "category": "ICE",
+//	  "densityKgPerL": 0.832, "costPerLitreAed": 3.05, "co2KgPerL": 2.64
+//	}
+func CreateFuelType(c *gin.Context) {
+	tid := requireTenant(c)
+	if tid == "" {
+		return
+	}
+	var input models.FuelType
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	input.Code = strings.ToUpper(strings.TrimSpace(input.Code))
+	input.Name = strings.TrimSpace(input.Name)
+	if input.Code == "" || input.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "code and name are required"})
+		return
+	}
+	input.TenantID = tid
+	if err := database.DB.Create(&input).Error; err != nil {
+		// Unique-constraint violation on (tenant_id, code) → 409.
+		if strings.Contains(err.Error(), "uniq_fuel_types_tenant_code") || strings.Contains(err.Error(), "23505") {
+			c.JSON(http.StatusConflict, gin.H{"error": "fuel-type code already exists in this tenant"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, input)
+}
+
+// GetFuelTypes lists this tenant's fuel-type reference rows.
+//
+//	GET /api/v1/fleet/fuel-types
+//	GET /api/v1/fleet/fuel-types?active=true
+func GetFuelTypes(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
+	q := database.DB.Scopes(auth.WithTenant(c))
+	if active := strings.TrimSpace(c.Query("active")); active != "" {
+		// "true" → only is_active=true; "false" → only is_active=false.
+		// Anything else → no filter.
+		if active == "true" {
+			q = q.Where("is_active = TRUE")
+		} else if active == "false" {
+			q = q.Where("is_active IS NOT TRUE")
+		}
+	}
+	var types []models.FuelType
+	if err := q.Order("code ASC").Find(&types).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"fuelTypes": types, "count": len(types)})
+}
+
+// UpdateFuelType lets an operator edit any field on a fuel-type row.
+// Tenant scoped — a request for a fuel-type id in another tenant
+// returns 404 (no side-channel about other tenants' codes).
+//
+//	PATCH /api/v1/fleet/fuel-types/:id
+func UpdateFuelType(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
+	id := c.Param("id")
+
+	var input models.FuelType
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var existing models.FuelType
+	if err := database.DB.Scopes(auth.WithTenant(c)).
+		Where("id = ?", id).First(&existing).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "fuel type not found"})
+		return
+	}
+	// Preserve immutable identity fields on the patch.
+	input.TenantID = existing.TenantID
+	if input.Code != "" {
+		input.Code = strings.ToUpper(strings.TrimSpace(input.Code))
+	}
+	if err := database.DB.Model(&existing).Omit("ID", "TenantID").Updates(input).Error; err != nil {
+		if strings.Contains(err.Error(), "uniq_fuel_types_tenant_code") || strings.Contains(err.Error(), "23505") {
+			c.JSON(http.StatusConflict, gin.H{"error": "fuel-type code conflicts with another in this tenant"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, existing)
+}
+
+// DeleteFuelType soft-deletes (sets deleted_at via GORM) the row.
+// Vehicles still pointing to it stay valid — the FK has ON DELETE
+// SET NULL, but soft-delete doesn't actually remove the row, so
+// existing references keep working until a follow-up hard delete OR
+// the operator detaches the vehicles.
+//
+//	DELETE /api/v1/fleet/fuel-types/:id
+func DeleteFuelType(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
+	id := c.Param("id")
+
+	var existing models.FuelType
+	if err := database.DB.Scopes(auth.WithTenant(c)).
+		Where("id = ?", id).First(&existing).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "fuel type not found"})
+		return
+	}
+	if err := database.DB.Delete(&existing).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
 // GetVehicleLocations returns the GPS trail for one vehicle ordered
 // from newest → oldest, optionally bounded by a [from, to] time
 // window. Default limit 500; max 5000.

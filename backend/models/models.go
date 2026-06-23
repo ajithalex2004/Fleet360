@@ -166,6 +166,12 @@ type Vehicle struct {
 	// same tenant; the DB-level FK enforces existence only.
 	VehicleGroupID *string `gorm:"column:vehicle_group_id" json:"vehicleGroupId,omitempty"`
 
+	// Normalized fuel reference. Set this when cost / emissions /
+	// range calculations need the physics (density, cost, CO2) — the
+	// legacy `FuelType` string column above stays put for backwards
+	// compatibility.
+	FuelTypeID *string `gorm:"column:fuel_type_id" json:"fuelTypeId,omitempty"`
+
 	// -- Live location (Phase B) ----------------------------------------------
 	// Denormalized "most recent known position" — refreshed by
 	// IngestVehicleLocation when an incoming reading is newer than the
@@ -270,6 +276,41 @@ func (VehicleGroup) TableName() string { return "vehicle_groups" }
 func (g *VehicleGroup) BeforeCreate(tx *gorm.DB) error {
 	if g.ID == "" {
 		g.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// FuelType is the tenant-scoped reference row for one fuel kind
+// (DIESEL, PETROL_95, EV, etc.). It carries the physics used by cost
+// and emissions calculations:
+//
+//   DensityKgPerL    — kg per litre, for litres→kg conversions
+//   CostPerLitreAed  — current pump cost in AED (per tenant)
+//   CO2KgPerL        — emissions factor for fleet-wide rollups
+//
+// Decimal precision uses gorm's "type:decimal(10,4)" matching the
+// Prisma @db.Decimal(10,4) so values round-trip without precision
+// loss between Go's float64 and Postgres NUMERIC.
+type FuelType struct {
+	ID              string         `gorm:"primaryKey;column:id" json:"id"`
+	CreatedAt       *time.Time     `gorm:"column:created_at" json:"createdAt,omitempty"`
+	UpdatedAt       *time.Time     `gorm:"column:updated_at" json:"updatedAt,omitempty"`
+	DeletedAt       gorm.DeletedAt `gorm:"column:deleted_at;index" json:"deletedAt,omitempty"`
+	TenantID        string         `gorm:"not null;column:tenant_id;index" json:"tenantId"`
+	Code            string         `gorm:"not null;column:code" json:"code"`
+	Name            string         `gorm:"not null;column:name" json:"name"`
+	Category        string         `gorm:"column:category" json:"category,omitempty"`
+	DensityKgPerL   *float64       `gorm:"column:density_kg_per_l;type:decimal(10,4)" json:"densityKgPerL,omitempty"`
+	CostPerLitreAed *float64       `gorm:"column:cost_per_litre_aed;type:decimal(10,4)" json:"costPerLitreAed,omitempty"`
+	CO2KgPerL       *float64       `gorm:"column:co2_kg_per_l;type:decimal(10,4)" json:"co2KgPerL,omitempty"`
+	IsActive        *bool          `gorm:"column:is_active" json:"isActive,omitempty"`
+}
+
+func (FuelType) TableName() string { return "fuel_types" }
+
+func (f *FuelType) BeforeCreate(tx *gorm.DB) error {
+	if f.ID == "" {
+		f.ID = uuid.New().String()
 	}
 	return nil
 }

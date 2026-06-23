@@ -186,6 +186,14 @@ func registerV1Routes(r *gin.Engine) {
 		fleet.GET("/groups", handlers.GetVehicleGroups)
 		fleet.GET("/groups/tree", handlers.GetVehicleGroupTree)
 		fleet.PUT("/vehicles/:id/group", handlers.AssignVehicleGroup)
+
+		// Fuel-type reference table (Phase C continuation): cost /
+		// emissions calcs read from these rather than the legacy
+		// vehicles.fuel_type free-form string.
+		fleet.POST("/fuel-types", handlers.CreateFuelType)
+		fleet.GET("/fuel-types", handlers.GetFuelTypes)
+		fleet.PATCH("/fuel-types/:id", handlers.UpdateFuelType)
+		fleet.DELETE("/fuel-types/:id", handlers.DeleteFuelType)
 	}
 
 	maint := v1.Group("/maintenance")
