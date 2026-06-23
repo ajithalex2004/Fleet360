@@ -178,7 +178,9 @@ func registerV1Routes(r *gin.Engine) {
 		maint.GET("/requests/:id", handlers.GetMaintenanceRequest)
 		maint.POST("/requests", handlers.CreateMaintenanceRequest)
 		maint.PATCH("/requests/:id", handlers.UpdateMaintenanceRequest)
-		maint.GET("/predictive", handlers.GetPredictiveMaintenance)
+		// Same URL keeps the frontend cutover atomic with this commit.
+		// A follow-up will rename the route to /api/v1/maintenance/alerts.
+		maint.GET("/predictive", handlers.GetMaintenanceDueAlerts)
 	}
 
 	service := v1.Group("/service")

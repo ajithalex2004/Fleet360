@@ -8,7 +8,6 @@ import (
 	"fleet360-backend/models"
 	"fleet360-backend/objectstore"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -726,175 +725,123 @@ func UpdateGarage(c *gin.Context) {
 	c.JSON(http.StatusOK, garage)
 }
 
-// GetPredictiveMaintenance (Heuristic Engine)
-func GetPredictiveMaintenance(c *gin.Context) {
+// GetMaintenanceDueAlerts returns "this vehicle is due for service"
+// recommendations for the requesting tenant. Honest naming and honest
+// fields throughout — every alert carries the rule that fired plus the
+// vehicle attributes the rule keyed off of, so the operator can trace
+// the recommendation back to its source without believing there's an
+// ML model under the hood. There isn't.
+//
+// Phase 1 of the predictive-maintenance honesty pass: this handler used
+// to manufacture fake Confidence / CurrentCondition / PredictedFailureDate
+// / EstimatedCost fields per alert plus a fabricated CostForecast and
+// Optimization block — none of which were computed from data. Those are
+// gone. Phase 2 will reintroduce data-driven versions (typical interval
+// per vehicle, projected next-due date, etc.) computed from
+// maintenance_requests history with sample-size disclosure.
+//
+// Endpoint URL stays at /api/v1/maintenance/predictive for one release
+// so the frontend cuts over atomically in this commit. A follow-up can
+// rename the route to /api/v1/maintenance/alerts once consumers have
+// migrated off the old shape.
+func GetMaintenanceDueAlerts(c *gin.Context) {
 	if requireTenant(c) == "" {
 		return
 	}
 	var vehicles []models.Vehicle
-	// Try to fetch this tenant's vehicles. Predictive maintenance must
-	// only consider the requesting tenant's fleet — leaking another
-	// tenant's mileage data would be a side-channel data leak via
-	// statistical inference.
+	// Tenant-scoped: maintenance alerts must only consider the requesting
+	// tenant's fleet — leaking another tenant's mileage data would be a
+	// side-channel data leak via statistical inference.
 	if err := database.DB.Scopes(auth.WithTenant(c)).Find(&vehicles).Error; err != nil {
-		logging.L().Warn("failed to fetch vehicles for predictive maintenance, proceeding with empty list",
+		logging.L().Warn("failed to fetch vehicles for maintenance-due alerts, proceeding with empty list",
 			zap.String("tenant_id", auth.TenantID(c)),
 			zap.Error(err),
 		)
-		// Proceed with empty list instead of 500
 		vehicles = []models.Vehicle{}
 	}
 
-	var predictions []models.Prediction
+	alerts := make([]models.MaintenanceDueAlert, 0, len(vehicles))
+	// vehiclesWithCriticalAlert / vehiclesWithWarningAlert are sets keyed
+	// by vehicle id so the same vehicle producing multiple alerts at the
+	// same risk level only counts once toward the rollup.
+	vehiclesWithCriticalAlert := map[string]bool{}
+	vehiclesWithWarningAlert := map[string]bool{}
+
+	currentYear := time.Now().Year()
 
 	for _, v := range vehicles {
-		// Heuristic 1: High Mileage -> Brake Pads
+		name := strings.TrimSpace(v.Make + " " + v.VehicleModel + " (" + v.LicensePlate + ")")
+
+		// Rule 1: high mileage → brake inspection. Threshold and reason
+		// are explicit; the alert carries the actual mileage so the
+		// operator can sanity-check the trigger.
 		if v.CurrentMileage > 50000 {
-			predictions = append(predictions, models.Prediction{
-				VehicleID:            v.ID,
-				VehicleName:          v.Make + " " + v.VehicleModel + " (" + v.LicensePlate + ")",
-				Component:            "Brake Pads",
-				CurrentCondition:     35, // Simulated degradation
-				PredictedFailureDate: "2025-01-20",
-				Confidence:           85,
-				RecommendedAction:    "Inspect and replace brake pads",
-				EstimatedCost:        450.00,
-				RiskLevel:            "High",
+			alerts = append(alerts, models.MaintenanceDueAlert{
+				VehicleID:         v.ID,
+				VehicleName:       name,
+				Component:         "Brake Pads",
+				RecommendedAction: "Inspect brake pads and discs",
+				RiskLevel:         "High",
+				Reason:            fmt.Sprintf("mileage %d km exceeds 50,000 km threshold", v.CurrentMileage),
+				VehicleMileage:    v.CurrentMileage,
+				VehicleYear:       v.Year,
 			})
+			vehiclesWithCriticalAlert[v.ID] = true
 		}
 
-		// Heuristic 2: Medium Mileage -> Tires
+		// Rule 2: medium mileage → tire check.
 		if v.CurrentMileage > 30000 && v.CurrentMileage <= 50000 {
-			predictions = append(predictions, models.Prediction{
-				VehicleID:            v.ID,
-				VehicleName:          v.Make + " " + v.VehicleModel + " (" + v.LicensePlate + ")",
-				Component:            "Tires",
-				CurrentCondition:     60,
-				PredictedFailureDate: "2025-03-15",
-				Confidence:           70,
-				RecommendedAction:    "Check tire tread depth",
-				EstimatedCost:        800.00,
-				RiskLevel:            "Medium",
+			alerts = append(alerts, models.MaintenanceDueAlert{
+				VehicleID:         v.ID,
+				VehicleName:       name,
+				Component:         "Tires",
+				RecommendedAction: "Check tire tread depth and rotation",
+				RiskLevel:         "Medium",
+				Reason:            fmt.Sprintf("mileage %d km in 30,000–50,000 km range", v.CurrentMileage),
+				VehicleMileage:    v.CurrentMileage,
+				VehicleYear:       v.Year,
 			})
+			vehiclesWithWarningAlert[v.ID] = true
 		}
 
-		// Heuristic 3: Old Vehicle -> Battery
-		if v.Year < 2022 {
-			predictions = append(predictions, models.Prediction{
-				VehicleID:            v.ID,
-				VehicleName:          v.Make + " " + v.VehicleModel + " (" + v.LicensePlate + ")",
-				Component:            "Battery",
-				CurrentCondition:     40,
-				PredictedFailureDate: "2025-02-10",
-				Confidence:           90,
-				RecommendedAction:    "Test battery health",
-				EstimatedCost:        250.00,
-				RiskLevel:            "High",
+		// Rule 3: vehicle age → battery test. Compute age from current
+		// year rather than the hardcoded "< 2022" check that was in the
+		// old handler — that magic number would drift wrong over time.
+		if v.Year > 0 && currentYear-v.Year >= 3 {
+			alerts = append(alerts, models.MaintenanceDueAlert{
+				VehicleID:         v.ID,
+				VehicleName:       name,
+				Component:         "Battery",
+				RecommendedAction: "Test battery health and charge level",
+				RiskLevel:         "High",
+				Reason:            fmt.Sprintf("vehicle is %d years old (year %d)", currentYear-v.Year, v.Year),
+				VehicleMileage:    v.CurrentMileage,
+				VehicleYear:       v.Year,
 			})
+			vehiclesWithCriticalAlert[v.ID] = true
 		}
 	}
 
-	// Dynamic Optimization Logic
-	var highRiskDates []time.Time
-	layout := "2006-01-02"
-
-	for _, p := range predictions {
-		if p.RiskLevel == "High" {
-			t, err := time.Parse(layout, p.PredictedFailureDate)
-			if err == nil {
-				highRiskDates = append(highRiskDates, t)
-			}
-		}
+	// Healthy = vehicles with no alert at all. A vehicle in critical
+	// is NOT also counted as warning, even if it would otherwise trigger
+	// both rules — risk-level precedence is high > medium > none.
+	risk := models.RiskCounts{
+		Critical: len(vehiclesWithCriticalAlert),
 	}
-
-	// Sort dates to find earliest failure
-	sort.Slice(highRiskDates, func(i, j int) bool {
-		return highRiskDates[i].Before(highRiskDates[j])
-	})
-
-	var opt models.Optimization
-	if len(highRiskDates) > 0 {
-		earliest := highRiskDates[0]
-		opt.EarliestFailure = earliest.Format("Jan 02")
-
-		// Optimal: 14 to 7 days before failure
-		startOpt := earliest.AddDate(0, 0, -14)
-		endOpt := earliest.AddDate(0, 0, -7)
-		opt.OptimalWindow = fmt.Sprintf("%s - %s", startOpt.Format("Jan 02"), endOpt.Format("Jan 02"))
-		opt.OptimalReason = "Lowest cost period with minimal disruption"
-
-		// Alt: 7 to 0 days before failure
-		startAlt := earliest.AddDate(0, 0, -7)
-		endAlt := earliest.AddDate(0, 0, 0)
-		opt.AltWindow = fmt.Sprintf("%s - %s", startAlt.Format("Jan 02"), endAlt.Format("Jan 02"))
-		opt.AltReason = "Just-in-time replacement (High Risk)"
-	} else {
-		// Default / No Risk
-		opt.OptimalWindow = "Maintenance Up-to-Date"
-		opt.OptimalReason = "No critical actions needed"
-		opt.AltWindow = "Review Monthly"
-		opt.AltReason = "Standard schedule"
-		opt.EarliestFailure = "-"
-	}
-
-	// Cost Forecast & Risk Assessment Logic
-	// Initialize with zero values to ensure JSON output is valid object, not null
-	cost := models.CostForecast{
-		Trend: "stable",
-	}
-	risk := models.RiskAssessment{}
-
-	now := time.Now()
-
-	for _, p := range predictions {
-		// Risk Counts (excluding duplicates if any, but simplistic count here)
-		if p.RiskLevel == "High" {
-			risk.Critical++
-		} else if p.RiskLevel == "Medium" {
+	for vid := range vehiclesWithWarningAlert {
+		if !vehiclesWithCriticalAlert[vid] {
 			risk.Warning++
 		}
-
-		// Cost Buckets
-		t, err := time.Parse(layout, p.PredictedFailureDate)
-		if err == nil {
-			daysUntil := int(t.Sub(now).Hours() / 24)
-
-			if daysUntil <= 30 {
-				cost.CurrentMonth += p.EstimatedCost
-			}
-			if daysUntil > 30 && daysUntil <= 60 {
-				cost.NextMonth += p.EstimatedCost
-			}
-			if daysUntil <= 90 {
-				cost.Next3Months += p.EstimatedCost
-			}
-			if daysUntil <= 180 {
-				cost.Next6Months += p.EstimatedCost
-			}
-		}
 	}
-
-	// Calculate "Healthy" = Total Vehicles - (Critical + Warning)
-	// Ensuring no negative values if logic overlaps
-	riskyCount := risk.Critical + risk.Warning
-	if len(vehicles) >= riskyCount {
-		risk.Healthy = len(vehicles) - riskyCount
-	} else {
+	risk.Healthy = len(vehicles) - risk.Critical - risk.Warning
+	if risk.Healthy < 0 {
 		risk.Healthy = 0
 	}
 
-	// Simple Trend Logic
-	if cost.NextMonth > cost.CurrentMonth {
-		cost.Trend = "increasing"
-	} else if cost.NextMonth < cost.CurrentMonth {
-		cost.Trend = "decreasing"
-	}
-
-	c.JSON(http.StatusOK, models.PredictiveSummary{
-		Predictions:    predictions,
-		Optimization:   opt,
-		CostForecast:   cost,
-		RiskAssessment: risk,
+	c.JSON(http.StatusOK, models.MaintenanceDueAlertsResponse{
+		Alerts:     alerts,
+		RiskCounts: risk,
+		Disclaimer: "Alerts are produced by rule-based heuristics (mileage thresholds and vehicle age), not a machine-learning model. Real predictive analytics from maintenance history is in active development.",
 	})
 }
 

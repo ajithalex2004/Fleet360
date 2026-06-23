@@ -404,47 +404,45 @@ type EstimateApproval struct {
 }
 
 // Prediction
-type Prediction struct {
-	VehicleID            string  `json:"vehicleId"`
-	VehicleName          string  `json:"vehicleName"`
-	Component            string  `json:"component"`
-	CurrentCondition     int     `json:"currentCondition"` // 0-100
-	PredictedFailureDate string  `json:"predictedFailureDate"`
-	Confidence           int     `json:"confidence"` // 0-100
-	RecommendedAction    string  `json:"recommendedAction"`
-	EstimatedCost        float64 `json:"estimatedCost"`
-	RiskLevel            string  `json:"riskLevel"` // High, Medium, Low
+// MaintenanceDueAlert is a single "this vehicle is due for service"
+// recommendation produced by GetMaintenanceDueAlerts. Honest fields only —
+// every value here is either directly read from the vehicle row or
+// computed from a clearly-named rule. The old Prediction struct carried
+// fake Confidence / CurrentCondition / PredictedFailureDate / EstimatedCost
+// fields that were just hardcoded constants; they're gone. Phase 2 brings
+// back data-driven equivalents (e.g. typical-interval-km derived from
+// this vehicle's own maintenance history) under different field names so
+// nobody confuses the new honest computation with the old theater.
+type MaintenanceDueAlert struct {
+	VehicleID         string `json:"vehicleId"`
+	VehicleName       string `json:"vehicleName"`
+	Component         string `json:"component"`
+	RecommendedAction string `json:"recommendedAction"`
+	RiskLevel         string `json:"riskLevel"` // High, Medium, Low
+	Reason            string `json:"reason"`    // human-readable: which rule fired and why
+	VehicleMileage    int    `json:"vehicleMileage"`
+	VehicleYear       int    `json:"vehicleYear"`
 }
 
-// Optimization
-type Optimization struct {
-	OptimalWindow   string `json:"optimalWindow"`
-	AltWindow       string `json:"altWindow"`
-	OptimalReason   string `json:"optimalReason"`
-	AltReason       string `json:"altReason"`
-	EarliestFailure string `json:"earliestFailure"`
-}
-
-// CostForecast
-type CostForecast struct {
-	CurrentMonth float64 `json:"currentMonth"`
-	NextMonth    float64 `json:"nextMonth"`
-	Next3Months  float64 `json:"next3Months"`
-	Next6Months  float64 `json:"next6Months"`
-	Trend        string  `json:"trend"`
-}
-
-// RiskAssessment
-type RiskAssessment struct {
+// RiskCounts aggregates how many distinct vehicles have at least one
+// alert at each risk level. Honest because it's a count derived directly
+// from the alerts above.
+type RiskCounts struct {
 	Critical int `json:"critical"`
 	Warning  int `json:"warning"`
 	Healthy  int `json:"healthy"`
 }
 
-// PredictiveSummary response wrapper
-type PredictiveSummary struct {
-	Predictions    []Prediction   `json:"predictions"`
-	Optimization   Optimization   `json:"optimization"`
-	CostForecast   CostForecast   `json:"costForecast"`
-	RiskAssessment RiskAssessment `json:"riskAssessment"`
+// MaintenanceDueAlertsResponse wraps the per-vehicle alerts plus the
+// risk-level rollup. No more Optimization / CostForecast blocks — both
+// were derived from fake PredictedFailureDate / EstimatedCost values.
+// Phase 2 will reintroduce them as data-driven structures when there's
+// real history to compute them from.
+type MaintenanceDueAlertsResponse struct {
+	Alerts     []MaintenanceDueAlert `json:"alerts"`
+	RiskCounts RiskCounts            `json:"riskCounts"`
+	// Disclaimer is intentionally returned in the response so any UI or
+	// downstream consumer renders the right semantic label rather than
+	// silently re-marketing this as ML.
+	Disclaimer string `json:"disclaimer"`
 }
