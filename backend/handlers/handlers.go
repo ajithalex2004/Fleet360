@@ -208,6 +208,15 @@ func CreateMaintenanceRequest(c *gin.Context) {
 		return
 	}
 
+	// Belt-and-braces: the Model.BeforeCreate hook (models.go) is the primary
+	// guarantee that every row gets a UUID, but we set it here explicitly so a
+	// future refactor that swaps db.Create for a raw insert / batch helper /
+	// upsert (none of which fire GORM hooks) can't silently regress to id=''
+	// rows. Same reason we do it for History below.
+	if input.ID == "" {
+		input.ID = uuid.New().String()
+	}
+
 	// Ensure status is valid if not provided
 	if input.Status == "" {
 		input.Status = models.StatusRequested
@@ -216,6 +225,7 @@ func CreateMaintenanceRequest(c *gin.Context) {
 	// Add initial history
 	input.History = []models.History{
 		{
+			Model:  models.Model{ID: uuid.New().String()},
 			Status: models.StatusRequested,
 			Date:   input.RequestDate,
 			Note:   "Request created",

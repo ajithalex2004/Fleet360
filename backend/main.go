@@ -136,15 +136,19 @@ func runSeed() {
 // runCleanup removes rows with malformed primary keys (id = ''). Such rows
 // should not exist; their presence indicates an INSERT path that didn't
 // generate an ID. Manual operator command — explicit invocation only, never
-// from runServer. Behaviour preserved from the previous startup-side cleanup
-// (GORM's default Delete; the model's soft-delete semantics apply if it has
-// a DeletedAt column) with logging added so the row count is visible.
+// from runServer.
+//
+// Uses .Unscoped() so the delete is a hard DELETE rather than GORM's default
+// soft-delete (which would set deleted_at and leave the bad rows in the table).
+// Soft-deleting a malformed row has no value — the row is unrecoverable garbage
+// regardless of audit trail, and leaving it physically present means every
+// subsequent query against the table still has to filter past it.
 func runCleanup() {
-	log.Println("[cleanup] removing maintenance_requests rows with id=''")
-	result := database.DB.Where("id = ?", "").Delete(&models.MaintenanceRequest{})
+	log.Println("[cleanup] hard-deleting maintenance_requests rows with id=''")
+	result := database.DB.Unscoped().Where("id = ?", "").Delete(&models.MaintenanceRequest{})
 	if result.Error != nil {
 		log.Printf("[cleanup] FAILED: %v", result.Error)
 		os.Exit(1)
 	}
-	log.Printf("[cleanup] done — %d row(s) affected", result.RowsAffected)
+	log.Printf("[cleanup] done — %d row(s) hard-deleted", result.RowsAffected)
 }
