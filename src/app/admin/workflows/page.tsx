@@ -93,6 +93,11 @@ const CONDITION_FIELDS = [
 interface Workflow {
   id: string; name: string; module: string; procedure: string;
   description: string; isActive: boolean; stepCount: number; activeInstances: number;
+  // Phase 2 — populated when the workflow has been linked to a service type
+  // / tenant. Legacy (pre-migration) rows have these as null.
+  serviceTypeId?: string | null;
+  tenantId?:      string | null;
+  scopeId?:       string | null;
 }
 
 interface WorkflowStep {
@@ -466,11 +471,25 @@ export default function WorkflowsPage() {
                         <p className="text-white font-semibold text-sm truncate">{wf.name}</p>
                         <p className="text-slate-500 text-xs mt-0.5">{getProcLabel(wf.module, wf.procedure)}</p>
                         {wf.description && <p className="text-slate-600 text-xs mt-1 line-clamp-1">{wf.description}</p>}
-                        <div className="flex items-center gap-2 mt-2">
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
                           <span className="text-xs text-slate-400">{wf.stepCount} step{wf.stepCount !== 1 ? 's' : ''}</span>
                           {wf.activeInstances > 0 && (
                             <span className="px-1.5 py-0.5 rounded-full text-xs bg-amber-500/20 text-amber-400 border border-amber-500/20">
                               {wf.activeInstances} live
+                            </span>
+                          )}
+                          {/* Phase 2 migration indicator — at a glance, admins
+                              can see which workflows are wired into Service
+                              Configuration vs. legacy global rows. */}
+                          {wf.serviceTypeId ? (
+                            <span title="Linked to a Service Configuration type — appears under that service's Workflow tab"
+                              className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                              Linked
+                            </span>
+                          ) : (
+                            <span title="Legacy global workflow — not yet linked to a service type. Resolves via (module, procedure)."
+                              className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-700/40 text-slate-400 border border-white/10">
+                              Legacy
                             </span>
                           )}
                         </div>

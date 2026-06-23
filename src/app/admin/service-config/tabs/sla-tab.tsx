@@ -11,6 +11,7 @@
 import { useMemo } from 'react';
 import { useRuleTab } from './use-rule-tab';
 import { Field, NumberInput, TextInput, Toggle, SaveBar, Section, type RuleTabProps } from './shared';
+import { NotifyPicker } from './notify-picker';
 import { DEFAULT_SLA_RULES, type SlaRules, type EscalationLevel } from '@/types/service-rules';
 import { Plus, Trash2 } from 'lucide-react';
 
@@ -116,18 +117,27 @@ export function SlaTab({ typeId, scopeId, scopeLookup }: RuleTabProps) {
           {rules.escalationLevels.length === 0 && (
             <p className="text-[11px] text-slate-500">No escalation levels — add one to start.</p>
           )}
+          {rules.escalationLevels.length > 0 && (
+            <div className="grid grid-cols-[80px_1fr_2fr_auto] gap-2 items-end px-1 text-[10px] uppercase tracking-wider text-slate-500">
+              <span>Level</span>
+              <span>Hours</span>
+              <span>Notify</span>
+              <span />
+            </div>
+          )}
           {rules.escalationLevels.map((lvl, i) => (
-            <div key={i} className="grid grid-cols-[80px_1fr_2fr_auto] gap-2 items-center">
+            <div key={i} className="grid grid-cols-[80px_1fr_2fr_auto] gap-2 items-start">
               <NumberInput value={lvl.level} min={1}
                 onChange={v => updateLevel(i, { level: v ?? 1 })} />
               <NumberInput value={lvl.triggerHours} min={0}
                 onChange={v => updateLevel(i, { triggerHours: v ?? 0 })}
                 placeholder="hours" />
-              <TextInput value={lvl.notify}
-                onChange={e => updateLevel(i, { notify: e.target.value })}
-                placeholder="email or role" />
+              <NotifyPicker
+                value={lvl.notify}
+                onChange={v => updateLevel(i, { notify: v })}
+                placeholder="email, role:CODE, or email:a@b.com,c@d.com" />
               <button type="button" onClick={() => removeLevel(i)}
-                className="p-2 rounded-lg text-rose-300 hover:bg-rose-500/10">
+                className="p-2 rounded-lg text-rose-300 hover:bg-rose-500/10 mt-1">
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>

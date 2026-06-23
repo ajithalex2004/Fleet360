@@ -42,6 +42,17 @@ const NAV = [
 export default function SchoolBusLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { tLabel, t } = useLanguage();
+
+  // Parent + Driver PWAs bypass the desktop chrome — they own their own
+  // mobile shells. Segment-bounded checks (so future plurals don't collide).
+  const isParentPwa =
+    pathname === '/school-bus/parent' ||
+    pathname?.startsWith('/school-bus/parent/');
+  const isDriverPwa =
+    pathname === '/school-bus/driver' ||
+    pathname?.startsWith('/school-bus/driver/');
+  if (isParentPwa || isDriverPwa) return <>{children}</>;
+
   return (
     <ModuleGuard moduleId="school-bus" moduleName="School Bus Transportation" moduleIcon="🏫">
     <div className="flex flex-col h-screen bg-slate-950 text-white overflow-hidden">

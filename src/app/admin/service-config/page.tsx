@@ -30,6 +30,7 @@ import {
 } from '@/types/service-config';
 import { SlaTab }        from './tabs/sla-tab';
 import { ApprovalTab }   from './tabs/approval-tab';
+import { WorkflowTab }   from './tabs/workflow-tab';
 import { VehicleTab }    from './tabs/vehicle-tab';
 import { TripTab }       from './tabs/trip-tab';
 import { FinanceTab }    from './tabs/finance-tab';
@@ -50,13 +51,14 @@ const TONE_FG: Record<ServiceTone, string> = {
   violet: 'text-violet-300', cyan: 'text-cyan-300',
 };
 
-type TabKey = 'basic' | 'mapping' | 'sla' | 'approval' | 'vehicle' | 'trip' | 'finance' | 'ticketing' | 'epod' | 'automation' | 'formFields';
+type TabKey = 'basic' | 'mapping' | 'sla' | 'approval' | 'workflow' | 'vehicle' | 'trip' | 'finance' | 'ticketing' | 'epod' | 'automation' | 'formFields';
 const TABS: { key: TabKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { key: 'basic',      label: 'Basic Info',      icon: Layers      },
   { key: 'mapping',    label: 'Module Mapping',  icon: Workflow    },
   { key: 'formFields', label: 'Form Fields',     icon: FormInput   },
   { key: 'sla',        label: 'SLA & Workflow',  icon: Bell        },
   { key: 'approval',   label: 'Approval',        icon: ShieldCheck },
+  { key: 'workflow',   label: 'Workflow',        icon: Workflow    },
   { key: 'vehicle',    label: 'Vehicle Rules',   icon: Truck       },
   { key: 'trip',       label: 'Trip & Dispatch', icon: Truck       },
   { key: 'finance',    label: 'Finance',         icon: DollarSign  },
@@ -310,15 +312,36 @@ export default function ServiceConfigPage() {
                     initial={selectedMapping}
                     onSaved={() => void load()} />
                 )}
-                {activeTab === 'formFields' && <FormFieldsTab key={`${selectedType.type.id}:${activeScopeId}`} typeId={selectedType.type.id} scopeId={activeScopeId ?? undefined} scopeLookup={scopeLookup} />}
-                {activeTab === 'sla'        && <SlaTab        key={`${selectedType.type.id}:${activeScopeId}`} typeId={selectedType.type.id} scopeId={activeScopeId ?? undefined} scopeLookup={scopeLookup} />}
-                {activeTab === 'approval'   && <ApprovalTab   key={`${selectedType.type.id}:${activeScopeId}`} typeId={selectedType.type.id} scopeId={activeScopeId ?? undefined} scopeLookup={scopeLookup} />}
-                {activeTab === 'vehicle'    && <VehicleTab    key={`${selectedType.type.id}:${activeScopeId}`} typeId={selectedType.type.id} scopeId={activeScopeId ?? undefined} scopeLookup={scopeLookup} />}
-                {activeTab === 'trip'       && <TripTab       key={`${selectedType.type.id}:${activeScopeId}`} typeId={selectedType.type.id} scopeId={activeScopeId ?? undefined} scopeLookup={scopeLookup} />}
-                {activeTab === 'finance'    && <FinanceTab    key={`${selectedType.type.id}:${activeScopeId}`} typeId={selectedType.type.id} scopeId={activeScopeId ?? undefined} scopeLookup={scopeLookup} />}
-                {activeTab === 'ticketing'  && <TicketingTab  key={`${selectedType.type.id}:${activeScopeId}`} typeId={selectedType.type.id} scopeId={activeScopeId ?? undefined} scopeLookup={scopeLookup} />}
-                {activeTab === 'epod'       && <EpodTab       key={`${selectedType.type.id}:${activeScopeId}`} typeId={selectedType.type.id} scopeId={activeScopeId ?? undefined} scopeLookup={scopeLookup} />}
-                {activeTab === 'automation' && <AutomationTab key={`${selectedType.type.id}:${activeScopeId}`} typeId={selectedType.type.id} scopeId={activeScopeId ?? undefined} scopeLookup={scopeLookup} />}
+                {(() => {
+                  // Common props every rule tab consumes. typeKey / categoryKey
+                  // are needed by the Workflow tab (filter) and the Approval
+                  // tab (workflow dropdown). onSwitchTab lets the Approval
+                  // tab jump to the Workflow tab via the "Edit workflow →" link.
+                  const ruleProps = {
+                    typeId:      selectedType.type.id,
+                    scopeId:     activeScopeId ?? undefined,
+                    scopeLookup,
+                    typeKey:     selectedType.type.key,
+                    typeName:    selectedType.type.name,
+                    categoryKey: selectedType.category.key,
+                    onSwitchTab: (k: string) => setActiveTab(k as TabKey),
+                  };
+                  const k = `${selectedType.type.id}:${activeScopeId}`;
+                  return (
+                    <>
+                      {activeTab === 'formFields' && <FormFieldsTab key={k} {...ruleProps} />}
+                      {activeTab === 'sla'        && <SlaTab        key={k} {...ruleProps} />}
+                      {activeTab === 'approval'   && <ApprovalTab   key={k} {...ruleProps} />}
+                      {activeTab === 'workflow'   && <WorkflowTab   key={k} {...ruleProps} />}
+                      {activeTab === 'vehicle'    && <VehicleTab    key={k} {...ruleProps} />}
+                      {activeTab === 'trip'       && <TripTab       key={k} {...ruleProps} />}
+                      {activeTab === 'finance'    && <FinanceTab    key={k} {...ruleProps} />}
+                      {activeTab === 'ticketing'  && <TicketingTab  key={k} {...ruleProps} />}
+                      {activeTab === 'epod'       && <EpodTab       key={k} {...ruleProps} />}
+                      {activeTab === 'automation' && <AutomationTab key={k} {...ruleProps} />}
+                    </>
+                  );
+                })()}
               </div>
             </>
           )}

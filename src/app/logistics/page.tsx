@@ -2,10 +2,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Truck, CheckCircle2, MapPin, Inbox, ClipboardCheck, Wrench, UserCog,
-  TrendingUp, Plus, Map, Users,
+  Truck, CheckCircle2, MapPin, Inbox, ClipboardCheck, Wrench,
+  TrendingUp, Plus, Map, Gavel,
 } from 'lucide-react';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
+import ChauffeurDriverIcon from '@/components/icons/ChauffeurDriverIcon';
+import RateCoveragePanel from '@/components/logistics/RateCoveragePanel';
+import LaneProfitabilityPanel from '@/components/logistics/LaneProfitabilityPanel';
 
 interface LogisticsStats {
   totalVehicles: number;
@@ -88,7 +91,7 @@ export default function LogisticsDashboard() {
             <KpiCard label="Pending"          value={stats?.pendingBookings ?? 0}   sub="Awaiting dispatch"      icon={Inbox}          accent="amber"   />
             <KpiCard label="Completed today"  value={stats?.completedToday ?? 0}    sub="Trips finished today"   icon={ClipboardCheck} accent="emerald" />
             <KpiCard label="In maintenance"   value={stats?.inMaintenance ?? 0}     sub="Out of service"         icon={Wrench}         accent="rose"    />
-            <KpiCard label="Drivers"          value={stats?.drivers ?? 0}           sub="Logistics-assigned"     icon={UserCog}        accent="cyan"    />
+            <KpiCard label="Drivers"          value={stats?.drivers ?? 0}           sub="Logistics-assigned"     icon={ChauffeurDriverIcon}        accent="cyan"    />
 
             {/* Utilisation tile with progress bar */}
             <div className="rounded-2xl bg-slate-900/60 border border-white/10 p-4 hover:border-white/20 transition-colors">
@@ -107,6 +110,10 @@ export default function LogisticsDashboard() {
               <div className="text-xs text-slate-500 mt-1">Active vs available</div>
             </div>
           </div>
+
+          <RateCoveragePanel />
+
+          <LaneProfitabilityPanel />
 
           <Panel title="Recent trips" icon={MapPin} accent="amber"
             actions={<Link href="/logistics/trips" className="text-sm text-amber-300 hover:text-amber-200">View all →</Link>}>
@@ -153,8 +160,9 @@ export default function LogisticsDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {[
               { href: '/logistics/trips',    icon: Map,   label: 'Trips & dispatch', desc: 'Manage active and pending trips',           accent: 'amber'   as const },
+              { href: '/logistics/marketplace', icon: Gavel, label: 'Freight marketplace', desc: 'Open RFQs, compare carrier bids, and award loads', accent: 'emerald' as const },
               { href: '/logistics/vehicles', icon: Truck, label: 'Fleet vehicles',   desc: 'Logistics-assigned vehicle inventory',     accent: 'amber'   as const },
-              { href: '/logistics/drivers',  icon: Users, label: 'Driver assignment',desc: 'Assign and track logistics drivers',       accent: 'cyan'    as const },
+              { href: '/logistics/drivers',  icon: ChauffeurDriverIcon, label: 'Driver assignment',desc: 'Assign and track logistics drivers',       accent: 'cyan'    as const },
             ].map(link => {
               const Icon = link.icon;
               return (

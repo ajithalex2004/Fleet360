@@ -109,6 +109,50 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       ).catch(() => {});
     }
 
+    // ── Guardian notifications ─────────────────────────────────────────
+    // Fire-and-forget. Never blocks event creation. Only events that
+    // map to guardian-meaningful messages.
+    if (studentId && ['BOARDING', 'ALIGHTING'].includes(eventType)) {
+      const { loadStudentForNotify, notifyGuardians } = await import('@/lib/school-bus-notify');
+      const student = await loadStudentForNotify(studentId);
+      if (student) {
+        const stopLabel = stopName ?? null;
+        const whenLabel = new Date(eventTime ?? Date.now()).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        void notifyGuardians(eventType === 'BOARDING' ? 'BOARDED' : 'ALIGHTED', student, {
+          stopName: stopLabel, whenLabel,
+        });
+      }
+    }
+    // Bus-wide events without a single student: notify ALL guardians of
+    // students on the route. Used for DEPARTURE and INCIDENT.
+    if (['DEPARTURE', 'INCIDENT'].includes(eventType)) {
+      const { loadStudentForNotify, notifyGuardians } = await import('@/lib/school-bus-notify');
+      const studentsOnRoute = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT s.id FROM school_bus_students s
+         JOIN school_bus_trips t ON t.route_id = s.route_id
+         WHERE t.id = $1::uuid AND s.deleted_at IS NULL AND s.is_active = true`,
+        tripId,
+      ).catch(() => [] as Array<{ id: string }>);
+      // Also skip students marked EXCUSED today (parent-recorded absence).
+      const todayDate = new Date().toISOString().slice(0, 10);
+      const excused = await prisma.$queryRawUnsafe<Array<{ student_id: string }>>(
+        `SELECT student_id::text FROM school_bus_attendance
+         WHERE date = $1::date AND status = 'EXCUSED'`,
+        todayDate,
+      ).catch(() => [] as Array<{ student_id: string }>);
+      const excusedSet = new Set(excused.map(e => e.student_id));
+      for (const row of studentsOnRoute) {
+        if (excusedSet.has(row.id)) continue;
+        const student = await loadStudentForNotify(row.id);
+        if (!student) continue;
+        void notifyGuardians(
+          eventType === 'DEPARTURE' ? 'DEPARTURE' : 'INCIDENT',
+          student,
+          { details: description ?? null },
+        );
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       event: ser(event),

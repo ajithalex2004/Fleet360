@@ -31,7 +31,10 @@ const ALL_NAV: NavItem[] = [
   // ── Toggleable by Super Admin for Tenant Admins ─────────────────────────────
   { href: '/admin/branches',  label: 'Branches & Regions',     icon: '🏢', navKey: 'branches'   },
   { href: '/admin/billing',   label: 'Billing & Subscriptions', icon: '💳', navKey: 'billing'    },
-  { href: '/admin/workflows', label: 'Workflow Management',     icon: '⚡', navKey: 'workflows'  },
+  // Workflow Management was removed from the sidebar in Phase 2C of the
+  // Service Configuration merge — workflows are now edited under
+  // /admin/service-config → Workflow tab. The /admin/workflows route still
+  // works as a power-user advanced editor, but is no longer in the nav.
   { href: '/admin/esign',     label: 'E-Signing Console',       icon: '✍️', navKey: 'esign'      },
   { href: '/admin/whatsapp',  label: 'WhatsApp Support',        icon: '💬', navKey: 'whatsapp'   },
   { href: '/admin/dispatch',  label: 'Dispatch Monitor',        icon: '🚦', navKey: 'dispatch'   },
@@ -39,6 +42,8 @@ const ALL_NAV: NavItem[] = [
 
   // ── Super Admin only — never shown to Tenant Admins ─────────────────────────
   { href: '/admin/tenants',                label: 'Tenants',           icon: 'T',  superOnly: true },
+  { href: '/admin/service-config',         label: 'Service Configuration', icon: '🧩', superOnly: true },
+  { href: '/admin/shipper-portal-config',  label: 'Shipper Portal',    icon: '🚢', superOnly: true },
   { href: '/admin/info',                   label: 'Platform Info',     icon: 'ℹ️', superOnly: true },
   { href: '/admin/settings/notifications', label: 'Notifications',     icon: '🔔', superOnly: true },
   { href: '/admin/settings/integrations',  label: 'Integrations & ERP',icon: '🔗', superOnly: true },

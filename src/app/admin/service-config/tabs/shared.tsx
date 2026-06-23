@@ -17,6 +17,17 @@ export interface RuleTabProps {
   scopeId?: string;
   /** scope_id → display name + isRoot flag, for the inheritance chip. */
   scopeLookup?: Record<string, { name: string; isRoot: boolean }>;
+  // ── Phase 2C — Workflow merge — context the workflow + approval tabs need
+  // to filter / pre-fill workflows scoped to the selected service type. ──
+  /** Stable code for this service type (e.g. 'MAINTENANCE_REQUEST'). */
+  typeKey?: string;
+  /** Display name for this service type (e.g. 'Maintenance Request'). */
+  typeName?: string;
+  /** Stable code for this type's parent category (e.g. 'OPERATION_SUPPORT'). */
+  categoryKey?: string;
+  /** Optional handler the parent provides so a tab can switch to another
+   *  tab — used by the Approval tab's "Edit workflow →" link. */
+  onSwitchTab?: (tab: string) => void;
 }
 
 export function Field({ label, children, hint, required }: {
