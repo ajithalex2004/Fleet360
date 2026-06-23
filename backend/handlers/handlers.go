@@ -1207,3 +1207,173 @@ func CreateAlert(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, input)
 }
+
+// IngestVehicleLocation accepts one GPS reading and persists it to
+// vehicle_locations + refreshes the vehicle's denormalized current_*
+// columns when the reading is newer than what's stored.
+//
+// Auth note: this endpoint uses the same JWT auth as the rest of /api/v1.
+// In a production deployment with real OBD-II / GPS-tracker devices,
+// those devices would NOT carry a user's JWT — they'd authenticate via
+// a per-device HMAC-signed token or similar. That's a separate auth
+// surface, deferred until devices come online. For now, this endpoint
+// is the right shape for browser-driven location updates (mobile
+// driver app where the driver IS logged in) and for testing.
+//
+// Tenancy: the vehicle id in the body must belong to the JWT's tenant
+// (verified by an existence check under WithTenant before insert). A
+// caller can't write a location for a vehicle in another tenant even
+// if they guess a valid vehicle id.
+//
+// Idempotency / late-arriving readings: the current_* refresh is
+// guarded by a conditional UPDATE — current_location_at IS NULL OR <
+// recorded_at — so a delayed reading from earlier than the stored
+// "current" doesn't overwrite the newer state. The location row
+// itself is always inserted; only the denormalized view skips the
+// refresh.
+func IngestVehicleLocation(c *gin.Context) {
+	tid := requireTenant(c)
+	if tid == "" {
+		return
+	}
+
+	var input models.VehicleLocation
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Field-level validation. The DB has NOT NULL constraints on these
+	// already, but failing early with a specific message beats a 500.
+	if input.VehicleID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "vehicleId required"})
+		return
+	}
+	if input.RecordedAt.IsZero() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "recordedAt required"})
+		return
+	}
+	if input.Latitude < -90 || input.Latitude > 90 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "latitude must be in [-90, 90]"})
+		return
+	}
+	if input.Longitude < -180 || input.Longitude > 180 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "longitude must be in [-180, 180]"})
+		return
+	}
+
+	// Vehicle existence + tenant ownership check. Failure returns 404
+	// deliberately — we don't reveal whether the vehicle exists in
+	// another tenant (would be a side-channel).
+	var vehicle models.Vehicle
+	if err := database.DB.Scopes(auth.WithTenant(c)).
+		Where("id = ?", input.VehicleID).
+		First(&vehicle).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "vehicle not found"})
+		return
+	}
+
+	// Stamp tenant from validated JWT; never trust a client-supplied
+	// tenantId on the body.
+	input.TenantID = tid
+	if input.ID == "" {
+		input.ID = uuid.New().String()
+	}
+
+	if err := database.DB.Create(&input).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Refresh the vehicle's denormalized current_* state ONLY if this
+	// reading is newer than the stored value. A buffered/delayed
+	// device could legitimately ingest a 5-minute-old reading after a
+	// fresher one — that mustn't clobber the latest known position.
+	refreshed := database.DB.Model(&models.Vehicle{}).
+		Where(
+			"id = ? AND tenant_id = ? AND (current_location_at IS NULL OR current_location_at < ?)",
+			input.VehicleID, tid, input.RecordedAt,
+		).
+		Updates(map[string]interface{}{
+			"current_lat":         input.Latitude,
+			"current_lng":         input.Longitude,
+			"current_speed_kph":   input.SpeedKph,
+			"current_heading_deg": input.HeadingDeg,
+			"current_location_at": input.RecordedAt,
+		})
+
+	c.JSON(http.StatusCreated, gin.H{
+		"location":         input,
+		"currentRefreshed": refreshed.RowsAffected > 0,
+	})
+}
+
+// GetVehicleLocations returns the GPS trail for one vehicle ordered
+// from newest → oldest, optionally bounded by a [from, to] time
+// window. Default limit 500; max 5000.
+//
+//	GET /api/v1/fleet/vehicles/:id/locations
+//	      ?from=2026-06-23T00:00:00Z
+//	      &to=2026-06-23T23:59:59Z
+//	      &limit=1000
+//
+// Vehicle ownership is verified before the query runs — caller asking
+// for another tenant's vehicle gets 404, not an empty array.
+func GetVehicleLocations(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
+	vehicleID := c.Param("id")
+
+	var vehicle models.Vehicle
+	if err := database.DB.Scopes(auth.WithTenant(c)).
+		Where("id = ?", vehicleID).
+		First(&vehicle).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "vehicle not found"})
+		return
+	}
+
+	q := database.DB.Scopes(auth.WithTenant(c)).Where("vehicle_id = ?", vehicleID)
+
+	if from := strings.TrimSpace(c.Query("from")); from != "" {
+		t, err := time.Parse(time.RFC3339, from)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "from must be RFC3339"})
+			return
+		}
+		q = q.Where("recorded_at >= ?", t)
+	}
+	if to := strings.TrimSpace(c.Query("to")); to != "" {
+		t, err := time.Parse(time.RFC3339, to)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "to must be RFC3339"})
+			return
+		}
+		q = q.Where("recorded_at <= ?", t)
+	}
+
+	limit := 500
+	if l := strings.TrimSpace(c.Query("limit")); l != "" {
+		n, err := strconv.Atoi(l)
+		if err != nil || n < 1 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be a positive integer"})
+			return
+		}
+		if n > 5000 {
+			n = 5000 // ceiling to bound the query — operator can paginate
+		}
+		limit = n
+	}
+
+	var locations []models.VehicleLocation
+	if err := q.Order("recorded_at DESC").Limit(limit).Find(&locations).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"vehicleId": vehicleID,
+		"locations": locations,
+		"count":     len(locations),
+	})
+}

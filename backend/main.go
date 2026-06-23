@@ -170,6 +170,11 @@ func registerV1Routes(r *gin.Engine) {
 		fleet.GET("/garages", handlers.GetGarages)
 		fleet.POST("/garages", handlers.CreateGarage)
 		fleet.PUT("/garages/:id", handlers.UpdateGarage)
+		// Live vehicle location (Phase B). POST ingests a single GPS
+		// reading; the GET returns this vehicle's GPS trail
+		// (newest → oldest) optionally bounded by ?from / ?to.
+		fleet.POST("/locations", handlers.IngestVehicleLocation)
+		fleet.GET("/vehicles/:id/locations", handlers.GetVehicleLocations)
 	}
 
 	maint := v1.Group("/maintenance")

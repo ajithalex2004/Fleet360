@@ -158,7 +158,51 @@ type Vehicle struct {
 	// -- Ownership / assignment -----------------------------------------------
 	AssignedDriverID string `gorm:"column:assigned_driver_id" json:"assignedDriverId"`
 	GarageID         string `gorm:"column:garage_id" json:"garageId"`
+
+	// -- Live location (Phase B) ----------------------------------------------
+	// Denormalized "most recent known position" — refreshed by
+	// IngestVehicleLocation when an incoming reading is newer than the
+	// stored CurrentLocationAt. Pointers because a vehicle with no
+	// reported position yet must serialise as JSON null, not as
+	// (0.0, 0.0) — those are valid coordinates (Gulf of Guinea) that
+	// would silently misplace every unreported vehicle.
+	CurrentLat        *float64   `gorm:"column:current_lat" json:"currentLat"`
+	CurrentLng        *float64   `gorm:"column:current_lng" json:"currentLng"`
+	CurrentSpeedKph   *float64   `gorm:"column:current_speed_kph" json:"currentSpeedKph"`
+	CurrentHeadingDeg *float64   `gorm:"column:current_heading_deg" json:"currentHeadingDeg"`
+	CurrentLocationAt *time.Time `gorm:"column:current_location_at" json:"currentLocationAt"`
 }
+
+// VehicleLocation is one position reading. Volume scales with ingest
+// cadence (5-30s per device is typical) — the (vehicle_id, recorded_at
+// DESC) composite index in the matching Prisma migration is the shape
+// every query needs ("latest position per vehicle", "trail for vehicle
+// X between T1 and T2"). The vehicle's denormalized Current* fields
+// (above) are kept fresh by IngestVehicleLocation; this row remains
+// the source of truth for the full history.
+//
+// CreatedAt vs RecordedAt: CreatedAt is when the backend received the
+// reading; RecordedAt is when the device captured it. They diverge
+// when a device buffers offline — both are kept so we can audit ingest
+// latency.
+type VehicleLocation struct {
+	ID         string    `gorm:"primaryKey;column:id" json:"id"`
+	CreatedAt  time.Time `gorm:"column:created_at" json:"createdAt"`
+	TenantID   string    `gorm:"not null;index;column:tenant_id" json:"tenantId"`
+	VehicleID  string    `gorm:"not null;column:vehicle_id;index:idx_vehicle_locations_vehicle_recorded,priority:1" json:"vehicleId"`
+	RecordedAt time.Time `gorm:"not null;column:recorded_at;index:idx_vehicle_locations_vehicle_recorded,sort:desc,priority:2" json:"recordedAt"`
+	Latitude   float64   `gorm:"not null;column:latitude" json:"latitude"`
+	Longitude  float64   `gorm:"not null;column:longitude" json:"longitude"`
+	SpeedKph   *float64  `gorm:"column:speed_kph" json:"speedKph,omitempty"`
+	HeadingDeg *float64  `gorm:"column:heading_deg" json:"headingDeg,omitempty"`
+	Odometer   *int      `gorm:"column:odometer" json:"odometer,omitempty"`
+	Source     string    `gorm:"column:source" json:"source,omitempty"`
+}
+
+// TableName explicit because GORM's default would pluralise to
+// "vehicle_locations" already, but being explicit defends against
+// naming-strategy changes.
+func (VehicleLocation) TableName() string { return "vehicle_locations" }
 
 // Driver
 type Driver struct {

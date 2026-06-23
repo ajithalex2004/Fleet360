@@ -568,16 +568,74 @@ model Vehicle {
   assignedDriverId     String?                @map("assigned_driver_id")
   garageId             String?                @map("garage_id")
 
+  // -- Live location (Phase B) -----------------------------------------------
+  // Denormalized "most recent known position" so a fleet-map query reads
+  // every vehicle's current state in one row without joining the
+  // vehicle_locations time-series. Updated by IngestVehicleLocation when
+  // the incoming reading is newer than the stored currentLocationAt.
+  // The authoritative history lives in vehicle_locations; these columns
+  // are an index into it.
+  currentLat           Float?                 @map("current_lat")
+  currentLng           Float?                 @map("current_lng")
+  currentSpeedKph      Float?                 @map("current_speed_kph")
+  currentHeadingDeg    Float?                 @map("current_heading_deg")
+  currentLocationAt    DateTime?              @map("current_location_at") @db.Timestamptz(6)
+
   // -- Relations ------------------------------------------------------------
   maintenanceRequests  MaintenanceRequest[]
   drivers              Driver[]
   serviceSchedules     ServiceSchedule[]
+  locations            VehicleLocation[]
 
   @@index([deletedAt], map: "idx_vehicles_deleted_at")
   @@index([vehicleUsage], map: "idx_vehicles_usage")
   @@index([status], map: "idx_vehicles_status")
   @@index([tenantId], map: "idx_vehicles_tenant_id")
   @@map("vehicles")
+}
+
+// VehicleLocation — time-series ledger of GPS positions per vehicle.
+// Authoritative history of every position reading; the vehicles.current_*
+// columns are a denormalized "latest" view into this table, updated
+// when an incoming reading's recordedAt is newer than what's stored.
+//
+// One row per position reading from an OBD-II tracker, a driver mobile
+// app, or any other source. Volume scales with ingest cadence
+// (5-30s typical) — index strategy is geared for the "give me the
+// latest position for this vehicle" and "give me the trail for this
+// vehicle between T1 and T2" queries, both of which need
+// (vehicle_id, recorded_at DESC).
+//
+// Tenancy: hard-required (the IngestVehicleLocation handler verifies
+// the JWT's tenant owns the vehicle_id before insert).
+model VehicleLocation {
+  id          String   @id @default(uuid())
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenantId    String   @map("tenant_id")
+  vehicleId   String   @map("vehicle_id")
+
+  // The device's wall-clock when the reading was captured. Distinct
+  // from createdAt (= when our backend received it) — a device that
+  // buffered offline for 10 minutes will have recordedAt 10 min before
+  // createdAt. Both are kept so we can audit ingest latency.
+  recordedAt  DateTime @map("recorded_at") @db.Timestamptz(6)
+
+  latitude    Float    @map("latitude")
+  longitude   Float    @map("longitude")
+  speedKph    Float?   @map("speed_kph")
+  headingDeg  Float?   @map("heading_deg")    // 0-360, compass bearing
+  odometer    Int?     @map("odometer")        // odometer reading at this fix, if available
+  source      String?  @map("source")          // "obd" | "gps_tracker" | "mobile_app" | "manual"
+
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade, map: "fk_vehicle_locations_vehicle")
+
+  // Composite index ordered (vehicle_id, recorded_at DESC) is the
+  // shape every query needs — both "latest position per vehicle" and
+  // "trail for vehicle X between T1 and T2" sort by recorded_at DESC.
+  @@index([vehicleId, recordedAt(sort: Desc)], map: "idx_vehicle_locations_vehicle_recorded")
+  @@index([tenantId], map: "idx_vehicle_locations_tenant_id")
+  @@map("vehicle_locations")
 }
 
 enum ActionStatus {
