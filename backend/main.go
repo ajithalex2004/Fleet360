@@ -1,8 +1,30 @@
+// Fleet360 backend entrypoint.
+//
+// The binary is dispatched on its first argv to one of three subcommands:
+//   serve   — boot the HTTP server on :8080 (default; this is what runs in prod)
+//   seed    — populate the database with demo data (developer-only operator command)
+//   cleanup — remove rows with malformed primary keys (manual operator command)
+//
+// Why subcommands instead of "just guard seed.Seed() with an env check"?
+// Because the production binary's serve path now has NO route to seed code at
+// all. A misconfigured GO_ENV, a backup/restore cycle, a fresh install on a
+// new tenant — none of them can accidentally inject demo data into a real
+// customer database, because the seed function isn't on the serve path.
+// Compliance/audit answer becomes structural ("production runs `backend serve`,
+// which can't reach seed") rather than configuration ("we check an env var").
+//
+// Dev workflow:
+//   go run . serve     (or just `go run .` — defaults to serve)
+//   go run . seed      explicit demo-data load
+//   go run . cleanup   explicit data hygiene pass
+//
+// Production deployment should always be: `./backend serve`.
 package main
 
 import (
 	"log"
 	"os"
+	"strings"
 
 	"fleet360-backend/database"
 	"fleet360-backend/handlers"
@@ -15,36 +37,33 @@ import (
 )
 
 func main() {
-	// Load .env file
+	// All commands need env + DB; loading them here keeps each runX small.
 	godotenv.Load()
-
-	// Connect to Database
 	database.Connect()
 
-	// Cleanup invalid data
-	database.DB.Where("id = ''").Delete(&models.MaintenanceRequest{})
-
-	// Seed Database — only in development/test. The shallow count-check inside
-	// seed.Seed() is not a strong enough barrier: a fresh-install or empty-
-	// table state in production would still dump demo data into a real
-	// customer DB. We guard at the application layer with an explicit env
-	// gate and log every path so operators can confirm what happened.
-	//
-	// Belt-and-braces note: production deployments must set GO_ENV=production
-	// (or any value other than "development"/"test") on the host/container.
-	// The default case below is the safety net — an unset or unrecognised
-	// GO_ENV will NOT seed, and it will log loudly so the misconfiguration is
-	// visible in startup logs rather than swallowed silently.
-	env := os.Getenv("GO_ENV")
-	switch env {
-	case "development", "test":
-		log.Printf("[startup] GO_ENV=%q — seeding database", env)
-		seed.Seed()
-	case "production":
-		log.Println("[startup] GO_ENV=production — seed skipped")
-	default:
-		log.Printf("[startup] GO_ENV=%q (unrecognised or unset) — seed skipped; expected development|test|production", env)
+	cmd := "serve"
+	if len(os.Args) > 1 {
+		cmd = os.Args[1]
 	}
+
+	switch strings.ToLower(cmd) {
+	case "serve":
+		runServer()
+	case "seed":
+		runSeed()
+	case "cleanup":
+		runCleanup()
+	default:
+		log.Fatalf("unknown command %q — expected: serve | seed | cleanup", cmd)
+	}
+}
+
+// runServer boots the HTTP server. It does NOT call seed.Seed() or the
+// cleanup delete — those live in dedicated subcommands operators invoke
+// explicitly. Production deployments invoke this command only, so demo data
+// can never land in a real customer database via a misconfigured startup.
+func runServer() {
+	log.Println("[serve] starting HTTP server on :8080")
 
 	r := gin.Default()
 
@@ -91,4 +110,41 @@ func main() {
 	r.Static("/uploads", "./uploads")
 
 	r.Run(":8080")
+}
+
+// runSeed populates the database with demo data via seed.Seed(). Even though
+// this command is supposed to be invoked manually (and never by a production
+// startup), we keep the GO_ENV gate as belt-and-braces: a developer typing
+// `backend seed` against a prod DSN by mistake gets a loud refusal, not a
+// silent data dump. Exit code 1 on refusal so CI / scripts can detect it.
+func runSeed() {
+	env := os.Getenv("GO_ENV")
+	switch env {
+	case "development", "test":
+		log.Printf("[seed] GO_ENV=%q — seeding database", env)
+		seed.Seed()
+		log.Println("[seed] done")
+	case "production":
+		log.Println("[seed] GO_ENV=production — refusing to seed a production database")
+		os.Exit(1)
+	default:
+		log.Printf("[seed] GO_ENV=%q (unrecognised or unset) — refusing to seed; set GO_ENV=development or test to allow", env)
+		os.Exit(1)
+	}
+}
+
+// runCleanup removes rows with malformed primary keys (id = ''). Such rows
+// should not exist; their presence indicates an INSERT path that didn't
+// generate an ID. Manual operator command — explicit invocation only, never
+// from runServer. Behaviour preserved from the previous startup-side cleanup
+// (GORM's default Delete; the model's soft-delete semantics apply if it has
+// a DeletedAt column) with logging added so the row count is visible.
+func runCleanup() {
+	log.Println("[cleanup] removing maintenance_requests rows with id=''")
+	result := database.DB.Where("id = ?", "").Delete(&models.MaintenanceRequest{})
+	if result.Error != nil {
+		log.Printf("[cleanup] FAILED: %v", result.Error)
+		os.Exit(1)
+	}
+	log.Printf("[cleanup] done — %d row(s) affected", result.RowsAffected)
 }
