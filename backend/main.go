@@ -21,6 +21,7 @@
 //   /api/v1/quotations/...   quotations
 //   /api/v1/alerts/...       alerts + alert configs
 //   /api/v1/files/...        upload, sign (S3-compatible object store)
+//   /api/v1/logistics/...    shipment orders, stats (freight domain; migrating)
 //
 // Dev workflow:
 //   go run . serve     (or just `go run .` — defaults to serve)
@@ -42,8 +43,8 @@ import (
 	"fleet360-backend/objectstore"
 	"fleet360-backend/seed"
 
-	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-contrib/cors"
+	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
@@ -208,6 +209,122 @@ func registerV1Routes(r *gin.Engine) {
 	{
 		files.POST("/upload", handlers.UploadFile)
 		files.GET("/sign", handlers.GetSignedURL)
+	}
+
+	// Logistics — the freight/shipment domain migrated out of the Next.js
+	// route handlers (src/app/api/logistics) so every query runs behind the
+	// same auth.WithTenant scope as the rest of /api/v1. Phase L0 wires the
+	// shipment-orders slice + tenant-scoped stats; carriers, bids, RFQs,
+	// trips, tracking and finance attach to this group in later phases.
+	logistics := v1.Group("/logistics")
+	{
+		logistics.GET("/shipments", handlers.GetLogisticsShipments)
+		logistics.GET("/shipments/:id", handlers.GetLogisticsShipment)
+		logistics.POST("/shipments", handlers.CreateLogisticsShipment)
+		logistics.GET("/stats", handlers.GetLogisticsStats)
+
+		// Phase L4a — KPI analytics. The Go-native replacement for the Next.js
+		// /api/logistics/analytics endpoint, which queries the legacy `bookings`
+		// table unscoped (a cross-tenant leak). This computes the same dashboard
+		// contract from logistics_shipment_orders behind auth.WithTenant, so each
+		// tenant sees only its own shipments. See handlers/logistics_analytics.go.
+		logistics.GET("/analytics", handlers.GetLogisticsAnalytics)
+
+		// Phase L4a — SLA monitor for the dispatch board's alert banner.
+		// Replaces the Next.js /api/logistics/sla (unscoped legacy-`bookings`
+		// scan) with a tenant-scoped pass over active logistics_shipment_orders
+		// (delivery-deadline breaches) merged with open SLA-timer exceptions.
+		// WARN=2h / BREACH=4h tiers verbatim. The CRITICAL ops SMS/email send is
+		// deferred until the sender port lands. See handlers/logistics_sla.go.
+		logistics.GET("/sla", handlers.GetLogisticsSla)
+
+		// Phase L4a — driver performance scorecards for the drivers roster and
+		// the per-driver performance page. Replaces the Next.js
+		// /api/logistics/driver-stats (unscoped legacy-`bookings` scan + a
+		// non-existent `phone` column) with a tenant-scoped union of the two
+		// driver→shipment link sources — logistics_shipment_orders.assigned_driver_id
+		// and logistics_assignments.driver_id — deduped by shipment. Same
+		// completion/on-time/no-cancel score; on-time is computed for real rather
+		// than the legacy 100% stub. See handlers/logistics_driver_stats.go.
+		logistics.GET("/driver-stats", handlers.GetLogisticsDriverStats)
+
+		// Phase L4a — live tracking map feed (polled every 15s). Replaces the
+		// Next.js /api/logistics/tracking (unscoped legacy-`bookings` scan with GPS
+		// dug out of trip_status_history.note JSON) with a tenant-scoped read of
+		// the active logistics_shipment_orders plus a driver_update → epod →
+		// estimated GPS fallback sourced from logistics_tracking_events /
+		// logistics_pod_events. position is always non-null (estimated Dubai-jitter
+		// pin at worst), matching the map's contract. See handlers/logistics_tracking.go.
+		logistics.GET("/tracking", handlers.GetLogisticsTracking)
+
+		// Phase L1 — marketplace core: carriers, rate contracts, and the
+		// rate-quote engine. The quote endpoint loads tenant-scoped lane
+		// candidates and scores them via the pure rateengine package.
+		logistics.GET("/carriers", handlers.GetLogisticsCarriers)
+		logistics.GET("/carriers/:id", handlers.GetLogisticsCarrier)
+		logistics.POST("/carriers", handlers.CreateLogisticsCarrier)
+		logistics.GET("/rate-contracts", handlers.GetLogisticsRateContracts)
+		logistics.POST("/rate-contracts", handlers.CreateLogisticsRateContract)
+		logistics.POST("/rates/quote", handlers.PostLogisticsRateQuote)
+
+		// Spot-market loop: RFQs invite carrier bids; scorecards rank carriers.
+		logistics.GET("/rfqs", handlers.GetLogisticsRFQs)
+		logistics.POST("/rfqs", handlers.CreateLogisticsRFQ)
+		logistics.GET("/bids", handlers.GetLogisticsBids)
+		logistics.POST("/bids", handlers.CreateLogisticsBid)
+		logistics.GET("/carrier-scorecards", handlers.GetLogisticsCarrierScorecards)
+		logistics.POST("/carrier-scorecards", handlers.CreateLogisticsCarrierScorecard)
+
+		// Phase L2 — the trip layer: multi-stop stops, route legs, carrier/
+		// driver assignments, GPS tracking, telematics, ePOD, and exceptions.
+		// All list/create endpoints scope by ?shipmentOrderId= and run behind
+		// auth.WithTenant like the rest of the surface.
+		logistics.GET("/stops", handlers.GetLogisticsStops)
+		logistics.POST("/stops", handlers.CreateLogisticsStop)
+		logistics.GET("/route-legs", handlers.GetLogisticsRouteLegs)
+		logistics.POST("/route-legs", handlers.CreateLogisticsRouteLeg)
+		logistics.GET("/assignments", handlers.GetLogisticsAssignments)
+		logistics.POST("/assignments", handlers.CreateLogisticsAssignment)
+		logistics.GET("/tracking-events", handlers.GetLogisticsTrackingEvents)
+		logistics.POST("/tracking-events", handlers.CreateLogisticsTrackingEvent)
+		logistics.GET("/pod-events", handlers.GetLogisticsPodEvents)
+		logistics.POST("/pod-events", handlers.CreateLogisticsPodEvent)
+		logistics.GET("/telematics-events", handlers.GetLogisticsTelematicsEvents)
+		logistics.POST("/telematics-events", handlers.CreateLogisticsTelematicsEvent)
+		logistics.GET("/exceptions", handlers.GetLogisticsExceptions)
+
+		// The headline ingest: a GPS ping that, best-effort, recomputes the
+		// shipment ETA and evaluates geofences (raising exception rows). The
+		// notify decision is computed but SMS/email sends are deferred until a
+		// sender port lands — see handlers/logistics_execution.go.
+		logistics.POST("/shipments/:id/tracking", handlers.IngestLogisticsTracking)
+
+		// Finance (Phase L3) — read surface for the money layer plus the 3-way
+		// reconciliation report. Write path (post/reverse to the shared ledger)
+		// lands in a follow-up increment; see handlers/logistics_finance.go.
+		logistics.GET("/freight-charges", handlers.GetLogisticsFreightCharges)
+		logistics.GET("/carrier-settlements", handlers.GetLogisticsCarrierSettlements)
+		logistics.GET("/driver-payouts", handlers.GetLogisticsDriverPayouts)
+		logistics.GET("/finance-postings", handlers.GetLogisticsFinancePostings)
+		logistics.GET("/finance/reconciliation", handlers.GetLogisticsFinanceReconciliation)
+
+		// Phase L4c — the VRP route planner. Replaces the Next.js
+		// /api/logistics/planner/** routes (raw-SQL, per-call-site tenant filter)
+		// with the Go port of route-optimizer-service.ts: optimize a set of
+		// shipments across a set of vehicles (pure solver in package routeopt,
+		// distance matrix in package distmatrix, geocoding in
+		// logistics_geocoder.go), persist the plan DRAFT, then commit / edit /
+		// discard / list its lifecycle — every query behind auth.WithTenant.
+		planner := logistics.Group("/planner")
+		{
+			planner.POST("/optimize", handlers.PostLogisticsPlannerOptimize)
+			planner.GET("/inputs", handlers.GetLogisticsPlannerInputs)
+			planner.GET("/plans", handlers.GetLogisticsPlannerPlans)
+			planner.GET("/plans/:id", handlers.GetLogisticsPlannerPlan)
+			planner.POST("/plans/:id/commit", handlers.PostLogisticsPlannerCommit)
+			planner.POST("/plans/:id/discard", handlers.PostLogisticsPlannerDiscard)
+			planner.POST("/plans/:id/edit", handlers.PostLogisticsPlannerEdit)
+		}
 	}
 }
 
