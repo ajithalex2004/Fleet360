@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"fleet360-backend/analytics"
 	"fleet360-backend/auth"
 	"fleet360-backend/database"
 	"fleet360-backend/logging"
@@ -726,32 +727,32 @@ func UpdateGarage(c *gin.Context) {
 }
 
 // GetMaintenanceDueAlerts returns "this vehicle is due for service"
-// recommendations for the requesting tenant. Honest naming and honest
-// fields throughout — every alert carries the rule that fired plus the
-// vehicle attributes the rule keyed off of, so the operator can trace
-// the recommendation back to its source without believing there's an
-// ML model under the hood. There isn't.
+// recommendations for the requesting tenant. Two complementary signals
+// feed the alert list:
 //
-// Phase 1 of the predictive-maintenance honesty pass: this handler used
-// to manufacture fake Confidence / CurrentCondition / PredictedFailureDate
-// / EstimatedCost fields per alert plus a fabricated CostForecast and
-// Optimization block — none of which were computed from data. Those are
-// gone. Phase 2 will reintroduce data-driven versions (typical interval
-// per vehicle, projected next-due date, etc.) computed from
-// maintenance_requests history with sample-size disclosure.
+//  1. Rule-based triggers (Phase 1): mileage/age thresholds. Catch
+//     vehicles with no maintenance history yet — useful for the new-
+//     fleet case where there's nothing to extrapolate from.
+//
+//  2. History-based projections (Phase 2): per-vehicle interval analytics
+//     from completed maintenance_requests rows. Catch vehicles where the
+//     thresholds would miss the actual due date — e.g., a low-mileage
+//     vehicle whose brake pads are due based on its own service cadence.
+//
+// Every alert carries a Source field declaring which signal produced it
+// (and whether both corroborated), plus the SampleCount the analytics
+// were based on. No fake confidence numbers anywhere.
 //
 // Endpoint URL stays at /api/v1/maintenance/predictive for one release
-// so the frontend cuts over atomically in this commit. A follow-up can
-// rename the route to /api/v1/maintenance/alerts once consumers have
-// migrated off the old shape.
+// so the frontend cuts over atomically. A follow-up will rename the route
+// to /api/v1/maintenance/alerts once consumers have migrated.
 func GetMaintenanceDueAlerts(c *gin.Context) {
 	if requireTenant(c) == "" {
 		return
 	}
+	now := time.Now()
+
 	var vehicles []models.Vehicle
-	// Tenant-scoped: maintenance alerts must only consider the requesting
-	// tenant's fleet — leaking another tenant's mileage data would be a
-	// side-channel data leak via statistical inference.
 	if err := database.DB.Scopes(auth.WithTenant(c)).Find(&vehicles).Error; err != nil {
 		logging.L().Warn("failed to fetch vehicles for maintenance-due alerts, proceeding with empty list",
 			zap.String("tenant_id", auth.TenantID(c)),
@@ -760,23 +761,154 @@ func GetMaintenanceDueAlerts(c *gin.Context) {
 		vehicles = []models.Vehicle{}
 	}
 
-	alerts := make([]models.MaintenanceDueAlert, 0, len(vehicles))
-	// vehiclesWithCriticalAlert / vehiclesWithWarningAlert are sets keyed
-	// by vehicle id so the same vehicle producing multiple alerts at the
-	// same risk level only counts once toward the rollup.
-	vehiclesWithCriticalAlert := map[string]bool{}
-	vehiclesWithWarningAlert := map[string]bool{}
+	// Load completed maintenance requests for this tenant. We only need
+	// the four columns the analytics package consumes — keep the query
+	// narrow so it scales as history grows. Filter on the two completion
+	// statuses + non-null completion_date so the analytics doesn't
+	// regress to in-flight requests.
+	type completedRow struct {
+		VehicleID       string
+		MaintenanceType string
+		Odometer        int
+		CompletionDate  time.Time
+	}
+	var rows []completedRow
+	if err := database.DB.
+		Scopes(auth.WithTenant(c)).
+		Model(&models.MaintenanceRequest{}).
+		Select("vehicle_id, maintenance_type, odometer, completion_date").
+		Where("status IN ?", []string{string(models.StatusCompleted), string(models.StatusMaintenanceCompleted)}).
+		Where("completion_date IS NOT NULL").
+		Where("maintenance_type <> ''").
+		Find(&rows).Error; err != nil {
+		logging.L().Warn("failed to fetch maintenance history for analytics, proceeding without it",
+			zap.String("tenant_id", auth.TenantID(c)),
+			zap.Error(err),
+		)
+		rows = nil
+	}
 
-	currentYear := time.Now().Year()
+	events := make([]analytics.ServiceEvent, 0, len(rows))
+	for _, r := range rows {
+		events = append(events, analytics.ServiceEvent{
+			VehicleID:       r.VehicleID,
+			MaintenanceType: r.MaintenanceType,
+			Odometer:        r.Odometer,
+			CompletedAt:     r.CompletionDate,
+		})
+	}
+	grouped := analytics.GroupByVehicleAndType(events)
 
+	// Build a lookup of vehicle id → vehicle for the analytics path so
+	// we can attach VehicleName / mileage / year to history-driven alerts
+	// without re-iterating vehicles.
+	vehicleByID := make(map[string]*models.Vehicle, len(vehicles))
+	for i := range vehicles {
+		vehicleByID[vehicles[i].ID] = &vehicles[i]
+	}
+
+	// alertKey dedupes alerts by (vehicleID, component). The first one
+	// to land wins; subsequent contributions enrich it (e.g. analytics
+	// data added to an alert originally produced by a rule).
+	alertKey := func(vehicleID, component string) string { return vehicleID + "|" + component }
+	alertByKey := map[string]*models.MaintenanceDueAlert{}
+	orderedKeys := []string{} // preserve discovery order so output is deterministic
+
+	addAlert := func(a models.MaintenanceDueAlert) {
+		k := alertKey(a.VehicleID, a.Component)
+		if existing, ok := alertByKey[k]; ok {
+			// Enrich: copy any non-zero analytics fields from the new
+			// alert onto the existing one, and bump Source to declare
+			// both signals corroborated.
+			if a.SampleCount > 0 && existing.SampleCount == 0 {
+				existing.SampleCount = a.SampleCount
+				existing.TypicalIntervalKm = a.TypicalIntervalKm
+				existing.TypicalIntervalDays = a.TypicalIntervalDays
+				existing.LastServiceAt = a.LastServiceAt
+				existing.LastServiceOdometer = a.LastServiceOdometer
+				existing.ProjectedDueAtKm = a.ProjectedDueAtKm
+				existing.ProjectedDueByDate = a.ProjectedDueByDate
+			}
+			if existing.Source == "rule" && a.Source == "history" {
+				existing.Source = "rule+history"
+				// Append the analytics reason to the rule's reason so
+				// the UI shows both why the rule fired and what the
+				// history says.
+				existing.Reason = existing.Reason + "; " + a.Reason
+			}
+			return
+		}
+		alertByKey[k] = &a
+		orderedKeys = append(orderedKeys, k)
+	}
+
+	currentYear := now.Year()
+
+	// ── Pass 1: history-driven projections ───────────────────────────
+	// For every (vehicle, type) bucket with enough data, project the
+	// next-due milestone. Generate an alert only when the projection
+	// says overdue or due_soon — anything on_schedule stays quiet.
+	for vehicleID, byType := range grouped {
+		v := vehicleByID[vehicleID]
+		if v == nil {
+			// Vehicle was deleted or filtered out; skip the orphan
+			// history rows.
+			continue
+		}
+		name := strings.TrimSpace(v.Make + " " + v.VehicleModel + " (" + v.LicensePlate + ")")
+
+		for maintType, typeEvents := range byType {
+			stats, ok := analytics.ComputeIntervalStats(typeEvents)
+			if !ok {
+				continue
+			}
+			proj := analytics.ProjectNextDue(stats, v.CurrentMileage, now)
+			if proj.Status == "on_schedule" {
+				continue
+			}
+
+			risk := "Medium"
+			if proj.Status == "overdue" {
+				risk = "High"
+			}
+
+			lastAt := stats.LastServiceAt
+			dueBy := proj.NextDueByDate
+			reason := fmt.Sprintf(
+				"projected from %d prior services — typical interval %d km / %d days, last service at %d km on %s",
+				stats.SampleCount, stats.MeanKm, stats.MeanDays, stats.LastOdometer, stats.LastServiceAt.Format("2006-01-02"),
+			)
+
+			addAlert(models.MaintenanceDueAlert{
+				VehicleID:           v.ID,
+				VehicleName:         name,
+				Component:           maintType,
+				RecommendedAction:   fmt.Sprintf("Schedule %s service", strings.ToLower(maintType)),
+				RiskLevel:           risk,
+				Reason:              reason,
+				VehicleMileage:      v.CurrentMileage,
+				VehicleYear:         v.Year,
+				Source:              "history",
+				SampleCount:         stats.SampleCount,
+				TypicalIntervalKm:   stats.MeanKm,
+				TypicalIntervalDays: stats.MeanDays,
+				LastServiceAt:       &lastAt,
+				LastServiceOdometer: stats.LastOdometer,
+				ProjectedDueAtKm:    proj.NextDueAtKm,
+				ProjectedDueByDate:  &dueBy,
+			})
+		}
+	}
+
+	// ── Pass 2: rule-based triggers ──────────────────────────────────
+	// Same three rules as Phase 1. addAlert merges with any history-
+	// driven alert for the same (vehicle, component) pair, so the final
+	// output is naturally deduplicated.
 	for _, v := range vehicles {
 		name := strings.TrimSpace(v.Make + " " + v.VehicleModel + " (" + v.LicensePlate + ")")
 
-		// Rule 1: high mileage → brake inspection. Threshold and reason
-		// are explicit; the alert carries the actual mileage so the
-		// operator can sanity-check the trigger.
 		if v.CurrentMileage > 50000 {
-			alerts = append(alerts, models.MaintenanceDueAlert{
+			addAlert(models.MaintenanceDueAlert{
 				VehicleID:         v.ID,
 				VehicleName:       name,
 				Component:         "Brake Pads",
@@ -785,13 +917,12 @@ func GetMaintenanceDueAlerts(c *gin.Context) {
 				Reason:            fmt.Sprintf("mileage %d km exceeds 50,000 km threshold", v.CurrentMileage),
 				VehicleMileage:    v.CurrentMileage,
 				VehicleYear:       v.Year,
+				Source:            "rule",
 			})
-			vehiclesWithCriticalAlert[v.ID] = true
 		}
 
-		// Rule 2: medium mileage → tire check.
 		if v.CurrentMileage > 30000 && v.CurrentMileage <= 50000 {
-			alerts = append(alerts, models.MaintenanceDueAlert{
+			addAlert(models.MaintenanceDueAlert{
 				VehicleID:         v.ID,
 				VehicleName:       name,
 				Component:         "Tires",
@@ -800,15 +931,12 @@ func GetMaintenanceDueAlerts(c *gin.Context) {
 				Reason:            fmt.Sprintf("mileage %d km in 30,000–50,000 km range", v.CurrentMileage),
 				VehicleMileage:    v.CurrentMileage,
 				VehicleYear:       v.Year,
+				Source:            "rule",
 			})
-			vehiclesWithWarningAlert[v.ID] = true
 		}
 
-		// Rule 3: vehicle age → battery test. Compute age from current
-		// year rather than the hardcoded "< 2022" check that was in the
-		// old handler — that magic number would drift wrong over time.
 		if v.Year > 0 && currentYear-v.Year >= 3 {
-			alerts = append(alerts, models.MaintenanceDueAlert{
+			addAlert(models.MaintenanceDueAlert{
 				VehicleID:         v.ID,
 				VehicleName:       name,
 				Component:         "Battery",
@@ -817,31 +945,62 @@ func GetMaintenanceDueAlerts(c *gin.Context) {
 				Reason:            fmt.Sprintf("vehicle is %d years old (year %d)", currentYear-v.Year, v.Year),
 				VehicleMileage:    v.CurrentMileage,
 				VehicleYear:       v.Year,
+				Source:            "rule",
 			})
-			vehiclesWithCriticalAlert[v.ID] = true
 		}
 	}
 
-	// Healthy = vehicles with no alert at all. A vehicle in critical
-	// is NOT also counted as warning, even if it would otherwise trigger
-	// both rules — risk-level precedence is high > medium > none.
-	risk := models.RiskCounts{
-		Critical: len(vehiclesWithCriticalAlert),
+	// Flatten the dedup map into the deterministic order we discovered
+	// alerts in (history first, then rule additions for components
+	// without a history-driven alert).
+	alerts := make([]models.MaintenanceDueAlert, 0, len(alertByKey))
+	for _, k := range orderedKeys {
+		alerts = append(alerts, *alertByKey[k])
 	}
-	for vid := range vehiclesWithWarningAlert {
-		if !vehiclesWithCriticalAlert[vid] {
-			risk.Warning++
+
+	// Risk rollup: dedupe vehicles by id, respecting risk-level
+	// precedence (any "High" alert puts the vehicle in Critical,
+	// otherwise any "Medium" puts it in Warning).
+	critical := map[string]bool{}
+	warning := map[string]bool{}
+	for _, a := range alerts {
+		switch a.RiskLevel {
+		case "High":
+			critical[a.VehicleID] = true
+		case "Medium":
+			if !critical[a.VehicleID] {
+				warning[a.VehicleID] = true
+			}
 		}
+	}
+	risk := models.RiskCounts{
+		Critical: len(critical),
+		Warning:  len(warning),
 	}
 	risk.Healthy = len(vehicles) - risk.Critical - risk.Warning
 	if risk.Healthy < 0 {
 		risk.Healthy = 0
 	}
 
+	// Compose the disclaimer based on whether history actually informed
+	// any alert. If every alert was rule-only, say so plainly. If
+	// history contributed, name it.
+	historyUsed := false
+	for _, a := range alerts {
+		if a.SampleCount > 0 {
+			historyUsed = true
+			break
+		}
+	}
+	disclaimer := "Alerts come from rule-based heuristics (mileage thresholds and vehicle age). Per-vehicle history-driven projections activate as soon as a vehicle has 2+ completed services of the same type."
+	if historyUsed {
+		disclaimer = "Alerts combine rule-based heuristics (mileage / age thresholds) with per-vehicle history-driven projections from completed maintenance records. Each alert's `source` field declares which signal(s) produced it; `sampleCount` is the number of prior service intervals the projection was averaged over."
+	}
+
 	c.JSON(http.StatusOK, models.MaintenanceDueAlertsResponse{
 		Alerts:     alerts,
 		RiskCounts: risk,
-		Disclaimer: "Alerts are produced by rule-based heuristics (mileage thresholds and vehicle age), not a machine-learning model. Real predictive analytics from maintenance history is in active development.",
+		Disclaimer: disclaimer,
 	})
 }
 

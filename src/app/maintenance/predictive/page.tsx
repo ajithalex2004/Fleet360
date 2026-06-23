@@ -4,11 +4,9 @@ import { useEffect, useState } from 'react';
 import { backendFetch } from '@/lib/auth/backend-fetch';
 
 // ── Response shape from /api/v1/maintenance/predictive ─────────────────────
-// Honest fields only — the old struct's Confidence / CurrentCondition /
-// PredictedFailureDate / EstimatedCost were all hardcoded constants. They
-// were removed in the backend's Phase 1 honesty pass. Phase 2 will
-// reintroduce data-driven fields under different names (typicalIntervalKm,
-// projectedDueAt, etc.) computed from actual maintenance history.
+// Phase 2 adds the analytics fields below (all optional). Backend marks
+// them omitempty so rule-only alerts don't carry zero values that look
+// like real measurements.
 interface MaintenanceDueAlert {
   vehicleId: string;
   vehicleName: string;
@@ -18,6 +16,15 @@ interface MaintenanceDueAlert {
   reason: string;
   vehicleMileage: number;
   vehicleYear: number;
+  // Phase 2 — present only when history informed the alert
+  source?: 'rule' | 'history' | 'rule+history';
+  sampleCount?: number;
+  typicalIntervalKm?: number;
+  typicalIntervalDays?: number;
+  lastServiceAt?: string;     // ISO timestamp
+  lastServiceOdometer?: number;
+  projectedDueAtKm?: number;
+  projectedDueByDate?: string; // ISO timestamp
 }
 
 interface RiskCounts {
@@ -42,6 +49,37 @@ const riskBadgeClass = (risk: string) => {
       return 'bg-emerald-500/20 text-emerald-300 border-emerald-300/30';
     default:
       return 'bg-slate-700/40 text-slate-300 border-white/15';
+  }
+};
+
+const sourceBadgeClass = (source?: string) => {
+  switch (source) {
+    case 'history':
+      return 'bg-violet-500/20 text-violet-200 border-violet-300/30';
+    case 'rule+history':
+      return 'bg-cyan-500/20 text-cyan-200 border-cyan-300/30';
+    default:
+      return 'bg-slate-600/30 text-slate-300 border-slate-400/20';
+  }
+};
+
+const sourceLabel = (source?: string) => {
+  switch (source) {
+    case 'history':
+      return 'History-driven';
+    case 'rule+history':
+      return 'Rule + History';
+    default:
+      return 'Rule-based';
+  }
+};
+
+const fmtDate = (iso?: string) => {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleDateString();
+  } catch {
+    return iso;
   }
 };
 
@@ -76,8 +114,8 @@ export default function MaintenanceDueAlertsPage() {
       <div>
         <h1 className="text-2xl font-bold text-white">Maintenance Due Alerts</h1>
         <p className="mt-1 text-slate-500">
-          Service recommendations from mileage and vehicle-age rules. No machine learning
-          on this page yet — see the disclaimer below.
+          Combined view of mileage / age rules and per-vehicle history-driven projections.
+          Each alert declares its source and the sample size behind it — see the disclaimer below.
         </p>
       </div>
 
@@ -152,46 +190,96 @@ export default function MaintenanceDueAlertsPage() {
           ) : visibleAlerts.length === 0 ? (
             <div className="p-6 text-center text-slate-500">
               {alerts.length === 0
-                ? 'No vehicles flagged. Add a vehicle with mileage > 30,000 km or age ≥ 3 years to see alerts.'
+                ? 'No vehicles flagged. Alerts appear when mileage / age rules fire OR when this vehicle has 2+ completed services of the same type with the next-due projection in range.'
                 : `No ${filter.toLowerCase()}-risk alerts.`}
             </div>
           ) : (
-            visibleAlerts.map((alert, idx) => (
-              <div key={`${alert.vehicleId}-${alert.component}-${idx}`} className="p-6 hover:bg-white/5 transition-colors">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <h4 className="text-base font-bold text-white truncate">
-                        {alert.vehicleName}
-                      </h4>
-                      <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${riskBadgeClass(alert.riskLevel)}`}
-                      >
-                        {alert.riskLevel} Risk
-                      </span>
+            visibleAlerts.map((alert, idx) => {
+              const hasAnalytics = (alert.sampleCount ?? 0) > 0;
+              return (
+                <div key={`${alert.vehicleId}-${alert.component}-${idx}`} className="p-6 hover:bg-white/5 transition-colors">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-base font-bold text-white truncate">
+                          {alert.vehicleName}
+                        </h4>
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${riskBadgeClass(alert.riskLevel)}`}
+                        >
+                          {alert.riskLevel} Risk
+                        </span>
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${sourceBadgeClass(alert.source)}`}
+                          title={hasAnalytics ? `Averaged over ${alert.sampleCount} prior service interval(s)` : 'Triggered by a threshold rule, no history yet'}
+                        >
+                          {sourceLabel(alert.source)}
+                          {hasAnalytics ? ` · n=${alert.sampleCount}` : ''}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm text-slate-300">
+                        Component:{' '}
+                        <span className="font-medium text-white">{alert.component}</span>
+                      </p>
                     </div>
-                    <p className="mt-1 text-sm text-slate-300">
-                      Component:{' '}
-                      <span className="font-medium text-white">{alert.component}</span>
+                    <div className="text-right text-xs text-slate-400 shrink-0">
+                      <p>{alert.vehicleMileage.toLocaleString()} km</p>
+                      <p>Year {alert.vehicleYear || '—'}</p>
+                    </div>
+                  </div>
+
+                  {/* Analytics block — visible only when history backed this alert */}
+                  {hasAnalytics && (
+                    <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 rounded-lg border border-violet-400/30 bg-violet-500/10 p-3">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-violet-300/80">Last service</p>
+                        <p className="text-sm text-violet-100">{fmtDate(alert.lastServiceAt)}</p>
+                        <p className="text-[11px] text-violet-200/70">
+                          at {alert.lastServiceOdometer?.toLocaleString() ?? '—'} km
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-violet-300/80">Typical interval</p>
+                        <p className="text-sm text-violet-100">
+                          {alert.typicalIntervalKm?.toLocaleString() ?? '—'} km
+                        </p>
+                        <p className="text-[11px] text-violet-200/70">
+                          ~{alert.typicalIntervalDays ?? '—'} days
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-violet-300/80">Projected due (km)</p>
+                        <p className="text-sm text-violet-100">
+                          {alert.projectedDueAtKm?.toLocaleString() ?? '—'} km
+                        </p>
+                        <p className="text-[11px] text-violet-200/70">
+                          {alert.projectedDueAtKm != null && alert.vehicleMileage != null
+                            ? `${(alert.projectedDueAtKm - alert.vehicleMileage).toLocaleString()} km away`
+                            : ''}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-violet-300/80">Projected due (date)</p>
+                        <p className="text-sm text-violet-100">{fmtDate(alert.projectedDueByDate)}</p>
+                        <p className="text-[11px] text-violet-200/70">
+                          based on n={alert.sampleCount}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-3 rounded-lg bg-blue-500/10 border border-blue-400/30 p-3">
+                    <p className="text-sm text-blue-200">
+                      <span className="font-medium">Recommendation:</span> {alert.recommendedAction}
                     </p>
                   </div>
-                  <div className="text-right text-xs text-slate-400 shrink-0">
-                    <p>{alert.vehicleMileage.toLocaleString()} km</p>
-                    <p>Year {alert.vehicleYear || '—'}</p>
-                  </div>
-                </div>
 
-                <div className="mt-3 rounded-lg bg-blue-500/10 border border-blue-400/30 p-3">
-                  <p className="text-sm text-blue-200">
-                    <span className="font-medium">Recommendation:</span> {alert.recommendedAction}
+                  <p className="mt-2 text-xs text-slate-500">
+                    <span className="font-medium">Triggered by:</span> {alert.reason}
                   </p>
                 </div>
-
-                <p className="mt-2 text-xs text-slate-500">
-                  <span className="font-medium">Triggered by:</span> {alert.reason}
-                </p>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
@@ -201,12 +289,12 @@ export default function MaintenanceDueAlertsPage() {
         <h4 className="text-sm font-bold text-amber-200">How these alerts are computed</h4>
         <p className="mt-1 text-sm text-amber-100/90">
           {data?.disclaimer ??
-            'Alerts come from mileage- and age-based rules, not a machine-learning model.'}
+            'Alerts come from mileage- and age-based rules, optionally informed by per-vehicle service history.'}
         </p>
         <p className="mt-2 text-xs text-amber-200/70">
-          Phase 2 (in development): per-vehicle predictive analytics computed from actual
-          maintenance history — mean km-between-services, projected next-due date, with
-          sample-size disclosure on every prediction.
+          Coming next (Phase 3): telemetry-driven anomaly detection (RPM, oil temp, battery
+          voltage, fault codes) once the ingestion path is online. That's when ML earns the
+          label.
         </p>
       </div>
     </div>

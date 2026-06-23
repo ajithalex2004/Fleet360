@@ -405,14 +405,18 @@ type EstimateApproval struct {
 
 // Prediction
 // MaintenanceDueAlert is a single "this vehicle is due for service"
-// recommendation produced by GetMaintenanceDueAlerts. Honest fields only —
-// every value here is either directly read from the vehicle row or
-// computed from a clearly-named rule. The old Prediction struct carried
-// fake Confidence / CurrentCondition / PredictedFailureDate / EstimatedCost
-// fields that were just hardcoded constants; they're gone. Phase 2 brings
-// back data-driven equivalents (e.g. typical-interval-km derived from
-// this vehicle's own maintenance history) under different field names so
-// nobody confuses the new honest computation with the old theater.
+// recommendation produced by GetMaintenanceDueAlerts. Honest fields only:
+// every value here is either directly read from the vehicle row, computed
+// from a clearly-named rule, or derived from this vehicle's actual
+// completed-maintenance history (Phase 2 fields below — all marked
+// omitempty so rule-based-only alerts don't carry zero values that look
+// meaningful).
+//
+// The old Prediction struct carried fake Confidence / CurrentCondition /
+// PredictedFailureDate / EstimatedCost fields that were hardcoded
+// constants. None of those names are reused here — the Phase 2 fields
+// use deliberately different names (TypicalIntervalKm, ProjectedDueAt,
+// SampleCount) so nobody confuses real computation with the old theater.
 type MaintenanceDueAlert struct {
 	VehicleID         string `json:"vehicleId"`
 	VehicleName       string `json:"vehicleName"`
@@ -422,6 +426,41 @@ type MaintenanceDueAlert struct {
 	Reason            string `json:"reason"`    // human-readable: which rule fired and why
 	VehicleMileage    int    `json:"vehicleMileage"`
 	VehicleYear       int    `json:"vehicleYear"`
+
+	// Source identifies how this alert was produced:
+	//   "rule"       — mileage/age threshold rule fired (Phase 1)
+	//   "history"    — this vehicle's own maintenance history projects
+	//                  the component as overdue or due soon (Phase 2)
+	//   "rule+history" — rule fired AND history projection corroborates;
+	//                    the analytics fields below carry the per-vehicle
+	//                    interval data.
+	// UI uses this to render the right confidence-disclosure language.
+	Source string `json:"source,omitempty"`
+
+	// SampleCount is the number of completed-service intervals the
+	// analytics fields were averaged over. 0 means no history was used.
+	// Higher = more trustworthy; the UI should expose this so operators
+	// don't act on a single-sample projection as if it were 10.
+	SampleCount int `json:"sampleCount,omitempty"`
+
+	// TypicalIntervalKm and TypicalIntervalDays are the mean km / day
+	// gap between consecutive same-component services for THIS vehicle.
+	// Zero when no history is available.
+	TypicalIntervalKm   int `json:"typicalIntervalKm,omitempty"`
+	TypicalIntervalDays int `json:"typicalIntervalDays,omitempty"`
+
+	// LastServiceAt and LastServiceOdometer pin the most recent
+	// completed service of this component on this vehicle. The "due"
+	// projection counts forward from these.
+	LastServiceAt       *time.Time `json:"lastServiceAt,omitempty"`
+	LastServiceOdometer int        `json:"lastServiceOdometer,omitempty"`
+
+	// ProjectedDueAtKm and ProjectedDueByDate are the forward
+	// extrapolation: when the analytics expect this component will need
+	// servicing next. Computed as last + typical-interval, with the
+	// km-pace cross-check applied (see analytics.ProjectNextDue).
+	ProjectedDueAtKm   int        `json:"projectedDueAtKm,omitempty"`
+	ProjectedDueByDate *time.Time `json:"projectedDueByDate,omitempty"`
 }
 
 // RiskCounts aggregates how many distinct vehicles have at least one
