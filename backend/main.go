@@ -34,6 +34,7 @@ import (
 	"os"
 	"strings"
 
+	"fleet360-backend/auth"
 	"fleet360-backend/corsorigin"
 	"fleet360-backend/database"
 	"fleet360-backend/handlers"
@@ -135,7 +136,15 @@ func runServer() {
 // (e.g. retiring v1/quotations in favour of a v2 shape) is self-contained
 // — the surrounding domains keep working untouched.
 func registerV1Routes(r *gin.Engine) {
-	v1 := r.Group("/api/v1")
+	// Every /api/v1/* request must carry a valid Bearer JWT issued by the
+	// Next.js login endpoint. auth.Middleware validates the signature,
+	// expiry, issuer, and HS256 algorithm, then stuffs the user_id,
+	// tenant_id, and role into the gin context. Handlers read those via
+	// auth.TenantID(c) / auth.UserID(c) / auth.RoleCode(c) and apply
+	// auth.WithTenant(c) as a GORM scope on every query.
+	//
+	// Unauthenticated requests get 401 with no handler invocation.
+	v1 := r.Group("/api/v1", auth.Middleware())
 
 	fleet := v1.Group("/fleet")
 	{
