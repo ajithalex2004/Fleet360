@@ -32,7 +32,14 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        # --legacy-peer-deps because the dependency tree has a known
+        # peer-conflict: @crayonai/react-core@0.7.6 (transitive via
+        # @thesysai/genui-sdk + @crayonai/react-ui) declares
+        # peer zustand@^4.5.5 while the root project depends on
+        # zustand@^5.0.8. Both versions resolve fine at runtime; npm's
+        # strict resolution refuses. Remove this flag once the upstream
+        # @crayonai/react-core publishes a version with `peer zustand@5`.
+        run: npm ci --legacy-peer-deps
 
       - name: Generate Prisma client
         run: npx prisma generate
