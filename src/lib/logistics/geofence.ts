@@ -202,3 +202,30 @@ export function geofenceEventType(e: GeofenceEvent): string {
     case 'RETURN':    return 'GEOFENCE_ROUTE_RETURN';
   }
 }
+
+// ── Rendering helper ─────────────────────────────────────────────────────────
+
+/**
+ * Approximate a circular geofence as a closed ring of [lng, lat] points, for
+ * drawing on a map. A Mapbox GL `circle` layer sizes in pixels (doesn't scale
+ * with zoom), so a metres-accurate geofence has to be a polygon. We walk
+ * `segments` points around the centre at the given radius, converting the
+ * metre offsets back to lat/lng (inverse of the equirectangular projection).
+ *
+ * Returns coordinates in GeoJSON order ([lng, lat]) with the first point
+ * repeated at the end to close the ring.
+ */
+export function circleToPolygon(center: LatLng, radiusM: number, segments = 64): Array<[number, number]> {
+  const rad = Math.PI / 180;
+  const ring: Array<[number, number]> = [];
+  const latRad = center.latitude * rad;
+  for (let i = 0; i <= segments; i++) {
+    const theta = (i / segments) * 2 * Math.PI;
+    const northM = radiusM * Math.cos(theta);
+    const eastM = radiusM * Math.sin(theta);
+    const dLat = (northM / EARTH_R_M) * (180 / Math.PI);
+    const dLng = (eastM / (EARTH_R_M * Math.cos(latRad))) * (180 / Math.PI);
+    ring.push([center.longitude + dLng, center.latitude + dLat]);
+  }
+  return ring;
+}

@@ -9,6 +9,7 @@ import {
   geofenceEventType,
   geofenceEventSeverity,
   geofenceEventTitle,
+  circleToPolygon,
   type CircleFence,
   type CorridorFence,
 } from '@/lib/logistics/geofence';
@@ -195,5 +196,32 @@ describe('geofence event mapping', () => {
   it('titles are human-readable and include the shipment number', () => {
     expect(geofenceEventTitle({ type: 'ENTER', fenceId: 'x', fenceKind: 'PICKUP', label: null, distanceM: 10 }, 'LOG-1')).toMatch(/LOG-1.*arrived at pickup/i);
     expect(geofenceEventTitle({ type: 'DEVIATION', offCorridorM: 300 }, 'LOG-1')).toMatch(/LOG-1.*deviated/i);
+  });
+});
+
+// ── circleToPolygon ──────────────────────────────────────────────────────────
+
+describe('circleToPolygon', () => {
+  it('returns a closed ring ([lng,lat], first == last)', () => {
+    const ring = circleToPolygon(STOP, 200, 32);
+    expect(ring).toHaveLength(33);  // segments + closing point
+    expect(ring[0]).toEqual(ring[ring.length - 1]);
+  });
+
+  it('every vertex sits ~radius metres from the centre', () => {
+    const radiusM = 200;
+    const ring = circleToPolygon(STOP, radiusM, 64);
+    for (const [lng, lat] of ring) {
+      const d = distanceToCircleM({ latitude: lat, longitude: lng }, { id: 'c', kind: 'STOP', center: STOP, radiusM });
+      expect(d).toBeGreaterThan(radiusM - 5);
+      expect(d).toBeLessThan(radiusM + 5);
+    }
+  });
+
+  it('a bigger radius produces a wider ring', () => {
+    const small = circleToPolygon(STOP, 100, 16);
+    const big = circleToPolygon(STOP, 500, 16);
+    const spread = (ring: Array<[number, number]>) => Math.max(...ring.map(p => Math.abs(p[1] - STOP.latitude)));
+    expect(spread(big)).toBeGreaterThan(spread(small));
   });
 });
