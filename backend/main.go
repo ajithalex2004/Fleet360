@@ -175,6 +175,17 @@ func registerV1Routes(r *gin.Engine) {
 		// (newest → oldest) optionally bounded by ?from / ?to.
 		fleet.POST("/locations", handlers.IngestVehicleLocation)
 		fleet.GET("/vehicles/:id/locations", handlers.GetVehicleLocations)
+
+		// Three-level org hierarchy (Phase C): Region → Department →
+		// Unit. POST creates a group at any level; the trigger
+		// enforces the parent-level rule. GET lists groups (filterable
+		// by level / parentId); /tree returns the nested hierarchy in
+		// one call. PUT /vehicles/:id/group attaches a vehicle to a
+		// UNIT-level leaf (detach by sending null).
+		fleet.POST("/groups", handlers.CreateVehicleGroup)
+		fleet.GET("/groups", handlers.GetVehicleGroups)
+		fleet.GET("/groups/tree", handlers.GetVehicleGroupTree)
+		fleet.PUT("/vehicles/:id/group", handlers.AssignVehicleGroup)
 	}
 
 	maint := v1.Group("/maintenance")

@@ -568,6 +568,20 @@ model Vehicle {
   assignedDriverId     String?                @map("assigned_driver_id")
   garageId             String?                @map("garage_id")
 
+  // -- Normalized hierarchy (Phase C) ---------------------------------------
+  // Points to a UNIT-level vehicle_groups row (the leaf of the
+  // Region → Department → Unit tree). Application-layer validates the
+  // referenced group is UNIT-level and in the same tenant — the FK
+  // itself only enforces existence, not level. The denormalized
+  // hierarchyId / hierarchyName / branchId / branchName strings above
+  // are kept for backwards compatibility; new code reads vehicleGroupId.
+  vehicleGroupId       String?                @map("vehicle_group_id")
+  // Named `orgGroup` (not `vehicleGroup`) to avoid colliding with the
+  // existing `vehicleGroup` body-type string column (ECONOMY|LUXURY|
+  // BUS|VAN|...) declared above. The body-type column stays put for
+  // backwards compatibility; this is the new normalized hierarchy edge.
+  orgGroup             VehicleGroup?          @relation("VehicleByGroup", fields: [vehicleGroupId], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_vehicles_vehicle_group")
+
   // -- Live location (Phase B) -----------------------------------------------
   // Denormalized "most recent known position" so a fleet-map query reads
   // every vehicle's current state in one row without joining the
@@ -591,7 +605,63 @@ model Vehicle {
   @@index([vehicleUsage], map: "idx_vehicles_usage")
   @@index([status], map: "idx_vehicles_status")
   @@index([tenantId], map: "idx_vehicles_tenant_id")
+  @@index([vehicleGroupId], map: "idx_vehicles_vehicle_group_id")
   @@map("vehicles")
+}
+
+// VehicleGroupLevel locks the org tree to exactly three tiers — Region
+// (root) → Department → Unit (leaf). A database trigger validates that
+// the parent_id's level matches: a DEPARTMENT must point to a REGION,
+// a UNIT must point to a DEPARTMENT, a REGION has no parent at all.
+// See the matching migration file for the enforcement function.
+enum VehicleGroupLevel {
+  REGION
+  DEPARTMENT
+  UNIT
+}
+
+// VehicleGroup — three-level org hierarchy for tenant fleet grouping.
+// Replaces the denormalized hierarchyId / hierarchyName / branchId /
+// branchName flat strings on Vehicle (those are kept for backwards-
+// compatibility; new code uses vehicleGroupId).
+//
+// Vehicles attach to UNITs (the leaf level). Region- and department-
+// level roll-ups happen via parent_id traversal. Single-table
+// adjacency-list is the right shape here: only three levels, no need
+// for closure tables or materialized paths.
+//
+// Tenancy: every group belongs to exactly one tenant. The (tenant_id,
+// level, code) tuple is unique among non-deleted rows — so an operator
+// can re-create a DXB region under a new id if the old one was soft-
+// deleted, but cannot create two live DXB regions in the same tenant.
+model VehicleGroup {
+  id          String            @id @default(uuid())
+  createdAt   DateTime?         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime?         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime?         @map("deleted_at") @db.Timestamptz(6)
+  tenantId    String            @map("tenant_id")
+
+  level       VehicleGroupLevel
+  parentId    String?           @map("parent_id")
+  // Short identifier scoped to (tenant, level), e.g. "DXB", "OPS",
+  // "TRUCK-FLEET-A". Operators search by this in admin UI.
+  code        String
+  name        String
+  description String?
+  isActive    Boolean?          @default(true) @map("is_active")
+
+  // Self-relation: parent_id → vehicle_groups.id. Naming the relation
+  // explicitly disambiguates the two-direction edge for Prisma.
+  parent      VehicleGroup?     @relation("VehicleGroupHierarchy", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "fk_vehicle_groups_parent")
+  children    VehicleGroup[]    @relation("VehicleGroupHierarchy")
+
+  vehicles    Vehicle[]         @relation("VehicleByGroup")
+
+  @@index([tenantId], map: "idx_vehicle_groups_tenant_id")
+  @@index([parentId], map: "idx_vehicle_groups_parent_id")
+  @@index([level], map: "idx_vehicle_groups_level")
+  @@unique([tenantId, level, code], map: "uniq_vehicle_groups_tenant_level_code")
+  @@map("vehicle_groups")
 }
 
 // VehicleLocation — time-series ledger of GPS positions per vehicle.

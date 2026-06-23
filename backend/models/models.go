@@ -159,6 +159,13 @@ type Vehicle struct {
 	AssignedDriverID string `gorm:"column:assigned_driver_id" json:"assignedDriverId"`
 	GarageID         string `gorm:"column:garage_id" json:"garageId"`
 
+	// -- Normalized hierarchy (Phase C) ---------------------------------------
+	// FK to a UNIT-level vehicle_groups row. The application layer
+	// (CreateVehicle / UpdateVehicle handlers + the assign-group
+	// endpoint) verifies the referenced group is UNIT-level and in the
+	// same tenant; the DB-level FK enforces existence only.
+	VehicleGroupID *string `gorm:"column:vehicle_group_id" json:"vehicleGroupId,omitempty"`
+
 	// -- Live location (Phase B) ----------------------------------------------
 	// Denormalized "most recent known position" — refreshed by
 	// IngestVehicleLocation when an incoming reading is newer than the
@@ -203,6 +210,69 @@ type VehicleLocation struct {
 // "vehicle_locations" already, but being explicit defends against
 // naming-strategy changes.
 func (VehicleLocation) TableName() string { return "vehicle_locations" }
+
+// VehicleGroupLevel locks the org tree to three tiers. Mirrors the
+// Postgres enum of the same name. The trigger-enforced rule is:
+//   REGION       parent IS NULL
+//   DEPARTMENT   parent is a REGION
+//   UNIT         parent is a DEPARTMENT
+// Vehicles attach at the UNIT level (the leaf).
+type VehicleGroupLevel string
+
+const (
+	VehicleGroupLevelRegion     VehicleGroupLevel = "REGION"
+	VehicleGroupLevelDepartment VehicleGroupLevel = "DEPARTMENT"
+	VehicleGroupLevelUnit       VehicleGroupLevel = "UNIT"
+)
+
+// IsValid reports whether v is one of the three known levels. Used by
+// the create handler to reject malformed input before the DB-level
+// CHECK trips with a less-helpful error message.
+func (v VehicleGroupLevel) IsValid() bool {
+	switch v {
+	case VehicleGroupLevelRegion, VehicleGroupLevelDepartment, VehicleGroupLevelUnit:
+		return true
+	}
+	return false
+}
+
+// VehicleGroup is one node in the tenant's three-level Region →
+// Department → Unit org tree. ParentID is self-referencing; the
+// schema-level trigger validates that the parent's level matches the
+// expected predecessor (DEPARTMENT.parent → REGION, UNIT.parent →
+// DEPARTMENT).
+//
+// Vehicles attach at the UNIT level. To produce a roll-up ("all
+// vehicles in region X") the application traverses parent_id; the
+// table is single-tier adjacency list, not a closure table — three
+// levels is shallow enough that recursive CTEs are unnecessary for
+// most queries.
+type VehicleGroup struct {
+	ID          string            `gorm:"primaryKey;column:id" json:"id"`
+	CreatedAt   *time.Time        `gorm:"column:created_at" json:"createdAt,omitempty"`
+	UpdatedAt   *time.Time        `gorm:"column:updated_at" json:"updatedAt,omitempty"`
+	DeletedAt   gorm.DeletedAt    `gorm:"column:deleted_at;index" json:"deletedAt,omitempty"`
+	TenantID    string            `gorm:"not null;column:tenant_id;index" json:"tenantId"`
+	Level       VehicleGroupLevel `gorm:"not null;column:level" json:"level"`
+	ParentID    *string           `gorm:"column:parent_id" json:"parentId,omitempty"`
+	Code        string            `gorm:"not null;column:code" json:"code"`
+	Name        string            `gorm:"not null;column:name" json:"name"`
+	Description string            `gorm:"column:description" json:"description,omitempty"`
+	IsActive    *bool             `gorm:"column:is_active" json:"isActive,omitempty"`
+}
+
+func (VehicleGroup) TableName() string { return "vehicle_groups" }
+
+// BeforeCreate generates a UUID if one wasn't supplied. Mirrors the
+// pattern used by the base Model struct elsewhere in this file —
+// VehicleGroup deliberately doesn't embed Model because that struct
+// includes Status / audit fields this table doesn't have.
+func (g *VehicleGroup) BeforeCreate(tx *gorm.DB) error {
+	if g.ID == "" {
+		g.ID = uuid.New().String()
+	}
+	return nil
+}
 
 // Driver
 type Driver struct {

@@ -1308,6 +1308,248 @@ func IngestVehicleLocation(c *gin.Context) {
 	})
 }
 
+// CreateVehicleGroup mints one node in the Region → Department → Unit
+// hierarchy. The schema-level trigger validates that the parent's
+// level matches what this row's level expects; this handler does
+// lighter-weight pre-flight checks so the failure mode for bad input
+// is a 400 with a specific message rather than a 500 from a trigger
+// raise.
+//
+// Allowed shapes:
+//
+//	POST /api/v1/fleet/groups
+//	{ "level": "REGION",     "code": "DXB", "name": "Dubai" }
+//	{ "level": "DEPARTMENT", "code": "OPS", "name": "Operations",
+//	    "parentId": "<region-id>" }
+//	{ "level": "UNIT",       "code": "TF-A", "name": "Truck Fleet A",
+//	    "parentId": "<department-id>" }
+func CreateVehicleGroup(c *gin.Context) {
+	tid := requireTenant(c)
+	if tid == "" {
+		return
+	}
+
+	var input models.VehicleGroup
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if !input.Level.IsValid() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "level must be REGION, DEPARTMENT, or UNIT"})
+		return
+	}
+	if strings.TrimSpace(input.Code) == "" || strings.TrimSpace(input.Name) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "code and name are required"})
+		return
+	}
+
+	// REGION rows must not carry a parent; the others must.
+	if input.Level == models.VehicleGroupLevelRegion {
+		if input.ParentID != nil && *input.ParentID != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "REGION cannot have a parentId"})
+			return
+		}
+	} else {
+		if input.ParentID == nil || *input.ParentID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "DEPARTMENT and UNIT require parentId"})
+			return
+		}
+		// Verify the parent exists in this tenant. Returning 400 here
+		// (rather than 404) because the client supplied a bad parent
+		// — semantically a validation error, not "resource not found".
+		var parent models.VehicleGroup
+		if err := database.DB.Scopes(auth.WithTenant(c)).
+			Where("id = ?", *input.ParentID).
+			First(&parent).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "parentId does not reference a group in this tenant"})
+			return
+		}
+	}
+
+	input.TenantID = tid // never trust a client-supplied tenantId
+
+	if err := database.DB.Create(&input).Error; err != nil {
+		// The Postgres trigger raises a clear EXCEPTION on level
+		// mismatch — forward it as 400 so the client sees the actual
+		// reason rather than a generic 500.
+		if strings.Contains(err.Error(), "vehicle_groups:") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, input)
+}
+
+// GetVehicleGroups lists groups in this tenant, optionally filtered
+// by level or parentId. Default: every active group, sorted by level
+// then code. Use this for picker UIs ("choose a region", "choose a
+// department under region X").
+//
+//	GET /api/v1/fleet/groups
+//	GET /api/v1/fleet/groups?level=REGION
+//	GET /api/v1/fleet/groups?parentId=<id>
+func GetVehicleGroups(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
+
+	q := database.DB.Scopes(auth.WithTenant(c))
+
+	if level := strings.TrimSpace(c.Query("level")); level != "" {
+		lvl := models.VehicleGroupLevel(level)
+		if !lvl.IsValid() {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "level must be REGION, DEPARTMENT, or UNIT"})
+			return
+		}
+		q = q.Where("level = ?", lvl)
+	}
+	if parentID := strings.TrimSpace(c.Query("parentId")); parentID != "" {
+		q = q.Where("parent_id = ?", parentID)
+	}
+
+	var groups []models.VehicleGroup
+	if err := q.Order("level ASC, code ASC").Find(&groups).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"groups": groups, "count": len(groups)})
+}
+
+// GetVehicleGroupTree returns the full Region → Department → Unit
+// hierarchy as a nested structure. Useful for a tree-picker UI or an
+// admin overview. Implementation: one query for all groups in tenant,
+// then assemble the tree in-memory (cheap for a fleet org of any
+// realistic size — even thousands of nodes).
+//
+//	GET /api/v1/fleet/groups/tree
+//	  → [
+//	      { id, level: "REGION", code, name, children: [
+//	          { id, level: "DEPARTMENT", code, name, children: [
+//	              { id, level: "UNIT", code, name, children: [] }
+//	          ] }
+//	      ] }
+//	    ]
+func GetVehicleGroupTree(c *gin.Context) {
+	if requireTenant(c) == "" {
+		return
+	}
+
+	var groups []models.VehicleGroup
+	if err := database.DB.Scopes(auth.WithTenant(c)).
+		Order("level ASC, code ASC").
+		Find(&groups).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Tree node — embed the group plus a children slice. We can't
+	// just stuff Children onto the GORM struct (would mess with the
+	// table mapping and unmarshalling) so we use a thin wrapper.
+	type node struct {
+		models.VehicleGroup
+		Children []*node `json:"children"`
+	}
+
+	byID := make(map[string]*node, len(groups))
+	for i := range groups {
+		byID[groups[i].ID] = &node{VehicleGroup: groups[i], Children: []*node{}}
+	}
+
+	roots := []*node{}
+	for _, n := range byID {
+		if n.ParentID == nil || *n.ParentID == "" {
+			roots = append(roots, n)
+			continue
+		}
+		if parent, ok := byID[*n.ParentID]; ok {
+			parent.Children = append(parent.Children, n)
+		} else {
+			// Orphan — parent_id points at a group we didn't load
+			// (shouldn't happen under tenant scoping but defend
+			// against future bugs). Surface it as a root so the
+			// operator can see and fix.
+			roots = append(roots, n)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"tree": roots, "count": len(groups)})
+}
+
+// AssignVehicleGroup attaches a vehicle to a UNIT-level group. The
+// vehicle's vehicle_group_id column does the assignment; the FK and
+// application checks enforce that the target group is UNIT-level and
+// in the same tenant as the vehicle.
+//
+//	PUT /api/v1/fleet/vehicles/:id/group
+//	{ "vehicleGroupId": "<unit-level-group-id>" }    // assign
+//	{ "vehicleGroupId": null }                       // detach
+func AssignVehicleGroup(c *gin.Context) {
+	tid := requireTenant(c)
+	if tid == "" {
+		return
+	}
+	vehicleID := c.Param("id")
+
+	var body struct {
+		VehicleGroupID *string `json:"vehicleGroupId"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Verify the vehicle exists in this tenant before we touch it.
+	var vehicle models.Vehicle
+	if err := database.DB.Scopes(auth.WithTenant(c)).
+		Where("id = ?", vehicleID).First(&vehicle).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "vehicle not found"})
+		return
+	}
+
+	// Detach is the easy case: NULL the column and return.
+	if body.VehicleGroupID == nil || *body.VehicleGroupID == "" {
+		if err := database.DB.Model(&vehicle).
+			Update("vehicle_group_id", nil).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"vehicleId": vehicle.ID, "vehicleGroupId": nil})
+		return
+	}
+
+	// Assign: target group must (a) exist in this tenant and (b) be
+	// at the UNIT level. The FK only enforces (a); we enforce (b)
+	// here so the operator gets a clear 400 instead of a successful
+	// assignment to a region/department that wouldn't make sense for
+	// roll-up queries.
+	var group models.VehicleGroup
+	if err := database.DB.Scopes(auth.WithTenant(c)).
+		Where("id = ?", *body.VehicleGroupID).First(&group).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "vehicleGroupId does not reference a group in this tenant"})
+		return
+	}
+	if group.Level != models.VehicleGroupLevelUnit {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "vehicles can only be assigned to UNIT-level groups; got " + string(group.Level)})
+		return
+	}
+
+	if err := database.DB.Model(&vehicle).
+		Update("vehicle_group_id", *body.VehicleGroupID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"vehicleId":      vehicle.ID,
+		"vehicleGroupId": *body.VehicleGroupID,
+		"groupCode":      group.Code,
+		"groupName":      group.Name,
+	})
+}
+
 // GetVehicleLocations returns the GPS trail for one vehicle ordered
 // from newest → oldest, optionally bounded by a [from, to] time
 // window. Default limit 500; max 5000.
