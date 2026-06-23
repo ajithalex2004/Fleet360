@@ -6,6 +6,12 @@ interface Config {
   username?: string; password?: string; apiKey?: string; apiSecret?: string;
   isEnabled: boolean; updatedAt?: string;
 }
+interface IntegrationField {
+  key: keyof Config;
+  label: string;
+  ph: string;
+  secret?: boolean;
+}
 
 const INTEGRATION_META = [
   {
@@ -16,7 +22,7 @@ const INTEGRATION_META = [
       { key: 'host',      label: 'Webhook URL',         ph: 'https://your-system.com/webhook' },
       { key: 'apiKey',    label: 'Secret / Auth Header', ph: 'Bearer token or HMAC secret', secret: true },
       { key: 'provider',  label: 'System Name',          ph: 'e.g. Zapier, Make, Custom API' },
-    ],
+    ] satisfies IntegrationField[],
     events: ['contract.created','contract.activated','contract.terminated','payment.received','payment.overdue','booking.confirmed','incident.logged'],
   },
   {
@@ -31,7 +37,7 @@ const INTEGRATION_META = [
       { key: 'password',  label: 'SAP Password',    ph: '**hidden**', secret: true },
       { key: 'apiKey',    label: 'Client ID',       ph: 'OAuth Client ID' },
       { key: 'apiSecret', label: 'Client Secret',   ph: '**hidden**', secret: true },
-    ],
+    ] satisfies IntegrationField[],
   },
   {
     type: 'ERP_ORACLE', label: 'Oracle / NetSuite', icon: 'O',
@@ -44,7 +50,7 @@ const INTEGRATION_META = [
       { key: 'password',  label: 'Password',        ph: '**hidden**', secret: true },
       { key: 'apiKey',    label: 'Consumer Key',    ph: '' },
       { key: 'apiSecret', label: 'Consumer Secret', ph: '**hidden**', secret: true },
-    ],
+    ] satisfies IntegrationField[],
   },
   {
     type: 'ERP_SAGE', label: 'Sage / QuickBooks', icon: 'Q',
@@ -56,7 +62,7 @@ const INTEGRATION_META = [
       { key: 'apiKey',    label: 'Client ID',       ph: '' },
       { key: 'apiSecret', label: 'Client Secret',   ph: '**hidden**', secret: true },
       { key: 'username',  label: 'Company ID',      ph: '' },
-    ],
+    ] satisfies IntegrationField[],
   },
   {
     type: 'GPS', label: 'GPS / Telematics', icon: 'G',
@@ -68,7 +74,7 @@ const INTEGRATION_META = [
       { key: 'apiKey',    label: 'API Key',         ph: '**hidden**', secret: true },
       { key: 'apiSecret', label: 'API Secret',      ph: '**hidden**', secret: true },
       { key: 'username',  label: 'Account / Org ID', ph: '' },
-    ],
+    ] satisfies IntegrationField[],
   },
 ];
 
@@ -111,18 +117,22 @@ export default function IntegrationsPage() {
       if (!payload.provider) { setMsg(p => ({ ...p, [type]: 'System Name / Provider is required' })); return; }
       const res = await fetch('/api/integration-configs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-confirm-action': 'integration-config.update' },
         body: JSON.stringify(payload),
       });
+      const d = await res.json().catch(() => ({}));
+      if (res.status === 428) {
+        setMsg(p => ({ ...p, [type]: `Queued for approval: ${d.approvalRequest?.id ?? 'pending request'}` }));
+        return;
+      }
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
         throw new Error(d.error ?? `Save failed (${res.status})`);
       }
       setMsg(p => ({ ...p, [type]: 'Saved successfully' }));
       setTimeout(() => setMsg(p => ({ ...p, [type]: '' })), 3000);
       load();
-    } catch (e: any) {
-      setMsg(p => ({ ...p, [type]: e.message ?? 'Failed to save' }));
+    } catch (e) {
+      setMsg(p => ({ ...p, [type]: e instanceof Error ? e.message : 'Failed to save' }));
     } finally { setSaving(null); }
   };
 
@@ -183,8 +193,8 @@ export default function IntegrationsPage() {
                   <div key={f.key}>
                     <label className="block text-sm font-medium text-slate-300 mb-1.5">{f.label}</label>
                     <input
-                      type={(f as any).secret ? 'password' : 'text'}
-                      value={(form as any)[f.key] ?? ''}
+                      type={f.secret ? 'password' : 'text'}
+                      value={String(form[f.key] ?? '')}
                       onChange={e => setField(intg.type, f.key, e.target.value)}
                       placeholder={f.ph}
                       className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 text-sm focus:border-blue-500 focus:outline-none"
@@ -194,11 +204,11 @@ export default function IntegrationsPage() {
               </div>
 
               {/* Webhook events */}
-              {(intg as any).events && (
+              {'events' in intg && Array.isArray(intg.events) && (
                 <div className="mt-4">
                   <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-2">Trigger Events</p>
                   <div className="flex flex-wrap gap-2">
-                    {((intg as any).events as string[]).map((ev: string) => (
+                    {intg.events.map((ev: string) => (
                       <span key={ev} className="text-xs font-mono px-2 py-1 rounded bg-slate-700 text-slate-300 border border-white/10">{ev}</span>
                     ))}
                   </div>

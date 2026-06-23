@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { legacyLeasingBillingWriteMoved } from '@/lib/finance-leasing-billing-routing';
 
 const DEFAULT_OVERAGE_RATE_AED_PER_KM = 0.50;
 
@@ -37,6 +38,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const moved = legacyLeasingBillingWriteMoved(req, '/api/finance/leasing-billing/mileage-readings');
+    if (moved) return moved;
     const body = await req.json();
     const reading = await prisma.leaseMileageReading.create({ data: body });
 
@@ -169,7 +172,7 @@ export async function POST(req: NextRequest) {
       {
         ...reading,
         overage: result.overage,
-        invoice: { id: result.invoice.id, invoiceNo: result.invoice.invoiceNo, totalAmount },
+        invoice: { id: result.invoice.id, invoiceNo: result.invoice.invoiceNo, totalAmount: result.invoice.totalAmount },
       },
       { status: 201 },
     );

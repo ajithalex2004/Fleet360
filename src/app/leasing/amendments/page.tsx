@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, ChevronRight, Search, Filter, X, Check, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Plus, ChevronRight, Search, Filter, X, Check, AlertTriangle, ArrowRight, FilePenLine, ClipboardCheck, BadgeCheck, Banknote } from 'lucide-react';
+import { KpiCard, KpiGrid, PageHeader } from '@/components/ui/page-theme';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -120,16 +121,6 @@ function fmtDate(d: string | null) {
 }
 
 // ─── KPI Card ────────────────────────────────────────────────────────────────
-
-function KpiCard({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent: string }) {
-  return (
-    <div className="bg-slate-800/60 border border-white/10 rounded-xl p-5">
-      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{label}</p>
-      <p className={`text-2xl font-bold mt-1 ${accent}`}>{value}</p>
-      {sub && <p className="text-xs text-slate-500 mt-0.5">{sub}</p>}
-    </div>
-  );
-}
 
 // ─── Input helpers ───────────────────────────────────────────────────────────
 
@@ -284,49 +275,52 @@ export default function AmendmentsPage() {
     <div className="space-y-6">
 
       {/* ─── Header ─── */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Contract Amendments</h1>
-          <p className="text-sm text-slate-400 mt-0.5">
-            Track and manage all contract modifications with full approval audit trail
-          </p>
-        </div>
-        <button
-          onClick={() => { setShowModal(true); setError(''); setForm(EMPTY_FORM); }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold text-sm shadow-lg shadow-violet-900/30 transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          New Amendment
-        </button>
-      </div>
+      <PageHeader
+        title="Contract Amendments"
+        subtitle="Track and manage all contract modifications with full approval audit trail"
+        accent="violet"
+        actions={(
+          <button
+            onClick={() => { setShowModal(true); setError(''); setForm(EMPTY_FORM); }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold text-sm shadow-lg shadow-violet-900/30 transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            New Amendment
+          </button>
+        )}
+      />
 
       {/* ─── KPI Cards ─── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <KpiGrid>
         <KpiCard
           label="Total Amendments"
           value={pagination.total}
           sub="All time"
-          accent="text-white"
+          accent="slate"
+          icon={FilePenLine}
         />
         <KpiCard
           label="Pending Approval"
           value={summary.pendingApproval}
           sub="Submitted, awaiting review"
-          accent="text-amber-400"
+          accent="amber"
+          icon={ClipboardCheck}
         />
         <KpiCard
           label="Approved This Month"
           value={summary.approvedThisMonth}
           sub="Current month"
-          accent="text-emerald-400"
+          accent="emerald"
+          icon={BadgeCheck}
         />
         <KpiCard
           label="Financial Impact"
           value={`AED ${fmt(summary.totalFinancialImpact)}`}
           sub="Total positive adjustments"
-          accent="text-violet-400"
+          accent="violet"
+          icon={Banknote}
         />
-      </div>
+      </KpiGrid>
 
       {/* ─── Status Pipeline Banner ─── */}
       <div className="bg-slate-800/50 border border-white/10 rounded-xl p-4">

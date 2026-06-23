@@ -9,15 +9,23 @@
 
 import * as crypto from 'crypto';
 import * as dotenv from 'dotenv';
+import * as fs from 'fs';
 
 // Load env so DATABASE_URL is available when this module is imported standalone
 dotenv.config({ path: '.env.test' });
 dotenv.config({ path: '.env' });
 
+const projectEnv = fs.existsSync('.env') ? fs.readFileSync('.env', 'utf8') : '';
+if (!/^SESSION_SECRET=/m.test(projectEnv)) {
+  process.env.SESSION_SECRET = 'xl-mobility-dev-secret-change-in-production';
+}
+
 // Web Crypto polyfill (Node < 20)
 if (typeof globalThis.crypto === 'undefined' || !globalThis.crypto.subtle) {
-  // @ts-expect-error polyfill
-  globalThis.crypto = (crypto as any).webcrypto;
+  Object.defineProperty(globalThis, 'crypto', {
+    value: crypto.webcrypto,
+    configurable: true,
+  });
 }
 
 /**

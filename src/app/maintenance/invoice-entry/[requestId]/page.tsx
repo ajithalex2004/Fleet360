@@ -8,6 +8,7 @@ import {
     EnhancedInvoiceLineItem,
     PaymentStatus,
     PartSource,
+    PartSourceValue,
     MaintenanceStatus
 } from '@/types/maintenance';
 import { getMaintenanceRequests } from '@/services/mockData';
@@ -33,7 +34,7 @@ export default function InvoiceEntryPage() {
         quantity: 1,
         unitPrice: 0,
         partNumber: '',
-        partSource: 'ORDERED' as PartSource,
+        partSource: PartSource.ORDERED as PartSourceValue,
         laborHours: 0,
         technicianName: ''
     });
@@ -125,7 +126,7 @@ export default function InvoiceEntryPage() {
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             partNumber: item.partNumber || '',
-            partSource: item.partSource || 'ORDERED',
+            partSource: item.partSource || PartSource.ORDERED,
             laborHours: item.laborHours || 0,
             technicianName: item.technicianName || ''
         });
@@ -144,7 +145,7 @@ export default function InvoiceEntryPage() {
             quantity: 1,
             unitPrice: 0,
             partNumber: '',
-            partSource: 'ORDERED',
+            partSource: PartSource.ORDERED,
             laborHours: 0,
             technicianName: ''
         });

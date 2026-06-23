@@ -16,57 +16,60 @@ const VENDOR = {
   trn: '',
 };
 
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+type Params = { params: Promise<{ id: string }> };
+
+export async function GET(req: NextRequest, { params }: Params) {
   const { id } = await params;
   const lang: Lang = req.nextUrl.searchParams.get('lang') === 'ar' ? 'ar' : 'en';
   const download = req.nextUrl.searchParams.get('download') === '1';
 
   try {
-    const c = await prisma.leaseContract2.findUnique({
+    const contract = await prisma.leaseContract2.findUnique({
       where: { id },
-      include: { vehicles: true, lessee: true },
+      include: { vehicles: true },
     });
-    if (!c) return jsonErr('Contract not found', 404);
+    if (!contract) return jsonErr('Contract not found', 404);
 
+    const lessee = await prisma.lessee.findUnique({ where: { id: contract.lesseeId } }).catch(() => null);
     const data: ContractPdfData = {
-      contractNumber: c.contractNumber ?? `LC-${id.slice(0, 8)}`,
-      agreementType: c.agreementType,
-      leaseType: c.leaseType,
-      startDate: c.startDate,
-      endDate: c.endDate,
-      durationMonths: Math.ceil((c.endDate.getTime() - c.startDate.getTime()) / (30.44 * 86400000)),
-      monthlyRate: Number(c.monthlyRate),
-      totalContractValue: c.totalContractValue ? Number(c.totalContractValue) : null,
-      mileageCap: c.mileageCap,
-      mileageOverageRate: c.mileageOverageRate ? Number(c.mileageOverageRate) : null,
-      securityDeposit: c.securityDeposit ? Number(c.securityDeposit) : null,
-      currency: c.currency ?? 'AED',
-      insuranceIncluded: c.insuranceIncluded ?? false,
-      maintenanceIncluded: c.maintenanceIncluded ?? false,
-      driverIncluded: c.driverIncluded ?? false,
+      contractNumber: contract.contractNumber ?? `LC-${id.slice(0, 8)}`,
+      agreementType: contract.agreementType,
+      leaseType: contract.leaseType,
+      startDate: contract.startDate,
+      endDate: contract.endDate,
+      durationMonths: Math.ceil((contract.endDate.getTime() - contract.startDate.getTime()) / (30.44 * 86400000)),
+      monthlyRate: Number(contract.monthlyRate),
+      totalContractValue: contract.totalContractValue ? Number(contract.totalContractValue) : null,
+      mileageCap: contract.mileageCap,
+      mileageOverageRate: contract.mileageOverageRate ? Number(contract.mileageOverageRate) : null,
+      securityDeposit: contract.securityDeposit ? Number(contract.securityDeposit) : null,
+      currency: contract.currency ?? 'AED',
+      insuranceIncluded: contract.insuranceIncluded ?? false,
+      maintenanceIncluded: contract.maintenanceIncluded ?? false,
+      driverIncluded: contract.driverIncluded ?? false,
       vendor: VENDOR,
-      lessee: c.lessee
+      lessee: lessee
         ? {
-            name: c.lessee.name,
-            type: c.lessee.type === 'corporate' ? 'corporate' : 'individual',
-            address: c.lessee.address,
-            email: c.lessee.email,
-            phone: c.lessee.phone,
-            tradeLicense: c.lessee.tradeLicense,
-            emiratesId: c.lessee.emiratesId,
+            name: lessee.name,
+            type: lessee.type === 'corporate' ? 'corporate' : 'individual',
+            address: lessee.address,
+            email: lessee.email,
+            phone: lessee.phone,
+            tradeLicense: lessee.tradeLicense,
+            emiratesId: lessee.emiratesId,
             trn: null,
           }
-        : { name: '—', type: 'individual' },
-      vehicles: (c.vehicles ?? []).map((v) => ({
-        vehicleType: v.vehicleType,
-        make: v.make,
-        model: v.model,
-        year: v.year,
-        licensePlate: v.licensePlate,
-        vin: v.vin,
-        monthlyRate: v.monthlyRate ? Number(v.monthlyRate) : null,
+        : { name: contract.lesseeId, type: 'individual' },
+      vehicles: contract.vehicles.map(vehicle => ({
+        vehicleType: vehicle.vehicleType,
+        make: vehicle.make,
+        model: vehicle.model,
+        year: vehicle.year,
+        licensePlate: vehicle.licensePlate,
+        vin: vehicle.vin,
+        monthlyRate: vehicle.monthlyRate ? Number(vehicle.monthlyRate) : null,
       })),
-      notes: c.notes,
+      notes: contract.notes,
     };
 
     const buffer = await renderPdf(createElement(ContractPdf, { data, lang }));
@@ -80,6 +83,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 function jsonErr(error: string, status: number) {
   return new Response(JSON.stringify({ error }), { status, headers: { 'Content-Type': 'application/json' } });
 }
+
 function pdfResponse(buffer: Buffer, filename: string, download: boolean) {
   return new Response(buffer, {
     status: 200,

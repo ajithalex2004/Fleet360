@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { legacyLeasingBillingWriteMoved } from '@/lib/finance-leasing-billing-routing';
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+type Params = { params: Promise<{ id: string }> };
+
+export async function GET(req: NextRequest, { params }: Params) {
   try {
+    const { id } = await params;
     const receipts = await prisma.leaseReceipt.findMany({
-      where: { contractId: params.id },
+      where: { contractId: id },
       orderBy: { receivedDate: 'desc' },
     });
     return NextResponse.json(receipts);
@@ -14,15 +18,18 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: Params) {
   try {
+    const moved = legacyLeasingBillingWriteMoved(req, '/api/finance/leasing-billing/receipts');
+    if (moved) return moved;
+    const { id } = await params;
     const body = await req.json();
     const receiptNumber = `RCP-${Date.now().toString().slice(-6)}`;
     const amount = Number(body.amount ?? 0);
 
     const receipt = await prisma.leaseReceipt.create({
       data: {
-        contractId: params.id,
+        contractId: id,
         receiptNumber,
         paymentType: body.paymentType ?? 'MONTHLY',
         amount,

@@ -27,6 +27,11 @@ const STATUS_TRANSITIONS: Record<MaintenanceStatus, MaintenanceStatus[]> = {
     [MaintenanceStatus.PENDING_INVOICE]: [MaintenanceStatus.INVOICE_SUBMITTED],
     [MaintenanceStatus.INVOICE_SUBMITTED]: [MaintenanceStatus.CLOSED],
     [MaintenanceStatus.CLOSED]: [], // Terminal state
+    [MaintenanceStatus.SUBMITTED]: [MaintenanceStatus.PENDING_OPERATIONS_ACK],
+    [MaintenanceStatus.PENDING_OPERATIONS_ACK]: [MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL],
+    [MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL]: [MaintenanceStatus.UNDER_ESTIMATION],
+    [MaintenanceStatus.REJECTED_BY_MAINTENANCE]: [],
+    [MaintenanceStatus.COMPLETED]: [],
 };
 
 /**

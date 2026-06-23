@@ -28,6 +28,22 @@ interface AuditLog {
 interface PageMeta { total: number; page: number; pages: number; limit: number; }
 interface Tenant   { id: string; name: string; }
 interface Branch   { id: string; branch_name: string; emirate: string; }
+interface ChangeEntry {
+  id: string;
+  tenant_id?: string;
+  entity_type: string;
+  entity_id?: string;
+  action: string;
+  actor_user_id?: string;
+  actor_role?: string;
+  impersonated_by?: string;
+  before_json?: unknown;
+  after_json?: unknown;
+  summary?: string;
+  ip_address?: string;
+  user_agent?: string;
+  created_at: string;
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const ENTITY_TYPES = [
@@ -94,21 +110,21 @@ function ActionBadge({ action }: { action: string }) {
 function DetailDrawer({ log, onClose }: { log: AuditLog; onClose: () => void }) {
   const dur = sessionDuration(log.login_time, log.logout_time);
   const rows: [string, React.ReactNode][] = [
-    ['Log ID',           <span className="font-mono text-xs">{log.id}</span>],
+    ['Log ID',           <span key="log-id" className="font-mono text-xs">{log.id}</span>],
     ['Timestamp',        fmtDate(log.created_at)],
     ['Tenant',           log.tenant_name ?? log.tenant_id ?? '—'],
     ['Branch',           log.branch_name ?? log.branch_id ?? '—'],
     ['Entity Type',      log.entity_type],
     ['Entity',           log.entity_name ? `${log.entity_name}${log.entity_id ? ` (${log.entity_id})` : ''}` : log.entity_id ?? '—'],
-    ['User ID',          <span className="font-mono text-xs">{log.user_id ?? '—'}</span>],
+    ['User ID',          <span key="user-id" className="font-mono text-xs">{log.user_id ?? '—'}</span>],
     ['User Name',        log.user_name ?? '—'],
     ['User Email',       log.user_email ?? '—'],
     ['User Role',        log.user_role ?? '—'],
-    ['Action',           <ActionBadge action={log.action} />],
+    ['Action',           <ActionBadge key="action" action={log.action} />],
     ['Details',          log.details ?? '—'],
     ['IP Address',       log.ip_address ?? '—'],
-    ['User Agent',       <span className="text-xs break-all">{log.user_agent ?? '—'}</span>],
-    ['Session ID',       <span className="font-mono text-xs">{log.session_id ?? '—'}</span>],
+    ['User Agent',       <span key="user-agent" className="text-xs break-all">{log.user_agent ?? '—'}</span>],
+    ['Session ID',       <span key="session-id" className="font-mono text-xs">{log.session_id ?? '—'}</span>],
     ['Login Time',       fmtDate(log.login_time)],
     ['Logout Time',      fmtDate(log.logout_time)],
     ['Session Duration', dur ? <span className="text-emerald-400 font-medium">{dur}</span> : '—'],
@@ -142,12 +158,77 @@ function DetailDrawer({ log, onClose }: { log: AuditLog; onClose: () => void }) 
   );
 }
 
+function JsonBlock({ value }: { value: unknown }) {
+  return (
+    <pre className="max-h-64 overflow-auto rounded-xl border border-white/10 bg-slate-950/80 p-3 text-xs text-slate-300 whitespace-pre-wrap">
+      {JSON.stringify(value ?? null, null, 2)}
+    </pre>
+  );
+}
+
+function ChangeDrawer({ change, onClose }: { change: ChangeEntry; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-end z-50">
+      <div className="w-full max-w-2xl h-full bg-slate-900 border-l border-white/10 flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-shrink-0">
+          <div>
+            <h2 className="text-white font-bold text-base">Change History Detail</h2>
+            <p className="text-slate-400 text-xs mt-0.5">{fmtDate(change.created_at)}</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl">✕</button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+              <div className="text-slate-500 text-xs">Entity</div>
+              <div className="text-white font-semibold mt-1">{change.entity_type}</div>
+              <div className="text-slate-500 text-xs font-mono mt-1">{change.entity_id ?? '—'}</div>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+              <div className="text-slate-500 text-xs">Actor</div>
+              <div className="text-white font-semibold mt-1">{change.actor_role ?? '—'}</div>
+              <div className="text-slate-500 text-xs font-mono mt-1">{change.actor_user_id ?? '—'}</div>
+            </div>
+          </div>
+          {change.impersonated_by && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              Impersonated by {change.impersonated_by}
+            </div>
+          )}
+          <div>
+            <h3 className="text-sm font-semibold text-white mb-2">Summary</h3>
+            <p className="text-sm text-slate-300">{change.summary ?? '—'}</p>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div>
+              <h3 className="text-sm font-semibold text-white mb-2">Before</h3>
+              <JsonBlock value={change.before_json} />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-white mb-2">After</h3>
+              <JsonBlock value={change.after_json} />
+            </div>
+          </div>
+        </div>
+        <div className="px-6 py-4 border-t border-white/10 flex-shrink-0">
+          <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-slate-800 border border-white/10 text-slate-300 text-sm hover:text-white transition-colors">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function AuditLogsPage() {
+  const [view, setView]       = useState<'audit' | 'changes'>('audit');
   const [logs,     setLogs]     = useState<AuditLog[]>([]);
+  const [changes,  setChanges]  = useState<ChangeEntry[]>([]);
   const [meta,     setMeta]     = useState<PageMeta>({ total:0, page:1, pages:1, limit:50 });
   const [loading,  setLoading]  = useState(true);
   const [selected, setSelected] = useState<AuditLog | null>(null);
+  const [selectedChange, setSelectedChange] = useState<ChangeEntry | null>(null);
   const [page,     setPage]     = useState(1);
 
   const [filter, setFilter] = useState({
@@ -175,7 +256,7 @@ export default function AuditLogsPage() {
       .then(r => r.json())
       .then(d => setBranches((d.data ?? []).map((b: Branch) => ({ id:b.id, branch_name:b.branch_name, emirate:b.emirate }))))
       .catch(() => {});
-  }, [filter.tenantId]); // eslint-disable-line
+  }, [filter.tenantId]);
 
   const load = useCallback(async (pg = 1) => {
     setLoading(true);
@@ -205,12 +286,53 @@ export default function AuditLogsPage() {
     finally { setLoading(false); }
   }, [filter]);
 
+  const loadChanges = useCallback(async (pg = 1) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (filter.tenantId)   params.set('tenantId',   filter.tenantId);
+      if (filter.entityType) params.set('entityType', filter.entityType);
+      if (filter.userId)     params.set('actorUserId', filter.userId);
+      if (filter.action)     params.set('action',     filter.action);
+      if (filter.search)     params.set('search',     filter.search);
+      params.set('page', String(pg));
+      params.set('limit', '50');
+      const res = await fetch(`/api/admin/change-history?${params}`, { cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      setChanges(Array.isArray(data.changes) ? data.changes : []);
+      setMeta({
+        total: Number(data.total ?? 0),
+        page: Number(data.page ?? 1),
+        pages: Number(data.pages ?? 1),
+        limit: Number(data.limit ?? 50),
+      });
+    } catch {
+      setChanges([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filter]);
+
   // Reset to page 1 whenever filter changes
-  useEffect(() => { setPage(1); load(1); }, [filter]); // eslint-disable-line
-  useEffect(() => { load(page); }, [page]);             // eslint-disable-line
+  useEffect(() => { setPage(1); view === 'audit' ? load(1) : loadChanges(1); }, [filter, view]); // eslint-disable-line
+  useEffect(() => { view === 'audit' ? load(page) : loadChanges(page); }, [page]);             // eslint-disable-line
 
   // CSV export
   const exportCSV = () => {
+    if (view === 'changes') {
+      const headers = ['Timestamp','Tenant','Entity Type','Entity ID','Actor','Role','Action','Summary','Impersonated By'];
+      const csvRows = changes.map(c => [
+        fmtDate(c.created_at), c.tenant_id ?? '', c.entity_type, c.entity_id ?? '',
+        c.actor_user_id ?? '', c.actor_role ?? '', c.action, c.summary ?? '', c.impersonated_by ?? '',
+      ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(','));
+      const csv = [headers.join(','), ...csvRows].join('\n');
+      const blob = new Blob([csv], { type:'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `change-history-${new Date().toISOString().slice(0,10)}.csv`;
+      a.click(); URL.revokeObjectURL(url);
+      return;
+    }
     const headers = ['Timestamp','Tenant','Branch','Entity Type','Entity','User ID','User Name','User Email','User Role','Action','Details','IP Address','Login Time','Logout Time','Session Duration'];
     const csvRows = logs.map(l => [
       fmtDate(l.created_at), l.tenant_name ?? '', l.branch_name ?? '',
@@ -267,10 +389,25 @@ export default function AuditLogsPage() {
         </div>
         <button
           onClick={exportCSV}
-          disabled={logs.length === 0}
+          disabled={view === 'audit' ? logs.length === 0 : changes.length === 0}
           className="flex items-center gap-2 bg-slate-800 border border-white/10 hover:border-white/20 text-slate-300 hover:text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40"
         >
           ↓ Export CSV
+        </button>
+      </div>
+
+      <div className="flex gap-1 bg-slate-900/70 border border-white/10 rounded-xl p-1 w-fit">
+        <button
+          onClick={() => setView('audit')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${view === 'audit' ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+        >
+          Audit Events
+        </button>
+        <button
+          onClick={() => setView('changes')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${view === 'changes' ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+        >
+          Change History
         </button>
       </div>
 
@@ -434,6 +571,68 @@ export default function AuditLogsPage() {
 
         {loading ? (
           <div className="p-16 text-center text-slate-500 text-sm">Loading audit logs…</div>
+        ) : view === 'changes' ? (
+          changes.length === 0 ? (
+            <div className="p-16 text-center">
+              <p className="text-4xl mb-3">📋</p>
+              <p className="text-white font-medium">No change history found</p>
+              <p className="text-slate-500 text-sm mt-1">
+                {hasFilter ? 'No changes match the current filters.' : 'Admin mutations with before/after context will appear here.'}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-800/50 text-[10px] text-slate-400 uppercase tracking-wide">
+                    <th className="text-left px-4 py-3 whitespace-nowrap">Timestamp</th>
+                    <th className="text-left px-4 py-3">Tenant</th>
+                    <th className="text-left px-4 py-3">Entity</th>
+                    <th className="text-left px-4 py-3">Actor</th>
+                    <th className="text-left px-4 py-3">Action</th>
+                    <th className="text-left px-4 py-3">Impersonation</th>
+                    <th className="text-left px-4 py-3">Summary</th>
+                    <th className="px-4 py-3"/>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {changes.map(change => (
+                    <tr key={change.id} onClick={() => setSelectedChange(change)}
+                      className="hover:bg-white/5 transition-colors cursor-pointer">
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <p className="text-white text-xs font-medium">
+                          {new Date(change.created_at).toLocaleDateString('en-AE', { day:'2-digit', month:'short', year:'numeric' })}
+                        </p>
+                        <p className="text-slate-500 text-xs">{fmtTime(change.created_at)}</p>
+                      </td>
+                      <td className="px-4 py-3 text-slate-300 text-xs">{change.tenant_id ?? 'Platform'}</td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs bg-slate-800 border border-white/10 text-slate-300 px-2 py-0.5 rounded-md">{change.entity_type}</span>
+                        {change.entity_id && <p className="text-slate-600 text-[10px] font-mono mt-1">{change.entity_id.slice(0, 12)}...</p>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-slate-200 text-xs font-mono">{change.actor_user_id ?? '—'}</p>
+                        {change.actor_role && <p className="text-violet-300 text-[10px] mt-1">{change.actor_role}</p>}
+                      </td>
+                      <td className="px-4 py-3"><ActionBadge action={change.action} /></td>
+                      <td className="px-4 py-3">
+                        {change.impersonated_by
+                          ? <span className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">{change.impersonated_by}</span>
+                          : <span className="text-slate-600 text-xs">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-slate-400 text-xs max-w-[360px] truncate">{change.summary ?? '—'}</td>
+                      <td className="px-4 py-3">
+                        <button onClick={e => { e.stopPropagation(); setSelectedChange(change); }}
+                          className="text-[10px] text-slate-500 hover:text-white px-2 py-1 rounded-lg bg-slate-800 border border-white/10 transition-colors whitespace-nowrap">
+                          View →
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
         ) : logs.length === 0 ? (
           <div className="p-16 text-center">
             <p className="text-4xl mb-3">📋</p>
@@ -597,6 +796,7 @@ export default function AuditLogsPage() {
       </div>
 
       {selected && <DetailDrawer log={selected} onClose={() => setSelected(null)} />}
+      {selectedChange && <ChangeDrawer change={selectedChange} onClose={() => setSelectedChange(null)} />}
     </div>
   );
 }

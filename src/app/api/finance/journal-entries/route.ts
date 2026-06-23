@@ -5,6 +5,8 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { ensureOperationalTenantColumn, recordOperationalChange, requireOperationalContext } from '@/lib/cross-module-governance';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
 
 const INIT_JE = `
   CREATE TABLE IF NOT EXISTS finance_journal_entries (
@@ -32,7 +34,8 @@ const INIT_JE = `
     approved_at     TIMESTAMPTZ,
     posted_at       TIMESTAMPTZ,
     notes           TEXT,
-    currency        TEXT DEFAULT 'AED'
+    currency        TEXT DEFAULT 'AED',
+    tenant_id       TEXT
   );
 `;
 
@@ -54,7 +57,6 @@ const INIT_LINES = `
 `;
 
 type JeRow   = Record<string, unknown>;
-type LineRow = Record<string, unknown>;
 
 async function nextJeNumber(): Promise<string> {
   const [row] = await prisma.$queryRawUnsafe<{count: string}[]>(
@@ -69,6 +71,9 @@ async function nextJeNumber(): Promise<string> {
 export async function GET(req: NextRequest) {
   await prisma.$executeRawUnsafe(INIT_JE).catch(() => {});
   await prisma.$executeRawUnsafe(INIT_LINES).catch(() => {});
+  await ensureOperationalTenantColumn('finance_journal_entries').catch(() => {});
+  const ctx = requireOperationalContext(req, 'finance', { requestedTenantId: req.nextUrl.searchParams.get('tenantId') });
+  if (ctx instanceof NextResponse) return ctx;
 
   const sp     = req.nextUrl.searchParams;
   const status = sp.get('status');
@@ -79,9 +84,9 @@ export async function GET(req: NextRequest) {
   const limit  = Math.min(100, parseInt(sp.get('limit') ?? '50'));
   const offset = (page - 1) * limit;
 
-  let where = `WHERE deleted_at IS NULL`;
-  const params: unknown[] = [];
-  let pi = 1;
+  let where = `WHERE deleted_at IS NULL AND tenant_id::text = $1`;
+  const params: unknown[] = [ctx.tenantId];
+  let pi = 2;
   if (status) { where += ` AND status = $${pi++}`; params.push(status); }
   if (source) { where += ` AND source_type = $${pi++}`; params.push(source); }
   if (from)   { where += ` AND entry_date >= $${pi++}`; params.push(from); }
@@ -105,7 +110,8 @@ export async function GET(req: NextRequest) {
     ).catch(() => []),
     prisma.$queryRawUnsafe<{status: string; count: string; total_debit: string}[]>(
       `SELECT status, COUNT(*)::text as count, COALESCE(SUM(total_debit),0)::text as total_debit
-         FROM finance_journal_entries WHERE deleted_at IS NULL GROUP BY status`
+         FROM finance_journal_entries WHERE deleted_at IS NULL AND tenant_id::text = $1 GROUP BY status`,
+      ctx.tenantId
     ).catch(() => []),
   ]);
 
@@ -115,6 +121,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   await prisma.$executeRawUnsafe(INIT_JE).catch(() => {});
   await prisma.$executeRawUnsafe(INIT_LINES).catch(() => {});
+  await ensureOperationalTenantColumn('finance_journal_entries').catch(() => {});
+  const ctx = requireOperationalContext(req, 'finance', { write: true });
+  if (ctx instanceof NextResponse) return ctx;
   const body = await req.json();
 
   // Validate lines
@@ -147,15 +156,15 @@ export async function POST(req: NextRequest) {
     `INSERT INTO finance_journal_entries
        (je_number, entry_date, period_year, period_month, narration, reference,
         source_type, source_id, status, total_debit, total_credit, is_balanced,
-        prepared_by, notes, currency)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'DRAFT',$9,$10,$11,$12,$13,$14)
+        prepared_by, notes, currency, tenant_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'DRAFT',$9,$10,$11,$12,$13,$14,$15)
      RETURNING *`,
     jeNumber, entryDate, d.getFullYear(), d.getMonth() + 1,
     body.narration, body.reference ?? null,
     body.sourceType ?? 'MANUAL', body.sourceId ?? null,
     totalDebit, totalCredit, isBalanced,
     body.preparedBy ?? null, body.notes ?? null,
-    body.currency ?? 'AED',
+    body.currency ?? 'AED', ctx.tenantId,
   ).catch(() => []);
 
   if (!je) return NextResponse.json({ error: 'Failed to create journal entry' }, { status: 500 });
@@ -192,5 +201,30 @@ export async function POST(req: NextRequest) {
      WHERE je.id = $1 GROUP BY je.id`, jeId
   ).catch(() => []);
 
-  return NextResponse.json(result ?? je, { status: 201 });
+  const created = result ?? je;
+  await recordOperationalChange({
+    req,
+    ctx,
+    entityType: 'FinanceJournalEntry',
+    entityId: String(created.id ?? jeId),
+    action: 'CREATE',
+    after: created,
+    summary: `Created journal entry ${String(created.je_number ?? jeNumber)}.`,
+  });
+  const workflow = await triggerServiceWorkflow({
+    req,
+    ctx,
+    serviceTypeKey: 'FINANCE_BILLING_EXCEPTION',
+    referenceType: 'JournalEntry',
+    referenceId: String(created.id ?? jeId),
+    referenceNumber: String(created.je_number ?? jeNumber),
+    contextData: {
+      sourceType: body.sourceType ?? 'MANUAL',
+      totalDebit,
+      totalCredit,
+      status: created.status ?? 'DRAFT',
+      narration: body.narration,
+    },
+  });
+  return NextResponse.json({ ...created, workflow }, { status: 201 });
 }

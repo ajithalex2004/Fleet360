@@ -14,6 +14,9 @@
 
 import { prisma } from '@/lib/prisma';
 
+let auditTableEnsured = false;
+let auditTableEnsurePromise: Promise<void> | null = null;
+
 export interface AuditPayload {
   tenantId?:    string;
   tenantName?:  string;
@@ -37,6 +40,12 @@ export interface AuditPayload {
 
 /** Ensure the audit_logs table exists (idempotent). */
 export async function ensureAuditTable() {
+  if (auditTableEnsured) return;
+  if (auditTableEnsurePromise) {
+    await auditTableEnsurePromise;
+    return;
+  }
+  auditTableEnsurePromise = (async () => {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS audit_logs (
       id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -76,11 +85,27 @@ export async function ensureAuditTable() {
   await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_audit_created   ON audit_logs(created_at DESC);
   `).catch(() => {});
+  })();
+  try {
+    await auditTableEnsurePromise;
+    auditTableEnsured = true;
+  } finally {
+    auditTableEnsurePromise = null;
+  }
 }
 
 export async function logAudit(payload: AuditPayload): Promise<void> {
   try {
     await ensureAuditTable();
+    const tenantTypeRows = await prisma.$queryRawUnsafe<Array<{ udt_name: string }>>(
+      `SELECT udt_name
+         FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'audit_logs'
+          AND column_name = 'tenant_id'
+        LIMIT 1`,
+    ).catch(() => []);
+    const tenantValueExpression = tenantTypeRows[0]?.udt_name === 'uuid' ? '$1::uuid' : '$1';
     await prisma.$executeRawUnsafe(
       `INSERT INTO audit_logs
          (tenant_id, tenant_name, branch_id, branch_name,
@@ -88,7 +113,7 @@ export async function logAudit(payload: AuditPayload): Promise<void> {
           user_id, user_name, user_email, user_role,
           action, details, ip_address, user_agent, session_id,
           login_time, logout_time)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
+       VALUES (${tenantValueExpression},$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
                $17::timestamptz,$18::timestamptz)`,
       payload.tenantId   ?? null,
       payload.tenantName ?? null,

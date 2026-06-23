@@ -1,4 +1,5 @@
 'use client';
+import { useRentalMasterData } from '@/hooks/useRentalMasterData';
 import React, { useState, useCallback } from 'react';
 
 interface Vehicle {
@@ -18,9 +19,8 @@ interface AvailabilityResult {
   vehicles: Vehicle[];
 }
 
-const VEHICLE_CATEGORIES = ['', 'Economy','Sedan','SUV','Luxury','Van','Minibus','Truck'];
-
 export default function AvailabilityPage() {
+  const { masterData } = useRentalMasterData();
   const [startDate, setStartDate]   = useState('');
   const [endDate, setEndDate]       = useState('');
   const [category, setCategory]     = useState('');
@@ -82,7 +82,7 @@ export default function AvailabilityPage() {
             <select value={category} onChange={e => setCategory(e.target.value)}
               className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-emerald-500 focus:outline-none">
               <option value="">All Categories</option>
-              {VEHICLE_CATEGORIES.filter(Boolean).map(c => <option key={c} value={c}>{c}</option>)}
+              {masterData.availabilityVehicleCategories.filter(Boolean).map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <button onClick={handleSearch} disabled={loading}
@@ -148,7 +148,7 @@ export default function AvailabilityPage() {
 
       {result === null && !loading && (
         <div className="bg-slate-800/30 border border-white/5 rounded-2xl p-12 text-center text-slate-500">
-          Select a date range and click "Check Availability" to see available vehicles
+          Select a date range and click &quot;Check Availability&quot; to see available vehicles
         </div>
       )}
     </div>

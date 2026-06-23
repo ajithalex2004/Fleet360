@@ -53,7 +53,7 @@ export async function GET() {
     ]);
 
     // ── Trips completed per day (last 14 days) ───────────────────────────────
-    const dailyCompleted = await prisma.$queryRawUnsafe<Array<{ day: string; trips: bigint }>>(
+    const dailyCompleted = await prisma.$queryRawUnsafe<Array<{ day: Date | string; trips: bigint }>>(
       `SELECT DATE(updated_at) as day, COUNT(*) as trips
        FROM bookings
        WHERE deleted_at IS NULL AND service_type = 'LOGISTICS'
@@ -61,7 +61,7 @@ export async function GET() {
          AND updated_at >= NOW() - INTERVAL '14 days'
        GROUP BY DATE(updated_at)
        ORDER BY day ASC`
-    ).catch(() => [] as Array<{ day: string; trips: bigint }>);
+    ).catch(() => [] as Array<{ day: Date | string; trips: bigint }>);
 
     // ── Trips by status distribution ─────────────────────────────────────────
     const statusDist = await prisma.$queryRawUnsafe<Array<{ status: string; count: bigint }>>(

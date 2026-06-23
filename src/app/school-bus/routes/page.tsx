@@ -732,10 +732,10 @@ export default function SchoolBusRoutesPage() {
                           : <span className="text-red-400/70">🚌 No vehicle</span>
                         }
                         {route.driver_name
-                          ? <span>👤 {route.driver_name}</span>
+                          ? <span>🤵 {route.driver_name}</span>
                           : route.assigned_driver_id
-                          ? <span className="text-amber-400">👤 Driver ID: {route.assigned_driver_id}</span>
-                          : <span className="text-red-400/70">👤 No driver</span>
+                          ? <span className="text-amber-400">🤵 Driver ID: {route.assigned_driver_id}</span>
+                          : <span className="text-red-400/70">🤵 No driver</span>
                         }
                         {route.assigned_attendant_id
                           ? <span className="text-emerald-400">👩 Attendant ✓</span>

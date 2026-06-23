@@ -1723,6 +1723,349 @@ model Booking {
 }
 
 // ============================================================
+// LOGISTICS DOMAIN MODEL - TMS + PRIVATE FREIGHT MARKETPLACE
+// ============================================================
+
+model LogisticsCarrier {
+  id                String    @id @default(uuid())
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId          String    @map("tenant_id")
+  carrierCode       String?   @map("carrier_code")
+  carrierType       String    @default("TRANSPORT_COMPANY") @map("carrier_type")
+  name              String
+  tradeLicense      String?   @map("trade_license")
+  contactName       String?   @map("contact_name")
+  contactEmail      String?   @map("contact_email")
+  contactPhone      String?   @map("contact_phone")
+  status            String    @default("ACTIVE")
+  onboardingStatus  String    @default("DRAFT") @map("onboarding_status")
+  complianceStatus  String    @default("PENDING") @map("compliance_status")
+  serviceRegions    Json?     @map("service_regions")
+  capacityProfile   Json?     @map("capacity_profile")
+  commissionModel   String?   @map("commission_model")
+  commissionRate    Decimal?  @map("commission_rate") @db.Decimal(10, 2)
+  marginRuleJson    Json?     @map("margin_rule_json")
+  metadata          Json?
+
+  @@unique([tenantId, carrierCode])
+  @@index([tenantId, status])
+  @@map("logistics_carriers")
+}
+
+model LogisticsShipmentOrder {
+  id                       String    @id @default(uuid())
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt                DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId                 String    @map("tenant_id")
+  shipmentNo               String    @map("shipment_no")
+  legacyBookingId          String?   @unique @map("legacy_booking_id")
+  cargoOwnerCustomerId     String?   @map("cargo_owner_customer_id")
+  cargoOwnerName           String?   @map("cargo_owner_name")
+  cargoOwnerEmail          String?   @map("cargo_owner_email")
+  cargoOwnerPhone          String?   @map("cargo_owner_phone")
+  shipmentType             String?   @map("shipment_type")
+  bookingMode              String    @default("SPOT") @map("booking_mode")
+  marketplaceStatus        String    @default("PRIVATE") @map("marketplace_status")
+  status                   String    @default("DRAFT")
+  priority                 String    @default("NORMAL")
+  originName               String?   @map("origin_name")
+  originAddress            String?   @map("origin_address")
+  destinationName          String?   @map("destination_name")
+  destinationAddress       String?   @map("destination_address")
+  pickupWindowFrom         DateTime? @map("pickup_window_from") @db.Timestamptz(6)
+  pickupWindowTo           DateTime? @map("pickup_window_to") @db.Timestamptz(6)
+  deliveryWindowFrom       DateTime? @map("delivery_window_from") @db.Timestamptz(6)
+  deliveryWindowTo         DateTime? @map("delivery_window_to") @db.Timestamptz(6)
+  requestedVehicleType     String?   @map("requested_vehicle_type")
+  totalWeightKg            Decimal?  @map("total_weight_kg") @db.Decimal(14, 3)
+  totalVolumeCbm           Decimal?  @map("total_volume_cbm") @db.Decimal(14, 3)
+  cargoValueAmount         Decimal?  @map("cargo_value_amount") @db.Decimal(15, 2)
+  currency                 String    @default("AED")
+  customerRateAmount       Decimal?  @map("customer_rate_amount") @db.Decimal(15, 2)
+  carrierCostAmount        Decimal?  @map("carrier_cost_amount") @db.Decimal(15, 2)
+  platformCommissionAmount Decimal?  @map("platform_commission_amount") @db.Decimal(15, 2)
+  marginAmount             Decimal?  @map("margin_amount") @db.Decimal(15, 2)
+  assignedCarrierId        String?   @map("assigned_carrier_id")
+  assignedDriverId         String?   @map("assigned_driver_id")
+  assignedVehicleId        String?   @map("assigned_vehicle_id")
+  sourceChannel            String?   @map("source_channel")
+  notes                    String?
+  metadata                 Json?
+  createdBy                String?   @map("created_by")
+  updatedBy                String?   @map("updated_by")
+
+  @@unique([tenantId, shipmentNo])
+  @@index([tenantId, status])
+  @@index([tenantId, cargoOwnerCustomerId])
+  @@index([tenantId, marketplaceStatus])
+  @@map("logistics_shipment_orders")
+}
+
+model LogisticsConsignment {
+  id              String    @id @default(uuid())
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId        String    @map("tenant_id")
+  shipmentOrderId String    @map("shipment_order_id")
+  consignmentNo   String?   @map("consignment_no")
+  shipperName     String?   @map("shipper_name")
+  consigneeName   String?   @map("consignee_name")
+  cargoSummary    String?   @map("cargo_summary")
+  handlingNotes   String?   @map("handling_notes")
+  status          String    @default("PLANNED")
+  metadata        Json?
+
+  @@index([tenantId, shipmentOrderId])
+  @@map("logistics_consignments")
+}
+
+model LogisticsCargoLine {
+  id               String   @id @default(uuid())
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId         String   @map("tenant_id")
+  shipmentOrderId  String   @map("shipment_order_id")
+  consignmentId    String?  @map("consignment_id")
+  description      String
+  commodityCode    String?  @map("commodity_code")
+  quantity         Decimal? @db.Decimal(14, 3)
+  packageType      String?  @map("package_type")
+  weightKg         Decimal? @map("weight_kg") @db.Decimal(14, 3)
+  volumeCbm        Decimal? @map("volume_cbm") @db.Decimal(14, 3)
+  isHazmat         Boolean  @default(false) @map("is_hazmat")
+  tempMinC         Decimal? @map("temp_min_c") @db.Decimal(8, 2)
+  tempMaxC         Decimal? @map("temp_max_c") @db.Decimal(8, 2)
+  cargoValueAmount Decimal? @map("cargo_value_amount") @db.Decimal(15, 2)
+  metadata         Json?
+
+  @@index([tenantId, shipmentOrderId])
+  @@map("logistics_cargo_lines")
+}
+
+model LogisticsShipmentStop {
+  id                String    @id @default(uuid())
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId          String    @map("tenant_id")
+  shipmentOrderId   String    @map("shipment_order_id")
+  sequenceNo        Int       @map("sequence_no")
+  stopType          String    @map("stop_type")
+  locationName      String?   @map("location_name")
+  address           String?
+  contactName       String?   @map("contact_name")
+  contactPhone      String?   @map("contact_phone")
+  latitude          Decimal?  @db.Decimal(10, 7)
+  longitude         Decimal?  @db.Decimal(10, 7)
+  plannedArrivalAt  DateTime? @map("planned_arrival_at") @db.Timestamptz(6)
+  plannedDepartAt   DateTime? @map("planned_depart_at") @db.Timestamptz(6)
+  actualArrivalAt   DateTime? @map("actual_arrival_at") @db.Timestamptz(6)
+  actualDepartAt    DateTime? @map("actual_depart_at") @db.Timestamptz(6)
+  status            String    @default("PLANNED")
+  instructions      String?
+  metadata          Json?
+
+  @@unique([shipmentOrderId, sequenceNo])
+  @@index([tenantId, shipmentOrderId])
+  @@map("logistics_shipment_stops")
+}
+
+model LogisticsRouteLeg {
+  id                 String   @id @default(uuid())
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId           String   @map("tenant_id")
+  shipmentOrderId    String   @map("shipment_order_id")
+  sequenceNo         Int      @map("sequence_no")
+  fromStopId         String?  @map("from_stop_id")
+  toStopId           String?  @map("to_stop_id")
+  plannedDistanceKm  Decimal? @map("planned_distance_km") @db.Decimal(12, 3)
+  plannedDurationMin Int?     @map("planned_duration_min")
+  actualDistanceKm   Decimal? @map("actual_distance_km") @db.Decimal(12, 3)
+  actualDurationMin  Int?     @map("actual_duration_min")
+  tollAmount         Decimal? @map("toll_amount") @db.Decimal(15, 2)
+  status             String   @default("PLANNED")
+  metadata           Json?
+
+  @@unique([shipmentOrderId, sequenceNo])
+  @@index([tenantId, shipmentOrderId])
+  @@map("logistics_route_legs")
+}
+
+model LogisticsFreightRfq {
+  id              String    @id @default(uuid())
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId        String    @map("tenant_id")
+  shipmentOrderId String    @map("shipment_order_id")
+  rfqNo           String    @map("rfq_no")
+  status          String    @default("DRAFT")
+  inviteScope     String    @default("SELECTED_CARRIERS") @map("invite_scope")
+  bidDeadlineAt   DateTime? @map("bid_deadline_at") @db.Timestamptz(6)
+  negotiationRound Int      @default(1) @map("negotiation_round")
+  awardedBidId    String?   @map("awarded_bid_id")
+  metadata        Json?
+
+  @@unique([tenantId, rfqNo])
+  @@index([tenantId, shipmentOrderId])
+  @@map("logistics_freight_rfqs")
+}
+
+model LogisticsCarrierBid {
+  id              String    @id @default(uuid())
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId        String    @map("tenant_id")
+  shipmentOrderId String    @map("shipment_order_id")
+  rfqId           String?   @map("rfq_id")
+  carrierId       String    @map("carrier_id")
+  bidNo           String?   @map("bid_no")
+  amount          Decimal   @db.Decimal(15, 2)
+  currency        String    @default("AED")
+  transitTimeHours Int?     @map("transit_time_hours")
+  validityUntil   DateTime? @map("validity_until") @db.Timestamptz(6)
+  status          String    @default("SUBMITTED")
+  chargeBreakdown Json?     @map("charge_breakdown")
+  notes           String?
+
+  @@index([tenantId, shipmentOrderId])
+  @@index([tenantId, carrierId])
+  @@map("logistics_carrier_bids")
+}
+
+model LogisticsAssignment {
+  id              String    @id @default(uuid())
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId        String    @map("tenant_id")
+  shipmentOrderId String    @map("shipment_order_id")
+  carrierId       String?   @map("carrier_id")
+  driverId        String?   @map("driver_id")
+  vehicleId       String?   @map("vehicle_id")
+  assignmentType  String    @default("CARRIER") @map("assignment_type")
+  status          String    @default("ASSIGNED")
+  costAmount      Decimal?  @map("cost_amount") @db.Decimal(15, 2)
+  currency        String    @default("AED")
+  acceptedAt      DateTime? @map("accepted_at") @db.Timestamptz(6)
+  dispatchedAt    DateTime? @map("dispatched_at") @db.Timestamptz(6)
+  completedAt     DateTime? @map("completed_at") @db.Timestamptz(6)
+  metadata        Json?
+
+  @@index([tenantId, shipmentOrderId])
+  @@index([tenantId, carrierId])
+  @@map("logistics_assignments")
+}
+
+model LogisticsTrackingEvent {
+  id              String    @id @default(uuid())
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId        String    @map("tenant_id")
+  shipmentOrderId String    @map("shipment_order_id")
+  assignmentId    String?   @map("assignment_id")
+  eventType       String    @map("event_type")
+  status          String?
+  latitude        Decimal?  @db.Decimal(10, 7)
+  longitude       Decimal?  @db.Decimal(10, 7)
+  source          String    @default("SYSTEM")
+  occurredAt      DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  notes           String?
+  metadata        Json?
+
+  @@index([tenantId, shipmentOrderId, occurredAt])
+  @@map("logistics_tracking_events")
+}
+
+model LogisticsPodEvent {
+  id              String    @id @default(uuid())
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId        String    @map("tenant_id")
+  shipmentOrderId String    @map("shipment_order_id")
+  assignmentId    String?   @map("assignment_id")
+  deliveredAt     DateTime? @map("delivered_at") @db.Timestamptz(6)
+  recipientName   String?   @map("recipient_name")
+  signatureUrl    String?   @map("signature_url")
+  photoUrls       Json?     @map("photo_urls")
+  documentUrls    Json?     @map("document_urls")
+  gps             Json?
+  status          String    @default("SUBMITTED")
+  createdBy       String?   @map("created_by")
+  metadata        Json?
+
+  @@index([tenantId, shipmentOrderId])
+  @@map("logistics_pod_events")
+}
+
+model LogisticsFreightCharge {
+  id              String   @id @default(uuid())
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId        String   @map("tenant_id")
+  shipmentOrderId String   @map("shipment_order_id")
+  chargeSide      String   @map("charge_side")
+  chargeType      String   @map("charge_type")
+  description     String?
+  quantity        Decimal  @default(1) @db.Decimal(14, 3)
+  unitRate        Decimal  @default(0) @map("unit_rate") @db.Decimal(15, 2)
+  amount          Decimal  @default(0) @db.Decimal(15, 2)
+  taxAmount       Decimal  @default(0) @map("tax_amount") @db.Decimal(15, 2)
+  totalAmount     Decimal  @default(0) @map("total_amount") @db.Decimal(15, 2)
+  currency        String   @default("AED")
+  billingStatus   String   @default("DRAFT") @map("billing_status")
+  invoiceId       String?  @map("invoice_id")
+  settlementId    String?  @map("settlement_id")
+  metadata        Json?
+
+  @@index([tenantId, shipmentOrderId])
+  @@index([tenantId, chargeSide])
+  @@map("logistics_freight_charges")
+}
+
+model LogisticsCarrierSettlement {
+  id               String    @id @default(uuid())
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId         String    @map("tenant_id")
+  carrierId        String    @map("carrier_id")
+  settlementNo     String    @map("settlement_no")
+  periodStart      DateTime? @map("period_start") @db.Date
+  periodEnd        DateTime? @map("period_end") @db.Date
+  grossAmount      Decimal   @default(0) @map("gross_amount") @db.Decimal(15, 2)
+  deductionsAmount Decimal   @default(0) @map("deductions_amount") @db.Decimal(15, 2)
+  commissionAmount Decimal   @default(0) @map("commission_amount") @db.Decimal(15, 2)
+  netPayableAmount Decimal   @default(0) @map("net_payable_amount") @db.Decimal(15, 2)
+  currency         String    @default("AED")
+  status           String    @default("DRAFT")
+  paymentId        String?   @map("payment_id")
+  metadata         Json?
+
+  @@unique([tenantId, settlementNo])
+  @@index([tenantId, carrierId])
+  @@map("logistics_carrier_settlements")
+}
+
+model LogisticsShipmentException {
+  id              String    @id @default(uuid())
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId        String    @map("tenant_id")
+  shipmentOrderId String    @map("shipment_order_id")
+  assignmentId    String?   @map("assignment_id")
+  exceptionType   String    @map("exception_type")
+  severity        String    @default("MEDIUM")
+  status          String    @default("OPEN")
+  title           String
+  description     String?
+  raisedAt        DateTime  @default(now()) @map("raised_at") @db.Timestamptz(6)
+  resolvedAt      DateTime? @map("resolved_at") @db.Timestamptz(6)
+  metadata        Json?
+
+  @@index([tenantId, shipmentOrderId])
+  @@index([tenantId, status])
+  @@map("logistics_shipment_exceptions")
+}
+
+// ============================================================
 // MODULE 7: FINANCE & BILLING
 // ============================================================
 

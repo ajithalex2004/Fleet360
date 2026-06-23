@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { assertCanWrite } from '@/lib/access-control';
+import { recordOperationalChange, requireOperationalContext } from '@/lib/cross-module-governance';
+import { ensureFinanceSourceLedger } from '@/lib/finance-source-ledger';
 
 /**
  * GET  /api/finance/invoices  — paginated list with filters
@@ -10,6 +12,8 @@ import { assertCanWrite } from '@/lib/access-control';
  */
 
 async function ensureTable() {
+  await ensureFinanceSourceLedger();
+
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS finance_invoices (
       id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -52,29 +56,70 @@ async function ensureTable() {
   await prisma.$executeRawUnsafe(`
     ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS tenant_id TEXT
   `).catch(() => {});
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS module_source TEXT
+  `).catch(() => {});
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS source_entity_type TEXT
+  `).catch(() => {});
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS source_entity_id UUID
+  `).catch(() => {});
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS source_entity_no TEXT
+  `).catch(() => {});
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS source_customer_id TEXT
+  `).catch(() => {});
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS source_customer_name TEXT
+  `).catch(() => {});
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS source_contract_ids TEXT[] NOT NULL DEFAULT '{}'
+  `).catch(() => {});
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS source_payload JSONB NOT NULL DEFAULT '{}'
+  `).catch(() => {});
 }
 
 export async function GET(req: NextRequest) {
   await ensureTable();
 
   const { searchParams } = new URL(req.url);
+  const ctx = requireOperationalContext(req, 'finance', { requestedTenantId: searchParams.get('tenantId') });
+  if (ctx instanceof NextResponse) return ctx;
   const status   = searchParams.get('status') ?? '';
-  const module   = searchParams.get('module') ?? '';
+  const moduleFilter = searchParams.get('module') ?? '';
+  const sourceModule = searchParams.get('sourceModule') ?? '';
+  const referenceType = searchParams.get('referenceType') ?? '';
   const q        = searchParams.get('q') ?? '';
   const page     = Math.max(1, parseInt(searchParams.get('page') ?? '1'));
   const limit    = Math.min(100, parseInt(searchParams.get('limit') ?? '25'));
   const offset   = (page - 1) * limit;
+  const tenantId = ctx.tenantId;
 
   const conditions: string[] = ['deleted_at IS NULL'];
   const values: unknown[] = [];
+
+  values.push(tenantId);
+  conditions.push(`tenant_id::text = $${values.length}`);
 
   if (status) {
     values.push(status);
     conditions.push(`payment_status = $${values.length}`);
   }
-  if (module) {
-    values.push(module);
+  if (moduleFilter) {
+    values.push(moduleFilter);
     conditions.push(`module = $${values.length}`);
+  }
+  if (sourceModule) {
+    values.push(sourceModule.toUpperCase());
+    conditions.push(`module_source = $${values.length}`);
+  }
+  if (referenceType) {
+    values.push(referenceType);
+    conditions.push(`reference_type = $${values.length}`);
   }
   if (q) {
     values.push(`%${q}%`);
@@ -91,6 +136,9 @@ export async function GET(req: NextRequest) {
               service_type, module, description,
               subtotal, vat_amount, total_amount, paid_amount, discount_amount,
               currency, issue_date, due_date, payment_status, notes,
+              module_source, reference_type, reference_id::text,
+              source_entity_type, source_entity_id, source_entity_no,
+              source_customer_id, source_customer_name, source_contract_ids,
               created_at, updated_at
          FROM finance_invoices
         WHERE ${where}
@@ -123,7 +171,8 @@ export async function GET(req: NextRequest) {
   // Summary counts
   type SumRow = { payment_status: string; cnt: bigint };
   const summary = await prisma.$queryRawUnsafe<SumRow[]>(
-    `SELECT payment_status, COUNT(*) as cnt FROM finance_invoices WHERE deleted_at IS NULL GROUP BY payment_status`
+    `SELECT payment_status, COUNT(*) as cnt FROM finance_invoices WHERE ${where} GROUP BY payment_status`,
+    ...values
   ).catch(() => [] as SumRow[]);
 
   const counts: Record<string, number> = {};
@@ -146,13 +195,17 @@ export async function POST(req: NextRequest) {
   await ensureTable();
 
   try {
+    const ctx = requireOperationalContext(req, 'finance', { write: true });
+    if (ctx instanceof NextResponse) return ctx;
     const body = await req.json();
     const {
       clientName, clientEmail, clientPhone, clientAddress,
-      serviceType = 'GENERAL', module = 'GENERAL',
+      serviceType = 'GENERAL', module: invoiceModule = 'GENERAL',
       description, lineItems = [], discountAmount = 0,
       vatRate = 5, currency = 'AED',
       issueDate, dueDate, notes, referenceId, referenceType, createdBy,
+      sourceModule, sourceEntityType, sourceEntityId, sourceEntityNo,
+      sourceCustomerId, sourceCustomerName, sourceContractIds = [], sourcePayload = {},
     } = body;
 
     if (!clientName) return NextResponse.json({ error: 'clientName is required' }, { status: 400 });
@@ -177,7 +230,7 @@ export async function POST(req: NextRequest) {
     const invoiceNumber = `${prefix}-${seq}-${rnd}`;
 
     // Read tenant from middleware-injected header for multi-tenant isolation
-    const tenantId = req.headers.get('x-tenant-id') ?? null;
+    const tenantId = ctx.tenantId;
 
     type InsRow = { id: string };
     const [row] = await prisma.$queryRawUnsafe<InsRow[]>(
@@ -185,12 +238,15 @@ export async function POST(req: NextRequest) {
          (invoice_number, client_name, client_email, client_phone, client_address,
           service_type, module, description, line_items, subtotal, discount_amount,
           vat_rate, vat_amount, total_amount, currency, issue_date, due_date,
-          notes, reference_id, reference_type, created_by, tenant_id)
+          notes, reference_id, reference_type, created_by, tenant_id,
+          module_source, source_entity_type, source_entity_id, source_entity_no,
+          source_customer_id, source_customer_name, source_contract_ids, source_payload)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12,$13,$14,$15,
-               $16::date,$17::date,$18,$19,$20,$21,$22)
+               $16::date,$17::date,$18,$19,$20,$21,$22,
+               $23,$24,$25,$26,$27,$28,$29::text[],$30::jsonb)
        RETURNING id`,
       invoiceNumber, clientName, clientEmail ?? null, clientPhone ?? null, clientAddress ?? null,
-      serviceType, module, description ?? null,
+      serviceType, invoiceModule, description ?? null,
       JSON.stringify(lineItems),
       subtotal, Number(discountAmount), Number(vatRate), vatAmount, totalAmount,
       currency,
@@ -198,10 +254,57 @@ export async function POST(req: NextRequest) {
       dueDate ?? null,
       notes ?? null,
       referenceId ?? null, referenceType ?? null, createdBy ?? null,
-      tenantId
+      tenantId,
+      sourceModule ? String(sourceModule).toUpperCase() : invoiceModule,
+      sourceEntityType ?? referenceType ?? null,
+      sourceEntityId ?? referenceId ?? null,
+      sourceEntityNo ?? null,
+      sourceCustomerId ?? null,
+      sourceCustomerName ?? clientName,
+      Array.isArray(sourceContractIds) ? sourceContractIds : [],
+      JSON.stringify(sourcePayload ?? {})
     );
 
-    return NextResponse.json({ success: true, id: row.id, invoiceNumber }, { status: 201 });
+    const createdInvoice = {
+      id: row.id,
+      invoice_number: invoiceNumber,
+      client_name: clientName,
+      client_email: clientEmail ?? null,
+      client_phone: clientPhone ?? null,
+      service_type: serviceType,
+      module: invoiceModule,
+      description: description ?? null,
+      subtotal,
+      discount_amount: Number(discountAmount),
+      vat_amount: vatAmount,
+      total_amount: totalAmount,
+      paid_amount: 0,
+      currency,
+      issue_date: issueDate ?? new Date().toISOString().split('T')[0],
+      due_date: dueDate ?? null,
+      payment_status: 'DRAFT',
+      notes: notes ?? null,
+      created_at: new Date().toISOString(),
+      line_items: Array.isArray(lineItems) ? lineItems : [],
+    };
+
+    const response = { success: true, id: row.id, invoiceNumber, invoice: createdInvoice };
+    await recordOperationalChange({
+      req,
+      ctx,
+      entityType: 'FinanceInvoice',
+      entityId: row.id,
+      action: 'CREATE',
+      after: { ...response, clientName, module: invoiceModule, totalAmount, currency },
+      summary: `Created invoice ${invoiceNumber} for ${clientName}.`,
+      sourceModule: sourceModule ? String(sourceModule).toUpperCase() : String(invoiceModule).toUpperCase(),
+      sourceEntityType: sourceEntityType ?? referenceType ?? null,
+      sourceEntityId: sourceEntityId ?? referenceId ?? null,
+      relatedEntityType: sourceEntityType ?? referenceType ?? null,
+      relatedEntityId: sourceEntityId ?? referenceId ?? null,
+      riskSeverity: 'low',
+    });
+    return NextResponse.json(response, { status: 201 });
   } catch (err) {
     console.error('[finance/invoices POST]', err);
     return NextResponse.json({ error: 'Failed to create invoice' }, { status: 500 });

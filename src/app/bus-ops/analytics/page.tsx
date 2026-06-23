@@ -226,7 +226,7 @@ export default function BusOpsAnalyticsPage() {
             <div className="border-t border-white/5 pt-3 space-y-1.5 text-xs">
               <p className="text-[10px] text-slate-500 uppercase">Breakdown · total AED {(kpis.totalCost ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
               <div className="flex items-center justify-between"><span className="text-slate-400">⛽ Fuel</span><span className="text-amber-300">AED {kpis.costBreakdown.fuel.toLocaleString()}</span></div>
-              <div className="flex items-center justify-between"><span className="text-slate-400">🧑‍✈️ Driver</span><span className="text-cyan-300">AED {kpis.costBreakdown.driver.toLocaleString()}</span></div>
+              <div className="flex items-center justify-between"><span className="text-slate-400">🤵 Driver</span><span className="text-cyan-300">AED {kpis.costBreakdown.driver.toLocaleString()}</span></div>
               <div className="flex items-center justify-between"><span className="text-slate-400">🚌 Vehicle</span><span className="text-violet-300">AED {kpis.costBreakdown.vehicle.toLocaleString()}</span></div>
             </div>
           )}

@@ -1,10 +1,24 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import {
+    attachTenantToEntity,
+    ensureOperationalTenantColumn,
+    recordOperationalChange,
+    requireOperationalContext,
+    tenantScopedIds,
+} from '@/lib/cross-module-governance';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+        const ctx = requireOperationalContext(request, 'maintenance', { requestedTenantId: request.nextUrl.searchParams.get('tenantId') });
+        if (ctx instanceof NextResponse) return ctx;
+        await ensureOperationalTenantColumn('maintenance_requests');
+        const ids = await tenantScopedIds('maintenance_requests', ctx.tenantId, { activeOnly: true });
+        if (ids.length === 0) return NextResponse.json([]);
+
         const requests = await prisma.maintenanceRequest.findMany({
-            where: { deletedAt: null },
+            where: { id: { in: ids }, deletedAt: null },
             include: {
                 Vehicle: true,
                 Garage: true,
@@ -24,8 +38,11 @@ export async function GET() {
     }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
+        const ctx = requireOperationalContext(request, 'maintenance', { write: true });
+        if (ctx instanceof NextResponse) return ctx;
+        await ensureOperationalTenantColumn('maintenance_requests');
         const body = await request.json();
 
         const req = await prisma.maintenanceRequest.create({
@@ -45,8 +62,35 @@ export async function POST(request: Request) {
                 maintenanceJobs: body.maintenanceJobs || body.maintenance_jobs || [],
             }
         });
+        await attachTenantToEntity('maintenance_requests', req.id, ctx.tenantId);
+        await recordOperationalChange({
+            req: request,
+            ctx,
+            entityType: 'MaintenanceRequest',
+            entityId: req.id,
+            action: 'CREATE',
+            after: req,
+            summary: `Created maintenance request ${req.id}`,
+        });
 
-        return NextResponse.json(JSON.parse(JSON.stringify(req)), { status: 201 });
+        const workflow = await triggerServiceWorkflow({
+            req: request,
+            ctx,
+            serviceTypeKey: 'MAINTENANCE_REQUEST_APPROVAL',
+            referenceType: 'MaintenanceRequest',
+            referenceId: req.id,
+            referenceNumber: req.workOrderNo ?? req.id,
+            contextData: {
+                requestId: req.id,
+                vehicleId: req.vehicleId,
+                driverId: req.driverId,
+                maintenanceType: req.maintenanceType,
+                priority: req.priority,
+                estimatedCost: req.estimatedCost,
+            },
+        });
+
+        return NextResponse.json(JSON.parse(JSON.stringify({ ...req, workflow })), { status: 201 });
     } catch (error) {
         console.error('Failed to create maintenance request:', error);
         return NextResponse.json({ error: 'Internal Server Error', details: String(error) }, { status: 500 });

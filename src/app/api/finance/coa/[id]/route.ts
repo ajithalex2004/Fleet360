@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { ensureOperationalTenantColumn, recordOperationalChange, requireOperationalContext } from '@/lib/cross-module-governance';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
 
 type CoaRow = Record<string, unknown>;
 
@@ -42,11 +44,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json(row);
 }
 
-export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  await ensureOperationalTenantColumn('finance_chart_of_accounts').catch(() => {});
+  const ctx = requireOperationalContext(req, 'finance', { write: true });
+  if (ctx instanceof NextResponse) return ctx;
   // Prevent deletion of system accounts or accounts with transactions
-  const [acc] = await prisma.$queryRawUnsafe<{is_system: boolean; account_code: string}[]>(
-    `SELECT is_system, account_code FROM finance_chart_of_accounts WHERE id=$1 OR account_code=$1`, params.id
-  ).catch(() => [] as {is_system: boolean; account_code: string}[]);
+  const [acc] = await prisma.$queryRawUnsafe<(CoaRow & {is_system: boolean; account_code: string})[]>(
+    `SELECT * FROM finance_chart_of_accounts
+      WHERE (id=$1 OR account_code=$1)
+        AND deleted_at IS NULL
+        AND (tenant_id::text = $2 OR tenant_id IS NULL)`,
+    params.id,
+    ctx.tenantId,
+  ).catch(() => [] as (CoaRow & {is_system: boolean; account_code: string})[]);
 
   if (!acc) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   if (acc.is_system) return NextResponse.json({ error: 'System accounts cannot be deleted' }, { status: 400 });
@@ -57,7 +67,37 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
   if (parseInt(count) > 0) return NextResponse.json({ error: 'Account has journal entries and cannot be deleted' }, { status: 400 });
 
   await prisma.$executeRawUnsafe(
-    `UPDATE finance_chart_of_accounts SET deleted_at=NOW() WHERE id=$1 OR account_code=$1`, params.id
+    `UPDATE finance_chart_of_accounts
+        SET deleted_at=NOW(), updated_at=NOW()
+      WHERE (id=$1 OR account_code=$1)
+        AND (tenant_id::text = $2 OR tenant_id IS NULL)`,
+    params.id,
+    ctx.tenantId,
   ).catch(() => {});
-  return NextResponse.json({ ok: true });
+  await recordOperationalChange({
+    req,
+    ctx,
+    entityType: 'FinanceChartOfAccount',
+    entityId: String(acc.id ?? params.id),
+    action: 'DELETE',
+    before: acc,
+    after: null,
+    summary: `Deleted chart of account ${String(acc.account_code ?? params.id)}.`,
+  });
+  const workflow = await triggerServiceWorkflow({
+    req,
+    ctx,
+    serviceTypeKey: 'FINANCE_BILLING_EXCEPTION',
+    referenceType: 'ChartOfAccount',
+    referenceId: String(acc.id ?? params.id),
+    referenceNumber: String(acc.account_code ?? params.id),
+    contextData: {
+      action: 'delete',
+      accountName: acc.account_name ?? null,
+      accountType: acc.account_type ?? null,
+      accountSubtype: acc.account_subtype ?? null,
+    },
+    force: true,
+  });
+  return NextResponse.json({ ok: true, workflow });
 }

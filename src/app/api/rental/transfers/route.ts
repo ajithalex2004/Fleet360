@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import {
+  ensureOperationalTenantColumn,
+  recordOperationalChange,
+  requireOperationalContext,
+} from '@/lib/cross-module-governance';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
 
 /**
  * Rental Inter-Branch Vehicle Transfers API
@@ -38,6 +44,7 @@ async function ensureTable() {
       condition_notes  TEXT,
       driver_name      TEXT,
       driver_phone     TEXT,
+      tenant_id        TEXT,
       status           TEXT        NOT NULL DEFAULT 'REQUESTED',
       requested_by     TEXT,
       approved_by      TEXT,
@@ -60,6 +67,7 @@ async function ensureTable() {
   await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_rvt_transfer_date ON rental_vehicle_transfers(transfer_date)
   `);
+  await ensureOperationalTenantColumn('rental_vehicle_transfers').catch(() => {});
 }
 
 type TransferRow = {
@@ -136,6 +144,8 @@ function mapTransfer(r: TransferRow) {
 export async function GET(req: NextRequest) {
   try {
     await ensureTable();
+    const ctx = requireOperationalContext(req, 'rac', { requestedTenantId: req.nextUrl.searchParams.get('tenantId') });
+    if (ctx instanceof NextResponse) return ctx;
     const sp         = req.nextUrl.searchParams;
     const status     = sp.get('status')      ?? '';
     const fromBranch = sp.get('from_branch') ?? '';
@@ -145,9 +155,9 @@ export async function GET(req: NextRequest) {
     const limit      = Math.min(100, Number(sp.get('limit') ?? 20));
     const offset     = (page - 1) * limit;
 
-    const conds: string[] = [];
-    const params: unknown[] = [];
-    let pi = 1;
+    const conds: string[] = ['t.tenant_id::text = $1'];
+    const params: unknown[] = [ctx.tenantId];
+    let pi = 2;
 
     if (status)     { conds.push(`t.status = $${pi++}`);               params.push(status); }
     if (fromBranch) { conds.push(`t.from_branch_name ILIKE $${pi++}`); params.push(`%${fromBranch}%`); }
@@ -208,6 +218,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     await ensureTable();
+    const ctx = requireOperationalContext(req, 'rac', { write: true });
+    if (ctx instanceof NextResponse) return ctx;
     const body = await req.json();
 
     const {
@@ -247,8 +259,8 @@ export async function POST(req: NextRequest) {
           from_branch_id, from_branch_name, from_emirate,
           to_branch_id, to_branch_name, to_emirate,
           transfer_date, reason, fuel_level, odometer_reading, condition_notes,
-          driver_name, driver_phone, requested_by, notes, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,'REQUESTED')
+          driver_name, driver_phone, requested_by, notes, tenant_id, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,'REQUESTED')
        RETURNING id, transfer_no`,
       transferNo,
       vehicleId      || null,
@@ -270,10 +282,36 @@ export async function POST(req: NextRequest) {
       driverName     || null,
       driverPhone    || null,
       requestedBy    || null,
-      notes          || null
+      notes          || null,
+      ctx.tenantId
     );
-
-    return NextResponse.json({ id: row.id, transferNo: row.transfer_no }, { status: 201 });
+    await recordOperationalChange({
+      req,
+      ctx,
+      entityType: 'RentalTransfer',
+      entityId: row.id,
+      action: 'CREATE',
+      after: { id: row.id, transferNo: row.transfer_no, vehicleNo, fromBranchName, toBranchName },
+      summary: `Created RAC transfer ${row.transfer_no}.`,
+    });
+    const workflow = await triggerServiceWorkflow({
+      req,
+      ctx,
+      serviceTypeKey: 'RAC_RENTAL_AGREEMENT',
+      referenceType: 'RentalTransfer',
+      referenceId: row.id,
+      referenceNumber: row.transfer_no,
+      contextData: {
+        vehicleId: vehicleId ?? null,
+        vehicleNo,
+        fromBranchName,
+        toBranchName,
+        transferDate,
+        reason,
+        status: 'REQUESTED',
+      },
+    });
+    return NextResponse.json({ id: row.id, transferNo: row.transfer_no, workflow }, { status: 201 });
   } catch (err) {
     console.error('[rental/transfers POST]', err);
     return NextResponse.json({ error: 'Failed to create transfer' }, { status: 500 });
@@ -283,6 +321,8 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     await ensureTable();
+    const ctx = requireOperationalContext(req, 'rac', { write: true });
+    if (ctx instanceof NextResponse) return ctx;
     const id = req.nextUrl.searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'id query param required' }, { status: 400 });
 
@@ -290,7 +330,7 @@ export async function PATCH(req: NextRequest) {
     const { action, approvedBy, cancelledReason } = body;
 
     const [current] = await prisma.$queryRawUnsafe<TransferRow[]>(
-      `SELECT * FROM rental_vehicle_transfers WHERE id = $1`, id
+      `SELECT * FROM rental_vehicle_transfers WHERE id = $1 AND tenant_id::text = $2`, id, ctx.tenantId
     );
     if (!current) return NextResponse.json({ error: 'Transfer not found' }, { status: 404 });
 
@@ -304,24 +344,24 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: 'approved_by is required' }, { status: 400 });
       }
       await prisma.$executeRawUnsafe(
-        `UPDATE rental_vehicle_transfers SET status='APPROVED', approved_by=$1, approved_at=$2, updated_at=$3 WHERE id=$4`,
-        approvedBy.trim(), now, now, id
+        `UPDATE rental_vehicle_transfers SET status='APPROVED', approved_by=$1, approved_at=$2, updated_at=$3 WHERE id=$4 AND tenant_id::text = $5`,
+        approvedBy.trim(), now, now, id, ctx.tenantId
       );
     } else if (action === 'DEPART') {
       if (current.status !== 'APPROVED') {
         return NextResponse.json({ error: 'Only APPROVED transfers can be departed' }, { status: 400 });
       }
       await prisma.$executeRawUnsafe(
-        `UPDATE rental_vehicle_transfers SET status='IN_TRANSIT', departed_at=$1, updated_at=$2 WHERE id=$3`,
-        now, now, id
+        `UPDATE rental_vehicle_transfers SET status='IN_TRANSIT', departed_at=$1, updated_at=$2 WHERE id=$3 AND tenant_id::text = $4`,
+        now, now, id, ctx.tenantId
       );
     } else if (action === 'ARRIVE') {
       if (current.status !== 'IN_TRANSIT') {
         return NextResponse.json({ error: 'Only IN_TRANSIT transfers can be completed' }, { status: 400 });
       }
       await prisma.$executeRawUnsafe(
-        `UPDATE rental_vehicle_transfers SET status='COMPLETED', arrived_at=$1, updated_at=$2 WHERE id=$3`,
-        now, now, id
+        `UPDATE rental_vehicle_transfers SET status='COMPLETED', arrived_at=$1, updated_at=$2 WHERE id=$3 AND tenant_id::text = $4`,
+        now, now, id, ctx.tenantId
       );
     } else if (action === 'CANCEL') {
       if (current.status === 'COMPLETED') {
@@ -331,17 +371,43 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: 'cancelled_reason is required' }, { status: 400 });
       }
       await prisma.$executeRawUnsafe(
-        `UPDATE rental_vehicle_transfers SET status='CANCELLED', cancelled_reason=$1, updated_at=$2 WHERE id=$3`,
-        cancelledReason.trim(), now, id
+        `UPDATE rental_vehicle_transfers SET status='CANCELLED', cancelled_reason=$1, updated_at=$2 WHERE id=$3 AND tenant_id::text = $4`,
+        cancelledReason.trim(), now, id, ctx.tenantId
       );
     } else {
       return NextResponse.json({ error: 'action must be one of: APPROVE, DEPART, ARRIVE, CANCEL' }, { status: 400 });
     }
 
     const [updated] = await prisma.$queryRawUnsafe<TransferRow[]>(
-      `SELECT * FROM rental_vehicle_transfers WHERE id = $1`, id
+      `SELECT * FROM rental_vehicle_transfers WHERE id = $1 AND tenant_id::text = $2`, id, ctx.tenantId
     );
-    return NextResponse.json(mapTransfer(updated));
+    await recordOperationalChange({
+      req,
+      ctx,
+      entityType: 'RentalTransfer',
+      entityId: id,
+      action: 'STATUS_CHANGE',
+      before: current,
+      after: updated,
+      summary: `Updated RAC transfer ${updated.transfer_no}.`,
+    });
+    const workflow = await triggerServiceWorkflow({
+      req,
+      ctx,
+      serviceTypeKey: 'RAC_RENTAL_AGREEMENT',
+      referenceType: 'RentalTransfer',
+      referenceId: id,
+      referenceNumber: updated.transfer_no,
+      contextData: {
+        previousStatus: current.status,
+        status: updated.status,
+        vehicleNo: updated.vehicle_no,
+        fromBranchName: updated.from_branch_name,
+        toBranchName: updated.to_branch_name,
+      },
+      force: ['APPROVED', 'CANCELLED', 'COMPLETED'].includes(String(updated.status ?? '')),
+    });
+    return NextResponse.json({ ...mapTransfer(updated), workflow });
   } catch (err) {
     console.error('[rental/transfers PATCH]', err);
     return NextResponse.json({ error: 'Failed to update transfer' }, { status: 500 });

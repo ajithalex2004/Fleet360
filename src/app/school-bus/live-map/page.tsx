@@ -194,7 +194,7 @@ function VehicleCard({ v, selected, onSelect }: { v: VehiclePosition; selected: 
       </div>
       {v.route_name && <p className="text-xs text-slate-400 mb-1">🗺️ {v.route_name}</p>}
       <div className="flex gap-3 text-xs text-slate-500">
-        <span>👨‍✈️ {v.driver_name ?? 'No driver'}</span>
+        <span>🤵 {v.driver_name ?? 'No driver'}</span>
         <span>👧 {v.students_onboard} aboard</span>
         <span>⚡ {Math.round(v.speed_kmh)} km/h</span>
       </div>
@@ -258,7 +258,7 @@ function DetailPanel({ v, onClose }: { v: VehiclePosition; onClose: () => void }
 
       <div className="space-y-1.5 text-sm">
         <div className="flex justify-between text-slate-400">
-          <span>👨‍✈️ Driver</span><span className="text-white">{v.driver_name ?? 'Unassigned'}</span>
+          <span>🤵 Driver</span><span className="text-white">{v.driver_name ?? 'Unassigned'}</span>
         </div>
         <div className="flex justify-between text-slate-400">
           <span>👩 Attendant</span><span className="text-white">{v.attendant_name ?? 'Unassigned'}</span>

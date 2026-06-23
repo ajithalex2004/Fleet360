@@ -10,7 +10,6 @@ export async function GET(req: NextRequest) {
 
     const alerts = await prisma.leaseAlert.findMany({
       where: {
-        deletedAt: null,
         ...(severity ? { severity } : {}),
         ...(status ? { status } : {}),
         ...(contractId ? { contractId } : {}),

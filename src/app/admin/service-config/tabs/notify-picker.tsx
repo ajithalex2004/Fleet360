@@ -217,7 +217,7 @@ function ModeBtn({ active, onClick, icon, label }: {
   return (
     <button type="button" onClick={onClick}
       className={`inline-flex items-center gap-1 px-2 py-1 rounded-md transition-colors ${
-        active ? 'bg-violet-600/30 text-violet-100 border border-violet-500/40' : 'text-slate-400 hover:text-white border border-transparent'
+        active ? 'border border-violet-300 bg-violet-100 text-violet-900 shadow-sm' : 'text-slate-400 hover:text-white border border-transparent'
       }`}>
       {icon} {label}
     </button>
@@ -295,7 +295,7 @@ function UsersMode({ loading, users, selected, onToggle }: {
         <div className="flex flex-wrap gap-1">
           {selected.map(email => (
             <span key={email}
-              className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-200 border border-violet-500/30">
+              className="inline-flex items-center gap-1 rounded-full border border-violet-300 bg-violet-100 px-2 py-0.5 text-[11px] text-violet-900 shadow-sm">
               {email}
               <button type="button" onClick={() => onToggle(email)} className="hover:text-rose-300">
                 <X className="w-3 h-3" />
@@ -325,13 +325,13 @@ function UsersMode({ loading, users, selected, onToggle }: {
                     onMouseDown={e => e.preventDefault()}
                     onClick={() => { onToggle(u.email); setQuery(''); }}
                     className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${
-                      picked ? 'bg-violet-500/20 text-violet-100' : 'text-slate-200 hover:bg-white/5'
+                      picked ? 'bg-violet-100 text-violet-900 shadow-sm' : 'text-slate-200 hover:bg-white/5'
                     }`}>
                     <span className="flex-1 min-w-0 truncate">{userLabel(u)}</span>
                     {u.roleName && (
                       <span className="text-[10px] text-slate-500 shrink-0">{u.roleName}</span>
                     )}
-                    {picked && <span className="text-[10px] text-violet-300 shrink-0">✓</span>}
+                    {picked && <span className="shrink-0 text-[10px] text-violet-700">✓</span>}
                   </button>
                 </li>
               );

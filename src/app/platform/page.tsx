@@ -2,12 +2,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Bot, Wrench, FileText, Car, Bus, School, Truck, Siren, CarFront, UserCog,
+  Bot, Wrench, FileText, Car, Bus, School, Truck, Siren, CarFront,
   Building2, Smartphone, Banknote, Scale, AppWindow, BarChart3, Radio,
   Leaf, Package, Headphones,
   type LucideIcon,
 } from 'lucide-react';
+import ChauffeurDriverIcon from '@/components/icons/ChauffeurDriverIcon';
 import TenantSessionBar from '@/components/TenantSessionBar';
+import ThemeToggle from '@/components/ui/ThemeToggle';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useAccessControl } from '@/hooks/useAccessControl';
 
@@ -107,7 +109,7 @@ const modules: ModuleDef[] = [
   {
     id: 'driver-mgmt', title: 'Driver Management',
     description: 'Driver onboarding, document tracking, shift management, training records, performance scoring',
-    href: '/driver-mgmt', icon: UserCog,
+    href: '/driver-mgmt', icon: ChauffeurDriverIcon,
     gradient: 'from-cyan-600 to-blue-600', glow: 'shadow-cyan-500/20', border: 'border-cyan-500/30',
     tags: ['Onboarding', 'Shifts', 'Training', 'Performance'], status: 'live',
   },
@@ -310,20 +312,22 @@ export default function PlatformPage() {
     <div className="min-h-screen bg-[#0c1a3e] text-white">
       {/* Top nav */}
       <nav className="border-b border-white/10 bg-slate-900/95 backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-white text-base shadow-lg shadow-blue-500/30">
               XL
             </div>
             <span className="text-white font-bold text-lg">Fleet360</span>
           </div>
-          <div className="flex items-center gap-4">
-            <Link href="/platform/v2" className="rounded-lg bg-gradient-to-r from-violet-600 to-blue-600 px-4 py-1.5 text-sm font-semibold text-white hover:opacity-90 transition-all shadow-lg shadow-violet-500/30">
-              ✨ Try new home
-            </Link>
-            <Link href="/customer" className="rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:opacity-90 transition-all">Customer Portal</Link>
-            <Link href="/approvals" className="rounded-lg bg-violet-600/20 border border-violet-500/30 px-4 py-1.5 text-sm font-medium text-violet-400 hover:bg-violet-600/30 transition-all">Approvals</Link>
-            <Link href="/admin" className="rounded-lg bg-red-600/20 border border-red-500/30 px-4 py-1.5 text-sm font-medium text-red-400 hover:bg-red-600/30 transition-all">Admin</Link>
+          <div className="flex flex-1 flex-wrap items-center justify-end gap-3 min-w-0">
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <Link href="/customer" className="rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:opacity-90 transition-all">Customer Portal</Link>
+              <Link href="/approvals" className="rounded-lg bg-violet-600/20 border border-violet-500/30 px-4 py-1.5 text-sm font-medium text-violet-400 hover:bg-violet-600/30 transition-all">Approvals</Link>
+              <Link href="/admin" className="rounded-lg bg-red-600/20 border border-red-500/30 px-4 py-1.5 text-sm font-medium text-red-400 hover:bg-red-600/30 transition-all">Admin</Link>
+            </div>
+            <div className="shrink-0">
+              <ThemeToggle />
+            </div>
             <TenantSessionBar />
           </div>
         </div>
@@ -407,7 +411,7 @@ export default function PlatformPage() {
                   <KpiTile icon="✅" label="Available"          value={kpis.fleet.available}           color="text-emerald-400" />
                   <KpiTile icon="🔧" label="Maintenance"        value={kpis.fleet.inMaintenance}       color={kpis.fleet.inMaintenance > 0 ? 'text-amber-400' : 'text-slate-400'} />
                   <KpiTile icon="🔄" label="Utilisation"        value={`${kpis.fleet.utilisationRate}%`} color={kpis.fleet.utilisationRate >= 70 ? 'text-emerald-400' : kpis.fleet.utilisationRate >= 40 ? 'text-amber-400' : 'text-red-400'} />
-                  <KpiTile icon="👤" label="Total Drivers"      value={kpis.drivers.total}             color="text-white" />
+                  <KpiTile icon="🤵" label="Total Drivers"      value={kpis.drivers.total}             color="text-white" />
                   <KpiTile icon="✅" label="Active Drivers"     value={kpis.drivers.active}            color="text-emerald-400" />
                 </div>
               </div>

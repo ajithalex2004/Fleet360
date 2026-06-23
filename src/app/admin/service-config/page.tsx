@@ -17,9 +17,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Settings, Plus, Search, ChevronDown, ChevronRight, Trash2, Save, Folder,
+  Settings, Plus, Search, ChevronDown, ChevronRight, Trash2, Save,
   AlertCircle, Layers, Workflow, Bell, ShieldCheck, DollarSign, Truck,
-  Lock, FileCheck, Sparkles, FormInput,
+  Lock, FileCheck, FormInput, PackageCheck,
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import {
@@ -38,6 +38,7 @@ import { TicketingTab }  from './tabs/ticketing-tab';
 import { EpodTab }       from './tabs/epod-tab';
 import { AutomationTab } from './tabs/automation-tab';
 import { FormFieldsTab } from './tabs/form-fields-tab';
+import { CatalogTab }    from './tabs/catalog-tab';
 
 // ── Tone palette (mirrors page-theme) ───────────────────────────────────────
 const TONE_BG: Record<ServiceTone, string> = {
@@ -51,21 +52,58 @@ const TONE_FG: Record<ServiceTone, string> = {
   violet: 'text-violet-300', cyan: 'text-cyan-300',
 };
 
-type TabKey = 'basic' | 'mapping' | 'sla' | 'approval' | 'workflow' | 'vehicle' | 'trip' | 'finance' | 'ticketing' | 'epod' | 'automation' | 'formFields';
+type TabKey = 'basic' | 'mapping' | 'sla' | 'approval' | 'workflow' | 'vehicle' | 'trip' | 'finance' | 'ticketing' | 'epod' | 'automation' | 'formFields' | 'catalog';
 const TABS: { key: TabKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { key: 'basic',      label: 'Basic Info',      icon: Layers      },
   { key: 'mapping',    label: 'Module Mapping',  icon: Workflow    },
-  { key: 'formFields', label: 'Form Fields',     icon: FormInput   },
-  { key: 'sla',        label: 'SLA & Workflow',  icon: Bell        },
-  { key: 'approval',   label: 'Approval',        icon: ShieldCheck },
-  { key: 'workflow',   label: 'Workflow',        icon: Workflow    },
+  { key: 'workflow',   label: 'Workflows',       icon: Workflow    },
+  { key: 'approval',   label: 'Approvals',       icon: ShieldCheck },
+  { key: 'finance',    label: 'Finance Rules',   icon: DollarSign  },
   { key: 'vehicle',    label: 'Vehicle Rules',   icon: Truck       },
+  { key: 'catalog',    label: 'Catalog',         icon: PackageCheck },
+  { key: 'formFields', label: 'Form Fields',     icon: FormInput   },
+  { key: 'sla',        label: 'SLA',             icon: Bell        },
+  { key: 'automation', label: 'Notifications',   icon: Bell        },
   { key: 'trip',       label: 'Trip & Dispatch', icon: Truck       },
-  { key: 'finance',    label: 'Finance',         icon: DollarSign  },
   { key: 'ticketing',  label: 'Ticketing',       icon: FileCheck   },
   { key: 'epod',       label: 'EPOD',            icon: Lock        },
-  { key: 'automation', label: 'Automation',      icon: Sparkles    },
 ];
+
+type ModuleHubEntry = {
+  type: ServiceType;
+  category: ServiceCategoryWithTypes;
+  mapping: ServiceModuleMapping | null;
+};
+
+type ModuleHubGroup = {
+  module: LinkedModule;
+  label: string;
+  entries: ModuleHubEntry[];
+};
+
+function approvalMessage(body: { approvalRequest?: { id?: string | null } } | null | undefined): string {
+  return `Queued for approval: ${body?.approvalRequest?.id ?? 'pending request'}. Approve it, then retry this change.`;
+}
+
+interface HealthIssue {
+  severity: 'error' | 'warning' | 'info';
+  tab: string;
+  code: string;
+  message: string;
+  detail?: string;
+}
+
+interface ServiceHealth {
+  status: 'OK' | 'WARN' | 'BLOCKED';
+  issues: HealthIssue[];
+  impact: {
+    activeTickets: number;
+    workflows: number;
+    activeWorkflows: number;
+    activeWorkflowsWithSteps: number;
+    inheritedRuleCategories: string[];
+  };
+}
 
 export default function ServiceConfigPage() {
   const [categories, setCategories]           = useState<ServiceCategoryWithTypes[]>([]);
@@ -75,6 +113,7 @@ export default function ServiceConfigPage() {
   const [search, setSearch]                   = useState('');
   const [expanded, setExpanded]               = useState<Set<string>>(new Set());
   const [selectedTypeId, setSelectedTypeId]   = useState<string | null>(null);
+  const [selectedModule, setSelectedModule]   = useState<LinkedModule | null>(null);
   const [activeTab, setActiveTab]             = useState<TabKey>('basic');
   const [showNewCat, setShowNewCat]           = useState(false);
   const [showNewType, setShowNewType]         = useState<string | null>(null); // categoryId
@@ -86,6 +125,8 @@ export default function ServiceConfigPage() {
   const [scopes, setScopes]                   = useState<ServiceScope[]>([]);
   const [activeScopeId, setActiveScopeId]     = useState<string | null>(null);
   const [showNewScope, setShowNewScope]       = useState(false);
+  const [health, setHealth]                   = useState<ServiceHealth | null>(null);
+  const [healthLoading, setHealthLoading]     = useState(false);
 
   const scopeLookup = useMemo(() => {
     const out: Record<string, { name: string; isRoot: boolean }> = {};
@@ -93,41 +134,70 @@ export default function ServiceConfigPage() {
     return out;
   }, [scopes]);
 
+  const hydrateScopes = useCallback((list: ServiceScope[]) => {
+    setScopes(list);
+    setActiveScopeId(prev => prev ?? list.find(s => s.isRoot)?.id ?? null);
+  }, []);
+
   const loadScopes = useCallback(async () => {
     const res = await fetch('/api/admin/service-config/scopes');
     const data = await res.json();
     if (!res.ok) return;
-    const list: ServiceScope[] = data.scopes ?? [];
-    setScopes(list);
-    // Default active scope to the root if not picked yet.
-    setActiveScopeId(prev => prev ?? list.find(s => s.isRoot)?.id ?? null);
-  }, []);
+    hydrateScopes(data.scopes ?? []);
+  }, [hydrateScopes]);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const res = await fetch('/api/admin/service-config/categories');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? 'Failed to load');
-      const cats: ServiceCategoryWithTypes[] = data.categories ?? [];
+      const [categoriesRes, scopesRes] = await Promise.all([
+        fetch('/api/admin/service-config/categories'),
+        fetch('/api/admin/service-config/scopes'),
+      ]);
+      const [categoriesData, scopesData] = await Promise.all([
+        categoriesRes.json(),
+        scopesRes.json(),
+      ]);
+      if (!categoriesRes.ok) throw new Error(categoriesData?.error ?? 'Failed to load');
+      const cats: ServiceCategoryWithTypes[] = categoriesData.categories ?? [];
       setCategories(cats);
-      setMappings(data.mappings ?? []);
-      // Expand all on first load so the tree feels alive.
-      setExpanded(prev => prev.size === 0 ? new Set(cats.map(c => c.id)) : prev);
+      setMappings(categoriesData.mappings ?? []);
+      if (scopesRes.ok) {
+        hydrateScopes(scopesData.scopes ?? []);
+      }
+      setExpanded(prev => {
+        if (prev.size > 0) return prev;
+        const firstMappedTypeId = cats.flatMap(c => c.types)[0]?.id;
+        const firstMappedModule = (categoriesData.mappings ?? []).find((row: ServiceModuleMapping) => row.serviceTypeId === firstMappedTypeId)?.linkedModule;
+        return firstMappedModule ? new Set([`module:${firstMappedModule}`]) : prev;
+      });
       // Auto-select first type if nothing chosen yet.
       if (!selectedTypeId) {
         const firstType = cats.flatMap(c => c.types)[0];
         if (firstType) setSelectedTypeId(firstType.id);
       }
-      await loadScopes();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
       setLoading(false);
     }
-  }, [selectedTypeId, loadScopes]);
+  }, [hydrateScopes, selectedTypeId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (!selectedTypeId) { setHealth(null); return; }
+    let cancelled = false;
+    setHealthLoading(true);
+    const qs = activeScopeId ? `?scopeId=${activeScopeId}` : '';
+    fetch(`/api/admin/service-config/types/${selectedTypeId}/health${qs}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!cancelled) setHealth(data?.ok ? data : null);
+      })
+      .catch(() => { if (!cancelled) setHealth(null); })
+      .finally(() => { if (!cancelled) setHealthLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedTypeId, activeScopeId]);
 
   // ── Derived ─────────────────────────────────────────────────────────────
   const selectedType = useMemo(() => {
@@ -144,34 +214,68 @@ export default function ServiceConfigPage() {
     [mappings, selectedTypeId],
   );
 
-  const filteredCategories = useMemo(() => {
-    if (!search.trim()) return categories;
-    const q = search.toLowerCase();
-    return categories
-      .map(c => ({
-        ...c,
-        types: c.types.filter(t =>
-          t.name.toLowerCase().includes(q) ||
-          t.key.toLowerCase().includes(q) ||
-          (t.description ?? '').toLowerCase().includes(q),
-        ),
-      }))
-      .filter(c =>
-        c.name.toLowerCase().includes(q) ||
-        c.key.toLowerCase().includes(q) ||
-        c.types.length > 0,
+  const moduleGroups = useMemo<ModuleHubGroup[]>(() => {
+    const q = search.trim().toLowerCase();
+    return LINKED_MODULES.map((module) => {
+      const entries = categories.flatMap((category) =>
+        category.types.flatMap((type) => {
+          const mapping = mappings.find((row) => row.serviceTypeId === type.id) ?? null;
+          const linkedModule = mapping?.linkedModule ?? 'ADMIN';
+          if (linkedModule !== module) return [];
+
+          const searchable = [
+            LINKED_MODULE_LABEL[module],
+            category.name,
+            category.key,
+            type.name,
+            type.key,
+            type.description ?? '',
+            mapping?.subModule ?? '',
+          ]
+            .join(' ')
+            .toLowerCase();
+          if (q && !searchable.includes(q)) return [];
+
+          return [{ type, category, mapping }];
+        })
       );
-  }, [categories, search]);
+
+      return {
+        module,
+        label: LINKED_MODULE_LABEL[module],
+        entries: entries.sort((left, right) => {
+          if (left.type.sortOrder !== right.type.sortOrder) return left.type.sortOrder - right.type.sortOrder;
+          return left.type.name.localeCompare(right.type.name);
+        }),
+      };
+    }).filter((group) => group.entries.length > 0 || !q);
+  }, [categories, mappings, search]);
+
+  const selectedModuleGroup = useMemo(
+    () => moduleGroups.find((group) => group.module === selectedModule) ?? null,
+    [moduleGroups, selectedModule],
+  );
 
   const toggle = (id: string) =>
     setExpanded(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+
+  useEffect(() => {
+    if (selectedMapping?.linkedModule) {
+      setSelectedModule(selectedMapping.linkedModule);
+      return;
+    }
+    if (!selectedModule) {
+      const firstWithEntries = moduleGroups.find((group) => group.entries.length > 0);
+      if (firstWithEntries) setSelectedModule(firstWithEntries.module);
+    }
+  }, [moduleGroups, selectedMapping, selectedModule]);
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4 max-w-[1600px]">
       <PageHeader
         title="Service Configuration"
-        subtitle="One place to define the service taxonomy, module dependencies, and downstream rules"
+        subtitle="Full module configuration hub for workflows, approvals, finance rules, vehicle rules, form fields, SLA, and notifications"
         icon={Settings}
         accent="violet"
       />
@@ -184,68 +288,156 @@ export default function ServiceConfigPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-4">
         {/* ───────── Left panel — categories + types ───────── */}
-        <aside className="bg-slate-900 border border-white/10 rounded-2xl p-3 space-y-2">
+        <aside className="bg-slate-900 border border-white/10 rounded-2xl p-3 space-y-3">
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search services…"
-              className="w-full bg-slate-800 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search modules and service types..."
+              className="w-full bg-slate-800 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
           </div>
-          <button onClick={() => setShowNewCat(true)}
-            className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-200 text-xs font-semibold">
-            <Plus className="w-3.5 h-3.5" /> Add category
-          </button>
-
-          {showNewCat && (
-            <NewCategoryRow onCancel={() => setShowNewCat(false)} onCreated={() => { setShowNewCat(false); void load(); }} />
-          )}
-
           {loading ? (
             <div className="space-y-2 pt-2">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-9 rounded-lg bg-slate-800/40 animate-pulse" />
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-12 rounded-xl bg-slate-800/40 animate-pulse" />
               ))}
             </div>
           ) : (
-            <div className="space-y-1 pt-1 max-h-[70vh] overflow-y-auto">
-              {filteredCategories.map(cat => (
-                <div key={cat.id} className="space-y-0.5">
-                  <button onClick={() => toggle(cat.id)}
-                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-sm font-semibold ${TONE_FG[cat.tone]} hover:bg-white/5`}>
-                    {expanded.has(cat.id) ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                    <Folder className="w-3.5 h-3.5 shrink-0" />
-                    <span className="flex-1 truncate">{cat.name}</span>
-                    <span className="text-[10px] tabular-nums text-slate-500">{cat.types.length}</span>
-                  </button>
-                  {expanded.has(cat.id) && (
-                    <div className="ml-5 space-y-0.5 border-l border-white/5 pl-2">
-                      {cat.types.map(t => (
-                        <button key={t.id} onClick={() => setSelectedTypeId(t.id)}
-                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs ${
-                            selectedTypeId === t.id
-                              ? `${TONE_BG[t.tone]} ${TONE_FG[t.tone]} ring-1 ring-current/30`
-                              : 'text-slate-300 hover:bg-white/5'
-                          }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${TONE_BG[t.tone]} ring-1 ring-current/40`} />
-                          <span className="flex-1 truncate">{t.name}</span>
-                          {t.isSystem && <span className="text-[9px] uppercase text-slate-500 tracking-wider">sys</span>}
-                        </button>
-                      ))}
-                      <button onClick={() => setShowNewType(cat.id)}
-                        className="w-full inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-slate-400 hover:text-violet-300 hover:bg-white/5">
-                        <Plus className="w-3 h-3" /> Add service type
+            <div className="space-y-3 pt-1 max-h-[70vh] overflow-y-auto pr-1">
+              {moduleGroups.map(group => {
+                const modulePanelId = `module:${group.module}`;
+                const isExpanded = expanded.has(modulePanelId);
+                return (
+                  <div key={group.module} className="rounded-xl border border-white/10 bg-slate-950/40 overflow-hidden">
+                    <button
+                      onClick={() => {
+                        toggle(modulePanelId);
+                        setSelectedModule(group.module);
+                        const hasSelectedType = group.entries.some((entry) => entry.type.id === selectedTypeId);
+                        if (!hasSelectedType && group.entries[0]) {
+                          setSelectedTypeId(group.entries[0].type.id);
+                        }
+                      }}
+                      className={`w-full flex items-center gap-3 px-3 py-3 text-left transition ${
+                        selectedModule === group.module ? 'bg-violet-600/10' : 'hover:bg-white/5'
+                      }`}
+                    >
+                      <div className="w-9 h-9 rounded-lg bg-violet-500/10 text-violet-200 flex items-center justify-center text-xs font-bold shrink-0">
+                        {group.label.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold text-white truncate">{group.label}</div>
+                        <div className="text-[11px] text-slate-400 truncate">
+                          {group.entries.length} configured service type{group.entries.length === 1 ? '' : 's'}
+                        </div>
+                      </div>
+                      {isExpanded ? (
+                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                      )}
+                    </button>
+
+                    {isExpanded && (
+                      <div className="border-t border-white/5 bg-slate-950/30 px-2 py-2 space-y-1">
+                        {group.entries.length === 0 ? (
+                          <div className="px-3 py-2 text-xs text-slate-500">
+                            No service types are linked to this module yet.
+                          </div>
+                        ) : (
+                          group.entries.map(({ type, category, mapping }) => (
+                            <button
+                              key={type.id}
+                              onClick={() => {
+                                setSelectedModule(group.module);
+                                setExpanded(prev => {
+                                  const next = new Set(prev);
+                                  next.add(modulePanelId);
+                                  return next;
+                                });
+                                setSelectedTypeId(type.id);
+                              }}
+                              className={`w-full rounded-lg px-3 py-2 text-left transition ${
+                                selectedTypeId === type.id
+                                  ? `${TONE_BG[type.tone]} ${TONE_FG[type.tone]} ring-1 ring-current/30`
+                                  : 'hover:bg-white/5 text-slate-200'
+                              }`}
+                            >
+                              <div className="flex items-start gap-2">
+                                <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${TONE_BG[type.tone]} ring-1 ring-current/40`} />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium truncate">{type.name}</span>
+                                    {type.isSystem && (
+                                      <span className="text-[9px] uppercase tracking-wider text-slate-500">sys</span>
+                                    )}
+                                  </div>
+                                  <div className="text-[11px] text-slate-400 truncate">
+                                    {category.name} · {type.key}
+                                    {mapping?.subModule ? ` · ${mapping.subModule}` : ''}
+                                  </div>
+                                </div>
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {!moduleGroups.some(group => group.entries.length > 0) && (
+                <div className="rounded-xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-slate-500">
+                  No module-mapped service types match your search yet.
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="border-t border-white/5 pt-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Advanced Taxonomy</div>
+                <div className="text-[11px] text-slate-500">
+                  Categories and service types still power the rules engine behind each module.
+                </div>
+              </div>
+              <button onClick={() => setShowNewCat(true)}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-200 text-xs font-semibold shrink-0">
+                <Plus className="w-3.5 h-3.5" /> Add category
+              </button>
+            </div>
+
+            {showNewCat && (
+              <NewCategoryRow onCancel={() => setShowNewCat(false)} onCreated={() => { setShowNewCat(false); void load(); }} />
+            )}
+
+            {selectedModuleGroup && (
+              <div className="rounded-lg border border-white/5 bg-slate-950/40 p-2">
+                <div className="text-[11px] uppercase tracking-wider text-slate-500 mb-2">
+                  Add service type to {selectedModuleGroup.label}
+                </div>
+                <div className="space-y-1">
+                  {categories.map((category) => (
+                    <div key={category.id}>
+                      <button onClick={() => setShowNewType(category.id)}
+                        className="w-full inline-flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs text-slate-300 hover:text-violet-300 hover:bg-white/5">
+                        <Plus className="w-3 h-3" /> {category.name}
                       </button>
-                      {showNewType === cat.id && (
-                        <NewTypeRow categoryId={cat.id}
+                      {showNewType === category.id && (
+                        <NewTypeRow categoryId={category.id}
                           onCancel={() => setShowNewType(null)}
                           onCreated={() => { setShowNewType(null); void load(); }} />
                       )}
                     </div>
-                  )}
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </aside>
 
         {/* ───────── Right panel — tabs ───────── */}
@@ -253,7 +445,7 @@ export default function ServiceConfigPage() {
           {!selectedType ? (
             <div className="py-20 text-center text-slate-500 text-sm">
               <Layers className="w-8 h-8 mx-auto mb-3 text-slate-600" />
-              Select a service type from the left panel to view its configuration.
+              Select a module-linked service type from the left panel to view its configuration hub.
             </div>
           ) : (
             <>
@@ -265,7 +457,7 @@ export default function ServiceConfigPage() {
                 <div className="flex-1 min-w-0">
                   <h2 className="text-lg font-bold text-white truncate">{selectedType.type.name}</h2>
                   <p className="text-xs text-slate-500 truncate">
-                    {selectedType.category.name} · <span className="font-mono">{selectedType.type.key}</span>
+                    {LINKED_MODULE_LABEL[selectedMapping?.linkedModule ?? 'ADMIN']} · {selectedType.category.name} · <span className="font-mono">{selectedType.type.key}</span>
                   </p>
                 </div>
               </div>
@@ -278,7 +470,10 @@ export default function ServiceConfigPage() {
                 onChange={setActiveScopeId}
                 showNewScope={showNewScope}
                 onShowNewScope={setShowNewScope}
-                onScopeCreated={() => { setShowNewScope(false); void loadScopes(); }} />
+                onScopeCreated={() => { setShowNewScope(false); void loadScopes(); }}
+                onScopesChanged={() => { void loadScopes(); }} />
+
+              <HealthPanel health={health} loading={healthLoading} onTab={k => setActiveTab(k)} />
 
               {/* Tab strip */}
               <div className="flex flex-wrap gap-1 p-2 border-b border-white/5">
@@ -289,7 +484,7 @@ export default function ServiceConfigPage() {
                     <button key={t.key} onClick={() => setActiveTab(t.key)}
                       className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                         active
-                          ? 'bg-violet-500/20 text-violet-200 ring-1 ring-violet-500/40'
+                          ? 'bg-violet-100 text-violet-900 ring-1 ring-violet-300 shadow-sm'
                           : 'text-slate-300 hover:bg-white/5'
                       }`}>
                       <Icon className="w-3.5 h-3.5" /> {t.label}
@@ -325,6 +520,11 @@ export default function ServiceConfigPage() {
                     typeName:    selectedType.type.name,
                     categoryKey: selectedType.category.key,
                     onSwitchTab: (k: string) => setActiveTab(k as TabKey),
+                    // Phase B++ — Form Fields tab consumes this to drive
+                    // module-aware bindings (e.g. when Module Mapping has
+                    // linkedModule='MAINTENANCE', Form Fields' bind-to
+                    // dropdown shows MaintenanceRequest fields).
+                    linkedModule: selectedMapping?.linkedModule ?? null,
                   };
                   const k = `${selectedType.type.id}:${activeScopeId}`;
                   return (
@@ -339,6 +539,7 @@ export default function ServiceConfigPage() {
                       {activeTab === 'ticketing'  && <TicketingTab  key={k} {...ruleProps} />}
                       {activeTab === 'epod'       && <EpodTab       key={k} {...ruleProps} />}
                       {activeTab === 'automation' && <AutomationTab key={k} {...ruleProps} />}
+                      {activeTab === 'catalog'    && <CatalogTab    key={k} {...ruleProps} />}
                     </>
                   );
                 })()}
@@ -347,6 +548,80 @@ export default function ServiceConfigPage() {
           )}
         </section>
       </div>
+    </div>
+  );
+}
+
+function HealthPanel({
+  health, loading, onTab,
+}: {
+  health: ServiceHealth | null;
+  loading: boolean;
+  onTab: (tab: TabKey) => void;
+}) {
+  const tabMap: Record<string, TabKey> = {
+    'Module Mapping': 'mapping',
+    Approval: 'approval',
+    Workflow: 'workflow',
+    Finance: 'finance',
+    'Trip & Dispatch': 'trip',
+    'Form Fields': 'formFields',
+    'Vehicle Rules': 'vehicle',
+    Scope: 'basic',
+  };
+
+  if (loading) {
+    return (
+      <div className="px-5 py-3 border-b border-white/5 bg-slate-950/30 text-xs text-slate-500">
+        Checking configuration health...
+      </div>
+    );
+  }
+  if (!health) return null;
+
+  const tone = health.status === 'BLOCKED'
+    ? 'border-rose-500/30 bg-rose-500/10 text-rose-200'
+    : health.status === 'WARN'
+      ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+      : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200';
+
+  return (
+    <div className="px-5 py-3 border-b border-white/5 bg-slate-950/30 space-y-3">
+      <div className={`rounded-lg border px-3 py-2 ${tone}`}>
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <AlertCircle className="w-4 h-4" />
+          Config Health: {health.status}
+          <span className="ml-auto text-[11px] font-normal opacity-80">
+            {health.impact.activeTickets} active ticket(s) · {health.impact.activeWorkflowsWithSteps}/{health.impact.activeWorkflows} active workflow(s) with steps
+          </span>
+        </div>
+      </div>
+
+      {health.issues.length > 0 && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
+          {health.issues.slice(0, 6).map(issue => (
+            <button
+              key={`${issue.code}:${issue.message}`}
+              type="button"
+              onClick={() => onTab(tabMap[issue.tab] ?? 'basic')}
+              className={`text-left rounded-lg border px-3 py-2 text-xs ${
+                issue.severity === 'error'
+                  ? 'border-rose-500/25 bg-rose-500/5 text-rose-200'
+                  : issue.severity === 'warning'
+                    ? 'border-amber-500/25 bg-amber-500/5 text-amber-200'
+                    : 'border-blue-500/25 bg-blue-500/5 text-blue-200'
+              }`}
+            >
+              <div className="font-semibold">{issue.tab} · {issue.severity.toUpperCase()}</div>
+              <div className="mt-0.5 text-slate-300">{issue.message}</div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {health.issues.length === 0 && (
+        <div className="text-xs text-emerald-300">No cross-tab configuration gaps detected for this service and scope.</div>
+      )}
     </div>
   );
 }
@@ -368,6 +643,7 @@ function NewCategoryRow({ onCancel, onCreated }: { onCancel: () => void; onCreat
         body: JSON.stringify({ name: name.trim(), key: key.trim() || name.trim() }),
       });
       const d = await res.json();
+      if (res.status === 428) { setErr(approvalMessage(d)); return; }
       if (!res.ok) { setErr(d?.error ?? 'Create failed'); return; }
       onCreated();
     } finally { setBusy(false); }
@@ -405,6 +681,7 @@ function NewTypeRow({ categoryId, onCancel, onCreated }: { categoryId: string; o
         body: JSON.stringify({ categoryId, name: name.trim(), key: key.trim() || name.trim() }),
       });
       const d = await res.json();
+      if (res.status === 428) { setErr(approvalMessage(d)); return; }
       if (!res.ok) { setErr(d?.error ?? 'Create failed'); return; }
       onCreated();
     } finally { setBusy(false); }
@@ -458,6 +735,7 @@ function BasicInfoTab({
         }),
       });
       const d = await res.json();
+      if (res.status === 428) { setMsg(approvalMessage(d)); return; }
       if (!res.ok) { setMsg(d?.error ?? 'Save failed'); return; }
       setMsg('Saved.');
       onSaved();
@@ -471,6 +749,7 @@ function BasicInfoTab({
     try {
       const res = await fetch(`/api/admin/service-config/types/${type.id}`, { method: 'DELETE' });
       const d = await res.json();
+      if (res.status === 428) { setMsg(approvalMessage(d)); return; }
       if (!res.ok) { setMsg(d?.error ?? 'Delete failed'); return; }
       setMsg('Deleted.'); onSaved();
     } finally { setSaving(false); }
@@ -579,6 +858,7 @@ function ModuleMappingTab({
         }),
       });
       const d = await res.json();
+      if (res.status === 428) { setMsg(approvalMessage(d)); return; }
       if (!res.ok) { setMsg(d?.error ?? 'Save failed'); return; }
       setMsg('Saved.'); onSaved();
     } finally { setSaving(false); }
@@ -649,10 +929,10 @@ function Toggle({ label, icon: Icon, checked, onChange }: {
     <button type="button" onClick={() => onChange(!checked)}
       className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all text-left ${
         checked
-          ? 'bg-violet-500/15 border-violet-500/40 text-violet-100'
+          ? 'bg-violet-100 border-violet-300 text-violet-900 shadow-sm'
           : 'bg-slate-800/60 border-white/10 text-slate-400 hover:border-white/20'
       }`}>
-      <Icon className={`w-4 h-4 ${checked ? 'text-violet-300' : 'text-slate-500'}`} />
+      <Icon className={`w-4 h-4 ${checked ? 'text-violet-700' : 'text-slate-500'}`} />
       <span className="flex-1">{label}</span>
       <span className={`w-8 h-4 rounded-full relative ${checked ? 'bg-violet-500' : 'bg-slate-700'}`}>
         <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${checked ? 'left-4' : 'left-0.5'}`} />
@@ -664,7 +944,7 @@ function Toggle({ label, icon: Icon, checked, onChange }: {
 // ── Scope picker ────────────────────────────────────────────────────────────
 
 function ScopePicker({
-  scopes, activeScopeId, onChange, showNewScope, onShowNewScope, onScopeCreated,
+  scopes, activeScopeId, onChange, showNewScope, onShowNewScope, onScopeCreated, onScopesChanged,
 }: {
   scopes: ServiceScope[];
   activeScopeId: string | null;
@@ -672,8 +952,22 @@ function ScopePicker({
   showNewScope: boolean;
   onShowNewScope: (b: boolean) => void;
   onScopeCreated: () => void;
+  onScopesChanged: () => void;
 }) {
   const active = scopes.find(s => s.id === activeScopeId);
+  const [manageOpen, setManageOpen] = useState(false);
+  const activePath = useMemo(() => {
+    const byId = new Map(scopes.map(s => [s.id, s]));
+    const path: ServiceScope[] = [];
+    let cursor = active;
+    const guard = new Set<string>();
+    while (cursor && !guard.has(cursor.id)) {
+      path.unshift(cursor);
+      guard.add(cursor.id);
+      cursor = cursor.parentScopeId ? byId.get(cursor.parentScopeId) : undefined;
+    }
+    return path;
+  }, [active, scopes]);
 
   return (
     <div className="px-5 py-3 border-b border-white/5 bg-slate-950/40">
@@ -691,16 +985,33 @@ function ScopePicker({
           ))}
         </select>
         {active && !active.isRoot && (
-          <span className="text-[11px] text-blue-300 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30">
+          <span className="text-[11px] text-blue-900 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 border border-blue-300 shadow-sm">
             Editing at {SCOPE_LEVEL_LABEL[active.level]}
           </span>
         )}
         <span className="ml-auto" />
+        <button type="button" onClick={() => setManageOpen(v => !v)}
+          className="text-xs px-2.5 py-1 rounded-md bg-slate-800/70 hover:bg-slate-800 border border-white/10 text-slate-300 inline-flex items-center gap-1">
+          <Settings className="w-3.5 h-3.5" /> Manage
+        </button>
         <button type="button" onClick={() => onShowNewScope(true)}
-          className="text-xs px-2.5 py-1 rounded-md bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-200 inline-flex items-center gap-1">
+          className="text-xs px-2.5 py-1 rounded-md bg-violet-100 hover:bg-violet-200 border border-violet-300 text-violet-900 shadow-sm inline-flex items-center gap-1">
           <Plus className="w-3.5 h-3.5" /> Add scope
         </button>
       </div>
+      {activePath.length > 0 && (
+        <div className="pt-2 flex items-center gap-1 flex-wrap text-[11px] text-slate-500">
+          <span className="uppercase tracking-wider">Path</span>
+          {activePath.map((s, idx) => (
+            <span key={s.id} className="inline-flex items-center gap-1">
+              {idx > 0 && <ChevronRight className="w-3 h-3 text-slate-600" />}
+              <span className={`px-2 py-0.5 rounded-full border ${s.id === activeScopeId ? 'border-blue-300 bg-blue-100 text-blue-900 shadow-sm' : 'border-white/10 bg-slate-800/50 text-slate-400'}`}>
+                {s.name}
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
       {showNewScope && (
         <div className="pt-3">
           <NewScopeForm
@@ -710,6 +1021,114 @@ function ScopePicker({
             onCreated={onScopeCreated} />
         </div>
       )}
+      {manageOpen && active && (
+        <ScopeQuickEdit
+          scope={active}
+          scopes={scopes}
+          onChanged={onScopesChanged}
+          onDeleted={() => {
+            const root = scopes.find(s => s.isRoot);
+            if (root) onChange(root.id);
+            onScopesChanged();
+            setManageOpen(false);
+          }} />
+      )}
+    </div>
+  );
+}
+
+function ScopeQuickEdit({
+  scope, scopes, onChanged, onDeleted,
+}: {
+  scope: ServiceScope;
+  scopes: ServiceScope[];
+  onChanged: () => void;
+  onDeleted: () => void;
+}) {
+  const [name, setName] = useState(scope.name);
+  const [description, setDescription] = useState(scope.description ?? '');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setName(scope.name);
+    setDescription(scope.description ?? '');
+    setMsg(null);
+  }, [scope.id, scope.name, scope.description]);
+
+  const save = async () => {
+    if (scope.isRoot) return;
+    setBusy(true); setMsg(null);
+    try {
+      const res = await fetch(`/api/admin/service-config/scopes/${scope.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), description: description.trim() || null }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.status === 428) { setMsg(approvalMessage(d)); return; }
+      if (!res.ok) { setMsg(d?.error ?? 'Update failed'); return; }
+      setMsg('Scope updated.');
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (scope.isRoot) return;
+    setBusy(true); setMsg(null);
+    try {
+      const res = await fetch(`/api/admin/service-config/scopes/${scope.id}`, { method: 'DELETE' });
+      const d = await res.json().catch(() => ({}));
+      if (res.status === 428) { setMsg(approvalMessage(d)); return; }
+      if (!res.ok) { setMsg(d?.error ?? 'Delete failed'); return; }
+      setMsg('Scope deleted.');
+      onDeleted();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const childCount = scopes.filter(s => s.parentScopeId === scope.id).length;
+
+  return (
+    <div className="mt-3 rounded-lg border border-white/10 bg-slate-900/70 p-3 space-y-2">
+      {scope.isRoot ? (
+        <div className="text-[11px] text-slate-400">Tenant root scope is the base of the hierarchy and cannot be edited or deleted.</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2 items-end">
+            <div className="space-y-1">
+              <label className="text-[10px] text-slate-400 uppercase tracking-wide">Scope name</label>
+              <input value={name} onChange={e => setName(e.target.value)}
+                className="w-full bg-slate-950 border border-white/10 rounded px-2 py-1.5 text-xs text-white" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] text-slate-400 uppercase tracking-wide">Description</label>
+              <input value={description} onChange={e => setDescription(e.target.value)}
+                className="w-full bg-slate-950 border border-white/10 rounded px-2 py-1.5 text-xs text-white" />
+            </div>
+            <div className="flex gap-1">
+              <button onClick={save} disabled={busy || !name.trim()}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs disabled:opacity-50">
+                <Save className="w-3.5 h-3.5" /> Save
+              </button>
+              <button onClick={remove} disabled={busy || childCount > 0}
+                title={childCount > 0 ? 'Delete child scopes first' : 'Delete scope'}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-200 text-xs disabled:opacity-50">
+                <Trash2 className="w-3.5 h-3.5" /> Delete
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-[10px] text-slate-500">
+            <span>Level: {SCOPE_LEVEL_LABEL[scope.level]}</span>
+            <span>Key: <span className="font-mono">{scope.key}</span></span>
+            <span>Children: {childCount}</span>
+          </div>
+        </>
+      )}
+      {msg && <div className={`text-[11px] ${msg === 'Scope updated.' || msg === 'Scope deleted.' ? 'text-emerald-300' : 'text-amber-300'}`}>{msg}</div>}
     </div>
   );
 }
@@ -742,6 +1161,7 @@ function NewScopeForm({
         }),
       });
       const d = await res.json();
+      if (res.status === 428) { setErr(approvalMessage(d)); return; }
       if (!res.ok) { setErr(d?.error ?? 'Create failed'); return; }
       onCreated();
     } finally { setBusy(false); }

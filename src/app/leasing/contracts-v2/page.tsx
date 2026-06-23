@@ -1,17 +1,53 @@
 'use client';
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { BadgeCheck, Clock3, CalendarClock, Layers3 } from 'lucide-react';
 import { addMonths, quotationToContract } from '@/lib/autoFill';
+import RowActionMenu from '@/components/ui/RowActionMenu';
+import DataTableToolbar from '@/components/ui/DataTableToolbar';
+import SmartDataGridHeader from '@/components/ui/SmartDataGridHeader';
+import { KpiCard, KpiGrid } from '@/components/ui/page-theme';
+import { useDataTableColumns, type DataTableColumn } from '@/hooks/useDataTableColumns';
+import { downloadXLSX } from '@/lib/exportUtils';
+import { downloadTablePdf } from '@/lib/exportTablePdf';
 
 interface Vehicle {
   id: string;
+  vehicleId?: string | null;
   type: string;
   make: string;
   model: string;
+  year?: number | null;
   licensePlate: string;
   driver: string;
   monthlyRate: number;
   status: string;
+  branchId?: string | null;
+  branchName?: string | null;
+  fleetStatus?: string | null;
+  lastOdometer?: number | null;
+}
+
+interface FleetVehicleOption {
+  id: string;
+  vehicleCode: string | null;
+  licensePlate: string | null;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  makeModelYear: string;
+  vehicleTypeName: string | null;
+  vehicleClass: string | null;
+  vehicleGroup: string | null;
+  branchId: string | null;
+  branchName: string | null;
+  status: string | null;
+  lastOdometer: number | null;
+}
+
+interface BranchOption {
+  id: string;
+  name: string;
 }
 
 interface Contract {
@@ -29,10 +65,33 @@ interface Contract {
   insurance: boolean;
   maintenance: boolean;
   driver: boolean;
-  status: 'Active' | 'Draft' | 'Pending Approval' | 'Expired' | 'Terminated';
+  status: 'Active' | 'Draft' | 'Pending Approval' | 'Expired' | 'Terminated' | 'Closed';
   branch: string;
   vehicles?: Vehicle[];
 }
+
+type SortKey =
+  | 'contractNumber'
+  | 'lessee'
+  | 'agreementType'
+  | 'leaseType'
+  | 'vehicleCount'
+  | 'duration'
+  | 'monthlyRate'
+  | 'status'
+  | 'branch';
+
+type ColumnFilters = {
+  contractNumber: string;
+  lessee: string;
+  agreementType: string;
+  leaseType: string;
+  vehicleCount: string;
+  duration: string;
+  monthlyRate: string;
+  status: string;
+  branch: string;
+};
 
 interface NewContractForm {
   step: 1 | 2 | 3;
@@ -48,6 +107,7 @@ interface NewContractForm {
   securityDeposit: string;
   mileageCap: string;
   branch: string;
+  openingBranchId: string;
   vehicles: Vehicle[];
   insuranceIncluded: boolean;
   maintenanceIncluded: boolean;
@@ -108,34 +168,99 @@ const MOCK_CONTRACTS: Contract[] = [
   },
 ];
 
+const formatLeaseTypeLabel = (value: Contract['leaseType']) =>
+  value
+    .toLowerCase()
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+
+const DEFAULT_AGREEMENT_COLUMNS: DataTableColumn<SortKey>[] = [
+  { key: 'contractNumber', label: 'Contract #', visible: true },
+  { key: 'lessee', label: 'Lessee', visible: true },
+  { key: 'agreementType', label: 'Agreement Type', visible: true },
+  { key: 'leaseType', label: 'Lease Type', visible: true },
+  { key: 'vehicleCount', label: 'Vehicles', visible: true },
+  { key: 'duration', label: 'Term', visible: true },
+  { key: 'monthlyRate', label: 'Monthly Rate', visible: true },
+  { key: 'status', label: 'Status', visible: true },
+  { key: 'branch', label: 'Branch', visible: true },
+];
+
 export default function ContractsV2Page() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNewContract, setShowNewContract] = useState(false);
   const [showPaymentSchedule, setShowPaymentSchedule] = useState<string | null>(null);
+  const [showTableFilters, setShowTableFilters] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
   const [expandedVehicles, setExpandedVehicles] = useState<Set<string>>(new Set());
-  const [filterStatus, setFilterStatus] = useState('');
-  const [filterAgreementType, setFilterAgreementType] = useState('');
-  const [filterLeaseType, setFilterLeaseType] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [quickSearch, setQuickSearch] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('contractNumber');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [columnFilters, setColumnFilters] = useState<ColumnFilters>({
+    contractNumber: '',
+    lessee: '',
+    agreementType: '',
+    leaseType: '',
+    vehicleCount: '',
+    duration: '',
+    monthlyRate: '',
+    status: '',
+    branch: '',
+  });
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [showAddVehicle, setShowAddVehicle] = useState<Contract | null>(null);
   const [newVehicleForm, setNewVehicleForm] = useState({ type: '', make: '', model: '', licensePlate: '', driver: '', monthlyRate: '' });
   const [addingVehicle, setAddingVehicle] = useState(false);
   const [addVehicleMsg, setAddVehicleMsg] = useState('');
+  const [fleetVehicles, setFleetVehicles] = useState<FleetVehicleOption[]>([]);
+  const [fleetVehiclesLoading, setFleetVehiclesLoading] = useState(false);
+  const [selectedFleetVehicleId, setSelectedFleetVehicleId] = useState('');
+  const [showOtherBranchVehicles, setShowOtherBranchVehicles] = useState(false);
+  const [newContractVehicleId, setNewContractVehicleId] = useState('');
+  const [newContractShowOtherBranches, setNewContractShowOtherBranches] = useState(false);
+  const [showCloseContract, setShowCloseContract] = useState<Contract | null>(null);
+  const [closingContract, setClosingContract] = useState(false);
+  const [closeContractMsg, setCloseContractMsg] = useState('');
+  const [closeContractForm, setCloseContractForm] = useState({
+    closingBranchId: '',
+    returnCondition: 'GOOD',
+    returnMileage: '',
+    depositSettlementAmount: '',
+    finalReceiptAmount: '',
+    finalReceiptPaymentMethod: 'BANK_TRANSFER',
+    finalReceiptNotes: '',
+  });
   const [saving, setSaving] = useState(false);
 
   const [newContractForm, setNewContractForm] = useState<NewContractForm>({
     step: 1, lessee: '', agreementType: 'INDIVIDUAL', masterContractId: '',
     leaseType: 'LONG_TERM', durationMonths: '', startDate: '', endDate: '',
     monthlyRate: '', currency: 'AED', securityDeposit: '', mileageCap: '',
-    branch: '', vehicles: [], insuranceIncluded: false, maintenanceIncluded: false,
+    branch: '', openingBranchId: '', vehicles: [], insuranceIncluded: false, maintenanceIncluded: false,
     driverIncluded: false, notes: '',
   });
 
   const [paymentScheduleMonths, setPaymentScheduleMonths] = useState('12');
   const [paymentVatRate, setPaymentVatRate] = useState('5');
   const [paymentPreview, setPaymentPreview] = useState<any[]>([]);
+  const [paymentScheduleMsg, setPaymentScheduleMsg] = useState('');
+  const {
+    columns,
+    visibleColumns,
+    toggleColumn,
+    moveColumn,
+    resizeColumn,
+  } = useDataTableColumns<SortKey>('leasing-contracts-v2-columns', DEFAULT_AGREEMENT_COLUMNS);
+
+  const getColumnStyle = useCallback(
+    (key: SortKey) => {
+      const column = visibleColumns.find((item) => item.key === key);
+      return column?.width ? { width: `${column.width}px`, minWidth: `${column.width}px` } : undefined;
+    },
+    [visibleColumns],
+  );
 
   const loadContracts = useCallback(() => {
     fetch('/api/leasing/contracts-v2')
@@ -146,6 +271,70 @@ export default function ContractsV2Page() {
   }, []);
 
   useEffect(() => { loadContracts(); }, [loadContracts]);
+
+  const loadFleetVehicles = useCallback(() => {
+    setFleetVehiclesLoading(true);
+    fetch('/api/fleet/vehicles/dropdown?availableOnly=1&excludeLeaseAssigned=1')
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then(data => setFleetVehicles(Array.isArray(data?.vehicles) ? data.vehicles : []))
+      .catch(() => setFleetVehicles([]))
+      .finally(() => setFleetVehiclesLoading(false));
+  }, []);
+
+  useEffect(() => { loadFleetVehicles(); }, [loadFleetVehicles]);
+
+  const branchOptions = useMemo<BranchOption[]>(() => {
+    const options = new Map<string, string>();
+    for (const vehicle of fleetVehicles) {
+      if (vehicle.branchId) options.set(vehicle.branchId, vehicle.branchName || vehicle.branchId);
+    }
+    for (const contract of contracts) {
+      if (contract.branch) options.set(contract.branch, contract.branch);
+    }
+    return [...options.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [contracts, fleetVehicles]);
+
+  const vehicleLabel = useCallback((vehicle: FleetVehicleOption) => {
+    const plate = vehicle.licensePlate || vehicle.vehicleCode || 'Unregistered';
+    const model = vehicle.makeModelYear && vehicle.makeModelYear.length > 1 ? vehicle.makeModelYear : [vehicle.make, vehicle.model, vehicle.year].filter(Boolean).join(' ');
+    const branch = vehicle.branchName ? ` - ${vehicle.branchName}` : '';
+    return `${plate} - ${model || 'Vehicle'}${branch}`;
+  }, []);
+
+  const fleetToContractVehicle = useCallback((vehicle: FleetVehicleOption, monthlyRate?: number): Vehicle => ({
+    id: `fleet-${vehicle.id}`,
+    vehicleId: vehicle.id,
+    type: vehicle.vehicleTypeName || vehicle.vehicleClass || vehicle.vehicleGroup || 'Vehicle',
+    make: vehicle.make || '',
+    model: vehicle.model || vehicle.makeModelYear || '',
+    year: vehicle.year,
+    licensePlate: vehicle.licensePlate || vehicle.vehicleCode || '',
+    driver: '',
+    monthlyRate: monthlyRate ?? Number(newContractForm.monthlyRate || 0),
+    status: 'Selected',
+    branchId: vehicle.branchId,
+    branchName: vehicle.branchName,
+    fleetStatus: vehicle.status,
+    lastOdometer: vehicle.lastOdometer,
+  }), [newContractForm.monthlyRate]);
+
+  const filteredFleetVehiclesForNewContract = useMemo(() => (
+    fleetVehicles.filter(vehicle => (
+      newContractShowOtherBranches ||
+      !newContractForm.openingBranchId ||
+      vehicle.branchId === newContractForm.openingBranchId
+    ))
+  ), [fleetVehicles, newContractForm.openingBranchId, newContractShowOtherBranches]);
+
+  const filteredFleetVehiclesForAdd = useMemo(() => (
+    fleetVehicles.filter(vehicle => (
+      showOtherBranchVehicles ||
+      !showAddVehicle?.branch ||
+      vehicle.branchId === showAddVehicle.branch
+    ))
+  ), [fleetVehicles, showAddVehicle?.branch, showOtherBranchVehicles]);
 
   const prefillFromQuotation = useCallback(async (quotationId: string) => {
     try {
@@ -178,7 +367,7 @@ export default function ContractsV2Page() {
     const map: Record<string, Record<string, string>> = {
       agreement: { MASTER: 'bg-amber-500/20 text-amber-400 border-amber-500/30', INDIVIDUAL: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
       lease: { LONG_TERM: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30', SHORT_TERM: 'bg-teal-500/20 text-teal-400 border-teal-500/30', DAILY: 'bg-orange-500/20 text-orange-400 border-orange-500/30', MONTHLY: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' },
-      status: { Active: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', Draft: 'bg-slate-500/20 text-slate-400 border-slate-500/30', 'Pending Approval': 'bg-amber-500/20 text-amber-400 border-amber-500/30', Expired: 'bg-rose-500/20 text-rose-400 border-rose-500/30', Terminated: 'bg-red-500/20 text-red-400 border-red-500/30' },
+      status: { Active: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', Draft: 'bg-slate-500/20 text-slate-400 border-slate-500/30', 'Pending Approval': 'bg-amber-500/20 text-amber-400 border-amber-500/30', Expired: 'bg-rose-500/20 text-rose-400 border-rose-500/30', Terminated: 'bg-red-500/20 text-red-400 border-red-500/30', Closed: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
     };
     return map[type]?.[value] ?? 'bg-slate-500/20 text-slate-400 border-slate-500/30';
   };
@@ -189,14 +378,109 @@ export default function ContractsV2Page() {
     return isNaN(m) || m < 0 ? '-' : `${m} mo`;
   };
 
-  const filtered = contracts.filter(c => {
-    if (filterStatus && c.status !== filterStatus) return false;
-    if (filterAgreementType && c.agreementType !== filterAgreementType) return false;
-    if (filterLeaseType && c.leaseType !== filterLeaseType) return false;
-    if (searchTerm && !c.contractNumber.toLowerCase().includes(searchTerm.toLowerCase()) &&
-        !c.lessee.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-    return true;
-  });
+  const getContractDurationMonths = (contract: Pick<Contract, 'startDate' | 'endDate' | 'durationMonths'>) => {
+    const explicit = Number(contract.durationMonths ?? 0);
+    if (Number.isFinite(explicit) && explicit > 0) return explicit;
+
+    const start = new Date(contract.startDate);
+    const end = new Date(contract.endDate);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 12;
+
+    const months = Math.max(
+      1,
+      (end.getFullYear() - start.getFullYear()) * 12 +
+        (end.getMonth() - start.getMonth()) +
+        (end.getDate() >= start.getDate() ? 0 : -1),
+    );
+
+    return months;
+  };
+
+  const updateColumnFilter = (key: keyof ColumnFilters, value: string) => {
+    setColumnFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const toggleSort = (key: SortKey) => {
+    setSortKey((prevKey) => {
+      if (prevKey === key) {
+        setSortDirection((prevDirection) => (prevDirection === 'asc' ? 'desc' : 'asc'));
+        return prevKey;
+      }
+      setSortDirection('asc');
+      return key;
+    });
+  };
+
+  const filtered = useMemo(() => {
+    const normalizedQuickSearch = quickSearch.trim().toLowerCase();
+    const normalizedContract = columnFilters.contractNumber.trim().toLowerCase();
+    const normalizedLessee = columnFilters.lessee.trim().toLowerCase();
+    const normalizedBranch = columnFilters.branch.trim().toLowerCase();
+    const normalizedVehicleCount = columnFilters.vehicleCount.trim().toLowerCase();
+    const normalizedDuration = columnFilters.duration.trim().toLowerCase();
+    const normalizedMonthlyRate = columnFilters.monthlyRate.trim().toLowerCase();
+
+    const visibleContracts = contracts.filter((c) => {
+      const vehicleCountLabel = String(c.vehicleCount ?? c.vehicles?.length ?? 0);
+      const durationLabel = calcDuration(c.startDate, c.endDate).toLowerCase();
+      const monthlyRateLabel = String(c.monthlyRate ?? 0);
+
+      if (!showInactive && c.status !== 'Active') return false;
+      if (
+        normalizedQuickSearch &&
+        !c.contractNumber.toLowerCase().includes(normalizedQuickSearch) &&
+        !c.lessee.toLowerCase().includes(normalizedQuickSearch)
+      ) return false;
+      if (normalizedContract && !c.contractNumber.toLowerCase().includes(normalizedContract)) return false;
+      if (normalizedLessee && !c.lessee.toLowerCase().includes(normalizedLessee)) return false;
+      if (columnFilters.agreementType && c.agreementType !== columnFilters.agreementType) return false;
+      if (columnFilters.leaseType && c.leaseType !== columnFilters.leaseType) return false;
+      if (normalizedVehicleCount && !vehicleCountLabel.includes(normalizedVehicleCount)) return false;
+      if (normalizedDuration && !durationLabel.includes(normalizedDuration)) return false;
+      if (normalizedMonthlyRate && !monthlyRateLabel.includes(normalizedMonthlyRate)) return false;
+      if (columnFilters.status && c.status !== columnFilters.status) return false;
+      if (normalizedBranch && !(c.branch || '').toLowerCase().includes(normalizedBranch)) return false;
+      return true;
+    });
+
+    return [...visibleContracts].sort((a, b) => {
+      const direction = sortDirection === 'asc' ? 1 : -1;
+
+      const getValue = (contract: Contract) => {
+        switch (sortKey) {
+          case 'contractNumber':
+            return contract.contractNumber;
+          case 'lessee':
+            return contract.lessee;
+          case 'agreementType':
+            return contract.agreementType;
+          case 'leaseType':
+            return contract.leaseType;
+          case 'vehicleCount':
+            return contract.vehicleCount ?? contract.vehicles?.length ?? 0;
+          case 'duration':
+            return getContractDurationMonths(contract);
+          case 'monthlyRate':
+            return contract.monthlyRate ?? 0;
+          case 'status':
+            return contract.status;
+          case 'branch':
+            return contract.branch || '';
+          default:
+            return contract.contractNumber;
+        }
+      };
+
+      const left = getValue(a);
+      const right = getValue(b);
+
+      if (typeof left === 'number' && typeof right === 'number') {
+        return (left - right) * direction;
+      }
+
+      return String(left).localeCompare(String(right)) * direction;
+    });
+  }, [columnFilters, contracts, quickSearch, showInactive, sortDirection, sortKey]);
 
   const stats = {
     active: contracts.filter(c => c.status === 'Active').length,
@@ -208,19 +492,175 @@ export default function ContractsV2Page() {
     multiVehicle: contracts.filter(c => (c.vehicleCount ?? 0) > 1).length,
   };
 
+  const getColumnValue = (contract: Contract, key: SortKey) => {
+    switch (key) {
+      case 'contractNumber':
+        return contract.contractNumber;
+      case 'lessee':
+        return contract.lessee;
+      case 'agreementType':
+        return contract.agreementType;
+      case 'leaseType':
+        return formatLeaseTypeLabel(contract.leaseType);
+      case 'vehicleCount':
+        return `${contract.vehicleCount ?? contract.vehicles?.length ?? 0}`;
+      case 'duration':
+        return calcDuration(contract.startDate, contract.endDate);
+      case 'monthlyRate':
+        return `${(contract.monthlyRate ?? 0).toLocaleString()} AED`;
+      case 'status':
+        return contract.status;
+      case 'branch':
+        return contract.branch || '-';
+      default:
+        return '';
+    }
+  };
+
+  const exportColumns = visibleColumns.map((column) => column.label);
+  const exportRows = filtered.map((contract) =>
+    visibleColumns.reduce<Record<string, string | number>>((row, column) => {
+      row[column.label] = getColumnValue(contract, column.key);
+      return row;
+    }, {}),
+  );
+
+  const renderFilterControl = (key: SortKey) => {
+    switch (key) {
+      case 'agreementType':
+        return (
+          <select value={columnFilters.agreementType} onChange={(e) => updateColumnFilter('agreementType', e.target.value)}
+            className="w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white focus:border-blue-500/50 focus:outline-none">
+            <option value="">All</option>
+            <option value="MASTER">Master</option>
+            <option value="INDIVIDUAL">Individual</option>
+          </select>
+        );
+      case 'leaseType':
+        return (
+          <select value={columnFilters.leaseType} onChange={(e) => updateColumnFilter('leaseType', e.target.value)}
+            className="w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white focus:border-blue-500/50 focus:outline-none">
+            <option value="">All</option>
+            <option value="LONG_TERM">Long Term</option>
+            <option value="SHORT_TERM">Short Term</option>
+            <option value="DAILY">Daily</option>
+            <option value="MONTHLY">Monthly</option>
+          </select>
+        );
+      case 'status':
+        return (
+          <select value={columnFilters.status} onChange={(e) => updateColumnFilter('status', e.target.value)}
+            className="w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white focus:border-blue-500/50 focus:outline-none">
+            <option value="">All</option>
+            <option value="Active">Active</option>
+            <option value="Draft">Draft</option>
+            <option value="Pending Approval">Pending Approval</option>
+            <option value="Expired">Expired</option>
+            <option value="Terminated">Terminated</option>
+            <option value="Closed">Closed</option>
+          </select>
+        );
+      case 'vehicleCount':
+        return <input type="text" placeholder="Units..." value={columnFilters.vehicleCount} onChange={(e) => updateColumnFilter('vehicleCount', e.target.value)} className="w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-blue-500/50 focus:outline-none" />;
+      case 'duration':
+        return <input type="text" placeholder="e.g. 36" value={columnFilters.duration} onChange={(e) => updateColumnFilter('duration', e.target.value)} className="w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-blue-500/50 focus:outline-none" />;
+      case 'monthlyRate':
+        return <input type="text" placeholder="Amount..." value={columnFilters.monthlyRate} onChange={(e) => updateColumnFilter('monthlyRate', e.target.value)} className="w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-blue-500/50 focus:outline-none" />;
+      case 'branch':
+        return <input type="text" placeholder="Search..." value={columnFilters.branch} onChange={(e) => updateColumnFilter('branch', e.target.value)} className="w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-blue-500/50 focus:outline-none" />;
+      case 'contractNumber':
+        return <input type="text" placeholder="Search..." value={columnFilters.contractNumber} onChange={(e) => updateColumnFilter('contractNumber', e.target.value)} className="w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-blue-500/50 focus:outline-none" />;
+      case 'lessee':
+        return <input type="text" placeholder="Search..." value={columnFilters.lessee} onChange={(e) => updateColumnFilter('lessee', e.target.value)} className="w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-blue-500/50 focus:outline-none" />;
+      default:
+        return null;
+    }
+  };
+
+  const renderContractCell = (contract: Contract, key: SortKey) => {
+    const style = getColumnStyle(key);
+    switch (key) {
+      case 'contractNumber':
+        return (
+          <td className="smart-data-grid-cell px-4 py-3.5" style={style}>
+            <div className="text-sm font-bold text-white whitespace-nowrap">{contract.contractNumber}</div>
+            <div className="mt-1 text-xs text-slate-500">Contract record</div>
+          </td>
+        );
+      case 'lessee':
+        return (
+          <td className="smart-data-grid-cell px-4 py-3.5" style={style}>
+            <div className="text-sm font-medium text-white">{contract.lessee}</div>
+            <div className="mt-1 text-xs text-slate-500">{contract.agreementType === 'MASTER' ? 'Corporate account' : 'Individual account'}</div>
+          </td>
+        );
+      case 'agreementType':
+        return (
+          <td className="smart-data-grid-cell px-4 py-3.5" style={style}>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getBadge('agreement', contract.agreementType)}`}>{contract.agreementType}</span>
+          </td>
+        );
+      case 'leaseType':
+        return (
+          <td className="smart-data-grid-cell px-4 py-3.5" style={style}>
+            <span className={`inline-flex whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium border ${getBadge('lease', contract.leaseType)}`}>{formatLeaseTypeLabel(contract.leaseType)}</span>
+          </td>
+        );
+      case 'vehicleCount':
+        return (
+          <td className="smart-data-grid-cell px-4 py-3.5" style={style}>
+            <button onClick={() => setExpandedVehicles(prev => {
+              const next = new Set(prev);
+              if (next.has(contract.id)) next.delete(contract.id); else next.add(contract.id);
+              return next;
+            })}
+              className="px-3 py-1 rounded-full bg-slate-700/60 text-white text-xs font-semibold hover:bg-slate-600/60 transition-colors">
+              {contract.vehicleCount ?? (contract.vehicles?.length ?? 0)} unit{(contract.vehicleCount ?? 0) !== 1 ? 's' : ''}
+            </button>
+          </td>
+        );
+      case 'duration':
+        return (
+          <td className="smart-data-grid-cell px-4 py-3.5" style={style}>
+            <div className="text-sm font-semibold text-white">{calcDuration(contract.startDate, contract.endDate)}</div>
+            <div className="mt-1 text-xs text-slate-500">{contract.startDate} to {contract.endDate}</div>
+          </td>
+        );
+      case 'monthlyRate':
+        return <td className="smart-data-grid-cell px-4 py-3.5 text-sm font-semibold text-white" style={style}>{(contract.monthlyRate ?? 0).toLocaleString()} AED</td>;
+      case 'status':
+        return (
+          <td className="smart-data-grid-cell px-4 py-3.5" style={style}>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getBadge('status', contract.status)}`}>{contract.status}</span>
+          </td>
+        );
+      case 'branch':
+        return <td className="smart-data-grid-cell px-4 py-3.5" style={style}><div className="text-sm text-slate-200">{contract.branch || '-'}</div></td>;
+      default:
+        return null;
+    }
+  };
+
   const handleCreateContract = async () => {
     setSaving(true);
     try {
       const res = await fetch('/api/leasing/contracts-v2', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newContractForm),
+        body: JSON.stringify({ ...newContractForm, allowCrossBranchOverride: newContractShowOtherBranches }),
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setShowNewContract(false);
-        setNewContractForm({ step: 1, lessee: '', agreementType: 'INDIVIDUAL', masterContractId: '', leaseType: 'LONG_TERM', durationMonths: '', startDate: '', endDate: '', monthlyRate: '', currency: 'AED', securityDeposit: '', mileageCap: '', branch: '', vehicles: [], insuranceIncluded: false, maintenanceIncluded: false, driverIncluded: false, notes: '' });
+        setNewContractForm({ step: 1, lessee: '', agreementType: 'INDIVIDUAL', masterContractId: '', leaseType: 'LONG_TERM', durationMonths: '', startDate: '', endDate: '', monthlyRate: '', currency: 'AED', securityDeposit: '', mileageCap: '', branch: '', openingBranchId: '', vehicles: [], insuranceIncluded: false, maintenanceIncluded: false, driverIncluded: false, notes: '' });
+        setNewContractVehicleId('');
+        setNewContractShowOtherBranches(false);
+        loadFleetVehicles();
         loadContracts();
-      } else { alert('Failed to create contract'); }
+        if (Array.isArray(data.approvalRequests) && data.approvalRequests.length > 0) {
+          alert(`${data.approvalRequests.length} cross-branch vehicle assignment approval request(s) were queued.`);
+        }
+      } else { alert(data.error ?? 'Failed to create contract'); }
     } catch { alert('Error creating contract'); }
     finally { setSaving(false); }
   };
@@ -266,81 +706,173 @@ export default function ContractsV2Page() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <KpiGrid>
         {[
-          { label: 'Active', value: stats.active, color: 'from-emerald-500 to-teal-600' },
-          { label: 'Draft / Pending', value: stats.draftPending, color: 'from-amber-500 to-orange-600' },
-          { label: 'Expiring This Month', value: stats.expiring, color: 'from-rose-500 to-pink-600' },
-          { label: 'Multi-Vehicle', value: stats.multiVehicle, color: 'from-purple-500 to-indigo-600' },
-        ].map((s, i) => (
-          <div key={i} className="bg-slate-800/50 border border-white/10 rounded-2xl p-4">
-            <p className="text-slate-400 text-xs font-medium mb-1">{s.label}</p>
-            <p className={`text-2xl font-bold bg-gradient-to-r ${s.color} bg-clip-text text-transparent`}>{s.value}</p>
-          </div>
+          { label: 'Active', value: stats.active, accent: 'emerald' as const, icon: BadgeCheck, sub: 'Live contracts' },
+          { label: 'Draft / Pending', value: stats.draftPending, accent: 'amber' as const, icon: Clock3, sub: 'Needs action' },
+          { label: 'Expiring This Month', value: stats.expiring, accent: 'rose' as const, icon: CalendarClock, sub: 'Renew soon' },
+          { label: 'Multi-Vehicle', value: stats.multiVehicle, accent: 'violet' as const, icon: Layers3, sub: 'Fleet bundles' },
+        ].map((s) => (
+          <KpiCard
+            key={s.label}
+            label={s.label}
+            value={s.value}
+            accent={s.accent}
+            icon={s.icon}
+            sub={s.sub}
+          />
         ))}
+      </KpiGrid>
+
+      <div className="mb-4 flex justify-end">
+        <DataTableToolbar
+          filtersOpen={showTableFilters}
+          onToggleFilters={() => setShowTableFilters((current) => !current)}
+          onExportExcel={() => downloadXLSX('lease-agreements-export', exportRows, exportColumns)}
+          onExportPdf={() => downloadTablePdf({
+            filename: 'lease-agreements-export.pdf',
+            title: 'Lease Agreements',
+            columns: exportColumns,
+            rows: exportRows,
+          })}
+          columns={columns}
+          onToggleColumn={toggleColumn}
+          onMoveColumn={moveColumn}
+          onResizeColumn={(key, direction) => resizeColumn(key, direction === 'wider' ? 24 : -24)}
+          leftSlot={(
+            <label className="data-grid-toggle flex min-w-max items-center gap-3 rounded-full border border-white/12 bg-slate-950/45 px-3 py-1.5 text-sm font-semibold text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+              <span className={`data-grid-toggle-track relative inline-flex h-8 w-14 items-center rounded-full border transition ${showInactive ? 'data-grid-toggle-track--active border-blue-300/55 bg-blue-500/35 shadow-[0_0_0_3px_rgba(59,130,246,0.18)]' : 'border-white/15 bg-slate-800/90'}`}>
+                <span className={`inline-block h-6 w-6 rounded-full bg-white shadow-sm transition ${showInactive ? 'data-grid-toggle-thumb--active translate-x-7' : 'translate-x-1'}`} />
+                <input
+                  type="checkbox"
+                  className="sr-only"
+                  checked={showInactive}
+                  onChange={(e) => setShowInactive(e.target.checked)}
+                />
+              </span>
+              <span className="data-grid-toggle-label inline-block whitespace-nowrap tracking-[0.01em] text-slate-50">Show Inactive</span>
+            </label>
+          )}
+        />
       </div>
 
-      {/* Filters */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-4 flex gap-4 flex-wrap items-end">
-        <div className="flex-1 min-w-[180px]">
-          <label className="block text-xs font-medium text-slate-400 mb-1.5">Search</label>
-          <input type="text" placeholder="Contract # or Lessee" value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-900/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500/50" />
-        </div>
-        {[
-          { label: 'Status', val: filterStatus, setVal: setFilterStatus, opts: [['', 'All Status'], ['Active', 'Active'], ['Draft', 'Draft'], ['Pending Approval', 'Pending Approval'], ['Expired', 'Expired']] },
-          { label: 'Agreement Type', val: filterAgreementType, setVal: setFilterAgreementType, opts: [['', 'All Types'], ['MASTER', 'Master'], ['INDIVIDUAL', 'Individual']] },
-          { label: 'Lease Type', val: filterLeaseType, setVal: setFilterLeaseType, opts: [['', 'All Lease Types'], ['LONG_TERM', 'Long Term'], ['SHORT_TERM', 'Short Term'], ['DAILY', 'Daily'], ['MONTHLY', 'Monthly']] },
-        ].map(({ label, val, setVal, opts }) => (
-          <div key={label} className="flex-1 min-w-[140px]">
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">{label}</label>
-            <select value={val} onChange={e => setVal(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50">
-              {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </div>
-        ))}
-      </div>
-
-      {/* Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-white/5">
-              {['Contract #', 'Type', 'Lessee', 'Lease Type', 'Vehicles', 'Duration', 'Monthly Rate', 'Status', 'Branch', 'Actions'].map(h => (
-                <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-300 whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
+      {/* Grid Table */}
+      <div className="smart-data-grid-surface">
+        <table className="w-full min-w-[1320px]">
+          <SmartDataGridHeader
+            sortKey={sortKey}
+            sortDirection={sortDirection}
+            onSort={(key) => toggleSort(key as SortKey)}
+            columns={visibleColumns.map((column) => ({
+              key: column.key,
+              label: column.label,
+              sortable: true,
+              width: column.width,
+              headerClassName: 'text-[11px] uppercase tracking-[0.08em]',
+              filterClassName: 'px-4 py-2',
+              filter: showTableFilters ? renderFilterControl(column.key) : undefined,
+            }))}
+            actionHeader="Actions"
+            actionFilter={
+              showTableFilters ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setColumnFilters({
+                      contractNumber: '',
+                      lessee: '',
+                      agreementType: '',
+                      leaseType: '',
+                      vehicleCount: '',
+                      duration: '',
+                      monthlyRate: '',
+                      status: '',
+                      branch: '',
+                    });
+                    setQuickSearch('');
+                    setSortKey('contractNumber');
+                    setSortDirection('asc');
+                  }}
+                  className="rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-300 transition hover:border-white/20 hover:text-white"
+                >
+                  Reset
+                </button>
+              ) : undefined
+            }
+          />
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={10} className="px-4 py-12 text-center text-slate-500">No contracts found</td></tr>
+              <tr><td colSpan={visibleColumns.length + 1} className="px-4 py-12 text-center text-slate-500">No contracts found</td></tr>
             ) : filtered.map(c => (
               <React.Fragment key={c.id}>
                 <tr className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
-                  <td className="px-4 py-3.5 text-sm font-bold text-white whitespace-nowrap">{c.contractNumber}</td>
-                  <td className="px-4 py-3.5">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getBadge('agreement', c.agreementType)}`}>{c.agreementType}</span>
-                  </td>
-                  <td className="px-4 py-3.5 text-sm text-white">{c.lessee}</td>
-                  <td className="px-4 py-3.5">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getBadge('lease', c.leaseType)}`}>{c.leaseType.replace('_', ' ')}</span>
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <button onClick={() => setExpandedVehicles(prev => { const n = new Set(prev); n.has(c.id) ? n.delete(c.id) : n.add(c.id); return n; })}
-                      className="px-3 py-1 rounded-full bg-slate-700/60 text-white text-xs font-semibold hover:bg-slate-600/60 transition-colors">
-                      {c.vehicleCount ?? (c.vehicles?.length ?? 0)} unit{(c.vehicleCount ?? 0) !== 1 ? 's' : ''} {expandedVehicles.has(c.id) ? '' : ''}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3.5 text-sm font-semibold text-white">{calcDuration(c.startDate, c.endDate)}</td>
-                  <td className="px-4 py-3.5 text-sm font-semibold text-white">{(c.monthlyRate ?? 0).toLocaleString()} AED</td>
-                  <td className="px-4 py-3.5">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getBadge('status', c.status)}`}>{c.status}</span>
-                  </td>
-                  <td className="px-4 py-3.5 text-sm text-white">{c.branch || '-'}</td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex gap-1.5 flex-wrap">
+                  {visibleColumns.map((column) => (
+                    <React.Fragment key={column.key}>
+                      {renderContractCell(c, column.key)}
+                    </React.Fragment>
+                  ))}
+                  <td className="smart-data-grid-cell px-4 py-3.5">
+                    <RowActionMenu
+                      side="top"
+                      actions={[
+                        {
+                          label: 'View',
+                          tone: 'info',
+                          onSelect: () => setSelectedContract(c),
+                        },
+                        {
+                          label: 'Download PDF (EN)',
+                          tone: 'success',
+                          onSelect: () => window.open(`/api/leasing/contracts-v2/${c.id}/pdf?lang=en&download=1`, '_blank', 'noopener,noreferrer'),
+                        },
+                        {
+                          label: 'Download PDF (AR)',
+                          tone: 'success',
+                          onSelect: () => window.open(`/api/leasing/contracts-v2/${c.id}/pdf?lang=ar&download=1`, '_blank', 'noopener,noreferrer'),
+                        },
+                        {
+                          label: 'Add Vehicle',
+                          tone: 'accent',
+                          onSelect: () => {
+                            setShowAddVehicle(c);
+                            setSelectedFleetVehicleId('');
+                            setShowOtherBranchVehicles(false);
+                            setNewVehicleForm({ type: '', make: '', model: '', licensePlate: '', driver: '', monthlyRate: '' });
+                            setAddVehicleMsg('');
+                            loadFleetVehicles();
+                          },
+                        },
+                        {
+                          label: 'Close Agreement',
+                          tone: 'danger',
+                          disabled: c.status !== 'Active',
+                          onSelect: () => {
+                            setShowCloseContract(c);
+                            setCloseContractForm({
+                              closingBranchId: c.branch || '',
+                              returnCondition: 'GOOD',
+                              returnMileage: '',
+                              depositSettlementAmount: '',
+                              finalReceiptAmount: '',
+                              finalReceiptPaymentMethod: 'BANK_TRANSFER',
+                              finalReceiptNotes: '',
+                            });
+                            setCloseContractMsg('');
+                          },
+                        },
+                        {
+                          label: 'Payments',
+                          tone: 'warning',
+                          onSelect: () => {
+                            setShowPaymentSchedule(c.id);
+                            setPaymentScheduleMonths(String(getContractDurationMonths(c)));
+                            setPaymentPreview([]);
+                            setPaymentScheduleMsg('');
+                          },
+                        },
+                      ]}
+                    />
+                    <div className="hidden flex gap-1.5 flex-wrap">
                       <button
                         onClick={() => setSelectedContract(c)}
                         className="px-2.5 py-1 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 text-xs hover:bg-blue-500/30 transition-all font-medium">
@@ -364,7 +896,12 @@ export default function ContractsV2Page() {
                         Add Vehicle
                       </button>
                       <button
-                        onClick={() => { setShowPaymentSchedule(c.id); setPaymentPreview([]); }}
+                        onClick={() => {
+                          setShowPaymentSchedule(c.id);
+                          setPaymentScheduleMonths(String(getContractDurationMonths(c)));
+                          setPaymentPreview([]);
+                          setPaymentScheduleMsg('');
+                        }}
                         className="px-2.5 py-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs hover:bg-amber-500/30 transition-all font-medium">
                         Payments
                       </button>
@@ -374,7 +911,7 @@ export default function ContractsV2Page() {
                 {/* Expanded vehicles */}
                 {expandedVehicles.has(c.id) && (
                   <tr className="border-b border-white/5 bg-slate-800/30">
-                    <td colSpan={10} className="px-6 py-4">
+                    <td colSpan={visibleColumns.length + 1} className="px-6 py-4">
                       <div className="bg-slate-900/50 rounded-xl p-4">
                         <p className="text-xs font-semibold text-slate-300 mb-3">Vehicles in {c.contractNumber}:</p>
                         {(c.vehicles ?? []).length === 0 ? (
@@ -472,7 +1009,7 @@ export default function ContractsV2Page() {
             </div>
             <div className="p-6 border-t border-white/10 flex gap-3 justify-end">
               <button
-                onClick={() => { setShowAddVehicle(selectedContract); setSelectedContract(null); setNewVehicleForm({ type: '', make: '', model: '', licensePlate: '', driver: '', monthlyRate: '' }); setAddVehicleMsg(''); }}
+                onClick={() => { setShowAddVehicle(selectedContract); setSelectedContract(null); setSelectedFleetVehicleId(''); setShowOtherBranchVehicles(false); setNewVehicleForm({ type: '', make: '', model: '', licensePlate: '', driver: '', monthlyRate: '' }); setAddVehicleMsg(''); loadFleetVehicles(); }}
                 className="px-5 py-2.5 rounded-xl bg-indigo-600/80 border border-indigo-500/40 text-white hover:bg-indigo-600 font-medium transition-all text-sm">
                 Add Vehicle
               </button>
@@ -496,25 +1033,44 @@ export default function ContractsV2Page() {
               </div>
               <button onClick={() => setShowAddVehicle(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white text-lg transition-all">x</button>
             </div>
-            <div className="p-6 grid grid-cols-2 gap-4">
-              {[
-                { key: 'type', label: 'Vehicle Type', placeholder: 'e.g. SUV, Sedan, Van' },
-                { key: 'make', label: 'Make', placeholder: 'e.g. Toyota' },
-                { key: 'model', label: 'Model', placeholder: 'e.g. Land Cruiser' },
-                { key: 'licensePlate', label: 'License Plate', placeholder: 'DXB-001' },
-                { key: 'driver', label: 'Driver (optional)', placeholder: 'Driver name' },
-                { key: 'monthlyRate', label: 'Monthly Rate (AED)', placeholder: '0' },
-              ].map(({ key, label, placeholder }) => (
-                <div key={key}>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">{label}</label>
-                  <input
-                    type={key === 'monthlyRate' ? 'number' : 'text'}
-                    placeholder={placeholder}
-                    value={(newVehicleForm as any)[key]}
-                    onChange={e => setNewVehicleForm(p => ({ ...p, [key]: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-900/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500" />
+            <div className="p-6 space-y-4">
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <label className="block text-xs font-semibold text-slate-400">Available Fleet Vehicle</label>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={showOtherBranchVehicles}
+                      onChange={(e) => setShowOtherBranchVehicles(e.target.checked)}
+                      className="h-4 w-4 accent-indigo-500"
+                    />
+                    Show other branches
+                  </label>
                 </div>
-              ))}
+                <select
+                  value={selectedFleetVehicleId}
+                  onChange={(e) => setSelectedFleetVehicleId(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                >
+                  <option value="">{fleetVehiclesLoading ? 'Loading vehicles...' : 'Select available vehicle'}</option>
+                  {filteredFleetVehiclesForAdd.map(vehicle => (
+                    <option key={vehicle.id} value={vehicle.id}>{vehicleLabel(vehicle)}</option>
+                  ))}
+                </select>
+                <p className="mt-2 text-xs text-slate-500">
+                  Default list shows only available vehicles in this agreement's opening branch. Other branch selections queue an approval override.
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1.5">Monthly Rate Override (AED)</label>
+                <input
+                  type="number"
+                  placeholder={`${showAddVehicle.monthlyRate || 0}`}
+                  value={newVehicleForm.monthlyRate}
+                  onChange={e => setNewVehicleForm(p => ({ ...p, monthlyRate: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-900/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500"
+                />
+              </div>
             </div>
             {addVehicleMsg && (
               <div className={`mx-6 mb-4 px-4 py-2 rounded-lg text-sm ${addVehicleMsg.startsWith('Error') ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
@@ -525,7 +1081,7 @@ export default function ContractsV2Page() {
               <button onClick={() => setShowAddVehicle(null)}
                 className="px-5 py-2.5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 font-medium transition-all text-sm">Cancel</button>
               <button
-                disabled={addingVehicle || !newVehicleForm.type || !newVehicleForm.licensePlate}
+                disabled={addingVehicle || !selectedFleetVehicleId}
                 onClick={async () => {
                   setAddingVehicle(true);
                   setAddVehicleMsg('');
@@ -533,7 +1089,11 @@ export default function ContractsV2Page() {
                     const res = await fetch(`/api/leasing/contracts-v2/${showAddVehicle.id}/vehicles`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ ...newVehicleForm, monthlyRate: parseFloat(newVehicleForm.monthlyRate) || 0 }),
+                      body: JSON.stringify({
+                        vehicleId: selectedFleetVehicleId,
+                        monthlyRate: parseFloat(newVehicleForm.monthlyRate) || showAddVehicle.monthlyRate || 0,
+                        allowCrossBranchOverride: showOtherBranchVehicles,
+                      }),
                     });
                     const data = await res.json();
                     if (res.ok) {
@@ -544,9 +1104,15 @@ export default function ContractsV2Page() {
                         vehicleCount: (c.vehicleCount ?? 0) + 1,
                         vehicles: [...(c.vehicles ?? []), data],
                       } : c));
+                      loadFleetVehicles();
                       setTimeout(() => setShowAddVehicle(null), 1200);
                     } else {
-                      setAddVehicleMsg(`Error: ${data.error ?? 'Failed to add vehicle'}`);
+                      const approvalId = data?.approvalRequest?.id;
+                      setAddVehicleMsg(
+                        approvalId
+                          ? `Error: Cross-branch override queued for approval (${approvalId}). Approve it, then retry with the approved request.`
+                          : `Error: ${data.error ?? data.message ?? 'Failed to add vehicle'}`,
+                      );
                     }
                   } catch {
                     setAddVehicleMsg('Error: Could not connect to server');
@@ -555,6 +1121,159 @@ export default function ContractsV2Page() {
                 }}
                 className="px-6 py-2.5 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 transition-all disabled:opacity-50 text-sm">
                 {addingVehicle ? 'Adding...' : 'Add Vehicle'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/*  CLOSE AGREEMENT MODAL  */}
+      {showCloseContract && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-800 border border-white/10 rounded-2xl w-full max-w-2xl shadow-2xl">
+            <div className="flex items-center justify-between p-6 border-b border-white/10">
+              <div>
+                <h2 className="text-xl font-bold text-white">Close Agreement</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{showCloseContract.contractNumber} &middot; {showCloseContract.lessee}</p>
+              </div>
+              <button onClick={() => setShowCloseContract(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white text-lg transition-all">x</button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Close Branch</label>
+                  <select
+                    value={closeContractForm.closingBranchId}
+                    onChange={(e) => setCloseContractForm(p => ({ ...p, closingBranchId: e.target.value }))}
+                    className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="">Select branch</option>
+                    {branchOptions.map(branch => (
+                      <option key={branch.id} value={branch.id}>{branch.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Return Condition</label>
+                  <select
+                    value={closeContractForm.returnCondition}
+                    onChange={(e) => setCloseContractForm(p => ({ ...p, returnCondition: e.target.value }))}
+                    className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="GOOD">Good</option>
+                    <option value="FAIR">Fair</option>
+                    <option value="DAMAGED">Damaged</option>
+                    <option value="TOTAL_LOSS">Total loss</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Return Mileage</label>
+                  <input
+                    type="number"
+                    value={closeContractForm.returnMileage}
+                    onChange={(e) => setCloseContractForm(p => ({ ...p, returnMileage: e.target.value }))}
+                    className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500"
+                    placeholder="Final odometer"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Deposit Settlement (AED)</label>
+                  <input
+                    type="number"
+                    value={closeContractForm.depositSettlementAmount}
+                    onChange={(e) => setCloseContractForm(p => ({ ...p, depositSettlementAmount: e.target.value }))}
+                    className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500"
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Final Receipt Amount (AED)</label>
+                  <input
+                    type="number"
+                    value={closeContractForm.finalReceiptAmount}
+                    onChange={(e) => setCloseContractForm(p => ({ ...p, finalReceiptAmount: e.target.value }))}
+                    className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500"
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Receipt Method</label>
+                  <select
+                    value={closeContractForm.finalReceiptPaymentMethod}
+                    onChange={(e) => setCloseContractForm(p => ({ ...p, finalReceiptPaymentMethod: e.target.value }))}
+                    className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="BANK_TRANSFER">Bank transfer</option>
+                    <option value="CASH">Cash</option>
+                    <option value="CARD">Card</option>
+                    <option value="CHEQUE">Cheque</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1.5">Settlement Notes</label>
+                <textarea
+                  value={closeContractForm.finalReceiptNotes}
+                  onChange={(e) => setCloseContractForm(p => ({ ...p, finalReceiptNotes: e.target.value }))}
+                  rows={3}
+                  className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500 resize-none"
+                  placeholder="Close notes, damage remarks, deposit adjustment details..."
+                />
+              </div>
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-200">
+                Closing releases all active agreement vehicles back to Fleet Master as AVAILABLE and moves them to the close branch when a branch is selected.
+              </div>
+              {closeContractMsg && (
+                <div className={`rounded-lg border px-4 py-2 text-sm ${closeContractMsg.startsWith('Error') ? 'border-rose-500/20 bg-rose-500/10 text-rose-300' : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'}`}>
+                  {closeContractMsg}
+                </div>
+              )}
+            </div>
+            <div className="p-6 border-t border-white/10 flex gap-3 justify-end">
+              <button
+                onClick={() => setShowCloseContract(null)}
+                className="px-5 py-2.5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 font-medium transition-all text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={closingContract || !closeContractForm.closingBranchId}
+                onClick={async () => {
+                  setClosingContract(true);
+                  setCloseContractMsg('');
+                  try {
+                    const res = await fetch(`/api/leasing/contracts-v2/${showCloseContract.id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        action: 'close',
+                        closingBranchId: closeContractForm.closingBranchId,
+                        returnCondition: closeContractForm.returnCondition,
+                        returnMileage: closeContractForm.returnMileage,
+                        depositSettlementAmount: closeContractForm.depositSettlementAmount,
+                        finalReceiptAmount: closeContractForm.finalReceiptAmount,
+                        finalReceiptPaymentMethod: closeContractForm.finalReceiptPaymentMethod,
+                        finalReceiptNotes: closeContractForm.finalReceiptNotes,
+                      }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (res.ok) {
+                      setCloseContractMsg('Agreement closed and Fleet vehicles released.');
+                      await loadContracts();
+                      loadFleetVehicles();
+                      setTimeout(() => setShowCloseContract(null), 900);
+                    } else {
+                      setCloseContractMsg(`Error: ${data.error ?? data.message ?? 'Failed to close agreement'}`);
+                    }
+                  } catch {
+                    setCloseContractMsg('Error: Could not connect to server');
+                  } finally {
+                    setClosingContract(false);
+                  }
+                }}
+                className="px-6 py-2.5 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-500 transition-all disabled:opacity-50 text-sm"
+              >
+                {closingContract ? 'Closing...' : 'Close Agreement'}
               </button>
             </div>
           </div>
@@ -591,10 +1310,19 @@ export default function ContractsV2Page() {
                       className="w-full px-3 py-2 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500" />
                   </div>
                 </div>
-                <button onClick={generatePaymentPreview}
+                <button onClick={() => { setPaymentScheduleMsg(''); generatePaymentPreview(); }}
                   className="px-5 py-2.5 rounded-xl bg-amber-600 text-white font-semibold hover:bg-amber-500 transition-all text-sm">
                   Generate Preview
                 </button>
+                {paymentScheduleMsg && (
+                  <div className={`px-4 py-2 rounded-lg text-sm border ${
+                    paymentScheduleMsg.startsWith('Error:')
+                      ? 'bg-rose-500/10 text-rose-300 border-rose-500/20'
+                      : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                  }`}>
+                    {paymentScheduleMsg}
+                  </div>
+                )}
                 {paymentPreview.length > 0 && (
                   <div>
                     <div className="flex items-center justify-between mb-3">
@@ -632,9 +1360,21 @@ export default function ContractsV2Page() {
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ months: parseInt(paymentScheduleMonths), vatRate: parseFloat(paymentVatRate), payments: paymentPreview }),
                             });
-                            if (res.ok) { setShowPaymentSchedule(null); setPaymentPreview([]); }
-                            else alert('Failed to save payment schedule');
-                          } catch { alert('Error saving payment schedule'); }
+                            const data = await res.json().catch(() => ({}));
+                            if (res.ok) {
+                              const replaced = Number(data?.replacedPendingRows ?? 0);
+                              setPaymentScheduleMsg(
+                                replaced > 0
+                                  ? `Payment schedule saved. Replaced ${replaced} pending row(s).`
+                                  : 'Payment schedule saved successfully.',
+                              );
+                              setPaymentPreview([]);
+                            } else {
+                              setPaymentScheduleMsg(`Error: ${data?.error ?? 'Failed to save payment schedule'}`);
+                            }
+                          } catch {
+                            setPaymentScheduleMsg('Error: Could not connect to server');
+                          }
                         }}
                         className="px-6 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition-all text-sm">
                         Confirm &amp; Save
@@ -763,12 +1503,24 @@ export default function ContractsV2Page() {
                       className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500/50" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Branch</label>
-                    <select value={newContractForm.branch}
-                      onChange={e => setNewContractForm(p => ({ ...p, branch: e.target.value }))}
+                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Opening Branch</label>
+                    <select value={newContractForm.openingBranchId}
+                      onChange={e => {
+                        const branchId = e.target.value;
+                        setNewContractForm(p => ({
+                          ...p,
+                          branch: branchId,
+                          openingBranchId: branchId,
+                          vehicles: newContractShowOtherBranches
+                            ? p.vehicles
+                            : p.vehicles.filter(v => !branchId || v.branchId === branchId),
+                        }));
+                      }}
                       className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50">
                       <option value="">Select branch</option>
-                      <option>Dubai HQ</option><option>Abu Dhabi</option><option>Sharjah</option>
+                      {branchOptions.map(branch => (
+                        <option key={branch.id} value={branch.id}>{branch.name}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -776,28 +1528,91 @@ export default function ContractsV2Page() {
 
               {/* Step 2 */}
               {newContractForm.step === 2 && (<>
-                <h3 className="text-sm font-semibold text-white mb-2">Assign Vehicles <span className="text-slate-500 font-normal">(optional  can add later)</span></h3>
-                {newContractForm.vehicles.map((v, idx) => (
-                  <div key={v.id} className="bg-slate-900/50 border border-white/10 rounded-xl p-4">
-                    <div className="flex justify-between items-center mb-3">
-                      <p className="text-sm font-medium text-slate-300">Vehicle {idx + 1}</p>
-                      <button onClick={() => setNewContractForm(p => ({ ...p, vehicles: p.vehicles.filter((_, i) => i !== idx) }))}
-                        className="text-rose-400 hover:text-rose-300 text-xs font-medium">Remove</button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      {[['type', 'Type (SUV, Sedan...)'], ['make', 'Make'], ['model', 'Model'], ['licensePlate', 'License Plate'], ['driver', 'Driver ID'], ['monthlyRate', 'Monthly Rate']].map(([f, pl]) => (
-                        <input key={f} type={f === 'monthlyRate' ? 'number' : 'text'} placeholder={pl}
-                          value={(v as any)[f]}
-                          onChange={e => { const up = [...newContractForm.vehicles]; up[idx] = { ...up[idx], [f]: f === 'monthlyRate' ? parseFloat(e.target.value) : e.target.value }; setNewContractForm(p => ({ ...p, vehicles: up })); }}
-                          className="px-3 py-2 bg-slate-800/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500/50" />
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-white">Assign Fleet Vehicles <span className="text-slate-500 font-normal">(optional - can add later)</span></h3>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={newContractShowOtherBranches}
+                      onChange={(e) => setNewContractShowOtherBranches(e.target.checked)}
+                      className="h-4 w-4 accent-blue-500"
+                    />
+                    Show other branches
+                  </label>
+                </div>
+                <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Available Fleet Vehicle</label>
+                  <div className="flex gap-3">
+                    <select
+                      value={newContractVehicleId}
+                      onChange={(e) => setNewContractVehicleId(e.target.value)}
+                      className="min-w-0 flex-1 px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50"
+                    >
+                      <option value="">{fleetVehiclesLoading ? 'Loading vehicles...' : 'Select available vehicle'}</option>
+                      {filteredFleetVehiclesForNewContract.map(vehicle => (
+                        <option key={vehicle.id} value={vehicle.id}>{vehicleLabel(vehicle)}</option>
                       ))}
-                    </div>
+                    </select>
+                    <button
+                      type="button"
+                      disabled={!newContractVehicleId}
+                      onClick={() => {
+                        const selected = fleetVehicles.find(vehicle => vehicle.id === newContractVehicleId);
+                        if (!selected) return;
+                        setNewContractForm(p => {
+                          if (p.vehicles.some(vehicle => vehicle.vehicleId === selected.id)) return p;
+                          return { ...p, vehicles: [...p.vehicles, fleetToContractVehicle(selected)] };
+                        });
+                        setNewContractVehicleId('');
+                      }}
+                      className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-blue-500 disabled:opacity-50"
+                    >
+                      Add
+                    </button>
                   </div>
-                ))}
-                <button onClick={() => setNewContractForm(p => ({ ...p, vehicles: [...p.vehicles, { id: `new-${Date.now()}`, type: '', make: '', model: '', licensePlate: '', driver: '', monthlyRate: 0, status: 'Draft' }] }))}
-                  className="w-full py-2.5 border border-dashed border-blue-500/40 rounded-xl text-blue-400 hover:bg-blue-500/5 transition-colors text-sm font-medium">
-                  + Add Vehicle
-                </button>
+                  <p className="mt-2 text-xs text-slate-500">
+                    Only AVAILABLE Fleet Master vehicles are shown. Other-branch vehicles require approval when attached after the agreement is created.
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  {newContractForm.vehicles.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500">
+                      No Fleet vehicles selected yet.
+                    </div>
+                  ) : newContractForm.vehicles.map((v, idx) => (
+                    <div key={v.id} className="bg-slate-900/50 border border-white/10 rounded-xl p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-bold text-white">{v.licensePlate || 'Unregistered'} - {v.make} {v.model}</p>
+                          <p className="mt-1 text-xs text-slate-400">{v.type} {v.branchName ? `- ${v.branchName}` : ''}</p>
+                          {v.lastOdometer !== null && v.lastOdometer !== undefined && (
+                            <p className="mt-1 text-xs text-slate-500">Odometer: {Number(v.lastOdometer).toLocaleString()}</p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setNewContractForm(p => ({ ...p, vehicles: p.vehicles.filter((_, i) => i !== idx) }))}
+                          className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-300 hover:bg-rose-500/20"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <div className="mt-3">
+                        <label className="block text-xs font-semibold text-slate-400 mb-1.5">Monthly Rate Override (AED)</label>
+                        <input
+                          type="number"
+                          value={v.monthlyRate || ''}
+                          onChange={e => {
+                            const up = [...newContractForm.vehicles];
+                            up[idx] = { ...up[idx], monthlyRate: parseFloat(e.target.value) || 0 };
+                            setNewContractForm(p => ({ ...p, vehicles: up }));
+                          }}
+                          className="w-full px-3 py-2 bg-slate-800/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500/50"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </>)}
 
               {/* Step 3 */}

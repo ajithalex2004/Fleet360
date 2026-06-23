@@ -18,6 +18,7 @@
 export const LINKED_MODULES = [
   'SERVICE_TICKETING',
   'MAINTENANCE',
+  'DRIVERS',
   'BOOKING',
   'LEASING',
   'RAC',
@@ -33,6 +34,7 @@ export type LinkedModule = typeof LINKED_MODULES[number];
 export const LINKED_MODULE_LABEL: Record<LinkedModule, string> = {
   SERVICE_TICKETING: 'Service & Support Ticketing',
   MAINTENANCE:       'Vehicle Maintenance',
+  DRIVERS:           'Drivers',
   BOOKING:           'Booking & Dispatch',
   LEASING:           'Vehicle Leasing',
   RAC:               'Rent-a-Car',

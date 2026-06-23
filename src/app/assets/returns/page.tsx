@@ -184,7 +184,7 @@ export default function ReturnRequestsPage() {
                 ].map(f => (
                   <div key={f.key}>
                     <label className="block text-xs text-slate-400 mb-1">{f.label}</label>
-                    <input value={(form as Record<string, string>)[f.key]} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                    <input value={(form as unknown as Record<string, string>)[f.key]} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
                   </div>
                 ))}
               </div>

@@ -26,7 +26,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       where: { id },
       include: {
         booking: { include: { customer: true } },
-        additionalCharges: true,
+        charges: true,
       },
     });
     if (!a) return jsonErr('Rental agreement not found', 404);
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const days = Math.max(1, Math.ceil((a.endDate.getTime() - a.startDate.getTime()) / 86400000));
     const baseRentalCharge = dailyRate * days;
 
-    const charges = (a.additionalCharges ?? []).map((c: any) => ({
+    const charges = (a.charges ?? []).map(c => ({
       description: c.description ?? c.chargeType,
       quantity: c.quantity ?? 1,
       unitPrice: Number(c.amount ?? 0),

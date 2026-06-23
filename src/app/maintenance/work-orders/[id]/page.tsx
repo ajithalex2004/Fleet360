@@ -334,7 +334,7 @@ export default function WorkOrderPage() {
             partNumber: part.partNumber || '',
             quantityUsed: part.quantityUsed,
             unitCost: part.unitCost,
-            source: part.source
+            source: part.source === PartSource.ORDERED_KEY ? PartSource.ORDERED : part.source
         });
         setEditingPartId(part.id);
         setShowAddPartModal(true);

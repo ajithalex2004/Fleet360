@@ -1,12 +1,8 @@
-/**
- * GET  /api/rental/rate-events  — list active events (optional ?from=YYYY-MM-DD&to=YYYY-MM-DD)
- * POST /api/rental/rate-events  — create or upsert by eventCode
- */
-
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { withAudit } from '@/lib/with-audit';
+import { attachTenantToEntity, recordOperationalChange, requireOperationalContext } from '@/lib/cross-module-governance';
+import { ensureRentalGovernance } from '@/lib/rental-governance';
 import { captureException } from '@/lib/sentry';
 
 export const runtime = 'nodejs';
@@ -26,49 +22,95 @@ const bodySchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
+  await ensureRentalGovernance();
   try {
     const sp = req.nextUrl.searchParams;
+    const ctx = requireOperationalContext(req, 'rac', { requestedTenantId: sp.get('tenantId') });
+    if (ctx instanceof NextResponse) return ctx;
+
     const from = sp.get('from');
     const to = sp.get('to');
-    const events = await prisma.rateEvent.findMany({
-      where: {
-        deletedAt: null,
-        ...(from ? { dateTo: { gte: new Date(from) } } : {}),
-        ...(to ? { dateFrom: { lte: new Date(to) } } : {}),
-      },
-      orderBy: { dateFrom: 'asc' },
-    });
-    return NextResponse.json(events);
-  } catch (err) {
-    captureException(err, { context: 'rental.rate-events.GET' });
+    const params: unknown[] = [ctx.tenantId];
+    const conditions = [`deleted_at IS NULL`, `(tenant_id::text = $1 OR tenant_id IS NULL OR tenant_id::text = 'GLOBAL')`];
+    if (from) {
+      params.push(new Date(from).toISOString());
+      conditions.push(`date_to >= $${params.length}::timestamptz`);
+    }
+    if (to) {
+      params.push(new Date(to).toISOString());
+      conditions.push(`date_from <= $${params.length}::timestamptz`);
+    }
+
+    const rows = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT *
+         FROM rate_events
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY date_from ASC, priority DESC`,
+      ...params,
+    );
+    return NextResponse.json(rows);
+  } catch (error) {
+    captureException(error, { context: 'rental.rate-events.GET' });
     return NextResponse.json({ error: 'Failed to fetch events' }, { status: 500 });
   }
 }
 
-export const POST = withAudit(
-  async (req: NextRequest) => {
-    try {
-      const body = await req.json();
-      const parsed = bodySchema.safeParse(body);
-      if (!parsed.success) {
+export async function POST(req: NextRequest) {
+  await ensureRentalGovernance();
+  try {
+    const ctx = requireOperationalContext(req, 'rac', { write: true });
+    if (ctx instanceof NextResponse) return ctx;
+
+    const body = await req.json();
+    const parsed = bodySchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: 'Validation failed',
+          details: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })),
+        },
+        { status: 400 },
+      );
+    }
+
+    const dateFrom = new Date(parsed.data.dateFrom);
+    const dateTo = new Date(parsed.data.dateTo);
+    if (dateTo < dateFrom) {
+      return NextResponse.json({ error: 'dateTo must be on or after dateFrom' }, { status: 400 });
+    }
+
+    const existingRows = await prisma.$queryRawUnsafe<Array<{ id: string; tenant_id: string | null }>>(
+      `SELECT id::text, tenant_id::text AS tenant_id
+         FROM rate_events
+        WHERE event_code = $1
+          AND deleted_at IS NULL
+        ORDER BY CASE
+          WHEN tenant_id::text = $2 THEN 0
+          WHEN tenant_id IS NULL THEN 1
+          ELSE 2
+        END
+        LIMIT 1`,
+      parsed.data.eventCode,
+      ctx.tenantId,
+    ).catch(() => []);
+
+    let event: Record<string, unknown> | null = null;
+    let action: 'CREATE' | 'UPDATE' = 'CREATE';
+    let entityId = '';
+    let before: unknown = null;
+
+    if (existingRows[0]) {
+      if (existingRows[0].tenant_id !== ctx.tenantId) {
         return NextResponse.json(
-          {
-            error: 'Validation failed',
-            details: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })),
-          },
-          { status: 400 },
+          { error: 'eventCode already exists outside this tenant. Create a tenant-specific code variant.' },
+          { status: 409 },
         );
       }
 
-      const dateFrom = new Date(parsed.data.dateFrom);
-      const dateTo = new Date(parsed.data.dateTo);
-      if (dateTo < dateFrom) {
-        return NextResponse.json({ error: 'dateTo must be on or after dateFrom' }, { status: 400 });
-      }
-
-      const event = await prisma.rateEvent.upsert({
-        where: { eventCode: parsed.data.eventCode },
-        update: {
+      before = await prisma.rateEvent.findUnique({ where: { id: existingRows[0].id } });
+      const updated = await prisma.rateEvent.update({
+        where: { id: existingRows[0].id },
+        data: {
           name: parsed.data.name,
           description: parsed.data.description ?? null,
           dateFrom,
@@ -80,7 +122,13 @@ export const POST = withAudit(
           isActive: parsed.data.isActive ?? true,
           notes: parsed.data.notes ?? null,
         },
-        create: {
+      });
+      event = updated as unknown as Record<string, unknown>;
+      entityId = updated.id;
+      action = 'UPDATE';
+    } else {
+      const created = await prisma.rateEvent.create({
+        data: {
           eventCode: parsed.data.eventCode,
           name: parsed.data.name,
           description: parsed.data.description ?? null,
@@ -94,19 +142,25 @@ export const POST = withAudit(
           notes: parsed.data.notes ?? null,
         },
       });
-      return NextResponse.json(event, { status: 201 });
-    } catch (err) {
-      captureException(err, { context: 'rental.rate-events.POST' });
-      return NextResponse.json({ error: 'Failed to save event' }, { status: 500 });
+      await attachTenantToEntity('rate_events', created.id, ctx.tenantId);
+      event = created as unknown as Record<string, unknown>;
+      entityId = created.id;
     }
-  },
-  {
-    entityType: 'RateEvent',
-    action: 'CREATE',
-    extractEntity: (body) => ({ id: body?.id, name: body?.eventCode }),
-    describe: (_req, body) =>
-      body?.eventCode
-        ? `Saved rate event ${body.eventCode} (${body.name}, multiplier ${body.multiplier})`
-        : undefined,
-  },
-);
+
+    await recordOperationalChange({
+      req,
+      ctx,
+      entityType: 'RateEvent',
+      entityId,
+      action,
+      before,
+      after: event,
+      summary: `${action === 'CREATE' ? 'Created' : 'Updated'} rate event ${parsed.data.eventCode}.`,
+    });
+
+    return NextResponse.json(event, { status: action === 'CREATE' ? 201 : 200 });
+  } catch (error) {
+    captureException(error, { context: 'rental.rate-events.POST' });
+    return NextResponse.json({ error: 'Failed to save event' }, { status: 500 });
+  }
+}

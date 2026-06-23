@@ -104,7 +104,7 @@ export default function SsoConfigPage() {
     try {
       const res = await fetch(`/api/admin/tenants/${tenantId}/sso`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-confirm-action': 'sso.update' },
         body: JSON.stringify({
           issuer: issuer.trim(),
           clientId: clientId.trim(),
@@ -129,7 +129,10 @@ export default function SsoConfigPage() {
   const remove = async () => {
     if (!config) return;
     if (!window.confirm('Delete the SSO configuration?\n\nUsers will fall back to password login on next sign-in.')) return;
-    const res = await fetch(`/api/admin/tenants/${tenantId}/sso`, { method: 'DELETE' });
+    const res = await fetch(`/api/admin/tenants/${tenantId}/sso`, {
+      method: 'DELETE',
+      headers: { 'x-admin-confirm-action': 'sso.delete' },
+    });
     if (!res.ok) { alert('Delete failed'); return; }
     setConfig(null); setIssuer(''); setClientId(''); setDomains([]);
     setDefaultRoleId(''); setJitEnabled(true); setIsActive(true);

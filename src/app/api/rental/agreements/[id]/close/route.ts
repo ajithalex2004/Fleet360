@@ -22,9 +22,47 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { calculateRate, type RateRequest } from '@/lib/rental-rate-engine';
+import { recordOperationalChange, requireOperationalContext } from '@/lib/cross-module-governance';
+import { ensureRentalGovernance, rentalEntityVisible } from '@/lib/rental-governance';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
+
+type InvoiceLineItem = {
+  lineType: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  unitLabel: string;
+  discountPct: number;
+  taxable: boolean;
+  amount: number;
+};
+
+type AdditionalCharge = {
+  description: string;
+  amount: number;
+};
+
+const text = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.trim() ? value : undefined;
+
+const textOr = (value: unknown, fallback: string): string => text(value) ?? fallback;
+
+const dateOr = (value: unknown, fallback: Date): Date => {
+  if (value instanceof Date) return value;
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return fallback;
+};
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  await ensureRentalGovernance();
   try {
+    const ctx = requireOperationalContext(req, 'rac', { write: true });
+    if (ctx instanceof NextResponse) return ctx;
+    const visible = await rentalEntityVisible('rental_agreements', params.id, ctx.tenantId);
+    if (!visible) return NextResponse.json({ error: 'Agreement not found' }, { status: 404 });
     const body = await req.json();
     const {
       actualReturnDate, returnFuelLevel, returnOdometer,
@@ -36,7 +74,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     // ── 1. Load agreement ──────────────────────────────────────────────────
-    const agreements = await prisma.$queryRawUnsafe<any[]>(
+    const agreements = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
       "SELECT ra.*, v.category AS vehicle_category, v.registration_no " +
       "FROM rental_agreements ra " +
       "LEFT JOIN vehicles v ON v.id = ra.vehicle_id " +
@@ -51,26 +89,26 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     const now        = new Date().toISOString();
-    const returnDate = new Date(actualReturnDate);
-    const dropoff    = agr.dropoff_date ? new Date(agr.dropoff_date) : returnDate;
+    const returnDate = dateOr(actualReturnDate, new Date());
+    const dropoff    = dateOr(agr.dropoff_date, returnDate);
 
     // ── 2. Load rate rule for late fees / excess KM ───────────────────────
-    const pricingRules = await (prisma as any).pricingRule.findMany({
+    const pricingRules = await prisma.pricingRule.findMany({
       where: { isActive: true }, orderBy: [{ priority: 'desc' }],
     });
 
     const rateReq: RateRequest = {
-      vehicleCategory:    agr.vehicle_category ?? 'ECONOMY',
-      pickupDate:         agr.pickup_date ? new Date(agr.pickup_date) : new Date(),
+      vehicleCategory:    textOr(agr.vehicle_category, 'ECONOMY'),
+      pickupDate:         dateOr(agr.pickup_date, new Date()),
       dropoffDate:        returnDate,
-      pickupLocationCode: agr.pickup_location_code ?? undefined,
-      dropoffLocationCode: agr.dropoff_location_code ?? undefined,
-      customerType:       agr.customer_type ?? 'INDIVIDUAL',
-      corporateAccountId: agr.corporate_account_id ?? undefined,
-      channel:            agr.channel ?? 'DIRECT',
-      promoCode:          agr.promo_code ?? undefined,
-      insurancePlanCode:  agr.insurance_plan_code ?? undefined,
-      currency:           agr.currency ?? 'AED',
+      pickupLocationCode: text(agr.pickup_location_code),
+      dropoffLocationCode: text(agr.dropoff_location_code),
+      customerType:       textOr(agr.customer_type, 'INDIVIDUAL'),
+      corporateAccountId: text(agr.corporate_account_id),
+      channel:            textOr(agr.channel, 'DIRECT'),
+      promoCode:          text(agr.promo_code),
+      insurancePlanCode:  text(agr.insurance_plan_code),
+      currency:           textOr(agr.currency, 'AED'),
     };
 
     const rate = calculateRate(pricingRules, rateReq);
@@ -136,7 +174,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     let invoice = null;
     if (generateInvoice) {
       const TAX_RATE   = 5;
-      const lineItems: any[] = [];
+      const lineItems: InvoiceLineItem[] = [];
 
       // Rental charges from rate engine (exclude TAX line)
       for (const bl of rate.breakdown) {
@@ -151,8 +189,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       // Additional charges from agreement JSON
       try {
         if (agr.additional_charges) {
-          const ac = JSON.parse(agr.additional_charges);
-          for (const c of (Array.isArray(ac) ? ac : [])) {
+          const ac = JSON.parse(String(agr.additional_charges)) as unknown;
+          for (const c of (Array.isArray(ac) ? ac : []) as AdditionalCharge[]) {
             lineItems.push({ lineType: 'EXTRA', description: c.description, quantity: 1, unitPrice: c.amount, unitLabel: 'flat', discountPct: 0, taxable: true, amount: c.amount });
           }
         }
@@ -210,23 +248,72 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         );
       }
 
-      const invRows = await prisma.$queryRawUnsafe<any[]>(
+      const invRows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
         "SELECT * FROM rental_invoices WHERE id = $1", invoiceId
       );
       invoice = invRows[0];
     }
 
-    const updatedAgr = await prisma.$queryRawUnsafe<any[]>(
+    const updatedAgr = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
       "SELECT * FROM rental_agreements WHERE id = $1", params.id
     );
+    await recordOperationalChange({
+      req,
+      ctx,
+      entityType: 'RentalAgreement',
+      entityId: params.id,
+      action: 'STATUS_CHANGE',
+      before: agr,
+      after: updatedAgr[0],
+      summary: `Closed rental agreement ${String(agr.agreement_no ?? params.id)}.`,
+    });
+    const workflowEvents = [
+      await triggerServiceWorkflow({
+        req,
+        ctx,
+        serviceTypeKey: 'RAC_CHECKIN_RETURN',
+        referenceType: 'RentalAgreement',
+        referenceId: params.id,
+        referenceNumber: String(agr.agreement_no ?? params.id),
+        contextData: {
+          agreementId: params.id,
+          agreementNo: agr.agreement_no ?? null,
+          lateFee,
+          excessKmFee,
+          fuelSurcharge,
+          invoiceId: invoice?.id ?? null,
+          status: 'CLOSED',
+        },
+      }),
+    ];
+    if (lateFee > 0 || excessKmFee > 0 || fuelSurcharge > 0) {
+      workflowEvents.push(await triggerServiceWorkflow({
+        req,
+        ctx,
+        serviceTypeKey: 'RAC_BILLING_EXCEPTION',
+        referenceType: 'RentalAgreement',
+        referenceId: params.id,
+        referenceNumber: String(agr.agreement_no ?? params.id),
+        contextData: {
+          agreementId: params.id,
+          lateFee,
+          excessKmFee,
+          fuelSurcharge,
+          invoiceId: invoice?.id ?? null,
+          invoiceNo: invoice?.invoice_no ?? null,
+        },
+        force: true,
+      }));
+    }
 
     return NextResponse.json({
       agreement: updatedAgr[0],
       closingSummary: { lateFee, excessKmFee, fuelSurcharge },
       invoice,
+      workflowEvents,
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Agreement close error:', e);
-    return NextResponse.json({ error: e.message ?? 'Failed to close agreement' }, { status: 500 });
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to close agreement' }, { status: 500 });
   }
 }

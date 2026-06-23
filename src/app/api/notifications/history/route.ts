@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -31,6 +32,7 @@ export async function POST(request: Request) {
 
         const newLog = await prisma.notificationLog.create({
             data: {
+                id: randomUUID(),
                 recipient,
                 type,
                 subject,

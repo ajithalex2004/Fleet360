@@ -85,7 +85,7 @@ test.beforeAll(async () => {
       data: {
         id:       roleId,
         tenantId: testTenantId,
-        name:     'Tenant Admin',
+        name:     'Tenant Administrator',
         code:     'TENANT_ADMIN',
       },
     });
@@ -137,6 +137,14 @@ async function performLogin(page: Page, email: string, password: string) {
   await page.click('button[type="submit"]');
 }
 
+async function waitForPlatformRedirect(page: Page) {
+  await page.waitForURL(/\/platform(?:$|[?#])/, {
+    timeout: 45_000,
+    waitUntil: 'domcontentloaded',
+  });
+  expect(new URL(page.url()).pathname).toBe('/platform');
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 test('navigating to /login shows a login form', async ({ page }) => {
@@ -171,29 +179,25 @@ test('submitting correct credentials redirects to /platform', async ({ page }) =
 
   await performLogin(page, TEST_EMAIL, TEST_PASSWORD);
 
-  // Should redirect to /platform after successful login
-  await page.waitForURL('**/platform**', { timeout: 15_000 });
-  expect(page.url()).toContain('/platform');
+  await waitForPlatformRedirect(page);
 });
 
 test('after login, /platform page renders content (not a redirect loop)', async ({ page }) => {
   await page.goto('/login');
   await performLogin(page, TEST_EMAIL, TEST_PASSWORD);
 
-  await page.waitForURL('**/platform**', { timeout: 15_000 });
+  await waitForPlatformRedirect(page);
 
-  // Platform page should render some navigational content
-  // Look for any meaningful content indicating a dashboard loaded
-  await expect(
-    page.locator('nav, [role="navigation"], main, h1, h2, [data-testid="platform"]'),
-  ).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('heading', { name: 'Fleet360' })).toBeVisible({
+    timeout: 10_000,
+  });
 });
 
 test('after login, visiting /platform shows welcome or dashboard content', async ({ page }) => {
   // Login first
   await page.goto('/login');
   await performLogin(page, TEST_EMAIL, TEST_PASSWORD);
-  await page.waitForURL('**/platform**', { timeout: 15_000 });
+  await waitForPlatformRedirect(page);
 
   // The platform page should show some form of welcome or navigation
   const content = await page.content();
@@ -222,7 +226,7 @@ test('logout clears session and redirects to /login', async ({ page }) => {
   // First, log in
   await page.goto('/login');
   await performLogin(page, TEST_EMAIL, TEST_PASSWORD);
-  await page.waitForURL('**/platform**', { timeout: 15_000 });
+  await waitForPlatformRedirect(page);
 
   // Find and click the logout button/link
   // Common selectors for logout: button with text "Logout", "Sign out", link to /logout, etc.

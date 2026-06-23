@@ -63,11 +63,27 @@ export function useRuleTab<T extends object>(
   const save = useCallback(async () => {
     setSaving(true); setError(null); setSavedMsg(null);
     try {
-      const res = await fetch(url, {
+      const submit = (approvalId?: string) => fetch(url, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        ...(approvalId ? { headers: { 'Content-Type': 'application/json', 'x-admin-approval-id': approvalId } } : {}),
         body: JSON.stringify(rules),
       });
-      const d = await res.json();
+      let res = await submit();
+      let d = await res.json();
+      if (res.status === 428) {
+        const approvedApprovalId =
+          d?.approvalRequest?.status === 'APPROVED' && typeof d?.approvalRequest?.id === 'string'
+            ? d.approvalRequest.id
+            : null;
+        if (approvedApprovalId) {
+          res = await submit(approvedApprovalId);
+          d = await res.json();
+        }
+      }
+      if (res.status === 428) {
+        setSavedMsg(`Queued for approval: ${d?.approvalRequest?.id ?? 'pending request'}. Approve it, then retry this change.`);
+        return;
+      }
       if (!res.ok) throw new Error(d?.error ?? 'Save failed');
       setRules({ ...defaults, ...(d.rules as object) } as T);
       setConfigured(true);

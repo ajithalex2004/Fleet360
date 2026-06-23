@@ -66,7 +66,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   try {
     await prisma.booking.update({
       where: { id: params.id },
-      data: { deletedAt: new Date() },
+      data: { status: 'CANCELLED' },
     });
     return NextResponse.json({ success: true });
   } catch (error) {

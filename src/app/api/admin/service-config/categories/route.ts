@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth';
+import { authorizeServiceConfig, recordServiceConfigChange, requireServiceConfigApproval, requireServiceConfigPermission } from '@/lib/service-config/auth';
 import { ensureSeededForTenant } from '@/lib/service-config/schema';
 import { SERVICE_TONES, type ServiceTone, type ServiceCategoryWithTypes, type ServiceCategory, type ServiceType, type ServiceModuleMapping } from '@/types/service-config';
 import { logAudit } from '@/lib/audit';
@@ -125,10 +125,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = authorizeServiceConfig(req);
+  const auth = await requireServiceConfigPermission(req, 'create');
   if (!auth.ok) return auth.res;
-  const adminCheck = requireAdmin(auth);
-  if (!adminCheck.ok) return adminCheck.res;
 
   let body: { key?: string; name?: string; description?: string; icon?: string; tone?: string; sortOrder?: number };
   try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
@@ -139,6 +137,14 @@ export async function POST(req: NextRequest) {
   if (!name) return NextResponse.json({ ok: false, error: 'Name is required.' }, { status: 400 });
   const tone = (SERVICE_TONES as readonly string[]).includes(body.tone ?? '') ? body.tone! : 'violet';
   const sortOrder = Number.isFinite(body.sortOrder) ? Number(body.sortOrder) : 100;
+
+  const approval = await requireServiceConfigApproval(req, auth, 'service_config.category.create', {
+    targetType: 'ServiceCategory',
+    targetId: key,
+    summary: `Create service category ${name} (${key}).`,
+    payload: { key, name, tone, sortOrder },
+  });
+  if (approval) return approval;
 
   await ensureSeededForTenant(auth.tenantId);
 
@@ -154,10 +160,15 @@ export async function POST(req: NextRequest) {
     const cat = inserted[0];
     if (!cat) return NextResponse.json({ ok: false, error: 'Insert returned no row' }, { status: 500 });
 
-    void logAudit({
-      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
-      entityType: 'ServiceCategory', entityId: cat.id, entityName: name,
-      action: 'CREATE', details: `Created service category ${name} (${key})`,
+    await recordServiceConfigChange({
+      req,
+      auth,
+      entityType: 'ServiceCategory',
+      entityId: cat.id,
+      entityName: name,
+      action: 'CREATE',
+      after: catRowToApi(cat),
+      summary: `Created service category ${name} (${key}).`,
     });
 
     return NextResponse.json({ ok: true, category: catRowToApi(cat) }, { status: 201 });

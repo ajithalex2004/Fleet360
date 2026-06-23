@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { assertCanWrite } from '@/lib/access-control';
+import { requireOperationalContext } from '@/lib/cross-module-governance';
 
 async function bootstrap() {
   await prisma.$executeRawUnsafe(`
@@ -33,10 +35,14 @@ async function bootstrap() {
       ) STORED,
       forfeiture_reason TEXT,
       notes            TEXT,
+      tenant_id        TEXT,
       created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE finance_security_deposits ADD COLUMN IF NOT EXISTS tenant_id TEXT
+  `).catch(() => {});
   await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_fsd_contract ON finance_security_deposits(contract_id);
     CREATE INDEX IF NOT EXISTS idx_fsd_status   ON finance_security_deposits(status);
@@ -83,6 +89,8 @@ function row(r: Record<string, unknown>) {
 
 export async function GET(req: NextRequest) {
   await bootstrap();
+  const ctx = requireOperationalContext(req, 'finance', { requestedTenantId: req.nextUrl.searchParams.get('tenantId') });
+  if (ctx instanceof NextResponse) return ctx;
   const p = req.nextUrl.searchParams;
   const status       = p.get('status');
   const contract_type = p.get('contract_type');
@@ -90,9 +98,9 @@ export async function GET(req: NextRequest) {
   const search       = p.get('search');
   const aging_only   = p.get('aging_only') === 'true'; // held > 365 days
 
-  let where = 'WHERE 1=1';
-  const params: unknown[] = [];
-  let idx = 1;
+  let where = 'WHERE tenant_id::text = $1';
+  const params: unknown[] = [ctx.tenantId];
+  let idx = 2;
 
   if (status)        { where += ` AND status = $${idx++}`;         params.push(status); }
   if (contract_type) { where += ` AND contract_type = $${idx++}`;  params.push(contract_type); }
@@ -120,13 +128,18 @@ export async function GET(req: NextRequest) {
       COALESCE(SUM(refund_amount)    FILTER (WHERE refund_amount IS NOT NULL), 0) AS total_refunded,
       COUNT(*) FILTER (WHERE held_days > 365)           AS overdue_count
     FROM finance_security_deposits
-  `) as Record<string, unknown>[];
+    WHERE tenant_id::text = $1
+  `, ctx.tenantId) as Record<string, unknown>[];
 
   return NextResponse.json({ deposits: rows.map(row), kpi: kpi[0] });
 }
 
 export async function POST(req: NextRequest) {
+  const guard = assertCanWrite(req, 'finance');
+  if (guard) return guard;
   await bootstrap();
+  const ctx = requireOperationalContext(req, 'finance', { write: true });
+  if (ctx instanceof NextResponse) return ctx;
   const b = await req.json();
 
   // Auto-number
@@ -143,8 +156,8 @@ export async function POST(req: NextRequest) {
     INSERT INTO finance_security_deposits
       (deposit_no, contract_id, contract_type, customer_name, customer_trn,
        vehicle_no, vehicle_type, branch, collected_amount, collection_date,
-       collection_method, cheque_no, bank_name, notes)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+       collection_method, cheque_no, bank_name, notes, tenant_id)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
     RETURNING *
   `,
     deposit_no,
@@ -161,13 +174,18 @@ export async function POST(req: NextRequest) {
     b.cheque_no ?? null,
     b.bank_name ?? null,
     b.notes ?? null,
+    ctx.tenantId,
   ) as Record<string, unknown>[];
 
   return NextResponse.json(row(rows[0]), { status: 201 });
 }
 
 export async function PATCH(req: NextRequest) {
+  const guard = assertCanWrite(req, 'finance');
+  if (guard) return guard;
   await bootstrap();
+  const ctx = requireOperationalContext(req, 'finance', { write: true });
+  if (ctx instanceof NextResponse) return ctx;
   const b = await req.json();
   const { id, action } = b;
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
@@ -192,8 +210,9 @@ export async function PATCH(req: NextRequest) {
         END,
         updated_at     = NOW()
       WHERE id = $1::uuid
+        AND tenant_id::text = $4
       RETURNING *
-    `, id, JSON.stringify([deduction]), Number(b.amount)) as Record<string, unknown>[];
+    `, id, JSON.stringify([deduction]), Number(b.amount), ctx.tenantId) as Record<string, unknown>[];
     if (!rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 });
     return NextResponse.json(row(rows[0]));
   }
@@ -201,7 +220,7 @@ export async function PATCH(req: NextRequest) {
   // ── Process Refund ────────────────────────────────────────────────────────
   if (action === 'refund') {
     const current = await prisma.$queryRawUnsafe(
-      `SELECT * FROM finance_security_deposits WHERE id = $1::uuid`, id
+      `SELECT * FROM finance_security_deposits WHERE id = $1::uuid AND tenant_id::text = $2`, id, ctx.tenantId
     ) as Record<string, unknown>[];
     if (!current.length) return NextResponse.json({ error: 'not found' }, { status: 404 });
     const dep = current[0];
@@ -219,9 +238,10 @@ export async function PATCH(req: NextRequest) {
         status           = $6,
         updated_at       = NOW()
       WHERE id = $1::uuid
+        AND tenant_id::text = $7
       RETURNING *
     `, id, refundAmt, b.refund_date ?? new Date().toISOString().split('T')[0],
-       b.refund_method ?? 'BANK_TRANSFER', b.refund_reference ?? null, newStatus
+       b.refund_method ?? 'BANK_TRANSFER', b.refund_reference ?? null, newStatus, ctx.tenantId
     ) as Record<string, unknown>[];
     return NextResponse.json(row(rows[0]));
   }
@@ -231,9 +251,9 @@ export async function PATCH(req: NextRequest) {
     const rows = await prisma.$queryRawUnsafe(`
       UPDATE finance_security_deposits
       SET status = 'FORFEITED', forfeiture_reason = $2, updated_at = NOW()
-      WHERE id = $1::uuid
+      WHERE id = $1::uuid AND tenant_id::text = $3
       RETURNING *
-    `, id, b.forfeiture_reason ?? 'Contract default') as Record<string, unknown>[];
+    `, id, b.forfeiture_reason ?? 'Contract default', ctx.tenantId) as Record<string, unknown>[];
     return NextResponse.json(row(rows[0]));
   }
 
@@ -251,8 +271,9 @@ export async function PATCH(req: NextRequest) {
   updates.push('updated_at = NOW()');
 
   const rows = await prisma.$queryRawUnsafe(
-    `UPDATE finance_security_deposits SET ${updates.join(', ')} WHERE id = $1::uuid RETURNING *`,
-    ...vals
+    `UPDATE finance_security_deposits SET ${updates.join(', ')} WHERE id = $1::uuid AND tenant_id::text = $${pi} RETURNING *`,
+    ...vals,
+    ctx.tenantId,
   ) as Record<string, unknown>[];
   if (!rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 });
   return NextResponse.json(row(rows[0]));

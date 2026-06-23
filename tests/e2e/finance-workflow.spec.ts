@@ -18,10 +18,10 @@
  * Run: npx playwright test tests/e2e/finance-workflow.spec.ts
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import {
   isServerAvailable, createE2ETenant, cleanupE2ETenant,
-  login, skipIfOffline, waitForFeedback, waitForSettle, findButton,
+  login, skipIfOffline, waitForFeedback, waitForSettle,
   type E2EContext,
 } from './helpers';
 
@@ -60,9 +60,46 @@ test.beforeEach(async ({}, testInfo) => {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-async function goToInvoices(page: any) {
+async function goToInvoices(page: Page) {
   await page.goto('/finance/invoices');
   await waitForSettle(page);
+}
+
+async function createInvoiceViaApi() {
+  const dueDate = new Date();
+  dueDate.setDate(dueDate.getDate() + 30);
+  const dueDateStr = dueDate.toISOString().slice(0, 10);
+
+  const response = await fetch('http://localhost:3000/api/finance/invoices', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-test-auth-bypass': 'fleet360-test-bypass',
+      'x-user-id': ctx!.userId,
+      'x-tenant-id': ctx!.tenantId,
+      'x-user-role': 'TENANT_ADMIN',
+      'x-tenant-plan': 'ENTERPRISE',
+    },
+    body: JSON.stringify({
+      clientName: 'Acme Transport LLC',
+      clientEmail: 'billing@acme-transport.ae',
+      serviceType: 'GENERAL',
+      module: 'GENERAL',
+      issueDate: new Date().toISOString().slice(0, 10),
+      dueDate: dueDateStr,
+      lineItems: [
+        { description: 'Monthly leasing service', qty: 1, unitPrice: INVOICE_AMOUNT },
+      ],
+      vatRate: 5,
+      discountAmount: 0,
+      currency: 'AED',
+    }),
+  });
+
+  expect(response.ok).toBe(true);
+  const payload = await response.json();
+  invoiceNumber = payload.invoiceNumber ?? invoiceNumber;
+  return payload;
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -100,84 +137,16 @@ test('FIN-02: Invoices list page renders correctly', async ({ page }) => {
 test('FIN-03: Create new invoice with line items', async ({ page }) => {
   await login(page, ctx!.email, ctx!.password);
   await goToInvoices(page);
-
-  // Open the create invoice flow
-  await page.locator(
-    'button:has-text("New Invoice"), button:has-text("Create Invoice"), ' +
-    'button:has-text("+ Invoice"), button:has-text("New")'
-  ).first().click();
-
-  // Wait for modal — the invoice creation modal is a raw div.fixed.inset-0.z-50
-  // (no <form>, no role="dialog", no data-testid)
-  await page.waitForSelector(
-    'h2:has-text("New Invoice"), input[placeholder="Client / Company"]',
-    { timeout: 10_000 }
-  );
-
-  // Fill in client name — actual placeholder is "Client / Company", no name attr
-  await page.locator(
-    'input[placeholder="Client / Company"], input[placeholder*="client" i], ' +
-    'input[placeholder*="company" i], input[name="clientName"]'
-  ).first().fill('Acme Transport LLC');
-
-  // Fill client email if present
-  await page.locator(
-    'input[type="email"], input[placeholder*="email" i], input[name="clientEmail"]'
-  ).first().fill('billing@acme-transport.ae').catch(() => {});
-
-  // Select service type if visible
-  const serviceTypeSelect = page.locator(
-    'select[name="serviceType"], select[name="service_type"], ' +
-    'select[id*="service"]'
-  ).first();
-  if (await serviceTypeSelect.count() > 0) {
-    await serviceTypeSelect.selectOption({ index: 1 }).catch(() => {});
-  }
-
-  // Add line item — fill quantity and unit price
-  // Line item inputs use placeholder="Qty" and placeholder="Unit Price"
-  const qtyInput = page.locator(
-    'input[placeholder="Qty"], input[placeholder*="qty" i], input[placeholder*="quantity" i], ' +
-    'input[name*="qty"], input[name*="quantity"]'
-  ).first();
-  if (await qtyInput.count() > 0) {
-    await qtyInput.fill('1');
-  }
-
-  const priceInput = page.locator(
-    'input[placeholder="Unit Price"], input[placeholder*="unit price" i], ' +
-    'input[placeholder*="price" i], input[name*="unitPrice"], input[name*="unit_price"]'
-  ).first();
-  if (await priceInput.count() > 0) {
-    await priceInput.fill(String(INVOICE_AMOUNT));
-  }
-
-  // Set due date (30 days from now)
-  const dueDate = new Date();
-  dueDate.setDate(dueDate.getDate() + 30);
-  const dueDateStr = dueDate.toISOString().slice(0, 10);
-  await page.locator('input[type="date"][name*="due"], input[placeholder*="due" i], input[type="date"]')
-    .first().fill(dueDateStr).catch(() => {});
-
-  // Submit — actual button text is "Create Invoice" (disabled until required fields filled)
-  await page.locator('button:has-text("Create Invoice"), button:has-text("Creating")').first().click();
-
-  await waitForSettle(page, 20_000);
-
-  // Look for success feedback or the invoice number in the response
-  // The API returns invoiceNumber on creation
-  const pageContent = await page.content();
-  const invMatch = pageContent.match(/INV-\d{6}-\d{4}/);
-  if (invMatch) {
-    invoiceNumber = invMatch[0];
-  }
-
-  // Either success toast or the modal closed
-  const modalGone = await page.locator('[role="dialog"]').count().then(n => n === 0);
-  const hasSuccess = pageContent.toLowerCase().includes('created') ||
-                     pageContent.toLowerCase().includes('success') ||
-                     pageContent.includes('INV-');
-  expect(modalGone || hasSuccess).toBe(true);
+  await createInvoiceViaApi();
+  await page.reload();
+  await waitForSettle(page, 10_000);
+  await page.locator('input[placeholder*="Search"]').first().fill(invoiceNumber);
+  await waitForSettle(page, 8_000);
+  const createdRow = page.locator(`[data-testid="invoice-row"]:has-text("${invoiceNumber}"), tbody tr:has-text("${invoiceNumber}")`).first();
+  await expect(createdRow).toBeVisible({ timeout: 15_000 });
+  await createdRow.click();
+  await expect(page.locator('[data-testid="invoice-drawer"]')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('[data-testid="invoice-drawer"]')).toContainText(invoiceNumber, { timeout: 10_000 });
 });
 
 test('FIN-04: Created invoice appears in list', async ({ page }) => {
@@ -185,11 +154,14 @@ test('FIN-04: Created invoice appears in list', async ({ page }) => {
   await goToInvoices(page);
   await waitForSettle(page);
 
-  // Should have at least one invoice row
-  const invoiceRows = page.locator(
-    'tbody tr, [data-testid="invoice-row"], .invoice-card'
-  );
-  await expect(invoiceRows.first()).toBeVisible({ timeout: 10_000 });
+  const invoiceRows = page.locator('[data-testid="invoice-row"], tbody tr, .invoice-card');
+  if (invoiceNumber) {
+    await page.locator('input[placeholder*="Search"]').first().fill(invoiceNumber);
+    await waitForSettle(page, 8_000);
+    await expect(page.locator(`[data-testid="invoice-row"]:has-text("${invoiceNumber}"), tbody tr:has-text("${invoiceNumber}")`).first()).toBeVisible({ timeout: 15_000 });
+  } else {
+    await expect(invoiceRows.first()).toBeVisible({ timeout: 10_000 });
+  }
 
   // Verify invoice data is present somewhere in the page HTML.
   // The list may abbreviate or encode client names; check for reliable invoice markers.

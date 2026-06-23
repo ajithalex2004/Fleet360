@@ -1,12 +1,18 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { addMonths, addDays, toDateInput, calcValidUntil, inquiryToQuotation } from '@/lib/autoFill';
-import { VEHICLE_MAKES, getModelsForMake, getAllMakes } from '@/lib/vehicleMaster';
+import { addMonths, addDays, inquiryToQuotation } from '@/lib/autoFill';
+import { getModelsForMakeAndVehicleType, getAllMakes } from '@/lib/vehicleMaster';
 import { useSearchParams } from 'next/navigation';
-import { Plus, Eye, Check, Send, FileText, X, ArrowRight, Mail, History, MessageSquare } from 'lucide-react';
+import { Plus, Eye, Check, Send, FileText, X, ArrowRight, Mail, CalendarDays, Search, RefreshCw, Users, ListFilter } from 'lucide-react';
 import { getQuotationAction, getQuotationStatusStyles } from '@/services/leasingWorkflow';
+import DataTableToolbar from '@/components/ui/DataTableToolbar';
+import SmartDataGridHeader from '@/components/ui/SmartDataGridHeader';
+import ActionDialog from '@/components/ui/ActionDialog';
+import { useDataTableColumns, type DataTableColumn } from '@/hooks/useDataTableColumns';
+import { downloadXLSX } from '@/lib/exportUtils';
+import { downloadTablePdf } from '@/lib/exportTablePdf';
 
 interface Vehicle {
   vehicleType: string;
@@ -23,6 +29,34 @@ interface Vehicle {
   driverIncluded?: boolean;
   driverCostPerUnit?: number;
 }
+
+type QuotationLineItemType = 'ACCESSORY' | 'SERVICE' | 'OTHER';
+
+interface QuotationLineItem {
+  itemType: QuotationLineItemType;
+  description: string;
+  quantity: number;
+  unitRate: number;
+  notes?: string;
+}
+
+interface QuotationCatalogItem {
+  id: string;
+  code: string;
+  itemType: QuotationLineItemType;
+  name: string;
+  description?: string | null;
+  unitRate: number;
+  currency?: string | null;
+}
+
+const createQuotationLineItem = (itemType: QuotationLineItemType = 'ACCESSORY'): QuotationLineItem => ({
+  itemType,
+  description: '',
+  quantity: 1,
+  unitRate: 0,
+  notes: '',
+});
 
 interface LeaseQuotation {
   id: string;
@@ -65,7 +99,101 @@ interface LeaseQuotation {
   insuranceIncluded?: boolean;
   maintenanceIncluded?: boolean;
   driverIncluded?: boolean;
+  lineItems?: Array<{
+    itemType?: string | null;
+    description?: string | null;
+    quantity?: number | null;
+    unitRate?: number | null;
+    monthlyAmount?: number | null;
+    totalAmount?: number | null;
+    currency?: string | null;
+    notes?: string | null;
+  }>;
 }
+
+type SessionIdentity = {
+  role?: string;
+  isSuperAdmin?: boolean;
+};
+
+type ApprovalStepSummary = {
+  entityId?: string;
+  status?: string;
+  approverRole?: string | null;
+  stepOrder?: number;
+};
+
+type CachedInquiryPayload = {
+  id?: string;
+  inquiryNumber?: string;
+  customerName?: string;
+  companyName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  vehicleType?: string;
+  vehicleCount?: number;
+  leaseType?: string;
+  durationMonths?: number;
+  startDate?: string;
+  requiresDriver?: boolean;
+  requiresInsurance?: boolean;
+  requiresMaintenance?: boolean;
+  notes?: string;
+};
+
+type LesseeOption = {
+  id: string;
+  name: string;
+  deletedAt?: string | null;
+};
+
+type LeaseType = LeaseQuotation['leaseType'];
+
+const normalizeLeaseType = (value: unknown): LeaseType =>
+  value === 'SHORT_TERM' || value === 'DAILY' || value === 'MONTHLY' ? value : 'LONG_TERM';
+
+function readCachedInquiryPayload(inquiryId: string): CachedInquiryPayload | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.sessionStorage.getItem('xl_convert_inquiry_payload');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CachedInquiryPayload;
+    if (!parsed || parsed.id !== inquiryId) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function clearCachedInquiryPayload() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.removeItem('xl_convert_inquiry_payload');
+  } catch {}
+}
+
+type QuotationColumnKey =
+  | 'quotationNumber'
+  | 'lesseeName'
+  | 'leaseType'
+  | 'duration'
+  | 'vehicleCount'
+  | 'totalMonthly'
+  | 'totalValue'
+  | 'status'
+  | 'validUntil';
+
+const DEFAULT_QUOTATION_COLUMNS: DataTableColumn<QuotationColumnKey>[] = [
+  { key: 'quotationNumber', label: 'Quotation #', visible: true },
+  { key: 'lesseeName', label: 'Lessee / Customer', visible: true },
+  { key: 'leaseType', label: 'Lease Type', visible: true },
+  { key: 'duration', label: 'Duration', visible: true },
+  { key: 'vehicleCount', label: 'Vehicle Count', visible: true },
+  { key: 'totalMonthly', label: 'Total Monthly', visible: true },
+  { key: 'totalValue', label: 'Total Value', visible: true },
+  { key: 'status', label: 'Status', visible: true },
+  { key: 'validUntil', label: 'Valid Until', visible: true },
+];
 
 const STATUS_PIPELINE = [
   'NEW',
@@ -109,7 +237,18 @@ export default function LeaseQuotationsPage() {
   const [loading, setLoading] = useState(true);
   const [showNewModal, setShowNewModal] = useState(false);
   const [activeStep, setActiveStep] = useState(1);
+  const [showTableFilters, setShowTableFilters] = useState(false);
+  const [sortKey, setSortKey] = useState<QuotationColumnKey>('quotationNumber');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [fromDateFilter, setFromDateFilter] = useState('');
+  const [toDateFilter, setToDateFilter] = useState('');
+  const [lesseeFilter, setLesseeFilter] = useState('ALL');
+  const [quotationYearFilter, setQuotationYearFilter] = useState(String(new Date().getFullYear()));
+  const [quotationSequenceFilter, setQuotationSequenceFilter] = useState('');
+  const fromDateInputRef = useRef<HTMLInputElement | null>(null);
+  const toDateInputRef = useRef<HTMLInputElement | null>(null);
   const [prefilling, setPrefilling]     = useState(false);
   const [viewQuotation, setViewQuotation] = useState<LeaseQuotation | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
@@ -117,13 +256,39 @@ export default function LeaseQuotationsPage() {
   const [submitMode, setSubmitMode]     = useState<'draft'|'submit'>('draft');
   const [submitResult, setSubmitResult] = useState<{success:boolean;message:string}|null>(null);
   const [wfToast, setWfToast] = useState<{type:'success'|'warn'|'error'; msg:string}|null>(null);
+  const [conversionCandidate, setConversionCandidate] = useState<LeaseQuotation | null>(null);
+  const [conversionNotice, setConversionNotice] = useState<{
+    tone: 'success' | 'warn' | 'error';
+    title: string;
+    message: string;
+    meta?: string;
+  } | null>(null);
   const [lessees, setLessees]           = useState<any[]>([]);
+  const [sessionIdentity, setSessionIdentity] = useState<SessionIdentity | null>(null);
+  const [pendingCreditApproverRoles, setPendingCreditApproverRoles] = useState<Record<string, string | null>>({});
+  const [serviceCatalog, setServiceCatalog] = useState<QuotationCatalogItem[]>([]);
+  const [serviceCatalogLoading, setServiceCatalogLoading] = useState(false);
   const vehicleMakesList                = getAllMakes();
+  const {
+    columns: quotationColumns,
+    visibleColumns: visibleQuotationColumns,
+    toggleColumn: toggleQuotationColumn,
+    moveColumn: moveQuotationColumn,
+    resizeColumn: resizeQuotationColumn,
+  } = useDataTableColumns<QuotationColumnKey>('leasing-quotations-columns', DEFAULT_QUOTATION_COLUMNS);
+
+  const getQuotationColumnStyle = useCallback(
+    (key: QuotationColumnKey) => {
+      const column = visibleQuotationColumns.find((item) => item.key === key);
+      return column?.width ? { width: `${column.width}px`, minWidth: `${column.width}px` } : undefined;
+    },
+    [visibleQuotationColumns],
+  );
 
   const [formData, setFormData] = useState({
     lesseeId: '',
     lesseeName: '',
-    leaseType: 'LONG_TERM' as const,
+    leaseType: 'LONG_TERM' as LeaseType,
     duration: 24,
     startDate: '',
     currency: 'AED' as const,
@@ -148,6 +313,7 @@ export default function LeaseQuotationsPage() {
     baseMonthlyRate: 0,
     interestRate: 0,
     markupRate: 0,
+    lineItems: [] as QuotationLineItem[],
     accessoriesCost: 0,
     servicesCost: 0,
     insuranceCost: 0,
@@ -278,35 +444,44 @@ export default function LeaseQuotationsPage() {
   const prefillFromInquiry = useCallback(async (inquiryId: string) => {
     setPrefilling(true);
     try {
-      // Fetch the inquiry
-      const res = await fetch(`/api/leasing/inquiries/${inquiryId}`);
-      if (!res.ok) { console.error('Inquiry not found:', inquiryId); return; }
-      const inq = await res.json();
+      const cachedInquiry = readCachedInquiryPayload(inquiryId);
+      let inq = cachedInquiry;
+      if (!inq) {
+        const res = await fetch(`/api/leasing/inquiries/${inquiryId}`);
+        if (!res.ok) { console.error('Inquiry not found:', inquiryId); return; }
+        inq = await res.json();
+      }
+      if (!inq) { console.error('Inquiry not found:', inquiryId); return; }
       const filled = inquiryToQuotation(inq);
+      const filledVehicles = (filled.vehicles ?? []).map((vehicle) => ({
+        ...vehicle,
+        insuranceIncluded: inq.requiresInsurance ?? false,
+        insuranceCostPerUnit: 0,
+        maintenanceIncluded: inq.requiresMaintenance ?? false,
+        maintenanceCostPerUnit: 0,
+        driverIncluded: inq.requiresDriver ?? false,
+        driverCostPerUnit: 0,
+      }));
+      const searchName = (inq.companyName ?? inq.customerName ?? '').toLowerCase().trim();
 
-      // Try to auto-match a lessee by company name or customer name
       let matchedLesseeId = '';
       let matchedLesseeName = filled.lesseeName;
-      try {
-        const lRes = await fetch('/api/leasing/lessees');
-        const lData = await lRes.json();
-        if (Array.isArray(lData)) {
-          const searchName = (inq.companyName ?? inq.customerName ?? '').toLowerCase().trim();
-          const match = lData.find((l: any) =>
-            l.name.toLowerCase().includes(searchName) ||
-            searchName.includes(l.name.toLowerCase())
-          );
-          if (match) {
-            matchedLesseeId   = match.id;
-            matchedLesseeName = match.name;
-            setLessees(lData);
-          }
+      if (lessees.length > 0) {
+        const match = (lessees as LesseeOption[]).find((l) =>
+          l.name.toLowerCase().includes(searchName) ||
+          searchName.includes(l.name.toLowerCase())
+        );
+        if (match) {
+          matchedLesseeId = match.id;
+          matchedLesseeName = match.name;
         }
-      } catch {}
+      }
 
       setFormData(prev => ({
         ...prev,
         ...filled,
+        leaseType: normalizeLeaseType(filled.leaseType),
+        vehicles: filledVehicles,
         inquiryId, // Link to the inquiry
         lesseeId:            matchedLesseeId,
         lesseeName:          matchedLesseeName,
@@ -314,6 +489,29 @@ export default function LeaseQuotationsPage() {
 
       setShowNewModal(true);
       setActiveStep(1);
+      clearCachedInquiryPayload();
+      setPrefilling(false);
+
+      if (lessees.length === 0) {
+        fetch('/api/leasing/lessees')
+          .then(r => r.ok ? r.json() : [])
+          .then((lData: LesseeOption[]) => {
+            if (!Array.isArray(lData)) return;
+            setLessees(lData);
+            const match = lData.find((l) =>
+              l.name.toLowerCase().includes(searchName) ||
+              searchName.includes(l.name.toLowerCase())
+            );
+            if (match) {
+              setFormData(prev => ({
+                ...prev,
+                lesseeId: match.id,
+                lesseeName: match.name,
+              }));
+            }
+          })
+          .catch(() => {});
+      }
 
     } catch (e) {
       console.error('Failed to load inquiry:', e);
@@ -321,25 +519,166 @@ export default function LeaseQuotationsPage() {
     } finally {
       setPrefilling(false);
     }
-  }, []);
+  }, [lessees]);
 
   useEffect(() => {
-    Promise.all([
-      fetch('/api/leasing/lessees').then(r => r.ok ? r.json() : []),
-      fetch('/api/leasing/quotations').then(r => r.ok ? r.json() : Promise.reject(r)),
-    ])
-      .then(([lesseesData, quotationsData]) => {
-        setLessees(Array.isArray(lesseesData) ? lesseesData.filter((l: any) => !l.deletedAt) : []);
+    fetch('/api/auth/me')
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then((me: SessionIdentity) => {
+        setSessionIdentity(me);
+      })
+      .catch(() => setSessionIdentity(null));
+
+    fetch('/api/leasing/lessees')
+      .then(r => r.ok ? r.json() : [])
+      .then((lesseesData: LesseeOption[]) => {
+        setLessees(Array.isArray(lesseesData) ? lesseesData.filter((l) => !l.deletedAt) : []);
+      })
+      .catch(() => {});
+
+    fetch('/api/leasing/quotations')
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then((quotationsData) => {
         setQuotations(quotationsData);
       })
       .catch(() => setQuotations(mockQuotations))
       .finally(() => setLoading(false));
+
+    fetch('/api/leasing/approval-steps?entityType=QUOTATION')
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then((steps: ApprovalStepSummary[]) => {
+        const next: Record<string, string | null> = {};
+        for (const step of Array.isArray(steps) ? steps : []) {
+          if (step?.status !== 'PENDING' || !step?.entityId) continue;
+          if (!(step.entityId in next)) next[step.entityId] = step.approverRole ?? null;
+        }
+        setPendingCreditApproverRoles(next);
+      })
+      .catch(() => setPendingCreditApproverRoles({}));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const filteredQuotations = quotations.filter(
-    (q) => statusFilter === 'ALL' || q.status === statusFilter
-  );
+  useEffect(() => {
+    let cancelled = false;
+    setServiceCatalogLoading(true);
+    fetch('/api/data-masters/leasing-service-catalog?serviceTypeKey=LEASING_QUOTATIONS&activeOnly=true', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then((data: { items?: QuotationCatalogItem[] }) => {
+        if (!cancelled) setServiceCatalog(Array.isArray(data.items) ? data.items : []);
+      })
+      .catch(() => {
+        if (!cancelled) setServiceCatalog([]);
+      })
+      .finally(() => {
+        if (!cancelled) setServiceCatalogLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const availableYears = Array.from(
+    new Set(
+      quotations
+        .map((quotation) => {
+          const createdYear = quotation.createdAt ? new Date(quotation.createdAt).getFullYear() : null;
+          return createdYear ? String(createdYear) : null;
+        })
+        .filter(Boolean) as string[],
+    ),
+  ).sort((a, b) => Number(b) - Number(a));
+
+  const filteredQuotations = quotations.filter((quotation) => {
+    if (statusFilter !== 'ALL' && quotation.status !== statusFilter) return false;
+
+    const lesseeName = quotation.lessee?.name || quotation.lesseeName || '';
+    if (lesseeFilter !== 'ALL' && quotation.lesseeId !== lesseeFilter) return false;
+
+    const createdAt = quotation.createdAt ? new Date(quotation.createdAt) : null;
+    if (fromDateFilter && createdAt) {
+      const fromDate = new Date(fromDateFilter);
+      fromDate.setHours(0, 0, 0, 0);
+      if (createdAt < fromDate) return false;
+    }
+    if (toDateFilter && createdAt) {
+      const toDate = new Date(toDateFilter);
+      toDate.setHours(23, 59, 59, 999);
+      if (createdAt > toDate) return false;
+    }
+
+    const yearCode = quotationYearFilter.slice(-2);
+    if (quotationYearFilter && !quotation.quotationNumber?.includes(`-${yearCode}`) && !(createdAt && String(createdAt.getFullYear()) === quotationYearFilter)) {
+      return false;
+    }
+
+    if (quotationSequenceFilter) {
+      const normalizedSeq = quotationSequenceFilter.replace(/\D/g, '');
+      if (normalizedSeq && !quotation.quotationNumber?.endsWith(normalizedSeq.padStart(4, '0')) && !quotation.quotationNumber?.includes(normalizedSeq)) {
+        return false;
+      }
+    }
+
+    if (searchQuery.trim()) {
+      const needle = searchQuery.toLowerCase().trim();
+      const haystack = [
+        quotation.quotationNumber,
+        lesseeName,
+        quotation.leaseType,
+        quotation.notes,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      if (!haystack.includes(needle)) return false;
+    }
+
+    return true;
+  });
+
+  const sortedQuotations = useMemo(() => {
+    const next = [...filteredQuotations];
+    next.sort((left, right) => {
+      const leftVehicleCount = (left.vehicles ?? []).reduce((sum, vehicle) => sum + (vehicle.quantity || 0), 0) || left.vehicleCount || 0;
+      const rightVehicleCount = (right.vehicles ?? []).reduce((sum, vehicle) => sum + (vehicle.quantity || 0), 0) || right.vehicleCount || 0;
+      const leftValue: Record<QuotationColumnKey, string | number> = {
+        quotationNumber: left.quotationNumber,
+        lesseeName: left.lessee?.name || left.lesseeName || '',
+        leaseType: left.leaseType,
+        duration: left.durationMonths ?? left.duration ?? 0,
+        vehicleCount: leftVehicleCount,
+        totalMonthly: left.totalMonthlyRate ?? 0,
+        totalValue: left.totalValue ?? left.totalContractValue ?? 0,
+        status: left.status,
+        validUntil: left.validUntil ?? '',
+      };
+      const rightValue: Record<QuotationColumnKey, string | number> = {
+        quotationNumber: right.quotationNumber,
+        lesseeName: right.lessee?.name || right.lesseeName || '',
+        leaseType: right.leaseType,
+        duration: right.durationMonths ?? right.duration ?? 0,
+        vehicleCount: rightVehicleCount,
+        totalMonthly: right.totalMonthlyRate ?? 0,
+        totalValue: right.totalValue ?? right.totalContractValue ?? 0,
+        status: right.status,
+        validUntil: right.validUntil ?? '',
+      };
+      const a = leftValue[sortKey];
+      const b = rightValue[sortKey];
+      const comparison =
+        typeof a === 'number' && typeof b === 'number'
+          ? a - b
+          : String(a).localeCompare(String(b));
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+    return next;
+  }, [filteredQuotations, sortDirection, sortKey]);
+
+  const toggleSort = (key: QuotationColumnKey) => {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection('asc');
+  };
 
   const getStatusCounts = () => {
     const counts: Record<string, number> = {};
@@ -350,6 +689,132 @@ export default function LeaseQuotationsPage() {
   };
 
   const statusCounts = getStatusCounts();
+
+  const getQuotationColumnValue = (quotation: LeaseQuotation, key: QuotationColumnKey) => {
+    const veh = quotation.vehicles ?? [];
+    const totalVehicleCount = veh.reduce((sum, v) => sum + (v.quantity || 0), 0);
+    const lesseeName = quotation.lessee?.name || quotation.lesseeName || '-';
+
+    switch (key) {
+      case 'quotationNumber':
+        return quotation.quotationNumber;
+      case 'lesseeName':
+        return lesseeName;
+      case 'leaseType':
+        return quotation.leaseType.replace(/_/g, ' ');
+      case 'duration':
+        return `${quotation.durationMonths ?? quotation.duration ?? 0} months`;
+      case 'vehicleCount':
+        return `${totalVehicleCount || quotation.vehicleCount || 0} units`;
+      case 'totalMonthly':
+        return `${Number(quotation.totalMonthlyRate ?? 0).toLocaleString('en-AE')} ${quotation.currency}`;
+      case 'totalValue':
+        return `${Number(quotation.totalValue ?? quotation.totalContractValue ?? 0).toLocaleString('en-AE')} ${quotation.currency}`;
+      case 'status':
+        return quotation.status.replace(/_/g, ' ');
+      case 'validUntil':
+        return quotation.validUntil;
+      default:
+        return '';
+    }
+  };
+
+  const quotationExportColumns = visibleQuotationColumns.map((column) => column.label);
+  const quotationExportRows = filteredQuotations.map((quotation) =>
+    visibleQuotationColumns.reduce<Record<string, string | number>>((row, column) => {
+      row[column.label] = getQuotationColumnValue(quotation, column.key);
+      return row;
+    }, {}),
+  );
+
+  const resetFilters = () => {
+    setSearchQuery('');
+    setFromDateFilter('');
+    setToDateFilter('');
+    setLesseeFilter('ALL');
+    setStatusFilter('ALL');
+    setQuotationYearFilter(String(new Date().getFullYear()));
+    setQuotationSequenceFilter('');
+  };
+
+  const renderQuotationCell = (quotation: LeaseQuotation, key: QuotationColumnKey) => {
+    const veh = quotation.vehicles ?? [];
+    const totalVehicleCount = veh.reduce((sum, v) => sum + (v.quantity || 0), 0);
+    const lesseeName = quotation.lessee?.name || quotation.lesseeName || '-';
+    const valueCellClass = 'smart-data-grid-cell px-3 py-3 align-top';
+    const style = getQuotationColumnStyle(key);
+
+    switch (key) {
+      case 'quotationNumber':
+        return <td className={valueCellClass} style={style}>{quotation.quotationNumber}</td>;
+      case 'lesseeName':
+        return <td className={valueCellClass} style={style}>{lesseeName}</td>;
+      case 'leaseType':
+        return <td className={valueCellClass} style={style}>{quotation.leaseType.replace(/_/g, ' ')}</td>;
+      case 'duration':
+        return <td className={valueCellClass} style={style}>{quotation.durationMonths ?? quotation.duration} months</td>;
+      case 'vehicleCount':
+        return <td className={valueCellClass} style={style}>{totalVehicleCount || quotation.vehicleCount || '0'} units</td>;
+      case 'totalMonthly':
+        return (
+          <td className={valueCellClass} style={style}>
+            {Number(quotation.totalMonthlyRate ?? 0).toLocaleString('en-AE')} {quotation.currency}
+          </td>
+        );
+      case 'totalValue':
+        return (
+          <td className={valueCellClass} style={style}>
+            {Number(quotation.totalValue ?? quotation.totalContractValue ?? 0).toLocaleString('en-AE')} {quotation.currency}
+          </td>
+        );
+      case 'status':
+        return (
+          <td className="smart-data-grid-cell px-3 py-3 whitespace-nowrap" style={style}>
+            <select
+              value={quotation.status}
+              onChange={async (e) => {
+                const newStatus = e.target.value;
+                try {
+                  const res = await fetch(`/api/leasing/quotations/${quotation.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus }),
+                  });
+                  if (res.ok) {
+                    const updated = await res.json();
+                    setQuotations(prev => prev.map(q => q.id === quotation.id ? { ...q, ...updated } : q));
+                    if (viewQuotation?.id === quotation.id) {
+                      setViewQuotation((prev) => (prev?.id === quotation.id ? { ...prev, ...updated } : prev));
+                    }
+                    await triggerWorkflowIfNeeded(quotation.id, newStatus, quotation.quotationNumber ?? quotation.id);
+                  }
+                } catch {}
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className={`text-xs px-2 py-1.5 rounded-lg border font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 ${getStatusColor(quotation.status)} bg-slate-800`}
+            >
+              {STATUS_PIPELINE.map(s => (
+                <option key={s} value={s} className="bg-slate-800 text-white">{s.replace(/_/g, ' ')}</option>
+              ))}
+            </select>
+          </td>
+        );
+      case 'validUntil':
+        return <td className={valueCellClass} style={style}>{quotation.validUntil}</td>;
+      default:
+        return null;
+    }
+  };
+
+  const openDatePicker = (input: HTMLInputElement | null) => {
+    if (!input) return;
+    input.focus();
+    if (typeof input.showPicker === 'function') {
+      input.showPicker();
+      return;
+    }
+    input.click();
+  };
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
@@ -397,6 +862,42 @@ export default function LeaseQuotationsPage() {
     });
   };
 
+  const addCatalogLineItem = (itemType: QuotationLineItemType = 'ACCESSORY', preset?: QuotationLineItem) => {
+    setFormData(prev => ({
+      ...prev,
+      lineItems: [
+        ...(prev.lineItems ?? []),
+        preset ? { ...preset } : createQuotationLineItem(itemType),
+      ],
+    }));
+  };
+
+  const addServiceCatalogPreset = (preset: QuotationCatalogItem) => {
+    addCatalogLineItem(preset.itemType, {
+      itemType: preset.itemType,
+      description: preset.name,
+      quantity: 1,
+      unitRate: Number(preset.unitRate) || 0,
+      notes: preset.description ?? '',
+    });
+  };
+
+  const updateCatalogLineItem = (index: number, patch: Partial<QuotationLineItem>) => {
+    setFormData(prev => ({
+      ...prev,
+      lineItems: (prev.lineItems ?? []).map((item, itemIndex) => (
+        itemIndex === index ? { ...item, ...patch } : item
+      )),
+    }));
+  };
+
+  const removeCatalogLineItem = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      lineItems: (prev.lineItems ?? []).filter((_, itemIndex) => itemIndex !== index),
+    }));
+  };
+
   const calculateTotals = () => {
     const vehicles = Array.isArray(formData.vehicles) ? formData.vehicles : [];
 
@@ -432,9 +933,38 @@ export default function LeaseQuotationsPage() {
     const totalDriver       = vehicleLines.reduce((s, l) => s + l.lineDriver, 0);
     const vehicleServicesTotal = totalInsurance + totalMaintenance + totalDriver;
 
+    const durationMonths = Number(formData.duration) || 0;
+    const lineItems = (formData.lineItems ?? [])
+      .map(item => {
+        const quantity = Math.max(1, Number(item.quantity) || 1);
+        const unitRate = Math.max(0, Number(item.unitRate) || 0);
+        const monthlyAmount = Number((quantity * unitRate).toFixed(2));
+        const totalAmount = Number((monthlyAmount * durationMonths).toFixed(2));
+        return {
+          itemType: item.itemType || 'OTHER',
+          description: String(item.description || '').trim(),
+          quantity,
+          unitRate,
+          monthlyAmount,
+          totalAmount,
+          notes: item.notes || '',
+        };
+      })
+      .filter(item => item.description || item.monthlyAmount > 0);
+
+    const accessoriesCost = lineItems
+      .filter(item => item.itemType === 'ACCESSORY')
+      .reduce((sum, item) => sum + item.monthlyAmount, 0);
+    const servicesCost = lineItems
+      .filter(item => item.itemType === 'SERVICE')
+      .reduce((sum, item) => sum + item.monthlyAmount, 0);
+    const otherLineCost = lineItems
+      .filter(item => item.itemType === 'OTHER')
+      .reduce((sum, item) => sum + item.monthlyAmount, 0);
+
     const interestAmount = (baseMonthly * (Number(formData.interestRate) || 0)) / 100;
     const markupAmount   = (baseMonthly * (Number(formData.markupRate)   || 0)) / 100;
-    const extraCosts     = (Number(formData.accessoriesCost) || 0) + (Number(formData.servicesCost) || 0);
+    const extraCosts     = accessoriesCost + servicesCost + otherLineCost;
 
     const totalMonthly = baseMonthly + vehicleServicesTotal + interestAmount + markupAmount + extraCosts;
 
@@ -447,9 +977,13 @@ export default function LeaseQuotationsPage() {
       vehicleServicesTotal: Number(vehicleServicesTotal.toFixed(2)),
       interestAmount:     Number(interestAmount.toFixed(2)),
       markupAmount:       Number(markupAmount.toFixed(2)),
+      accessoriesCost:     Number(accessoriesCost.toFixed(2)),
+      servicesCost:        Number(servicesCost.toFixed(2)),
+      otherLineCost:       Number(otherLineCost.toFixed(2)),
+      lineItems,
       extraCosts:         Number(extraCosts.toFixed(2)),
       totalMonthly:       Number(totalMonthly.toFixed(2)),
-      totalValue:         Number((totalMonthly * (Number(formData.duration) || 0)).toFixed(2)),
+      totalValue:         Number((totalMonthly * durationMonths).toFixed(2)),
     };
   };
 
@@ -474,6 +1008,16 @@ export default function LeaseQuotationsPage() {
         driverIncluded:    v.driverIncluded    ?? false,
         driverCostPerUnit: v.driverCostPerUnit ?? 0,
       }));
+      const lineItems = totals.lineItems.map(item => ({
+        itemType: item.itemType,
+        description: item.description || `${item.itemType} line item`,
+        quantity: item.quantity,
+        unitRate: item.unitRate,
+        monthlyAmount: item.monthlyAmount,
+        totalAmount: item.totalAmount,
+        currency: formData.currency,
+        notes: item.notes || null,
+      }));
 
       const payload = {
         lesseeId:            formData.lesseeId        || null,
@@ -485,11 +1029,11 @@ export default function LeaseQuotationsPage() {
         validUntil:          formData.validUntil ? new Date(formData.validUntil).toISOString() : null,
         vehicleType:         vehicles[0]?.vehicleType ?? null,
         vehicleCount:        vehicles.reduce((s, v) => s + (v.quantity||0), 0),
-        baseMonthlyRate:     formData.baseMonthlyRate || null,
+        baseMonthlyRate:     totals.baseMonthly      || null,
         interestRate:        formData.interestRate    || null,
         markupPct:           formData.markupRate      || null,
-        accessoriesCost:     formData.accessoriesCost || null,
-        servicesCost:        formData.servicesCost    || null,
+        accessoriesCost:     totals.accessoriesCost   || null,
+        servicesCost:        (totals.servicesCost + totals.otherLineCost) || null,
         insuranceCost:       totals.totalInsurance    || null,
         maintenanceCost:     totals.totalMaintenance  || null,
         driverCost:          totals.totalDriver       || null,
@@ -503,6 +1047,7 @@ export default function LeaseQuotationsPage() {
         status:              'NEW',
         inquiryId:           (formData as any).inquiryId || null,
         vehicles,
+        lineItems,
       };
 
       // Step A: Create quotation
@@ -535,8 +1080,6 @@ export default function LeaseQuotationsPage() {
         if (submitRes.ok) {
           setQuotations(prev => prev.map(q => q.id === saved.id ? { ...q, status: 'SENT_TO_CUSTOMER' } : q));
         }
-        // Keep modal open briefly to show result
-        await new Promise(r => setTimeout(r, 2500));
       }
 
       setShowNewModal(false);
@@ -555,7 +1098,7 @@ export default function LeaseQuotationsPage() {
       const res = await fetch(`/api/leasing/quotations/${quotationId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           action,
           approverName: 'System Admin', 
           comments: `Quotation ${action.toLowerCase()}d via dashboard`
@@ -578,9 +1121,16 @@ export default function LeaseQuotationsPage() {
   const handleSendToCustomer    = (quotationId: string) => handleApproveAction(quotationId, 'APPROVE');
   const handleGenericApprove    = (quotationId: string) => handleApproveAction(quotationId, 'APPROVE');
 
-  const handleConvertToContract = async (quotationId: string) => {
-    if (!confirm('Are you sure you want to convert this quotation into a live contract?')) return;
-    
+  const openConvertToContractDialog = (quotation: LeaseQuotation) => {
+    setConversionNotice(null);
+    setConversionCandidate(quotation);
+  };
+
+  const handleConvertToContract = async () => {
+    const quotation = conversionCandidate;
+    if (!quotation) return;
+
+    const quotationId = quotation.id;
     setProcessingActionId(quotationId);
     try {
       const res = await fetch(`/api/leasing/quotations/${quotationId}/convert`, {
@@ -596,15 +1146,43 @@ export default function LeaseQuotationsPage() {
         const data = await res.json();
         // Update local status so UI reflects 'DELIVERED' or 'CONVERTED'
         setQuotations(prev => prev.map(q => q.id === quotationId ? { ...q, status: 'DELIVERED' } : q));
+        setConversionCandidate(null);
+        setConversionNotice({
+          tone: 'success',
+          title: 'Contract created',
+          message: `${quotation.quotationNumber ?? 'Quotation'} was converted into contract ${data.contract?.contractNumber ?? data.contract?.id ?? ''}.`,
+        });
         // Redirect to the newly created contract
         router.push(`/leasing/contracts-v2?contractId=${data.contract.id}`);
       } else {
         const err = await res.json().catch(() => ({}));
-        alert(`Conversion failed: ${err.error || 'Unknown error'}`);
+        const runtimeAction = err?.runtimeAction;
+        const firstPendingStep = runtimeAction?.pendingSteps?.[0];
+        const assignedTo =
+          firstPendingStep?.approverRole ??
+          firstPendingStep?.assignedToEmail ??
+          'the configured approver';
+        const message =
+          res.status === 428 || err?.code === 'LEASING_RUNTIME_APPROVAL_REQUIRED'
+            ? `Approval is required before this Leasing action can execute. It is waiting for ${assignedTo}. Approve it in Leasing Workflow, then retry the Contract action.`
+            : (err.error || 'Unknown error');
+        setConversionCandidate(null);
+        setConversionNotice({
+          tone: res.status === 428 || err?.code === 'LEASING_RUNTIME_APPROVAL_REQUIRED' ? 'warn' : 'error',
+          title: res.status === 428 || err?.code === 'LEASING_RUNTIME_APPROVAL_REQUIRED' ? 'Approval required' : 'Conversion failed',
+          message,
+          meta: runtimeAction?.id ? `Runtime action ${runtimeAction.id}` : undefined,
+        });
+        showWfToast(res.status === 428 || err?.code === 'LEASING_RUNTIME_APPROVAL_REQUIRED' ? 'warn' : 'error', message);
       }
     } catch (err) {
       console.error(err);
-      alert('Network error during contract conversion');
+      setConversionNotice({
+        tone: 'error',
+        title: 'Network error',
+        message: 'Could not complete contract conversion. Please retry after checking the connection.',
+      });
+      showWfToast('error', 'Network error during contract conversion.');
     } finally {
       setProcessingActionId(null);
     }
@@ -654,6 +1232,14 @@ export default function LeaseQuotationsPage() {
     setTimeout(() => setWfToast(null), 5000);
   };
 
+  const canApproveCreditForQuotation = useCallback((quotation: LeaseQuotation) => {
+    if (quotation.status !== 'PENDING_CREDIT_APPROVAL') return true;
+    if (sessionIdentity?.isSuperAdmin) return true;
+    const requiredRole = pendingCreditApproverRoles[quotation.id];
+    if (!requiredRole) return false;
+    return sessionIdentity?.role === requiredRole;
+  }, [pendingCreditApproverRoles, sessionIdentity]);
+
   const triggerWorkflowIfNeeded = async (quotationId: string, newStatus: string, quotationNumber: string) => {
     const trigger = WORKFLOW_TRIGGER_MAP[newStatus];
     if (!trigger) return;
@@ -690,6 +1276,13 @@ export default function LeaseQuotationsPage() {
   };
 
   const handleWorkflowAction = async (quotationId: string, actionLabel: string, targetStatus?: string, comment?: string, email?: string) => {
+    const currentQuotation =
+      quotations.find((quotation) => quotation.id === quotationId)
+      ?? (viewQuotation?.id === quotationId ? viewQuotation : null);
+    if (currentQuotation && !canApproveCreditForQuotation(currentQuotation)) {
+      showWfToast('warn', `Credit approval is assigned to ${pendingCreditApproverRoles[quotationId] ?? 'another approver role'}.`);
+      return;
+    }
     setProcessingActionId(quotationId);
     try {
       const res = await fetch(`/api/leasing/quotations/${quotationId}/approve`, {
@@ -706,24 +1299,40 @@ export default function LeaseQuotationsPage() {
       if (res.ok) {
         const updated = await res.json();
         setQuotations(prev => prev.map(q => q.id === quotationId ? updated : q));
+        setPendingCreditApproverRoles((prev) => {
+          if (!(quotationId in prev)) return prev;
+          const next = { ...prev };
+          delete next[quotationId];
+          return next;
+        });
         if (viewQuotation?.id === quotationId) {
           setViewQuotation(updated);
-          const hRes = await fetch(`/api/leasing/quotations/${quotationId}`);
-          if (hRes.ok) {
-            const hData = await hRes.json();
-            setQuotationHistory(hData.history || []);
-          }
+          void (async () => {
+            const hRes = await fetch(`/api/leasing/quotations/${quotationId}`);
+            if (hRes.ok) {
+              const hData = await hRes.json();
+              setQuotationHistory(hData.history || []);
+            }
+          })();
         }
-        // Trigger workflow engine for approval-gated transitions
-        await triggerWorkflowIfNeeded(quotationId, updated.status, updated.quotationNumber ?? quotationId);
         setShowCommentModal(false);
         setWorkflowComment('');
         setRecipientEmail('');
+        // Trigger workflow engine for approval-gated transitions in the background
+        void triggerWorkflowIfNeeded(quotationId, updated.status, updated.quotationNumber ?? quotationId);
       } else {
-        alert('Failed to process workflow action');
+        const errorBody = await res.json().catch(() => ({}));
+        const errorCode = String(errorBody?.code ?? '');
+        const errorMessage = String(errorBody?.error ?? 'Failed to process workflow action');
+        if (res.status === 409 && errorCode.startsWith('CREDIT_')) {
+          showWfToast('warn', `Credit approval blocked: ${errorMessage}`);
+        } else {
+          showWfToast('error', errorMessage);
+        }
       }
     } catch (err) {
       console.error(err);
+      showWfToast('error', 'Network error while processing workflow action.');
     } finally {
       setProcessingActionId(null);
     }
@@ -799,8 +1408,8 @@ export default function LeaseQuotationsPage() {
             <p className="text-xs font-bold uppercase tracking-wider mb-0.5 opacity-70">Workflow</p>
             <p className="text-sm font-medium leading-snug">{wfToast.msg}</p>
             {wfToast.type !== 'success' && (
-              <a href="/approvals" className="text-xs underline opacity-70 hover:opacity-100 mt-1 block">
-                Open Approvals Inbox
+              <a href="/leasing/workflow" className="text-xs underline opacity-70 hover:opacity-100 mt-1 block">
+                Open Leasing approvals
               </a>
             )}
           </div>
@@ -852,105 +1461,250 @@ export default function LeaseQuotationsPage() {
           </div>
         </div>
 
+        <div className="mb-4 flex justify-end">
+          <DataTableToolbar
+            filtersOpen={showTableFilters}
+            onToggleFilters={() => setShowTableFilters((current) => !current)}
+            onExportExcel={() => downloadXLSX('lease-quotations-export', quotationExportRows, quotationExportColumns)}
+            onExportPdf={() => downloadTablePdf({
+              filename: 'lease-quotations-export.pdf',
+              title: 'Lease Quotations',
+              columns: quotationExportColumns,
+              rows: quotationExportRows,
+            })}
+            columns={quotationColumns}
+            onToggleColumn={toggleQuotationColumn}
+            onMoveColumn={moveQuotationColumn}
+            onResizeColumn={(key, direction) => resizeQuotationColumn(key, direction === 'wider' ? 24 : -24)}
+            leftSlot={(
+              <div className="data-grid-count-badge">
+                {filteredQuotations.length} quotation{filteredQuotations.length === 1 ? '' : 's'}
+              </div>
+            )}
+          />
+        </div>
+
+        {conversionNotice && (
+          <div className={`mb-4 rounded-2xl border px-4 py-3 shadow-sm ${
+            conversionNotice.tone === 'success'
+              ? 'border-emerald-300 bg-emerald-50 text-emerald-950'
+              : conversionNotice.tone === 'warn'
+              ? 'border-amber-300 bg-amber-50 text-amber-950'
+              : 'border-rose-300 bg-rose-50 text-rose-950'
+          }`}>
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-bold">{conversionNotice.title}</p>
+                <p className="mt-1 text-sm font-medium">{conversionNotice.message}</p>
+                {conversionNotice.meta && (
+                  <p className="mt-1 text-xs font-semibold opacity-70">{conversionNotice.meta}</p>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {conversionNotice.tone === 'warn' && (
+                  <a
+                    href="/leasing/workflow"
+                    className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-slate-900 transition hover:bg-amber-100"
+                  >
+                    Open Leasing approvals
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setConversionNotice(null)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-900 transition hover:bg-slate-100"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showTableFilters && (
+        <div className="mb-8 rounded-2xl border border-white/10 bg-slate-800/50 p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => openDatePicker(fromDateInputRef.current)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  openDatePicker(fromDateInputRef.current);
+                }
+              }}
+              className="flex min-w-[190px] items-center gap-2 rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-left"
+            >
+              <CalendarDays className="h-4 w-4 text-slate-400" />
+              <input
+                ref={fromDateInputRef}
+                type="date"
+                value={fromDateFilter}
+                onChange={(e) => setFromDateFilter(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full cursor-pointer bg-transparent text-sm text-white focus:outline-none"
+              />
+              {fromDateFilter && (
+                <button onClick={() => setFromDateFilter('')} className="text-slate-500 hover:text-white">×</button>
+              )}
+            </div>
+
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => openDatePicker(toDateInputRef.current)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  openDatePicker(toDateInputRef.current);
+                }
+              }}
+              className="flex min-w-[190px] items-center gap-2 rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-left"
+            >
+              <CalendarDays className="h-4 w-4 text-slate-400" />
+              <input
+                ref={toDateInputRef}
+                type="date"
+                value={toDateFilter}
+                onChange={(e) => setToDateFilter(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full cursor-pointer bg-transparent text-sm text-white focus:outline-none"
+              />
+              {toDateFilter && (
+                <button onClick={() => setToDateFilter('')} className="text-slate-500 hover:text-white">×</button>
+              )}
+            </div>
+
+            <div className="flex min-w-[170px] items-center gap-2 rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2">
+              <ListFilter className="h-4 w-4 text-slate-400" />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full bg-transparent text-sm text-white focus:outline-none"
+              >
+                <option value="ALL">Status</option>
+                {STATUS_PIPELINE.map((status) => (
+                  <option key={status} value={status}>
+                    {status.replace(/_/g, ' ')}
+                  </option>
+                ))}
+              </select>
+              {statusFilter !== 'ALL' && (
+                <span className="rounded-md bg-blue-600 px-2 py-0.5 text-xs font-semibold text-white">
+                  {filteredQuotations.length}
+                </span>
+              )}
+            </div>
+
+            <div className="flex min-w-[210px] items-center gap-2 rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2">
+              <Users className="h-4 w-4 text-slate-400" />
+              <select
+                value={lesseeFilter}
+                onChange={(e) => setLesseeFilter(e.target.value)}
+                className="w-full bg-transparent text-sm text-white focus:outline-none"
+              >
+                <option value="ALL">Lessee</option>
+                {lessees.map((lessee) => (
+                  <option key={lessee.id} value={lessee.id}>
+                    {lessee.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center overflow-hidden rounded-xl border border-white/10 bg-slate-900/70">
+              <span className="border-r border-white/10 px-3 py-2 text-sm font-semibold text-slate-300">QUO-</span>
+              <select
+                value={quotationYearFilter}
+                onChange={(e) => setQuotationYearFilter(e.target.value)}
+                className="bg-transparent px-3 py-2 text-sm text-white focus:outline-none"
+              >
+                {(availableYears.length ? availableYears : [String(new Date().getFullYear())]).map((year) => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+              <span className="border-l border-r border-white/10 px-3 py-2 text-sm text-slate-400">-</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={quotationSequenceFilter}
+                onChange={(e) => setQuotationSequenceFilter(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="0001"
+                className="w-24 bg-transparent px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex min-w-[220px] items-center gap-2 rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2">
+              <Search className="h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search quotation or lessee"
+                className="w-full bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none"
+              />
+            </div>
+
+            <button
+              onClick={resetFilters}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-slate-900/70 text-slate-300 transition hover:bg-slate-800 hover:text-white"
+              title="Reset filters"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        )}
+
         {/* Table */}
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-x-auto">
+        <div className="smart-data-grid-surface">
           <table className="w-full min-w-[760px]">
-            <thead className="bg-slate-800/50">
-              <tr className="border-b border-white/5">
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Quotation #
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Lessee / Customer
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Lease Type
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Duration
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Vehicle Count
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Total Monthly
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Total Value
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Status
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Valid Until
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Actions
-                </th>
-              </tr>
-            </thead>
+            <SmartDataGridHeader
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              onSort={(key) => toggleSort(key as QuotationColumnKey)}
+              columns={visibleQuotationColumns.map((column) => {
+                const commonInputClass = 'w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-sm font-medium text-[color:var(--text-primary)] placeholder:text-xs placeholder:font-medium placeholder:text-[color:var(--text-tertiary)] focus:border-blue-500 focus:outline-none';
+                if (!showTableFilters) return { key: column.key, label: column.label, sortable: true, width: column.width };
+                switch (column.key) {
+                  case 'quotationNumber':
+                    return { key: column.key, label: column.label, sortable: true, width: column.width, filter: <input value={quotationSequenceFilter} onChange={(e) => setQuotationSequenceFilter(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="0001" className={commonInputClass} /> };
+                  case 'lesseeName':
+                    return { key: column.key, label: column.label, sortable: true, width: column.width, filter: <select value={lesseeFilter} onChange={(e) => setLesseeFilter(e.target.value)} className={commonInputClass}><option value="ALL">All</option>{lessees.map((lessee) => <option key={lessee.id} value={lessee.id}>{lessee.name}</option>)}</select> };
+                  case 'leaseType':
+                    return { key: column.key, label: column.label, sortable: true, width: column.width, filter: <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Lease type..." className={commonInputClass} /> };
+                  case 'duration':
+                    return { key: column.key, label: column.label, sortable: true, width: column.width, filter: <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="e.g. 36" className={commonInputClass} /> };
+                  case 'vehicleCount':
+                    return { key: column.key, label: column.label, sortable: true, width: column.width, filter: <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Units..." className={commonInputClass} /> };
+                  case 'totalMonthly':
+                    return { key: column.key, label: column.label, sortable: true, width: column.width, filter: <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Amount..." className={commonInputClass} /> };
+                  case 'totalValue':
+                    return { key: column.key, label: column.label, sortable: true, width: column.width, filter: <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Amount..." className={commonInputClass} /> };
+                  case 'status':
+                    return { key: column.key, label: column.label, sortable: true, width: column.width, filter: <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={commonInputClass}><option value="ALL">All</option>{STATUS_PIPELINE.map((status) => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}</select> };
+                  case 'validUntil':
+                    return { key: column.key, label: column.label, sortable: true, width: column.width, filter: <input value={toDateFilter} onChange={(e) => setToDateFilter(e.target.value)} placeholder="YYYY-MM-DD" className={commonInputClass} /> };
+                  default:
+                    return { key: column.key, label: column.label, sortable: true, width: column.width };
+                }
+              })}
+              actionHeader="Actions"
+            />
             <tbody>
-              {filteredQuotations.map((quotation) => {
-                const veh = quotation.vehicles ?? [];
-                const totalVehicleCount = veh.reduce((sum, v) => sum + (v.quantity||0), 0);
-                const vehicleTypes = veh.map((v) => v.vehicleType).join(', ');
+              {sortedQuotations.map((quotation) => {
                 return (
                   <tr
                     key={quotation.id}
                     className="border-b border-white/5 hover:bg-white/5 transition-colors"
                   >
-                    <td className="px-3 py-3 text-sm text-white font-medium">
-                      {quotation.quotationNumber}
-                    </td>
-                    <td className="px-3 py-3 text-sm text-white">
-                      {quotation.lessee?.name || quotation.lesseeName || '-'}
-                    </td>
-                    <td className="px-3 py-3 text-sm text-slate-200">
-                      {quotation.leaseType}
-                    </td>
-                    <td className="px-3 py-3 text-sm text-white">
-                      {quotation.durationMonths ?? quotation.duration} months
-                    </td>
-                    <td className="px-3 py-3 text-sm text-white font-semibold">
-                      {totalVehicleCount || quotation.vehicleCount || '0'} units
-                    </td>
-                    <td className="px-3 py-3 text-sm font-medium text-emerald-400">
-                      {(Number(quotation.totalMonthlyRate ?? 0)).toLocaleString('en-AE')}{' '}
-                      {quotation.currency}
-                    </td>
-                    <td className="px-3 py-3 text-sm font-medium text-blue-400">
-                      {(Number(quotation.totalValue ?? quotation.totalContractValue ?? 0)).toLocaleString('en-AE')}{' '}
-                      {quotation.currency}
-                    </td>
-                    <td className="px-3 py-3 text-sm whitespace-nowrap">
-                      <select
-                        value={quotation.status}
-                        onChange={async (e) => {
-                          const newStatus = e.target.value;
-                          try {
-                            const res = await fetch(`/api/leasing/quotations/${quotation.id}`, {
-                              method: 'PATCH',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ status: newStatus }),
-                            });
-                            if (res.ok) {
-                              setQuotations(prev => prev.map(q => q.id === quotation.id ? { ...q, status: newStatus as any } : q));
-                              await triggerWorkflowIfNeeded(quotation.id, newStatus, quotation.quotationNumber ?? quotation.id);
-                            }
-                          } catch {}
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        className={`text-xs px-2 py-1.5 rounded-lg border font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 ${getStatusColor(quotation.status)} bg-slate-800`}
-                      >
-                        {STATUS_PIPELINE.map(s => (
-                          <option key={s} value={s} className="bg-slate-800 text-white">{s.replace(/_/g, ' ')}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-3 py-3 text-sm text-slate-200">
-                      {quotation.validUntil}
-                    </td>
-                    <td className="px-3 py-3 text-sm">
+                    {visibleQuotationColumns.map((column) => (
+                      <React.Fragment key={column.key}>
+                        {renderQuotationCell(quotation, column.key)}
+                      </React.Fragment>
+                    ))}
+                    <td className="smart-data-grid-cell px-3 py-3">
                       <div className="flex gap-2">
                         <button
                           onClick={() => setViewQuotation(quotation)}
@@ -961,15 +1715,16 @@ export default function LeaseQuotationsPage() {
                         </button>
                         {getQuotationAction(quotation.status) && (
                           <button
-                            disabled={processingActionId === quotation.id}
+                            disabled={processingActionId === quotation.id || !canApproveCreditForQuotation(quotation)}
                             onClick={() => handleWorkflowAction(quotation.id, getQuotationAction(quotation.status)!.label)}
+                            title={!canApproveCreditForQuotation(quotation) ? `Assigned to ${pendingCreditApproverRoles[quotation.id] ?? 'another approver role'}` : undefined}
                             className={`px-2.5 py-1 rounded text-xs transition-all flex items-center gap-1 border ${
                               getQuotationAction(quotation.status)!.color === 'emerald'
                                 ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30'
                                 : getQuotationAction(quotation.status)!.color === 'indigo'
                                 ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/30'
                                 : 'bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30'
-                            }`}
+                            } ${!canApproveCreditForQuotation(quotation) ? 'opacity-50 cursor-not-allowed hover:bg-inherit' : ''}`}
                           >
                             {processingActionId === quotation.id ? (
                                <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -981,7 +1736,7 @@ export default function LeaseQuotationsPage() {
                         )}
                         {['CUSTOMER_APPROVED', 'PENDING_CREDIT_APPROVAL', 'CREDIT_APPROVED', 'PO_PREPARATION', 'PO_PREPARED', 'DELIVERY_IN_PROGRESS', 'DELIVERED'].includes(quotation.status) && (
                           <button
-                            onClick={() => handleConvertToContract(quotation.id)}
+                            onClick={() => openConvertToContractDialog(quotation)}
                             className="px-2.5 py-1 rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 text-xs hover:bg-indigo-500/30 flex items-center gap-1"
                           >
                             <FileText className="h-3 w-3" />
@@ -997,6 +1752,27 @@ export default function LeaseQuotationsPage() {
           </table>
         </div>
       </div>
+
+      <ActionDialog
+        open={!!conversionCandidate}
+        title="Convert quotation to contract"
+        description="This will try to activate a live Leasing contract from the selected quotation. If the contract activation policy requires approval, the action will be queued in Leasing Workflow."
+        confirmLabel="Convert"
+        cancelLabel="Cancel"
+        tone="info"
+        busy={processingActionId === conversionCandidate?.id}
+        onClose={() => {
+          if (processingActionId !== conversionCandidate?.id) {
+            setConversionCandidate(null);
+          }
+        }}
+        onConfirm={handleConvertToContract}
+        details={[
+          `Quotation: ${conversionCandidate?.quotationNumber ?? '-'}`,
+          `Lessee: ${conversionCandidate?.lesseeName ?? conversionCandidate?.lessee?.name ?? '-'}`,
+          `Value: ${(conversionCandidate?.totalContractValue ?? conversionCandidate?.totalValue ?? 0).toLocaleString()} ${conversionCandidate?.currency ?? 'AED'}`,
+        ]}
+      />
 
       {/*  New Quotation Modal  */}
       {showNewModal && (
@@ -1218,7 +1994,14 @@ export default function LeaseQuotationsPage() {
                             <select value={vehicle.vehicleType}
                               onChange={e => {
                                 const v = [...formData.vehicles];
-                                v[index] = { ...v[index], vehicleType: e.target.value as any };
+                                const nextVehicleType = e.target.value as any;
+                                const validModels = v[index].make ? getModelsForMakeAndVehicleType(v[index].make, nextVehicleType) : [];
+                                const currentModelStillValid = !v[index].model || validModels.some(model => model.model === v[index].model);
+                                v[index] = {
+                                  ...v[index],
+                                  vehicleType: nextVehicleType,
+                                  model: currentModelStillValid ? v[index].model : '',
+                                };
                                 setFormData({ ...formData, vehicles: v });
                               }}
                               className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500">
@@ -1250,7 +2033,7 @@ export default function LeaseQuotationsPage() {
                               }}
                               className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500">
                               <option value="">Any Model</option>
-                              {vehicle.make && getModelsForMake(vehicle.make).map(m => (
+                              {vehicle.make && getModelsForMakeAndVehicleType(vehicle.make, vehicle.vehicleType).map(m => (
                                 <option key={m.model} value={m.model}>{m.model}</option>
                               ))}
                             </select>
@@ -1391,12 +2174,10 @@ export default function LeaseQuotationsPage() {
                         <span className="w-6 h-6 rounded bg-blue-600 text-white text-xs flex items-center justify-center">3</span>
                         Pricing Adjustments
                       </h3>
-                      <div className="grid grid-cols-3 gap-4">
+                      <div className="grid grid-cols-2 gap-4">
                         {[
                           { label:'Interest Rate (%)', key:'interestRate', help:'Annual interest rate applied to base monthly rate' },
                           { label:'Markup (%)', key:'markupRate', help:'Profit markup percentage on base monthly rate' },
-                          { label:'Accessories Cost (monthly)', key:'accessoriesCost', help:'Monthly cost for vehicle accessories/upgrades' },
-                          { label:'Services Cost (monthly)', key:'servicesCost', help:'Monthly cost for additional services' },
                         ].map(({ label, key, help }) => (
                           <div key={key}>
                             <label className="block text-sm font-medium text-slate-300 mb-1.5">{label}</label>
@@ -1408,6 +2189,147 @@ export default function LeaseQuotationsPage() {
                             {help && <p className="text-xs text-slate-500 mt-1">{help}</p>}
                           </div>
                         ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                        <div>
+                          <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                            <span className="w-6 h-6 rounded bg-cyan-600 text-white text-xs flex items-center justify-center">+</span>
+                            Itemized Accessories & Service Catalog
+                          </h3>
+                          <p className="text-xs text-slate-500 mt-1">
+                            Add optional vehicle accessories and recurring service elements as separate quote lines.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => addCatalogLineItem('ACCESSORY')}
+                            className="inline-flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-slate-900 dark:text-cyan-100 hover:bg-cyan-500/20 transition-all"
+                          >
+                            <Plus className="h-4 w-4" /> Add accessory
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => addCatalogLineItem('SERVICE')}
+                            className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-slate-900 dark:text-emerald-100 hover:bg-emerald-500/20 transition-all"
+                          >
+                            <Plus className="h-4 w-4" /> Add service
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="mb-3 flex flex-wrap gap-2">
+                        {serviceCatalogLoading && (
+                          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-400">
+                            Loading tenant catalog...
+                          </span>
+                        )}
+                        {!serviceCatalogLoading && serviceCatalog.length === 0 && (
+                          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300">
+                            No active catalog presets. Configure them in Admin &gt; Service Configuration &gt; Vehicle Leasing &gt; Quotations &gt; Catalog.
+                          </span>
+                        )}
+                        {serviceCatalog.map((preset) => (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => addServiceCatalogPreset(preset)}
+                            className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:border-blue-400/50 hover:bg-blue-500/10 transition-all"
+                            title={preset.description ?? undefined}
+                          >
+                            + {preset.name}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-700/20">
+                        <div className="grid grid-cols-[140px_1fr_110px_140px_150px_44px] gap-2 border-b border-white/10 bg-slate-800/60 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                          <span>Type</span>
+                          <span>Description</span>
+                          <span>Qty</span>
+                          <span>Rate / Month</span>
+                          <span className="text-right">Monthly Total</span>
+                          <span />
+                        </div>
+                        {(formData.lineItems ?? []).length === 0 ? (
+                          <div className="px-4 py-6 text-center text-sm text-slate-500">
+                            No catalog items added yet. Add accessories or services to make the quotation fully itemized.
+                          </div>
+                        ) : (
+                          <div className="divide-y divide-white/5">
+                            {(formData.lineItems ?? []).map((item, index) => {
+                              const quantity = Math.max(1, Number(item.quantity) || 1);
+                              const unitRate = Math.max(0, Number(item.unitRate) || 0);
+                              const monthlyAmount = quantity * unitRate;
+                              return (
+                                <div key={index} className="grid grid-cols-[140px_1fr_110px_140px_150px_44px] gap-2 px-4 py-3 items-start">
+                                  <select
+                                    value={item.itemType}
+                                    onChange={e => updateCatalogLineItem(index, { itemType: e.target.value as QuotationLineItemType })}
+                                    className="w-full rounded-lg border border-white/10 bg-slate-700 px-2 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                                  >
+                                    <option value="ACCESSORY">Accessory</option>
+                                    <option value="SERVICE">Service</option>
+                                    <option value="OTHER">Other</option>
+                                  </select>
+                                  <input
+                                    type="text"
+                                    value={item.description}
+                                    onChange={e => updateCatalogLineItem(index, { description: e.target.value })}
+                                    placeholder="e.g. Roadside assistance"
+                                    className="w-full rounded-lg border border-white/10 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                                  />
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={item.quantity || ''}
+                                    onChange={e => updateCatalogLineItem(index, { quantity: parseInt(e.target.value, 10) || 1 })}
+                                    className="w-full rounded-lg border border-white/10 bg-slate-700 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                                  />
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={item.unitRate || ''}
+                                    onChange={e => updateCatalogLineItem(index, { unitRate: parseFloat(e.target.value) || 0 })}
+                                    className="w-full rounded-lg border border-white/10 bg-slate-700 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                                  />
+                                  <div className="rounded-lg bg-slate-800/70 px-3 py-2 text-right text-sm font-semibold text-emerald-300">
+                                    {formData.currency} {monthlyAmount.toLocaleString('en-AE', { minimumFractionDigits: 2 })}
+                                    <div className="text-[11px] font-medium text-slate-500">
+                                      {formData.duration} mo: {formData.currency} {(monthlyAmount * (Number(formData.duration) || 0)).toLocaleString('en-AE')}
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeCatalogLineItem(index)}
+                                    className="mt-1 flex h-9 w-9 items-center justify-center rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 transition-all"
+                                    aria-label="Remove catalog item"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div className="grid grid-cols-3 gap-3 border-t border-white/10 bg-slate-800/40 px-4 py-3 text-sm">
+                          <div className="rounded-xl bg-cyan-500/10 px-3 py-2">
+                            <div className="text-xs font-semibold uppercase tracking-wider text-cyan-300">Accessories</div>
+                            <div className="font-bold text-white">{formData.currency} {totals.accessoriesCost.toLocaleString('en-AE')}</div>
+                          </div>
+                          <div className="rounded-xl bg-emerald-500/10 px-3 py-2">
+                            <div className="text-xs font-semibold uppercase tracking-wider text-emerald-300">Services</div>
+                            <div className="font-bold text-white">{formData.currency} {totals.servicesCost.toLocaleString('en-AE')}</div>
+                          </div>
+                          <div className="rounded-xl bg-violet-500/10 px-3 py-2">
+                            <div className="text-xs font-semibold uppercase tracking-wider text-violet-300">Other</div>
+                            <div className="font-bold text-white">{formData.currency} {totals.otherLineCost.toLocaleString('en-AE')}</div>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -1493,19 +2415,19 @@ export default function LeaseQuotationsPage() {
                               {line.lineIns > 0 && (
                                 <div className="flex items-center justify-between text-xs">
                                   <span className="text-slate-500">Insurance ({formData.currency}{Number(line.unitIns).toLocaleString('en-AE')}/unit)</span>
-                                  <span className="text-blue-400">{formData.currency} {line.lineIns.toLocaleString('en-AE')}</span>
+                                  <span className="font-medium text-sky-700 dark:text-sky-300">{formData.currency} {line.lineIns.toLocaleString('en-AE')}</span>
                                 </div>
                               )}
                               {line.lineMaint > 0 && (
                                 <div className="flex items-center justify-between text-xs">
                                   <span className="text-slate-500">Maintenance ({formData.currency}{Number(line.unitMaint).toLocaleString('en-AE')}/unit)</span>
-                                  <span className="text-emerald-400">{formData.currency} {line.lineMaint.toLocaleString('en-AE')}</span>
+                                  <span className="font-medium text-emerald-700 dark:text-emerald-300">{formData.currency} {line.lineMaint.toLocaleString('en-AE')}</span>
                                 </div>
                               )}
                               {line.lineDriver > 0 && (
                                 <div className="flex items-center justify-between text-xs">
                                   <span className="text-slate-500">Driver ({formData.currency}{Number(line.unitDriver).toLocaleString('en-AE')}/unit)</span>
-                                  <span className="text-amber-400">{formData.currency} {line.lineDriver.toLocaleString('en-AE')}</span>
+                                  <span className="font-medium text-amber-700 dark:text-amber-300">{formData.currency} {line.lineDriver.toLocaleString('en-AE')}</span>
                                 </div>
                               )}
                             </div>
@@ -1524,29 +2446,35 @@ export default function LeaseQuotationsPage() {
                             <span className="text-white">{formData.currency} {Number(totals.markupAmount ?? 0).toLocaleString('en-AE', { minimumFractionDigits: 2 })}</span>
                           </div>
                         )}
-                        {(Number(formData.accessoriesCost) > 0) && (
+                        {(Number(totals.accessoriesCost) > 0) && (
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-slate-400">Accessories</span>
-                            <span className="text-white">{formData.currency} {Number(formData.accessoriesCost).toLocaleString('en-AE', { minimumFractionDigits: 2 })}</span>
+                            <span className="text-white">{formData.currency} {Number(totals.accessoriesCost).toLocaleString('en-AE', { minimumFractionDigits: 2 })}</span>
                           </div>
                         )}
-                        {(Number(formData.servicesCost) > 0) && (
+                        {(Number(totals.servicesCost) > 0) && (
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-slate-400">Additional Services</span>
-                            <span className="text-white">{formData.currency} {Number(formData.servicesCost).toLocaleString('en-AE', { minimumFractionDigits: 2 })}</span>
+                            <span className="text-white">{formData.currency} {Number(totals.servicesCost).toLocaleString('en-AE', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        )}
+                        {(Number(totals.otherLineCost) > 0) && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-slate-400">Other Quote Items</span>
+                            <span className="text-white">{formData.currency} {Number(totals.otherLineCost).toLocaleString('en-AE', { minimumFractionDigits: 2 })}</span>
                           </div>
                         )}
                         <div className="border-t border-white/10 pt-3 mt-3 space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-base font-semibold text-white">Total Monthly Rate</span>
-                            <span className="text-xl font-bold text-emerald-400">
+                            <span className="text-xl font-bold text-emerald-800 dark:text-emerald-300">
                               {formData.currency} {Number(totals.totalMonthly ?? 0).toLocaleString('en-AE', { minimumFractionDigits: 2 })}
                             </span>
                           </div>
                           {formData.duration > 0 && (
                             <div className="flex items-center justify-between">
                               <span className="text-sm text-slate-400">Total Contract Value ({formData.duration} months)</span>
-                              <span className="text-lg font-bold text-blue-400">
+                              <span className="text-lg font-bold text-sky-800 dark:text-sky-300">
                                 {formData.currency} {Number(totals.totalValue ?? 0).toLocaleString('en-AE', { minimumFractionDigits: 2 })}
                               </span>
                             </div>
@@ -1554,7 +2482,7 @@ export default function LeaseQuotationsPage() {
                           {Number(formData.securityDeposit) > 0 && (
                             <div className="flex items-center justify-between">
                               <span className="text-sm text-slate-400">Security Deposit</span>
-                              <span className="text-sm font-medium text-amber-400">
+                              <span className="text-sm font-medium text-amber-800 dark:text-amber-300">
                                 {formData.currency} {Number(formData.securityDeposit).toLocaleString('en-AE', { minimumFractionDigits: 2 })}
                               </span>
                             </div>
@@ -1595,16 +2523,18 @@ export default function LeaseQuotationsPage() {
                         <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Pricing</h4>
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between"><span className="text-slate-400">Vehicle Base</span><span className="text-white">{formData.currency} {Number(totals.baseMonthly??0).toLocaleString('en-AE')}</span></div>
-                          {Number(totals.totalInsurance) > 0 && <div className="flex justify-between"><span className="text-slate-400">Insurance (all vehicles)</span><span className="text-blue-400">{formData.currency} {totals.totalInsurance.toLocaleString('en-AE')}</span></div>}
-                          {Number(totals.totalMaintenance) > 0 && <div className="flex justify-between"><span className="text-slate-400">Maintenance (all vehicles)</span><span className="text-emerald-400">{formData.currency} {totals.totalMaintenance.toLocaleString('en-AE')}</span></div>}
-                          {Number(totals.totalDriver) > 0 && <div className="flex justify-between"><span className="text-slate-400">Driver (all vehicles)</span><span className="text-amber-400">{formData.currency} {totals.totalDriver.toLocaleString('en-AE')}</span></div>}
+                          {Number(totals.totalInsurance) > 0 && <div className="flex justify-between"><span className="text-slate-400">Insurance (all vehicles)</span><span className="font-medium text-sky-700 dark:text-sky-300">{formData.currency} {totals.totalInsurance.toLocaleString('en-AE')}</span></div>}
+                          {Number(totals.totalMaintenance) > 0 && <div className="flex justify-between"><span className="text-slate-400">Maintenance (all vehicles)</span><span className="font-medium text-emerald-700 dark:text-emerald-300">{formData.currency} {totals.totalMaintenance.toLocaleString('en-AE')}</span></div>}
+                          {Number(totals.totalDriver) > 0 && <div className="flex justify-between"><span className="text-slate-400">Driver (all vehicles)</span><span className="font-medium text-amber-700 dark:text-amber-300">{formData.currency} {totals.totalDriver.toLocaleString('en-AE')}</span></div>}
+                          {Number(totals.accessoriesCost) > 0 && <div className="flex justify-between"><span className="text-slate-400">Accessories</span><span className="font-medium text-cyan-700 dark:text-cyan-300">{formData.currency} {totals.accessoriesCost.toLocaleString('en-AE')}</span></div>}
+                          {Number(totals.servicesCost + totals.otherLineCost) > 0 && <div className="flex justify-between"><span className="text-slate-400">Services / Other</span><span className="font-medium text-emerald-700 dark:text-emerald-300">{formData.currency} {(totals.servicesCost + totals.otherLineCost).toLocaleString('en-AE')}</span></div>}
                           {(Number(totals.interestAmount) > 0 || Number(totals.markupAmount) > 0) && (
                             <div className="flex justify-between"><span className="text-slate-400">Interest + Markup</span><span className="text-white">{formData.currency} {(Number(totals.interestAmount??0)+Number(totals.markupAmount??0)).toLocaleString('en-AE')}</span></div>
                           )}
                           <div className="border-t border-white/10 pt-2 space-y-1">
                             <div className="flex justify-between text-base font-bold">
                               <span className="text-white">Monthly Total</span>
-                              <span className="text-emerald-400">{formData.currency} {Number(totals.totalMonthly??0).toLocaleString('en-AE')}</span>
+                              <span className="text-emerald-800 dark:text-emerald-300">{formData.currency} {Number(totals.totalMonthly??0).toLocaleString('en-AE')}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-slate-400 text-sm">Contract Total</span>
@@ -1614,6 +2544,36 @@ export default function LeaseQuotationsPage() {
                         </div>
                       </div>
                     </div>
+
+                    {totals.lineItems.length > 0 && (
+                      <div className="bg-slate-700/30 border border-white/10 rounded-xl overflow-hidden">
+                        <div className="px-4 py-3 border-b border-white/10">
+                          <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Accessories & Service Catalog</h4>
+                        </div>
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-white/5">
+                              <th className="px-4 py-2 text-left text-xs text-slate-400">Type</th>
+                              <th className="px-4 py-2 text-left text-xs text-slate-400">Description</th>
+                              <th className="px-4 py-2 text-center text-xs text-slate-400">Qty</th>
+                              <th className="px-4 py-2 text-right text-xs text-slate-400">Monthly</th>
+                              <th className="px-4 py-2 text-right text-xs text-slate-400">Contract Value</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {totals.lineItems.map((item, index) => (
+                              <tr key={`${item.description}-${index}`} className="border-b border-white/5">
+                                <td className="px-4 py-2.5 text-slate-300">{item.itemType}</td>
+                                <td className="px-4 py-2.5 text-white">{item.description || '-'}</td>
+                                <td className="px-4 py-2.5 text-center text-slate-300">{item.quantity}</td>
+                                <td className="px-4 py-2.5 text-right text-emerald-300">{formData.currency} {item.monthlyAmount.toLocaleString('en-AE')}</td>
+                                <td className="px-4 py-2.5 text-right text-blue-300">{formData.currency} {item.totalAmount.toLocaleString('en-AE')}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
 
                     {/* Vehicles Table */}
                     <div className="bg-slate-700/30 border border-white/10 rounded-xl overflow-hidden">
@@ -1873,9 +2833,10 @@ export default function LeaseQuotationsPage() {
                       <p className="text-slate-500 text-xs mt-0.5">{getQuotationAction(viewQuotation.status)!.description}</p>
                     </div>
                     <button
-                      disabled={processingActionId === viewQuotation.id}
+                      disabled={processingActionId === viewQuotation.id || !canApproveCreditForQuotation(viewQuotation)}
                       onClick={() => handleWorkflowAction(viewQuotation.id, getQuotationAction(viewQuotation.status)!.label)}
-                      className="px-5 py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-500 transition-all disabled:opacity-50 flex items-center gap-2 flex-shrink-0"
+                      title={!canApproveCreditForQuotation(viewQuotation) ? `Assigned to ${pendingCreditApproverRoles[viewQuotation.id] ?? 'another approver role'}` : undefined}
+                      className="px-5 py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 flex-shrink-0"
                     >
                       {processingActionId === viewQuotation.id
                         ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />

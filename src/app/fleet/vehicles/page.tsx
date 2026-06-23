@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
-import { lookupVehicle, KNOWN_MAKES, getModelsForMake, type VehicleKnowledge } from '@/lib/vehicle-knowledge-base';
+import { lookupVehicle, KNOWN_MAKES, type VehicleKnowledge } from '@/lib/vehicle-knowledge-base';
+import { getModelsForMakeAndVehicleType } from '@/lib/vehicleMaster';
 
 interface Vehicle {
   id: string;
@@ -410,7 +411,7 @@ export default function VehiclesPage() {
                         <input
                           list="makes-list"
                           value={form.make ?? ''}
-                          onChange={e => f('make', e.target.value)}
+                          onChange={e => setForm((prev) => ({ ...prev, make: e.target.value, model: '' }))}
                           placeholder="e.g. Toyota"
                           className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
                         <datalist id="makes-list">
@@ -426,7 +427,10 @@ export default function VehiclesPage() {
                           placeholder="e.g. Camry"
                           className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
                         <datalist id="models-list">
-                          {getModelsForMake(form.make ?? '').map(m => <option key={m} value={m} />)}
+                          {getModelsForMakeAndVehicleType(
+                            form.make ?? '',
+                            vehicleTypes.find((vt) => vt.id === form.vehicleTypeId)?.code ?? ''
+                          ).map((m) => <option key={m.model} value={m.model} />)}
                         </datalist>
                       </div>
                       <div>
@@ -556,7 +560,17 @@ export default function VehiclesPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs text-slate-400 mb-1.5">Vehicle Type</label>
-                        <select value={form.vehicleTypeId ?? ''} onChange={e => f('vehicleTypeId', e.target.value)}
+                        <select value={form.vehicleTypeId ?? ''} onChange={e => setForm((prev) => {
+                          const nextVehicleTypeId = e.target.value;
+                          const nextVehicleTypeCode = vehicleTypes.find((vt) => vt.id === nextVehicleTypeId)?.code ?? '';
+                          const modelStillValid = !prev.model
+                            || getModelsForMakeAndVehicleType(prev.make ?? '', nextVehicleTypeCode).some((m) => m.model === prev.model);
+                          return {
+                            ...prev,
+                            vehicleTypeId: nextVehicleTypeId,
+                            model: modelStillValid ? prev.model : '',
+                          };
+                        })}
                           className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50">
                           <option value="">— Select Type —</option>
                           {vehicleTypes.map(vt => <option key={vt.id} value={vt.id}>{vt.name} ({vt.code})</option>)}

@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { createAdminApprovalRequest } from '@/lib/admin-approvals';
 import { notifyTripStatusChange } from '@/lib/logistics-notifications';
+import {
+  assertGovernedShipmentWrite,
+  ensureShipmentForLegacyBooking,
+  getCarrierAwardComplianceBlockers,
+  syncShipmentStatusFromBooking,
+} from '@/lib/logistics/domain';
+import { logisticsErrorResponse } from '@/lib/logistics/api-context';
 
 /**
  * Trip Status Transition API
@@ -52,7 +60,7 @@ export async function PATCH(
 ) {
   try {
     const { id } = params;
-    const { status: toStatus, changedBy, note, vehicleId, driverId, driverName, vehiclePlate } =
+    const { status: toStatus, changedBy, note, vehicleId, driverId, driverName, vehiclePlate, tenantId: bodyTenantId, overrideCompliance, overrideReason } =
       await req.json() as {
         status: string;
         changedBy?: string;
@@ -61,7 +69,13 @@ export async function PATCH(
         driverId?: string;
         driverName?: string;
         vehiclePlate?: string;
+        tenantId?: string;
+        overrideCompliance?: boolean;
+        overrideReason?: string | null;
       };
+    const tenantId = req.headers.get('x-tenant-id') ?? bodyTenantId ?? null;
+    const role = req.headers.get('x-user-role') ?? '';
+    const userId = req.headers.get('x-user-id') ?? changedBy ?? 'logistics-status-api';
 
     // Fetch current booking
     const booking = await prisma.booking.findUnique({ where: { id } });
@@ -77,6 +91,104 @@ export async function PATCH(
         { error: `Cannot transition from ${fromStatus} to ${toStatus}` },
         { status: 422 }
       );
+    }
+
+    if (tenantId) {
+      const shipment = await ensureShipmentForLegacyBooking({
+        tenantId,
+        bookingId: id,
+        actorUserId: changedBy ?? req.headers.get('x-user-id') ?? null,
+      });
+      if (shipment) {
+        await assertGovernedShipmentWrite({
+          tenantId,
+          shipmentOrderId: shipment.id,
+          action: 'Trip status transition',
+          allowClosed: toStatus === 'CLOSED',
+        });
+      }
+      if (shipment && ['DISPATCHED', 'ENROUTE_PICKUP', 'LOADED', 'ENROUTE_DELIVERY'].includes(toStatus)) {
+        const carrierId = shipment.assigned_carrier_id ?? null;
+        if (carrierId) {
+          const blockers = await getCarrierAwardComplianceBlockers({
+            tenantId,
+            carrierId,
+            vehicleId: vehicleId ?? shipment.assigned_vehicle_id ?? null,
+            driverId: driverId ?? shipment.assigned_driver_id ?? null,
+            requireVehicle: true,
+          });
+          if (blockers.length > 0 && overrideCompliance) {
+            if (role !== 'SUPER_ADMIN') {
+              return NextResponse.json({ error: 'Only Super Admin can request a compliance override.' }, { status: 403 });
+            }
+            if (!String(overrideReason ?? '').trim()) {
+              return NextResponse.json({ error: 'Override reason is required.' }, { status: 400 });
+            }
+            const approvalId = await createAdminApprovalRequest({
+              req,
+              ctx: {
+                userId,
+                tenantId,
+                role,
+                isSuperAdmin: true,
+                isTenantAdmin: false,
+              },
+              action: 'logistics.compliance_override.dispatch',
+              tenantId,
+              targetType: 'LogisticsTripStatus',
+              targetId: id,
+              summary: `Override compliance blockers to move ${booking.bookingRef ?? id.slice(0, 8)} to ${toStatus}.`,
+              requiredApprovals: 1,
+              payload: {
+                before: {
+                  bookingStatus: fromStatus,
+                  shipmentStatus: shipment.status,
+                  carrierId,
+                  vehicleId: shipment.assigned_vehicle_id ?? null,
+                  driverId: shipment.assigned_driver_id ?? null,
+                },
+                after: {
+                  bookingStatus: toStatus,
+                  shipmentStatus: toStatus,
+                  vehicleId: vehicleId ?? shipment.assigned_vehicle_id ?? null,
+                  driverId: driverId ?? shipment.assigned_driver_id ?? null,
+                },
+                operation: {
+                  tenantId,
+                  bookingId: id,
+                  status: toStatus,
+                  changedBy,
+                  note,
+                  vehicleId,
+                  driverId,
+                  driverName,
+                  vehiclePlate,
+                  overrideReason,
+                },
+                blockers,
+                preview: { blockerCount: blockers.length, bookingRef: booking.bookingRef ?? id.slice(0, 8) },
+              },
+            });
+            return NextResponse.json({
+              error: 'Approval required',
+              code: 'LOGISTICS_OVERRIDE_APPROVAL_REQUIRED',
+              message: 'Compliance override was queued for approval. Dispatch will execute after approval.',
+              blockers,
+              approvalRequest: { id: approvalId, status: 'PENDING', requiredApprovals: 1 },
+            }, { status: 428 });
+          }
+          if (blockers.length > 0) {
+            return NextResponse.json(
+              {
+                error: 'Carrier compliance blocks shipment dispatch',
+                code: 'LOGISTICS_COMPLIANCE_BLOCKED',
+                blockers,
+              },
+              { status: 409 },
+            );
+          }
+        }
+      }
     }
 
     // Build patch data
@@ -136,10 +248,23 @@ export async function PATCH(
       id, fromStatus, toStatus, changedBy ?? 'system', note ?? null
     ).catch(() => { /* silent — don't fail the whole request if history write fails */ });
 
+    if (tenantId) {
+      await syncShipmentStatusFromBooking({
+        tenantId,
+        bookingId: id,
+        status: toStatus,
+        actorUserId: changedBy ?? req.headers.get('x-user-id') ?? null,
+        note,
+        metadata: { vehicleId, driverId, driverName, vehiclePlate },
+      }).catch(error => {
+        console.error('[logistics/trips/status PATCH] shipment sync failed:', error);
+      });
+    }
+
     return NextResponse.json({ success: true, booking: updated });
   } catch (err) {
     console.error('[logistics/trips/status PATCH]', err);
-    return NextResponse.json({ error: 'Failed to update status' }, { status: 500 });
+    return logisticsErrorResponse(err, 'Failed to update status');
   }
 }
 

@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { usePathname } from 'next/navigation';
+import { LeasingBillingMigrationNotice } from '@/components/LeasingBillingMigrationNotice';
 
 interface TrafficFine {
   id: string; fineNo?: string; contractId?: string; vehicleId?: string; driverId?: string; lesseeId?: string;
@@ -8,7 +10,8 @@ interface TrafficFine {
   dueDate?: string; billedToLessee?: boolean; billingStatus?: string; paidDate?: string; notes?: string;
   contract?: { contractNumber?: string };
 }
-interface Contract { id: string; contractNumber?: string; }
+interface Contract { id: string; contractNumber?: string; lessee?: string; lesseeId?: string | null; }
+interface Lessee { id: string; name: string; }
 
 const VIOLATION_TYPES = ['SPEEDING','PARKING','RED_LIGHT','SALIK','REGISTRATION','OTHER'];
 const AUTHORITIES     = ['RTA','DUBAI_POLICE','ABU_DHABI_POLICE','SHARJAH_POLICE','OTHER'];
@@ -21,8 +24,12 @@ const STATUS_COLORS: Record<string,string> = {
 };
 
 export default function TrafficFinesPage() {
+  const pathname = usePathname();
+  const isLegacyPath = pathname.startsWith('/leasing/');
+  const apiBase = isLegacyPath ? '/api/leasing' : '/api/finance/leasing-billing';
   const [fines, setFines]           = useState<TrafficFine[]>([]);
   const [contracts, setContracts]   = useState<Contract[]>([]);
+  const [lessees, setLessees]       = useState<Lessee[]>([]);
   const [filter, setFilter]         = useState('All');
   const [showModal, setShowModal]   = useState(false);
   const [loading, setLoading]       = useState(true);
@@ -31,26 +38,36 @@ export default function TrafficFinesPage() {
 
   const emptyForm = { contractId:'', vehicleId:'', driverId:'', lesseeId:'', violationDate:'', violationType:'SPEEDING', authority:'RTA', location:'', fineAmount:'', discountAmount:'', dueDate:'', billedToLessee:true, notes:'' };
   const [form, setForm] = useState(emptyForm);
-
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const params = filter !== 'All' ? `?billingStatus=${filter}` : '';
-      const [fRes, cRes] = await Promise.all([fetch(`/api/leasing/traffic-fines${params}`), fetch('/api/leasing/contracts-v2')]);
-      const [fData, cData] = await Promise.all([fRes.json(), cRes.json()]);
+      const [fRes, cRes, lesseesRes] = await Promise.all([fetch(`${apiBase}/traffic-fines${params}`), fetch('/api/leasing/contracts-v2'), fetch('/api/leasing/lessees')]);
+      const [fData, cData, lesseesData] = await Promise.all([fRes.json(), cRes.json(), lesseesRes.json()]);
       setFines(Array.isArray(fData) ? fData : []);
       setContracts(Array.isArray(cData) ? cData : []);
+      setLessees(Array.isArray(lesseesData) ? lesseesData : lesseesData.lessees ?? []);
     } catch { setError('Failed to load'); }
     finally { setLoading(false); }
-  }, [filter]);
+  }, [apiBase, filter]);
+
+  const filteredContracts = form.lesseeId
+    ? contracts.filter(contract => contract.lesseeId === form.lesseeId)
+    : contracts;
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (form.contractId && !filteredContracts.some(contract => contract.id === form.contractId)) {
+      setForm(prev => ({ ...prev, contractId: '' }));
+    }
+  }, [filteredContracts, form.contractId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
     try {
       const finalAmount = parseFloat(form.fineAmount) - parseFloat(form.discountAmount || '0');
-      const res = await fetch('/api/leasing/traffic-fines', { method:'POST', headers:{'Content-Type':'application/json'},
+      const res = await fetch(`${apiBase}/traffic-fines`, { method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ ...form, fineAmount: parseFloat(form.fineAmount), discountAmount: parseFloat(form.discountAmount||'0'), finalAmount,
           violationDate: new Date(form.violationDate).toISOString(), dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : null,
           contractId: form.contractId || null, vehicleId: form.vehicleId || null }) });
@@ -60,7 +77,7 @@ export default function TrafficFinesPage() {
   };
 
   const updateStatus = async (id: string, billingStatus: string) => {
-    await fetch(`/api/leasing/traffic-fines/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ billingStatus }) });
+    await fetch(`${apiBase}/traffic-fines/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ billingStatus }) });
     load();
   };
 
@@ -69,6 +86,16 @@ export default function TrafficFinesPage() {
   const totalPaid     = fines.filter(f=>f.billingStatus==='PAID').reduce((s,f)=>s+Number(f.finalAmount??f.fineAmount),0);
 
   if (loading) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading...</div></div>;
+
+  if (isLegacyPath) {
+    return (
+      <LeasingBillingMigrationNotice
+        title="Leasing traffic fines"
+        financeHref="/finance/leasing-billing/traffic-fines"
+        description="Traffic-fine billing, collection status, and chargeback controls now belong to Finance & Billing."
+      />
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -134,11 +161,17 @@ export default function TrafficFinesPage() {
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
+                <div><label className="block text-sm font-medium text-slate-300 mb-2">Customer / Lessee</label>
+                  <select value={form.lesseeId} onChange={e=>setForm(p=>({...p,lesseeId:e.target.value}))}
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-rose-500 focus:outline-none">
+                    <option value="">All lessees</option>
+                    {lessees.map(lessee=><option key={lessee.id} value={lessee.id}>{lessee.name}</option>)}
+                  </select></div>
                 <div><label className="block text-sm font-medium text-slate-300 mb-2">Contract</label>
                   <select value={form.contractId} onChange={e=>setForm(p=>({...p,contractId:e.target.value}))}
                     className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-rose-500 focus:outline-none">
                     <option value="">Select contract</option>
-                    {contracts.map(c=><option key={c.id} value={c.id}>{c.contractNumber??c.id.slice(0,8)}</option>)}
+                    {filteredContracts.map(c=><option key={c.id} value={c.id}>{c.contractNumber??c.id.slice(0,8)}{c.lessee ? ` - ${c.lessee}` : ''}</option>)}
                   </select></div>
                 <div><label className="block text-sm font-medium text-slate-300 mb-2">Violation Date *</label>
                   <input type="datetime-local" value={form.violationDate} onChange={e=>setForm(p=>({...p,violationDate:e.target.value}))} required
@@ -155,7 +188,7 @@ export default function TrafficFinesPage() {
                   </select></div>
                 {[{l:'Fine Amount (AED) *',k:'fineAmount',t:'number',ph:'500',req:true},{l:'Discount Amount',k:'discountAmount',t:'number',ph:'0'},{l:'Location',k:'location',t:'text',ph:'Sheikh Zayed Road'},{l:'Vehicle ID',k:'vehicleId',t:'text',ph:'Optional'},{l:'Driver ID',k:'driverId',t:'text',ph:'Optional'},{l:'Due Date',k:'dueDate',t:'date',ph:''}].map(({l,k,t,ph,req})=>(
                   <div key={k}><label className="block text-sm font-medium text-slate-300 mb-2">{l}</label>
-                    <input type={t} value={(form as any)[k]} onChange={e=>setForm(p=>({...p,[k]:e.target.value}))} placeholder={ph} required={req}
+                    <input type={t} value={String(form[k as keyof typeof form] ?? '')} onChange={e=>setForm(p=>({...p,[k]:e.target.value}))} placeholder={ph} required={req}
                       className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-rose-500 focus:outline-none"/></div>
                 ))}
                 <div className="flex items-center gap-3">

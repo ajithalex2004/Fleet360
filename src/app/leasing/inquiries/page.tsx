@@ -1,17 +1,41 @@
 'use client';
-import { VEHICLE_GROUPS, VEHICLE_MAKES, getModelsForMake, getGroupsForModel } from '@/lib/vehicleMaster';
+import { VEHICLE_GROUPS, VEHICLE_MAKES, getModelsForMakeAndVehicleType } from '@/lib/vehicleMaster';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  ChevronRight,
   Plus,
   Eye,
   ArrowRight,
   Search,
-  Filter,
+  Square,
+  CheckSquare,
   X,
+  BadgeCheck,
+  FileText,
+  MessageSquare,
+  Sparkles,
 } from 'lucide-react';
+import DataTableToolbar from '@/components/ui/DataTableToolbar';
+import SmartDataGridHeader from '@/components/ui/SmartDataGridHeader';
+import { KpiCard, KpiGrid, PageHeader } from '@/components/ui/page-theme';
+import { useDataTableColumns, type DataTableColumn } from '@/hooks/useDataTableColumns';
+import { downloadXLSX } from '@/lib/exportUtils';
+import { downloadTablePdf } from '@/lib/exportTablePdf';
+
+const ALL_VEHICLE_TYPES = [...new Set(VEHICLE_GROUPS.flatMap((group) => group.types))];
+
+function formatVehicleTypeLabel(type: string) {
+  return type
+    .toLowerCase()
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function arraysEqual(left: string[], right: string[]) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
 
 interface LeaseInquiry {
   id: string;
@@ -39,16 +63,69 @@ interface LeaseInquiry {
   createdAt: string;
 }
 
+function cacheInquiryForQuotation(inquiry: LeaseInquiry) {
+  try {
+    window.sessionStorage.setItem(
+      'xl_convert_inquiry_payload',
+      JSON.stringify({
+        id: inquiry.id,
+        inquiryNumber: inquiry.inquiryNumber,
+        customerName: inquiry.customerName,
+        customerEmail: inquiry.customerEmail,
+        customerPhone: inquiry.customerPhone,
+        companyName: inquiry.companyName,
+        vehicleType: inquiry.vehicleType,
+        vehicleCount: inquiry.vehicleCount ?? inquiry.count ?? 1,
+        leaseType: inquiry.leaseType,
+        durationMonths: inquiry.durationMonths ?? inquiry.duration ?? 24,
+        startDate: inquiry.startDate,
+        requiresDriver: inquiry.requiresDriver,
+        requiresInsurance: inquiry.requiresInsurance,
+        requiresMaintenance: inquiry.requiresMaintenance,
+        notes: inquiry.notes,
+      }),
+    );
+  } catch {}
+}
+
+type InquiryColumnKey =
+  | 'inquiryNumber'
+  | 'customerName'
+  | 'companyName'
+  | 'vehicleType'
+  | 'vehicleCount'
+  | 'leaseType'
+  | 'duration'
+  | 'startDate'
+  | 'status'
+  | 'assignedTo';
+
+const DEFAULT_INQUIRY_COLUMNS: DataTableColumn<InquiryColumnKey>[] = [
+  { key: 'inquiryNumber', label: 'Inquiry #', visible: true },
+  { key: 'customerName', label: 'Customer Name', visible: true },
+  { key: 'companyName', label: 'Company', visible: true },
+  { key: 'vehicleType', label: 'Vehicle Type', visible: true },
+  { key: 'vehicleCount', label: 'Count', visible: true },
+  { key: 'leaseType', label: 'Lease Type', visible: true },
+  { key: 'duration', label: 'Duration', visible: true },
+  { key: 'startDate', label: 'Start Date', visible: true },
+  { key: 'status', label: 'Status', visible: true },
+  { key: 'assignedTo', label: 'Assigned To', visible: true },
+];
+
 export default function LeaseInquiriesPage() {
   const router = useRouter();
   const [inquiries, setInquiries] = useState<LeaseInquiry[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showNewModal, setShowNewModal] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [vehicleTypeFilter, setVehicleTypeFilter] = useState<string>('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedInquiry, setSelectedInquiry] = useState<LeaseInquiry | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showTableFilters, setShowTableFilters] = useState(false);
+  const [sortKey, setSortKey] = useState<InquiryColumnKey>('inquiryNumber');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [selectedInquiryIds, setSelectedInquiryIds] = useState<string[]>([]);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [editStatus, setEditStatus] = useState<string>('');
   const [editNotes, setEditNotes] = useState('');
@@ -73,6 +150,95 @@ export default function LeaseInquiriesPage() {
     notes: '',
     assignedTo: '',
   });
+  const {
+    columns: inquiryColumns,
+    visibleColumns: visibleInquiryColumns,
+    toggleColumn: toggleInquiryColumn,
+    moveColumn: moveInquiryColumn,
+    resizeColumn: resizeInquiryColumn,
+  } = useDataTableColumns<InquiryColumnKey>('leasing-inquiries-columns', DEFAULT_INQUIRY_COLUMNS);
+
+  const getInquiryColumnStyle = useMemo(
+    () =>
+      (key: InquiryColumnKey) => {
+        const column = visibleInquiryColumns.find((item) => item.key === key);
+        return column?.width ? { width: `${column.width}px`, minWidth: `${column.width}px` } : undefined;
+      },
+    [visibleInquiryColumns],
+  );
+
+  const selectedVehicleGroups = useMemo(() => formData.vehicleGroups ?? [], [formData.vehicleGroups]);
+  const allowedVehicleTypes = useMemo(
+    () =>
+      selectedVehicleGroups.length === 0
+        ? ALL_VEHICLE_TYPES
+        : [
+            ...new Set(
+              VEHICLE_GROUPS.filter((group) => selectedVehicleGroups.includes(group.code)).flatMap(
+                (group) => group.types
+              )
+            ),
+          ],
+    [selectedVehicleGroups]
+  );
+  const allowedVehicleMakes = useMemo(
+    () =>
+      VEHICLE_MAKES.filter(
+        (makeDef) =>
+          selectedVehicleGroups.length === 0 ||
+          makeDef.models.some((modelDef) =>
+            modelDef.groups.some((groupCode) => selectedVehicleGroups.includes(groupCode))
+          )
+      ),
+    [selectedVehicleGroups]
+  );
+  const allowedVehicleModels = useMemo(
+    () =>
+      (formData.vehicleMakes ?? []).flatMap((make) =>
+        getModelsForMakeAndVehicleType(make, formData.vehicleType).filter(
+          ({ groups }) =>
+            selectedVehicleGroups.length === 0 ||
+            groups.some((groupCode) => selectedVehicleGroups.includes(groupCode))
+        )
+      ),
+    [formData.vehicleMakes, formData.vehicleType, selectedVehicleGroups]
+  );
+
+  useEffect(() => {
+    setFormData((current) => {
+      const nextVehicleType = allowedVehicleTypes.includes(current.vehicleType)
+        ? current.vehicleType
+        : (allowedVehicleTypes[0] ?? '');
+      const nextVehicleMakes = (current.vehicleMakes ?? []).filter((make) =>
+        allowedVehicleMakes.some((allowedMake) => allowedMake.make === make)
+      );
+      const nextVehicleModels = (current.vehicleModels ?? []).filter((model) =>
+        nextVehicleMakes.some((make) =>
+          getModelsForMakeAndVehicleType(make, nextVehicleType).some(
+            (modelDef) =>
+              modelDef.model === model &&
+              (selectedVehicleGroups.length === 0 ||
+                modelDef.groups.some((groupCode) => selectedVehicleGroups.includes(groupCode)))
+          )
+        )
+      );
+
+      if (
+        nextVehicleType === current.vehicleType &&
+        arraysEqual(nextVehicleMakes, current.vehicleMakes ?? []) &&
+        arraysEqual(nextVehicleModels, current.vehicleModels ?? [])
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        vehicleType: nextVehicleType,
+        vehicleMakes: nextVehicleMakes,
+        vehicleModels: nextVehicleModels,
+      };
+    });
+  }, [allowedVehicleMakes, allowedVehicleTypes, selectedVehicleGroups]);
 
   // Mock data
   const mockInquiries: LeaseInquiry[] = [
@@ -168,8 +334,7 @@ export default function LeaseInquiriesPage() {
     fetch('/api/leasing/inquiries')
       .then((r) => r.ok ? r.json() : Promise.reject(r))
       .then((data) => setInquiries(data))
-      .catch(() => setInquiries(mockInquiries as unknown as LeaseInquiry[]))
-      .finally(() => setLoading(false));
+      .catch(() => setInquiries(mockInquiries as unknown as LeaseInquiry[]));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -186,26 +351,121 @@ export default function LeaseInquiriesPage() {
     return statusMatch && vehicleMatch && searchMatch;
   });
 
+  const sortedInquiries = useMemo(() => {
+    const next = [...filteredInquiries];
+    next.sort((left, right) => {
+      const leftValue: Record<InquiryColumnKey, string | number> = {
+        inquiryNumber: left.inquiryNumber,
+        customerName: left.customerName,
+        companyName: left.companyName ?? '',
+        vehicleType: left.vehicleType,
+        vehicleCount: left.vehicleCount ?? left.count ?? 0,
+        leaseType: left.leaseType,
+        duration: left.durationMonths ?? left.duration ?? 0,
+        startDate: left.startDate ?? '',
+        status: left.status,
+        assignedTo: left.assignedTo ?? '',
+      };
+      const rightValue: Record<InquiryColumnKey, string | number> = {
+        inquiryNumber: right.inquiryNumber,
+        customerName: right.customerName,
+        companyName: right.companyName ?? '',
+        vehicleType: right.vehicleType,
+        vehicleCount: right.vehicleCount ?? right.count ?? 0,
+        leaseType: right.leaseType,
+        duration: right.durationMonths ?? right.duration ?? 0,
+        startDate: right.startDate ?? '',
+        status: right.status,
+        assignedTo: right.assignedTo ?? '',
+      };
+      const a = leftValue[sortKey];
+      const b = rightValue[sortKey];
+      const comparison =
+        typeof a === 'number' && typeof b === 'number'
+          ? a - b
+          : String(a).localeCompare(String(b));
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+    return next;
+  }, [filteredInquiries, sortDirection, sortKey]);
+
+  const allVisibleSelected =
+    sortedInquiries.length > 0 && sortedInquiries.every((inquiry) => selectedInquiryIds.includes(inquiry.id));
+
+  const toggleSelectedInquiry = (id: string) => {
+    setSelectedInquiryIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
+    );
+  };
+
+  const toggleSelectAllVisible = () => {
+    setSelectedInquiryIds((current) => {
+      if (allVisibleSelected) {
+        return current.filter((id) => !sortedInquiries.some((inquiry) => inquiry.id === id));
+      }
+      const next = new Set(current);
+      sortedInquiries.forEach((inquiry) => next.add(inquiry.id));
+      return Array.from(next);
+    });
+  };
+
+  const toggleSort = (key: InquiryColumnKey) => {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection('asc');
+  };
+
+  const inquiryExportColumns = visibleInquiryColumns.map((column) => column.label);
+  const inquiryExportRows = filteredInquiries.map((inquiry) =>
+    visibleInquiryColumns.reduce<Record<string, string | number>>((row, column) => {
+      const valueMap: Record<InquiryColumnKey, string | number> = {
+        inquiryNumber: inquiry.inquiryNumber,
+        customerName: inquiry.customerName,
+        companyName: inquiry.companyName ?? '-',
+        vehicleType: inquiry.vehicleType,
+        vehicleCount: inquiry.vehicleCount ?? inquiry.count ?? '-',
+        leaseType: inquiry.leaseType.replace(/_/g, ' '),
+        duration: inquiry.durationMonths ?? inquiry.duration ? `${inquiry.durationMonths ?? inquiry.duration} months` : '-',
+        startDate: inquiry.startDate ? new Date(inquiry.startDate).toLocaleDateString() : '-',
+        status: inquiry.status,
+        assignedTo: inquiry.assignedTo ?? '-',
+      };
+      row[column.label] = valueMap[column.key];
+      return row;
+    }, {}),
+  );
+
   const stats = [
     {
       label: 'New',
       value: inquiries.filter((i) => i.status === 'NEW').length,
-      color: 'blue',
+      accent: 'blue' as const,
+      icon: Sparkles,
+      sub: 'Fresh inbound',
     },
     {
       label: 'Contacted',
       value: inquiries.filter((i) => i.status === 'CONTACTED').length,
-      color: 'amber',
+      accent: 'amber' as const,
+      icon: MessageSquare,
+      sub: 'Engaged leads',
     },
     {
       label: 'Quotation Sent',
       value: inquiries.filter((i) => i.status === 'QUOTATION_SENT').length,
-      color: 'purple',
+      accent: 'violet' as const,
+      icon: FileText,
+      sub: 'Awaiting decision',
     },
     {
       label: 'Converted',
       value: inquiries.filter((i) => i.status === 'CONVERTED').length,
-      color: 'emerald',
+      accent: 'emerald' as const,
+      icon: BadgeCheck,
+      sub: 'Won inquiries',
     },
   ];
 
@@ -249,13 +509,13 @@ export default function LeaseInquiriesPage() {
       }
       setInquiries(prev =>
         prev.map(i => i.id === selectedInquiry.id
-          ? { ...i, status: editStatus as any, notes: editNotes, assignedTo: editAssignedTo }
+          ? { ...i, status: editStatus as LeaseInquiry['status'], notes: editNotes, assignedTo: editAssignedTo }
           : i
         )
       );
       setShowDetailModal(false);
-    } catch (e: any) {
-      alert('Update failed: ' + (e.message ?? 'Unknown error'));
+    } catch (e: unknown) {
+      alert('Update failed: ' + (e instanceof Error ? e.message : 'Unknown error'));
     } finally {
       setUpdatingStatus(false);
     }
@@ -329,6 +589,10 @@ export default function LeaseInquiriesPage() {
   const handleConvertToQuotation = (inquiryId: string) => {
     // Clear cached inquiry ID so re-convert always triggers
     try { window.sessionStorage.removeItem('xl_last_inquiry_id'); } catch {}
+    const inquiry = inquiries.find((item) => item.id === inquiryId);
+    if (inquiry) {
+      cacheInquiryForQuotation(inquiry);
+    }
     router.push(`/leasing/quotations?fromInquiry=${inquiryId}`);
   };
 
@@ -336,36 +600,62 @@ export default function LeaseInquiriesPage() {
     <div className="min-h-screen bg-[#0c1a3e] p-8">
       <div className="mx-auto max-w-7xl">
         {/* Header */}
-        <div className="mb-8 flex items-end justify-between">
-          <div>
-            <h1 className="text-4xl font-bold text-white">Lease Inquiries</h1>
-            <p className="mt-2 text-slate-400">
-              Capture and track initial customer interest
-            </p>
-          </div>
-          <button
-            onClick={() => setShowNewModal(true)}
-            className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90 flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            New Inquiry
-          </button>
-        </div>
+        <PageHeader
+          title="Lease Inquiries"
+          subtitle="Capture and track initial customer interest"
+          accent="blue"
+          actions={(
+            <button
+              onClick={() => setShowNewModal(true)}
+              className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90 flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              New Inquiry
+            </button>
+          )}
+        />
 
         {/* Stats */}
-        <div className="mb-8 grid grid-cols-4 gap-4">
+        <KpiGrid className="mb-8">
           {stats.map((stat) => (
-            <div
+            <KpiCard
               key={stat.label}
-              className="bg-slate-800/50 border border-white/10 rounded-2xl p-6"
-            >
-              <p className="text-slate-400 text-sm mb-2">{stat.label}</p>
-              <p className="text-4xl font-bold text-white">{stat.value}</p>
-            </div>
+              label={stat.label}
+              value={stat.value}
+              sub={stat.sub}
+              accent={stat.accent}
+              icon={stat.icon}
+            />
           ))}
+        </KpiGrid>
+
+        <div className="mb-4 flex justify-end">
+          <DataTableToolbar
+            filtersOpen={showTableFilters}
+            onToggleFilters={() => setShowTableFilters((current) => !current)}
+            onExportExcel={() => downloadXLSX('lease-inquiries-export', inquiryExportRows, inquiryExportColumns)}
+            onExportPdf={() =>
+              downloadTablePdf({
+                filename: 'lease-inquiries-export.pdf',
+                title: 'Lease Enquiries',
+                columns: inquiryExportColumns,
+                rows: inquiryExportRows,
+              })
+            }
+            columns={inquiryColumns}
+            onToggleColumn={toggleInquiryColumn}
+            onMoveColumn={moveInquiryColumn}
+            onResizeColumn={(key, direction) => resizeInquiryColumn(key, direction === 'wider' ? 24 : -24)}
+            leftSlot={
+              <div className="data-grid-count-badge">
+                {filteredInquiries.length} inquir{filteredInquiries.length === 1 ? 'y' : 'ies'}
+              </div>
+            }
+          />
         </div>
 
         {/* Filters */}
+        {showTableFilters && (
         <div className="mb-6 bg-slate-800/50 border border-white/10 rounded-2xl p-4 space-y-4">
           <div className="grid grid-cols-3 gap-4">
             {/* Status Filter */}
@@ -425,91 +715,123 @@ export default function LeaseInquiriesPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Table */}
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-x-auto">
+        <div className="smart-data-grid-surface">
           <table className="w-full min-w-[900px]">
-            <thead className="bg-slate-800/50">
-              <tr className="border-b border-white/5">
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Inquiry #
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Customer Name
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Company
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Vehicle Type
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Count
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Lease Type
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Duration
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Start Date
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Status
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
-                  Assigned To
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-white whitespace-nowrap bg-blue-900/30">
-                  Actions
-                </th>
-              </tr>
-            </thead>
+            <SmartDataGridHeader
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              onSort={(key) => toggleSort(key as InquiryColumnKey)}
+              columns={[
+                {
+                  key: 'select',
+                  label: '',
+                  sortable: false,
+                  headerClassName: 'w-[72px] text-center',
+                  filterClassName: 'w-[72px] text-center',
+                  filter: showTableFilters ? (
+                    <button
+                      type="button"
+                      onClick={toggleSelectAllVisible}
+                      className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold"
+                    >
+                      {allVisibleSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                    </button>
+                  ) : undefined,
+                },
+                ...visibleInquiryColumns.map((column) => {
+                const commonInputClass = 'w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none';
+                if (!showTableFilters) return { key: column.key, label: column.label, sortable: true, width: column.width };
+                switch (column.key) {
+                  case 'inquiryNumber':
+                    return { key: column.key, label: column.label, sortable: true, width: column.width, filter: <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search..." className={commonInputClass} /> };
+                  case 'customerName':
+                    return { key: column.key, label: column.label, sortable: true, width: column.width, filter: <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search..." className={commonInputClass} /> };
+                  case 'companyName':
+                    return { key: column.key, label: column.label, sortable: true, width: column.width, filter: <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search..." className={commonInputClass} /> };
+                  case 'vehicleType':
+                    return { key: column.key, label: column.label, sortable: true, width: column.width, filter: <select value={vehicleTypeFilter} onChange={(e) => setVehicleTypeFilter(e.target.value)} className={commonInputClass}><option>All</option><option>SEDAN</option><option>SUV</option><option>VAN</option><option>BUS</option><option>TRUCK</option><option>LUXURY</option></select> };
+                  case 'vehicleCount':
+                    return { key: column.key, label: column.label, sortable: true, width: column.width, filter: <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Units..." className={commonInputClass} /> };
+                  case 'leaseType':
+                    return { key: column.key, label: column.label, sortable: true, width: column.width, filter: <select value="All" onChange={() => undefined} className={commonInputClass}><option>All</option></select> };
+                  case 'duration':
+                    return { key: column.key, label: column.label, sortable: true, width: column.width, filter: <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Months..." className={commonInputClass} /> };
+                  case 'startDate':
+                    return { key: column.key, label: column.label, sortable: true, width: column.width, filter: <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="YYYY-MM-DD" className={commonInputClass} /> };
+                  case 'status':
+                    return { key: column.key, label: column.label, sortable: true, width: column.width, filter: <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={commonInputClass}><option>All</option><option>NEW</option><option>CONTACTED</option><option>QUOTATION_SENT</option><option>CONVERTED</option><option>LOST</option></select> };
+                  case 'assignedTo':
+                    return { key: column.key, label: column.label, sortable: true, width: column.width, filter: <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search..." className={commonInputClass} /> };
+                  default:
+                    return { key: column.key, label: column.label, sortable: true, width: column.width };
+                }
+              }),
+            ]}
+              actionHeader="Actions"
+            />
             <tbody>
-              {filteredInquiries.map((inquiry) => (
+              {sortedInquiries.map((inquiry) => (
                 <tr
                   key={inquiry.id}
                   className="border-b border-white/5 hover:bg-white/5 transition-colors"
                 >
-                  <td className="px-3 py-3 text-sm text-white font-medium">
-                    {inquiry.inquiryNumber}
-                  </td>
-                  <td className="px-3 py-3 text-sm text-white">
-                    {inquiry.customerName}
-                  </td>
-                  <td className="px-3 py-3 text-sm text-slate-200">
-                    {inquiry.companyName}
-                  </td>
-                  <td className="px-3 py-3 text-sm text-white">
-                    {inquiry.vehicleType}
-                  </td>
-                  <td className="px-3 py-3 text-sm text-white">
-                    {inquiry.vehicleCount ?? "-"}
-                  </td>
-                  <td className="px-3 py-3 text-sm text-slate-200">
-                    {inquiry.leaseType}
-                  </td>
-                  <td className="px-3 py-3 text-sm text-white">
-                    {(inquiry as any).durationMonths ?? inquiry.durationMonths ? `${(inquiry as any).durationMonths ?? inquiry.durationMonths} months` : "-"}
-                  </td>
-                  <td className="px-3 py-3 text-sm text-slate-200">
-                    {inquiry.startDate ? new Date(inquiry.startDate).toLocaleDateString() : "-"}
-                  </td>
-                  <td className="px-3 py-3 text-sm">
+                  <td className="px-4 py-4 text-center align-top">
                     <button
-                      onClick={() => openDetail(inquiry)}
-                      className={`px-2 py-1 rounded-full text-xs font-medium border hover:opacity-80 transition-opacity ${getStatusColor(
-                        inquiry.status
-                      )}`}
+                      type="button"
+                      onClick={() => toggleSelectedInquiry(inquiry.id)}
+                      className="inline-flex text-slate-500 transition hover:text-slate-900"
+                      aria-label={selectedInquiryIds.includes(inquiry.id) ? 'Deselect inquiry' : 'Select inquiry'}
                     >
-                      {inquiry.status}
+                      {selectedInquiryIds.includes(inquiry.id) ? (
+                        <CheckSquare className="h-5 w-5" />
+                      ) : (
+                        <Square className="h-5 w-5" />
+                      )}
                     </button>
                   </td>
-                  <td className="px-3 py-3 text-sm text-slate-200">
-                    {inquiry.assignedTo ?? "-"}
-                  </td>
-                  <td className="px-3 py-3 text-sm whitespace-nowrap">
+                  {visibleInquiryColumns.map((column) => {
+                    const valueCellClass = 'smart-data-grid-cell px-5 py-4 align-top';
+                    const style = getInquiryColumnStyle(column.key);
+                    switch (column.key) {
+                      case 'inquiryNumber':
+                        return <td key={column.key} className={valueCellClass} style={style}>{inquiry.inquiryNumber}</td>;
+                      case 'customerName':
+                        return <td key={column.key} className={valueCellClass} style={style}>{inquiry.customerName}</td>;
+                      case 'companyName':
+                        return <td key={column.key} className={valueCellClass} style={style}>{inquiry.companyName ?? '-'}</td>;
+                      case 'vehicleType':
+                        return <td key={column.key} className={valueCellClass} style={style}>{inquiry.vehicleType}</td>;
+                      case 'vehicleCount':
+                        return <td key={column.key} className={valueCellClass} style={style}>{inquiry.vehicleCount ?? inquiry.count ?? '-'}</td>;
+                      case 'leaseType':
+                        return <td key={column.key} className={valueCellClass} style={style}>{inquiry.leaseType.replace(/_/g, ' ')}</td>;
+                      case 'duration':
+                        return <td key={column.key} className={valueCellClass} style={style}>{inquiry.durationMonths ?? inquiry.duration ? `${inquiry.durationMonths ?? inquiry.duration} months` : '-'}</td>;
+                      case 'startDate':
+                        return <td key={column.key} className={valueCellClass} style={style}>{inquiry.startDate ? new Date(inquiry.startDate).toLocaleDateString() : '-'}</td>;
+                      case 'status':
+                        return (
+                          <td key={column.key} className="smart-data-grid-cell px-5 py-4 align-top" style={style}>
+                            <button
+                              onClick={() => openDetail(inquiry)}
+                              className={`px-2 py-1 rounded-full text-xs font-medium border hover:opacity-80 transition-opacity ${getStatusColor(
+                                inquiry.status
+                              )}`}
+                            >
+                              {inquiry.status}
+                            </button>
+                          </td>
+                        );
+                      case 'assignedTo':
+                        return <td key={column.key} className={valueCellClass} style={style}>{inquiry.assignedTo ?? '-'}</td>;
+                      default:
+                        return null;
+                    }
+                  })}
+                  <td className="smart-data-grid-cell px-5 py-4 whitespace-nowrap">
                     <div className="flex gap-2">
                       <button
                         onClick={() => openDetail(inquiry)}
@@ -647,16 +969,11 @@ export default function LeaseInquiriesPage() {
                     onChange={(e) => setFormData({ ...formData, vehicleType: e.target.value })}
                     className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                   >
-                    <option value="SEDAN">Sedan</option>
-                    <option value="SUV">SUV</option>
-                    <option value="VAN">Van</option>
-                    <option value="BUS">Bus</option>
-                    <option value="MINIBUS">Minibus</option>
-                    <option value="TRUCK">Truck</option>
-                    <option value="PICKUP">Pickup</option>
-                    <option value="LUXURY">Luxury</option>
-                    <option value="EXECUTIVE_SEDAN">Executive Sedan</option>
-                    <option value="LIMOUSINE">Limousine</option>
+                    {allowedVehicleTypes.map((type) => (
+                      <option key={type} value={type}>
+                        {formatVehicleTypeLabel(type)}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -683,20 +1000,38 @@ export default function LeaseInquiriesPage() {
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Make <span className="text-xs text-slate-500">(multi-select)</span></label>
                   <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-slate-700/50 border border-white/10 min-h-[42px] max-h-32 overflow-y-auto">
-                    {VEHICLE_MAKES.map(m => {
+                    {allowedVehicleMakes.map(m => {
                       const selected = (formData.vehicleMakes ?? []).includes(m.make);
                       return (
                         <button type="button" key={m.make}
                           onClick={() => {
                             const makes = formData.vehicleMakes ?? [];
                             const newMakes = selected ? makes.filter(x => x !== m.make) : [...makes, m.make];
-                            setFormData({ ...formData, vehicleMakes: newMakes, vehicleModels: (formData.vehicleModels ?? []).filter(mo => newMakes.some(mk => VEHICLE_MAKES.find(vm => vm.make === mk)?.models.some(md => md.model === mo))) });
+                            setFormData({
+                              ...formData,
+                              vehicleMakes: newMakes,
+                              vehicleModels: (formData.vehicleModels ?? []).filter((model) =>
+                                newMakes.some((make) =>
+                                  getModelsForMakeAndVehicleType(make, formData.vehicleType).some(
+                                    (modelDef) =>
+                                      modelDef.model === model &&
+                                      (selectedVehicleGroups.length === 0 ||
+                                        modelDef.groups.some((groupCode) =>
+                                          selectedVehicleGroups.includes(groupCode)
+                                        ))
+                                  )
+                                )
+                              ),
+                            });
                           }}
                           className={`px-2 py-1 rounded text-xs font-medium transition-all ${selected ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/40' : 'bg-slate-600 text-slate-300 hover:bg-slate-500'}`}>
                           {m.make}
                         </button>
                       );
                     })}
+                    {allowedVehicleMakes.length === 0 && (
+                      <span className="text-xs text-slate-500 p-1">No makes available for the selected group</span>
+                    )}
                   </div>
                 </div>
                 <div>
@@ -706,7 +1041,7 @@ export default function LeaseInquiriesPage() {
                   <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-slate-700/50 border border-white/10 min-h-[42px] max-h-32 overflow-y-auto">
                     {(formData.vehicleMakes ?? []).length === 0
                       ? <span className="text-xs text-slate-500 p-1">Select a make first</span>
-                      : (formData.vehicleMakes ?? []).flatMap(mk => getModelsForMake(mk)).map(({ model, groups }) => {
+                      : allowedVehicleModels.map(({ model, groups }) => {
                           const selected = (formData.vehicleModels ?? []).includes(model);
                           const autoGroups = groups;
                           return (
@@ -743,7 +1078,7 @@ export default function LeaseInquiriesPage() {
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        leaseType: e.target.value as any,
+                        leaseType: e.target.value as LeaseInquiry['leaseType'],
                       })
                     }
                     className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
@@ -913,9 +1248,9 @@ export default function LeaseInquiriesPage() {
                 ['Email',        selectedInquiry.customerEmail ?? '-'],
                 ['Phone',        selectedInquiry.customerPhone ?? '-'],
                 ['Vehicle Type', selectedInquiry.vehicleType ?? '-'],
-                ['Count',        String(selectedInquiry.count ?? 1)],
+                ['Count',        String(selectedInquiry.vehicleCount ?? selectedInquiry.count ?? 1)],
                 ['Lease Type',   selectedInquiry.leaseType ?? '-'],
-                ['Duration',     selectedInquiry.duration ? `${selectedInquiry.duration} months` : '-'],
+                ['Duration',     selectedInquiry.durationMonths ?? selectedInquiry.duration ? `${selectedInquiry.durationMonths ?? selectedInquiry.duration} months` : '-'],
                 ['Start Date',   selectedInquiry.startDate ?? '-'],
                 ['Driver',       selectedInquiry.requiresDriver ? 'Required' : 'Not required'],
                 ['Insurance',    selectedInquiry.requiresInsurance ? 'Required' : 'Not required'],
@@ -978,6 +1313,7 @@ export default function LeaseInquiriesPage() {
               <button
                 onClick={() => {
                   try { window.sessionStorage.removeItem('xl_last_inquiry_id'); } catch {}
+                  cacheInquiryForQuotation(selectedInquiry);
                   router.push(`/leasing/quotations?fromInquiry=${selectedInquiry.id}`);
                   setShowDetailModal(false);
                 }}

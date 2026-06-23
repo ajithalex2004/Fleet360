@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Building2, CreditCard, Mail, MapPin, Phone, UserRound } from 'lucide-react';
 
 interface UserProfile {
   name: string;
+  customerName: string;
   email: string;
   phone: string;
   address: string;
@@ -15,111 +17,92 @@ interface UserProfile {
 export default function ProfilePage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [editMode, setEditMode] = useState(false);
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        setLoading(true);
-        const res = await fetch('/api/customer/profile');
-        if (res.ok) {
-          const data = await res.json();
-          setProfile(data);
-        }
-      } catch (error) {
-        console.error('Error fetching profile:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProfile();
+    let mounted = true;
+    fetch('/api/customer/profile', { cache: 'no-store' })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (mounted) setProfile(data);
+      })
+      .catch(() => {
+        if (mounted) setProfile(null);
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => { mounted = false; };
   }, []);
 
   if (loading) {
+    return <div className="h-56 animate-pulse rounded-lg bg-white/5" />;
+  }
+
+  if (!profile) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      <div className="rounded-lg border border-white/10 bg-slate-900/70 p-6 text-sm text-slate-400">
+        Profile is not available.
       </div>
     );
   }
 
+  const fields = [
+    { label: 'Email', value: profile.email || 'Not provided', icon: Mail },
+    { label: 'Phone', value: profile.phone || 'Not provided', icon: Phone },
+    { label: 'Address', value: profile.address || 'Not provided', icon: MapPin },
+    { label: 'Billing', value: profile.preferredPayment || 'Corporate account', icon: CreditCard },
+  ];
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-5 pb-20 lg:pb-0">
+      <div>
         <h1 className="text-2xl font-bold text-white">Profile</h1>
-        <button
-          onClick={() => setEditMode(!editMode)}
-          className="text-blue-400 text-sm font-medium hover:text-blue-300"
-        >
-          {editMode ? 'Cancel' : 'Edit'}
-        </button>
+        <p className="mt-1 text-sm text-slate-400">Customer portal identity and account details</p>
       </div>
 
-      {profile && (
-        <div className="space-y-3">
-          {/* Profile Header */}
-          <div className="bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl p-6 text-white">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center text-3xl">
-                👤
-              </div>
-              <div>
-                <h2 className="text-xl font-bold">{profile.name}</h2>
-                <p className="text-blue-100 text-sm">Member since {new Date(profile.memberSince).getFullYear()}</p>
-              </div>
+      <section className="rounded-lg border border-white/10 bg-slate-900/70 p-5">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-md bg-cyan-300/10 text-cyan-200">
+              <UserRound className="h-8 w-8" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">{profile.name}</h2>
+              <p className="mt-1 text-sm text-slate-400">Member since {new Date(profile.memberSince).getFullYear()}</p>
             </div>
           </div>
-
-          {/* Stats */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-slate-800/50 border border-white/10 rounded-xl p-4">
-              <p className="text-slate-400 text-xs font-medium mb-1">Total Bookings</p>
-              <p className="text-2xl font-bold text-white">{profile.totalBookings}</p>
-            </div>
-            <div className="bg-slate-800/50 border border-white/10 rounded-xl p-4">
-              <p className="text-slate-400 text-xs font-medium mb-1">Preferred Payment</p>
-              <p className="text-sm font-bold text-white">{profile.preferredPayment}</p>
-            </div>
-          </div>
-
-          {/* Contact Info */}
-          <div className="space-y-3">
-            <h3 className="text-white font-semibold text-sm">Contact Information</h3>
-            <div className="bg-slate-800/50 border border-white/10 rounded-xl p-4 space-y-3">
-              <div>
-                <p className="text-slate-400 text-xs font-medium mb-1">Email</p>
-                <p className="text-white text-sm">{profile.email}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 text-xs font-medium mb-1">Phone</p>
-                <p className="text-white text-sm">{profile.phone}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 text-xs font-medium mb-1">Address</p>
-                <p className="text-white text-sm">{profile.address}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Settings */}
-          <div className="space-y-2">
-            <h3 className="text-white font-semibold text-sm">Settings</h3>
-            <button className="w-full bg-slate-800/50 border border-white/10 rounded-lg p-3 text-left hover:border-blue-500/50 transition-all">
-              <p className="text-white font-medium text-sm">Notifications</p>
-              <p className="text-slate-400 text-xs">Manage push and email notifications</p>
-            </button>
-            <button className="w-full bg-slate-800/50 border border-white/10 rounded-lg p-3 text-left hover:border-blue-500/50 transition-all">
-              <p className="text-white font-medium text-sm">Payment Methods</p>
-              <p className="text-slate-400 text-xs">Add or remove payment cards</p>
-            </button>
-            <button className="w-full bg-slate-800/50 border border-white/10 rounded-lg p-3 text-left hover:border-red-500/50 transition-all">
-              <p className="text-rose-400 font-medium text-sm">Sign Out</p>
-              <p className="text-slate-400 text-xs">Logout from this device</p>
-            </button>
+          <div className="rounded-md border border-white/10 bg-white/[0.03] px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Bookings</p>
+            <p className="mt-1 text-2xl font-bold text-white">{profile.totalBookings}</p>
           </div>
         </div>
-      )}
+      </section>
+
+      <section className="rounded-lg border border-white/10 bg-slate-900/70">
+        <div className="flex items-center gap-3 border-b border-white/10 p-4">
+          <Building2 className="h-5 w-5 text-cyan-200" />
+          <div>
+            <h2 className="font-bold text-white">{profile.customerName}</h2>
+            <p className="text-sm text-slate-400">Corporate customer account</p>
+          </div>
+        </div>
+        <div className="grid gap-0 sm:grid-cols-2">
+          {fields.map((field) => {
+            const Icon = field.icon;
+            return (
+              <div key={field.label} className="border-b border-white/10 p-4 sm:border-r">
+                <div className="flex items-start gap-3">
+                  <Icon className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{field.label}</p>
+                    <p className="mt-1 break-words text-sm text-slate-200">{field.value}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }

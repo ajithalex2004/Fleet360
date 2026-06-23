@@ -5,6 +5,8 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { ensureOperationalTenantColumn, recordOperationalChange, requireOperationalContext } from '@/lib/cross-module-governance';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
 
 const INIT = `
   CREATE TABLE IF NOT EXISTS finance_pdc_cheques (
@@ -32,6 +34,10 @@ const INIT = `
   );
 `;
 
+const MIGRATE = `
+  ALTER TABLE finance_pdc_cheques ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+`;
+
 type PdcRow = {
   id: string; created_at: string; cheque_number: string; bank_name: string;
   account_name: string | null; cheque_date: string; amount: string; currency: string;
@@ -43,6 +49,10 @@ type PdcRow = {
 
 export async function GET(req: NextRequest) {
   await prisma.$executeRawUnsafe(INIT).catch(() => {});
+  await prisma.$executeRawUnsafe(MIGRATE).catch(() => {});
+  await ensureOperationalTenantColumn('finance_pdc_cheques').catch(() => {});
+  const ctx = requireOperationalContext(req, 'finance', { requestedTenantId: req.nextUrl.searchParams.get('tenantId') });
+  if (ctx instanceof NextResponse) return ctx;
   const sp = req.nextUrl.searchParams;
   const status = sp.get('status');
   const direction = sp.get('direction');
@@ -52,9 +62,9 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(100, parseInt(sp.get('limit') ?? '50'));
   const offset = (page - 1) * limit;
 
-  let where = `WHERE deleted_at IS NULL`;
-  const params: unknown[] = [];
-  let pi = 1;
+  let where = `WHERE deleted_at IS NULL AND tenant_id::text = $1`;
+  const params: unknown[] = [ctx.tenantId];
+  let pi = 2;
   if (status)    { where += ` AND status = $${pi++}`;         params.push(status); }
   if (direction) { where += ` AND direction = $${pi++}`;      params.push(direction); }
   if (from)      { where += ` AND cheque_date >= $${pi++}`;   params.push(from); }
@@ -83,21 +93,50 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   await prisma.$executeRawUnsafe(INIT).catch(() => {});
+  await prisma.$executeRawUnsafe(MIGRATE).catch(() => {});
+  await ensureOperationalTenantColumn('finance_pdc_cheques').catch(() => {});
+  const ctx = requireOperationalContext(req, 'finance', { write: true });
+  if (ctx instanceof NextResponse) return ctx;
   const body = await req.json();
 
   const [row] = await prisma.$queryRawUnsafe<PdcRow[]>(
     `INSERT INTO finance_pdc_cheques
        (cheque_number, bank_name, account_name, cheque_date, amount, currency,
-        direction, client_name, client_ref, linked_invoice_id, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        direction, client_name, client_ref, linked_invoice_id, notes, created_by, tenant_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
      RETURNING *`,
     body.chequeNumber, body.bankName, body.accountName ?? null,
     body.chequeDate, body.amount, body.currency ?? 'AED',
     body.direction ?? 'INCOMING', body.clientName ?? null,
     body.clientRef ?? null, body.linkedInvoiceId ?? null,
-    body.notes ?? null, body.createdBy ?? null,
+    body.notes ?? null, body.createdBy ?? null, ctx.tenantId,
   ).catch(() => [] as PdcRow[]);
 
   if (!row) return NextResponse.json({ error: 'Failed to create cheque' }, { status: 500 });
-  return NextResponse.json(row, { status: 201 });
+  await recordOperationalChange({
+    req,
+    ctx,
+    entityType: 'FinancePdcCheque',
+    entityId: row.id,
+    action: 'CREATE',
+    after: row,
+    summary: `Created PDC cheque ${row.cheque_number}.`,
+  });
+  const workflow = await triggerServiceWorkflow({
+    req,
+    ctx,
+    serviceTypeKey: row.direction === 'OUTGOING' ? 'FINANCE_BILLING_EXCEPTION' : 'FINANCE_RECEIVABLE_EXCEPTION',
+    referenceType: 'PdcCheque',
+    referenceId: row.id,
+    referenceNumber: row.cheque_number,
+    contextData: {
+      action: 'create',
+      status: row.status,
+      direction: row.direction,
+      amount: row.amount,
+      clientName: row.client_name,
+      linkedInvoiceId: row.linked_invoice_id,
+    },
+  });
+  return NextResponse.json({ ...row, workflow }, { status: 201 });
 }

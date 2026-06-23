@@ -13,6 +13,7 @@
  */
 
 import { useEffect } from 'react';
+import { getClientMe } from '@/lib/client-session';
 
 interface Branding {
   productName:  string | null;
@@ -28,9 +29,7 @@ export default function BrandingProvider() {
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch('/api/auth/me', { cache: 'no-store' });
-        if (!r.ok) return;
-        const data = await r.json();
+        const data = await getClientMe();
         if (cancelled) return;
         applyBranding(data?.branding ?? null);
       } catch { /* swallow — branding is best-effort */ }

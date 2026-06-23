@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { maybeCreateIncidentWorkOrder } from '@/lib/incident-work-orders';
 
 const zero = () => Promise.resolve([{ count: BigInt(0) }]);
 
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
     const rand = Math.floor(Math.random() * 9000) + 1000;
     const incidentNo = `INC-${dateStr}-${rand}`;
 
-    const incident = await prisma.$executeRawUnsafe(
+    const [incident] = await prisma.$queryRawUnsafe<Array<{ id: string; incident_no: string | null }>>(
       `INSERT INTO trip_incidents
          (id, incident_no, incident_type, severity, status, description, location,
           vehicle_id, driver_id, incident_date, created_at, updated_at)
@@ -40,18 +41,38 @@ export async function POST(req: NextRequest) {
       incidentDate ? new Date(incidentDate) : today,
     ).catch(async () => {
       // Fallback: try without optional foreign key columns (in case they don't exist)
-      return prisma.$executeRawUnsafe(
+      const [row] = await prisma.$queryRawUnsafe<Array<{ id: string; incident_no: string | null }>>(
         `INSERT INTO trip_incidents
            (id, incident_no, incident_type, severity, status, description, location, incident_date, created_at, updated_at)
          VALUES
-           (gen_random_uuid(), $1, $2, $3, 'OPEN', $4, $5, $6, NOW(), NOW())`,
+           (gen_random_uuid(), $1, $2, $3, 'OPEN', $4, $5, $6, NOW(), NOW())
+         RETURNING id, incident_no`,
         incidentNo, incidentType, severity,
         description ?? null, location ?? null,
         incidentDate ? new Date(incidentDate) : today,
       );
+      return [row];
     });
 
-    return NextResponse.json({ success: true, incidentNo }, { status: 201 });
+    const workOrder = incident
+      ? await maybeCreateIncidentWorkOrder({
+          req,
+          incident: {
+            id: incident.id,
+            incidentNo,
+            incidentType,
+            severity,
+            description,
+            location,
+            vehicleId,
+            driverId,
+          },
+          createWorkOrder: typeof body.createWorkOrder === 'boolean' ? body.createWorkOrder : undefined,
+          sourceModule: 'INCIDENT',
+        })
+      : { created: false, skipped: true, reason: 'incident_insert_not_returned' };
+
+    return NextResponse.json({ success: true, incidentId: incident?.id ?? null, incidentNo, workOrder }, { status: 201 });
   } catch (err) {
     console.error('[incidents POST]', err);
     return NextResponse.json({ error: 'Failed to create incident' }, { status: 500 });

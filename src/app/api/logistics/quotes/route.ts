@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { LogisticsValidationError } from '@/lib/logistics/domain';
+import { logisticsErrorResponse } from '@/lib/logistics/api-context';
 
 /**
  * Freight Quotation API
@@ -178,17 +180,34 @@ export async function POST(req: NextRequest) {
       validDays?: number;
       notes?: string;
     };
+    const distanceKm = Number(body.distanceKm);
+    const weightTonnes = Number(body.weightTonnes);
+    const cargoValueAED = Number(body.cargoValueAED ?? 0);
+    const validDays = Number(body.validDays ?? 7);
+    const issues: string[] = [];
+
+    if (!Number.isFinite(distanceKm) || distanceKm <= 0) issues.push('Distance must be greater than zero.');
+    if (!Number.isFinite(weightTonnes) || weightTonnes <= 0) issues.push('Weight must be greater than zero.');
+    if (!String(body.shipmentType ?? '').trim()) issues.push('Shipment type is required.');
+    if (!Number.isFinite(cargoValueAED) || cargoValueAED < 0) issues.push('Cargo value cannot be negative.');
+    if (!Number.isFinite(validDays) || validDays <= 0) issues.push('Quote validity must be greater than zero days.');
+    if (body.action !== 'calculate') {
+      if (!String(body.customerName ?? '').trim()) issues.push('Customer name is required to save a quote.');
+      if (!String(body.origin ?? '').trim()) issues.push('Origin is required to save a quote.');
+      if (!String(body.destination ?? '').trim()) issues.push('Destination is required to save a quote.');
+    }
+    if (issues.length > 0) throw new LogisticsValidationError(issues);
 
     const calc = calculateFreight({
-      distanceKm:         body.distanceKm,
-      weightTonnes:       body.weightTonnes,
+      distanceKm,
+      weightTonnes,
       shipmentType:       body.shipmentType,
       vehicleType:        body.vehicleType,
       isUrgent:           body.isUrgent,
       isHazmat:           body.isHazmat,
       requiresInsurance:  body.requiresInsurance,
       requiresCustoms:    body.requiresCustoms,
-      cargoValueAED:      body.cargoValueAED,
+      cargoValueAED,
     });
 
     // Calculate-only mode
@@ -212,18 +231,18 @@ export async function POST(req: NextRequest) {
       quoteNo,
       body.customerName ?? null, body.customerEmail ?? null, body.customerPhone ?? null,
       body.origin ?? null, body.destination ?? null,
-      body.distanceKm, body.weightTonnes, body.shipmentType, body.vehicleType ?? null,
-      body.cargoDesc ?? null, body.cargoValueAED ?? 0,
+      distanceKm, weightTonnes, body.shipmentType, body.vehicleType ?? null,
+      body.cargoDesc ?? null, cargoValueAED,
       body.isUrgent ?? false, body.isHazmat ?? false,
       body.requiresInsurance ?? false, body.requiresCustoms ?? false,
       calc.baseFreight, calc.fuelSurcharge, calc.urgencySurcharge, calc.hazmatSurcharge,
       calc.insuranceFee, calc.customsFee, calc.totalAED,
-      body.validDays ?? 7, body.notes ?? null
+      validDays, body.notes ?? null
     );
 
     return NextResponse.json({ success: true, quoteNo, ...calc }, { status: 201 });
   } catch (err) {
     console.error('[quotes POST]', err);
-    return NextResponse.json({ error: 'Failed to process quote' }, { status: 500 });
+    return logisticsErrorResponse(err, 'Failed to process quote');
   }
 }

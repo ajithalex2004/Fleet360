@@ -11,7 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth';
+import { authorizeServiceConfig, recordServiceConfigChange, requireServiceConfigApproval, requireServiceConfigPermission } from '@/lib/service-config/auth';
 import { ensureSeededForTenant } from '@/lib/service-config/schema';
 import { listScopes, createScope } from '@/lib/service-config/scopes-schema';
 import { SCOPE_LEVELS, type ScopeLevel } from '@/types/service-config';
@@ -37,10 +37,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = authorizeServiceConfig(req);
+  const auth = await requireServiceConfigPermission(req, 'create');
   if (!auth.ok) return auth.res;
-  const adminCheck = requireAdmin(auth);
-  if (!adminCheck.ok) return adminCheck.res;
 
   let body: {
     parentScopeId?: string | null;
@@ -63,6 +61,14 @@ export async function POST(req: NextRequest) {
   if (!key)  return NextResponse.json({ ok: false, error: 'Key is required.' }, { status: 400 });
   if (!name) return NextResponse.json({ ok: false, error: 'Name is required.' }, { status: 400 });
 
+  const approval = await requireServiceConfigApproval(req, auth, 'service_config.scope.create', {
+    targetType: 'ServiceScope',
+    targetId: key,
+    summary: `Create ${level.toLowerCase()} service scope ${name} (${key}).`,
+    payload: { parentScopeId, level, key, name },
+  });
+  if (approval) return approval;
+
   await ensureSeededForTenant(auth.tenantId);
 
   try {
@@ -72,10 +78,15 @@ export async function POST(req: NextRequest) {
       sortOrder: typeof body.sortOrder === 'number' ? body.sortOrder : 100,
     });
 
-    void logAudit({
-      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
-      entityType: 'ServiceScope', entityId: scope.id, entityName: name,
-      action: 'CREATE', details: `Created ${level.toLowerCase()} scope ${name} (${key})`,
+    await recordServiceConfigChange({
+      req,
+      auth,
+      entityType: 'ServiceScope',
+      entityId: scope.id,
+      entityName: name,
+      action: 'CREATE',
+      after: scope,
+      summary: `Created ${level.toLowerCase()} scope ${name} (${key}).`,
     });
 
     return NextResponse.json({ ok: true, scope }, { status: 201 });

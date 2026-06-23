@@ -60,6 +60,30 @@ For now, the recommended path is **Vercel**:
 
 If self-hosted, see `Dockerfile` + `docker-compose.yml`.
 
+### Release gate
+
+Before promoting a build, run:
+
+```bash
+npm run check:prod
+npm run check:deploy
+```
+
+For browser-backed smoke validation against a running local or preview app:
+
+```bash
+npm run check:deploy:e2e
+```
+
+Required failures block release. Recommended warnings are allowed only when
+they are explicitly accepted in release notes. Current recommended gates:
+
+- Stripe configured for billing checkout/portal.
+- Email configured for invitations and notifications.
+- Sentry configured for production exception telemetry.
+- `UPTIME_MONITOR_URL` recorded for the external `/api/health` monitor.
+- `NEON_BACKUP_POLICY_CONFIRMED=true` after PITR/backup policy is verified.
+
 ## Database operations
 
 ### Backups
@@ -67,6 +91,22 @@ If self-hosted, see `Dockerfile` + `docker-compose.yml`.
   No custom cron jobs — confirm Neon plan is Pro before STS go-live.
 - **Disaster recovery test:** Run a full restore from PITR to a staging
   branch monthly. Verify schema and row counts match production.
+
+Backup release gate:
+
+- Confirm the active Neon plan provides the required PITR/recovery window.
+- Set `NEON_BACKUP_POLICY_CONFIRMED=true` only after the target environment is verified.
+- Restore production to a staging branch monthly and verify row counts.
+
+Minimum DR verification:
+
+```sql
+SELECT COUNT(*) FROM tenants;
+SELECT COUNT(*) FROM "User";
+SELECT COUNT(*) FROM user_tenants;
+SELECT COUNT(*) FROM tenant_modules;
+SELECT COUNT(*) FROM admin_change_history;
+```
 
 ### Migrations
 ```bash
@@ -78,6 +118,14 @@ git commit
 ```
 
 **Never run `prisma db push` or `migrate dev` against production.**
+
+Release checklist for migrations:
+
+- Migration exists under `prisma/migrations`.
+- `npx prisma migrate status` shows no pending local drift.
+- Migration has been applied to a Neon preview/staging branch first.
+- Rollback approach is written in release notes. Prefer forward-fix migration.
+- Any data backfill has row-count verification and is idempotent.
 
 ### Connection pooling
 The Neon URL format must include `?sslmode=require` and use the *pooler*
@@ -112,8 +160,19 @@ ORDER BY created_at DESC;
 ```
 
 ### Health probe
-`GET /api/health` returns 200 when the app + DB are reachable. Wire to
-UptimeRobot (free tier) for 1-minute interval checks.
+`GET /api/health` returns:
+
+- `200 status=ok` when DB and required production config are healthy.
+- `200 status=degraded` when DB is healthy but required config is missing.
+- `503 status=unhealthy` when DB is unreachable.
+
+Wire an external monitor to `/api/health` for 1-5 minute checks and record the
+monitor URL in `UPTIME_MONITOR_URL`. Alert routing:
+
+- Primary: on-call engineer.
+- Secondary: operations owner.
+- Escalate immediately if status is `503` for two consecutive checks.
+- Create an incident note if degradation lasts more than 30 minutes.
 
 ## Incident response
 

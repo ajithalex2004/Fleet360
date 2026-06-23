@@ -28,9 +28,15 @@ import {
   Plus, Trash2, ChevronDown, ChevronRight, Save, ExternalLink,
   Workflow as WorkflowIcon, AlertCircle, CheckCircle2, Power,
 } from 'lucide-react';
+import { emitAdminNotificationRefresh, subscribeAdminNotificationRefresh } from '@/components/admin/admin-notification-realtime';
 import type { RuleTabProps } from './shared';
 import { Field, NumberInput, TextInput, Section } from './shared';
 import { NotifyPicker } from './notify-picker';
+import { getPreferredWorkflowProcedure, getWorkflowProcedureCandidates } from '@/lib/service-config/workflow-procedure';
+
+function approvalMessage(body: any): string {
+  return `Queued for approval: ${body?.approvalRequest?.id ?? 'pending request'}. Approve it, then retry this change.`;
+}
 
 // ── API shapes (mirror /api/admin/workflows responses) ─────────────────────
 interface WorkflowDef {
@@ -149,13 +155,14 @@ export function WorkflowTab({ typeId, typeKey, typeName, categoryKey }: RuleTabP
     if (!typeKey) { setLoading(false); return; }
     setLoading(true); setError(null);
     try {
+      const procedureCandidates = getWorkflowProcedureCandidates(typeKey, typeName);
       const me = await loadMe();
       const tenant = me?.tenantId ?? null;
       setTenantId(tenant);
-      // Pull all workflows once, then filter client-side. Server-side filter
-      // would miss legacy rows (which have serviceTypeId NULL), so the
-      // hybrid match below covers both transitions.
-      const res = await fetch('/api/admin/workflows');
+      const qs = new URLSearchParams({ serviceTypeId: typeId });
+      qs.set('lite', '1');
+      if (tenant) qs.set('tenantId', tenant);
+      const res = await fetch(`/api/admin/workflows?${qs.toString()}`);
       if (!res.ok) throw new Error(`Failed to load workflows (${res.status})`);
       const all: WorkflowDef[] = await res.json();
 
@@ -167,16 +174,27 @@ export function WorkflowTab({ typeId, typeKey, typeName, categoryKey }: RuleTabP
       //     them via the advanced editor at /admin/workflows.
       setWorkflows(all.filter(w =>
         (w.serviceTypeId && w.serviceTypeId === typeId)
-        || (!w.serviceTypeId && w.procedure === typeKey)
+        || (!w.serviceTypeId && procedureCandidates.includes(String(w.procedure ?? '').trim().toUpperCase()))
       ));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Load failed');
     } finally {
       setLoading(false);
     }
-  }, [typeId, typeKey]);
+  }, [typeId, typeKey, typeName]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    return subscribeAdminNotificationRefresh((detail) => {
+      const reason = String(detail?.reason ?? '');
+      if (
+        reason.startsWith('approval-')
+        || reason.startsWith('workflow-')
+      ) {
+        void load();
+      }
+    });
+  }, [load]);
 
   if (!typeKey) {
     return (
@@ -204,13 +222,13 @@ export function WorkflowTab({ typeId, typeKey, typeName, categoryKey }: RuleTabP
           <button
             type="button"
             onClick={() => setShowNew(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-200 text-xs">
+            className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-100 px-3 py-1.5 text-xs text-violet-900 shadow-sm transition hover:bg-violet-200">
             <Plus className="w-3.5 h-3.5" /> Create workflow
           </button>
           <a
             href="/admin/workflows"
             target="_blank" rel="noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-violet-300 ml-auto">
+            className="ml-auto inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-violet-700">
             <ExternalLink className="w-3 h-3" /> Open advanced editor
           </a>
         </div>
@@ -285,7 +303,7 @@ function NewWorkflowForm({
           // Legacy keys kept for backward-compat callers (Phase 3 will
           // deprecate them). The canonical link is serviceTypeId/tenantId.
           module: categoryKey,
-          procedure: typeKey,
+          procedure: getPreferredWorkflowProcedure(typeKey, typeName),
           description: description.trim() || undefined,
           serviceTypeId: typeId,
           tenantId,                  // null when /api/auth/me is unavailable
@@ -294,13 +312,15 @@ function NewWorkflowForm({
         }),
       });
       const d = await res.json();
+      if (res.status === 428) { emitAdminNotificationRefresh('workflow-create-approval'); setErr(approvalMessage(d)); return; }
       if (!res.ok) { setErr(d?.error ?? 'Create failed'); return; }
+      emitAdminNotificationRefresh('workflow-created');
       onCreated();
     } finally { setBusy(false); }
   };
 
   return (
-    <div className="bg-slate-800/50 border border-violet-500/30 rounded-xl p-3 space-y-2">
+    <div className="space-y-2 rounded-xl border border-violet-300 bg-violet-50 p-3">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <Field label="Name" required>
           <TextInput value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Maintenance Request — Approval" />
@@ -336,18 +356,24 @@ function WorkflowRow({ workflow, expanded, onToggle, onChanged }: {
   const [renaming, setRenaming] = useState(false);
   const [name, setName]         = useState(workflow.name);
   const [busy, setBusy]         = useState(false);
+  const [msg, setMsg]           = useState<string | null>(null);
 
   // Keep local name in sync if the prop refreshes after a save elsewhere.
   useEffect(() => { setName(workflow.name); }, [workflow.name]);
 
   const update = async (patch: Partial<WorkflowDef>) => {
     setBusy(true);
+    setMsg(null);
     try {
-      await fetch(`/api/admin/workflows/${workflow.id}`, {
+      const res = await fetch(`/api/admin/workflows/${workflow.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
       });
+      const d = await res.json().catch(() => ({}));
+      if (res.status === 428) { emitAdminNotificationRefresh('workflow-update-approval'); setMsg(approvalMessage(d)); return; }
+      if (!res.ok) { setMsg(d?.error ?? 'Update failed'); return; }
+      emitAdminNotificationRefresh('workflow-updated');
       onChanged();
     } finally { setBusy(false); }
   };
@@ -363,15 +389,23 @@ function WorkflowRow({ workflow, expanded, onToggle, onChanged }: {
       if (!window.confirm(`This workflow has ${workflow.activeInstances} active instance(s). Delete anyway?`)) return;
     } else if (!window.confirm(`Delete "${workflow.name}"?`)) return;
     setBusy(true);
+    setMsg(null);
     try {
-      await fetch(`/api/admin/workflows/${workflow.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/admin/workflows/${workflow.id}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-confirm-action': 'workflow.delete' },
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.status === 428) { emitAdminNotificationRefresh('workflow-delete-approval'); setMsg(approvalMessage(d)); return; }
+      if (!res.ok) { setMsg(d?.error ?? 'Delete failed'); return; }
+      emitAdminNotificationRefresh('workflow-deleted');
       onChanged();
     } finally { setBusy(false); }
   };
 
   return (
     <div className={`bg-slate-800/40 border rounded-xl overflow-hidden transition-colors ${
-      expanded ? 'border-violet-500/40' : 'border-white/10'
+      expanded ? 'border-violet-300 shadow-sm' : 'border-white/10'
     }`}>
       <div className="flex items-center gap-2 p-3">
         <button type="button" onClick={onToggle}
@@ -386,10 +420,10 @@ function WorkflowRow({ workflow, expanded, onToggle, onChanged }: {
             onChange={e => setName(e.target.value)}
             onBlur={saveName}
             onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') { setName(workflow.name); setRenaming(false); } }}
-            className="flex-1 bg-slate-900 border border-violet-500/40 rounded px-2 py-1 text-sm text-white focus:outline-none" />
+            className="flex-1 rounded border border-violet-300 bg-white px-2 py-1 text-sm text-slate-900 focus:outline-none" />
         ) : (
           <button type="button" onClick={() => setRenaming(true)}
-            className="flex-1 text-left text-sm text-white hover:text-violet-200 truncate">
+            className="flex-1 truncate text-left text-sm text-slate-900 hover:text-violet-700">
             {workflow.name}
           </button>
         )}
@@ -424,6 +458,7 @@ function WorkflowRow({ workflow, expanded, onToggle, onChanged }: {
       </div>
 
       {expanded && <StepsEditor workflowId={workflow.id} onChanged={onChanged} />}
+      {msg && <div className="px-3 pb-3 text-[11px] text-blue-700">{msg}</div>}
     </div>
   );
 }
@@ -434,6 +469,7 @@ function StepsEditor({ workflowId, onChanged }: { workflowId: string; onChanged:
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError]     = useState<string | null>(null);
+  const [msg, setMsg]         = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -452,6 +488,7 @@ function StepsEditor({ workflowId, onChanged }: { workflowId: string; onChanged:
   useEffect(() => { void load(); }, [load]);
 
   const addStep = async () => {
+    setError(null); setMsg(null);
     const stepOrder = (steps.at(-1)?.stepOrder ?? 0) + 1;
     const res = await fetch(`/api/admin/workflows/${workflowId}/steps`, {
       method: 'POST',
@@ -465,6 +502,9 @@ function StepsEditor({ workflowId, onChanged }: { workflowId: string; onChanged:
         escalationHours: 48,
       }),
     });
+    const d = await res.json().catch(() => ({}));
+    if (res.status === 428) { setMsg(approvalMessage(d)); return; }
+    if (!res.ok) { setError(d?.error ?? 'Create failed'); return; }
     if (res.ok) {
       await load();
       onChanged(); // refresh stepCount on parent
@@ -473,40 +513,56 @@ function StepsEditor({ workflowId, onChanged }: { workflowId: string; onChanged:
 
   const updateStep = async (s: WorkflowStep, patch: Partial<WorkflowStep>) => {
     setSavingId(s.id);
+    setError(null); setMsg(null);
     // Optimistic local update so the form feels responsive.
     setSteps(prev => prev.map(x => x.id === s.id ? { ...x, ...patch } : x));
     try {
-      await fetch(`/api/admin/workflows/${workflowId}/steps/${s.id}`, {
+      const res = await fetch(`/api/admin/workflows/${workflowId}/steps/${s.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
       });
+      const d = await res.json().catch(() => ({}));
+      if (res.status === 428) { setMsg(approvalMessage(d)); return; }
+      if (!res.ok) { setError(d?.error ?? 'Update failed'); await load(); }
     } finally { setSavingId(null); }
   };
 
   const deleteStep = async (s: WorkflowStep) => {
     if (!window.confirm(`Delete step "${s.stepName}"?`)) return;
-    await fetch(`/api/admin/workflows/${workflowId}/steps/${s.id}`, { method: 'DELETE' });
+    setError(null); setMsg(null);
+    const res = await fetch(`/api/admin/workflows/${workflowId}/steps/${s.id}`, {
+      method: 'DELETE',
+      headers: { 'x-admin-confirm-action': 'workflow.step.delete' },
+    });
+    const d = await res.json().catch(() => ({}));
+    if (res.status === 428) { setMsg(approvalMessage(d)); return; }
+    if (!res.ok) { setError(d?.error ?? 'Delete failed'); return; }
     await load();
     onChanged();
   };
 
   const move = async (s: WorkflowStep, direction: -1 | 1) => {
+    setError(null); setMsg(null);
     const idx = steps.findIndex(x => x.id === s.id);
     const swapIdx = idx + direction;
     if (swapIdx < 0 || swapIdx >= steps.length) return;
     const other = steps[swapIdx];
-    // Swap stepOrder values via two PUTs.
-    await Promise.all([
-      fetch(`/api/admin/workflows/${workflowId}/steps/${s.id}`, {
+    const first = await fetch(`/api/admin/workflows/${workflowId}/steps/${s.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stepOrder: other.stepOrder }),
-      }),
-      fetch(`/api/admin/workflows/${workflowId}/steps/${other.id}`, {
+      });
+    const firstBody = await first.json().catch(() => ({}));
+    if (first.status === 428) { setMsg(approvalMessage(firstBody)); return; }
+    if (!first.ok) { setError(firstBody?.error ?? 'Move failed'); return; }
+
+    const second = await fetch(`/api/admin/workflows/${workflowId}/steps/${other.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stepOrder: s.stepOrder }),
-      }),
-    ]);
+      });
+    const secondBody = await second.json().catch(() => ({}));
+    if (second.status === 428) { setMsg(approvalMessage(secondBody)); return; }
+    if (!second.ok) { setError(secondBody?.error ?? 'Move failed'); return; }
     await load();
   };
 
@@ -518,6 +574,7 @@ function StepsEditor({ workflowId, onChanged }: { workflowId: string; onChanged:
         <div className="text-xs text-rose-300">{error}</div>
       ) : (
         <>
+          {msg && <div className="text-[11px] text-blue-700">{msg}</div>}
           {steps.length === 0 && (
             <p className="text-[11px] text-slate-500">No steps yet — add one to define the chain.</p>
           )}
@@ -532,7 +589,7 @@ function StepsEditor({ workflowId, onChanged }: { workflowId: string; onChanged:
                   <button type="button" onClick={() => void move(s, +1)} disabled={i === steps.length - 1}
                     className="p-0.5 text-slate-500 hover:text-white disabled:opacity-30 leading-none text-[10px]">▼</button>
                 </div>
-                <span className="inline-flex w-6 h-6 items-center justify-center rounded-full bg-violet-500/20 text-violet-300 text-[10px] font-mono">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-violet-300 bg-violet-100 text-[10px] font-mono text-violet-900 shadow-sm">
                   {s.stepOrder}
                 </span>
                 <input
@@ -541,7 +598,7 @@ function StepsEditor({ workflowId, onChanged }: { workflowId: string; onChanged:
                   onBlur={e => { if (e.target.value !== s.stepName) void updateStep(s, { stepName: e.target.value }); }}
                   className="flex-1 bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500" />
                 {savingId === s.id && (
-                  <span className="text-[10px] text-violet-300 inline-flex items-center gap-1">
+                  <span className="inline-flex items-center gap-1 text-[10px] text-violet-700">
                     <Save className="w-3 h-3" /> saving
                   </span>
                 )}
@@ -591,7 +648,7 @@ function StepsEditor({ workflowId, onChanged }: { workflowId: string; onChanged:
           ))}
 
           <button type="button" onClick={addStep}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-200 text-xs">
+            className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-100 px-3 py-1.5 text-xs text-violet-900 shadow-sm transition hover:bg-violet-200">
             <Plus className="w-3.5 h-3.5" /> Add step
           </button>
 
@@ -599,11 +656,10 @@ function StepsEditor({ workflowId, onChanged }: { workflowId: string; onChanged:
             <CheckCircle2 className="w-3 h-3 text-emerald-400" />
             Changes save automatically on blur. Reorder with the arrows.
             For email templates, conditional rules, or multi-approver lists,
-            use the <a href="/admin/workflows" target="_blank" rel="noreferrer" className="underline hover:text-violet-300">advanced editor</a>.
+            use the <a href="/admin/workflows" target="_blank" rel="noreferrer" className="underline hover:text-violet-700">advanced editor</a>.
           </p>
         </>
       )}
     </div>
   );
 }
-

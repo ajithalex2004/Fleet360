@@ -12,13 +12,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { issueQrToken } from '@/lib/bus-checkin';
+import { requireBusEntity, requireBusOpsContext } from '@/lib/bus-ops-route-guards';
 
 export const runtime = 'nodejs';
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const ctx = await requireBusOpsContext(req);
+  if (ctx instanceof NextResponse) return ctx;
+  const boundary = await requireBusEntity(ctx, 'trip_schedules', id, 'Trip');
+  if (boundary) return boundary;
   const ttlSeconds = Math.max(60, Number(req.nextUrl.searchParams.get('ttlSeconds') ?? 900));
   const schedule = await prisma.tripSchedule.findUnique({
-    where: { id: params.id },
+    where: { id },
     select: { id: true, status: true },
   });
   if (!schedule) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
@@ -26,7 +32,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     return NextResponse.json({ error: `Trip is ${schedule.status} — QR not issued` }, { status: 409 });
   }
   try {
-    const token = issueQrToken(params.id, ttlSeconds);
+    const token = issueQrToken(id, ttlSeconds);
     const expiresAt = parseInt(token.split('.')[1], 10);
     return NextResponse.json({ token, expiresAt, ttlSeconds });
   } catch (err) {

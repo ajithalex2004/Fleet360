@@ -16,6 +16,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureTripTables } from '../../route';
+import { recordOperationalChange, requireOperationalContext } from '@/lib/cross-module-governance';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
 
 type Row = Record<string, unknown>;
 const query  = <T = Row>(sql: string, ...v: unknown[]) => prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -49,6 +51,8 @@ export async function POST(
 ) {
   try {
     await ensureTripTables();
+    const ctx = requireOperationalContext(req, 'bus_ops', { write: true });
+    if (ctx instanceof NextResponse) return ctx;
     const { id: tripId } = await params;
     const body = await req.json().catch(() => ({}));
     const {
@@ -60,11 +64,13 @@ export async function POST(
 
     // Fetch current trip
     const [trip] = await query<Row>(
-      `SELECT * FROM school_bus_trips WHERE id = $1::uuid`, tripId,
+      `SELECT * FROM school_bus_trips WHERE id = $1::uuid AND tenant_id::text = $2`,
+      tripId,
+      ctx.tenantId,
     );
     if (!trip) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
 
-    const tenantId   = String(trip.tenant_id ?? 'default');
+    const tenantId   = ctx.tenantId;
     const routeName  = String(trip.route_name ?? 'Unknown Route');
     const tripCode   = String(trip.trip_code  ?? tripId);
     const now        = new Date().toISOString();
@@ -84,19 +90,45 @@ export async function POST(
       const [updated] = await query<Row>(`
         UPDATE school_bus_trips
         SET status = 'IN_PROGRESS', actual_start = $2, updated_at = NOW()
-        WHERE id = $1::uuid
+        WHERE id = $1::uuid AND tenant_id::text = $3
         RETURNING id, status, actual_start, route_name, trip_code
-      `, tripId, now);
+      `, tripId, now, ctx.tenantId);
 
       await logEvent(tripId, tenantId, 'DEPARTURE',
         `Trip ${tripCode} started — ${routeName}`,
         { action: 'start', operatorId, routeName, tripCode },
       );
 
+      await recordOperationalChange({
+        req,
+        ctx,
+        entityType: 'SchoolBusTrip',
+        entityId: tripId,
+        action: 'STATUS_CHANGE',
+        before: trip,
+        after: updated,
+        summary: `Started school bus trip ${tripCode}.`,
+      });
+      const workflow = await triggerServiceWorkflow({
+        req,
+        ctx,
+        serviceTypeKey: 'SCHOOL_ROUTE_ALLOCATION',
+        referenceType: 'SchoolBusTrip',
+        referenceId: tripId,
+        referenceNumber: tripCode,
+        contextData: {
+          previousStatus: trip.status ?? null,
+          status: updated?.status ?? 'IN_PROGRESS',
+          routeName,
+          action: 'start',
+        },
+      });
+
       return NextResponse.json({
         ok: true,
         message: `Trip started successfully`,
         trip: updated ? ser(updated) : null,
+        workflow,
       });
     }
 
@@ -121,19 +153,46 @@ export async function POST(
             actual_end   = $2,
             duration_min = COALESCE($3, duration_min),
             updated_at   = NOW()
-        WHERE id = $1::uuid
+        WHERE id = $1::uuid AND tenant_id::text = $4
         RETURNING id, status, actual_start, actual_end, duration_min, route_name, trip_code
-      `, tripId, now, durationMin);
+      `, tripId, now, durationMin, ctx.tenantId);
 
       await logEvent(tripId, tenantId, 'ARRIVAL',
         `Trip ${tripCode} completed — all students ${trip.direction === 'PICKUP' ? 'delivered to school' : 'dropped home'}`,
         { action: 'complete', operatorId, routeName, tripCode, durationMin, notes },
       );
 
+      await recordOperationalChange({
+        req,
+        ctx,
+        entityType: 'SchoolBusTrip',
+        entityId: tripId,
+        action: 'STATUS_CHANGE',
+        before: trip,
+        after: updated,
+        summary: `Completed school bus trip ${tripCode}.`,
+      });
+      const workflow = await triggerServiceWorkflow({
+        req,
+        ctx,
+        serviceTypeKey: 'SCHOOL_ROUTE_ALLOCATION',
+        referenceType: 'SchoolBusTrip',
+        referenceId: tripId,
+        referenceNumber: tripCode,
+        contextData: {
+          previousStatus: trip.status ?? null,
+          status: updated?.status ?? 'COMPLETED',
+          routeName,
+          durationMin,
+          action: 'complete',
+        },
+      });
+
       return NextResponse.json({
         ok: true,
         message: `Trip completed successfully${durationMin ? ` in ${durationMin} min` : ''}`,
         trip: updated ? ser(updated) : null,
+        workflow,
       });
     }
 
@@ -153,19 +212,47 @@ export async function POST(
         SET status = 'CANCELLED',
             notes  = COALESCE(NULLIF($2, ''), notes),
             updated_at = NOW()
-        WHERE id = $1::uuid
+        WHERE id = $1::uuid AND tenant_id::text = $3
         RETURNING id, status, route_name, trip_code, notes
-      `, tripId, cancelReason);
+      `, tripId, cancelReason, ctx.tenantId);
 
       await logEvent(tripId, tenantId, 'CANCELLED',
         `Trip ${tripCode} cancelled — ${cancelReason}`,
         { action: 'cancel', operatorId, routeName, tripCode, reason: cancelReason, notes },
       );
 
+      await recordOperationalChange({
+        req,
+        ctx,
+        entityType: 'SchoolBusTrip',
+        entityId: tripId,
+        action: 'STATUS_CHANGE',
+        before: trip,
+        after: updated,
+        summary: `Cancelled school bus trip ${tripCode}.`,
+      });
+      const workflow = await triggerServiceWorkflow({
+        req,
+        ctx,
+        serviceTypeKey: 'SCHOOL_SAFETY_INCIDENT_REVIEW',
+        referenceType: 'SchoolBusTrip',
+        referenceId: tripId,
+        referenceNumber: tripCode,
+        contextData: {
+          previousStatus: trip.status ?? null,
+          status: updated?.status ?? 'CANCELLED',
+          routeName,
+          reason: cancelReason,
+          action: 'cancel',
+        },
+        force: true,
+      });
+
       return NextResponse.json({
         ok: true,
         message: `Trip cancelled`,
         trip: updated ? ser(updated) : null,
+        workflow,
       });
     }
 
@@ -184,19 +271,47 @@ export async function POST(
         SET status = 'BREAKDOWN',
             notes  = COALESCE(NULLIF($2, ''), notes),
             updated_at = NOW()
-        WHERE id = $1::uuid
+        WHERE id = $1::uuid AND tenant_id::text = $3
         RETURNING id, status, route_name, trip_code, notes
-      `, tripId, breakdownReason);
+      `, tripId, breakdownReason, ctx.tenantId);
 
       await logEvent(tripId, tenantId, 'BREAKDOWN',
         `Breakdown reported on ${tripCode} — ${breakdownReason}`,
         { action: 'breakdown', operatorId, routeName, tripCode, reason: breakdownReason, notes },
       );
 
+      await recordOperationalChange({
+        req,
+        ctx,
+        entityType: 'SchoolBusTrip',
+        entityId: tripId,
+        action: 'STATUS_CHANGE',
+        before: trip,
+        after: updated,
+        summary: `Reported breakdown for school bus trip ${tripCode}.`,
+      });
+      const workflow = await triggerServiceWorkflow({
+        req,
+        ctx,
+        serviceTypeKey: 'SCHOOL_SAFETY_INCIDENT_REVIEW',
+        referenceType: 'SchoolBusTrip',
+        referenceId: tripId,
+        referenceNumber: tripCode,
+        contextData: {
+          previousStatus: trip.status ?? null,
+          status: updated?.status ?? 'BREAKDOWN',
+          routeName,
+          reason: breakdownReason,
+          action: 'breakdown',
+        },
+        force: true,
+      });
+
       return NextResponse.json({
         ok: true,
         message: `Breakdown reported. Dispatch notified.`,
         trip: updated ? ser(updated) : null,
+        workflow,
       });
     }
 

@@ -3,7 +3,8 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ClipboardList, ScanLine, AlertTriangle, UserRound } from 'lucide-react';
+import { ClipboardList, ScanLine, AlertTriangle } from 'lucide-react';
+import ChauffeurDriverIcon from '@/components/icons/ChauffeurDriverIcon';
 
 export default function SchoolBusDriverLayout({ children }: { children: React.ReactNode }) {
   const path = usePathname();
@@ -14,7 +15,7 @@ export default function SchoolBusDriverLayout({ children }: { children: React.Re
     { href: '/school-bus/driver',          label: 'Trips',     Icon: ClipboardList },
     { href: '/school-bus/driver/scan',     label: 'Scan',      Icon: ScanLine },
     { href: '/school-bus/driver/incident', label: 'Incident',  Icon: AlertTriangle },
-    { href: '/school-bus/driver/profile',  label: 'Me',        Icon: UserRound },
+    { href: '/school-bus/driver/profile',  label: 'Me',        Icon: ChauffeurDriverIcon },
   ];
 
   return (

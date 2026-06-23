@@ -10,14 +10,34 @@
  *  - skipIfOffline()     – per-test skip hook when server is unreachable
  */
 
-import { type Page, type Browser, type BrowserContext, type TestInfo, expect } from '@playwright/test';
+import { type Page, type Browser, type Locator, type TestInfo } from '@playwright/test';
 import { hashPassword } from '../test-utils';
+
+async function retryTestDb<T>(
+  label: string,
+  operation: () => Promise<T>,
+  attempts = 3,
+  delayMs = 750,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await operation();
+    } catch (err) {
+      lastError = err;
+      if (attempt >= attempts) break;
+      console.warn(`[E2E][DB] ${label} failed on attempt ${attempt}/${attempts}; retrying...`);
+      await new Promise(resolve => setTimeout(resolve, delayMs * attempt));
+    }
+  }
+  throw lastError;
+}
 
 // ── Auth state type (matches Playwright storageState shape) ────────────────────
 export interface StorageState {
   cookies: Array<{
     name: string; value: string; domain: string; path: string;
-    expires: number; httpOnly: boolean; secure: boolean; sameSite: string;
+    expires: number; httpOnly: boolean; secure: boolean; sameSite: 'Strict' | 'Lax' | 'None';
   }>;
   origins: Array<{ origin: string; localStorage: Array<{ name: string; value: string }> }>;
 }
@@ -25,20 +45,16 @@ export interface StorageState {
 // ── Server probe ───────────────────────────────────────────────────────────────
 
 export async function isServerAvailable(): Promise<boolean> {
-  // Try both 127.0.0.1 (IPv4) and localhost — on Windows, Node.js may resolve
-  // 'localhost' to ::1 (IPv6) while Next.js only binds to 127.0.0.1.
-  // Probe up to 3 times with a short delay — Turbopack may be mid-compile after
-  // file changes. Each attempt tries both IPv4 and hostname.
-  const urls = ['http://127.0.0.1:3000', 'http://localhost:3000'];
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt > 0) await new Promise(r => setTimeout(r, 4_000));
+  const urls = ['http://127.0.0.1:3000/api/health', 'http://localhost:3000/api/health'];
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, 3_000));
     for (const url of urls) {
       try {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 6_000);
+        const timer = setTimeout(() => controller.abort(), 10_000);
         const res = await fetch(url, { signal: controller.signal });
         clearTimeout(timer);
-        if (res.status < 500) {
+        if (res.ok) {
           console.log(`[E2E] Server reachable at ${url} (status ${res.status})`);
           return true;
         }
@@ -80,27 +96,29 @@ export async function createE2ETenant(
   const code     = `E2E-${label.toUpperCase().replace(/\s+/g, '-').slice(0, 10)}-${uid}`;
 
   try {
-    await prisma.tenant.create({
+    await retryTestDb('create tenant', () => prisma.tenant.create({
       data: { id: tenantId, name: `E2E ${label} ${uid}`, code, plan, isActive: true },
-    });
+    }));
 
-    await prisma.user.create({
+    await retryTestDb('create user', () => prisma.user.create({
       data: {
         id: userId, email, username: `e2e-${uid.toLowerCase()}`,
         firstName: label, lastName: 'E2E', isActive: true, updatedAt: new Date(),
       },
-    });
+    }));
 
-    await prisma.$executeRawUnsafe(
+    await retryTestDb('set user password hash', () => prisma.$executeRawUnsafe(
       `UPDATE "User" SET password_hash = $1 WHERE id = $2`,
       hashPassword(password), userId,
-    );
+    ));
 
     const roleId = crypto.randomUUID();
-    await prisma.role.create({ data: { id: roleId, tenantId, name: 'Tenant Admin', code: 'TENANT_ADMIN' } });
-    await prisma.userTenant.create({
+    await retryTestDb('create role', () => prisma.role.create({
+      data: { id: roleId, tenantId, name: 'Tenant Administrator', code: 'TENANT_ADMIN' },
+    }));
+    await retryTestDb('create user tenant link', () => prisma.userTenant.create({
       data: { id: crypto.randomUUID(), userId, tenantId, roleId, isActive: true },
-    });
+    }));
 
     return { tenantId, tenantCode: code, userId, email, password };
   } finally {
@@ -115,14 +133,23 @@ export async function cleanupE2ETenant(ctx: E2EContext | null): Promise<void> {
   const prisma = new PrismaClient();
   try {
     // Raw rows created by tests (finance tables, etc.)
-    await prisma.$executeRawUnsafe(`DELETE FROM finance_invoices WHERE tenant_id = $1`, ctx.tenantId).catch(() => {});
-    await prisma.$executeRawUnsafe(`DELETE FROM finance_expenses WHERE tenant_id = $1`, ctx.tenantId).catch(() => {});
+    await retryTestDb('cleanup raw tenant rows', async () => {
+      await prisma.$executeRawUnsafe(`DELETE FROM finance_invoices WHERE tenant_id = $1`, ctx.tenantId).catch(() => {});
+      await prisma.$executeRawUnsafe(`DELETE FROM finance_expenses WHERE tenant_id = $1`, ctx.tenantId).catch(() => {});
+      await prisma.$executeRawUnsafe(`DELETE FROM auth_sessions WHERE tenant_id = $1`, ctx.tenantId).catch(() => {});
+      await prisma.$executeRawUnsafe(`DELETE FROM auth_login_attempts WHERE tenant_id = $1`, ctx.tenantId).catch(() => {});
+      await prisma.$executeRawUnsafe(`DELETE FROM admin_mfa_policies WHERE tenant_id = $1`, ctx.tenantId).catch(() => {});
+      await prisma.$executeRawUnsafe(`DELETE FROM admin_approval_requests WHERE tenant_id = $1`, ctx.tenantId).catch(() => {});
+      await prisma.$executeRawUnsafe(`DELETE FROM tenant_invitations WHERE tenant_id = $1`, ctx.tenantId).catch(() => {});
+    });
 
     // Auth rows
-    await prisma.userTenant.deleteMany({ where: { tenantId: ctx.tenantId } });
-    await prisma.role.deleteMany({ where: { tenantId: ctx.tenantId } });
-    await prisma.user.delete({ where: { id: ctx.userId } }).catch(() => {});
-    await prisma.tenant.delete({ where: { id: ctx.tenantId } }).catch(() => {});
+    await retryTestDb('cleanup auth tenant rows', async () => {
+      await prisma.userTenant.deleteMany({ where: { tenantId: ctx.tenantId } });
+      await prisma.role.deleteMany({ where: { tenantId: ctx.tenantId } });
+      await prisma.user.delete({ where: { id: ctx.userId } }).catch(() => {});
+      await prisma.tenant.delete({ where: { id: ctx.tenantId } }).catch(() => {});
+    });
   } finally {
     await prisma.$disconnect();
   }
@@ -133,12 +160,35 @@ export async function cleanupE2ETenant(ctx: E2EContext | null): Promise<void> {
 /** Fills the login form and waits for redirect to /platform.
  *  LOGIN_TIMEOUT is 60 s to absorb Neon cold-starts after tenant creation. */
 const LOGIN_TIMEOUT = 60_000;
+async function fillLoginInput(input: Locator, value: string): Promise<void> {
+  await input.waitFor({ state: 'visible', timeout: 15_000 });
+  await input.fill(value);
+  if ((await input.inputValue()) === value) return;
+
+  await input.click();
+  await input.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
+  await input.pressSequentially(value);
+  if ((await input.inputValue()) === value) return;
+
+  await input.evaluate((el, nextValue) => {
+    const inputEl = el as HTMLInputElement;
+    inputEl.value = nextValue;
+    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+  }, value);
+}
+
 export async function login(page: Page, email: string, password: string): Promise<void> {
   await page.goto('/login', { waitUntil: 'domcontentloaded' });
-  await page.fill('input[type="email"], input[name="email"]', email);
-  await page.fill('input[type="password"], input[name="password"]', password);
-  await page.click('button[type="submit"]');
-  await page.waitForURL('**/platform**', { timeout: LOGIN_TIMEOUT });
+  const emailInput = page.locator('form input[type="email"]').first();
+  const passwordInput = page.locator('form input[type="password"]').first();
+  await fillLoginInput(emailInput, email);
+  await fillLoginInput(passwordInput, password);
+  if ((await emailInput.inputValue()) !== email || (await passwordInput.inputValue()) !== password) {
+    throw new Error('Login form did not retain entered credentials before submit');
+  }
+  await page.locator('form button[type="submit"]').click();
+  await page.waitForURL('**/platform**', { timeout: LOGIN_TIMEOUT, waitUntil: 'domcontentloaded' });
 }
 
 /**
@@ -195,11 +245,20 @@ export async function loginWithStoredState(
 ): Promise<void> {
   // Inject all cookies from the saved session
   await page.context().addCookies(state.cookies);
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.evaluate(({ userId, tenantId }) => {
+    localStorage.setItem('xl_mobility_session', JSON.stringify({ userId, tenantId, customerId: null }));
+  }, { userId: ctx.userId, tenantId: ctx.tenantId });
   // Navigate straight to the authenticated area
   await page.goto('/platform', { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('load', { timeout: 15_000 }).catch(() => {});
   // If NextAuth rejected the session cookie (e.g. DB rolled), fall back
-  if (page.url().includes('/login')) {
+  const signInRequired = await page
+    .locator(':text("Sign in to continue"), :text("SIGN IN REQUIRED")')
+    .first()
+    .isVisible({ timeout: 1_000 })
+    .catch(() => false);
+  if (page.url().includes('/login') || signInRequired) {
     console.warn('[E2E] Stored auth state rejected — falling back to full login');
     await login(page, ctx.email, ctx.password);
   }
@@ -248,10 +307,10 @@ export function findLink(page: Page, ...texts: string[]) {
   return page.locator(texts.map(t => `a:has-text("${t}")`).join(', ')).first();
 }
 
-/** Skip the current test if the dev server is not running. */
+/** Fail fast if the dev server is not reachable so skips cannot mask regressions. */
 export function skipIfOffline(serverUp: boolean, testInfo: TestInfo): void {
   if (!serverUp) {
-    testInfo.skip(true, 'Dev server (localhost:3000) not running — start with `npm run dev`');
+    throw new Error(`Dev server health check failed for ${testInfo.title}. Start Fleet360 on http://localhost:3000 before running E2E tests.`);
   }
 }
 

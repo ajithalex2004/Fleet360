@@ -4,8 +4,7 @@ import { prisma } from '@/lib/prisma';
 export async function GET(req: NextRequest) {
   try {
     const fuelCards = await prisma.fuelCard.findMany({
-      where: { deletedAt: null },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { cardNumber: 'asc' },
     });
     return NextResponse.json(fuelCards);
   } catch (error) {

@@ -184,7 +184,7 @@ function RouteCard({ route, onAction, actionLoading }: {
             {route.vehicle && <span className="text-slate-500">{route.vehicle.make} {route.vehicle.model}</span>}
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-slate-500 w-12 flex-shrink-0">👤 Driver</span>
+            <span className="text-slate-500 w-12 flex-shrink-0">🤵 Driver</span>
             {route.driver ? (
               <>
                 <span className="text-slate-300">{route.driver.name}</span>
@@ -272,7 +272,7 @@ export default function SchoolBusDispatchBoard() {
   const [filter,  setFilter]  = useState('ALL');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [toast,   setToast]   = useState<{ msg: string; ok: boolean } | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval>>();
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -284,7 +284,9 @@ export default function SchoolBusDispatchBoard() {
   useEffect(() => {
     load();
     pollRef.current = setInterval(load, 30_000);
-    return () => clearInterval(pollRef.current);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, [load]);
 
   function showToast(msg: string, ok: boolean) {

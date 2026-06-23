@@ -94,13 +94,14 @@ function TransitionModal({ agreement, onClose, onDone }: {
 
   const status = agreement.status ?? 'DRAFT';
 
-  const actions: Array<{ key: typeof action; label: string; show: boolean; color: string }> = [
+  const rawActions = [
     { key: 'activate',      label: '🟢 Activate Agreement',  show: status === 'DRAFT',     color: 'bg-emerald-600 hover:bg-emerald-500' },
     { key: 'sign',          label: '✍️ Mark as Signed',       show: status === 'DRAFT',     color: 'bg-blue-600 hover:bg-blue-500' },
     { key: 'complete',      label: '✅ Complete & Return',    show: status === 'ACTIVE',    color: 'bg-teal-600 hover:bg-teal-500' },
     { key: 'refund_deposit',label: '💰 Refund Security Dep.', show: agreement.depositStatus === 'PAID', color: 'bg-violet-600 hover:bg-violet-500' },
     { key: 'cancel',        label: '❌ Cancel Agreement',     show: ['DRAFT','ACTIVE'].includes(status), color: 'bg-red-700 hover:bg-red-600' },
-  ].filter(a => a.show);
+  ] as const satisfies ReadonlyArray<{ key: typeof action; label: string; show: boolean; color: string }>;
+  const actions = rawActions.filter(a => a.show);
 
   const handle = async () => {
     setSaving(true); setError('');

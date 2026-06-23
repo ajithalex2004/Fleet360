@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { signSession } from '@/lib/tenant-session';
+import { newSessionId, registerSession } from '@/lib/session-registry';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -78,13 +79,27 @@ export async function POST(req: NextRequest) {
     // the impersonation session.
     const originalToken = req.cookies.get(COOKIE_NAME)?.value ?? '';
 
+    const sessionId = newSessionId();
+    const expiresAt = new Date(Date.now() + IMPERSONATION_TTL_MS);
     const newToken = await signSession({
+      sessionId,
       userId:         target.user.id,
       tenantId:       tenant.id,
       plan:           tenant.plan ?? 'TRIAL',
       role:           target.role.code,
       impersonatedBy: impersonatorId,
       ttlMs:          IMPERSONATION_TTL_MS,
+    });
+    await registerSession({
+      id: sessionId,
+      userId: target.user.id,
+      tenantId: tenant.id,
+      plan: tenant.plan ?? 'TRIAL',
+      role: target.role.code,
+      expiresAt,
+      impersonatedBy: impersonatorId,
+      ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? req.headers.get('x-real-ip'),
+      userAgent: req.headers.get('user-agent'),
     });
 
     void logAudit({

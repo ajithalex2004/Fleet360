@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { assertGovernedShipmentWrite, ensureShipmentForLegacyBooking } from '@/lib/logistics/domain';
+import { logisticsErrorResponse } from '@/lib/logistics/api-context';
 
 /**
  * DELETE /api/logistics/trips/[id]/documents/[docId]
@@ -31,10 +33,26 @@ export async function GET(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string; docId: string } }
 ) {
   try {
+    const body = await req.json().catch(() => ({})) as { tenantId?: string };
+    const tenantId = req.headers.get('x-tenant-id') ?? body.tenantId ?? req.nextUrl.searchParams.get('tenantId');
+    if (tenantId) {
+      const shipment = await ensureShipmentForLegacyBooking({
+        tenantId,
+        bookingId: params.id,
+        actorUserId: req.headers.get('x-user-id') ?? null,
+      });
+      if (shipment) {
+        await assertGovernedShipmentWrite({
+          tenantId,
+          shipmentOrderId: shipment.id,
+          action: 'Trip document deletion',
+        });
+      }
+    }
     await prisma.$executeRawUnsafe(
       `DELETE FROM trip_documents WHERE id = $1 AND booking_id = $2`,
       params.docId, params.id
@@ -42,6 +60,6 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('[trip-docs DELETE]', err);
-    return NextResponse.json({ error: 'Failed to delete' }, { status: 500 });
+    return logisticsErrorResponse(err, 'Failed to delete');
   }
 }

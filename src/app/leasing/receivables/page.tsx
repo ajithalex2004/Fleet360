@@ -1,15 +1,22 @@
 'use client';
 import React, { useState, useCallback, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
+import { Wallet, AlertOctagon, TrendingUp } from 'lucide-react';
+import { LeasingBillingMigrationNotice } from '@/components/LeasingBillingMigrationNotice';
+import { usePermissions } from '@/contexts/PermissionContext';
+import RowActionMenu from '@/components/ui/RowActionMenu';
+import { KpiCard, KpiGrid } from '@/components/ui/page-theme';
 
 interface Receivable {
-  lessee: string;
+  lesseeId: string;
+  lesseeName: string;
   current: number;
-  overdue1to30: number;
-  overdue31to60: number;
-  overdue61to90: number;
+  overdue1_30: number;
+  overdue31_60: number;
+  overdue61_90: number;
   overdue90plus: number;
   totalOutstanding: number;
-  contractId: string;
+  payments: Array<{ id: string; contractNumber: string; dueDate: string; amount: number; status: string; periodMonth?: number; periodYear?: number }>;
 }
 
 interface DunningLog {
@@ -24,8 +31,6 @@ interface DunningLog {
   notes: string;
 }
 
-interface FormData extends DunningLog {}
-
 interface SweepResult {
   dryRun: boolean;
   scanned: number;
@@ -37,6 +42,8 @@ interface SweepResult {
 }
 
 export default function ReceivablesPage() {
+  const pathname = usePathname();
+  const { can } = usePermissions();
   const [receivables, setReceivables] = useState<Receivable[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [showDunningModal, setShowDunningModal] = useState(false);
@@ -44,7 +51,7 @@ export default function ReceivablesPage() {
   const [sweepBusy, setSweepBusy] = useState(false);
   const [sweepResult, setSweepResult] = useState<SweepResult | null>(null);
   const [sweepError, setSweepError] = useState<string | null>(null);
-  const [formData, setFormData] = useState<FormData>({
+  const [formData, setFormData] = useState<DunningLog>({
     contractId: '',
     activityType: 'EMAIL',
     daysOverdue: 0,
@@ -56,20 +63,27 @@ export default function ReceivablesPage() {
     notes: '',
   });
 
+  const canManageDunning =
+    can('finance', 'edit', 'leasing_billing') ||
+    can('finance', 'approve', 'leasing_billing') ||
+    can('leasing', 'create', 'dunning');
+  const isLegacyPath = pathname.startsWith('/leasing/');
+  const apiBase = isLegacyPath ? '/api/leasing' : '/api/finance/leasing-billing';
+
   const fetchReceivables = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/leasing/receivables');
+      const response = await fetch(`${apiBase}/receivables`);
       if (response.ok) {
         const data = await response.json();
-        setReceivables(data);
+        setReceivables(Array.isArray(data) ? data : data.agingBuckets ?? []);
       }
     } catch (error) {
       console.error('Failed to fetch receivables:', error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiBase]);
 
   useEffect(() => {
     fetchReceivables();
@@ -86,7 +100,7 @@ export default function ReceivablesPage() {
   const handleDunningSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch('/api/leasing/receivables/dunning', {
+      const response = await fetch(`${apiBase}/receivables/dunning`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -127,7 +141,7 @@ export default function ReceivablesPage() {
     setSweepResult(null);
     try {
       const res = await fetch(
-        `/api/leasing/receivables/dunning/sweep${dryRun ? '?dryRun=1' : ''}`,
+        `${apiBase}/receivables/dunning/sweep${dryRun ? '?dryRun=1' : ''}`,
         { method: 'POST' },
       );
       const json = await res.json();
@@ -146,7 +160,7 @@ export default function ReceivablesPage() {
   };
 
   const totalAR = receivables.reduce((sum, r) => sum + r.totalOutstanding, 0);
-  const totalOverdue = receivables.reduce((sum, r) => sum + r.overdue1to30 + r.overdue31to60 + r.overdue61to90 + r.overdue90plus, 0);
+  const totalOverdue = receivables.reduce((sum, r) => sum + r.overdue1_30 + r.overdue31_60 + r.overdue61_90 + r.overdue90plus, 0);
   const collectionRate = totalAR > 0 ? (((totalAR - totalOverdue) / totalAR) * 100).toFixed(2) : '0.00';
 
   const getAgeColor = (days: number) => {
@@ -173,6 +187,16 @@ export default function ReceivablesPage() {
     );
   }
 
+  if (isLegacyPath) {
+    return (
+      <LeasingBillingMigrationNotice
+        title="Leasing receivables"
+        financeHref="/finance/leasing-billing/receivables"
+        description="Accounts receivable, dunning, and collections are now operated from Finance & Billing."
+      />
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Page Header */}
@@ -184,7 +208,7 @@ export default function ReceivablesPage() {
         <div className="flex gap-3">
           <button
             onClick={() => handleRunSweep(true)}
-            disabled={sweepBusy}
+            disabled={sweepBusy || !canManageDunning}
             className="rounded-xl bg-slate-700 border border-white/10 px-4 py-3 text-sm font-medium text-slate-200 hover:bg-slate-600 disabled:opacity-50 transition-all"
             title="Preview without sending emails or writing activities"
           >
@@ -192,7 +216,7 @@ export default function ReceivablesPage() {
           </button>
           <button
             onClick={() => handleRunSweep(false)}
-            disabled={sweepBusy}
+            disabled={sweepBusy || !canManageDunning}
             className="rounded-xl bg-amber-700/40 border border-amber-500/40 px-4 py-3 text-sm font-medium text-amber-100 hover:bg-amber-600/40 disabled:opacity-50 transition-all"
             title="Send 30/60/90-day reminders to all overdue lessees"
           >
@@ -200,6 +224,7 @@ export default function ReceivablesPage() {
           </button>
           <button
             onClick={() => setShowDunningModal(true)}
+            disabled={!canManageDunning}
             className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90 transition-all"
           >
             + Log Manual Activity
@@ -244,20 +269,29 @@ export default function ReceivablesPage() {
       )}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-6">
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
-          <div className="text-slate-400 text-sm font-medium mb-2">Total AR</div>
-          <div className="text-3xl font-bold text-white">AED {totalAR.toLocaleString()}</div>
-        </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
-          <div className="text-slate-400 text-sm font-medium mb-2">Total Overdue</div>
-          <div className="text-3xl font-bold text-rose-400">AED {totalOverdue.toLocaleString()}</div>
-        </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
-          <div className="text-slate-400 text-sm font-medium mb-2">Collection Rate</div>
-          <div className="text-3xl font-bold text-emerald-400">{collectionRate}%</div>
-        </div>
-      </div>
+      <KpiGrid>
+        <KpiCard
+          label="Total AR"
+          value={`AED ${totalAR.toLocaleString()}`}
+          sub="Open receivables"
+          accent="blue"
+          icon={Wallet}
+        />
+        <KpiCard
+          label="Total Overdue"
+          value={`AED ${totalOverdue.toLocaleString()}`}
+          sub="Collections at risk"
+          accent="rose"
+          icon={AlertOctagon}
+        />
+        <KpiCard
+          label="Collection Rate"
+          value={`${collectionRate}%`}
+          sub="Recovered on time"
+          accent="emerald"
+          icon={TrendingUp}
+        />
+      </KpiGrid>
 
       {/* AR Aging Table */}
       <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
@@ -276,27 +310,27 @@ export default function ReceivablesPage() {
           </thead>
           <tbody>
             {receivables.map((receivable) => (
-              <React.Fragment key={receivable.contractId}>
+              <React.Fragment key={receivable.lesseeId}>
                 <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                  <td className="px-6 py-4 text-sm font-medium text-white">{receivable.lessee}</td>
+                  <td className="px-6 py-4 text-sm font-medium text-white">{receivable.lesseeName}</td>
                   <td className="px-6 py-4 text-sm">
                     <span className="bg-white/5 px-3 py-1 rounded-lg text-white">
                       AED {receivable.current.toLocaleString()}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm">
-                    <span className={`${getAgeBgColor(30)} ${getAgeColor(receivable.overdue1to30 > 0 ? 30 : 0)} px-3 py-1 rounded-lg`}>
-                      AED {receivable.overdue1to30.toLocaleString()}
+                    <span className={`${getAgeBgColor(30)} ${getAgeColor(receivable.overdue1_30 > 0 ? 30 : 0)} px-3 py-1 rounded-lg`}>
+                      AED {receivable.overdue1_30.toLocaleString()}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm">
-                    <span className={`${getAgeBgColor(60)} ${getAgeColor(receivable.overdue31to60 > 0 ? 60 : 0)} px-3 py-1 rounded-lg`}>
-                      AED {receivable.overdue31to60.toLocaleString()}
+                    <span className={`${getAgeBgColor(60)} ${getAgeColor(receivable.overdue31_60 > 0 ? 60 : 0)} px-3 py-1 rounded-lg`}>
+                      AED {receivable.overdue31_60.toLocaleString()}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm">
-                    <span className={`${getAgeBgColor(90)} ${getAgeColor(receivable.overdue61to90 > 0 ? 90 : 0)} px-3 py-1 rounded-lg`}>
-                      AED {receivable.overdue61to90.toLocaleString()}
+                    <span className={`${getAgeBgColor(90)} ${getAgeColor(receivable.overdue61_90 > 0 ? 90 : 0)} px-3 py-1 rounded-lg`}>
+                      AED {receivable.overdue61_90.toLocaleString()}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm">
@@ -308,42 +342,55 @@ export default function ReceivablesPage() {
                     AED {receivable.totalOutstanding.toLocaleString()}
                   </td>
                   <td className="px-6 py-4 text-sm">
-                    <button
-                      onClick={() => toggleExpandedRow(receivable.contractId)}
-                      className="text-blue-400 hover:text-blue-300 transition-colors"
-                    >
-                      {expandedRows.has(receivable.contractId) ? 'Hide' : 'Show'}
-                    </button>
+                    <RowActionMenu
+                      actions={[
+                        {
+                          label: expandedRows.has(receivable.lesseeId) ? 'Hide details' : 'Show details',
+                          onSelect: () => toggleExpandedRow(receivable.lesseeId),
+                        },
+                      ]}
+                    />
                   </td>
                 </tr>
-                {expandedRows.has(receivable.contractId) && (
+                {expandedRows.has(receivable.lesseeId) && (
                   <tr className="border-b border-white/5 bg-slate-900/30">
                     <td colSpan={8} className="px-6 py-4">
                       <div className="bg-slate-900/50 border border-white/5 rounded-lg p-4">
                         <h4 className="text-white font-medium mb-3">Overdue Payments</h4>
                         <div className="space-y-2 text-sm text-white">
-                          {receivable.overdue1to30 > 0 && (
+                          {receivable.overdue1_30 > 0 && (
                             <div className="flex justify-between">
                               <span>1-30 Days Overdue:</span>
-                              <span className="text-amber-400">AED {receivable.overdue1to30.toLocaleString()}</span>
+                              <span className="text-amber-400">AED {receivable.overdue1_30.toLocaleString()}</span>
                             </div>
                           )}
-                          {receivable.overdue31to60 > 0 && (
+                          {receivable.overdue31_60 > 0 && (
                             <div className="flex justify-between">
                               <span>31-60 Days Overdue:</span>
-                              <span className="text-orange-400">AED {receivable.overdue31to60.toLocaleString()}</span>
+                              <span className="text-orange-400">AED {receivable.overdue31_60.toLocaleString()}</span>
                             </div>
                           )}
-                          {receivable.overdue61to90 > 0 && (
+                          {receivable.overdue61_90 > 0 && (
                             <div className="flex justify-between">
                               <span>61-90 Days Overdue:</span>
-                              <span className="text-red-400">AED {receivable.overdue61to90.toLocaleString()}</span>
+                              <span className="text-red-400">AED {receivable.overdue61_90.toLocaleString()}</span>
                             </div>
                           )}
                           {receivable.overdue90plus > 0 && (
                             <div className="flex justify-between">
                               <span>90+ Days Overdue:</span>
                               <span className="text-rose-600">AED {receivable.overdue90plus.toLocaleString()}</span>
+                            </div>
+                          )}
+                          {receivable.payments.length > 0 && (
+                            <div className="mt-4 border-t border-white/10 pt-3">
+                              <div className="text-xs uppercase tracking-wider text-slate-500 mb-2">Payment evidence</div>
+                              {receivable.payments.map(payment => (
+                                <div key={payment.id} className="flex justify-between gap-4 text-xs text-slate-300">
+                                  <span>{payment.contractNumber} &middot; {payment.status}</span>
+                                  <span>AED {Number(payment.amount ?? 0).toLocaleString()}</span>
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>

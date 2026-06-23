@@ -26,7 +26,6 @@ export async function PATCH(
             data: {
                 status: body.status,
                 assignedTo: body.assignedTo,
-                assignedDate: body.assignedDate,
                 // Add other fields as needed
             },
         });

@@ -30,7 +30,8 @@ export async function GET(req: NextRequest) {
     // Find all active vehicles NOT in the booked list
     const availableVehicles = await prisma.vehicle.findMany({
       where: {
-        isActive: true,
+        deletedAt: null,
+        status: { in: ['AVAILABLE', 'ACTIVE'] },
         id: { notIn: bookedVehicleIds },
         ...(category ? { category } : {}),
       },

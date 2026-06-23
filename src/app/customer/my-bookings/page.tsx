@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { CalendarDays, CarFront, KeyRound, Route, SearchX } from 'lucide-react';
 
 interface Booking {
   id: string;
@@ -13,73 +14,63 @@ interface Booking {
 
 export default function MyBookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [filteredBookings, setFilteredBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterTab, setFilterTab] = useState<'all' | 'active' | 'completed' | 'cancelled'>('all');
+  const [filterTab, setFilterTab] = useState<'all' | Booking['status']>('all');
 
   useEffect(() => {
-    fetchBookings();
+    let mounted = true;
+    fetch('/api/customer/bookings', { cache: 'no-store' })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (mounted) setBookings(data?.bookings ?? []);
+      })
+      .catch(() => {
+        if (mounted) setBookings([]);
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => { mounted = false; };
   }, []);
 
-  useEffect(() => {
-    if (filterTab === 'all') {
-      setFilteredBookings(bookings);
-    } else {
-      setFilteredBookings(bookings.filter((b) => b.status === filterTab));
-    }
-  }, [filterTab, bookings]);
-
-  const fetchBookings = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch('/api/bookings');
-      if (res.ok) {
-        const data = await res.json();
-        setBookings(data.bookings || []);
-      }
-    } catch (error) {
-      console.error('Error fetching bookings:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const filteredBookings = filterTab === 'all'
+    ? bookings
+    : bookings.filter(booking => booking.status === filterTab);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <div className="h-44 animate-pulse rounded-lg bg-white/5" />;
   }
 
   const getStatusColor = (status: string) => {
-    if (status === 'active') return 'bg-emerald-500/20 text-emerald-400';
-    if (status === 'completed') return 'bg-blue-500/20 text-blue-400';
-    if (status === 'cancelled') return 'bg-rose-500/20 text-rose-400';
-    return 'bg-amber-500/20 text-amber-400';
+    if (status === 'active') return 'bg-emerald-400/10 text-emerald-200 border-emerald-300/20';
+    if (status === 'completed') return 'bg-cyan-400/10 text-cyan-200 border-cyan-300/20';
+    if (status === 'cancelled') return 'bg-rose-400/10 text-rose-200 border-rose-300/20';
+    return 'bg-amber-400/10 text-amber-200 border-amber-300/20';
   };
 
   const getServiceIcon = (type: string) => {
-    if (type.includes('Rental')) return '🚗';
-    if (type.includes('Lease')) return '🔑';
-    if (type.includes('Shuttle')) return '🚌';
-    return '📅';
+    if (type.includes('Rental')) return CarFront;
+    if (type.includes('Lease')) return KeyRound;
+    if (type.includes('Shuttle')) return Route;
+    return CalendarDays;
   };
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold text-white">My Bookings</h1>
+    <div className="space-y-5 pb-20 lg:pb-0">
+      <div>
+        <h1 className="text-2xl font-bold text-white">My Bookings</h1>
+        <p className="mt-1 text-sm text-slate-400">Reservations linked to your corporate account</p>
+      </div>
 
-      {/* Filter Tabs */}
       <div className="flex gap-2 overflow-x-auto pb-2">
-        {(['all', 'active', 'completed', 'cancelled'] as const).map((tab) => (
+        {(['all', 'active', 'upcoming', 'completed', 'cancelled'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setFilterTab(tab)}
-            className={`px-3 py-1 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+            className={`h-9 rounded-md px-3 text-sm font-semibold whitespace-nowrap transition ${
               filterTab === tab
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-800/50 text-slate-300 border border-white/10'
+                ? 'bg-cyan-500 text-slate-950'
+                : 'border border-white/10 bg-slate-900/70 text-slate-300 hover:bg-white/5'
             }`}
           >
             {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -87,37 +78,34 @@ export default function MyBookingsPage() {
         ))}
       </div>
 
-      {/* Bookings List */}
       <div className="space-y-3">
-        {filteredBookings.length > 0 ? (
-          filteredBookings.map((booking) => (
-            <div key={booking.id} className="bg-slate-800/50 border border-white/10 rounded-xl p-4">
+        {filteredBookings.length > 0 ? filteredBookings.map((booking) => {
+          const Icon = getServiceIcon(booking.serviceType);
+          return (
+            <div key={booking.id} className="rounded-lg border border-white/10 bg-slate-900/70 p-4">
               <div className="flex gap-3">
-                <span className="text-3xl">{getServiceIcon(booking.serviceType)}</span>
-                <div className="flex-1">
-                  <div className="flex items-start justify-between mb-2">
+                <Icon className="mt-1 h-6 w-6 shrink-0 text-cyan-200" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-white font-semibold text-sm">{booking.serviceType}</p>
-                      <p className="text-slate-400 text-xs">{booking.reference}</p>
+                      <p className="font-semibold text-white">{booking.serviceType}</p>
+                      <p className="mt-1 text-sm text-slate-400">{booking.reference}</p>
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(booking.status)}`}>
+                    <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${getStatusColor(booking.status)}`}>
                       {booking.status}
                     </span>
                   </div>
-                  <p className="text-slate-400 text-xs">
+                  <p className="mt-3 text-sm text-slate-400">
                     {new Date(booking.startDate).toLocaleDateString()} - {new Date(booking.endDate).toLocaleDateString()}
                   </p>
-                  <button className="mt-2 text-blue-400 text-xs font-medium hover:text-blue-300">
-                    View Details →
-                  </button>
                 </div>
               </div>
             </div>
-          ))
-        ) : (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <span className="text-5xl mb-3">📭</span>
-            <p className="text-slate-400 text-sm">No bookings found</p>
+          );
+        }) : (
+          <div className="flex flex-col items-center justify-center rounded-lg border border-white/10 bg-slate-900/70 py-12 text-center">
+            <SearchX className="mb-3 h-10 w-10 text-slate-500" />
+            <p className="text-sm text-slate-400">No bookings found</p>
           </div>
         )}
       </div>

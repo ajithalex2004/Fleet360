@@ -67,10 +67,15 @@ const STATUS_STYLES: Record<string, string> = {
 
 type ViewMode = 'my' | 'all';
 
+interface MyApprovalsResponse {
+  actorEmail?: string;
+  approvals?: PendingApproval[];
+  error?: string;
+}
+
 export default function ApprovalsPage() {
   const [viewMode, setViewMode]             = useState<ViewMode>('my');
   const [email, setEmail]                   = useState('');
-  const [emailInput, setEmailInput]         = useState('');
   const [approvals, setApprovals]           = useState<PendingApproval[]>([]);
   const [allPending, setAllPending]         = useState<PendingApproval[]>([]);
   const [loading, setLoading]               = useState(false);
@@ -81,16 +86,33 @@ export default function ApprovalsPage() {
   const [actionComments, setActionComments] = useState('');
   const [actioning, setActioning]           = useState(false);
   const [actionMsg, setActionMsg]           = useState('');
+  const [loadError, setLoadError]           = useState('');
   const [moduleFilter, setModuleFilter]     = useState('ALL');
 
-  const loadMyApprovals = useCallback(async (emailAddr: string) => {
-    if (!emailAddr) return;
+  const loadMyApprovals = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
     try {
-      const res = await fetch(`/api/my-approvals?email=${encodeURIComponent(emailAddr)}`);
-      const data = await res.json();
-      setApprovals(Array.isArray(data) ? data : []);
-    } catch { setApprovals([]); }
+      const res = await fetch('/api/my-approvals');
+      const data = await res.json().catch(() => ({})) as MyApprovalsResponse | PendingApproval[];
+      if (!res.ok) {
+        const message = Array.isArray(data) ? 'Could not load your approvals.' : data.error ?? 'Could not load your approvals.';
+        setApprovals([]);
+        setLoadError(message);
+        return;
+      }
+
+      if (Array.isArray(data)) {
+        setApprovals(data);
+        return;
+      }
+
+      setEmail(data.actorEmail ?? '');
+      setApprovals(Array.isArray(data.approvals) ? data.approvals : []);
+    } catch {
+      setApprovals([]);
+      setLoadError('Could not connect to the approvals service.');
+    }
     finally { setLoading(false); }
   }, []);
 
@@ -113,9 +135,7 @@ export default function ApprovalsPage() {
     finally { setHistoryLoading(false); }
   };
 
-  useEffect(() => {
-    if (email) loadMyApprovals(email);
-  }, [email, loadMyApprovals]);
+  useEffect(() => { void loadMyApprovals(); }, [loadMyApprovals]);
 
   useEffect(() => {
     if (viewMode === 'all') loadAllPending();
@@ -132,7 +152,7 @@ export default function ApprovalsPage() {
         body: JSON.stringify({
           action,
           comments: actionComments,
-          actionedByEmail: email || 'admin@xlai.com',
+          actionedByEmail: email,
           currentStepOrder: null,
         }),
       });
@@ -140,7 +160,7 @@ export default function ApprovalsPage() {
       if (res.ok) {
         setActionMsg(action === 'APPROVE' ? 'Approved successfully!' : 'Rejected.');
         setActionComments('');
-        if (viewMode === 'my' && email) await loadMyApprovals(email);
+        if (viewMode === 'my') await loadMyApprovals();
         if (viewMode === 'all') await loadAllPending();
         if (selectedApproval) await loadHistory(selectedApproval.workflowInstanceId);
         setTimeout(() => { setSelectedApproval(null); setActionMsg(''); }, 1800);
@@ -229,49 +249,19 @@ export default function ApprovalsPage() {
       {/* MY APPROVALS VIEW */}
       {viewMode === 'my' && (
         <>
-          {!email ? (
-            <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-8 max-w-md mx-auto mt-12">
-              <div className="text-center mb-6">
-                <div className="w-16 h-16 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center mx-auto mb-4">
-                  <span className="text-3xl font-bold text-violet-400">A</span>
-                </div>
-                <h2 className="text-white font-bold text-lg">Enter Your Email</h2>
-                <p className="text-slate-400 text-sm mt-1">To see approvals assigned to you</p>
-              </div>
-              <div className="flex gap-2">
-                <input type="email" value={emailInput} onChange={e => setEmailInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && emailInput) setEmail(emailInput); }}
-                  placeholder="your.email@company.com"
-                  className="flex-1 px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500/50" />
-                <button onClick={() => { if (emailInput) setEmail(emailInput); }}
-                  disabled={!emailInput}
-                  className="px-5 py-2.5 rounded-xl bg-violet-600 text-white font-semibold text-sm hover:bg-violet-500 transition-all disabled:opacity-50">
-                  View
-                </button>
-              </div>
-              <div className="mt-4 pt-4 border-t border-white/10 text-center">
-                <button onClick={() => setViewMode('all')} className="text-violet-400 hover:text-violet-300 text-xs font-medium transition-colors">
-                  View All Pending Approvals (Admin)
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
               <div className="flex items-center justify-between bg-slate-800/40 border border-white/10 rounded-xl px-4 py-3">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center">
-                    <span className="text-violet-400 text-xs font-bold">{email[0]?.toUpperCase()}</span>
+                    <span className="text-violet-400 text-xs font-bold">{email[0]?.toUpperCase() || 'A'}</span>
                   </div>
                   <div>
-                    <p className="text-white text-sm font-semibold">{email}</p>
+                    <p className="text-white text-sm font-semibold">{email || 'My approvals'}</p>
                     <p className="text-slate-500 text-xs">{approvals.length} pending approval{approvals.length !== 1 ? 's' : ''}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={() => loadMyApprovals(email)}
+                  <button onClick={() => loadMyApprovals()}
                     className="text-slate-500 hover:text-slate-300 text-xs transition-colors">Refresh</button>
-                  <button onClick={() => { setEmail(''); setEmailInput(''); setApprovals([]); setSelectedApproval(null); }}
-                    className="text-slate-500 hover:text-slate-300 text-xs font-medium transition-colors">Switch User</button>
                 </div>
               </div>
 
@@ -279,11 +269,19 @@ export default function ApprovalsPage() {
                 <div className="lg:col-span-2 space-y-3">
                   {loading ? (
                     <div className="text-slate-500 text-sm text-center py-8 animate-pulse">Loading...</div>
+                  ) : loadError ? (
+                    <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-8 text-center">
+                      <p className="text-white font-semibold mb-1">Unable to load your inbox</p>
+                      <p className="text-rose-200/80 text-sm">{loadError}</p>
+                      <button onClick={() => loadMyApprovals()} className="mt-4 text-violet-300 hover:text-violet-200 text-xs font-medium transition-colors">
+                        Retry
+                      </button>
+                    </div>
                   ) : approvals.length === 0 ? (
                     <div className="bg-slate-800/40 border border-dashed border-white/10 rounded-2xl p-10 text-center">
                       <p className="text-4xl mb-3">&#10003;</p>
                       <p className="text-white font-semibold mb-1">All caught up!</p>
-                      <p className="text-slate-500 text-sm">No pending approvals for this email.</p>
+                      <p className="text-slate-500 text-sm">No pending approvals assigned to you.</p>
                       <button onClick={() => setViewMode('all')} className="mt-4 text-violet-400 hover:text-violet-300 text-xs font-medium transition-colors">
                         Check All Pending
                       </button>
@@ -294,8 +292,6 @@ export default function ApprovalsPage() {
                   <ActionPanel />
                 </div>
               </div>
-            </>
-          )}
         </>
       )}
 
@@ -431,7 +427,7 @@ export default function ApprovalsPage() {
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Your Decision</p>
             {viewMode === 'my' && !email && (
               <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-                Switch to &ldquo;My Approvals&rdquo; and enter your email to take action.
+                Your signed-in account email could not be resolved. Refresh the page or sign in again.
               </p>
             )}
             <textarea value={actionComments} onChange={e => setActionComments(e.target.value)}

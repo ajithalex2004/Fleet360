@@ -120,7 +120,7 @@ function NewScheduleModal({ onClose, onSave }: { onClose: () => void; onSave: ()
           ].map(([label, key, type]) => (
             <div key={key}>
               <label className="text-xs text-slate-400 mb-1 block">{label}</label>
-              <input type={type} value={(form as Record<string, string>)[key]} onChange={e => set(key, e.target.value)}
+              <input type={type} value={(form as unknown as Record<string, string>)[key]} onChange={e => set(key, e.target.value)}
                 className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" />
             </div>
           ))}

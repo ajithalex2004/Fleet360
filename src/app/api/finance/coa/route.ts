@@ -5,6 +5,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { ensureOperationalTenantColumn, recordOperationalChange, requireOperationalContext } from '@/lib/cross-module-governance';
 
 const INIT = `
   CREATE TABLE IF NOT EXISTS finance_chart_of_accounts (
@@ -23,7 +24,8 @@ const INIT = `
     is_system       BOOLEAN DEFAULT FALSE,   -- system accounts (cannot be deleted)
     normal_balance  TEXT DEFAULT 'DEBIT',    -- DEBIT | CREDIT (credit for liabilities/equity/income)
     currency        TEXT DEFAULT 'AED',
-    sort_order      INTEGER DEFAULT 0
+    sort_order      INTEGER DEFAULT 0,
+    tenant_id       TEXT
   );
 `;
 
@@ -154,6 +156,9 @@ async function seedIfEmpty() {
 
 export async function GET(req: NextRequest) {
   await prisma.$executeRawUnsafe(INIT).catch(() => {});
+  await ensureOperationalTenantColumn('finance_chart_of_accounts').catch(() => {});
+  const ctx = requireOperationalContext(req, 'finance', { requestedTenantId: req.nextUrl.searchParams.get('tenantId') });
+  if (ctx instanceof NextResponse) return ctx;
   await seedIfEmpty();
 
   const sp      = req.nextUrl.searchParams;
@@ -161,9 +166,9 @@ export async function GET(req: NextRequest) {
   const search  = sp.get('search');
   const flat    = sp.get('flat');    // flat list vs tree
 
-  let where = `WHERE deleted_at IS NULL`;
-  const params: unknown[] = [];
-  let pi = 1;
+  let where = `WHERE deleted_at IS NULL AND (tenant_id::text = $1 OR tenant_id IS NULL)`;
+  const params: unknown[] = [ctx.tenantId];
+  let pi = 2;
   if (type)   { where += ` AND account_type = $${pi++}`;    params.push(type); }
   if (search) { where += ` AND (account_code ILIKE $${pi} OR account_name ILIKE $${pi})`; params.push(`%${search}%`); pi++; }
 
@@ -193,6 +198,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   await prisma.$executeRawUnsafe(INIT).catch(() => {});
+  await ensureOperationalTenantColumn('finance_chart_of_accounts').catch(() => {});
+  const ctx = requireOperationalContext(req, 'finance', { write: true });
+  if (ctx instanceof NextResponse) return ctx;
   const body = await req.json();
 
   // Determine normal_balance from account_type if not specified
@@ -202,15 +210,24 @@ export async function POST(req: NextRequest) {
   const [row] = await prisma.$queryRawUnsafe<CoaRow[]>(
     `INSERT INTO finance_chart_of_accounts
        (account_code, account_name, account_type, account_subtype, parent_code,
-        description, is_header, is_active, normal_balance, sort_order)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        description, is_header, is_active, normal_balance, sort_order, tenant_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
      RETURNING *`,
     body.accountCode, body.accountName, body.accountType,
     body.accountSubtype ?? null, body.parentCode ?? null,
     body.description ?? null, body.isHeader ?? false, true,
-    normalBalance, body.sortOrder ?? 999,
+    normalBalance, body.sortOrder ?? 999, ctx.tenantId,
   ).catch(() => []);
 
   if (!row) return NextResponse.json({ error: 'Failed to create account' }, { status: 500 });
+  await recordOperationalChange({
+    req,
+    ctx,
+    entityType: 'FinanceChartOfAccount',
+    entityId: String(row.id ?? body.accountCode),
+    action: 'CREATE',
+    after: row,
+    summary: `Created chart of account ${String(row.account_code ?? body.accountCode)}.`,
+  });
   return NextResponse.json(row, { status: 201 });
 }

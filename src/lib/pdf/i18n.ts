@@ -162,6 +162,10 @@ export const pdfStrings = {
   noTransactions: { en: 'No transactions in this period.', ar: 'لا توجد معاملات في هذه الفترة.' },
   txn_INVOICE: { en: 'Invoice', ar: 'فاتورة' },
   txn_PAYMENT: { en: 'Payment', ar: 'دفعة' },
+  txn_CREDIT_NOTE: { en: 'Credit Note', ar: 'إشعار دائن' },
+  txn_DEPOSIT: { en: 'Security Deposit', ar: 'تأمين مستلم' },
+  txn_DEPOSIT_DEDUCTION: { en: 'Deposit Deduction', ar: 'استقطاع من التأمين' },
+  txn_DEPOSIT_REFUND: { en: 'Deposit Refund', ar: 'رد التأمين' },
 
   // ── Rent-A-Car specifics ────────────────────────────────────────────────
   rentalAgreement: { en: 'Rental Agreement', ar: 'عقد إيجار سيارة' },

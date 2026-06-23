@@ -1,8 +1,29 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import {
+    ensureOperationalTenantColumn,
+    recordOperationalChange,
+    requireOperationalContext,
+} from '@/lib/cross-module-governance';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+async function requestBelongsToTenant(id: string, tenantId: string) {
+    await ensureOperationalTenantColumn('maintenance_requests');
+    const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id::text AS id FROM maintenance_requests WHERE id::text = $1 AND tenant_id::text = $2 AND deleted_at IS NULL LIMIT 1`,
+        id,
+        tenantId,
+    ).catch(() => []);
+    return rows.length > 0;
+}
+
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
     try {
+        const ctx = requireOperationalContext(request, 'maintenance');
+        if (ctx instanceof NextResponse) return ctx;
+        if (!(await requestBelongsToTenant(params.id, ctx.tenantId))) {
+            return NextResponse.json({ error: 'Request not found' }, { status: 404 });
+        }
         const req = await prisma.maintenanceRequest.findFirst({
             where: { id: params.id, deletedAt: null },
             include: {
@@ -28,9 +49,20 @@ export async function GET(request: Request, { params }: { params: { id: string }
     }
 }
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
     try {
+        const ctx = requireOperationalContext(request, 'maintenance', { write: true });
+        if (ctx instanceof NextResponse) return ctx;
+        if (!(await requestBelongsToTenant(params.id, ctx.tenantId))) {
+            return NextResponse.json({ error: 'Request not found' }, { status: 404 });
+        }
         const body = await request.json();
+        const before = await prisma.maintenanceRequest.findFirst({
+            where: { id: params.id, deletedAt: null },
+        });
+        if (!before) {
+            return NextResponse.json({ error: 'Request not found' }, { status: 404 });
+        }
 
         const data: Record<string, unknown> = {};
         if (body.vehicleId !== undefined) data.vehicleId = body.vehicleId;
@@ -72,18 +104,125 @@ export async function PATCH(request: Request, { params }: { params: { id: string
             },
         });
 
-        return NextResponse.json(JSON.parse(JSON.stringify(updated)));
+        await recordOperationalChange({
+            req: request,
+            ctx,
+            entityType: 'MaintenanceRequest',
+            entityId: params.id,
+            action: body.status !== undefined && body.status !== before.status ? 'STATUS_CHANGE' : 'UPDATE',
+            before,
+            after: updated,
+            summary: `Updated maintenance request ${updated.workOrderNo ?? updated.id}`,
+        });
+
+        const workflowEvents = [];
+        const estimateTouched =
+            body.estimatedCost !== undefined
+            || body.estimateApproval !== undefined
+            || body.candidateGarageIds !== undefined;
+        if (estimateTouched) {
+            workflowEvents.push(await triggerServiceWorkflow({
+                req: request,
+                ctx,
+                serviceTypeKey: 'MAINTENANCE_ESTIMATE_APPROVAL',
+                referenceType: 'MaintenanceRequest',
+                referenceId: updated.id,
+                referenceNumber: updated.workOrderNo ?? updated.id,
+                contextData: {
+                    requestId: updated.id,
+                    estimatedCost: updated.estimatedCost,
+                    estimateApproval: updated.estimateApproval,
+                    candidateGarageIds: updated.candidateGarageIds,
+                },
+            }));
+        }
+
+        const workOrderTouched =
+            body.workOrderNo !== undefined
+            || body.work_order_no !== undefined
+            || body.maintenanceJobs !== undefined
+            || body.maintenance_jobs !== undefined;
+        if (workOrderTouched) {
+            workflowEvents.push(await triggerServiceWorkflow({
+                req: request,
+                ctx,
+                serviceTypeKey: 'MAINTENANCE_WORK_ORDER',
+                referenceType: 'MaintenanceRequest',
+                referenceId: updated.id,
+                referenceNumber: updated.workOrderNo ?? updated.id,
+                contextData: {
+                    requestId: updated.id,
+                    workOrderNo: updated.workOrderNo,
+                    maintenanceJobs: updated.maintenanceJobs,
+                },
+            }));
+        }
+
+        const vendorTouched = body.garageId !== undefined || body.garage_id !== undefined;
+        if (vendorTouched) {
+            workflowEvents.push(await triggerServiceWorkflow({
+                req: request,
+                ctx,
+                serviceTypeKey: 'MAINTENANCE_VENDOR_ASSIGNMENT',
+                referenceType: 'MaintenanceRequest',
+                referenceId: updated.id,
+                referenceNumber: updated.workOrderNo ?? updated.id,
+                contextData: {
+                    requestId: updated.id,
+                    garageId: updated.garageId,
+                    candidateGarageIds: updated.candidateGarageIds,
+                },
+            }));
+        }
+
+        const completed =
+            (body.status !== undefined && String(body.status).toLowerCase() === 'completed')
+            || body.completionDate !== undefined;
+        if (completed) {
+            workflowEvents.push(await triggerServiceWorkflow({
+                req: request,
+                ctx,
+                serviceTypeKey: 'MAINTENANCE_COMPLETION_REVIEW',
+                referenceType: 'MaintenanceRequest',
+                referenceId: updated.id,
+                referenceNumber: updated.workOrderNo ?? updated.id,
+                contextData: {
+                    requestId: updated.id,
+                    status: updated.status,
+                    completionDate: updated.completionDate,
+                    actualCost: updated.actualCost,
+                },
+            }));
+        }
+
+        return NextResponse.json(JSON.parse(JSON.stringify({ ...updated, workflowEvents })));
     } catch (error) {
         console.error('Failed to update maintenance request:', error);
         return NextResponse.json({ error: 'Internal Server Error', details: String(error) }, { status: 500 });
     }
 }
 
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
     try {
-        await prisma.maintenanceRequest.update({
+        const ctx = requireOperationalContext(request, 'maintenance', { write: true });
+        if (ctx instanceof NextResponse) return ctx;
+        if (!(await requestBelongsToTenant(params.id, ctx.tenantId))) {
+            return NextResponse.json({ error: 'Request not found' }, { status: 404 });
+        }
+        const before = await prisma.maintenanceRequest.findFirst({ where: { id: params.id, deletedAt: null } });
+        const updated = await prisma.maintenanceRequest.update({
             where: { id: params.id },
             data: { deletedAt: new Date() },
+        });
+        await recordOperationalChange({
+            req: request,
+            ctx,
+            entityType: 'MaintenanceRequest',
+            entityId: params.id,
+            action: 'DELETE',
+            before,
+            after: updated,
+            summary: `Deleted maintenance request ${updated.workOrderNo ?? updated.id}`,
         });
         return NextResponse.json({ success: true });
     } catch (error) {

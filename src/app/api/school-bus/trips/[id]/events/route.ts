@@ -22,6 +22,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureTripTables } from '../../route';
+import { requireOperationalContext } from '@/lib/cross-module-governance';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
 
 type Row = Record<string, unknown>;
 const ser = (r: Row): Row => {
@@ -34,13 +36,16 @@ const ser = (r: Row): Row => {
 
 const SAFETY_EVENTS = ['SPEEDING', 'HARSH_BRAKING', 'GEOFENCE_EXIT', 'INCIDENT', 'BREAKDOWN'];
 
-export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await ensureTripTables();
     const { id } = await params;
+    const reqTenantId = req.nextUrl.searchParams.get('tenantId');
+    const ctx = requireOperationalContext(req, 'bus_ops', { requestedTenantId: reqTenantId });
+    if (ctx instanceof NextResponse) return ctx;
 
     const events = await prisma.$queryRawUnsafe<Row[]>(
-      `SELECT * FROM school_bus_trip_events WHERE trip_id = $1::uuid ORDER BY event_time ASC`, id,
+      `SELECT * FROM school_bus_trip_events WHERE trip_id = $1::uuid AND tenant_id::text = $2 ORDER BY event_time ASC`, id, ctx.tenantId,
     );
     return NextResponse.json({ events: events.map(ser), total: events.length });
   } catch (err) {
@@ -51,11 +56,13 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await ensureTripTables();
+    const ctx = requireOperationalContext(req, 'bus_ops', { write: true });
+    if (ctx instanceof NextResponse) return ctx;
     const { id: tripId } = await params;
     const body = await req.json();
 
     const {
-      tenantId = 'default', eventType,
+      eventType,
       lat, lng, speedKmh,
       stopId, stopName,
       studentId, studentName,
@@ -69,7 +76,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     // Validate trip exists
     const [trip] = await prisma.$queryRawUnsafe<Row[]>(
-      `SELECT id, status FROM school_bus_trips WHERE id = $1::uuid AND tenant_id = $2`, tripId, tenantId,
+      `SELECT id, trip_code, route_name, status FROM school_bus_trips WHERE id = $1::uuid AND tenant_id::text = $2`, tripId, ctx.tenantId,
     );
     if (!trip) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
 
@@ -81,7 +88,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
       RETURNING *
     `,
-      tenantId, tripId, eventType,
+      ctx.tenantId, tripId, eventType,
       eventTime ?? new Date().toISOString(),
       lat ?? null, lng ?? null, speedKmh ?? null,
       stopId ?? null, stopName ?? null,
@@ -104,8 +111,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     if (updates.length > 0) {
       await prisma.$executeRawUnsafe(
-        `UPDATE school_bus_trips SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $1::uuid`,
+        `UPDATE school_bus_trips SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $1::uuid AND tenant_id::text = $2`,
         tripId,
+        ctx.tenantId,
       ).catch(() => {});
     }
 
@@ -153,10 +161,32 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
+    let workflow = null;
+    if (SAFETY_EVENTS.includes(eventType)) {
+      workflow = await triggerServiceWorkflow({
+        req,
+        ctx,
+        serviceTypeKey: 'SCHOOL_SAFETY_INCIDENT_REVIEW',
+        referenceType: 'SchoolBusTrip',
+        referenceId: tripId,
+        referenceNumber: String(trip.trip_code ?? tripId),
+        contextData: {
+          eventType,
+          routeName: trip.route_name ?? null,
+          description: description ?? null,
+          speedKmh: speedKmh ?? null,
+          stopName: stopName ?? null,
+          studentId: studentId ?? null,
+        },
+        force: true,
+      });
+    }
+
     return NextResponse.json({
       ok: true,
       event: ser(event),
       isSafetyAlert: SAFETY_EVENTS.includes(eventType),
+      workflow,
     }, { status: 201 });
   } catch (err) {
     console.error('[trip-events POST]', err);

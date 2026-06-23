@@ -17,11 +17,15 @@ import { prisma } from '@/lib/prisma';
 import { assessSchoolBusChecklist, SCHOOL_BUS_PRETRIP_CHECKLIST } from '@/lib/school-bus-pretrip';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { requireOperationalContext } from '@/lib/cross-module-governance';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
 
 export const runtime = 'nodejs';
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const ctx = requireOperationalContext(req, 'bus_ops', { requestedTenantId: req.nextUrl.searchParams.get('tenantId') });
+  if (ctx instanceof NextResponse) return ctx;
   const latest = await prisma.busPreTripCheck.findFirst({
     where: { scheduleId: id },
     orderBy: { performedAt: 'desc' },
@@ -32,6 +36,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {
+    const ctx = requireOperationalContext(req, 'bus_ops', { write: true });
+    if (ctx instanceof NextResponse) return ctx;
     const body = await req.json();
     const items = Array.isArray(body?.items) ? body.items : [];
     if (items.length === 0) {
@@ -39,9 +45,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Verify trip exists in school_bus_trips
-    const tripRows = await prisma.$queryRawUnsafe<Array<{ id: string; vehicle_id: string | null; driver_name: string | null }>>(
-      `SELECT id::text, vehicle_id::text, driver_name FROM school_bus_trips WHERE id = $1::uuid`,
+    const tripRows = await prisma.$queryRawUnsafe<Array<{ id: string; trip_code: string | null; vehicle_id: string | null; driver_name: string | null }>>(
+      `SELECT id::text, trip_code, vehicle_id::text, driver_name FROM school_bus_trips WHERE id = $1::uuid AND tenant_id::text = $2`,
       id,
+      ctx.tenantId,
     ).catch(() => []);
     if (tripRows.length === 0) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
 
@@ -70,7 +77,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       details: `School-bus pre-trip check ${assessment.overallPass ? 'PASS' : `FAIL (${assessment.blockingFailures.length} blocking)`} — ${items.filter((i: { ok: boolean }) => i.ok).length}/${items.length} items OK.`,
     });
 
-    return NextResponse.json({ check, assessment }, { status: 201 });
+    const workflow = await triggerServiceWorkflow({
+      req,
+      ctx,
+      serviceTypeKey: 'SCHOOL_SAFETY_INCIDENT_REVIEW',
+      referenceType: 'SchoolBusTrip',
+      referenceId: id,
+      referenceNumber: String(tripRows[0]?.trip_code ?? id),
+      contextData: {
+        tripId: id,
+        overallPass: assessment.overallPass,
+        failCount: assessment.failCount,
+        blockingFailures: assessment.blockingFailures,
+      },
+      force: !assessment.overallPass,
+    });
+
+    return NextResponse.json({ check, assessment, workflow }, { status: 201 });
   } catch (err) {
     captureException(err, { context: 'school-bus.pretrip-check.create', tags: { tripId: id } });
     return NextResponse.json({ error: 'Failed to record check' }, { status: 500 });

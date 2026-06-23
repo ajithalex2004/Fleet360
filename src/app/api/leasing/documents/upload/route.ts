@@ -50,6 +50,7 @@ const metadataSchema = z.object({
   issueDate: z.string().optional().or(z.literal('')),
   expiryDate: z.string().optional().or(z.literal('')),
   notes: z.string().optional(),
+  replaceDocumentId: z.string().uuid().optional().or(z.literal('')),
 });
 
 export async function POST(req: NextRequest) {
@@ -86,6 +87,7 @@ export async function POST(req: NextRequest) {
       issueDate: String(form.get('issueDate') ?? ''),
       expiryDate: String(form.get('expiryDate') ?? ''),
       notes: form.get('notes') ? String(form.get('notes')) : undefined,
+      replaceDocumentId: String(form.get('replaceDocumentId') ?? ''),
     };
 
     const parsed = metadataSchema.safeParse(meta);
@@ -120,6 +122,55 @@ export async function POST(req: NextRequest) {
       const days = Math.ceil((expiry.getTime() - Date.now()) / 86400000);
       if (days < 0) status = 'EXPIRED';
       else if (days <= 30) status = 'EXPIRING_SOON';
+    }
+
+    const existingId = parsed.data.replaceDocumentId || undefined;
+
+    if (existingId) {
+      const existing = await prisma.leaseDocument.findUnique({
+        where: { id: existingId },
+        select: { id: true, docName: true, fileUrl: true },
+      });
+      if (!existing) {
+        return NextResponse.json({ error: 'Document to replace was not found' }, { status: 404 });
+      }
+
+      const doc = await prisma.leaseDocument.update({
+        where: { id: existingId },
+        data: {
+          entityType: parsed.data.entityType,
+          entityId: parsed.data.entityId,
+          docType: parsed.data.docType,
+          docName: parsed.data.docName,
+          fileName: stored.originalName,
+          fileUrl: stored.url,
+          fileSize: stored.size,
+          mimeType: stored.mimeType,
+          issueDate: issue,
+          expiryDate: expiry,
+          status,
+          uploadedBy: req.headers.get('x-user-id') ?? null,
+          notes: parsed.data.notes ?? null,
+          updatedAt: new Date(),
+        },
+      });
+
+      if (existing.fileUrl?.startsWith('/uploads/')) {
+        await storage.delete(existing.fileUrl.replace('/uploads/', ''));
+      }
+
+      void logAudit({
+        tenantId: req.headers.get('x-tenant-id') ?? undefined,
+        userId: req.headers.get('x-user-id') ?? undefined,
+        userRole: req.headers.get('x-user-role') ?? undefined,
+        entityType: 'LeaseDocument',
+        entityId: doc.id,
+        entityName: doc.docName,
+        action: 'UPDATE',
+        details: `Replaced ${parsed.data.docType} with ${stored.originalName} for ${parsed.data.entityType} ${parsed.data.entityId}${expiry ? ` (expires ${expiry.toISOString().slice(0, 10)})` : ''}`,
+      });
+
+      return NextResponse.json({ document: doc, storage: stored, replaced: true }, { status: 200 });
     }
 
     const doc = await prisma.leaseDocument.create({

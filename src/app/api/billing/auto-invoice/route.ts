@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireAdminPermission, requireDangerApproval } from '@/lib/admin-policy';
+import { recordAdminChange } from '@/lib/admin-change-history';
 
 // ---------------------------------------------------------------------------
 // Table bootstrap
@@ -196,7 +198,13 @@ async function computeBilling(sub: Subscription, tenantName: string): Promise<{
 // GET /api/billing/auto-invoice
 // Returns billing runs list + last run summary
 // ---------------------------------------------------------------------------
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
+  const auth = await requireAdminPermission(req, 'view', 'billing');
+  if (auth instanceof NextResponse) return auth;
+  if (!auth.ctx.isSuperAdmin) {
+    return NextResponse.json({ error: 'Auto-invoice runs require super admin access' }, { status: 403 });
+  }
+
   await ensureTables();
 
   type RunRow = {
@@ -248,6 +256,12 @@ export async function GET(_req: NextRequest) {
 // action=preview      → dry run, returns what would be billed
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
+  const auth = await requireAdminPermission(req, 'edit', 'billing');
+  if (auth instanceof NextResponse) return auth;
+  if (!auth.ctx.isSuperAdmin) {
+    return NextResponse.json({ error: 'Auto-invoice runs require super admin access' }, { status: 403 });
+  }
+
   await ensureTables();
 
   try {
@@ -260,6 +274,14 @@ export async function POST(req: NextRequest) {
 
     const today   = new Date().toISOString().split('T')[0];
     const isDryRun = action === 'preview';
+
+    if (!isDryRun) {
+      const approval = await requireDangerApproval(req, auth.ctx, 'billing.run', {
+        targetType: 'BillingRun',
+        summary: 'Run automatic billing and create invoices.',
+      });
+      if (approval) return approval;
+    }
 
     // ── 1. Create billing_run record (only for real runs) ──────────────────
     let runId: string | null = null;
@@ -427,6 +449,23 @@ export async function POST(req: NextRequest) {
         previews,
       });
     }
+
+    await recordAdminChange({
+      req,
+      ctx: auth.ctx,
+      entityType: 'BillingRun',
+      entityId: runId,
+      action: 'CREATE',
+      after: {
+        runId,
+        status: errors.length > 0 ? 'FAILED' : 'COMPLETED',
+        totalTenants: tenantsSeen.size,
+        invoicesCreated,
+        totalAmount: Math.round(totalAmount * 100) / 100,
+        errors,
+      },
+      summary: `Billing run created ${invoicesCreated} invoice(s).`,
+    });
 
     return NextResponse.json({
       success:          true,

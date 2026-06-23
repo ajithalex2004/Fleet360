@@ -16,6 +16,7 @@ import {
   hashPassword, verifyPassword, validatePassword, DEFAULT_PASSWORD_POLICY,
 } from '@/lib/password-policy';
 import { signSession } from '@/lib/tenant-session';
+import { newSessionId, registerSession } from '@/lib/session-registry';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -121,11 +122,24 @@ export async function POST(req: NextRequest) {
         details: `Invitation accepted by existing user ${inv.email}; joined as ${role.code}.`,
       });
 
+      const sessionId = newSessionId();
+      const expiresAt = new Date(Date.now() + 86_400_000);
       const tk = await signSession({
+        sessionId,
         userId:   existing.id,
         tenantId: tenant.id,
         plan:     tenant.plan ?? 'TRIAL',
         role:     role.code,
+      });
+      await registerSession({
+        id: sessionId,
+        userId: existing.id,
+        tenantId: tenant.id,
+        plan: tenant.plan ?? 'TRIAL',
+        role: role.code,
+        expiresAt,
+        ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? req.headers.get('x-real-ip'),
+        userAgent: req.headers.get('user-agent'),
       });
       const res = NextResponse.json({
         ok: true,
@@ -185,11 +199,24 @@ export async function POST(req: NextRequest) {
       details: `Invitation accepted; new user ${inv.email} created and joined as ${role.code}.`,
     });
 
+    const sessionId = newSessionId();
+    const expiresAt = new Date(Date.now() + 86_400_000);
     const tk = await signSession({
+      sessionId,
       userId:   newUserId,
       tenantId: tenant.id,
       plan:     tenant.plan ?? 'TRIAL',
       role:     role.code,
+    });
+    await registerSession({
+      id: sessionId,
+      userId: newUserId,
+      tenantId: tenant.id,
+      plan: tenant.plan ?? 'TRIAL',
+      role: role.code,
+      expiresAt,
+      ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? req.headers.get('x-real-ip'),
+      userAgent: req.headers.get('user-agent'),
     });
     const res = NextResponse.json({
       ok: true,

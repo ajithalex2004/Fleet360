@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import {
+  assertGovernedShipmentWrite,
+  ensureShipmentForLegacyBooking,
+  LogisticsValidationError,
+} from '@/lib/logistics/domain';
+import { logisticsErrorResponse } from '@/lib/logistics/api-context';
 
 /**
  * /api/logistics/trips/[id]/manifest
@@ -44,18 +50,93 @@ const CREATE_TABLE = `
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
 
+type TripRouteContext = { params: Promise<{ id: string }> };
+
 async function ensureTable() {
   await prisma.$queryRawUnsafe(CREATE_TABLE).catch(() => {});
+}
+
+async function assertManifestWriteAllowed(
+  req: Request,
+  bookingId: string,
+  bodyTenantId: string | null | undefined,
+  action: string,
+) {
+  const tenantId = req.headers.get('x-tenant-id') ?? bodyTenantId ?? null;
+  if (!tenantId) return;
+
+  const shipment = await ensureShipmentForLegacyBooking({
+    tenantId,
+    bookingId,
+    actorUserId: req.headers.get('x-user-id') ?? null,
+  });
+  if (!shipment) return;
+
+  await assertGovernedShipmentWrite({
+    tenantId,
+    shipmentOrderId: shipment.id,
+    action,
+  });
+}
+
+function assertManifestPayload(body: {
+  action?: string;
+  stopId?: string;
+  stopNumber?: number;
+  stopName?: string;
+  stopAddress?: string;
+  cargoItems?: Array<{ desc: string; qty: number; unit: string; weightKg?: number }>;
+  order?: Array<{ stopId: string; stopNumber: number }>;
+}) {
+  const issues: string[] = [];
+  const validActions = ['add_stop', 'update_stop', 'confirm_delivery', 'reorder'];
+
+  if (!body.action || !validActions.includes(body.action)) {
+    issues.push('Manifest action is required.');
+  }
+  if (body.stopNumber != null && (!Number.isInteger(Number(body.stopNumber)) || Number(body.stopNumber) <= 0)) {
+    issues.push('Stop number must be a positive whole number.');
+  }
+  if (body.action === 'add_stop' && !String(body.stopName ?? body.stopAddress ?? '').trim()) {
+    issues.push('Stop name or stop address is required.');
+  }
+  if ((body.action === 'update_stop' || body.action === 'confirm_delivery') && !body.stopId) {
+    issues.push('stopId is required for this manifest action.');
+  }
+  if (body.action === 'reorder') {
+    if (!Array.isArray(body.order) || body.order.length === 0) {
+      issues.push('At least one stop order item is required.');
+    } else {
+      body.order.forEach((item, index) => {
+        if (!item.stopId) issues.push(`Stop order row ${index + 1} is missing stopId.`);
+        if (!Number.isInteger(Number(item.stopNumber)) || Number(item.stopNumber) <= 0) {
+          issues.push(`Stop order row ${index + 1} must use a positive whole stop number.`);
+        }
+      });
+    }
+  }
+  if (Array.isArray(body.cargoItems)) {
+    body.cargoItems.forEach((item, index) => {
+      if (!String(item.desc ?? '').trim()) issues.push(`Cargo item ${index + 1} description is required.`);
+      if (!Number.isFinite(Number(item.qty)) || Number(item.qty) <= 0) issues.push(`Cargo item ${index + 1} quantity must be greater than zero.`);
+      if (item.weightKg != null && (!Number.isFinite(Number(item.weightKg)) || Number(item.weightKg) < 0)) {
+        issues.push(`Cargo item ${index + 1} weight cannot be negative.`);
+      }
+    });
+  }
+
+  if (issues.length > 0) throw new LogisticsValidationError(issues);
 }
 
 // ── GET — fetch all stops for a trip ─────────────────────────────────────────
 
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } }
+  { params }: TripRouteContext
 ) {
   await ensureTable();
   try {
+    const { id } = await params;
     // Fetch booking details
     const bookings = await prisma.$queryRawUnsafe<Array<{
       id: string; booking_ref: string | null; status: string | null;
@@ -64,7 +145,7 @@ export async function GET(
     }>>(
       `SELECT id, booking_ref, status, requestor_name, notes, start_date, end_date
        FROM bookings WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
-      params.id
+      id
     ).catch(() => []);
 
     if (!bookings.length) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
@@ -89,7 +170,7 @@ export async function GET(
        FROM cargo_manifests
        WHERE booking_id = $1
        ORDER BY stop_number ASC`,
-      params.id
+      id
     ).catch(() => []);
 
     // Summary counts
@@ -130,10 +211,10 @@ export async function GET(
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: TripRouteContext
 ) {
-  await ensureTable();
   try {
+    const { id } = await params;
     const body = await req.json() as {
       action: 'add_stop' | 'update_stop' | 'confirm_delivery' | 'reorder';
       stopId?: string;
@@ -146,9 +227,13 @@ export async function POST(
       status?: 'PENDING' | 'DELIVERED' | 'SKIPPED';
       deliveryNote?: string;
       signatureB64?: string;
+      tenantId?: string;
       // reorder: array of {stopId, stopNumber}
       order?: Array<{ stopId: string; stopNumber: number }>;
     };
+    assertManifestPayload(body);
+    await ensureTable();
+    await assertManifestWriteAllowed(req, id, body.tenantId ?? null, `Manifest ${body.action}`);
 
     // ── add_stop ──────────────────────────────────────────────────────────────
     if (body.action === 'add_stop') {
@@ -157,7 +242,7 @@ export async function POST(
       if (!nextStop) {
         const max = await prisma.$queryRawUnsafe<Array<{ max: number | null }>>(
           `SELECT MAX(stop_number) AS max FROM cargo_manifests WHERE booking_id = $1`,
-          params.id
+          id
         ).catch(() => [{ max: null }]);
         nextStop = (max[0]?.max ?? 0) + 1;
       }
@@ -166,7 +251,7 @@ export async function POST(
         `INSERT INTO cargo_manifests
            (booking_id, stop_number, stop_name, stop_address, recipient, recipient_phone, cargo_items)
          VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)`,
-        params.id,
+        id,
         nextStop,
         body.stopName   ?? null,
         body.stopAddress ?? null,
@@ -195,7 +280,7 @@ export async function POST(
         body.recipient   ?? null,
         body.recipientPhone ?? null,
         body.cargoItems ? JSON.stringify(body.cargoItems) : null,
-        params.id
+        id
       );
       return NextResponse.json({ ok: true });
     }
@@ -211,7 +296,7 @@ export async function POST(
         body.status ?? 'DELIVERED',
         body.deliveryNote  ?? null,
         body.signatureB64  ?? null,
-        params.id
+        id
       );
       return NextResponse.json({ ok: true });
     }
@@ -221,7 +306,7 @@ export async function POST(
       for (const { stopId, stopNumber } of body.order) {
         await prisma.$queryRawUnsafe(
           `UPDATE cargo_manifests SET stop_number = $2, updated_at = NOW() WHERE id = $1 AND booking_id = $3`,
-          stopId, stopNumber, params.id
+          stopId, stopNumber, id
         );
       }
       return NextResponse.json({ ok: true });
@@ -230,7 +315,7 @@ export async function POST(
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
   } catch (err) {
     console.error('[manifest POST]', err);
-    return NextResponse.json({ error: 'Failed to update manifest' }, { status: 500 });
+    return logisticsErrorResponse(err, 'Failed to update manifest');
   }
 }
 
@@ -238,19 +323,21 @@ export async function POST(
 
 export async function DELETE(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: TripRouteContext
 ) {
   await ensureTable();
   try {
-    const { stopId } = await req.json() as { stopId: string };
+    const { id } = await params;
+    const { stopId, tenantId } = await req.json() as { stopId: string; tenantId?: string };
     if (!stopId) return NextResponse.json({ error: 'stopId required' }, { status: 400 });
+    await assertManifestWriteAllowed(req, id, tenantId ?? null, 'Manifest stop deletion');
     await prisma.$queryRawUnsafe(
       `DELETE FROM cargo_manifests WHERE id = $1 AND booking_id = $2`,
-      stopId, params.id
+      stopId, id
     );
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('[manifest DELETE]', err);
-    return NextResponse.json({ error: 'Failed to delete stop' }, { status: 500 });
+    return logisticsErrorResponse(err, 'Failed to delete stop');
   }
 }

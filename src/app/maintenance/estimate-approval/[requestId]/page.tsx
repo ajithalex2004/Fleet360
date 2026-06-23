@@ -41,7 +41,7 @@ export default function EstimateApprovalPage() {
         const fetchData = async () => {
             // If token is present, validate it (email approval)
             if (token) {
-                const validation = validateApprovalLink(token);
+                const validation = validateApprovalLink(token, []);
                 if (!validation.valid) {
                     setLinkValid(false);
                     setLoading(false);

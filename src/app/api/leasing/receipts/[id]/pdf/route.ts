@@ -24,11 +24,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const r = await prisma.leaseReceipt.findUnique({
       where: { id },
-      include: { contract: { include: { lessee: true } } },
+      include: { contract: true },
     });
     if (!r) return jsonErr('Receipt not found', 404);
 
-    const lessee = r.contract.lessee;
+    const lessee = await prisma.lessee.findUnique({ where: { id: r.contract.lesseeId } });
     const data: ReceiptPdfData = {
       receiptNumber: r.receiptNumber ?? `RCP-${id.slice(0, 8)}`,
       receivedDate: r.receivedDate,

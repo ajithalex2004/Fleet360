@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
+import RowActionMenu from '@/components/ui/RowActionMenu';
 
 interface Contract {
   id: string;
@@ -266,7 +267,7 @@ export default function ContractsPage() {
                   </span>
                 </td>
                 <td className="px-6 py-4 text-sm">
-                  <button className="text-blue-400 hover:text-blue-300 transition-colors">View</button>
+                  <RowActionMenu actions={[{ label: 'View (coming soon)', onSelect: () => {}, disabled: true }]} />
                 </td>
               </tr>
             ))}

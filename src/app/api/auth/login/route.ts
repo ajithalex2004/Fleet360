@@ -9,8 +9,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { signSession } from '@/lib/tenant-session';
-import { ensureMfaColumns } from '@/lib/auth-mfa-schema';
+import { newSessionId, registerSession } from '@/lib/session-registry';
 import { verifyTotp, verifyRecoveryCode } from '@/lib/totp';
+import { resolveMfaRequirement } from '@/lib/mfa-policy';
+import { getActiveAccountLockout, recordLoginAttempt } from '@/lib/auth-security';
+import { customerContextForUser } from '@/lib/corporate-customer-identity';
 
 // ── Password verification (matches the PBKDF2 format used in /api/tenants/provision) ──
 
@@ -41,6 +44,9 @@ export async function POST(request: NextRequest) {
       mfaCode?: string;
       recoveryCode?: string;
     };
+    const normalizedEmail = email?.toLowerCase().trim();
+    const ipAddress = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? request.headers.get('x-real-ip');
+    const userAgent = request.headers.get('user-agent');
 
     if (!email || !password) {
       return NextResponse.json(
@@ -48,10 +54,29 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+    const activeLockout = await getActiveAccountLockout(normalizedEmail!, preferredTenantId);
+    if (activeLockout) {
+      return NextResponse.json(
+        {
+          error: 'Account locked',
+          message: 'Too many failed sign-in attempts. Try again later or contact your administrator.',
+          lockedUntil: activeLockout,
+        },
+        { status: 423 },
+      );
+    }
 
     // 1. Find the user by email
-    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail! } });
     if (!user) {
+      await recordLoginAttempt({
+        email: normalizedEmail!,
+        tenantId: preferredTenantId ?? null,
+        success: false,
+        failureReason: 'USER_NOT_FOUND',
+        ipAddress,
+        userAgent,
+      });
       // Same message for both "not found" and "wrong password" to prevent user enumeration
       return NextResponse.json(
         { error: 'Unauthorized', message: 'Invalid email or password' },
@@ -60,6 +85,15 @@ export async function POST(request: NextRequest) {
     }
 
     if (!user.isActive) {
+      await recordLoginAttempt({
+        email: normalizedEmail!,
+        tenantId: preferredTenantId ?? null,
+        userId: user.id,
+        success: false,
+        failureReason: 'USER_INACTIVE',
+        ipAddress,
+        userAgent,
+      });
       return NextResponse.json(
         { error: 'Forbidden', message: 'Your account has been disabled. Contact your administrator.' },
         { status: 403 },
@@ -77,6 +111,15 @@ export async function POST(request: NextRequest) {
     const passwordHash = rows[0]?.password_hash ?? null;
 
     if (!passwordHash) {
+      await recordLoginAttempt({
+        email: normalizedEmail!,
+        tenantId: preferredTenantId ?? null,
+        userId: user.id,
+        success: false,
+        failureReason: 'PASSWORD_NOT_SET',
+        ipAddress,
+        userAgent,
+      });
       return NextResponse.json(
         { error: 'Unauthorized', message: 'No password set for this account. Please contact your administrator.' },
         { status: 401 },
@@ -84,6 +127,15 @@ export async function POST(request: NextRequest) {
     }
 
     if (!verifyPassword(password, passwordHash)) {
+      await recordLoginAttempt({
+        email: normalizedEmail!,
+        tenantId: preferredTenantId ?? null,
+        userId: user.id,
+        success: false,
+        failureReason: 'BAD_PASSWORD',
+        ipAddress,
+        userAgent,
+      });
       return NextResponse.json(
         { error: 'Unauthorized', message: 'Invalid email or password' },
         { status: 401 },
@@ -91,18 +143,26 @@ export async function POST(request: NextRequest) {
     }
 
     // 2.5 MFA gate (after password verification)
-    await ensureMfaColumns();
     const mfaRows = await prisma.$queryRawUnsafe<{
       mfa_enabled: boolean; mfa_secret: string | null; mfa_recovery_codes: string[] | null;
     }[]>(
       `SELECT mfa_enabled, mfa_secret, mfa_recovery_codes FROM "User" WHERE id = $1`,
       user.id,
-    );
+    ).catch(() => [{ mfa_enabled: false, mfa_secret: null, mfa_recovery_codes: null }]);
     const mfaRow = mfaRows[0];
     if (mfaRow?.mfa_enabled) {
       const code = mfaCode ? String(mfaCode).trim() : '';
       const rec  = recoveryCode ? String(recoveryCode).trim() : '';
       if (!code && !rec) {
+        await recordLoginAttempt({
+          email: normalizedEmail!,
+          tenantId: preferredTenantId ?? null,
+          userId: user.id,
+          success: false,
+          failureReason: 'MFA_REQUIRED',
+          ipAddress,
+          userAgent,
+        });
         return NextResponse.json(
           { error: 'MFA required', mfaRequired: true, message: 'Enter your authenticator code.' },
           { status: 401 },
@@ -118,6 +178,15 @@ export async function POST(request: NextRequest) {
         if (consumedHash) ok = true;
       }
       if (!ok) {
+        await recordLoginAttempt({
+          email: normalizedEmail!,
+          tenantId: preferredTenantId ?? null,
+          userId: user.id,
+          success: false,
+          failureReason: 'BAD_MFA',
+          ipAddress,
+          userAgent,
+        });
         return NextResponse.json(
           { error: 'Unauthorized', mfaRequired: true, message: 'Invalid authenticator or recovery code.' },
           { status: 401 },
@@ -144,6 +213,15 @@ export async function POST(request: NextRequest) {
     });
 
     if (userTenants.length === 0) {
+      await recordLoginAttempt({
+        email: normalizedEmail!,
+        tenantId: preferredTenantId ?? null,
+        userId: user.id,
+        success: false,
+        failureReason: 'NO_TENANT_ACCESS',
+        ipAddress,
+        userAgent,
+      });
       return NextResponse.json(
         { error: 'Forbidden', message: 'No active tenant access found for this account.' },
         { status: 403 },
@@ -156,19 +234,76 @@ export async function POST(request: NextRequest) {
       : userTenants[0];
 
     if (!userTenant.tenant.isActive) {
+      await recordLoginAttempt({
+        email: normalizedEmail!,
+        tenantId: userTenant.tenantId,
+        userId: user.id,
+        success: false,
+        failureReason: 'TENANT_INACTIVE',
+        ipAddress,
+        userAgent,
+      });
       return NextResponse.json(
         { error: 'Forbidden', message: 'This tenant account is inactive.' },
         { status: 403 },
       );
     }
 
+    const mfaRequirement = await resolveMfaRequirement({
+      tenantId: userTenant.tenantId,
+      roleCode: userTenant.role.code,
+      userCreatedAt: user.createdAt,
+    });
+    if (mfaRequirement.required && !mfaRow?.mfa_enabled) {
+      await recordLoginAttempt({
+        email: normalizedEmail!,
+        tenantId: userTenant.tenantId,
+        userId: user.id,
+        success: false,
+        failureReason: 'MFA_ENROLLMENT_REQUIRED',
+        ipAddress,
+        userAgent,
+      });
+      return NextResponse.json(
+        {
+          error: 'MFA enrollment required',
+          mfaEnrollmentRequired: true,
+          message: 'Your administrator requires MFA before signing in. Contact an administrator or complete MFA setup from an active session.',
+        },
+        { status: 403 },
+      );
+    }
+
     // 4. Sign session cookie (include role so middleware can inject x-user-role)
     const plan = userTenant.tenant.plan ?? 'TRIAL';
+    const customerContext = await customerContextForUser(userTenant.tenantId, user.id).catch(() => null);
+    const sessionId = newSessionId();
+    const expiresAt = new Date(Date.now() + 86_400_000);
     const token = await signSession({
+      sessionId,
       userId:   user.id,
       tenantId: userTenant.tenantId,
+      ...(customerContext ? { customerId: customerContext.customerId, customerRole: customerContext.role } : {}),
       plan,
       role:     userTenant.role.code,
+    });
+    await registerSession({
+      id: sessionId,
+      userId: user.id,
+      tenantId: userTenant.tenantId,
+      plan,
+      role: userTenant.role.code,
+      expiresAt,
+      ipAddress,
+      userAgent,
+    });
+    await recordLoginAttempt({
+      email: normalizedEmail!,
+      tenantId: userTenant.tenantId,
+      userId: user.id,
+      success: true,
+      ipAddress,
+      userAgent,
     });
 
     // 5. Build response
@@ -188,6 +323,7 @@ export async function POST(request: NextRequest) {
         code: userTenant.tenant.code,
         plan,
       },
+      customer: customerContext,
       // Return all tenants so the client can show a tenant-switcher if needed
       availableTenants: userTenants.map(ut => ({
         id:   ut.tenant.id,

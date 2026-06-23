@@ -14,28 +14,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureApiKeyTable, generateApiKey } from '@/lib/api-keys';
 import { requirePlan } from '@/lib/plan-limits';
-import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { requireAdminPermission, requireDangerApproval, resolveTenantBoundary } from '@/lib/admin-policy';
+import { recordAdminChange } from '@/lib/admin-change-history';
 
 export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string }>; }
 
-function authorize(req: NextRequest, tenantId: string): { ok: true; userId: string } | { ok: false; res: NextResponse } {
-  const role     = req.headers.get('x-user-role')   ?? '';
-  const userId   = req.headers.get('x-user-id')     ?? '';
-  const ctxTenant = req.headers.get('x-tenant-id')  ?? '';
-  if (!userId) return { ok: false, res: NextResponse.json({ ok: false, error: 'Not authenticated' }, { status: 401 }) };
-  if (role !== 'SUPER_ADMIN' && ctxTenant !== tenantId) {
-    return { ok: false, res: NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 }) };
-  }
-  return { ok: true, userId };
-}
-
 export async function GET(req: NextRequest, { params }: RouteParams) {
   const { id: tenantId } = await params;
-  const auth = authorize(req, tenantId);
-  if (!auth.ok) return auth.res;
+  const auth = await requireAdminPermission(req, 'view', 'integrations');
+  if (auth instanceof NextResponse) return auth;
+  const scopedTenantId = resolveTenantBoundary(auth.ctx, tenantId);
+  if (scopedTenantId instanceof NextResponse) return scopedTenantId;
 
   await ensureApiKeyTable();
   const rows = await prisma.$queryRawUnsafe<Array<{
@@ -75,8 +67,16 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
   const { id: tenantId } = await params;
-  const auth = authorize(req, tenantId);
-  if (!auth.ok) return auth.res;
+  const auth = await requireAdminPermission(req, 'create', 'integrations');
+  if (auth instanceof NextResponse) return auth;
+  const scopedTenantId = resolveTenantBoundary(auth.ctx, tenantId);
+  if (scopedTenantId instanceof NextResponse) return scopedTenantId;
+  const approval = await requireDangerApproval(req, auth.ctx, 'api-key.create', {
+    tenantId,
+    targetType: 'ApiKey',
+    summary: `Create API key for tenant ${tenantId}.`,
+  });
+  if (approval) return approval;
   // API keys require a paid plan (any tier above TRIAL).
   const gate = requirePlan(req, 'STANDARD');
   if (gate) return gate;
@@ -112,19 +112,20 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       `INSERT INTO tenant_api_keys (tenant_id, name, prefix, key_hash, scopes, created_by_user_id)
        VALUES ($1, $2, $3, $4, $5::jsonb, $6)
        RETURNING id::text`,
-      tenantId, name, prefix, hash, JSON.stringify(scopes), auth.userId,
+      tenantId, name, prefix, hash, JSON.stringify(scopes), auth.ctx.userId,
     );
     const id = inserted[0]?.id;
 
-    void logAudit({
-      tenantId, tenantName: tenant.name,
-      userId: auth.userId,
-      userRole: 'TENANT_ADMIN',
+    await recordAdminChange({
+      req,
+      ctx: auth.ctx,
+      tenantId,
       entityType: 'ApiKey',
       entityId: id,
       entityName: name,
       action: 'CREATE',
-      details: `API key "${name}" created (prefix ${prefix}, scopes: ${scopes.join(',') || 'none'}).`,
+      after: { id, name, prefix, scopes },
+      summary: `API key "${name}" created (prefix ${prefix}, scopes: ${scopes.join(',') || 'none'}).`,
     });
 
     return NextResponse.json({

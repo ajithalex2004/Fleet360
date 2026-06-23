@@ -81,7 +81,11 @@ export async function GET(
       })),
 
       lines: (quotation.lineItems ?? []).map(l => ({
+        itemType: l.itemType,
         description: l.description,
+        quantity: l.quantity ?? 1,
+        unitRate: Number(l.unitRate ?? 0),
+        monthlyAmount: Number(l.monthlyAmount ?? 0),
         amount: Number(l.totalAmount ?? 0),
       })),
 

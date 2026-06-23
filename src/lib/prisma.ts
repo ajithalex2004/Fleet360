@@ -1,5 +1,28 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 
+function isNeonDatabaseUrl(url?: string | null): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname.endsWith('.neon.tech') || parsed.searchParams.get('options')?.includes('endpoint=') === true;
+  } catch {
+    return false;
+  }
+}
+
+export function getDatabaseTarget() {
+  try {
+    const parsed = new URL(process.env.DATABASE_URL ?? '');
+    return {
+      host: parsed.hostname,
+      database: parsed.pathname.replace(/^\//, ''),
+      neon: isNeonDatabaseUrl(parsed.toString()),
+    };
+  } catch {
+    return { host: 'invalid', database: '', neon: false };
+  }
+}
+
 // Fix BigInt serialization for JSON responses
 (BigInt.prototype as unknown as { toJSON: () => string }).toJSON = function () {
   return this.toString();
@@ -55,6 +78,7 @@ function isLocalCircuitOpen(): boolean {
 let _localPrismaPromise: Promise<import('@/lib/prisma-local').LocalPrismaType> | null = null;
 
 function getLocalPrismaPromise() {
+  if (process.env.FLEET360_ENABLE_LOCAL_MIRROR !== 'true') return null;
   if (!process.env.LOCAL_DATABASE_URL) return null;
   if (!_localPrismaPromise) {
     _localPrismaPromise = import('@/lib/prisma-local')
@@ -71,7 +95,7 @@ function getLocalPrismaPromise() {
 // ── Primary Prisma client (Neon) ──────────────────────────────────────────────
 const prismaClientSingleton = () => {
   const client = new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+    log: process.env.NODE_ENV === 'development' ? ['warn'] : ['error'],
   });
 
   // Dual-write middleware — mirrors every write to local DB automatically.
@@ -103,7 +127,7 @@ async function mirrorToLocal(params: Prisma.MiddlewareParams) {
   if (!localPrisma) return;
 
   const model    = params.model as keyof typeof localPrisma;
-  const delegate = localPrisma[model] as Record<string, (args: unknown) => Promise<unknown>>;
+  const delegate = localPrisma[model] as unknown as Record<string, (args: unknown) => Promise<unknown>>;
   if (!delegate || typeof delegate[params.action] !== 'function') return;
 
   // Race against a 5-second timeout — local DB must respond promptly

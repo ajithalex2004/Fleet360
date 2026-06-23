@@ -24,6 +24,9 @@ import { prisma } from '@/lib/prisma';
 import { aggregatePreBilling } from '@/lib/leasing/pre-billing-aggregator';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { requireDangerApproval } from '@/lib/admin-policy';
+import { recordOperationalChange, requireOperationalContext } from '@/lib/cross-module-governance';
+import { assertContractBillingScope } from '@/lib/leasing-billing-reconciliation';
 
 export const runtime = 'nodejs';
 
@@ -64,6 +67,10 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+    const ctx = requireOperationalContext(req, 'leasing', { write: Boolean(parsed.data.commit) });
+    if (ctx instanceof NextResponse) return ctx;
+    const boundary = await assertContractBillingScope(parsed.data.contractId, ctx);
+    if (boundary) return boundary;
 
     const aggregated = await aggregatePreBilling({
       contractId: parsed.data.contractId,
@@ -78,6 +85,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ mode: 'preview', ...aggregated });
     }
 
+    const approval = await requireDangerApproval(req, {
+      userId: ctx.userId,
+      tenantId: ctx.tenantId,
+      role: ctx.role,
+      isSuperAdmin: ctx.isSuperAdmin,
+      isTenantAdmin: ctx.role === 'TENANT_ADMIN',
+    }, 'leasing.prebilling.commit', {
+      tenantId: ctx.tenantId,
+      targetType: 'LeasePreBillingStatement',
+      targetId: parsed.data.contractId,
+      summary: `Commit pre-billing for ${aggregated.contractNumber ?? aggregated.contractId}`,
+      payload: { before: null, after: aggregated },
+      requiredApprovals: 2,
+    });
+    if (approval) return approval;
+
     // Commit: persist as LeasePreBillingStatement.
     const dueDate = parsed.data.dueDate
       ? new Date(parsed.data.dueDate)
@@ -87,6 +110,16 @@ export async function POST(req: NextRequest) {
 
     const count = await prisma.leasePreBillingStatement.count();
     const statementNo = `PBS-${String(count + 1).padStart(5, '0')}`;
+    const duplicate = await prisma.leasePreBillingStatement.findFirst({
+      where: { contractId: aggregated.contractId, billingPeriod, status: { not: 'CANCELLED' } },
+      select: { id: true, statementNo: true },
+    });
+    if (duplicate) {
+      return NextResponse.json(
+        { error: 'Pre-billing already exists for this contract and period', statementId: duplicate.id, statementNo: duplicate.statementNo },
+        { status: 409 },
+      );
+    }
 
     const statement = await prisma.leasePreBillingStatement.create({
       data: {
@@ -117,6 +150,15 @@ export async function POST(req: NextRequest) {
       entityName: statementNo,
       action: 'CREATE',
       details: `Aggregated pre-billing ${statementNo} for contract ${aggregated.contractNumber ?? aggregated.contractId} (${billingPeriod}): base ${aggregated.baseRent}, fuel ${aggregated.fuelCharges}, fines ${aggregated.fineCharges}, overage ${aggregated.overageCharges}, total ${aggregated.totalAmount.toFixed(2)} ${aggregated.currency}`,
+    });
+    await recordOperationalChange({
+      req,
+      ctx,
+      entityType: 'LeasePreBillingStatement',
+      entityId: statement.id,
+      action: 'CREATE',
+      after: { statement, sources: aggregated.sources },
+      summary: `Committed pre-billing ${statementNo} for ${aggregated.contractNumber ?? aggregated.contractId}`,
     });
 
     return NextResponse.json(

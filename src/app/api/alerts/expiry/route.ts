@@ -159,6 +159,46 @@ export async function GET(req: NextRequest) {
   // ──────────────────────────────────────────────
   // Apply days filter & sort
   // ──────────────────────────────────────────────
+  if (module === 'ALL' || module === 'LEASING') {
+    try {
+      const rows = await prisma.$queryRawUnsafe<any[]>(`
+        SELECT
+          c.id::text,
+          COALESCE(c.contract_number, c.id::text) AS contract_number,
+          COALESCE(l.name, 'Unknown Lessee') AS lessee_name,
+          c.end_date AS expiry_date,
+          EXTRACT(EPOCH FROM (c.end_date::timestamptz - NOW())) / 86400 AS days_remaining
+        FROM lease_contracts_v2 c
+        LEFT JOIN lessees l ON l.id = c.lessee_id
+        WHERE c.end_date IS NOT NULL
+          AND c.deleted_at IS NULL
+          AND COALESCE(c.status, 'ACTIVE') IN ('ACTIVE', 'EXTENDED', 'APPROVED')
+          AND EXTRACT(EPOCH FROM (c.end_date::timestamptz - NOW())) / 86400 <= 90
+          AND NOT EXISTS (
+            SELECT 1
+            FROM lease_renewals r
+            WHERE r.original_contract_id = c.id
+              AND COALESCE(r.status, 'PROPOSED') IN ('PROPOSED', 'SENT_TO_CUSTOMER', 'ACCEPTED')
+          )
+        ORDER BY days_remaining ASC
+      `);
+      for (const r of rows) {
+        allAlerts.push({
+          id: `lctr-${r.id}`,
+          type: 'CONTRACT_RENEWAL',
+          name: `${r.contract_number} · ${r.lessee_name}`,
+          document_type: 'Lease Contract Renewal',
+          expiry_date: r.expiry_date,
+          days_remaining: parseFloat(r.days_remaining),
+          module: 'LEASING',
+          action_url: `/leasing/renewals?contractId=${r.id}`,
+        });
+      }
+    } catch (_) {
+      // table may not exist
+    }
+  }
+
   const filtered = allAlerts
     .filter((a) => a.days_remaining <= maxDays)
     .sort((a, b) => a.days_remaining - b.days_remaining);

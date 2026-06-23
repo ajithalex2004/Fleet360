@@ -15,6 +15,8 @@ import { prisma } from '@/lib/prisma';
 import { optimiseRoute, type GeoStop } from '@/lib/agents/route-optimiser/tsp';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { requireBusEntity, requireBusOpsContext } from '@/lib/bus-ops-route-guards';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
 
 export const runtime = 'nodejs';
 
@@ -42,11 +44,16 @@ async function loadGeoStops(routeId: string) {
   return { stops, geoStops, skipped };
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const route = await prisma.busRoute.findUnique({ where: { id: params.id }, select: { id: true, name: true } });
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const ctx = await requireBusOpsContext(_req);
+  if (ctx instanceof NextResponse) return ctx;
+  const boundary = await requireBusEntity(ctx, 'bus_routes', id, 'Route');
+  if (boundary) return boundary;
+  const route = await prisma.busRoute.findUnique({ where: { id }, select: { id: true, name: true } });
   if (!route) return NextResponse.json({ error: 'Route not found' }, { status: 404 });
 
-  const { stops, geoStops, skipped } = await loadGeoStops(params.id);
+  const { stops, geoStops, skipped } = await loadGeoStops(id);
   if (geoStops.length < 3) {
     return NextResponse.json({
       ok: false,
@@ -74,12 +81,17 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   });
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   try {
-    const route = await prisma.busRoute.findUnique({ where: { id: params.id }, select: { id: true, name: true } });
+    const ctx = await requireBusOpsContext(req, { write: true });
+    if (ctx instanceof NextResponse) return ctx;
+    const boundary = await requireBusEntity(ctx, 'bus_routes', id, 'Route');
+    if (boundary) return boundary;
+    const route = await prisma.busRoute.findUnique({ where: { id }, select: { id: true, name: true } });
     if (!route) return NextResponse.json({ error: 'Route not found' }, { status: 404 });
 
-    const { stops, geoStops } = await loadGeoStops(params.id);
+    const { stops, geoStops } = await loadGeoStops(id);
     if (geoStops.length < 3) {
       return NextResponse.json({ error: 'Need at least 3 geocoded stops to optimise' }, { status: 400 });
     }
@@ -100,24 +112,42 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       ),
       // Persist the new total distance on the route.
       prisma.busRoute.update({
-        where: { id: params.id },
+        where: { id },
         data: { totalDistanceKm: round2(result.optimisedDistanceKm) },
       }),
     ]);
 
     void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
-      userId: req.headers.get('x-user-id') ?? 'system',
-      userRole: req.headers.get('x-user-role') ?? 'STAFF',
+      tenantId: ctx.tenantId,
+      userId: ctx.userId,
+      userRole: ctx.role,
       entityType: 'BusRoute',
-      entityId: params.id,
+      entityId: id,
       action: 'UPDATE',
       details: `Route "${route.name}" re-optimised (TSP): ${round2(result.originalDistanceKm)} → ${round2(result.optimisedDistanceKm)} km (saved ${round2(result.distanceSavedKm)} km / ${round2(result.distanceSavedPct)}%).`,
+    });
+
+    const workflow = await triggerServiceWorkflow({
+      req,
+      ctx,
+      serviceTypeKey: 'STAFF_ROUTE_ASSIGNMENT',
+      referenceType: 'BusRoute',
+      referenceId: id,
+      referenceNumber: route.name ?? id,
+      contextData: {
+        routeId: id,
+        routeName: route.name,
+        originalDistanceKm: round2(result.originalDistanceKm),
+        optimisedDistanceKm: round2(result.optimisedDistanceKm),
+        distanceSavedKm: round2(result.distanceSavedKm),
+        distanceSavedPct: round2(result.distanceSavedPct),
+      },
     });
 
     return NextResponse.json({
       ok: true,
       applied: true,
+      workflow,
       route: { id: route.id, name: route.name },
       originalDistanceKm: round2(result.originalDistanceKm),
       optimisedDistanceKm: round2(result.optimisedDistanceKm),
@@ -125,7 +155,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       distanceSavedPct: round2(result.distanceSavedPct),
     });
   } catch (err) {
-    captureException(err, { context: 'bus-ops.routes.optimise', tags: { routeId: params.id } });
+    captureException(err, { context: 'bus-ops.routes.optimise', tags: { routeId: id } });
     return NextResponse.json({ error: 'Optimisation failed' }, { status: 500 });
   }
 }

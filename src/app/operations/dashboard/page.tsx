@@ -315,7 +315,7 @@ export default function OperationsDashboardPage() {
                                 Cancel
                             </button>
                             <button
-                                onClick={() => handleAcknowledge(selectedRequest, ackComments)}
+                                onClick={() => handleAcknowledge(selectedRequest)}
                                 className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700"
                             >
                                 Acknowledge & Forward

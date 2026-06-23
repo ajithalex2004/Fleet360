@@ -98,7 +98,6 @@ const translations: Record<string, Record<Language, string>> = {
   'module.reports':      { en: 'Reports',              ar: 'التقارير' },
   'module.approvals':    { en: 'Approvals',            ar: 'الموافقات' },
   'module.bus_ops':      { en: 'Staff Transport',      ar: 'نقل الموظفين' },
-  'module.school_bus':   { en: 'School Bus',           ar: 'حافلة مدرسية' },
   'module.sustainability':{ en: 'Sustainability & ESG', ar: 'الاستدامة والحوكمة' },
 };
 
@@ -132,7 +131,6 @@ const arabicLabels: Record<string, string> = {
   // ── Nav item labels — Finance ─────────────────────────────
   'Dashboard':              'لوحة التحكم',
   'Analytics & BI':         'التحليلات والذكاء الاصطناعي',
-  'CRM Pipeline':           'خط إدارة العملاء',
   'Invoices':               'الفواتير',
   'Recurring Invoices':     'الفواتير المتكررة',
   'Payments':               'المدفوعات',
@@ -360,3 +358,4 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 export function useLanguage() {
   return useContext(LanguageContext);
 }
+

@@ -116,13 +116,13 @@ export default function QuotationsPage() {
             id: `quot-${Date.now()}`,
             requestId,
             garageId: selectedGarageId,
-            garageName: selectedGarage?.name,
+            garageName: selectedGarage?.name ?? 'Selected Garage',
             submittedDate: new Date().toISOString(),
             validUntil: quotationForm.validUntil,
             laborCost: quotationForm.laborCost,
             partsCost: quotationForm.partsCost,
-            additionalCosts: quotationForm.additionalCosts,
-            taxAmount: quotationForm.taxAmount,
+            consumablesCost: quotationForm.additionalCosts,
+            vatAmount: quotationForm.taxAmount,
             totalCost: calculateTotalCost(),
             estimatedDuration: quotationForm.estimatedDuration,
             partsBreakdown: quotationForm.partsBreakdown,
@@ -290,7 +290,7 @@ export default function QuotationsPage() {
                                     <td className="px-4 py-3 text-sm font-medium text-white">Valid Until</td>
                                     {quotationsToCompare.map(q => (
                                         <td key={q.id} className="px-4 py-3 text-sm text-slate-300">
-                                            {new Date(q.validUntil).toLocaleDateString()}
+                                            {new Date(q.validUntil || new Date().toISOString()).toLocaleDateString()}
                                         </td>
                                     ))}
                                 </tr>
@@ -334,8 +334,8 @@ export default function QuotationsPage() {
                                         </span>
                                     </div>
                                     <p className="text-sm text-slate-500">
-                                        Submitted: {new Date(quotation.submittedDate).toLocaleDateString()} •
-                                        Valid until: {new Date(quotation.validUntil).toLocaleDateString()}
+                                        Submitted: {new Date(quotation.submittedDate ?? new Date().toISOString()).toLocaleDateString()} •
+                                        Valid until: {new Date(quotation.validUntil || new Date().toISOString()).toLocaleDateString()}
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -388,7 +388,7 @@ export default function QuotationsPage() {
                                 </div>
                             </div>
 
-                            {quotation.partsBreakdown.length > 0 && (
+                            {(quotation.partsBreakdown?.length ?? 0) > 0 && (
                                 <div className="mt-4">
                                     <h4 className="text-sm font-medium text-white mb-2">Parts Breakdown</h4>
                                     <div className="rounded-lg border border-white/10 overflow-hidden">
@@ -403,7 +403,7 @@ export default function QuotationsPage() {
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-white/10 bg-slate-900">
-                                                {quotation.partsBreakdown.map(part => (
+                                                {quotation.partsBreakdown?.map(part => (
                                                     <tr key={part.id}>
                                                         <td className="px-3 py-2 text-sm text-white">{part.name}</td>
                                                         <td className="px-3 py-2 text-sm text-slate-300">{part.partNumber || '-'}</td>

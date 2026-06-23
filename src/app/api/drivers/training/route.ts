@@ -4,7 +4,6 @@ import { prisma } from '@/lib/prisma';
 export async function GET(req: NextRequest) {
   try {
     const trainings = await prisma.driverTraining.findMany({
-      where: { deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
     return NextResponse.json(trainings);

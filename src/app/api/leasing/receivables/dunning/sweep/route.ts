@@ -34,13 +34,18 @@ import { renderDunningEmail, type DunningStage } from '@/lib/finance/dunning-tem
 import { sendEmail } from '@/services/email/emailService';
 import { logAudit } from '@/lib/audit';
 import { captureException, captureMessage } from '@/lib/sentry';
+import { requireOperationalContext, requireOperationalPermission } from '@/lib/cross-module-governance';
+import { legacyLeasingBillingWriteMoved } from '@/lib/finance-leasing-billing-routing';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  const moved = legacyLeasingBillingWriteMoved(req, '/api/finance/leasing-billing/receivables/dunning/sweep');
+  if (moved) return moved;
   // Optional shared-secret auth for external cron triggers.
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && !req.headers.get('x-tenant-id')) {
+  const hasTenantHeaders = Boolean(req.headers.get('x-tenant-id'));
+  if (cronSecret && !hasTenantHeaders) {
     const auth = req.headers.get('authorization');
     if (auth !== `Bearer ${cronSecret}`) {
       return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
@@ -48,6 +53,18 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    if (hasTenantHeaders) {
+      const ctx = requireOperationalContext(req, 'leasing', { write: true, requestedTenantId: req.nextUrl.searchParams.get('tenantId') });
+      if (ctx instanceof NextResponse) return ctx;
+      const permission = await requireOperationalPermission(ctx, [
+        { module: 'finance', action: 'approve', resource: 'leasing_billing' },
+        { module: 'finance', action: 'edit', resource: 'leasing_billing' },
+        { module: 'leasing', action: 'create', resource: 'dunning' },
+        { module: 'leasing', action: 'approve', resource: 'invoices' },
+      ], { message: 'You do not have access to run the Leasing dunning sweep' });
+      if (permission) return permission;
+    }
+
     const dryRun = req.nextUrl.searchParams.get('dryRun') === '1';
     const lesseeFilter = req.nextUrl.searchParams.get('lesseeId') ?? undefined;
 

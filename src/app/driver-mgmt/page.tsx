@@ -2,10 +2,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  UserCog, Users, CheckCircle2, Clock, AlertOctagon, Activity, RefreshCw, Plus,
-  IdCard, Calendar, BarChart3, FileWarning, Check, X, Minus, AlertTriangle,
+  Users, CheckCircle2, Clock, AlertOctagon, Activity, RefreshCw, Plus,
+  Calendar, BarChart3, FileWarning, Check, X, Minus, AlertTriangle,
 } from 'lucide-react';
 import { PageHeader, KpiCard, Panel } from '@/components/ui/page-theme';
+import ChauffeurDriverIcon from '@/components/icons/ChauffeurDriverIcon';
 
 interface ComplianceSummary {
   total: number;
@@ -101,7 +102,7 @@ export default function DriverDashboard() {
       <PageHeader
         title="Driver Management Hub"
         subtitle="Central driver registry — compliance, identity & assignments"
-        icon={UserCog}
+        icon={ChauffeurDriverIcon}
         accent="cyan"
         actions={
           <>

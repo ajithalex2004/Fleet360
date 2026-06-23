@@ -25,6 +25,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import {
   verifyQrToken,
@@ -35,6 +36,8 @@ import {
 } from '@/lib/bus-checkin';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { requireBusEntity, requireBusOpsContext } from '@/lib/bus-ops-route-guards';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
 
 export const runtime = 'nodejs';
 
@@ -42,6 +45,8 @@ const METHODS: CheckinMethod[] = ['QR', 'NFC', 'BLE', 'MANUAL'];
 
 export async function POST(req: NextRequest) {
   try {
+    const ctx = await requireBusOpsContext(req, { write: true });
+    if (ctx instanceof NextResponse) return ctx;
     const body = await req.json();
     const method = String(body?.method ?? '').toUpperCase() as CheckinMethod;
     if (!METHODS.includes(method)) {
@@ -124,6 +129,12 @@ export async function POST(req: NextRequest) {
     if (!scheduleId) {
       return NextResponse.json({ error: 'Could not resolve scheduleId' }, { status: 400 });
     }
+    const scheduleBoundary = await requireBusEntity(ctx, 'trip_schedules', scheduleId, 'Trip');
+    if (scheduleBoundary) return scheduleBoundary;
+    if (staffMemberId) {
+      const staffBoundary = await requireBusEntity(ctx, 'staff_members', staffMemberId, 'Staff member');
+      if (staffBoundary) return staffBoundary;
+    }
 
     /* ── Resolve TripPassenger (the link to denormalise status onto) ──── */
 
@@ -141,10 +152,12 @@ export async function POST(req: NextRequest) {
     if (!passengerId) {
       return NextResponse.json({ error: `Staff member is not a passenger on this trip` }, { status: 404 });
     }
+    const passengerBoundary = await requireBusEntity(ctx, 'trip_passengers', passengerId, 'Passenger');
+    if (passengerBoundary) return passengerBoundary;
 
     /* ── Persist immutable event + denormalise status ──────────────────── */
 
-    const performedBy = req.headers.get('x-user-id') ?? body?.performedBy ?? null;
+    const performedBy = ctx.userId ?? body?.performedBy ?? null;
     const performedAt = body?.performedAt ? new Date(body.performedAt) : new Date();
 
     const [event, passenger] = await prisma.$transaction([
@@ -160,8 +173,8 @@ export async function POST(req: NextRequest) {
           performedAt,
           performedBy,
           rawPayload: body && typeof body === 'object'
-            ? (body as Record<string, unknown>)
-            : null,
+            ? (body as Prisma.InputJsonObject)
+            : Prisma.JsonNull,
         },
       }),
       prisma.tripPassenger.update({
@@ -173,16 +186,35 @@ export async function POST(req: NextRequest) {
     ]);
 
     void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
+      tenantId: ctx.tenantId,
       userId: performedBy ?? `method:${method}`,
-      userRole: req.headers.get('x-user-role') ?? 'STAFF',
+      userRole: ctx.role,
       entityType: 'TripPassenger',
       entityId: passengerId,
       action: 'UPDATE',
       details: `${direction} via ${method}${identifier ? ` (${identifier.slice(0, 16)})` : ''}${resolvedNote} on schedule ${scheduleId.slice(0, 8)}.`,
     });
 
-    return NextResponse.json({ ok: true, event, passenger });
+    const workflow = method === 'MANUAL'
+      ? await triggerServiceWorkflow({
+          req,
+          ctx,
+          serviceTypeKey: 'STAFF_ATTENDANCE_EXCEPTION',
+          referenceType: 'BoardingEvent',
+          referenceId: event.id,
+          referenceNumber: `${direction}-${method}-${String(event.id).slice(0, 8)}`,
+          contextData: {
+            scheduleId,
+            passengerId,
+            staffMemberId,
+            direction,
+            method,
+          },
+          force: true,
+        })
+      : null;
+
+    return NextResponse.json({ ok: true, event, passenger, workflow });
   } catch (err) {
     captureException(err, { context: 'bus-ops.checkin' });
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Check-in failed' }, { status: 500 });

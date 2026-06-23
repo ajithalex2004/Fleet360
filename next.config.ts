@@ -4,10 +4,8 @@ import type { NextConfig } from "next";
 // Everything else is handled by Next.js API routes directly
 const GO_BACKEND_ROUTES = [
   "vehicles",
-  "maintenance-requests",
   "maintenance",
   "service-requests",
-  "drivers",
   "quotations",
   "garages",
   "alert-configs",

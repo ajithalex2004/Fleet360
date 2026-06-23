@@ -32,6 +32,7 @@ yarn-error.log*
 
 # backend runtime logs (regenerated each run)
 backend/*.log
+fleet360-dev*.log
 
 # Go build artifacts
 backend/*.exe

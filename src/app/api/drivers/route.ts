@@ -11,6 +11,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import {
+  attachTenantToEntity,
+  ensureOperationalTenantColumn,
+  recordOperationalChange,
+  requireOperationalContext,
+  tenantScopedIds,
+} from '@/lib/cross-module-governance';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
 
 function serialize(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj;
@@ -62,14 +70,22 @@ function complianceFlags(d: {
 
 export async function GET(request: NextRequest) {
   try {
-    const sp       = request.nextUrl.searchParams;
+    const sp = request.nextUrl.searchParams;
+    const ctx = requireOperationalContext(request, 'drivers', { requestedTenantId: sp.get('tenantId') });
+    if (ctx instanceof NextResponse) return ctx;
+    await ensureOperationalTenantColumn('drivers');
+
     const status   = sp.get('status');
     const type     = sp.get('driverType');
     const search   = sp.get('search');
     const expiring = sp.get('expiring'); // 'true' → only compliance-issue drivers
 
+    const ids = await tenantScopedIds('drivers', ctx.tenantId, { activeOnly: true });
+    if (ids.length === 0) return NextResponse.json([]);
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const where: any = { deletedAt: null };
+    where.id = { in: ids };
     if (status) where.status     = status;
     if (type)   where.driverType = type;
     if (search) {
@@ -117,8 +133,12 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const ctx = requireOperationalContext(request, 'drivers', { write: true });
+    if (ctx instanceof NextResponse) return ctx;
+    await ensureOperationalTenantColumn('drivers');
+
     const body = await request.json();
 
     // Required fields
@@ -167,8 +187,33 @@ export async function POST(request: Request) {
         garageId:              body.garageId               ?? null,
       },
     });
+    await attachTenantToEntity('drivers', driver.id, ctx.tenantId);
+    await recordOperationalChange({
+      req: request,
+      ctx,
+      entityType: 'Driver',
+      entityId: driver.id,
+      action: 'CREATE',
+      after: driver,
+      summary: `Created driver ${driver.name ?? driver.licenseNumber ?? driver.id}`,
+    });
 
-    return NextResponse.json(serialize(driver), { status: 201 });
+    const workflow = await triggerServiceWorkflow({
+      req: request,
+      ctx,
+      serviceTypeKey: 'DRIVER_ONBOARDING',
+      referenceType: 'Driver',
+      referenceId: driver.id,
+      referenceNumber: driver.licenseNumber ?? driver.id,
+      contextData: {
+        driverId: driver.id,
+        driverName: driver.name,
+        driverType: driver.driverType,
+        status: driver.status,
+      },
+    });
+
+    return NextResponse.json(serialize({ ...driver, workflow }), { status: 201 });
   } catch (error) {
     console.error('[Driver Hub] POST /api/drivers:', error);
     return NextResponse.json(

@@ -1,9 +1,10 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  lookupVehicle, KNOWN_MAKES, getModelsForMake, getSegmentDefaults,
+  lookupVehicle, KNOWN_MAKES, getSegmentDefaults,
   type VehicleKnowledge,
 } from '@/lib/vehicle-knowledge-base';
+import { getModelsForMakeAndVehicleType } from '@/lib/vehicleMaster';
 
 interface VehicleType {
   id: string;
@@ -378,7 +379,7 @@ export default function VehicleTypesPage() {
                     <input
                       list="vt-makes-list"
                       value={form.make ?? ''}
-                      onChange={e => f('make', e.target.value)}
+                      onChange={e => setForm((prev) => ({ ...prev, make: e.target.value, model: '' }))}
                       placeholder="e.g. Toyota"
                       className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
                     <datalist id="vt-makes-list">
@@ -396,7 +397,9 @@ export default function VehicleTypesPage() {
                       placeholder="e.g. Fortuner"
                       className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
                     <datalist id="vt-models-list">
-                      {getModelsForMake(form.make ?? '').map(m => <option key={m} value={m} />)}
+                      {getModelsForMakeAndVehicleType(form.make ?? '', form.vehicleClass ?? '').map((m) => (
+                        <option key={m.model} value={m.model} />
+                      ))}
                     </datalist>
                   </div>
                   <div className="col-span-2">
@@ -439,7 +442,19 @@ export default function VehicleTypesPage() {
                       {autoFilledFields.has('vehicleClass') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
                     </label>
                     <select value={form.vehicleClass ?? ''}
-                      onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('vehicleClass'); return s; }); f('vehicleClass', e.target.value); }}
+                      onChange={e => {
+                        const nextVehicleClass = e.target.value;
+                        setAutoFilledFields(prev => { const s = new Set(prev); s.delete('vehicleClass'); return s; });
+                        setForm((prev) => {
+                          const modelStillValid = !prev.model
+                            || getModelsForMakeAndVehicleType(prev.make ?? '', nextVehicleClass).some((m) => m.model === prev.model);
+                          return {
+                            ...prev,
+                            vehicleClass: nextVehicleClass,
+                            model: modelStillValid ? prev.model : '',
+                          };
+                        });
+                      }}
                       className={`w-full bg-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none ${autoFilledFields.has('vehicleClass') ? 'border border-blue-500/50' : 'border border-white/10 focus:border-orange-500/50'}`}>
                       {(GROUP_CLASS_MAP[form.vehicleGroup ?? ''] ?? ALL_VEHICLE_CLASSES).map(c => (
                         <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>

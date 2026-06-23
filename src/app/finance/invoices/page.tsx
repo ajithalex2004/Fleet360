@@ -12,6 +12,12 @@ interface Invoice {
   paid_amount: number; currency: string; issue_date: string; due_date?: string;
   payment_status: string; notes?: string; created_at: string; line_items?: LineItem[];
 }
+type CreatedInvoicePayload = {
+  success: true;
+  id: string;
+  invoiceNumber: string;
+  invoice?: Invoice;
+};
 interface Payment {
   id: string; amount: number; payment_date: string; payment_method: string;
   reference?: string; notes?: string;
@@ -48,7 +54,15 @@ function StatusBadge({ status }: { status: string }) {
 function EmptyLineItem(): LineItem { return { description: '', qty: 1, unitPrice: 0 }; }
 
 /* ─────────────────────────── CreateModal ────────────────────── */
-function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => void; onCreated: () => void; defaultModule?: string }) {
+function CreateModal({
+  onClose,
+  onCreated,
+  defaultModule,
+}: {
+  onClose: () => void;
+  onCreated: (created: CreatedInvoicePayload) => void;
+  defaultModule?: string;
+}) {
   const [form, setForm] = useState({
     clientName: '', clientEmail: '', clientPhone: '', clientAddress: '',
     serviceType: defaultModule === 'SCHOOL_BUS' ? 'TRANSPORT_EDU' : 'GENERAL',
@@ -61,6 +75,7 @@ function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => voi
   });
   const [lineItems, setLineItems] = useState<LineItem[]>([EmptyLineItem()]);
   const [saving, setSaving] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const isSchoolBus = form.module === 'SCHOOL_BUS';
 
@@ -87,6 +102,7 @@ function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => voi
 
   const submit = async () => {
     if (!form.clientName) return alert('Client name is required');
+    setSubmitError('');
     setSaving(true);
     // Compose school-bus-specific description enrichment
     let enrichedNotes = form.notes;
@@ -108,14 +124,19 @@ function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => voi
         referenceType: isSchoolBus ? 'SCHOOL_BUS_ALLOCATION' : undefined,
       }),
     });
+    const payload = await res.json().catch(() => null);
     setSaving(false);
-    if (res.ok) { onCreated(); onClose(); }
-    else alert('Failed to create invoice');
+    if (res.ok && payload) {
+      onCreated(payload as CreatedInvoicePayload);
+      onClose();
+    } else {
+      setSubmitError(payload?.error ?? 'Failed to create invoice');
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" data-testid="create-invoice-modal" className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b border-white/10">
           <h2 className="text-lg font-bold text-white">New Invoice</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white text-xl leading-none">×</button>
@@ -179,7 +200,7 @@ function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => voi
                       placeholder="e.g. Term 1 2024-25" className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-xs text-white" />
                   </div>
                 </div>
-                <p className="text-[10px] text-slate-600">👤 Use "Client Name" for the student name and "Email/Phone" for parent contact.</p>
+                <p className="text-[10px] text-slate-600">Use &quot;Client Name&quot; for the student name and &quot;Email/Phone&quot; for parent contact.</p>
               </div>
             )}
             <div>
@@ -217,9 +238,9 @@ function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => voi
                   <input value={item.description} onChange={e => setItem(i, 'description', e.target.value)}
                     placeholder="Item description"
                     className="col-span-6 bg-slate-800 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white" />
-                  <input type="number" value={item.qty} min={1} onChange={e => setItem(i, 'qty', e.target.value)}
+                  <input type="number" placeholder="Qty" value={item.qty} min={1} onChange={e => setItem(i, 'qty', e.target.value)}
                     className="col-span-2 bg-slate-800 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white text-right" />
-                  <input type="number" value={item.unitPrice} min={0} step={0.01} onChange={e => setItem(i, 'unitPrice', e.target.value)}
+                  <input type="number" placeholder="Unit Price" value={item.unitPrice} min={0} step={0.01} onChange={e => setItem(i, 'unitPrice', e.target.value)}
                     className="col-span-3 bg-slate-800 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white text-right" />
                   <button onClick={() => removeItem(i)} disabled={lineItems.length === 1}
                     className="col-span-1 text-slate-600 hover:text-red-400 text-center disabled:opacity-30">×</button>
@@ -263,6 +284,11 @@ function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => voi
             <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
               rows={2} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white resize-none" />
           </div>
+          {submitError && (
+            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+              {submitError}
+            </div>
+          )}
         </div>
         <div className="flex gap-2 p-5 border-t border-white/10">
           <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-white/10 text-sm text-slate-400 hover:text-white">Cancel</button>
@@ -297,7 +323,7 @@ function PaymentModal({ invoice, onClose, onPaid }: { invoice: Invoice; onClose:
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md">
+      <div role="dialog" aria-modal="true" data-testid="record-payment-modal" className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md">
         <div className="flex items-center justify-between p-5 border-b border-white/10">
           <h2 className="text-lg font-bold text-white">Record Payment</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white text-xl">×</button>
@@ -348,8 +374,20 @@ function PaymentModal({ invoice, onClose, onPaid }: { invoice: Invoice; onClose:
 }
 
 /* ─────────────────────────── InvoiceDrawer ──────────────────── */
-function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; onClose: () => void; onRefresh: () => void }) {
-  const [inv, setInv] = useState<InvoiceDetail | null>(null);
+function InvoiceDrawer({
+  invoiceId,
+  initialInvoice,
+  onClose,
+  onRefresh,
+}: {
+  invoiceId: string;
+  initialInvoice?: Invoice | null;
+  onClose: () => void;
+  onRefresh: () => void;
+}) {
+  const [inv, setInv] = useState<InvoiceDetail | null>(
+    initialInvoice ? { ...initialInvoice, payments: [] } : null,
+  );
   const [showPay, setShowPay] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
@@ -357,6 +395,10 @@ function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; o
     const res = await fetch(`/api/finance/invoices/${invoiceId}`);
     if (res.ok) setInv(await res.json());
   }, [invoiceId]);
+
+  useEffect(() => {
+    setInv(initialInvoice ? { ...initialInvoice, payments: [] } : null);
+  }, [invoiceId, initialInvoice]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -375,7 +417,7 @@ function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; o
   if (!inv) return (
     <>
       <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 z-40 w-[480px] bg-slate-950 border-l border-white/10 flex items-center justify-center">
+      <div data-testid="invoice-drawer" className="fixed inset-y-0 right-0 z-40 w-[480px] bg-slate-950 border-l border-white/10 flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500" />
       </div>
     </>
@@ -388,7 +430,7 @@ function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; o
     <>
       {showPay && <PaymentModal invoice={inv} onClose={() => setShowPay(false)} onPaid={() => { load(); onRefresh(); }} />}
       <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 z-40 w-[480px] bg-slate-950 border-l border-white/10 overflow-y-auto">
+      <div data-testid="invoice-drawer" className="fixed inset-y-0 right-0 z-40 w-[480px] bg-slate-950 border-l border-white/10 overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b border-white/10 sticky top-0 bg-slate-950 z-10">
           <div>
             <p className="text-xs text-slate-500">Invoice</p>
@@ -538,6 +580,7 @@ function FinanceInvoicesInner() {
   const [showCreate, setShowCreate] = useState(false);
   const [createModule, setCreateModule] = useState<string | undefined>(undefined);
   const [drawerInvId, setDrawerInvId] = useState<string | null>(null);
+  const [drawerInvoiceSeed, setDrawerInvoiceSeed] = useState<Invoice | null>(null);
 
   const openCreate = (mod?: string) => { setCreateModule(mod); setShowCreate(true); };
 
@@ -557,6 +600,25 @@ function FinanceInvoicesInner() {
       }
     } finally { setLoading(false); }
   }, [tab, q, page, module]);
+
+  const applyCreatedInvoice = useCallback((created: CreatedInvoicePayload) => {
+    if (!created.invoice) {
+      setDrawerInvoiceSeed(null);
+      setDrawerInvId(created.id);
+      void load();
+      return;
+    }
+
+    const seededInvoice = created.invoice as Invoice;
+    setInvoices(prev => [seededInvoice, ...prev.filter(inv => inv.id !== created.id)]);
+    setTotal(prev => prev + 1);
+    setCounts(prev => ({
+      ...prev,
+      DRAFT: (prev.DRAFT ?? 0) + 1,
+    }));
+    setDrawerInvoiceSeed(seededInvoice);
+    setDrawerInvId(created.id);
+  }, [load]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setPage(1); }, [tab, q, module]);
@@ -595,9 +657,9 @@ function FinanceInvoicesInner() {
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm border border-white/10">
             ⬇ Export XLSX
           </button>
-          <button onClick={() => openCreate(module || undefined)}
+          <button data-testid="create-invoice" onClick={() => openCreate(module || undefined)}
             className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded-xl text-sm">
-            + New Invoice
+            + New
           </button>
         </div>
       </div>
@@ -641,7 +703,7 @@ function FinanceInvoicesInner() {
         <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-16 text-center">
           <div className="text-5xl mb-3">🧾</div>
           <p className="text-slate-400">No invoices found</p>
-          <button onClick={() => openCreate(module || undefined)} className="mt-3 text-amber-400 hover:text-amber-300 text-sm">Create your first invoice →</button>
+          <button onClick={() => openCreate(module || undefined)} className="mt-3 text-amber-400 hover:text-amber-300 text-sm">Start with your first invoice →</button>
         </div>
       ) : (
         <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
@@ -662,8 +724,8 @@ function FinanceInvoicesInner() {
               {invoices.map(inv => {
                 const outstanding = Math.max(0, Number(inv.total_amount) - Number(inv.paid_amount));
                 return (
-                  <tr key={inv.id} className="border-b border-white/5 last:border-0 hover:bg-slate-800/40 transition-colors cursor-pointer"
-                    onClick={() => setDrawerInvId(inv.id)}>
+                  <tr key={inv.id} data-testid="invoice-row" data-invoice-id={inv.id} className="border-b border-white/5 last:border-0 hover:bg-slate-800/40 transition-colors cursor-pointer"
+                    onClick={() => { setDrawerInvoiceSeed(inv); setDrawerInvId(inv.id); }}>
                     <td className="px-5 py-3">
                       <p className="font-mono text-xs text-amber-400">{inv.invoice_number}</p>
                       <p className="text-slate-500 text-xs mt-0.5">{fmtDate(inv.issue_date)}</p>
@@ -690,7 +752,7 @@ function FinanceInvoicesInner() {
                         : <span className="text-slate-600">—</span>}
                     </td>
                     <td className="px-5 py-3 text-right" onClick={e => e.stopPropagation()}>
-                      <button onClick={() => setDrawerInvId(inv.id)} className="text-xs text-amber-400 hover:text-amber-300">View →</button>
+                      <button onClick={() => { setDrawerInvoiceSeed(inv); setDrawerInvId(inv.id); }} className="text-xs text-amber-400 hover:text-amber-300">View →</button>
                     </td>
                   </tr>
                 );
@@ -732,8 +794,21 @@ function FinanceInvoicesInner() {
         </div>
       )}
 
-      {showCreate && <CreateModal onClose={() => { setShowCreate(false); setCreateModule(undefined); }} onCreated={load} defaultModule={createModule} />}
-      {drawerInvId && <InvoiceDrawer invoiceId={drawerInvId} onClose={() => setDrawerInvId(null)} onRefresh={load} />}
+      {showCreate && (
+        <CreateModal
+          onClose={() => { setShowCreate(false); setCreateModule(undefined); }}
+          onCreated={applyCreatedInvoice}
+          defaultModule={createModule}
+        />
+      )}
+      {drawerInvId && (
+        <InvoiceDrawer
+          invoiceId={drawerInvId}
+          initialInvoice={drawerInvoiceSeed}
+          onClose={() => { setDrawerInvId(null); setDrawerInvoiceSeed(null); }}
+          onRefresh={load}
+        />
+      )}
     </div>
   );
 }

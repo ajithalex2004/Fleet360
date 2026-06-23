@@ -4,6 +4,8 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { ensureOperationalTenantColumn, recordOperationalChange, requireOperationalContext } from '@/lib/cross-module-governance';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
 
 const INIT_ASSETS = `
   CREATE TABLE IF NOT EXISTS finance_fixed_assets (
@@ -34,7 +36,8 @@ const INIT_ASSETS = `
     supplier            TEXT,
     purchase_invoice_no TEXT,
     location            TEXT,               -- Dubai | Abu Dhabi | Sharjah
-    notes               TEXT
+    notes               TEXT,
+    tenant_id           TEXT
   );
 `;
 
@@ -56,13 +59,15 @@ const INIT_DEP = `
 
 type AssetRow = Record<string, unknown>;
 
-async function nextAssetNo(category: string): Promise<string> {
+async function nextAssetNo(category: string, tenantId: string): Promise<string> {
   const prefix: Record<string, string> = {
     PASSENGER_VEHICLE: 'PV', LCV: 'LCV', HEAVY_VEHICLE: 'HV',
     BUS: 'BUS', AMBULANCE: 'AMB', EQUIPMENT: 'EQP', OFFICE: 'OFC',
   };
   const [{ count }] = await prisma.$queryRawUnsafe<{count: string}[]>(
-    `SELECT COUNT(*)::text as count FROM finance_fixed_assets WHERE asset_category=$1`, category
+    `SELECT COUNT(*)::text as count FROM finance_fixed_assets WHERE asset_category=$1 AND tenant_id::text = $2`,
+    category,
+    tenantId,
   ).catch(() => [{ count: '0' }]);
   const pfx = prefix[category] ?? 'AST';
   const seq = (parseInt(count) + 1).toString().padStart(4, '0');
@@ -83,6 +88,9 @@ function calculateMonthlyDepreciation(
 export async function GET(req: NextRequest) {
   await prisma.$executeRawUnsafe(INIT_ASSETS).catch(() => {});
   await prisma.$executeRawUnsafe(INIT_DEP).catch(() => {});
+  await ensureOperationalTenantColumn('finance_fixed_assets').catch(() => {});
+  const ctx = requireOperationalContext(req, 'finance', { requestedTenantId: req.nextUrl.searchParams.get('tenantId') });
+  if (ctx instanceof NextResponse) return ctx;
 
   const sp       = req.nextUrl.searchParams;
   const status   = sp.get('status');
@@ -93,7 +101,15 @@ export async function GET(req: NextRequest) {
     const assetId = sp.get('assetId');
     if (!assetId) return NextResponse.json({ error: 'assetId required' }, { status: 400 });
     const schedule = await prisma.$queryRawUnsafe<AssetRow[]>(
-      `SELECT * FROM finance_depreciation_schedule WHERE asset_id=$1 ORDER BY period_year, period_month`, assetId
+      `SELECT d.*
+         FROM finance_depreciation_schedule d
+         JOIN finance_fixed_assets a ON a.id::text = d.asset_id
+        WHERE d.asset_id=$1
+          AND a.deleted_at IS NULL
+          AND a.tenant_id::text = $2
+        ORDER BY d.period_year, d.period_month`,
+      assetId,
+      ctx.tenantId,
     ).catch(() => []);
     return NextResponse.json({ data: schedule });
   }
@@ -106,14 +122,17 @@ export async function GET(req: NextRequest) {
          COALESCE(SUM(net_book_value),0)::text as total_nbv,
          COUNT(*)::text as count,
          SUM(CASE WHEN status='ACTIVE' THEN 1 ELSE 0 END)::text as active_count
-       FROM finance_fixed_assets WHERE deleted_at IS NULL`
+       FROM finance_fixed_assets
+       WHERE deleted_at IS NULL
+         AND tenant_id::text = $1`,
+      ctx.tenantId,
     ).catch(() => []);
     return NextResponse.json(totals ?? {});
   }
 
-  let where = `WHERE deleted_at IS NULL`;
-  const params: unknown[] = [];
-  let pi = 1;
+  let where = `WHERE deleted_at IS NULL AND tenant_id::text = $1`;
+  const params: unknown[] = [ctx.tenantId];
+  let pi = 2;
   if (status)   { where += ` AND status = $${pi++}`;          params.push(status); }
   if (category) { where += ` AND asset_category = $${pi++}`;  params.push(category); }
 
@@ -127,6 +146,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   await prisma.$executeRawUnsafe(INIT_ASSETS).catch(() => {});
   await prisma.$executeRawUnsafe(INIT_DEP).catch(() => {});
+  await ensureOperationalTenantColumn('finance_fixed_assets').catch(() => {});
+  const ctx = requireOperationalContext(req, 'finance', { write: true });
+  if (ctx instanceof NextResponse) return ctx;
   const body = await req.json();
 
   if (body.action === 'run_depreciation') {
@@ -140,7 +162,8 @@ export async function POST(req: NextRequest) {
       accumulated_depreciation: string; net_book_value: string; acquisition_date: string;
       status: string;
     }[]>(
-      `SELECT * FROM finance_fixed_assets WHERE deleted_at IS NULL AND status = 'ACTIVE'`
+      `SELECT * FROM finance_fixed_assets WHERE deleted_at IS NULL AND status = 'ACTIVE' AND tenant_id::text = $1`,
+      ctx.tenantId,
     ).catch(() => []);
 
     let processed = 0;
@@ -195,27 +218,54 @@ export async function POST(req: NextRequest) {
 
   if (body.action === 'dispose') {
     const { assetId, disposalDate, disposalProceeds, disposalMethod, notes } = body;
-    const [asset] = await prisma.$queryRawUnsafe<{net_book_value: string}[]>(
-      `SELECT net_book_value FROM finance_fixed_assets WHERE id=$1`, assetId
+      const [asset] = await prisma.$queryRawUnsafe<{net_book_value: string}[]>(
+      `SELECT net_book_value FROM finance_fixed_assets WHERE id=$1 AND tenant_id::text = $2`,
+      assetId,
+      ctx.tenantId,
     ).catch(() => [] as {net_book_value: string}[]);
 
-    await prisma.$executeRawUnsafe(
+      await prisma.$executeRawUnsafe(
       `UPDATE finance_fixed_assets SET
          status='DISPOSED', disposal_date=$2, disposal_proceeds=$3,
          disposal_method=$4, notes=COALESCE($5,notes), updated_at=NOW()
-       WHERE id=$1`,
-      assetId, disposalDate, disposalProceeds ?? 0, disposalMethod ?? 'SOLD', notes ?? null
+       WHERE id=$1 AND tenant_id::text = $6`,
+      assetId, disposalDate, disposalProceeds ?? 0, disposalMethod ?? 'SOLD', notes ?? null, ctx.tenantId
     ).catch(() => {});
 
     const nbv      = parseFloat(asset?.net_book_value ?? '0');
     const proceeds = parseFloat(disposalProceeds ?? '0');
     const gainLoss = proceeds - nbv;
 
-    return NextResponse.json({ disposed: assetId, gainLoss: Math.round(gainLoss * 100) / 100 });
+    await recordOperationalChange({
+      req,
+      ctx,
+      entityType: 'FinanceFixedAsset',
+      entityId: assetId,
+      action: 'STATUS_CHANGE',
+      before: asset ?? null,
+      after: { status: 'DISPOSED', disposalDate, disposalProceeds, disposalMethod },
+      summary: `Disposed fixed asset ${assetId}.`,
+    });
+    const workflow = await triggerServiceWorkflow({
+      req,
+      ctx,
+      serviceTypeKey: 'FINANCE_BILLING_EXCEPTION',
+      referenceType: 'FixedAsset',
+      referenceId: assetId,
+      referenceNumber: assetId,
+      contextData: {
+        action: 'dispose',
+        status: 'DISPOSED',
+        disposalProceeds: disposalProceeds ?? 0,
+        gainLoss: Math.round(gainLoss * 100) / 100,
+      },
+      force: true,
+    });
+    return NextResponse.json({ disposed: assetId, gainLoss: Math.round(gainLoss * 100) / 100, workflow });
   }
 
   // Create new fixed asset
-  const assetNo  = await nextAssetNo(body.assetCategory);
+  const assetNo  = await nextAssetNo(body.assetCategory, ctx.tenantId);
   const cost     = parseFloat(body.acquisitionCost);
   const residual = parseFloat(body.residualValue ?? '0');
   const nbv      = cost;
@@ -225,8 +275,8 @@ export async function POST(req: NextRequest) {
        (asset_no, asset_name, asset_category, coa_account_code, description,
         vehicle_id, registration_no, acquisition_date, acquisition_cost, residual_value,
         useful_life_months, depreciation_method, depreciation_rate,
-        net_book_value, supplier, purchase_invoice_no, location, notes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+        net_book_value, supplier, purchase_invoice_no, location, notes, tenant_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
      RETURNING *`,
     assetNo, body.assetName, body.assetCategory,
     body.coaAccountCode ?? null, body.description ?? null,
@@ -236,9 +286,18 @@ export async function POST(req: NextRequest) {
     body.depreciationMethod ?? 'STRAIGHT_LINE',
     body.depreciationRate ?? null,
     nbv, body.supplier ?? null, body.purchaseInvoiceNo ?? null,
-    body.location ?? null, body.notes ?? null,
+    body.location ?? null, body.notes ?? null, ctx.tenantId,
   ).catch(() => []);
 
   if (!row) return NextResponse.json({ error: 'Failed to create asset' }, { status: 500 });
+  await recordOperationalChange({
+    req,
+    ctx,
+    entityType: 'FinanceFixedAsset',
+    entityId: String(row.id ?? assetNo),
+    action: 'CREATE',
+    after: row,
+    summary: `Created fixed asset ${String(row.asset_no ?? assetNo)}.`,
+  });
   return NextResponse.json(row, { status: 201 });
 }

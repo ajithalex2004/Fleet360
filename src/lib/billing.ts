@@ -183,6 +183,8 @@ export async function syncSubscriptionToTenant(sub: Stripe.Subscription): Promis
     trialEnd,
     tenantId,
   );
+  const { syncCanonicalBillingAccount } = await import('@/lib/canonical-billing');
+  await syncCanonicalBillingAccount(tenantId).catch(() => null);
 }
 
 async function tenantIdForCustomer(customerId: string): Promise<string | null> {

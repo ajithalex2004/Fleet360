@@ -139,7 +139,79 @@ const SEED: SeedCategory[] = [
     key: 'TRANSPORTATION',
     name: 'Transportation Services',
     description: 'Passenger movement — airport transfers, limousine, staff transport, school bus, rentals.',
-    icon: 'Bus', tone: 'blue', sortOrder: 10, types: [],
+    icon: 'Bus', tone: 'blue', sortOrder: 10,
+    types: [
+      {
+        key: 'STAFF_TRANSPORT_REQUEST', name: 'Transport Request',
+        description: 'Employee or client transport request intake for staff mobility operations.',
+        icon: 'Route', tone: 'blue', defaultPriority: 'Medium', sortOrder: 10,
+        module: { linkedModule: 'STAFF_TRANSPORT', subModule: 'Requests',
+          workflow: true, notification: true, approval: true, finance: false, dispatch: true },
+      },
+      {
+        key: 'STAFF_ROUTE_ASSIGNMENT', name: 'Route Assignment',
+        description: 'Assign riders to a staff transport route, shift, or operating corridor.',
+        icon: 'MapPinned', tone: 'cyan', defaultPriority: 'Medium', sortOrder: 20,
+        module: { linkedModule: 'STAFF_TRANSPORT', subModule: 'Route Planning',
+          workflow: true, notification: true, approval: false, finance: false, dispatch: true },
+      },
+      {
+        key: 'STAFF_TRIP_SCHEDULING', name: 'Trip Scheduling',
+        description: 'Schedule recurring or one-off staff transport trips and operating windows.',
+        icon: 'CalendarClock', tone: 'emerald', defaultPriority: 'Medium', sortOrder: 30,
+        module: { linkedModule: 'STAFF_TRANSPORT', subModule: 'Trip Scheduling',
+          workflow: true, notification: true, approval: false, finance: false, dispatch: true },
+      },
+      {
+        key: 'STAFF_ATTENDANCE_EXCEPTION', name: 'Attendance Exception',
+        description: 'Track missed pickup, rider absence, or attendance reconciliation issues.',
+        icon: 'ClipboardAlert', tone: 'amber', defaultPriority: 'Medium', sortOrder: 40,
+        module: { linkedModule: 'STAFF_TRANSPORT', subModule: 'Attendance',
+          workflow: true, notification: true, approval: false, finance: false, dispatch: false },
+      },
+      {
+        key: 'STAFF_BILLING_EXCEPTION', name: 'Billing Exceptions',
+        description: 'Review staff transport billing disputes, short charges, and invoice adjustments.',
+        icon: 'ReceiptText', tone: 'rose', defaultPriority: 'High', sortOrder: 50,
+        module: { linkedModule: 'STAFF_TRANSPORT', subModule: 'Billing',
+          workflow: true, notification: true, approval: true, finance: true, dispatch: false },
+      },
+      {
+        key: 'SCHOOL_TRANSPORT_REGISTRATION', name: 'Student Transport Registration',
+        description: 'Onboard a student or guardian request into the school transport roster.',
+        icon: 'School', tone: 'blue', defaultPriority: 'Medium', sortOrder: 60,
+        module: { linkedModule: 'SCHOOL_BUS', subModule: 'Registration',
+          workflow: true, notification: true, approval: true, finance: false, dispatch: false },
+      },
+      {
+        key: 'SCHOOL_ROUTE_ALLOCATION', name: 'Route Allocation',
+        description: 'Assign students to routes, buses, and stop plans for school transport.',
+        icon: 'Map', tone: 'cyan', defaultPriority: 'Medium', sortOrder: 70,
+        module: { linkedModule: 'SCHOOL_BUS', subModule: 'Routing',
+          workflow: true, notification: true, approval: false, finance: false, dispatch: true },
+      },
+      {
+        key: 'SCHOOL_ATTENDANCE_EXCEPTION', name: 'Attendance Exception',
+        description: 'Manage absences, missed boardings, and guardian follow-up exceptions.',
+        icon: 'UserRoundX', tone: 'amber', defaultPriority: 'Medium', sortOrder: 80,
+        module: { linkedModule: 'SCHOOL_BUS', subModule: 'Attendance',
+          workflow: true, notification: true, approval: false, finance: false, dispatch: false },
+      },
+      {
+        key: 'SCHOOL_SAFETY_INCIDENT_REVIEW', name: 'Safety Incident Review',
+        description: 'Investigate and approve follow-up actions for school transport safety events.',
+        icon: 'ShieldAlert', tone: 'rose', defaultPriority: 'High', sortOrder: 90,
+        module: { linkedModule: 'SCHOOL_BUS', subModule: 'Safety',
+          workflow: true, notification: true, approval: true, finance: false, dispatch: true },
+      },
+      {
+        key: 'SCHOOL_BILLING_EXCEPTION', name: 'Billing Exceptions',
+        description: 'Handle fee disputes, transport plan changes, and school transport billing adjustments.',
+        icon: 'BadgeDollarSign', tone: 'violet', defaultPriority: 'High', sortOrder: 100,
+        module: { linkedModule: 'SCHOOL_BUS', subModule: 'Billing',
+          workflow: true, notification: true, approval: true, finance: true, dispatch: false },
+      },
+    ],
   },
   {
     key: 'OPERATION_SUPPORT',
@@ -202,21 +274,290 @@ const SEED: SeedCategory[] = [
     key: 'FLEET_MANAGEMENT',
     name: 'Fleet Management Services',
     description: 'Lifecycle — leasing, rental, ownership, registration, telematics.',
-    icon: 'Car', tone: 'emerald', sortOrder: 30, types: [],
+    icon: 'Car', tone: 'emerald', sortOrder: 30,
+    types: [
+      {
+        key: 'LEASING_ENQUIRIES', name: 'Enquiries',
+        description: 'Capture and qualify new leasing prospects and customer demand signals.',
+        icon: 'MessagesSquare', tone: 'blue', defaultPriority: 'Medium', sortOrder: 10,
+        module: { linkedModule: 'LEASING', subModule: 'Enquiries',
+          workflow: true, notification: true, approval: false, finance: false, dispatch: false },
+      },
+      {
+        key: 'LEASING_QUOTATIONS', name: 'Quotations',
+        description: 'Prepare, revise, and issue leasing quotations for prospective customers.',
+        icon: 'FileText', tone: 'cyan', defaultPriority: 'Medium', sortOrder: 20,
+        module: { linkedModule: 'LEASING', subModule: 'Quotations',
+          workflow: true, notification: true, approval: false, finance: true, dispatch: false },
+      },
+      {
+        key: 'LEASING_CREDIT_APPROVAL', name: 'Credit Approval',
+        description: 'Run credit review, internal approval, and decision tracking for a leasing customer.',
+        icon: 'ShieldCheck', tone: 'amber', defaultPriority: 'High', sortOrder: 30,
+        module: { linkedModule: 'LEASING', subModule: 'Credit Approval',
+          workflow: true, notification: true, approval: true, finance: true, dispatch: false },
+      },
+      {
+        key: 'LEASING_CONTRACT_ACTIVATION', name: 'Contract Activation',
+        description: 'Activate an approved lease contract and release it into operations and billing.',
+        icon: 'FileSignature', tone: 'emerald', defaultPriority: 'High', sortOrder: 40,
+        module: { linkedModule: 'LEASING', subModule: 'Contracts',
+          workflow: true, notification: true, approval: true, finance: true, dispatch: false },
+      },
+      {
+        key: 'LEASING_HANDOVER', name: 'Handover',
+        description: 'Coordinate vehicle delivery, inspection, and customer handover for a live lease.',
+        icon: 'KeyRound', tone: 'blue', defaultPriority: 'Medium', sortOrder: 50,
+        module: { linkedModule: 'LEASING', subModule: 'Handover',
+          workflow: true, notification: true, approval: false, finance: false, dispatch: true },
+      },
+      {
+        key: 'LEASING_RETURN', name: 'Return',
+        description: 'Manage lease return inspection, settlement, and off-hire workflow.',
+        icon: 'Undo2', tone: 'violet', defaultPriority: 'High', sortOrder: 60,
+        module: { linkedModule: 'LEASING', subModule: 'Return',
+          workflow: true, notification: true, approval: false, finance: true, dispatch: true },
+      },
+      {
+        key: 'LEASING_BILLING_EXCEPTION', name: 'Billing Exceptions',
+        description: 'Review disputed lease charges, pro-rata issues, and contract billing adjustments.',
+        icon: 'ReceiptText', tone: 'rose', defaultPriority: 'High', sortOrder: 70,
+        module: { linkedModule: 'LEASING', subModule: 'Billing',
+          workflow: true, notification: true, approval: true, finance: true, dispatch: false },
+      },
+      {
+        key: 'RAC_RESERVATIONS', name: 'Reservations',
+        description: 'Create and manage rental reservations across channels and customer accounts.',
+        icon: 'BookOpenCheck', tone: 'blue', defaultPriority: 'Medium', sortOrder: 110,
+        module: { linkedModule: 'RAC', subModule: 'Reservations',
+          workflow: true, notification: true, approval: false, finance: false, dispatch: false },
+      },
+      {
+        key: 'RAC_QUOTATIONS', name: 'Quotations',
+        description: 'Prepare rental pricing offers, rate exceptions, and negotiated customer quotes.',
+        icon: 'FileBadge2', tone: 'cyan', defaultPriority: 'Medium', sortOrder: 120,
+        module: { linkedModule: 'RAC', subModule: 'Quotations',
+          workflow: true, notification: true, approval: false, finance: true, dispatch: false },
+      },
+      {
+        key: 'RAC_RENTAL_AGREEMENT', name: 'Rental Agreement Creation',
+        description: 'Create the formal rental agreement before vehicle release and charge capture.',
+        icon: 'ScrollText', tone: 'emerald', defaultPriority: 'High', sortOrder: 130,
+        module: { linkedModule: 'RAC', subModule: 'Rental Agreements',
+          workflow: true, notification: true, approval: true, finance: true, dispatch: false },
+      },
+      {
+        key: 'RAC_CHECKOUT_HANDOVER', name: 'Check-Out / Handover',
+        description: 'Run rental handover, pickup inspection, and customer release workflow.',
+        icon: 'CarFront', tone: 'blue', defaultPriority: 'Medium', sortOrder: 140,
+        module: { linkedModule: 'RAC', subModule: 'Handover',
+          workflow: true, notification: true, approval: false, finance: false, dispatch: true },
+      },
+      {
+        key: 'RAC_CHECKIN_RETURN', name: 'Check-In / Return',
+        description: 'Process rental returns, closeout checks, and chargeable exception review.',
+        icon: 'RotateCcwSquare', tone: 'violet', defaultPriority: 'High', sortOrder: 150,
+        module: { linkedModule: 'RAC', subModule: 'Return',
+          workflow: true, notification: true, approval: false, finance: true, dispatch: true },
+      },
+      {
+        key: 'RAC_DAMAGE_INSPECTION', name: 'Damage Inspection',
+        description: 'Assess damage evidence, responsibility, and downstream charge or repair actions.',
+        icon: 'ShieldAlert', tone: 'amber', defaultPriority: 'High', sortOrder: 160,
+        module: { linkedModule: 'RAC', subModule: 'Damage',
+          workflow: true, notification: true, approval: true, finance: true, dispatch: false },
+      },
+      {
+        key: 'RAC_BILLING_EXCEPTION', name: 'Billing Exceptions',
+        description: 'Resolve rental invoice disputes, deposit issues, and post-rental financial adjustments.',
+        icon: 'BadgeDollarSign', tone: 'rose', defaultPriority: 'High', sortOrder: 170,
+        module: { linkedModule: 'RAC', subModule: 'Billing',
+          workflow: true, notification: true, approval: true, finance: true, dispatch: false },
+      },
+    ],
   },
   {
     key: 'VEHICLE_MAINTENANCE',
     name: 'Vehicle Maintenance Services',
     description: 'Workshop operations — work orders, vendor management, parts.',
-    icon: 'Wrench', tone: 'amber', sortOrder: 40, types: [],
+    icon: 'Wrench', tone: 'amber', sortOrder: 40,
+    types: [
+      {
+        key: 'MAINTENANCE_REQUEST_APPROVAL', name: 'Maintenance Request Approval',
+        description: 'Approve a maintenance request before it moves into workshop planning or vendor allocation.',
+        icon: 'ClipboardCheck', tone: 'amber', defaultPriority: 'High', sortOrder: 10,
+        module: { linkedModule: 'MAINTENANCE', subModule: 'Requests',
+          workflow: true, notification: true, approval: true, finance: false, dispatch: false },
+      },
+      {
+        key: 'MAINTENANCE_WORK_ORDER', name: 'Work Order',
+        description: 'Create and route workshop work orders through execution planning and ownership.',
+        icon: 'FileCog', tone: 'blue', defaultPriority: 'Medium', sortOrder: 20,
+        module: { linkedModule: 'MAINTENANCE', subModule: 'Work Orders',
+          workflow: true, notification: true, approval: false, finance: false, dispatch: false },
+      },
+      {
+        key: 'MAINTENANCE_ESTIMATE_APPROVAL', name: 'Estimate Approval',
+        description: 'Approve workshop quotations, parts estimates, and external vendor spend before execution.',
+        icon: 'BadgeDollarSign', tone: 'rose', defaultPriority: 'High', sortOrder: 30,
+        module: { linkedModule: 'MAINTENANCE', subModule: 'Estimates',
+          workflow: true, notification: true, approval: true, finance: true, dispatch: false },
+      },
+      {
+        key: 'MAINTENANCE_VENDOR_ASSIGNMENT', name: 'Vendor Assignment',
+        description: 'Assign the job to a garage, workshop, or service vendor with routing visibility.',
+        icon: 'Building2', tone: 'cyan', defaultPriority: 'Medium', sortOrder: 40,
+        module: { linkedModule: 'MAINTENANCE', subModule: 'Vendors',
+          workflow: true, notification: true, approval: false, finance: false, dispatch: false },
+      },
+      {
+        key: 'MAINTENANCE_COMPLETION_REVIEW', name: 'Completion Review',
+        description: 'Review completed work, validate execution, and close the maintenance workflow safely.',
+        icon: 'CheckCheck', tone: 'emerald', defaultPriority: 'Medium', sortOrder: 50,
+        module: { linkedModule: 'MAINTENANCE', subModule: 'Completion',
+          workflow: true, notification: true, approval: true, finance: false, dispatch: false },
+      },
+      {
+        key: 'MAINTENANCE_BILLING_EXCEPTION', name: 'Billing Exceptions',
+        description: 'Handle invoice mismatches, excess charges, and maintenance spend exceptions.',
+        icon: 'ReceiptText', tone: 'violet', defaultPriority: 'High', sortOrder: 60,
+        module: { linkedModule: 'MAINTENANCE', subModule: 'Billing',
+          workflow: true, notification: true, approval: true, finance: true, dispatch: false },
+      },
+    ],
+  },
+  {
+    key: 'DRIVER_MANAGEMENT',
+    name: 'Driver Management Services',
+    description: 'Driver lifecycle, compliance, assignment, and performance governance.',
+    icon: 'UserCog', tone: 'cyan', sortOrder: 50,
+    types: [
+      {
+        key: 'DRIVER_ONBOARDING', name: 'Driver Onboarding',
+        description: 'Onboard a new driver profile, documentation set, and readiness checklist.',
+        icon: 'UserRoundPlus', tone: 'blue', defaultPriority: 'Medium', sortOrder: 10,
+        module: { linkedModule: 'DRIVERS', subModule: 'Profiles',
+          workflow: true, notification: true, approval: true, finance: false, dispatch: false },
+      },
+      {
+        key: 'DRIVER_ASSIGNMENT', name: 'Driver Assignment',
+        description: 'Approve or route assignment of a driver to a route, vehicle, or operating contract.',
+        icon: 'ClipboardList', tone: 'emerald', defaultPriority: 'Medium', sortOrder: 20,
+        module: { linkedModule: 'DRIVERS', subModule: 'Assignments',
+          workflow: true, notification: true, approval: false, finance: false, dispatch: true },
+      },
+      {
+        key: 'DRIVER_LICENSE_RENEWAL', name: 'Licence Renewal',
+        description: 'Track licence and permit renewal workflow for driver compliance continuity.',
+        icon: 'IdCard', tone: 'amber', defaultPriority: 'High', sortOrder: 30,
+        module: { linkedModule: 'DRIVERS', subModule: 'Compliance',
+          workflow: true, notification: true, approval: true, finance: false, dispatch: false },
+      },
+      {
+        key: 'DRIVER_INCIDENT_REVIEW', name: 'Incident Review',
+        description: 'Investigate driver incidents and route corrective actions through formal review.',
+        icon: 'ShieldAlert', tone: 'rose', defaultPriority: 'High', sortOrder: 40,
+        module: { linkedModule: 'DRIVERS', subModule: 'Incidents',
+          workflow: true, notification: true, approval: true, finance: false, dispatch: false },
+      },
+      {
+        key: 'DRIVER_COMPLIANCE_EXCEPTION', name: 'Compliance Exception',
+        description: 'Escalate expiring documents, training gaps, and driver readiness exceptions.',
+        icon: 'AlertTriangle', tone: 'violet', defaultPriority: 'High', sortOrder: 50,
+        module: { linkedModule: 'DRIVERS', subModule: 'Compliance',
+          workflow: true, notification: true, approval: true, finance: false, dispatch: false },
+      },
+    ],
   },
   {
     key: 'CUSTOMER_SUPPORT',
     name: 'Customer Support Services',
     description: 'Customer-facing channels — call centre, WhatsApp, chat.',
-    icon: 'MessageCircle', tone: 'cyan', sortOrder: 50, types: [],
+    icon: 'MessageCircle', tone: 'cyan', sortOrder: 60, types: [],
+  },
+  {
+    key: 'FINANCE_CONTROLS',
+    name: 'Finance Control Services',
+    description: 'Exception-led finance workflows across billing, expenses, receivables, and budgets.',
+    icon: 'WalletCards', tone: 'emerald', sortOrder: 70,
+    types: [
+      {
+        key: 'FINANCE_BILLING_EXCEPTION', name: 'Billing Exception',
+        description: 'Review billing mismatches, disputed invoices, and invoice release blockers.',
+        icon: 'ReceiptText', tone: 'rose', defaultPriority: 'High', sortOrder: 10,
+        module: { linkedModule: 'FINANCE', subModule: 'Billing Exceptions',
+          workflow: true, notification: true, approval: true, finance: true, dispatch: false },
+      },
+      {
+        key: 'FINANCE_EXPENSE_EXCEPTION', name: 'Expense Exception',
+        description: 'Escalate out-of-policy costs, missing support, or unusual finance spend activity.',
+        icon: 'BadgeAlert', tone: 'amber', defaultPriority: 'High', sortOrder: 20,
+        module: { linkedModule: 'FINANCE', subModule: 'Expenses',
+          workflow: true, notification: true, approval: true, finance: true, dispatch: false },
+      },
+      {
+        key: 'FINANCE_BUDGET_EXCEPTION', name: 'Budget Exception',
+        description: 'Control budget overruns, exception releases, and non-standard finance approvals.',
+        icon: 'ChartNoAxesCombined', tone: 'blue', defaultPriority: 'High', sortOrder: 30,
+        module: { linkedModule: 'FINANCE', subModule: 'Budget Approvals',
+          workflow: true, notification: true, approval: true, finance: true, dispatch: false },
+      },
+      {
+        key: 'FINANCE_RECEIVABLE_EXCEPTION', name: 'Receivable Exception',
+        description: 'Manage collection risks, overdue disputes, and receivable escalation workflows.',
+        icon: 'Landmark', tone: 'violet', defaultPriority: 'High', sortOrder: 40,
+        module: { linkedModule: 'FINANCE', subModule: 'Receivables',
+          workflow: true, notification: true, approval: true, finance: true, dispatch: false },
+      },
+    ],
+  },
+  {
+    key: 'PLATFORM_ADMIN',
+    name: 'Platform Administration Services',
+    description: 'Govern platform change control, access administration, and core tenancy operations.',
+    icon: 'ShieldCheck', tone: 'violet', sortOrder: 80,
+    types: [
+      {
+        key: 'ADMIN_USER_PROVISIONING', name: 'User Provisioning',
+        description: 'Create, activate, deactivate, or correct access for platform and tenant users.',
+        icon: 'UserPlus', tone: 'blue', defaultPriority: 'Medium', sortOrder: 10,
+        module: { linkedModule: 'ADMIN', subModule: 'Users',
+          workflow: true, notification: true, approval: true, finance: false, dispatch: false },
+      },
+      {
+        key: 'ADMIN_ROLE_PERMISSION_CHANGE', name: 'Role / Permission Change',
+        description: 'Approve and manage changes to roles, permissions, and access boundaries.',
+        icon: 'KeySquare', tone: 'amber', defaultPriority: 'High', sortOrder: 20,
+        module: { linkedModule: 'ADMIN', subModule: 'Roles & Permissions',
+          workflow: true, notification: true, approval: true, finance: false, dispatch: false },
+      },
+      {
+        key: 'ADMIN_WORKFLOW_CHANGE', name: 'Workflow Change',
+        description: 'Control changes to workflow templates, approvers, and routing policies.',
+        icon: 'Workflow', tone: 'cyan', defaultPriority: 'High', sortOrder: 30,
+        module: { linkedModule: 'ADMIN', subModule: 'Workflows',
+          workflow: true, notification: true, approval: true, finance: false, dispatch: false },
+      },
+      {
+        key: 'ADMIN_SERVICE_CONFIGURATION_CHANGE', name: 'Service Configuration Change',
+        description: 'Govern changes to service types, mappings, rules, and notification behavior.',
+        icon: 'Settings2', tone: 'violet', defaultPriority: 'High', sortOrder: 40,
+        module: { linkedModule: 'ADMIN', subModule: 'Service Configuration',
+          workflow: true, notification: true, approval: true, finance: false, dispatch: false },
+      },
+      {
+        key: 'ADMIN_BILLING_PLAN_CHANGE', name: 'Billing Plan Change',
+        description: 'Approve subscription, commercial plan, or billing model changes for a tenant.',
+        icon: 'CreditCard', tone: 'rose', defaultPriority: 'High', sortOrder: 50,
+        module: { linkedModule: 'ADMIN', subModule: 'Billing & Subscriptions',
+          workflow: true, notification: true, approval: true, finance: true, dispatch: false },
+      },
+    ],
   },
 ];
+
+const EXPECTED_SYSTEM_CATEGORY_COUNT = SEED.length;
+const EXPECTED_SYSTEM_TYPE_COUNT = SEED.reduce((total, category) => total + category.types.length, 0);
 
 /**
  * Idempotent seed — runs on first read for a tenant. Inserts only the rows
@@ -364,11 +705,17 @@ const _seededTenants = new Set<string>();
 export async function ensureSeededForTenant(tenantId: string): Promise<void> {
   if (_seededTenants.has(tenantId)) return;
   await ensureServiceConfigTables();
-  const rows = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
-    `SELECT COUNT(*)::bigint AS count FROM service_categories WHERE tenant_id = $1`,
+  const counts = await prisma.$queryRawUnsafe<Array<{ categories: bigint; types: bigint }>>(
+    `SELECT
+        COALESCE((SELECT COUNT(*)::bigint FROM service_categories WHERE tenant_id = $1 AND is_system = TRUE AND deleted_at IS NULL), 0::bigint) AS categories,
+        COALESCE((SELECT COUNT(*)::bigint FROM service_types WHERE tenant_id = $1 AND is_system = TRUE AND deleted_at IS NULL), 0::bigint) AS types`,
     tenantId,
-  ).catch(() => [{ count: BigInt(0) }]);
-  const count = Number(rows[0]?.count ?? BigInt(0));
-  if (count === 0) await seedServiceConfigForTenant(tenantId);
+  ).catch(() => [{ categories: BigInt(0), types: BigInt(0) }]);
+
+  const categoryCount = Number(counts[0]?.categories ?? BigInt(0));
+  const typeCount = Number(counts[0]?.types ?? BigInt(0));
+  if (categoryCount < EXPECTED_SYSTEM_CATEGORY_COUNT || typeCount < EXPECTED_SYSTEM_TYPE_COUNT) {
+    await seedServiceConfigForTenant(tenantId);
+  }
   _seededTenants.add(tenantId);
 }

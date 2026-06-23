@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import nodemailer from 'nodemailer';
+import { randomUUID } from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
             // Log as 'Sent' (Mock) so UI shows success
             await prisma.notificationLog.create({
                 data: {
+                    id: randomUUID(),
                     recipient: finalRecipient,
                     type: 'Email',
                     subject,
@@ -71,6 +73,7 @@ export async function POST(request: Request) {
             // 4. Log Success
             await prisma.notificationLog.create({
                 data: {
+                    id: randomUUID(),
                     recipient: finalRecipient,
                     type: 'Email',
                     subject,
@@ -88,6 +91,7 @@ export async function POST(request: Request) {
             // 4. Log Failure
             await prisma.notificationLog.create({
                 data: {
+                    id: randomUUID(),
                     recipient: finalRecipient,
                     type: 'Email',
                     subject,

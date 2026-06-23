@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth';
+import { recordServiceConfigChange, requireServiceConfigApproval, requireServiceConfigPermission } from '@/lib/service-config/auth';
 import { ensureScopesTable, getScope, updateScope, deleteScope } from '@/lib/service-config/scopes-schema';
 import { SCOPE_LEVELS, type ScopeLevel } from '@/types/service-config';
 import { logAudit } from '@/lib/audit';
@@ -18,10 +18,8 @@ export const runtime = 'nodejs';
 interface RouteParams { params: Promise<{ id: string }>; }
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
-  const auth = authorizeServiceConfig(req);
+  const auth = await requireServiceConfigPermission(req, 'edit');
   if (!auth.ok) return auth.res;
-  const adminCheck = requireAdmin(auth);
-  if (!adminCheck.ok) return adminCheck.res;
   const { id } = await params;
 
   await ensureScopesTable();
@@ -45,13 +43,27 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     }
     if (typeof body.parentScopeId === 'string') patch.parentScopeId = body.parentScopeId;
 
+    const approval = await requireServiceConfigApproval(req, auth, 'service_config.scope.update', {
+      targetType: 'ServiceScope',
+      targetId: id,
+      summary: `Update service scope ${target.name}.`,
+      payload: patch,
+    });
+    if (approval) return approval;
+
     const updated = await updateScope(auth.tenantId, id, patch);
     if (!updated) return NextResponse.json({ ok: false, error: 'Scope not found' }, { status: 404 });
 
-    void logAudit({
-      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
-      entityType: 'ServiceScope', entityId: id, entityName: updated.name,
-      action: 'UPDATE', details: `Updated scope ${updated.name}`,
+    await recordServiceConfigChange({
+      req,
+      auth,
+      entityType: 'ServiceScope',
+      entityId: id,
+      entityName: updated.name,
+      action: 'UPDATE',
+      before: target,
+      after: updated,
+      summary: `Updated scope ${updated.name}.`,
     });
 
     return NextResponse.json({ ok: true, scope: updated });
@@ -62,22 +74,33 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 }
 
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
-  const auth = authorizeServiceConfig(req);
+  const auth = await requireServiceConfigPermission(req, 'delete');
   if (!auth.ok) return auth.res;
-  const adminCheck = requireAdmin(auth);
-  if (!adminCheck.ok) return adminCheck.res;
   const { id } = await params;
 
   const target = await getScope(auth.tenantId, id);
   if (!target) return NextResponse.json({ ok: false, error: 'Scope not found' }, { status: 404 });
 
+  const approval = await requireServiceConfigApproval(req, auth, 'service_config.scope.delete', {
+    targetType: 'ServiceScope',
+    targetId: id,
+    summary: `Delete service scope ${target.name}.`,
+  });
+  if (approval) return approval;
+
   const result = await deleteScope(auth.tenantId, id);
   if (!result.ok) return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
 
-  void logAudit({
-    tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
-    entityType: 'ServiceScope', entityId: id, entityName: target.name,
-    action: 'DELETE', details: `Soft-deleted scope ${target.name}`,
+  await recordServiceConfigChange({
+    req,
+    auth,
+    entityType: 'ServiceScope',
+    entityId: id,
+    entityName: target.name,
+    action: 'DELETE',
+    before: target,
+    after: { ...target, deleted: true },
+    summary: `Soft-deleted scope ${target.name}.`,
   });
 
   return NextResponse.json({ ok: true });

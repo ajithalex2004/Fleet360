@@ -54,6 +54,24 @@ interface BillingDashboard {
   upcoming_renewals: UpcomingRenewal[];
   outstanding_invoices: OutstandingInvoices;
   recent_billing_runs: BillingRun[];
+  canonical_subscriptions?: Array<{
+    id: string;
+    tenant_id: string;
+    tenant_name?: string;
+    tenant_code?: string | null;
+    module_code: string;
+    plan_tier: string;
+    billing_cycle: string;
+    status: string;
+    base_price: number;
+    currency: string;
+    next_billing_date: string | null;
+  }>;
+  reconciliation?: {
+    status: 'OK' | 'DRIFT';
+    issues: string[];
+    source_of_truth: string;
+  };
 }
 
 interface Subscription {
@@ -70,6 +88,11 @@ interface Subscription {
   status: string;
   next_billing_date: string;
   billing_cycle: string;
+}
+
+interface PendingSubscriptionAction {
+  subscription: Subscription;
+  action: 'SUSPEND' | 'ACTIVATE' | 'CANCEL';
 }
 
 interface PreviewInvoice {
@@ -112,6 +135,23 @@ function fmt(n: number) {
 }
 function fmtDate(d: string) {
   return d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+}
+
+function canonicalSubscriptionsToRows(dashboard: BillingDashboard | null): Subscription[] {
+  return (dashboard?.canonical_subscriptions ?? []).map(sub => ({
+    id: sub.id,
+    tenant_id: sub.tenant_id,
+    tenant_name: sub.tenant_name,
+    tenant_code: sub.tenant_code ?? undefined,
+    module_code: sub.module_code,
+    plan_tier: sub.plan_tier,
+    base_price: Number(sub.base_price ?? 0),
+    max_vehicles: 0,
+    max_users: 0,
+    status: sub.status,
+    next_billing_date: sub.next_billing_date ?? '',
+    billing_cycle: sub.billing_cycle,
+  }));
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -537,6 +577,62 @@ function PreviewRunModal({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
+function SubscriptionActionModal({
+  pending,
+  onClose,
+  onConfirm,
+  confirming,
+}: {
+  pending: PendingSubscriptionAction;
+  onClose: () => void;
+  onConfirm: () => void;
+  confirming: boolean;
+}) {
+  const { subscription, action } = pending;
+  const label = action === 'CANCEL' ? 'Cancel subscription' : action === 'SUSPEND' ? 'Suspend subscription' : 'Activate subscription';
+  const tenantLabel = subscription.tenant_name ?? subscription.tenant_code ?? `${subscription.tenant_id.slice(0, 8)}...`;
+  const tone = action === 'CANCEL'
+    ? 'border-red-500/30 bg-red-500/10 text-red-200'
+    : action === 'SUSPEND'
+      ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+      : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-slate-900 shadow-2xl">
+        <div className="px-6 py-5 border-b border-white/10">
+          <h3 className="text-lg font-semibold text-white">{label}</h3>
+          <p className="text-sm text-slate-400 mt-1">Review this billing change before it enters the approval workflow.</p>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className={`rounded-xl border px-4 py-3 text-sm ${tone}`}>
+            {label} for {tenantLabel} - {subscription.module_code}
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="rounded-lg bg-slate-950/70 border border-white/10 p-3">
+              <div className="text-slate-500">Current status</div>
+              <div className="text-white font-semibold mt-1">{subscription.status}</div>
+            </div>
+            <div className="rounded-lg bg-slate-950/70 border border-white/10 p-3">
+              <div className="text-slate-500">Billing</div>
+              <div className="text-white font-semibold mt-1">{fmt(subscription.base_price)} / {subscription.billing_cycle}</div>
+            </div>
+          </div>
+        </div>
+        <div className="px-6 py-4 border-t border-white/10 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm text-slate-300 hover:text-white hover:bg-white/5">Keep unchanged</button>
+          <button onClick={onConfirm} disabled={confirming}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50 ${
+              action === 'CANCEL' ? 'bg-red-600 hover:bg-red-500' : action === 'SUSPEND' ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500'
+            }`}>
+            {confirming ? 'Submitting...' : label}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function BillingPage() {
   const [dashboard, setDashboard]           = useState<BillingDashboard | null>(null);
   const [subscriptions, setSubscriptions]   = useState<Subscription[]>([]);
@@ -552,6 +648,8 @@ export default function BillingPage() {
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [confirmingRun, setConfirmingRun]   = useState(false);
   const [showAddModal, setShowAddModal]     = useState(false);
+  const [pendingSubscriptionAction, setPendingSubscriptionAction] = useState<PendingSubscriptionAction | null>(null);
+  const [confirmingSubscriptionAction, setConfirmingSubscriptionAction] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -560,8 +658,15 @@ export default function BillingPage() {
         fetch('/api/billing?type=dashboard'),
         fetch('/api/tenant-subscriptions'),
       ]);
-      if (dashRes.ok)  setDashboard(await dashRes.json());
-      if (subRes.ok)   { const d = await subRes.json(); setSubscriptions(d.data ?? []); }
+      const dash = dashRes.ok ? await dashRes.json() : null;
+      if (dash) setDashboard(dash);
+      if (subRes.ok) {
+        const d = await subRes.json();
+        const rows = Array.isArray(d.data) ? d.data : [];
+        setSubscriptions(rows.length ? rows : canonicalSubscriptionsToRows(dash));
+      } else {
+        setSubscriptions(canonicalSubscriptionsToRows(dash));
+      }
     } catch {
       // silently handle
     } finally {
@@ -577,7 +682,7 @@ export default function BillingPage() {
     try {
       const res = await fetch('/api/billing/auto-invoice', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-confirm-action': 'billing.run' },
         body: JSON.stringify({ action: 'run_billing' }),
       });
       const data = await res.json();
@@ -617,7 +722,7 @@ export default function BillingPage() {
     try {
       const res = await fetch('/api/billing/auto-invoice', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-confirm-action': 'billing.run' },
         body: JSON.stringify({ action: 'run_billing' }),
       });
       const data = await res.json();
@@ -636,28 +741,60 @@ export default function BillingPage() {
   async function handleSubscriptionAction(id: string, action: 'SUSPEND' | 'ACTIVATE' | 'CANCEL') {
     const actionMap: Record<string, string> = { SUSPEND: 'suspend', ACTIVATE: 'activate', CANCEL: 'cancel' };
     try {
-      await fetch('/api/tenant-subscriptions', {
+      const res = await fetch('/api/tenant-subscriptions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-confirm-action': 'billing.subscription.update' },
         body: JSON.stringify({ action: actionMap[action], id }),
       });
-      loadData();
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 428) {
+        setBillingMsg({ type: 'success', text: `Subscription ${action.toLowerCase()} queued for approval: ${data.approvalRequest?.id ?? 'pending request'}.` });
+        return;
+      }
+      if (!res.ok) {
+        setBillingMsg({ type: 'error', text: data.error ?? 'Subscription update failed.' });
+        return;
+      }
+      setBillingMsg({ type: 'success', text: `Subscription ${action.toLowerCase()} submitted.` });
+      await loadData();
     } catch {
-      // ignore
+      setBillingMsg({ type: 'error', text: 'Network error updating subscription.' });
+    }
+  }
+
+  async function confirmSubscriptionAction() {
+    if (!pendingSubscriptionAction) return;
+    setConfirmingSubscriptionAction(true);
+    try {
+      await handleSubscriptionAction(pendingSubscriptionAction.subscription.id, pendingSubscriptionAction.action);
+      setPendingSubscriptionAction(null);
+    } finally {
+      setConfirmingSubscriptionAction(false);
     }
   }
 
   async function handleAddSubscription(data: Record<string, unknown>) {
     try {
-      await fetch('/api/tenant-subscriptions', {
+      const res = await fetch('/api/tenant-subscriptions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-confirm-action': 'billing.subscription.update' },
         body: JSON.stringify(data),
       });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 428) {
+        setBillingMsg({ type: 'success', text: `Subscription create/update queued for approval: ${body.approvalRequest?.id ?? 'pending request'}.` });
+        setShowAddModal(false);
+        return;
+      }
+      if (!res.ok) {
+        setBillingMsg({ type: 'error', text: body.error ?? 'Subscription create/update failed.' });
+        return;
+      }
+      setBillingMsg({ type: 'success', text: 'Subscription saved.' });
       setShowAddModal(false);
-      loadData();
+      await loadData();
     } catch {
-      // ignore
+      setBillingMsg({ type: 'error', text: 'Network error saving subscription.' });
     }
   }
 
@@ -714,6 +851,17 @@ export default function BillingPage() {
         <div className={`mb-6 px-4 py-3 rounded-xl border text-sm flex items-center justify-between ${billingMsg.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-red-500/10 border-red-500/30 text-red-300'}`}>
           <span>{billingMsg.text}</span>
           <button onClick={() => setBillingMsg(null)} className="text-current opacity-60 hover:opacity-100 ml-4">&times;</button>
+        </div>
+      )}
+
+      {dashboard?.reconciliation && (
+        <div className={`mb-6 px-4 py-3 rounded-xl border text-sm ${dashboard.reconciliation.status === 'OK' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-amber-500/10 border-amber-500/30 text-amber-200'}`}>
+          <div className="font-semibold">
+            Billing reconciliation: {dashboard.reconciliation.status === 'OK' ? 'Overview and subscriptions are aligned' : 'Drift detected'}
+          </div>
+          {dashboard.reconciliation.issues.length > 0 && (
+            <div className="mt-1 text-xs">{dashboard.reconciliation.issues.join(' | ')}</div>
+          )}
         </div>
       )}
 
@@ -1001,11 +1149,7 @@ export default function BillingPage() {
                           )}
                           {sub.status !== 'CANCELLED' && (
                             <button
-                              onClick={() => {
-                                if (confirm(`Cancel subscription for ${sub.tenant_name ?? sub.tenant_code ?? sub.tenant_id.slice(0,8)} — ${sub.module_code}?`)) {
-                                  handleSubscriptionAction(sub.id, 'CANCEL');
-                                }
-                              }}
+                              onClick={() => setPendingSubscriptionAction({ subscription: sub, action: 'CANCEL' })}
                               className="text-xs px-2 py-1 rounded-md border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
                             >
                               Cancel
@@ -1050,6 +1194,14 @@ export default function BillingPage() {
         <AddSubscriptionModal
           onClose={() => setShowAddModal(false)}
           onSave={handleAddSubscription}
+        />
+      )}
+      {pendingSubscriptionAction && (
+        <SubscriptionActionModal
+          pending={pendingSubscriptionAction}
+          onClose={() => setPendingSubscriptionAction(null)}
+          onConfirm={confirmSubscriptionAction}
+          confirming={confirmingSubscriptionAction}
         />
       )}
     </div>

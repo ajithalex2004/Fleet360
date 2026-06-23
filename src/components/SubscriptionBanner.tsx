@@ -14,6 +14,7 @@
 
 import { useEffect, useState } from 'react';
 import { Sparkles, AlertTriangle, X } from 'lucide-react';
+import { getClientMe } from '@/lib/client-session';
 
 interface BillingResp {
   billing?: {
@@ -25,6 +26,30 @@ interface BillingResp {
 }
 
 const DISMISS_KEY = 'xl-sub-banner-dismissed-until';
+let billingCache: { ts: number; billing: BillingResp['billing'] | null } | null = null;
+let billingPromise: Promise<BillingResp['billing'] | null> | null = null;
+const BILLING_CACHE_TTL = 5 * 60 * 1000;
+
+async function loadBillingBanner(): Promise<BillingResp['billing'] | null> {
+  if (billingCache && Date.now() - billingCache.ts < BILLING_CACHE_TTL) return billingCache.billing;
+  if (billingPromise) return billingPromise;
+  billingPromise = getClientMe()
+    .then(me => {
+      if (!me?.userId || me.isAdmin === false) return null;
+      return fetch('/api/admin/billing')
+        .then(r => r.ok ? r.json() : null)
+        .then((d: BillingResp | null) => d?.billing ?? null);
+    })
+    .then(billing => {
+      billingCache = { ts: Date.now(), billing };
+      return billing;
+    })
+    .catch(() => null)
+    .finally(() => {
+      billingPromise = null;
+    });
+  return billingPromise;
+}
 
 export default function SubscriptionBanner() {
   const [info, setInfo] = useState<BillingResp['billing'] | null>(null);
@@ -37,9 +62,8 @@ export default function SubscriptionBanner() {
       setDismissed(true);
       return;
     }
-    fetch('/api/admin/billing', { cache: 'no-store' })
-      .then(r => r.ok ? r.json() : null)
-      .then((d: BillingResp) => { if (d?.billing) setInfo(d.billing); })
+    loadBillingBanner()
+      .then(billing => { if (billing) setInfo(billing); })
       .catch(() => {});
   }, []);
 

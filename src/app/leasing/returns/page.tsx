@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
+import { ClipboardList, Gauge, TriangleAlert } from 'lucide-react';
+import { KpiCard, KpiGrid, PageHeader } from '@/components/ui/page-theme';
 
 interface VehicleReturn {
   id: string;
@@ -146,39 +148,32 @@ export default function ReturnsPage() {
   return (
     <div className="space-y-8">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Vehicle Returns</h1>
-          <p className="text-slate-400">Track vehicle condition and return costs</p>
-        </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90 transition-all"
-        >
-          + New Return
-        </button>
-      </div>
+      <PageHeader
+        title="Vehicle Returns"
+        subtitle="Track vehicle condition and return costs"
+        accent="blue"
+        actions={(
+          <button
+            onClick={() => setShowModal(true)}
+            className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90 transition-all"
+          >
+            + New Return
+          </button>
+        )}
+      />
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
-          <h3 className="text-sm font-semibold text-slate-400 mb-4">Total Returns</h3>
-          <p className="text-3xl font-bold text-white">{returns.length}</p>
-          <p className="text-xs text-slate-500 mt-2">Processed</p>
-        </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
-          <h3 className="text-sm font-semibold text-slate-400 mb-4">Total Damage Costs</h3>
-          <p className="text-3xl font-bold text-rose-400">AED {totalDamages.toLocaleString()}</p>
-          <p className="text-xs text-slate-500 mt-2">All returns</p>
-        </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
-          <h3 className="text-sm font-semibold text-slate-400 mb-4">Avg. Mileage</h3>
-          <p className="text-3xl font-bold text-amber-400">
-            {returns.length > 0 ? Math.round(returns.reduce((sum, r) => sum + r.mileage, 0) / returns.length).toLocaleString() : 0}
-          </p>
-          <p className="text-xs text-slate-500 mt-2">Per vehicle</p>
-        </div>
-      </div>
+      <KpiGrid>
+        <KpiCard label="Total Returns" value={returns.length} accent="slate" icon={ClipboardList} sub="Processed records" />
+        <KpiCard label="Damage Costs" value={`AED ${totalDamages.toLocaleString()}`} accent="rose" icon={TriangleAlert} sub="Across all returns" />
+        <KpiCard
+          label="Avg. Mileage"
+          value={returns.length > 0 ? Math.round(returns.reduce((sum, r) => sum + r.mileage, 0) / returns.length).toLocaleString() : 0}
+          accent="amber"
+          icon={Gauge}
+          sub="Per returned vehicle"
+        />
+      </KpiGrid>
 
       {/* Returns Table */}
       <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">

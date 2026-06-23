@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { LogisticsConfirmDialog, LogisticsMessage, readLogisticsApiError } from '@/components/logistics/master-data-fields';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -80,6 +81,7 @@ function UploadModal({
   const [mode,       setMode]       = useState<'file' | 'url'>('file');
   const [saving,     setSaving]     = useState(false);
   const [error,      setError]      = useState('');
+  const [apiError,   setApiError]   = useState<Awaited<ReturnType<typeof readLogisticsApiError>> | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -99,7 +101,7 @@ function UploadModal({
     if (!docName.trim()) { setError('Document name is required'); return; }
     if (mode === 'file' && !fileData) { setError('Please select a file to upload'); return; }
     if (mode === 'url' && !fileUrl.trim()) { setError('Please enter a file URL'); return; }
-    setSaving(true); setError('');
+    setSaving(true); setError(''); setApiError(null);
     try {
       const res = await fetch(`/api/logistics/trips/${bookingId}/documents`, {
         method: 'POST',
@@ -115,7 +117,11 @@ function UploadModal({
           notes:      notes.trim() || undefined,
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const parsed = await readLogisticsApiError(res);
+        setApiError(parsed);
+        throw new Error(parsed.message);
+      }
       onUploaded();
       onClose();
     } catch (e) {
@@ -212,7 +218,21 @@ function UploadModal({
           </div>
         </div>
 
-        {error && (
+        {apiError && (
+          <LogisticsMessage
+            type="error"
+            title="Document validation failed"
+            message={apiError.message}
+            issues={apiError.issues}
+            warnings={apiError.warnings}
+          />
+        )}
+
+        {!apiError && error && (
+          <LogisticsMessage type="error" title="Document upload failed" message={error} />
+        )}
+
+        {false && error && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-2.5 text-red-400 text-xs">⚠️ {error}</div>
         )}
 
@@ -355,6 +375,8 @@ export default function TripDocumentsPage() {
   const [filterType,   setFilterType]   = useState('ALL');
   const [bookingRef,   setBookingRef]   = useState('');
   const [deleting,     setDeleting]     = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<TripDoc | null>(null);
+  const [pageError,    setPageError]    = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -372,12 +394,16 @@ export default function TripDocumentsPage() {
   useEffect(() => { load(); }, [load]);
 
   const handleDelete = async (docId: string) => {
-    if (!confirm('Delete this document?')) return;
     setDeleting(docId);
+    setPageError('');
     try {
-      await fetch(`/api/logistics/trips/${id}/documents/${docId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/logistics/trips/${id}/documents/${docId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error((await readLogisticsApiError(res)).message);
+      setDeleteTarget(null);
       await load();
-    } catch { /* silent */ }
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : 'Failed to delete document');
+    }
     finally { setDeleting(null); }
   };
 
@@ -395,6 +421,16 @@ export default function TripDocumentsPage() {
       )}
       {viewingDoc && (
         <DocViewer bookingId={id} docId={viewingDoc} onClose={() => setViewingDoc(null)} />
+      )}
+      {deleteTarget && (
+        <LogisticsConfirmDialog
+          title="Delete document"
+          message={`Delete ${deleteTarget.doc_name}? This removes the document from the trip record.`}
+          confirmLabel="Delete document"
+          busy={deleting === deleteTarget.id}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => handleDelete(deleteTarget.id)}
+        />
       )}
 
       <div className="space-y-6">
@@ -421,6 +457,7 @@ export default function TripDocumentsPage() {
             </button>
           </div>
         </div>
+        {pageError && <LogisticsMessage type="error" title="Document action failed" message={pageError} />}
 
         {/* Type filter */}
         {types.length > 1 && (
@@ -476,7 +513,7 @@ export default function TripDocumentsPage() {
                   <div className="space-y-3">
                     {typeDocs.map(doc => (
                       <DocCard key={doc.id} doc={doc}
-                        onDelete={docId => handleDelete(docId)}
+                        onDelete={docId => setDeleteTarget(docs.find(item => item.id === docId) ?? null)}
                         onView={docId => setViewingDoc(docId)} />
                     ))}
                   </div>
@@ -486,7 +523,7 @@ export default function TripDocumentsPage() {
             {/* Ungrouped types not in DOC_TYPES */}
             {filtered.filter(d => !grouped.some(g => g.value === d.doc_type)).map(doc => (
               <DocCard key={doc.id} doc={doc}
-                onDelete={docId => handleDelete(docId)}
+                onDelete={docId => setDeleteTarget(docs.find(item => item.id === docId) ?? null)}
                 onView={docId => setViewingDoc(docId)} />
             ))}
           </div>
@@ -494,7 +531,7 @@ export default function TripDocumentsPage() {
           <div className="space-y-3">
             {filtered.map(doc => (
               <DocCard key={doc.id} doc={doc}
-                onDelete={docId => handleDelete(docId)}
+                onDelete={docId => setDeleteTarget(docs.find(item => item.id === docId) ?? null)}
                 onView={docId => setViewingDoc(docId)} />
             ))}
           </div>

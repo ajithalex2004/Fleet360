@@ -3,22 +3,16 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import PasswordInput from '@/components/ui/PasswordInput';
+import { MODULES } from '@/lib/permissions';
 
 /* ─────────────────────────────────────────────────────────
    Module config — IDs must match platform/page.tsx mod.id exactly
 ───────────────────────────────────────────────────────── */
-const ALL_MODULES = [
-  'fleet', 'driver-mgmt', 'maintenance',
-  'leasing', 'rental', 'bus-ops',
-  'school-bus', 'logistics', 'incidents',
-  'dispatch', 'finance', 'compliance',
-  'booking-portal', 'customer-mgmt', 'customer',
-  'reports', 'agents', 'sustainability', 'assets',
-];
+const ALL_MODULES = [...MODULES];
 
 const MODULE_LABELS: Record<string, string> = {
   'fleet':          '🚘 Fleet Management',
-  'driver-mgmt':    '👤 Driver Management',
+  'driver-mgmt':    '🤵 Driver Management',
   'maintenance':    '🔧 Vehicle Maintenance',
   'leasing':        '📋 Vehicle Leasing',
   'rental':         '🚗 Rent-a-Car',
@@ -36,6 +30,10 @@ const MODULE_LABELS: Record<string, string> = {
   'agents':         '🤖 AI Agent Ecosystem',
   'sustainability':  '🌱 Sustainability & ESG',
   'assets':         '🏗️ Assets & Inventory',
+  drivers: 'Driver Management',
+  rac: 'Rent-a-Car',
+  bus_ops: 'Staff Transportation',
+  admin: 'Admin',
 };
 
 /* ─────────────────────────────────────────────────────────
@@ -840,9 +838,59 @@ interface TenantDetailCache {
   tenant: any; roles: any[]; users: any[];
   allRoles: any[]; settings: any; weights: any;
   branches: any[]; navPerms: Record<string, boolean>;
+  overview: TenantOverview | null;
   ts: number;
 }
 const _detailCache = new Map<string, TenantDetailCache>();
+
+interface TenantOverview {
+  metrics: {
+    enabledModules: number;
+    totalModules: number;
+    activeUsers: number;
+    roles: number;
+    branches: number;
+    pendingApprovals: number;
+    openInvitations: number;
+    activeSessions: number;
+    failedLogins24h: number;
+    serviceTypes: number;
+    activeServiceRules: number;
+  };
+  billing: null | {
+    model: string;
+    status: string;
+    effectivePlan: string;
+    moduleMrr: number;
+    activeModuleSubscriptions: number;
+    currency: string;
+  };
+  readiness: { status: 'healthy' | 'attention'; risks: string[] };
+  readinessDashboard?: {
+    score: number;
+    status: 'READY' | 'ATTENTION' | 'BLOCKED';
+    blockers: Array<{ key: string; label: string; message: string; actionHref?: string }>;
+    warnings: Array<{ key: string; label: string; message: string; actionHref?: string }>;
+    categories: Array<{
+      key: string;
+      label: string;
+      score: number;
+      status: 'READY' | 'ATTENTION' | 'BLOCKED';
+      blockers: number;
+      warnings: number;
+      passes: number;
+    }>;
+  } | null;
+  recentChanges: Array<{
+    id: string;
+    entity_type: string;
+    action: string;
+    summary: string | null;
+    actor_role: string | null;
+    created_at: string;
+  }>;
+  operational: { generatedAt: string; queryMs: number };
+}
 
 /* ─────────────────────────────────────────────────────────
    Main page
@@ -856,7 +904,8 @@ export default function TenantDetailPage() {
   // allUsers is loaded lazily on demand (only when Add User modal opens)
   const [allUsers, setAllUsers]     = useState<any[]>([]);
   const [allUsersLoading, setAllUsersLoading] = useState(false);
-  const [tab, setTab]               = useState<'modules'|'features'|'users'|'roles'|'branches'|'admin-access'>('modules');
+  const [tab, setTab]               = useState<'overview'|'modules'|'features'|'users'|'roles'|'branches'|'admin-access'>('overview');
+  const [overview, setOverview]     = useState<TenantOverview | null>(null);
 
   // Admin Access tab state
   const TOGGLEABLE_NAV = [
@@ -874,6 +923,7 @@ export default function TenantDetailPage() {
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
   const [enabledModules, setEnabledModules] = useState<string[]>([]);
+  const [moduleMsg, setModuleMsg] = useState('');
 
   // Feature settings
   const [ts, setTs]                 = useState<TSettings>(TSETTINGS_DEFAULT);
@@ -895,8 +945,9 @@ export default function TenantDetailPage() {
 
   // Helper: apply fetched data to state
   const applyData = useCallback((tData: any, rData: any, uData: any, arData: any,
-    sData: any, wData: any, bData: any, npData: any) => {
+    sData: any, wData: any, bData: any, npData: any, ovData: TenantOverview | null) => {
     setTenant(tData);
+    setOverview(ovData);
     setEnabledModules((tData.modules ?? []).filter((m: any) => m.isEnabled).map((m: any) => m.module));
     setRoles(Array.isArray(rData) ? rData : []);
     setUsers(Array.isArray(uData) ? uData : []);
@@ -948,7 +999,7 @@ export default function TenantDetailPage() {
       const cached = _detailCache.get(id);
       if (cached && Date.now() - cached.ts < DETAIL_CACHE_TTL) {
         applyData(cached.tenant, cached.roles, cached.users, cached.allRoles,
-          cached.settings, cached.weights, cached.branches, cached.navPerms);
+          cached.settings, cached.weights, cached.branches, cached.navPerms, cached.overview);
         setLoading(false);
         return;
       }
@@ -957,7 +1008,7 @@ export default function TenantDetailPage() {
     setLoading(true);
     try {
       // ── All 9 fetches fire in parallel (branches + nav-perms no longer sequential) ──
-      const [tRes, rRes, uRes, arRes, sRes, wRes, bRes, npRes] = await Promise.all([
+      const [tRes, rRes, uRes, arRes, sRes, wRes, bRes, npRes, ovRes] = await Promise.all([
         fetch(`/api/admin/tenants/${id}`),
         fetch(`/api/admin/roles?tenantId=${id}`),
         fetch(`/api/admin/tenants/${id}/users`),
@@ -966,6 +1017,7 @@ export default function TenantDetailPage() {
         fetch(`/api/dispatch/weights?tenantId=${id}`),
         fetch(`/api/tenant-branches?tenantId=${id}&includeInactive=true`).catch(() => null),
         fetch(`/api/admin/nav-permissions?tenantId=${id}`).catch(() => null),
+        fetch(`/api/admin/tenants/${id}/overview`).catch(() => null),
       ]);
 
       const [tData, rData, uData, arData, sData, wData] = await Promise.all([
@@ -973,15 +1025,16 @@ export default function TenantDetailPage() {
       ]);
       const bData  = bRes?.ok  ? (await bRes.json()).data  ?? [] : [];
       const npData = npRes?.ok ? (await npRes.json()).permissions ?? {} : {};
+      const ovData = ovRes?.ok ? await ovRes.json() : null;
 
       // ── Populate cache ─────────────────────────────────────────────────
       _detailCache.set(id, {
         tenant: tData, roles: rData, users: uData, allRoles: arData,
-        settings: sData, weights: wData, branches: bData, navPerms: npData,
+        settings: sData, weights: wData, branches: bData, navPerms: npData, overview: ovData,
         ts: Date.now(),
       });
 
-      applyData(tData, rData, uData, arData, sData, wData, bData, npData);
+      applyData(tData, rData, uData, arData, sData, wData, bData, npData, ovData);
     } catch { } finally { setLoading(false); }
   }, [id, applyData]);
 
@@ -1000,13 +1053,25 @@ export default function TenantDetailPage() {
 
   const saveModules = async () => {
     setSaving(true);
+    setModuleMsg('');
     try {
-      await fetch(`/api/admin/tenants/${id}/modules`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      const res = await fetch(`/api/admin/tenants/${id}/modules`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-admin-confirm-action': 'tenant.modules.update' },
         body: JSON.stringify({ enabledModules }),
       });
       _detailCache.delete(id); // modules changed — invalidate cache
-      load(true);
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 428) {
+        setModuleMsg(`Module access update queued for approval: ${body.approvalRequest?.id ?? 'pending request'}. Approve it, then retry.`);
+        return;
+      }
+      if (!res.ok) {
+        setModuleMsg(body.error ?? 'Module access save failed');
+        return;
+      }
+      await load(true);
+      setModuleMsg('Module access saved.');
+      setTimeout(() => setModuleMsg(''), 3000);
     } finally { setSaving(false); }
   };
 
@@ -1075,6 +1140,7 @@ export default function TenantDetailPage() {
       {/* Tabs */}
       <div className="flex gap-2 border-b border-white/10 overflow-x-auto">
         {([
+          ['overview',     'Tenant 360'],
           ['modules',      'Module Access'],
           ['features',     '⚡ Feature Flags'],
           ['admin-access', '🔐 Admin Access'],
@@ -1090,6 +1156,107 @@ export default function TenantDetailPage() {
       </div>
 
       {/* ── MODULE ACCESS ── */}
+      {tab === 'overview' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              ['Enabled Modules', overview?.metrics.enabledModules ?? enabledModules.length, `${overview?.metrics.totalModules ?? tenant.modules?.length ?? 0} assigned`],
+              ['Active Users', overview?.metrics.activeUsers ?? users.length, `${overview?.metrics.openInvitations ?? 0} open invites`],
+              ['Pending Approvals', overview?.metrics.pendingApprovals ?? 0, 'admin queue'],
+              ['Failed Logins', overview?.metrics.failedLogins24h ?? 0, 'last 24 hours'],
+            ].map(([label, value, hint]) => (
+              <div key={label} className="rounded-2xl border border-white/10 bg-slate-800/50 p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{label}</p>
+                <p className="mt-3 text-3xl font-bold text-white">{value}</p>
+                <p className="mt-1 text-xs text-slate-400">{hint}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+            <div className="xl:col-span-2 rounded-2xl border border-white/10 bg-slate-900/60 overflow-hidden">
+              <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white">Tenant Readiness</h2>
+                  <p className="text-sm text-slate-400">Operational signals across access, billing, security, and configuration.</p>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${
+                  overview?.readiness.status === 'attention'
+                    ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                    : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                }`}>
+                  {overview?.readinessDashboard?.score ?? (overview?.readiness.status === 'attention' ? 70 : 100)}% - {overview?.readiness.status === 'attention' ? 'Needs Attention' : 'Ready'}
+                </span>
+              </div>
+
+              {(overview?.readinessDashboard?.categories?.length ?? 0) > 0 && (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-5 border-b border-white/10">
+                  {overview!.readinessDashboard!.categories.slice(0, 4).map(category => (
+                    <div key={category.key} className="rounded-xl border border-white/10 bg-slate-950/50 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{category.label}</span>
+                        <span className={`text-xs font-bold ${
+                          category.status === 'READY' ? 'text-emerald-300' : category.status === 'BLOCKED' ? 'text-rose-300' : 'text-amber-300'
+                        }`}>{category.score}%</span>
+                      </div>
+                      <p className="mt-2 text-xs text-slate-400">
+                        {category.blockers} blockers - {category.warnings} warnings - {category.passes} passed
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-white/10">
+                <div className="p-5 space-y-4">
+                  <div className="flex items-center justify-between"><span className="text-sm text-slate-400">Billing model</span><span className="text-sm font-semibold text-white">{overview?.billing?.model ?? 'PLAN'}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-sm text-slate-400">Billing status</span><span className="text-sm font-semibold text-emerald-300">{overview?.billing?.status ?? 'ACTIVE'}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-sm text-slate-400">Module MRR</span><span className="text-sm font-semibold text-white">{overview?.billing?.currency ?? 'AED'} {Number(overview?.billing?.moduleMrr ?? 0).toLocaleString()}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-sm text-slate-400">Active sessions</span><span className="text-sm font-semibold text-white">{overview?.metrics.activeSessions ?? 0}</span></div>
+                </div>
+                <div className="p-5 space-y-4">
+                  <div className="flex items-center justify-between"><span className="text-sm text-slate-400">Branches</span><span className="text-sm font-semibold text-white">{overview?.metrics.branches ?? branches.length}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-sm text-slate-400">Roles</span><span className="text-sm font-semibold text-white">{overview?.metrics.roles ?? roles.length}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-sm text-slate-400">Service types</span><span className="text-sm font-semibold text-white">{overview?.metrics.serviceTypes ?? 0}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-sm text-slate-400">Active service rules</span><span className="text-sm font-semibold text-white">{overview?.metrics.activeServiceRules ?? 0}</span></div>
+                </div>
+              </div>
+
+              {(overview?.readiness.risks?.length ?? 0) > 0 && (
+                <div className="border-t border-white/10 p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-300 mb-3">Risks</p>
+                  <div className="space-y-2">
+                    {overview!.readiness.risks.map(risk => (
+                      <div key={risk} className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-sm text-amber-100">{risk}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-slate-900/60 overflow-hidden">
+              <div className="px-5 py-4 border-b border-white/10">
+                <h2 className="text-lg font-bold text-white">Recent Changes</h2>
+                <p className="text-sm text-slate-400">Latest admin mutations for this tenant.</p>
+              </div>
+              <div className="divide-y divide-white/10">
+                {(overview?.recentChanges ?? []).length === 0 ? (
+                  <div className="p-5 text-sm text-slate-500">No recent change history.</div>
+                ) : overview!.recentChanges.map(change => (
+                  <div key={change.id} className="p-4">
+                    <p className="text-sm font-semibold text-white">{change.summary ?? `${change.entity_type} ${change.action}`}</p>
+                    <p className="mt-1 text-xs text-slate-500">{change.action} by {change.actor_role ?? 'admin'} - {new Date(change.created_at).toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="px-5 py-4 border-t border-white/10">
+                <Link href={`/admin/audit-logs?tenantId=${id}`} className="text-sm text-blue-300 hover:text-blue-200">Open audit history</Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {tab === 'modules' && (
         <div className="space-y-6">
           <p className="text-slate-400 text-sm">Control which modules this tenant can access. Disabled modules will be hidden from their navigation.</p>
@@ -1100,7 +1267,7 @@ export default function TenantDetailPage() {
                   onChange={() => setEnabledModules(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m])}
                   className="w-4 h-4 accent-emerald-500"/>
                 <div>
-                  <div className="text-sm font-medium text-white">{MODULE_LABELS[m]}</div>
+                  <div className="text-sm font-medium text-white">{MODULE_LABELS[m] ?? m}</div>
                   <div className={`text-xs mt-0.5 ${enabledModules.includes(m) ? 'text-emerald-400' : 'text-slate-500'}`}>{enabledModules.includes(m) ? 'Enabled' : 'Disabled'}</div>
                 </div>
               </label>
@@ -1110,6 +1277,15 @@ export default function TenantDetailPage() {
             className="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-medium hover:opacity-90 disabled:opacity-50">
             {saving ? 'Saving...' : 'Save Module Access'}
           </button>
+          {moduleMsg && (
+            <div className={`rounded-xl border px-4 py-3 text-sm ${
+              moduleMsg.includes('saved')
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
+                : 'bg-blue-500/10 border-blue-500/30 text-blue-200'
+            }`}>
+              {moduleMsg}
+            </div>
+          )}
         </div>
       )}
 

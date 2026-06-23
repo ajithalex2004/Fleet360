@@ -9,6 +9,7 @@ const SSO_MESSAGES: Record<string, string> = {
   'missing-state':            'SSO session expired. Try again.',
   'invalid-state':            'SSO session expired or tampered with. Try again.',
   'config-missing':           'SSO is not currently configured for your tenant.',
+  'incomplete':               'SSO is configured for your domain, but the setup is incomplete. Contact your administrator.',
   'no-claims':                'Your identity provider returned no claims.',
   'no-email':                 'Your identity provider didn’t return an email address.',
   'domain-not-allowed':       'That email domain isn’t in this tenant’s allowed list.',
@@ -34,6 +35,8 @@ export default function LoginPage() {
   // SSO step
   const [ssoMode, setSsoMode] = useState(false);
   const [ssoEmail, setSsoEmail] = useState('');
+  const [ssoChecking, setSsoChecking] = useState(false);
+  const [ssoDiscovery, setSsoDiscovery] = useState<string | null>(null);
 
   // Optional white-label branding when arriving via /login?tenant=<code>
   interface PublicBranding {
@@ -107,9 +110,13 @@ export default function LoginPage() {
 
       localStorage.setItem(
         'xl_mobility_session',
-        JSON.stringify({ userId: data.user.id, tenantId: data.tenant.id }),
+        JSON.stringify({
+          userId: data.user.id,
+          tenantId: data.tenant.id,
+          customerId: data.customer?.customerId ?? null,
+        }),
       );
-      window.location.href = '/platform';
+      window.location.href = data.customer?.customerId ? '/customer' : '/platform';
     } catch {
       setError('Network error. Please check your connection and try again.');
     } finally {
@@ -143,8 +150,48 @@ export default function LoginPage() {
     }
   }, [mfaCode, useRecovery, submit]);
 
+  const handleSso = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    const workEmail = ssoEmail.trim().toLowerCase();
+    setError(null);
+    setSsoDiscovery(null);
+    if (!workEmail || !/.+@.+\..+/.test(workEmail)) {
+      setError('Enter a valid work email.');
+      return;
+    }
+    setSsoChecking(true);
+    try {
+      const res = await fetch('/api/auth/sso/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: workEmail }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ready) {
+        const tenantName = data.tenant?.name ? `${data.tenant.name}: ` : '';
+        const reason = data.reason === 'incomplete'
+          ? `${tenantName}SSO setup is incomplete. Contact your administrator.`
+          : data.reason === 'tenant-inactive'
+            ? `${tenantName}tenant is inactive.`
+            : 'No SSO is configured for that email domain. Use password sign-in or contact your administrator.';
+        setError(reason);
+        return;
+      }
+      const returnTo = data.customer?.customerId ? '/customer' : '/platform';
+      const label = data.customer?.customerName
+        ? `${data.customer.customerName} portal`
+        : data.tenant?.name ?? 'your identity provider';
+      setSsoDiscovery(`Redirecting to ${label}...`);
+      window.location.href = `/api/auth/sso/initiate?email=${encodeURIComponent(workEmail)}&returnTo=${encodeURIComponent(returnTo)}`;
+    } catch {
+      setError('Could not check SSO for this email. Try again or use password sign-in.');
+    } finally {
+      setSsoChecking(false);
+    }
+  }, [ssoEmail]);
+
   return (
-    <div className="min-h-screen bg-[#0c1a3e] flex items-center justify-center p-4">
+    <div className="relative min-h-screen bg-[var(--app-bg)] flex items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center space-y-2">
           {branding?.logoUrl ? (
@@ -180,20 +227,17 @@ export default function LoginPage() {
           )}
 
           {ssoMode ? (
-            <form onSubmit={(e) => {
-                e.preventDefault();
-                if (!ssoEmail.trim() || !/.+@.+\..+/.test(ssoEmail)) { setError('Enter a valid work email.'); return; }
-                window.location.href = `/api/auth/sso/initiate?email=${encodeURIComponent(ssoEmail.trim())}`;
-              }} className="space-y-4">
+            <form onSubmit={handleSso} className="space-y-4">
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Work email</label>
                 <input type="email" value={ssoEmail} onChange={e => setSsoEmail(e.target.value)} required autoFocus
                   placeholder="you@yourcompany.com"
                   className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
               </div>
-              <button type="submit"
-                className="w-full py-2.5 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-lg text-sm">
-                Continue with SSO
+              {ssoDiscovery && <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-200">{ssoDiscovery}</div>}
+              <button type="submit" disabled={ssoChecking}
+                className="w-full py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold rounded-lg text-sm">
+                {ssoChecking ? 'Checking SSO...' : 'Continue with SSO'}
               </button>
               <div className="text-center">
                 <button type="button" onClick={() => { setSsoMode(false); setError(null); }}

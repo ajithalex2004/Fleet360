@@ -49,8 +49,22 @@ export type TicketStatus =
 
 export type TicketPriority = 'Low' | 'Medium' | 'High';
 
-/** Form field schema for per-type custom fields (1C). Renders dynamically
- *  in the create form and surfaces on the card. */
+/** Form field schema for per-type custom fields (1C).
+ *
+ *  Bindings (Phase B+) — every field can declare:
+ *    • source   — where the value comes from (user-input, current user,
+ *                 selected vehicle, selected maintenance type, current
+ *                 date, etc.)
+ *    • bindTo   — where the value is stored on the ticket (customFields
+ *                 JSONB by default; named bindings map to top-level
+ *                 columns like requestor_name, assigned_to, vehicle_id)
+ *    • readOnly — render but disable; pairs with `source` to show
+ *                 auto-populated values the user can't change
+ *    • hidden   — never render; pairs with `source` to silently capture
+ *                 metadata
+ *
+ *  When `source` is anything other than `user-input`, the server
+ *  overwrites whatever the client sent — see field-resolver.ts. */
 export interface FormFieldDef {
   /** stable key used in customFields JSONB */
   key: string;
@@ -69,7 +83,62 @@ export interface FormFieldDef {
   preview?: boolean;
   /** how to display on cards: 'text' (verbatim), 'badge' (pill) */
   display?: 'text' | 'badge';
+
+  // ── Bindings (Phase B+) ───────────────────────────────────────────────
+  /** Where the value comes from. Default 'user-input' = user types it. */
+  source?: FieldSource;
+  /** Where the value is stored on the ticket. Default 'customFields'. */
+  bindTo?: FieldBindTarget;
+  /** Render but disable — paired with `source` for auto-populated fields. */
+  readOnly?: boolean;
+  /** Suppress UI rendering — paired with `source` to silently capture. */
+  hidden?: boolean;
 }
+
+/** Sources the field-resolver knows how to read. Adding a new entry
+ *  requires extending resolveFieldSource() in field-resolver.ts. */
+export type FieldSource =
+  | 'user-input'                    // default — user types the value
+  | 'currentUser.id'                // session user id
+  | 'currentUser.email'             // session user email
+  | 'currentUser.name'              // session user display name
+  | 'currentUser.department'        // session user department
+  | 'currentUser.role'              // session user primary role code
+  | 'currentDate'                   // YYYY-MM-DD at submit time
+  | 'currentTimestamp'              // ISO 8601 at submit time
+  | 'tenant.id'                     // current tenant id
+  | 'tenant.name'                   // current tenant display name
+  | 'vehicle.id'                    // selected vehicle id
+  | 'vehicle.licensePlate'          // selected vehicle plate
+  | 'vehicle.type'                  // selected vehicle type name
+  | 'vehicle.lastOdometer'          // selected vehicle most-recent odometer
+  | 'maintenanceType.code'          // selected maintenance type code
+  | 'maintenanceType.name'          // selected maintenance type name
+  | 'maintenanceType.defaultPriority'
+  | 'maintenanceType.estimatedHours';
+
+/** Where a resolved value gets stored. Defaults to 'customFields' (the
+ *  JSONB blob keyed by FormFieldDef.key). Other values map to top-level
+ *  columns on service_tickets — the POST handler redirects accordingly.
+ *
+ *  Phase B++ — `module.<key>` bindings (template-literal type) carry
+ *  hints to the downstream auto-create bridge: when a MAINTENANCE
+ *  ticket transitions to Acknowledged and a MaintenanceRequest is
+ *  spawned, fields with `bindTo: 'module.estimatedCost'` are projected
+ *  onto MaintenanceRequest.estimatedCost during that bridge. The
+ *  bindings are declared in src/lib/service-config/module-fields.ts.
+ *  The value still lives in service_tickets.custom_fields at INSERT
+ *  time; the bridge reads it back when it fires. */
+export type FieldBindTarget =
+  | 'customFields'      // service_tickets.custom_fields[key]      (default)
+  | 'requestorId'       // service_tickets.requestor_id
+  | 'requestorName'     // service_tickets.requestor_name
+  | 'assignedTo'        // service_tickets.assigned_to
+  | 'priority'          // service_tickets.priority
+  | 'dueDate'           // service_tickets.due_date
+  | 'vehicleId'         // service_tickets.vehicle_id
+  | 'relatedDriverId'   // service_tickets.related_driver_id
+  | `module.${string}`; // routed to the linked module's downstream model
 
 /** Approval rule (1C) — when set on a TicketTypeConfig, matching tickets
  *  start in 'Awaiting Approval' instead of 'Pending'. Approval is

@@ -7,9 +7,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminPermission } from '@/lib/admin-policy';
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAdminPermission(request, 'edit', 'platform');
+    if (auth instanceof NextResponse) return auth;
     const body = await request.json() as {
       channel: 'email' | 'sms';
       settings: Record<string, string>;

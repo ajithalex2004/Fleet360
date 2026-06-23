@@ -16,13 +16,52 @@
  */
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Headphones, Plus, AlertCircle, Clock, ChevronRight, ArrowUpRight } from 'lucide-react';
+import {
+  Headphones, Plus, AlertCircle, Clock, ChevronRight, ArrowUpRight,
+  Paperclip, Upload, X, Car, Wrench, Lock,
+} from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import { TICKET_TYPES_ORDER } from '@/types/service-tickets';
 import type { TicketType, ServiceTicket, TenantTicketTypeAccess, FormFieldDef } from '@/types/service-tickets';
 import type { ServiceTone } from '@/types/service-config';
 import { getServiceIcon } from '@/lib/service-tickets/icons';
 import { createMaintenanceRequest } from '@/services/mockData';
+
+// ── Phase A/B data-master types — what the form fetches once per mount ─────
+interface MaintenanceTypeOpt {
+  id: string; code: string; name: string;
+  defaultPriority: 'Low' | 'Medium' | 'High';
+  estimatedHours: number | null;
+  defaultAssignee: string | null;
+}
+interface AttachmentTypeOpt {
+  id: string; code: string; name: string;
+  required: boolean;
+  maxFileSizeMb: number | null;
+  allowedMimeTypes: string[];
+  appliesTo: string[];
+}
+interface VehicleOpt {
+  id: string;
+  vehicleCode: string | null;
+  licensePlate: string | null;
+  makeModelYear: string;
+  vehicleTypeId: string | null;
+  vehicleTypeName: string | null;
+  vehicleClass: string | null;
+  branchId: string | null;
+  branchName: string | null;
+  status: string | null;
+  lastOdometer: number | null;
+}
+
+interface CurrentUser {
+  id: string;
+  email: string | null;
+  name: string | null;
+  department: string | null;
+  role: string | null;
+}
 
 /** Map of ticket type → resolved form fields, sourced from
  *  /api/service-tickets/form-fields. Empty array for a type means
@@ -117,6 +156,10 @@ function withHistory(t: ServiceTicket, status: string, actor: string, note?: str
 export default function ServiceTicketsHome() {
   const [, setTenantId]               = useState<string | null>(null);
   const [userId, setUserId]           = useState<string | null>(null);
+  // currentUser is forwarded to NewTicketForm so binding-aware fields can
+  // render the resolved value client-side (display-only — server has the
+  // final word on POST).
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [accessMap, setAccessMap]     = useState<Map<TicketType, TenantTicketTypeAccess>>(new Map());
   const [formFieldsByType, setFormFieldsByType] = useState<FormFieldsByType>({});
   const [typeConfigByType, setTypeConfigByType] = useState<TypeConfigByType>({});
@@ -151,6 +194,17 @@ export default function ServiceTicketsHome() {
       const me = await meRes.json();
       setTenantId(me.tenantId);
       setUserId(me.userId);
+      // Compose a CurrentUser snapshot for binding-aware fields. /api/auth/me
+      // returns userId / tenantId / role / tenantName; we merge in firstName
+      // / lastName / email / department from the user record when available
+      // so client-side resolveSourceClient() can fill currentUser.* sources.
+      setCurrentUser({
+        id:         me.userId ?? '',
+        email:      me.email ?? null,
+        name:       me.userName ?? me.fullName ?? me.email ?? null,
+        department: me.department ?? null,
+        role:       me.role ?? null,
+      });
 
       const [matrixRes, ticketsRes, fieldsRes] = await Promise.all([
         fetch(`/api/admin/tenants/${me.tenantId}/ticket-types`),
@@ -390,6 +444,7 @@ export default function ServiceTicketsHome() {
           enabledTypes={enabledTypes.map(c => c.type)}
           formFieldsByType={formFieldsByType}
           typeConfigByType={typeConfigByType}
+          currentUser={currentUser}
           onCreated={(t) => {
             setTickets(prev => [t, ...prev]);
             setShowForm(false);
@@ -675,17 +730,36 @@ function TicketCard({ ticket, formFields, typeConfig, selected, onToggleSelect, 
   );
 }
 
-// ── Create form ──────────────────────────────────────────────────────────────
+// ── Create form (Phase B + B+) ──────────────────────────────────────────────
+//
+// Adds for MAINTENANCE tickets specifically:
+//   • Maintenance Type dropdown sourced from the Maintenance Type Master
+//     (Phase A). Picking one auto-fills Priority + estimated hours.
+//   • Vehicle dropdown sourced from /api/fleet/vehicles/dropdown (Phase A).
+//     Picking a vehicle auto-populates the Vehicle Type read-only chip
+//     and pre-fills Current Odometer with the last known reading.
+//   • Current Odometer numeric input.
+//   • Multi-attachment widget — Type dropdown sourced from the Attachment
+//     Master (Phase A) + file upload via /api/service-tickets/upload.
+//
+// Adds for ALL ticket types (Phase B+ bindings):
+//   • Custom fields with `source !== 'user-input'` are auto-populated from
+//     the current user / selected vehicle / selected maintenance type.
+//   • Custom fields with `readOnly: true` render disabled.
+//   • Custom fields with `hidden: true` don't render at all (server still
+//     resolves their values from the source).
 function NewTicketForm({
   enabledTypes,
   formFieldsByType,
   typeConfigByType,
+  currentUser,
   onCreated,
   onCancel,
 }: {
   enabledTypes: TicketType[];
   formFieldsByType: FormFieldsByType;
   typeConfigByType: TypeConfigByType;
+  currentUser: CurrentUser | null;
   onCreated: (t: ServiceTicket) => void;
   onCancel: () => void;
 }) {
@@ -699,10 +773,40 @@ function NewTicketForm({
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr]               = useState<string | null>(null);
 
-  // Resolved per-type config from the Service Configuration Engine —
-  // delivered by /api/service-tickets/form-fields. Single source of truth
-  // for everything the create form needs. Fallback values cover the brief
-  // window before the parent's mount fetch completes.
+  // Maintenance-specific state.
+  const [maintenanceTypeId, setMaintenanceTypeId] = useState('');
+  const [odometer, setOdometer]                   = useState<string>('');
+
+  // Multi-attachment payload — populated as the user uploads files.
+  const [attachments, setAttachments] = useState<Array<{
+    type: string; fileName: string; url: string; size?: number; mimeType?: string;
+  }>>([]);
+
+  // Master + dropdown data, fetched lazily once on mount.
+  const [maintenanceTypes, setMaintenanceTypes] = useState<MaintenanceTypeOpt[]>([]);
+  const [attachmentTypes, setAttachmentTypes]   = useState<AttachmentTypeOpt[]>([]);
+  const [vehicles, setVehicles]                 = useState<VehicleOpt[]>([]);
+
+  useEffect(() => {
+    // All three masters in parallel — failures are non-fatal (the form
+    // degrades to free-text input where data is missing).
+    void (async () => {
+      try {
+        const [mtRes, atRes, vRes] = await Promise.all([
+          fetch('/api/data-masters/maintenance-types?activeOnly=true'),
+          fetch(`/api/data-masters/attachment-types?activeOnly=true&appliesTo=${ticketType}`),
+          fetch('/api/fleet/vehicles/dropdown'),
+        ]);
+        if (mtRes.ok) setMaintenanceTypes((await mtRes.json()).types ?? []);
+        if (atRes.ok) setAttachmentTypes((await atRes.json()).types ?? []);
+        if (vRes.ok)  setVehicles((await vRes.json()).vehicles ?? []);
+      } catch { /* ignore — UI handles empty arrays gracefully */ }
+    })();
+    // We refetch attachment types when ticketType changes so the widget
+    // only offers types that apply (or are universal).
+  }, [ticketType]);
+
+  // Resolved per-type config from the Service Configuration Engine.
   const tc = typeConfigByType[ticketType];
   const formFields: FormFieldDef[] = formFieldsByType[ticketType] ?? [];
   const vehicleRequired         = !!tc?.vehicleRequired;
@@ -714,31 +818,71 @@ function NewTicketForm({
     !!tc?.approvalRequired
     && !(tc.approvalEmergencyBypass && priority === 'High');
 
-  // Reset per-type custom fields whenever the ticket type changes — different
-  // types have different field schemas, so values don't carry across.
+  const isMaintenance = ticketType === 'MAINTENANCE';
+  const selectedVehicle = vehicles.find(v => v.id === vehicleId) ?? null;
+  const selectedMaintenanceType = maintenanceTypes.find(t => t.id === maintenanceTypeId) ?? null;
+
+  // Reset per-type custom fields whenever the ticket type changes.
   useEffect(() => {
     setCustomFields({});
+    setMaintenanceTypeId('');
   }, [ticketType]);
 
-  // When the type's defaultPriority differs from current selection AND the
-  // user hasn't started typing, snap to it. We only do this on type change.
+  // Snap priority to the type default on type change.
   useEffect(() => {
     setPriority(p => (p === 'Low' || p === 'Medium' || p === 'High') ? resolvedDefaultPriority : p);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticketType]);
 
+  // When a Maintenance Type is picked, pull its default priority forward.
+  // The user can still override Priority manually afterwards.
+  useEffect(() => {
+    if (selectedMaintenanceType) {
+      setPriority(selectedMaintenanceType.defaultPriority);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maintenanceTypeId]);
+
+  // When a Vehicle is picked, pre-fill the odometer with the last known
+  // reading as a starting suggestion (the user enters what they actually
+  // observe and it'll usually be close).
+  useEffect(() => {
+    if (selectedVehicle?.lastOdometer != null && odometer === '') {
+      setOdometer(String(selectedVehicle.lastOdometer));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vehicleId]);
+
+  // Build the binding context the DynamicField needs to auto-populate
+  // source-driven fields. Mirrors ResolverContext on the server side.
+  const bindingContext = useMemo(() => ({
+    user:            currentUser,
+    vehicle:         selectedVehicle,
+    maintenanceType: selectedMaintenanceType,
+  }), [currentUser, selectedVehicle, selectedMaintenanceType]);
+
   const setField = (key: string, value: unknown) => {
     setCustomFields(prev => ({ ...prev, [key]: value }));
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setErr(null);
     if (!title.trim()) { setErr('Title is required.'); return; }
-    if (vehicleRequired && !vehicleId.trim()) { setErr(`${longLabel} requires a vehicle ID.`); return; }
+    if (vehicleRequired && !vehicleId.trim()) { setErr(`${longLabel} requires a vehicle.`); return; }
+    if (isMaintenance && maintenanceTypes.length > 0 && !maintenanceTypeId) {
+      setErr('Pick a Maintenance Type.');
+      return;
+    }
 
-    // Client-side mirror of server validation — fail fast before POST.
+    // Required-field validation — skip fields whose value will be filled
+    // server-side from a non-default source.
     for (const f of formFields) {
       if (!f.required) continue;
+      if (f.source && f.source !== 'user-input') continue;
       const v = customFields[f.key];
       const empty = v === undefined || v === null || v === '' || v === false;
       if (empty && f.type !== 'checkbox') {
@@ -747,8 +891,30 @@ function NewTicketForm({
       }
     }
 
+    // Required attachment-type check — applies the master's `required` flag.
+    const requiredTypes = attachmentTypes.filter(t =>
+      t.required && (t.appliesTo.length === 0 || t.appliesTo.includes(ticketType)));
+    for (const reqType of requiredTypes) {
+      if (!attachments.some(a => a.type === reqType.code)) {
+        setErr(`Required attachment missing: ${reqType.name}.`);
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
+      // Stuff Maintenance Type + Odometer into customFields so admins can
+      // surface them on the card. The bindings layer can also bind these
+      // out to top-level columns via the Form Fields tab.
+      const payloadCustomFields: Record<string, unknown> = { ...customFields };
+      if (isMaintenance && selectedMaintenanceType) {
+        payloadCustomFields.maintenanceTypeCode = selectedMaintenanceType.code;
+        payloadCustomFields.maintenanceTypeName = selectedMaintenanceType.name;
+      }
+      if (isMaintenance && odometer !== '') {
+        payloadCustomFields.odometer = Number(odometer);
+      }
+
       const res = await fetch('/api/service-tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -759,7 +925,9 @@ function NewTicketForm({
           priority,
           vehicleId: vehicleId.trim() || undefined,
           dueDate: dueDate || undefined,
-          customFields: Object.keys(customFields).length ? customFields : undefined,
+          maintenanceTypeId: isMaintenance ? (maintenanceTypeId || undefined) : undefined,
+          customFields: Object.keys(payloadCustomFields).length ? payloadCustomFields : undefined,
+          attachments: attachments.length > 0 ? attachments : undefined,
         }),
       });
       const data = await res.json();
@@ -808,8 +976,6 @@ function NewTicketForm({
           Default SLA: <strong className="text-white">{defaultSlaHours}h</strong> · default priority: <strong className="text-white">{resolvedDefaultPriority}</strong>
           {autoCreatesMR && <span className="ml-2 text-blue-300">· auto-creates Maintenance Request on Acknowledge</span>}
         </p>
-        {/* Approval-gate hint — derived server-side from the resolved
-            approval rules. */}
         {willAwaitApproval && (
           <p className="text-[11px] text-amber-300/90 inline-flex items-center gap-1">
             <AlertCircle className="w-3 h-3" />
@@ -819,87 +985,326 @@ function NewTicketForm({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="space-y-1 md:col-span-2">
-          <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Title</label>
+        {/* Maintenance Type — first because it drives Priority defaults */}
+        {isMaintenance && (
+          <FormCol label="Maintenance Type" required hint={selectedMaintenanceType?.estimatedHours != null
+            ? `Estimated ${selectedMaintenanceType.estimatedHours}h work`
+            : undefined}>
+            <div className="relative">
+              <Wrench className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+              <select value={maintenanceTypeId} onChange={e => setMaintenanceTypeId(e.target.value)}
+                className="w-full bg-slate-800 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+                <option value="">{maintenanceTypes.length === 0 ? 'No types defined — add some in the Master' : '— Select a type —'}</option>
+                {maintenanceTypes.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+          </FormCol>
+        )}
+
+        {/* Title */}
+        <FormCol label="Title" required colSpan={2}>
           <input value={title} onChange={e => setTitle(e.target.value)} required
             placeholder="Short summary"
             className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-        </div>
-        <div className="space-y-1 md:col-span-2">
-          <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Description</label>
-          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Priority</label>
+        </FormCol>
+
+        {/* Vehicle dropdown — drives the Vehicle Type chip and odometer hint */}
+        <FormCol label="Vehicle" required={vehicleRequired} colSpan={2}>
+          <div className="relative">
+            <Car className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+            <select value={vehicleId} onChange={e => setVehicleId(e.target.value)}
+              className="w-full bg-slate-800 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+              <option value="">{vehicles.length === 0 ? 'No vehicles available' : '— Select a vehicle —'}</option>
+              {vehicles.map(v => (
+                <option key={v.id} value={v.id}>
+                  {v.licensePlate ? `[${v.licensePlate}] ` : ''}{v.makeModelYear}
+                  {v.branchName ? ` · ${v.branchName}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* Vehicle Type — read-only chip auto-populated from selection */}
+          {selectedVehicle && (
+            <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-[11px]">
+              {selectedVehicle.vehicleTypeName && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/30">
+                  <Lock className="w-3 h-3" /> Type: <strong>{selectedVehicle.vehicleTypeName}</strong>
+                </span>
+              )}
+              {selectedVehicle.vehicleClass && (
+                <span className="text-slate-500">· {selectedVehicle.vehicleClass}</span>
+              )}
+              {selectedVehicle.lastOdometer != null && (
+                <span className="text-slate-500">· last odometer {selectedVehicle.lastOdometer.toLocaleString()} km</span>
+              )}
+            </div>
+          )}
+        </FormCol>
+
+        {/* Priority + Due Date row */}
+        <FormCol label="Priority">
           <select value={priority} onChange={e => setPriority(e.target.value as 'Low' | 'Medium' | 'High')}
             className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
             <option>Low</option><option>Medium</option><option>High</option>
           </select>
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Due date</label>
+        </FormCol>
+        <FormCol label="Due date">
           <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
             className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" />
-        </div>
-        <div className="space-y-1 md:col-span-2">
-          <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
-            Vehicle ID {vehicleRequired && <span className="text-rose-400">*</span>}
-          </label>
-          <input value={vehicleId} onChange={e => setVehicleId(e.target.value)}
-            placeholder={vehicleRequired ? 'Required for this ticket type' : 'Optional'}
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-        </div>
+        </FormCol>
 
-        {/* Per-type dynamic fields — driven by resolved formFields
-            (admin-edited rules first, compile-time config as fallback). */}
+        {/* Current Odometer — maintenance only */}
+        {isMaintenance && (
+          <FormCol label="Current Odometer (km)"
+            hint={selectedVehicle?.lastOdometer != null
+              ? `Last known: ${selectedVehicle.lastOdometer.toLocaleString()} km`
+              : undefined}>
+            <input type="number" min={0} value={odometer}
+              onChange={e => setOdometer(e.target.value)}
+              placeholder="Reading at the time of request"
+              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+          </FormCol>
+        )}
+
+        {/* Description */}
+        <FormCol label="Description / Remarks" colSpan={2}>
+          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
+            placeholder="Additional details, symptoms, requestor remarks…"
+            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+        </FormCol>
+
+        {/* Per-type dynamic custom fields — driven by resolved formFields */}
         {formFields.map(f => (
           <DynamicField key={`${ticketType}:${f.key}`}
             field={f}
             value={customFields[f.key]}
-            onChange={v => setField(f.key, v)} />
+            onChange={v => setField(f.key, v)}
+            ctx={bindingContext} />
         ))}
       </div>
+
+      {/* Multi-attachment widget */}
+      <AttachmentsWidget
+        attachmentTypes={attachmentTypes}
+        ticketType={ticketType}
+        attachments={attachments}
+        onAdd={a => setAttachments(prev => [...prev, a])}
+        onRemove={removeAttachment} />
 
       <div className="flex justify-end gap-2">
         <button type="button" onClick={onCancel}
           className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
         <button type="submit" disabled={submitting}
           className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 transition-all">
-          <Plus className="w-4 h-4" /> {submitting ? 'Creating…' : 'Create ticket'}
+          <Plus className="w-4 h-4" /> {submitting ? 'Submitting…' : 'Submit Request'}
         </button>
       </div>
     </form>
   );
 }
 
-// ── Dynamic per-type form field ─────────────────────────────────────────────
-// Renders a single field from cfg.formFields. Knows about all 7 input types.
-// Layout: text/textarea/select span 2 cols; numbers/dates/checkboxes 1 col.
+// ── Form column helper — tiny wrapper to keep markup tidy ───────────────────
+function FormCol({ label, required, hint, children, colSpan }: {
+  label: string; required?: boolean; hint?: string;
+  children: React.ReactNode; colSpan?: 1 | 2;
+}) {
+  return (
+    <div className={`space-y-1 ${colSpan === 2 ? 'md:col-span-2' : ''}`}>
+      <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
+        {label} {required && <span className="text-rose-400">*</span>}
+      </label>
+      {children}
+      {hint && <p className="text-[10px] text-slate-500">{hint}</p>}
+    </div>
+  );
+}
+
+// ── Multi-attachment widget ─────────────────────────────────────────────────
+// One row per attachment: [Type dropdown] + [File picker] + [remove].
+// Plus an "Add attachment" button that adds a row and waits for the user
+// to pick a file. Upload happens via /api/service-tickets/upload which
+// validates against the Attachment Master (MIME, size).
+function AttachmentsWidget({
+  attachmentTypes, ticketType, attachments, onAdd, onRemove,
+}: {
+  attachmentTypes: AttachmentTypeOpt[];
+  ticketType: TicketType;
+  attachments: Array<{ type: string; fileName: string; url: string; size?: number; mimeType?: string }>;
+  onAdd: (a: { type: string; fileName: string; url: string; size?: number; mimeType?: string }) => void;
+  onRemove: (i: number) => void;
+}) {
+  const [stagedType, setStagedType] = useState('');
+  const [uploading, setUploading]   = useState(false);
+  const [err, setErr]               = useState<string | null>(null);
+
+  // Keep only types that apply to this ticket type or are universal.
+  const applicableTypes = attachmentTypes.filter(t =>
+    t.appliesTo.length === 0 || t.appliesTo.includes(ticketType));
+
+  const handleFileChosen = async (file: File) => {
+    if (!stagedType) { setErr('Pick an attachment type first.'); return; }
+    setErr(null); setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('typeCode', stagedType);
+      const res = await fetch('/api/service-tickets/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) { setErr(data?.error ?? 'Upload failed'); return; }
+      onAdd({ type: stagedType, fileName: data.fileName, url: data.url, size: data.size, mimeType: data.mimeType });
+      setStagedType('');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-slate-900/40 p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <Paperclip className="w-3.5 h-3.5 text-slate-400" />
+        <span className="text-xs font-semibold text-slate-300 uppercase tracking-wide">Attachments</span>
+        <span className="text-[10px] text-slate-500">{attachments.length} attached</span>
+      </div>
+
+      {/* Existing attachments */}
+      {attachments.length > 0 && (
+        <ul className="space-y-1">
+          {attachments.map((a, i) => {
+            const typeMeta = attachmentTypes.find(t => t.code === a.type);
+            return (
+              <li key={`${a.url}-${i}`}
+                className="flex items-center gap-2 text-xs bg-slate-800/60 border border-white/5 rounded-lg px-3 py-1.5">
+                <span className="px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/30 text-[10px] font-mono">
+                  {typeMeta?.name ?? a.type}
+                </span>
+                <a href={a.url} target="_blank" rel="noreferrer"
+                  className="flex-1 truncate text-violet-300 hover:text-violet-200 underline-offset-2 hover:underline">
+                  {a.fileName}
+                </a>
+                {a.size != null && (
+                  <span className="text-[10px] text-slate-500">{(a.size / 1024).toFixed(0)} KB</span>
+                )}
+                <button type="button" onClick={() => onRemove(i)}
+                  className="p-1 text-rose-300 hover:bg-rose-500/10 rounded">
+                  <X className="w-3 h-3" />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {/* Staged uploader */}
+      <div className="grid grid-cols-[1fr_auto] gap-2 items-start">
+        <select value={stagedType} onChange={e => setStagedType(e.target.value)}
+          className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:ring-2 focus:ring-violet-500">
+          <option value="">{applicableTypes.length === 0 ? 'No types configured' : '— Pick attachment type —'}</option>
+          {applicableTypes.map(t => (
+            <option key={t.id} value={t.code}>
+              {t.name}{t.required ? ' (required)' : ''}{t.maxFileSizeMb != null ? ` · max ${t.maxFileSizeMb} MB` : ''}
+            </option>
+          ))}
+        </select>
+        <label className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer ${
+          stagedType && !uploading
+            ? 'bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-200'
+            : 'bg-slate-800/60 border border-white/10 text-slate-500 cursor-not-allowed'
+        }`}>
+          <Upload className="w-3.5 h-3.5" />
+          {uploading ? 'Uploading…' : 'Choose file'}
+          <input type="file" className="sr-only"
+            disabled={!stagedType || uploading}
+            onChange={e => {
+              const f = e.target.files?.[0];
+              if (f) void handleFileChosen(f);
+              e.target.value = ''; // reset so picking the same file twice still fires onChange
+            }} />
+        </label>
+      </div>
+      {err && <p className="text-[11px] text-rose-300">{err}</p>}
+    </div>
+  );
+}
+
+// ── Dynamic per-type form field (binding-aware) ─────────────────────────────
+// Renders a single field from cfg.formFields. Knows about all 7 input types
+// and respects Phase B+ bindings:
+//   • field.hidden   → render nothing (server still resolves the value)
+//   • field.readOnly → render disabled
+//   • field.source !== 'user-input' → pre-fill with the resolved value from
+//     the binding context (current user / vehicle / maintenance type)
+//
+// The display value precedence is:
+//   1. User-entered `value` if the user has typed (state owns it)
+//   2. Resolved source value when the field is auto-sourced
+//   3. Empty string
 function DynamicField({
-  field, value, onChange,
+  field, value, onChange, ctx,
 }: {
   field: FormFieldDef;
   value: unknown;
   onChange: (v: unknown) => void;
+  ctx: { user: CurrentUser | null; vehicle: VehicleOpt | null; maintenanceType: MaintenanceTypeOpt | null };
 }) {
+  // ── Hooks must fire unconditionally on every render ──────────────────
+  // Earlier versions returned null for `field.hidden` BEFORE calling the
+  // hooks below, which violates the rules of hooks and crashes the page
+  // when a field's `hidden` flag toggles between renders. We evaluate
+  // the hooks first and gate the JSX afterwards.
+  const autoSourced = !!field.source && field.source !== 'user-input';
+  const readOnly = !!field.readOnly;
+
+  // Resolve the source value client-side for display. The server has the
+  // last word — whatever it computes wins on POST — so this is purely UX.
+  const resolved = useMemo(() => resolveSourceClient(field.source, ctx), [field.source, ctx]);
+
+  // The displayed value: prefer user input when present, otherwise the
+  // auto-sourced value. Empty string falls through to "let the user type".
+  const displayValue = (value !== undefined && value !== null && value !== '')
+    ? value
+    : (autoSourced ? resolved : '');
+
+  // When auto-sourced, push the resolved value into form state so it gets
+  // submitted even if the user never touches the field. We only do this
+  // when there's no user-typed value, so we don't clobber edits.
+  useEffect(() => {
+    if (autoSourced && (value === undefined || value === '') && resolved !== null && resolved !== undefined) {
+      onChange(resolved);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSourced, resolved]);
+
+  // Hidden fields are suppressed in the UI — return AFTER hooks have run
+  // so the hook order stays stable across hidden/visible transitions.
+  if (field.hidden) return null;
+
   const span = field.type === 'textarea' || field.type === 'select' || field.type === 'text'
     ? 'md:col-span-2' : '';
   const labelEl = (
-    <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
-      {field.label} {field.required && <span className="text-rose-400">*</span>}
+    <label className="text-xs font-medium text-slate-400 uppercase tracking-wide flex items-center gap-1">
+      {field.label}
+      {field.required && <span className="text-rose-400">*</span>}
+      {readOnly && <Lock className="w-3 h-3 text-slate-500" />}
     </label>
   );
+
+  const baseClasses = `w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 ${
+    readOnly ? 'opacity-60 cursor-not-allowed' : ''
+  }`;
 
   if (field.type === 'checkbox') {
     return (
       <div className="space-y-1 md:col-span-2">
         <label className="inline-flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
           <input type="checkbox"
-            checked={!!value}
+            checked={!!displayValue}
+            disabled={readOnly}
             onChange={e => onChange(e.target.checked)}
             className="w-4 h-4 accent-violet-500 rounded" />
           <span>{field.label}{field.required && <span className="ml-1 text-rose-400">*</span>}</span>
+          {readOnly && <Lock className="w-3 h-3 text-slate-500" />}
         </label>
       </div>
     );
@@ -909,10 +1314,11 @@ function DynamicField({
     return (
       <div className={`space-y-1 ${span}`}>
         {labelEl}
-        <select value={(value as string) ?? ''}
+        <select value={(displayValue as string) ?? ''}
           onChange={e => onChange(e.target.value || undefined)}
-          required={field.required}
-          className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+          required={field.required && !autoSourced}
+          disabled={readOnly}
+          className={baseClasses}>
           <option value="">— Select —</option>
           {field.options?.map(o => (
             <option key={o.value} value={o.value}>{o.label}</option>
@@ -927,12 +1333,13 @@ function DynamicField({
       <div className={`space-y-1 ${span}`}>
         {labelEl}
         <textarea
-          value={(value as string) ?? ''}
+          value={(displayValue as string) ?? ''}
           onChange={e => onChange(e.target.value)}
           placeholder={field.placeholder}
-          required={field.required}
+          required={field.required && !autoSourced}
+          readOnly={readOnly}
           rows={3}
-          className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+          className={baseClasses} />
       </div>
     );
   }
@@ -947,7 +1354,7 @@ function DynamicField({
     <div className={`space-y-1 ${span}`}>
       {labelEl}
       <input type={inputType}
-        value={(value as string | number | undefined) ?? ''}
+        value={(displayValue as string | number | undefined) ?? ''}
         onChange={e => {
           const v = e.target.value;
           onChange(field.type === 'number' ? (v === '' ? undefined : Number(v)) : v);
@@ -955,8 +1362,39 @@ function DynamicField({
         placeholder={field.placeholder}
         min={field.min}
         max={field.max}
-        required={field.required}
-        className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+        required={field.required && !autoSourced}
+        readOnly={readOnly}
+        className={baseClasses} />
     </div>
   );
+}
+
+// Mirror of the server-side resolveFieldSource for client-side display.
+// The server is authoritative; this is purely so the user sees the value
+// they're about to submit. Only handles the cases the client has data for —
+// other sources (currentDate, etc.) the server fills in.
+function resolveSourceClient(
+  source: FormFieldDef['source'] | undefined,
+  ctx: { user: CurrentUser | null; vehicle: VehicleOpt | null; maintenanceType: MaintenanceTypeOpt | null },
+): unknown | null {
+  switch (source) {
+    case 'currentUser.id':           return ctx.user?.id ?? null;
+    case 'currentUser.email':        return ctx.user?.email ?? null;
+    case 'currentUser.name':         return ctx.user?.name ?? ctx.user?.email ?? null;
+    case 'currentUser.department':   return ctx.user?.department ?? null;
+    case 'currentUser.role':         return ctx.user?.role ?? null;
+    case 'currentDate':              return new Date().toISOString().slice(0, 10);
+    case 'currentTimestamp':         return new Date().toISOString();
+    case 'vehicle.id':               return ctx.vehicle?.id ?? null;
+    case 'vehicle.licensePlate':     return ctx.vehicle?.licensePlate ?? null;
+    case 'vehicle.type':             return ctx.vehicle?.vehicleTypeName ?? null;
+    case 'vehicle.lastOdometer':     return ctx.vehicle?.lastOdometer ?? null;
+    case 'maintenanceType.code':              return ctx.maintenanceType?.code ?? null;
+    case 'maintenanceType.name':              return ctx.maintenanceType?.name ?? null;
+    case 'maintenanceType.defaultPriority':   return ctx.maintenanceType?.defaultPriority ?? null;
+    case 'maintenanceType.estimatedHours':    return ctx.maintenanceType?.estimatedHours ?? null;
+    // tenant.* + currentUser fields not in CurrentUser fall through — the
+    // server fills them on submit.
+    default: return null;
+  }
 }

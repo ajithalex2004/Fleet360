@@ -5,6 +5,7 @@ import { usePermissions } from '@/contexts/PermissionContext';
 import UserSwitcher from '@/components/UserSwitcher';
 import BranchSelector from '@/components/BranchSelector';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import ThemeToggle from '@/components/ui/ThemeToggle';
 
 interface Props {
   moduleName: string;
@@ -17,12 +18,12 @@ export default function PlatformHomeBar({
   moduleIcon = 'M',
   accentColor = 'from-blue-500 to-indigo-600',
 }: Props) {
-  const { user, tenant, isAuthenticated } = usePermissions();
+  const { tenant, isAuthenticated } = usePermissions();
   const pathname = usePathname();
   const isAgentsPage = pathname?.startsWith('/agents');
 
   return (
-    <div className="flex items-center justify-between px-4 py-2 bg-slate-950/90 border-b border-white/5 z-50 backdrop-blur-sm flex-shrink-0">
+    <div className="app-shell-bar flex items-center justify-between px-4 py-2 bg-slate-950/90 border-b border-white/5 z-50 backdrop-blur-sm flex-shrink-0">
       {/* Left: back to platform home + AI Agents quick link */}
       <div className="flex items-center gap-2">
         <Link
@@ -64,6 +65,7 @@ export default function PlatformHomeBar({
 
       {/* Right: language switcher + branch selector + user switcher */}
       <div className="flex items-center gap-2 flex-shrink-0">
+        <ThemeToggle />
         <LanguageSwitcher />
         <BranchSelector compact />
         {isAuthenticated ? (

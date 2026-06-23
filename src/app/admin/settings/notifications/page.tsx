@@ -572,7 +572,7 @@ function NotificationPrefsMatrix({ settings, onSave }: {
 /* ─────────────────────────────────────────────────────────────
    WhatsApp Channel Card  (legacy — uses integration-configs)
 ───────────────────────────────────────────────────────────── */
-const WA_FIELDS = [
+const WA_FIELDS: Array<{ key: keyof WaConfig; label: string; ph: string; secret?: boolean }> = [
   { key: 'provider',   label: 'Provider',            ph: 'e.g. Twilio, 360dialog' },
   { key: 'apiKey',     label: 'API Key',              ph: '•••••', secret: true },
   { key: 'apiSecret',  label: 'API Secret',           ph: '•••••', secret: true },
@@ -635,12 +635,12 @@ function WhatsAppCard() {
           {WA_FIELDS.map(f => (
             <div key={f.key} className="py-3 border-b border-white/5 last:border-0">
               <label className="block text-sm font-medium text-white mb-1.5">{f.label}</label>
-              {(f as any).secret ? (
-                <PasswordInput value={(cfg as any)[f.key] ?? ''} onChange={v => setField(f.key, v)}
+              {f.secret ? (
+                <PasswordInput value={String(cfg[f.key] ?? '')} onChange={v => setField(f.key, v)}
                   placeholder={f.ph}
                   className="bg-slate-800 border border-white/10 text-white text-sm rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-green-500/50 placeholder-slate-600" />
               ) : (
-                <input type="text" value={(cfg as any)[f.key] ?? ''} placeholder={f.ph}
+                <input type="text" value={String(cfg[f.key] ?? '')} placeholder={f.ph}
                   onChange={e => setField(f.key, e.target.value)}
                   className="bg-slate-800 border border-white/10 text-white text-sm rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-green-500/50 placeholder-slate-600" />
               )}
@@ -704,10 +704,15 @@ export default function NotificationChannelsPage() {
     keys.forEach(k => { payload[k] = settings[k] ?? ''; });
     try {
       const res = await fetch('/api/admin/platform-settings', {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-admin-confirm-action': 'platform-settings.update' },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error();
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 428) {
+        setError(`Channel settings queued for approval: ${data.approvalRequest?.id ?? 'pending request'}.`);
+        return;
+      }
+      if (!res.ok) throw new Error(data.error ?? 'Save failed');
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch { setError('Failed to save — please try again'); }
@@ -778,11 +783,17 @@ export default function NotificationChannelsPage() {
         settings={settings}
         onSave={async (prefs) => {
           const json = JSON.stringify(prefs);
-          await fetch('/api/admin/platform-settings', {
+          const res = await fetch('/api/admin/platform-settings', {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-admin-confirm-action': 'platform-settings.update' },
             body: JSON.stringify({ platform_notification_prefs: json }),
           });
+          const data = await res.json().catch(() => ({}));
+          if (res.status === 428) {
+            setError(`Notification preferences queued for approval: ${data.approvalRequest?.id ?? 'pending request'}.`);
+            return;
+          }
+          if (!res.ok) throw new Error(data.error ?? 'Save failed');
           setSettings(s => ({ ...s, platform_notification_prefs: json }));
         }}
       />

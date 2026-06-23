@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 export async function GET(req: NextRequest) {
   try {
     const branches = await prisma.leaseBranch.findMany({
-      where: { deletedAt: null },
+      where: { isActive: { not: false } },
       orderBy: { name: 'asc' },
     });
     return NextResponse.json(branches);
@@ -47,7 +47,7 @@ export async function DELETE(req: NextRequest) {
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
     await prisma.leaseBranch.update({
       where: { id },
-      data: { deletedAt: new Date() },
+      data: { isActive: false },
     });
     return NextResponse.json({ success: true });
   } catch (e) {

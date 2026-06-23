@@ -204,7 +204,7 @@ function TripCard({ schedule, onTransition, onAssign, isMoving }: {
       {(schedule.vehicle || schedule.driver) && (
         <div className="text-xs space-y-0.5">
           {schedule.vehicle && <p className="text-amber-400">🚌 {schedule.vehicle.plateNumber ?? schedule.vehicle.registrationNo}</p>}
-          {schedule.driver  && <p className="text-blue-400">👤 {schedule.driver.firstName} {schedule.driver.lastName}</p>}
+          {schedule.driver  && <p className="text-blue-400">🤵 {schedule.driver.firstName} {schedule.driver.lastName}</p>}
         </div>
       )}
 

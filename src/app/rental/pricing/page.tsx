@@ -1,4 +1,5 @@
 'use client';
+import { useRentalMasterData } from '@/hooks/useRentalMasterData';
 import React, { useState, useEffect, useCallback } from 'react';
 
 interface PricingRule {
@@ -15,6 +16,13 @@ interface PricingRule {
   isActive?: boolean;
   createdAt?: string;
 }
+
+type PricingFormKey =
+  | 'baseDailyRate'
+  | 'baseKmRate'
+  | 'weeklyRate'
+  | 'monthlyRate'
+  | 'multiplier';
 
 /** Synced with Fleet VEHICLE_SEGMENTS */
 const VEHICLE_CATEGORIES = [
@@ -35,12 +43,14 @@ const VEHICLE_CATEGORIES = [
 ];
 
 export default function PricingPage() {
+  const { masterData } = useRentalMasterData();
   const [rules, setRules]           = useState<PricingRule[]>([]);
   const [showModal, setShowModal]   = useState(false);
   const [editRule, setEditRule]     = useState<PricingRule | null>(null);
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
   const [error, setError]           = useState('');
+  const vehicleCategories = masterData.rateVehicleCategories.length ? masterData.rateVehicleCategories : VEHICLE_CATEGORIES;
 
   const emptyForm = { vehicleCategory:'', baseDailyRate:'', baseKmRate:'', weeklyRate:'', monthlyRate:'', multiplier:'1', seasonFrom:'', seasonTo:'', currency:'AED', isActive:true };
   const [formData, setFormData] = useState(emptyForm);
@@ -84,7 +94,7 @@ export default function PricingPage() {
     e.preventDefault();
     setSaving(true);
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         vehicleCategory: formData.vehicleCategory,
         baseDailyRate:   parseFloat(formData.baseDailyRate),
         baseKmRate:      formData.baseKmRate  ? parseFloat(formData.baseKmRate)  : null,
@@ -157,7 +167,7 @@ export default function PricingPage() {
               {rules.map(r => (
                 <tr key={r.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                   <td className="px-4 py-4 text-sm font-medium text-white">
-                    {VEHICLE_CATEGORIES.find(c => c.value === r.vehicleCategory)?.label ?? r.vehicleCategory}
+                    {vehicleCategories.find(c => c.value === r.vehicleCategory)?.label ?? r.vehicleCategory}
                   </td>
                   <td className="px-4 py-4 text-sm font-medium text-amber-400">{r.currency ?? 'AED'} {Number(r.baseDailyRate).toLocaleString()}</td>
                   <td className="px-4 py-4 text-sm text-white">{r.weeklyRate  ? `${r.currency ?? 'AED'} ${Number(r.weeklyRate).toLocaleString()}`  : '-'}</td>
@@ -203,7 +213,7 @@ export default function PricingPage() {
                   <select value={formData.vehicleCategory} onChange={e => setFormData(p => ({...p, vehicleCategory: e.target.value}))} required
                     className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-amber-500 focus:outline-none">
                     <option value="">Select category</option>
-                    {VEHICLE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                    {vehicleCategories.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                   </select>
                 </div>
                 <div>
@@ -215,16 +225,16 @@ export default function PricingPage() {
                     <option value="EUR">EUR</option>
                   </select>
                 </div>
-                {[
+                {([
                   { label:'Base Daily Rate *', key:'baseDailyRate', placeholder:'150', required:true },
                   { label:'Weekly Rate', key:'weeklyRate', placeholder:'900' },
                   { label:'Monthly Rate', key:'monthlyRate', placeholder:'3500' },
                   { label:'Per KM Rate', key:'baseKmRate', placeholder:'0.50' },
                   { label:'Multiplier', key:'multiplier', placeholder:'1.0' },
-                ].map(({ label, key, placeholder, required }) => (
+                ] as { label: string; key: PricingFormKey; placeholder: string; required?: boolean }[]).map(({ label, key, placeholder, required }) => (
                   <div key={key}>
                     <label className="block text-sm font-medium text-slate-300 mb-2">{label}</label>
-                    <input type="number" value={(formData as any)[key]} onChange={e => setFormData(p => ({...p, [key]: e.target.value}))}
+                    <input type="number" value={formData[key]} onChange={e => setFormData(p => ({...p, [key]: e.target.value}))}
                       placeholder={placeholder} required={required} min="0" step="0.01"
                       className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none" />
                   </div>

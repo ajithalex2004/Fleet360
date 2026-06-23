@@ -1,4 +1,5 @@
 'use client';
+import ActionDialog from '@/components/ui/ActionDialog';
 import React, { useState, useEffect, useCallback } from 'react';
 
 interface Customer {
@@ -14,6 +15,15 @@ interface Customer {
   createdAt?: string;
 }
 
+type CustomerFormKey =
+  | 'fullName'
+  | 'nationality'
+  | 'passportNo'
+  | 'drivingLicenseNo'
+  | 'licenseExpiry'
+  | 'email'
+  | 'phone';
+
 export default function CustomersPage() {
   const [customers, setCustomers]   = useState<Customer[]>([]);
   const [search, setSearch]         = useState('');
@@ -22,6 +32,8 @@ export default function CustomersPage() {
   const [saving, setSaving]         = useState(false);
   const [error, setError]           = useState('');
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
+  const [pendingBlacklist, setPendingBlacklist] = useState<Customer | null>(null);
+  const [blacklistBusy, setBlacklistBusy] = useState(false);
 
   const [formData, setFormData] = useState({
     fullName: '', nationality: '', passportNo: '',
@@ -84,16 +96,19 @@ export default function CustomersPage() {
   };
 
   const handleBlacklist = async (c: Customer) => {
-    if (!confirm(`${c.blacklisted ? 'Remove from' : 'Add to'} blacklist?`)) return;
+    setBlacklistBusy(true);
     try {
       await fetch(`/api/rental/customers/${c.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ blacklisted: !c.blacklisted }),
       });
+      setPendingBlacklist(null);
       loadCustomers();
     } catch {
       setError('Failed to update');
+    } finally {
+      setBlacklistBusy(false);
     }
   };
 
@@ -163,7 +178,7 @@ export default function CustomersPage() {
                   <td className="px-4 py-4">
                     <div className="flex gap-2">
                       <button onClick={() => openEdit(c)} className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30">Edit</button>
-                      <button onClick={() => handleBlacklist(c)} className={`text-xs px-2 py-1 rounded border ${c.blacklisted ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border-rose-500/30'} hover:opacity-80`}>
+                      <button onClick={() => setPendingBlacklist(c)} className={`text-xs px-2 py-1 rounded border ${c.blacklisted ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border-rose-500/30'} hover:opacity-80`}>
                         {c.blacklisted ? 'Unblock' : 'Blacklist'}
                       </button>
                     </div>
@@ -184,7 +199,7 @@ export default function CustomersPage() {
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                {[
+                {([
                   { label:'Full Name *', key:'fullName', type:'text', placeholder:'Ahmed Al-Mansouri', required:true },
                   { label:'Nationality', key:'nationality', type:'text', placeholder:'UAE' },
                   { label:'Passport No.', key:'passportNo', type:'text', placeholder:'A12345678' },
@@ -192,10 +207,10 @@ export default function CustomersPage() {
                   { label:'License Expiry', key:'licenseExpiry', type:'date', placeholder:'' },
                   { label:'Email', key:'email', type:'email', placeholder:'customer@email.com' },
                   { label:'Phone', key:'phone', type:'text', placeholder:'+971 50 000 0000' },
-                ].map(({ label, key, type, placeholder, required }) => (
+                ] as { label: string; key: CustomerFormKey; type: string; placeholder: string; required?: boolean }[]).map(({ label, key, type, placeholder, required }) => (
                   <div key={key}>
                     <label className="block text-sm font-medium text-slate-300 mb-2">{label}</label>
-                    <input type={type} value={(formData as any)[key]} onChange={e => setFormData(p => ({...p, [key]: e.target.value}))} placeholder={placeholder} required={required}
+                    <input type={type} value={formData[key]} onChange={e => setFormData(p => ({...p, [key]: e.target.value}))} placeholder={placeholder} required={required}
                       className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none" />
                   </div>
                 ))}
@@ -215,6 +230,22 @@ export default function CustomersPage() {
           </div>
         </div>
       )}
+
+      <ActionDialog
+        open={!!pendingBlacklist}
+        title={pendingBlacklist?.blacklisted ? 'Remove customer from blacklist' : 'Blacklist customer'}
+        description="Review this customer status update before applying it."
+        details={pendingBlacklist ? [
+          `Customer: ${pendingBlacklist.fullName}`,
+          `Email: ${pendingBlacklist.email ?? '-'}`,
+          pendingBlacklist.blacklisted ? 'Customer will become active again.' : 'Customer will be blocked from regular booking operations.',
+        ] : undefined}
+        tone={pendingBlacklist?.blacklisted ? 'info' : 'danger'}
+        confirmLabel={pendingBlacklist?.blacklisted ? 'Remove block' : 'Blacklist'}
+        busy={blacklistBusy}
+        onClose={() => !blacklistBusy && setPendingBlacklist(null)}
+        onConfirm={pendingBlacklist ? () => handleBlacklist(pendingBlacklist) : undefined}
+      />
     </div>
   );
 }

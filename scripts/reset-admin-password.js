@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * reset-admin-password.js
  * Run from the project root: node scripts/reset-admin-password.js
@@ -11,8 +12,10 @@ const readline = require('readline');
 const path     = require('path');
 
 // ── Load env ─────────────────────────────────────────────────────────────────
-require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
-require('dotenv').config({ path: path.join(__dirname, '..', '.env.local') });
+require('dotenv').config({ path: path.join(__dirname, '..', '.env'), override: true });
+require('dotenv').config({ path: path.join(__dirname, '..', '.env.local'), override: true });
+
+delete process.env.FLEET360_DB;
 
 if (!process.env.DATABASE_URL) {
   console.error('❌  DATABASE_URL not found in .env / .env.local');
@@ -32,6 +35,15 @@ function prompt(question) {
   return new Promise(resolve => rl.question(question, answer => { rl.close(); resolve(answer.trim()); }));
 }
 
+function safeDatabaseLabel(url) {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.protocol}//${parsed.username ? `${parsed.username}:***@` : ''}${parsed.host}${parsed.pathname}`;
+  } catch {
+    return '(invalid database url)';
+  }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
   // Lazy-load Prisma so env is set first
@@ -39,7 +51,7 @@ async function main() {
   const prisma = new PrismaClient();
 
   try {
-    console.log('🔗  Connecting to database…');
+    console.log(`🔗  Connecting to database: ${safeDatabaseLabel(process.env.DATABASE_URL)}`);
 
     // List existing accounts
     const users = await prisma.$queryRawUnsafe(`
@@ -47,12 +59,15 @@ async function main() {
              t.name AS tenant, t.domain, r.code AS role,
              CASE WHEN u.password_hash IS NOT NULL THEN 'YES' ELSE 'NO' END AS has_password
       FROM "User" u
-      JOIN "UserTenant" ut ON ut."userId" = u.id
-      JOIN tenants t       ON t.id = ut."tenantId"
-      JOIN roles r         ON r.id = ut."roleId"
+      JOIN user_tenants ut ON ut.user_id = u.id
+      JOIN tenants t       ON t.id = ut.tenant_id
+      JOIN roles r         ON r.id = ut.role_id
       ORDER BY u."createdAt" DESC
       LIMIT 20
-    `);
+    `).catch(err => {
+      console.log(`\n⚠️  Could not list tenant accounts (${err.message ?? err}). Continuing with password reset.`);
+      return [];
+    });
 
     if (!users || users.length === 0) {
       console.log('\n⚠️  No users with tenant access found.');
@@ -68,7 +83,11 @@ async function main() {
     const email = (await prompt('\nEnter email to set/reset password for: ')).toLowerCase();
     if (!email.includes('@')) { console.error('❌  Invalid email'); process.exit(1); }
 
-    const userRow = await prisma.user.findUnique({ where: { email } });
+    const userRows = await prisma.$queryRawUnsafe(
+      `SELECT id, email FROM "User" WHERE lower(email) = lower($1) LIMIT 1`,
+      email,
+    );
+    const userRow = userRows[0] ?? null;
 
     if (!userRow) {
       console.log(`\n⚠️  No user found with email "${email}".`);
@@ -108,7 +127,7 @@ async function main() {
 
       if (!role) {
         role = await prisma.role.create({
-          data: { id: crypto.randomUUID(), name: 'Super Admin', code: 'SUPER_ADMIN', tenantId: tenant.id, isSystem: true },
+          data: { id: crypto.randomUUID(), name: 'Super Administrator', code: 'SUPER_ADMIN', tenantId: tenant.id, isSystem: true },
         });
       }
 

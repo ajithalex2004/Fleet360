@@ -28,6 +28,11 @@ export interface RuleTabProps {
   /** Optional handler the parent provides so a tab can switch to another
    *  tab — used by the Approval tab's "Edit workflow →" link. */
   onSwitchTab?: (tab: string) => void;
+  /** Linked module from the Module Mapping tab — the Form Fields tab uses
+   *  this to surface module-aware bindings (Phase B++). When it's null
+   *  the admin hasn't picked a module yet and the bind-to dropdown only
+   *  offers the universal options. */
+  linkedModule?: string | null;
 }
 
 export function Field({ label, children, hint, required }: {
@@ -87,7 +92,7 @@ export function Toggle({ label, hint, checked, onChange }: {
     <button type="button" onClick={() => onChange(!checked)}
       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-sm text-left transition-all ${
         checked
-          ? 'bg-violet-500/15 border-violet-500/40 text-violet-100'
+          ? 'bg-violet-100 border-violet-300 text-violet-900 shadow-sm'
           : 'bg-slate-800/60 border-white/10 text-slate-300 hover:border-white/20'
       }`}>
       <span className={`w-9 h-5 rounded-full relative shrink-0 ${checked ? 'bg-violet-500' : 'bg-slate-700'}`}>
@@ -95,7 +100,11 @@ export function Toggle({ label, hint, checked, onChange }: {
       </span>
       <span className="flex-1">
         <span className="block">{label}</span>
-        {hint && <span className="block text-[10px] text-slate-500 font-normal mt-0.5">{hint}</span>}
+        {hint && (
+          <span className={`block text-[10px] font-normal mt-0.5 ${checked ? 'text-violet-700/80' : 'text-slate-500'}`}>
+            {hint}
+          </span>
+        )}
       </span>
     </button>
   );
@@ -127,7 +136,7 @@ export function ChipMultiSelect({
     <div className="space-y-2">
       <div className="flex flex-wrap gap-1.5">
         {values.map(v => (
-          <span key={v} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-200 border border-violet-500/30">
+          <span key={v} className="inline-flex items-center gap-1 rounded-full border border-violet-300 bg-violet-100 px-2 py-0.5 text-[11px] text-violet-900 shadow-sm">
             {v}
             <button type="button" onClick={() => onChange(values.filter(x => x !== v))}
               className="hover:text-rose-300">
@@ -147,7 +156,7 @@ export function ChipMultiSelect({
           placeholder={placeholder}
           className="flex-1 bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:ring-2 focus:ring-violet-500" />
         <button type="button" onClick={() => add(draft)}
-          className="px-3 py-2 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-200 text-xs">
+          className="rounded-lg border border-violet-300 bg-violet-100 px-3 py-2 text-xs text-violet-900 shadow-sm transition hover:bg-violet-200">
           <Plus className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -155,7 +164,7 @@ export function ChipMultiSelect({
         <div className="flex flex-wrap gap-1">
           {suggestions.filter(s => !values.includes(s)).slice(0, 12).map(s => (
             <button key={s} type="button" onClick={() => add(s)}
-              className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800/60 text-slate-400 border border-white/5 hover:border-violet-500/40 hover:text-violet-200">
+              className="rounded px-1.5 py-0.5 text-[10px] border border-white/5 bg-slate-800/60 text-slate-400 hover:border-violet-300 hover:text-violet-200">
               + {s}
             </button>
           ))}
@@ -191,6 +200,8 @@ export function SaveBar({
   onRolledBack?: () => void;
 }) {
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetMsg, setResetMsg] = useState<{ tone: 'ok' | 'warn' | 'error'; text: string } | null>(null);
 
   // Inheritance status for the indicator chip:
   //   - configured + ownedScope === scopeId → overridden at this scope
@@ -200,6 +211,37 @@ export function SaveBar({
     ? scopeLookup?.[ownedScope]
     : null;
   const overriddenHere = configured && ownedScope && ownedScope === scopeId;
+
+  const resetOverride = async () => {
+    if (!typeId || !category || !scopeId || !overriddenHere) return;
+    setResetBusy(true);
+    setResetMsg(null);
+    try {
+      const qs = `?scopeId=${encodeURIComponent(scopeId)}`;
+      const res = await fetch(`/api/admin/service-config/types/${typeId}/rules/${category}${qs}`, {
+        method: 'DELETE',
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 428) {
+        setResetMsg({
+          tone: 'warn',
+          text: `Queued for approval: ${body?.approvalRequest?.id ?? 'pending request'}. Approve it, then retry reset.`,
+        });
+        return;
+      }
+      if (!res.ok) {
+        setResetMsg({ tone: 'error', text: body?.error ?? 'Reset failed.' });
+        return;
+      }
+      setResetMsg({ tone: 'ok', text: 'Override reset. Inherited rules are now active here.' });
+      onRolledBack?.();
+      onReset?.();
+    } catch (err) {
+      setResetMsg({ tone: 'error', text: err instanceof Error ? err.message : 'Reset failed.' });
+    } finally {
+      setResetBusy(false);
+    }
+  };
 
   return (
     <>
@@ -222,9 +264,16 @@ export function SaveBar({
             <History className="w-3.5 h-3.5" /> History
           </button>
         )}
+        {overriddenHere && typeId && category && scopeId && (
+          <button onClick={resetOverride} disabled={resetBusy}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-amber-200 hover:text-amber-100 hover:bg-amber-500/10 disabled:opacity-50"
+            title="Remove this scope override and inherit rules from the nearest parent">
+            <RotateCcw className="w-3.5 h-3.5" /> {resetBusy ? 'Resetting...' : 'Reset override'}
+          </button>
+        )}
         {/* Inheritance indicator chip */}
         {inheritedFrom && (
-          <span className="text-[11px] text-blue-300 inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-500/10 border border-blue-500/30">
+          <span className="inline-flex items-center gap-1 rounded-full border border-blue-300 bg-blue-100 px-2 py-1 text-[11px] text-blue-900 shadow-sm">
             <AlertCircle className="w-3 h-3" /> Inherited from <strong>{inheritedFrom.name}</strong>
           </span>
         )}
@@ -246,6 +295,14 @@ export function SaveBar({
         {error && (
           <span className="text-xs text-rose-300 inline-flex items-center gap-1 ml-auto">
             <AlertCircle className="w-3 h-3" /> {error}
+          </span>
+        )}
+        {resetMsg && (
+          <span className={`text-xs inline-flex items-center gap-1 ${
+            resetMsg.tone === 'ok' ? 'text-emerald-300' : resetMsg.tone === 'warn' ? 'text-amber-300' : 'text-rose-300'
+          }`}>
+            {resetMsg.tone === 'ok' ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+            {resetMsg.text}
           </span>
         )}
       </div>
@@ -329,7 +386,7 @@ function HistoryDrawer({
       <div className="relative w-full max-w-md bg-slate-900 border-l border-white/10 shadow-2xl overflow-y-auto"
         onClick={e => e.stopPropagation()}>
         <div className="sticky top-0 bg-slate-900 border-b border-white/10 px-5 py-4 flex items-center gap-2 z-10">
-          <History className="w-4 h-4 text-violet-300" />
+          <History className="w-4 h-4 text-violet-700" />
           <h3 className="text-sm font-semibold text-white">Change history</h3>
           <span className="text-xs text-slate-500 font-mono">{category}</span>
           <button onClick={onClose} className="ml-auto p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white">
@@ -397,7 +454,7 @@ function VersionRow({ version, busy, onRollback }: {
         </div>
         {!version.active && (
           <button type="button" onClick={onRollback} disabled={busy}
-            className="text-[10px] px-2 py-1 rounded bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-200 inline-flex items-center gap-1 disabled:opacity-50">
+            className="inline-flex items-center gap-1 rounded border border-violet-300 bg-violet-100 px-2 py-1 text-[10px] text-violet-900 shadow-sm transition hover:bg-violet-200 disabled:opacity-50">
             <RotateCcw className="w-3 h-3" /> {busy ? 'Rolling back…' : 'Rollback'}
           </button>
         )}

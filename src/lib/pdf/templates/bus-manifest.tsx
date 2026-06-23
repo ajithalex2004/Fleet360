@@ -8,7 +8,7 @@
 
 import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
 import type { Lang } from '../theme';
-import { colors, spacing, typography, fontFor, dirFor, formatDate } from '../theme';
+import { colors, spacing, typography, fontFor, formatDate } from '../theme';
 import { t } from '../i18n';
 
 export interface ManifestPassenger {
@@ -115,7 +115,6 @@ interface PageProps { data: BusManifestPdfData; lang: Lang; }
 
 function ManifestPage({ data, lang }: PageProps) {
   const font = fontFor(lang);
-  const dir = dirFor(lang);
 
   const totals = data.passengers.reduce(
     (acc, p) => {
@@ -205,9 +204,9 @@ function ManifestPage({ data, lang }: PageProps) {
             : status === 'NO_SHOW' ? s.pill_NO_SHOW
             : s.pill_CONFIRMED;
           return (
-            <View key={i} style={[s.trow, i % 2 === 1 ? s.trowAlt : null].filter(Boolean) as object[]}>
+            <View key={i} style={i % 2 === 1 ? [s.trow, s.trowAlt] : s.trow}>
               <Text style={[s.td, s.c_idx]}>{i + 1}</Text>
-              <Text style={[s.td, s.c_name, { writingDirection: dir }]}>{p.employeeName ?? '—'}</Text>
+              <Text style={[s.td, s.c_name]}>{p.employeeName ?? '—'}</Text>
               <Text style={[s.td, s.c_id]}>{p.employeeId ?? '—'}</Text>
               <Text style={[s.td, s.c_dept]}>{p.department ?? '—'}</Text>
               <Text style={[s.td, s.c_board]}>{p.boardingStop ?? '—'}</Text>

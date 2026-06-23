@@ -1,7 +1,11 @@
 export enum MaintenanceStatus {
+    SUBMITTED = 'Submitted',
     REQUESTED = 'Requested',
     ACCEPTED = 'Accepted',
     REJECTED = 'Rejected',
+    PENDING_OPERATIONS_ACK = 'Pending Operations Ack',
+    PENDING_MAINTENANCE_APPROVAL = 'Pending Maintenance Approval',
+    REJECTED_BY_MAINTENANCE = 'Rejected By Maintenance',
     RE_ASSIGN = 'Re-Assign',
     UNDER_ESTIMATION = 'Under Estimation',
     PENDING_ESTIMATION_APPROVAL = 'Pending Estimation Approval',
@@ -11,6 +15,7 @@ export enum MaintenanceStatus {
     PENDING_INVOICE = 'Pending Invoice',
     INVOICE_SUBMITTED = 'Invoice Submitted',
     CLOSED = 'Closed',
+    COMPLETED = 'Completed',
 }
 
 
@@ -51,6 +56,8 @@ export enum MaintenancePriority {
     CRITICAL = 'CRITICAL',
 }
 
+export type MaintenancePriorityValue = MaintenancePriority | 'Low' | 'Medium' | 'High' | 'Critical';
+
 export enum AttachmentType {
     INVOICE = 'INVOICE',
     REPORT = 'REPORT',
@@ -65,6 +72,7 @@ export enum AttachmentType {
 // Quotation Management
 export enum QuotationStatus {
     PENDING = 'PENDING',
+    ACCEPTED = 'ACCEPTED',
     APPROVED = 'APPROVED',
     REJECTED = 'REJECTED',
     EXPIRED = 'EXPIRED',
@@ -98,8 +106,11 @@ export enum WorkOrderStatus {
 export enum PartSource {
     STOCK = 'Stock',
     ORDERED = 'Ordered',
+    ORDERED_KEY = 'ORDERED',
     CUSTOMER_SUPPLIED = 'Customer Supplied',
 }
+
+export type PartSourceValue = PartSource | 'ORDERED';
 
 // Invoice
 export enum PaymentStatus {
@@ -166,6 +177,14 @@ export interface Driver {
     contactNumber: string;
     email?: string;
     licenseLastRenewed?: string; // ISO Date
+    hierarchy?: string;
+    driverType?: string;
+    nationality?: string;
+    dob?: string;
+    emiratesId?: string;
+    communicationLanguage?: string;
+    dateOfJoin?: string;
+    dallasId?: string;
 }
 
 export interface Garage {
@@ -190,6 +209,7 @@ export interface MaintenanceRequest {
     driverId: string;
     requestDate: string; // ISO Date / Start Date
     expectedEndDate?: string; // ISO Date
+    expectedCompletionDate?: string; // ISO Date
     description: string;
     status: MaintenanceStatus;
 
@@ -198,7 +218,7 @@ export interface MaintenanceRequest {
     garageId?: string;
     candidateGarageIds?: string[]; // For RFQ
     maintenanceType?: MaintenanceType;
-    priority?: MaintenancePriority;
+    priority?: MaintenancePriorityValue;
     maintenanceJobs?: string[];
     workOrderNo?: string;
     attachments?: Attachment[];
@@ -304,23 +324,25 @@ export interface Quotation {
     requestId: string;
     garageId: string;
     garageName: string;
-    quotationDate: string;
+    quotationDate?: string;
+    submittedDate?: string;
     validUntil: string;
     laborCost: number;
     partsCost: number;
     totalCost: number; // Subtotal (Parts + Labor)
     currency?: 'AED';
-    parts: PartItem[];
-    labor: LaborItem[];
-    consumablesCost: number;
-    vatAmount: number;
-    grandTotal: number;
+    parts?: PartItem[];
+    labor?: LaborItem[];
+    consumablesCost?: number;
+    vatAmount?: number;
+    grandTotal?: number;
     estimatedDuration: number; // hours
     estimatedCompletionDate?: string; // ISO Date
     notes?: string;
     status: QuotationStatus;
-    submittedBy: string;
+    submittedBy?: string;
     attachments?: Attachment[];
+    partsBreakdown?: PartItem[];
     revision?: number;
 }
 
@@ -382,7 +404,7 @@ export interface PartUsage {
     quantityUsed: number;
     unitCost: number;
     totalCost: number;
-    source: PartSource;
+    source: PartSourceValue;
 }
 
 export interface ChecklistItem {
@@ -664,7 +686,7 @@ export interface EnhancedInvoiceLineItem {
     totalPrice: number;
     // Part-specific fields
     partNumber?: string;
-    partSource?: PartSource;
+    partSource?: PartSourceValue;
     // Labor-specific fields
     laborHours?: number;
     technicianName?: string;
@@ -759,12 +781,14 @@ export interface VendorQuotation {
 export interface EstimateApproval {
     id: string;
     requestId: string;
-    selectedQuotationId: string;
+    selectedQuotationId?: string;
+    quotationId?: string;
     approvedBy: string;
     approvedByName: string;
-    approvedByRole: UserRole;
+    approvedByRole?: UserRole;
     approvalMethod: 'IN_APP' | 'EMAIL_LINK';
     approvedAt: string; // ISO Date
+    approvedCost?: number;
     comments?: string;
     rejectionReason?: string; // if rejected
 }
@@ -773,6 +797,8 @@ export interface EstimateApproval {
 export interface ApprovalLink {
     id: string;
     token: string; // JWT or UUID
+    approvalUrl?: string;
+    expiresInHours?: number;
     requestId: string;
     quotationId: string;
     approverEmail: string;
@@ -798,6 +824,7 @@ export interface WorkOrderClosure {
     completedBy: string;
     completedByName: string;
     completedAt: string; // ISO Date
+    completionNotes?: string;
     notes?: string;
 }
 
@@ -813,7 +840,7 @@ export interface RFQDetails {
     };
     workOrderReference: string;
     requiredJobTypes: string[];
-    priority: MaintenancePriority;
+    priority: MaintenancePriorityValue;
     sla: string; // e.g., "24 hours", "3 days"
     requiredCompletionDate: string; // ISO Date
     attachments: Attachment[];

@@ -66,7 +66,7 @@ function ExpiryBadge({ dateStr }: { dateStr?: string }) {
   if (days < 0) return <span className="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full">Expired {Math.abs(days)}d ago</span>;
   if (days < 30) return <span className="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full">Expires in {days}d</span>;
   if (days < 90) return <span className="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full">Expires in {days}d</span>;
-  return <span className="text-xs text-slate-400">{new Date(dateStr).toLocaleDateString('en-AE')}</span>;
+  return <span className="text-xs text-slate-400">{new Date(dateStr ?? '').toLocaleDateString('en-AE')}</span>;
 }
 
 // ── Reusable field — defined OUTSIDE modal so it never gets recreated on render
@@ -138,7 +138,7 @@ function BranchModal({
     try {
       const url  = '/api/tenant-branches';
       const method = isEdit ? 'PATCH' : 'POST';
-      const body = isEdit ? { id: branch!.id, tenantId: form.tenantId, ...form } : form;
+      const body = isEdit ? { ...form, id: branch!.id } : form;
       const res  = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -399,6 +399,7 @@ export default function BranchesPage() {
   const [branches,  setBranches]  = useState<Branch[]>([]);
   const [tenants,   setTenants]   = useState<Tenant[]>([]);
   const [loading,   setLoading]   = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [filter,    setFilter]    = useState({ tenantId: '', emirate: '', search: '' });
   const [modal,     setModal]     = useState<{ open: boolean; branch: Branch | null }>({ open: false, branch: null });
   const [deleting,     setDeleting]     = useState<string | null>(null);
@@ -407,6 +408,7 @@ export default function BranchesPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const params = new URLSearchParams();
       if (filter.tenantId) params.set('tenantId', filter.tenantId);
@@ -418,9 +420,14 @@ export default function BranchesPage() {
         fetch('/api/admin/tenants?limit=200',   { cache: 'no-store' }),
       ]);
       const [bData, tData] = await Promise.all([bRes.json(), tRes.json()]);
+      if (!bRes.ok) throw new Error(bData.error ?? bData.detail ?? `Failed to load branches (${bRes.status})`);
+      if (!tRes.ok) throw new Error(tData.error ?? tData.detail ?? `Failed to load tenants (${tRes.status})`);
       setBranches(bData.data ?? []);
       setTenants(Array.isArray(tData) ? tData : (tData.data ?? []));
-    } catch { /* silent */ }
+    } catch (err) {
+      setBranches([]);
+      setLoadError(err instanceof Error ? err.message : 'Failed to load branches');
+    }
     finally { setLoading(false); }
   }, [filter.tenantId, filter.emirate]);
 
@@ -539,6 +546,13 @@ export default function BranchesPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Filters */}
+      {loadError && (
+        <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          {loadError}
         </div>
       )}
 

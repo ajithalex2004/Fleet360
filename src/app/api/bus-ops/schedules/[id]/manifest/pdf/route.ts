@@ -14,13 +14,14 @@
  */
 
 import { createElement } from 'react';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { renderPdf } from '@/lib/pdf/render';
 import { BusManifestPdf, type BusManifestPdfData, type ManifestPassenger } from '@/lib/pdf/templates/bus-manifest';
 import type { Lang } from '@/lib/pdf/theme';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { requireBusEntity, requireBusOpsContext } from '@/lib/bus-ops-route-guards';
 
 export const runtime = 'nodejs';
 
@@ -36,6 +37,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const download = req.nextUrl.searchParams.get('download') === '1';
 
   try {
+    const ctx = await requireBusOpsContext(req);
+    if (ctx instanceof NextResponse) return ctx;
+    const boundary = await requireBusEntity(ctx, 'trip_schedules', id, 'Trip');
+    if (boundary) return boundary;
     const schedule = await prisma.tripSchedule.findUnique({
       where: { id },
       include: {
@@ -69,7 +74,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       boardedAt: p.boardedAt,
     }));
 
-    const driverName = driver?.name ?? [driver?.firstName, driver?.lastName].filter(Boolean).join(' ') || null;
+    const driverName = driver?.name ?? ([driver?.firstName, driver?.lastName].filter(Boolean).join(' ') || null);
 
     const data: BusManifestPdfData = {
       manifestNo: `MAN-${schedule.tripNumber ?? id.slice(0, 8)}-${new Date().toISOString().slice(0, 10)}`,
@@ -101,9 +106,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const buffer = await renderPdf(createElement(BusManifestPdf, { data, lang }));
 
     void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
-      userId: req.headers.get('x-user-id') ?? 'system',
-      userRole: req.headers.get('x-user-role') ?? 'STAFF',
+      tenantId: ctx.tenantId,
+      userId: ctx.userId,
+      userRole: ctx.role,
       entityType: 'TripSchedule',
       entityId: id,
       action: 'EXPORT',

@@ -30,6 +30,16 @@ interface DriverStat {
 
 interface WeeklyEntry { week: string; trips: number; onTime: number; }
 
+type BookingRow = {
+  id: string;
+  driver_id_note: string | null;
+  status: string | null;
+  start_date: Date | null;
+  end_date: Date | null;
+  notes: string | null;
+  created_at: Date | null;
+};
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const driverId = searchParams.get('driverId');
@@ -60,15 +70,7 @@ export async function GET(req: Request) {
     // ── 2. Fetch bookings for these drivers in the lookback window ────────────
     // Driver is referenced in booking.notes JSON as driverId
     // We search notes for each driver ID — not the most efficient but works without schema changes
-    const bookingRows = await prisma.$queryRawUnsafe<Array<{
-      id: string;
-      driver_id_note: string | null;
-      status: string | null;
-      start_date: Date | null;
-      end_date: Date | null;
-      notes: string | null;
-      created_at: Date | null;
-    }>>(
+    const bookingRows: BookingRow[] = await prisma.$queryRawUnsafe<BookingRow[]>(
       `SELECT
          b.id,
          b.notes::jsonb ->> 'driverId'   AS driver_id_note,
@@ -86,10 +88,10 @@ export async function GET(req: Request) {
          AND b.notes != '{}'
        ORDER BY b.created_at DESC`,
       since
-    ).catch(() => []);
+    ).catch((): BookingRow[] => []);
 
     // Group bookings by driverId
-    const bookingsByDriver: Record<string, typeof bookingRows> = {};
+    const bookingsByDriver: Record<string, BookingRow[]> = {};
     for (const row of bookingRows) {
       if (!row.driver_id_note) continue;
       if (!driverIds.includes(row.driver_id_note)) continue;

@@ -178,7 +178,7 @@ export async function POST(req: NextRequest) {
         WHERE a.tenant_id = $1
           AND a.route_id = $2::uuid
           AND a.status = 'ACTIVE'
-      `, tenantId, routeId).catch(() => null);
+      `, tenantId, routeId).catch(() => [] as { enrolled: bigint; seat_capacity: number }[]);
 
       if (capRow) {
         const enrolled = Number(capRow.enrolled ?? 0);

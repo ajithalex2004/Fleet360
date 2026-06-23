@@ -101,8 +101,6 @@ export default function InvoicesPage() {
             totalAmount: totalAmount,
             paidAmount: 0,
             paymentStatus: PaymentStatus.UNPAID,
-            paidAmount: 0,
-            paymentStatus: PaymentStatus.UNPAID,
             lineItems: [], // Simplified for now
             attachments: newInvoiceData.attachments // Use selected attachments
         };

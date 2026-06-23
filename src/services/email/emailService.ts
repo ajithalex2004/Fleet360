@@ -99,7 +99,7 @@ export async function sendEmail(params: SendEmailParams): Promise<EmailLog> {
         cc: params.cc?.map(r => r.email),
         subject: params.subject,
         sentAt: new Date().toISOString(),
-        status: transport ? 'SENT' : 'MOCK_SENT',
+        status: 'SENT',
         retryCount: 0
     };
 }

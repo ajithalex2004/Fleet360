@@ -16,10 +16,12 @@ const NAV_GROUPS = [
   {
     label: 'Receivables',
     items: [
+      { href: '/finance/leasing-billing',      label: 'Leasing Billing',       icon: 'VL' },
+      { href: '/finance/customer-statement',   label: 'Customer SOA',          icon: 'SOA' },
       { href: '/finance/invoices',             label: 'Invoices',              icon: '🧾' },
       { href: '/finance/invoices?module=SCHOOL_BUS', label: 'School Bus Fees', icon: '🏫' },
       { href: '/finance/recurring-invoices',   label: 'Recurring Invoices',    icon: '🔁' },
-      { href: '/finance/payments',             label: 'Payments',              icon: '💳' },
+      { href: '/finance/payments',             label: 'Cash Allocation',       icon: '💳' },
       { href: '/finance/credit-notes',         label: 'Credit Notes',          icon: '📝' },
       { href: '/finance/ar-aging',             label: 'AR Aging Report',        icon: '📊' },
       { href: '/finance/collections',          label: 'Collections & Dunning', icon: '📞' },
@@ -90,12 +92,13 @@ const NAV_GROUPS = [
 export default function Layout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { tLabel, t } = useLanguage();
+  const alternateModules = pathname?.startsWith('/finance/leasing-billing') ? ['leasing'] : [];
 
   const isActive = (href: string) =>
     href === '/finance' ? pathname === '/finance' : pathname.startsWith(href);
 
   return (
-    <ModuleGuard moduleId="finance" moduleName="Finance & Billing" moduleIcon="💰">
+    <ModuleGuard moduleId="finance" allowedModuleIds={alternateModules} moduleName="Finance & Billing" moduleIcon="💰">
     <div className="flex flex-col h-screen bg-slate-900">
       <PlatformHomeBar moduleName={t('module.finance')} moduleIcon="FN" accentColor="from-green-500 to-emerald-600" />
       <div className="flex flex-1 overflow-hidden">

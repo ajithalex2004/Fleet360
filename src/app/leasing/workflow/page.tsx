@@ -1,403 +1,736 @@
 'use client';
-import React, { useState, useEffect } from 'react';
 
-interface PendingAction {
-  id: string;
-  entityType: 'quotation' | 'contract';
-  entityNumber: string;
-  currentStatus: string;
-  actionNeeded: string;
-  requestor: string;
-  createdDate: string;
-  timeElapsed: string;
-}
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  Clock3,
+  Eye,
+  Filter,
+  ShieldCheck,
+  TimerReset,
+  XCircle,
+} from 'lucide-react';
 
-interface ApprovalHistoryItem {
+type ApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SKIPPED' | string;
+type EntityType = 'QUOTATION' | 'CONTRACT' | 'PRE_BILLING' | 'INVOICE' | string;
+type SlaTone = 'on_track' | 'due_soon' | 'overdue' | 'escalated';
+
+interface ApprovalStep {
   id: string;
-  entityType: string;
+  entityType: EntityType;
   entityId: string;
   stepName: string;
-  approver: string;
-  status: 'Approved' | 'Rejected' | 'Pending';
-  actionDate: string;
-  comments: string;
+  stepOrder: number;
+  approverRole?: string | null;
+  approverName?: string | null;
+  status?: ApprovalStatus | null;
+  actionAt?: string | null;
+  comments?: string | null;
+  createdAt?: string | null;
+  assignedToEmail?: string | null;
+  delegatedFromRole?: string | null;
+  dueAt?: string | null;
+  escalationAt?: string | null;
+  serviceTypeKey?: string | null;
+  runtimeActionId?: string | null;
 }
 
-interface VarianceAlert {
+interface ActionStepSummary {
   id: string;
-  reference: string;
-  message: string;
-  severity: 'WARNING' | 'ERROR';
-  status: 'Open' | 'Acknowledged' | 'Resolved';
-  created: string;
+  stepName: string;
+  stepOrder: number;
+  status: ApprovalStatus;
+  approverRole: string | null;
+  approverName: string | null;
+  assignedToEmail: string | null;
+  delegatedFromRole: string | null;
+  dueAt: string | null;
+  escalationAt: string | null;
+  actionAt: string | null;
+  comments: string | null;
 }
 
-interface WorkflowStep {
-  number: number;
-  label: string;
-  count: number;
+interface RuntimeApprovalAction {
+  id: string;
+  runtimeActionId: string | null;
+  entityType: EntityType;
+  entityId: string;
+  serviceTypeKey: string | null;
+  title: string;
+  entityLabel: string;
+  href: string;
+  createdAt: string | null;
+  currentStep: ActionStepSummary | null;
+  pendingCount: number;
+  approvedCount: number;
+  rejectedCount: number;
+  steps: ActionStepSummary[];
+  slaTone: SlaTone;
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString('en-AE', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function elapsedLabel(value?: string | null) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  const diffHours = Math.max(0, Math.floor((Date.now() - date.getTime()) / 3600000));
+  if (diffHours < 1) return 'Less than 1h';
+  if (diffHours < 24) return `${diffHours}h`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ${diffHours % 24}h`;
+}
+
+function statusBadge(status?: ApprovalStatus | null) {
+  switch ((status ?? 'PENDING').toUpperCase()) {
+    case 'APPROVED':
+      return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25';
+    case 'REJECTED':
+      return 'bg-rose-500/15 text-rose-300 border-rose-500/25';
+    case 'SKIPPED':
+      return 'bg-slate-500/15 text-slate-300 border-slate-500/25';
+    default:
+      return 'bg-amber-500/15 text-amber-300 border-amber-500/25';
+  }
+}
+
+function slaBadge(tone: SlaTone) {
+  switch (tone) {
+    case 'overdue':
+      return 'bg-rose-500/15 text-rose-300 border-rose-500/25';
+    case 'escalated':
+      return 'bg-orange-500/15 text-orange-300 border-orange-500/25';
+    case 'due_soon':
+      return 'bg-amber-500/15 text-amber-300 border-amber-500/25';
+    default:
+      return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25';
+  }
+}
+
+function labelize(value?: string | null) {
+  if (!value) return 'Unspecified';
+  return value
+    .toLowerCase()
+    .split(/[_\s]+/)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function entityPrefix(entityType: EntityType) {
+  switch (entityType) {
+    case 'QUOTATION': return 'QUO';
+    case 'CONTRACT': return 'CNT';
+    case 'PRE_BILLING': return 'PBS';
+    case 'INVOICE': return 'INV';
+    default: return entityType.slice(0, 3).toUpperCase();
+  }
+}
+
+function entityHref(entityType: EntityType, entityId: string) {
+  switch (entityType) {
+    case 'QUOTATION': return `/leasing/quotations/${entityId}`;
+    case 'CONTRACT': return `/leasing/contracts-v2/${entityId}`;
+    case 'PRE_BILLING': return '/leasing/pre-billing';
+    case 'INVOICE': return '/finance/leasing-billing';
+    default: return '/leasing/workflow';
+  }
+}
+
+function inferSlaTone(step: ApprovalStep | ActionStepSummary | null): SlaTone {
+  if (!step) return 'on_track';
+  const now = Date.now();
+  const escalationAt = step.escalationAt ? new Date(step.escalationAt).getTime() : null;
+  const dueAt = step.dueAt ? new Date(step.dueAt).getTime() : null;
+  if (escalationAt && now >= escalationAt) return 'escalated';
+  if (dueAt && now >= dueAt) return 'overdue';
+  if (dueAt && dueAt - now <= 4 * 3600000) return 'due_soon';
+  return 'on_track';
+}
+
+function buildActionId(step: ApprovalStep) {
+  return step.runtimeActionId ?? `${step.entityType}:${step.entityId}:${step.serviceTypeKey ?? 'GENERAL'}`;
+}
+
+function buildActionTitle(serviceTypeKey: string | null, currentStep: ApprovalStep | ActionStepSummary | null) {
+  if (serviceTypeKey) return labelize(serviceTypeKey.replace(/^LEASING_/, ''));
+  return currentStep?.stepName ?? 'Approval Action';
+}
+
+function buildEntityLabel(step: ApprovalStep) {
+  return `${entityPrefix(step.entityType)}-${step.entityId.slice(0, 8)}`;
 }
 
 export default function WorkflowPage() {
-  const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
-  const [approvalHistory, setApprovalHistory] = useState<ApprovalHistoryItem[]>([]);
-  const [varianceAlerts, setVarianceAlerts] = useState<VarianceAlert[]>([]);
+  const [steps, setSteps] = useState<ApprovalStep[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
+  const [view, setView] = useState<'inbox' | 'history' | 'sla'>('inbox');
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [comments, setComments] = useState('');
+  const [serviceFilter, setServiceFilter] = useState('ALL');
+  const [slaFilter, setSlaFilter] = useState<'ALL' | SlaTone>('ALL');
 
-  const workflowSteps: WorkflowStep[] = [
-    { number: 1, label: 'Inquiry', count: 8 },
-    { number: 2, label: 'Quotation', count: 12 },
-    { number: 3, label: 'Internal Approval', count: 5 },
-    { number: 4, label: 'Sent to Customer', count: 10 },
-    { number: 5, label: 'Customer Approval', count: 3 },
-    { number: 6, label: 'Credit Approval', count: 2 },
-    { number: 7, label: 'PO Prepared', count: 4 },
-    { number: 8, label: 'Contract Generated', count: 6 },
-    { number: 9, label: 'Active', count: 24 },
-  ];
-
-  useEffect(() => {
-    const mockPendingActions: PendingAction[] = [
-      {
-        id: '1',
-        entityType: 'quotation',
-        entityNumber: 'QT-2025-001',
-        currentStatus: 'Pending Internal Approval',
-        actionNeeded: 'Awaiting Internal Approval',
-        requestor: 'Ahmed Al-Mansouri',
-        createdDate: '2025-04-08',
-        timeElapsed: '4 days ago',
-      },
-      {
-        id: '2',
-        entityType: 'contract',
-        entityNumber: 'LC-V2-005',
-        currentStatus: 'Pending Customer Response',
-        actionNeeded: 'Awaiting Customer Approval',
-        requestor: 'Global Logistics LLC',
-        createdDate: '2025-04-06',
-        timeElapsed: '6 days ago',
-      },
-      {
-        id: '3',
-        entityType: 'quotation',
-        entityNumber: 'QT-2025-003',
-        currentStatus: 'Pending Credit Check',
-        actionNeeded: 'Awaiting Credit Approval',
-        requestor: 'Enterprise Corp',
-        createdDate: '2025-04-10',
-        timeElapsed: '2 days ago',
-      },
-      {
-        id: '4',
-        entityType: 'contract',
-        entityNumber: 'LC-V2-006',
-        currentStatus: 'Pending PO Submission',
-        actionNeeded: 'Awaiting PO Preparation',
-        requestor: 'Fatima Al-Nakhli',
-        createdDate: '2025-04-11',
-        timeElapsed: '1 day ago',
-      },
-    ];
-
-    const mockApprovalHistory: ApprovalHistoryItem[] = [
-      {
-        id: '1',
-        entityType: 'Quotation',
-        entityId: 'QT-2025-002',
-        stepName: 'Internal Approval',
-        approver: 'Hana Al-Mansouri',
-        status: 'Approved',
-        actionDate: '2025-04-09',
-        comments: 'Terms acceptable, approved for customer submission',
-      },
-      {
-        id: '2',
-        entityType: 'Contract',
-        entityId: 'LC-V2-004',
-        stepName: 'Credit Approval',
-        approver: 'Mohammed Al-Qasimi',
-        status: 'Approved',
-        actionDate: '2025-04-07',
-        comments: 'Credit check passed, approved for execution',
-      },
-      {
-        id: '3',
-        entityType: 'Quotation',
-        entityId: 'QT-2025-001',
-        stepName: 'Customer Approval',
-        approver: 'Customer',
-        status: 'Pending',
-        actionDate: '2025-04-05',
-        comments: 'Awaiting customer response',
-      },
-      {
-        id: '4',
-        entityType: 'Contract',
-        entityId: 'LC-V2-003',
-        stepName: 'Internal Approval',
-        approver: 'Layla Al-Nakhli',
-        status: 'Rejected',
-        actionDate: '2025-04-03',
-        comments: 'Mileage cap needs adjustment',
-      },
-    ];
-
-    const mockVarianceAlerts: VarianceAlert[] = [
-      {
-        id: '1',
-        reference: 'LC-V2-001',
-        message: 'Monthly rate exceeds standard rate by 15%',
-        severity: 'WARNING',
-        status: 'Open',
-        created: '2025-04-10',
-      },
-      {
-        id: '2',
-        reference: 'QT-2025-002',
-        message: 'Master contract variance detected - review pricing structure',
-        severity: 'ERROR',
-        status: 'Acknowledged',
-        created: '2025-04-08',
-      },
-      {
-        id: '3',
-        reference: 'LC-V2-002',
-        message: 'Security deposit below minimum threshold',
-        severity: 'WARNING',
-        status: 'Open',
-        created: '2025-04-11',
-      },
-    ];
-
-    setPendingActions(mockPendingActions);
-    setApprovalHistory(mockApprovalHistory);
-    setVarianceAlerts(mockVarianceAlerts);
-    setLoading(false);
+  const loadSteps = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch('/api/leasing/approval-steps');
+      const data = await response.json().catch(() => []);
+      if (!response.ok) throw new Error(data.error ?? 'Failed to load approval steps');
+      setSteps(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load workflow');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const getStatusBadgeStyle = (status: string) => {
-    switch (status) {
-      case 'Approved':
-        return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
-      case 'Rejected':
-        return 'bg-red-500/20 text-red-400 border-red-500/30';
-      case 'Pending':
-        return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
-      default:
-        return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
-    }
-  };
+  useEffect(() => {
+    void loadSteps();
+  }, [loadSteps]);
 
-  const getSeverityBadgeStyle = (severity: string) => {
-    switch (severity) {
-      case 'ERROR':
-        return 'bg-red-500/20 text-red-400 border-red-500/30';
-      case 'WARNING':
-        return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
-      default:
-        return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+  const actions = useMemo<RuntimeApprovalAction[]>(() => {
+    const grouped = new Map<string, ApprovalStep[]>();
+    steps.forEach(step => {
+      const key = buildActionId(step);
+      const list = grouped.get(key) ?? [];
+      list.push(step);
+      grouped.set(key, list);
+    });
+
+    return Array.from(grouped.entries())
+      .map(([id, group]) => {
+        const sorted = [...group].sort((a, b) => (a.stepOrder ?? 0) - (b.stepOrder ?? 0));
+        const currentStep = sorted.find(step => (step.status ?? 'PENDING') === 'PENDING') ?? sorted[sorted.length - 1] ?? null;
+        const pendingCount = sorted.filter(step => (step.status ?? 'PENDING') === 'PENDING').length;
+        const approvedCount = sorted.filter(step => (step.status ?? '').toUpperCase() === 'APPROVED').length;
+        const rejectedCount = sorted.filter(step => (step.status ?? '').toUpperCase() === 'REJECTED').length;
+        const summarySteps: ActionStepSummary[] = sorted.map(step => ({
+          id: step.id,
+          stepName: step.stepName,
+          stepOrder: step.stepOrder,
+          status: step.status ?? 'PENDING',
+          approverRole: step.approverRole ?? null,
+          approverName: step.approverName ?? null,
+          assignedToEmail: step.assignedToEmail ?? null,
+          delegatedFromRole: step.delegatedFromRole ?? null,
+          dueAt: step.dueAt ?? null,
+          escalationAt: step.escalationAt ?? null,
+          actionAt: step.actionAt ?? null,
+          comments: step.comments ?? null,
+        }));
+
+        return {
+          id,
+          runtimeActionId: currentStep?.runtimeActionId ?? null,
+          entityType: currentStep?.entityType ?? 'QUOTATION',
+          entityId: currentStep?.entityId ?? '',
+          serviceTypeKey: currentStep?.serviceTypeKey ?? null,
+          title: buildActionTitle(currentStep?.serviceTypeKey ?? null, currentStep ?? null),
+          entityLabel: currentStep ? buildEntityLabel(currentStep) : '-',
+          href: currentStep ? entityHref(currentStep.entityType, currentStep.entityId) : '/leasing/workflow',
+          createdAt: sorted[0]?.createdAt ?? null,
+          currentStep: currentStep ? {
+            id: currentStep.id,
+            stepName: currentStep.stepName,
+            stepOrder: currentStep.stepOrder,
+            status: currentStep.status ?? 'PENDING',
+            approverRole: currentStep.approverRole ?? null,
+            approverName: currentStep.approverName ?? null,
+            assignedToEmail: currentStep.assignedToEmail ?? null,
+            delegatedFromRole: currentStep.delegatedFromRole ?? null,
+            dueAt: currentStep.dueAt ?? null,
+            escalationAt: currentStep.escalationAt ?? null,
+            actionAt: currentStep.actionAt ?? null,
+            comments: currentStep.comments ?? null,
+          } : null,
+          pendingCount,
+          approvedCount,
+          rejectedCount,
+          steps: summarySteps,
+          slaTone: inferSlaTone(currentStep),
+        };
+      })
+      .sort((a, b) => {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bTime - aTime;
+      });
+  }, [steps]);
+
+  const selectedAction = useMemo(
+    () => actions.find(action => action.id === selectedActionId) ?? actions[0] ?? null,
+    [actions, selectedActionId],
+  );
+
+  useEffect(() => {
+    if (!selectedActionId && actions[0]) setSelectedActionId(actions[0].id);
+    if (selectedActionId && !actions.find(action => action.id === selectedActionId)) {
+      setSelectedActionId(actions[0]?.id ?? null);
+    }
+  }, [actions, selectedActionId]);
+
+  const serviceOptions = useMemo(
+    () => ['ALL', ...Array.from(new Set(actions.map(action => action.serviceTypeKey ?? 'GENERAL')))],
+    [actions],
+  );
+
+  const filteredInbox = useMemo(() => actions.filter(action => {
+    const serviceMatch = serviceFilter === 'ALL' || (action.serviceTypeKey ?? 'GENERAL') === serviceFilter;
+    const pendingMatch = action.pendingCount > 0;
+    const slaMatch = slaFilter === 'ALL' || action.slaTone === slaFilter;
+    return serviceMatch && pendingMatch && slaMatch;
+  }), [actions, serviceFilter, slaFilter]);
+
+  const historyItems = useMemo(() => actions.filter(action => action.pendingCount === 0), [actions]);
+  const overdueActions = useMemo(
+    () => actions.filter(action => action.pendingCount > 0 && (action.slaTone === 'overdue' || action.slaTone === 'escalated')),
+    [actions],
+  );
+
+  const metrics = useMemo(() => {
+    const pending = actions.filter(action => action.pendingCount > 0);
+    return {
+      inbox: pending.length,
+      onTrack: pending.filter(action => action.slaTone === 'on_track').length,
+      dueSoon: pending.filter(action => action.slaTone === 'due_soon').length,
+      overdue: pending.filter(action => action.slaTone === 'overdue').length,
+      escalated: pending.filter(action => action.slaTone === 'escalated').length,
+    };
+  }, [actions]);
+
+  const handleAction = async (stepId: string, decision: 'APPROVE' | 'REJECT') => {
+    setBusyId(stepId);
+    setError('');
+    setMessage('');
+    try {
+      const response = await fetch('/api/leasing/approval-steps', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: stepId,
+          action: decision,
+          approverName: 'Workflow Manager',
+          comments: comments.trim() || (decision === 'APPROVE' ? 'Approved from Leasing approval inbox' : 'Rejected from Leasing approval inbox'),
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error ?? `Failed to ${decision.toLowerCase()} step`);
+      setComments('');
+      setMessage(decision === 'APPROVE' ? 'Approval step approved.' : 'Approval step rejected.');
+      await loadSteps();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to ${decision.toLowerCase()} step`);
+    } finally {
+      setBusyId(null);
     }
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-slate-400">Loading workflow...</div>
+        <div className="text-slate-400">Loading workflow & approvals...</div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-4xl font-bold text-white mb-2">Workflow Management</h1>
-        <p className="text-slate-400">Monitor approval cycles and contract lifecycle progression</p>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-2">Workflow & Approvals</h1>
+          <p className="text-slate-400">Leasing runtime approval inbox, SLA health, and overdue escalation dashboard.</p>
+        </div>
+        <button
+          onClick={() => void loadSteps()}
+          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-slate-800 px-4 py-2 text-sm text-slate-200 hover:bg-slate-700"
+        >
+          <TimerReset className="w-4 h-4" />
+          Refresh
+        </button>
       </div>
 
-      {/* Workflow Pipeline */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
-        <div className="flex gap-3 min-w-min pb-4">
-          {workflowSteps.map((step, idx) => (
-            <React.Fragment key={step.number}>
-              <div className="flex flex-col items-center min-w-fit">
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full w-12 h-12 flex items-center justify-center text-white font-bold text-sm mb-3">
-                  {step.number}
-                </div>
-                <p className="text-xs font-medium text-slate-300 text-center mb-2 whitespace-nowrap">{step.label}</p>
-                <p className="text-lg font-bold text-white">{step.count}</p>
+      {error && <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
+      {message && <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">{message}</div>}
+
+      <div className="grid gap-4 md:grid-cols-5">
+        <MetricCard title="Approval Inbox" value={metrics.inbox} tone="blue" icon={<ShieldCheck className="w-4 h-4" />} />
+        <MetricCard title="On Track" value={metrics.onTrack} tone="emerald" icon={<CheckCircle2 className="w-4 h-4" />} />
+        <MetricCard title="Due Soon" value={metrics.dueSoon} tone="amber" icon={<Clock3 className="w-4 h-4" />} />
+        <MetricCard title="Overdue" value={metrics.overdue} tone="rose" icon={<AlertTriangle className="w-4 h-4" />} />
+        <MetricCard title="Escalated" value={metrics.escalated} tone="orange" icon={<ArrowRight className="w-4 h-4" />} />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <ViewButton active={view === 'inbox'} onClick={() => setView('inbox')} label={`Approval Inbox (${metrics.inbox})`} />
+        <ViewButton active={view === 'sla'} onClick={() => setView('sla')} label={`SLA Dashboard (${metrics.overdue + metrics.escalated})`} />
+        <ViewButton active={view === 'history'} onClick={() => setView('history')} label={`Completed (${historyItems.length})`} />
+      </div>
+
+      {view !== 'history' && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-slate-900/50 p-4">
+          <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <Filter className="w-3.5 h-3.5" />
+            Filters
+          </div>
+          <select
+            value={serviceFilter}
+            onChange={event => setServiceFilter(event.target.value)}
+            className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white"
+          >
+            {serviceOptions.map(option => (
+              <option key={option} value={option}>{labelize(option === 'GENERAL' ? 'General' : option.replace(/^LEASING_/, ''))}</option>
+            ))}
+          </select>
+          <select
+            value={slaFilter}
+            onChange={event => setSlaFilter(event.target.value as 'ALL' | SlaTone)}
+            className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white"
+          >
+            <option value="ALL">All SLA states</option>
+            <option value="on_track">On Track</option>
+            <option value="due_soon">Due Soon</option>
+            <option value="overdue">Overdue</option>
+            <option value="escalated">Escalated</option>
+          </select>
+        </div>
+      )}
+
+      {view === 'history' ? (
+        <CompletedTable actions={historyItems} />
+      ) : (
+        <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+          <div className="rounded-2xl border border-white/10 bg-slate-900/55 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-white">
+                  {view === 'sla' ? 'Overdue & escalated approvals' : 'Runtime approval inbox'}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {view === 'sla'
+                    ? 'Items that need intervention before they block Leasing operations.'
+                    : 'Grouped by live Leasing runtime action, not just loose step rows.'}
+                </p>
               </div>
-              {idx < workflowSteps.length - 1 && (
-                <div className="flex items-center px-2">
-                  <div className="text-2xl text-slate-600">→</div>
-                </div>
-              )}
-            </React.Fragment>
-          ))}
-        </div>
-      </div>
+            </div>
 
-      {/* Tabs */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
-        <div className="flex gap-4 border-b border-white/10 mb-6">
-          <button
-            onClick={() => setActiveTab('pending')}
-            className={`pb-4 text-sm font-semibold transition-colors ${
-              activeTab === 'pending'
-                ? 'text-blue-400 border-b-2 border-blue-500'
-                : 'text-slate-400 hover:text-slate-300'
-            }`}
-          >
-            Pending Actions ({pendingActions.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`pb-4 text-sm font-semibold transition-colors ${
-              activeTab === 'history'
-                ? 'text-blue-400 border-b-2 border-blue-500'
-                : 'text-slate-400 hover:text-slate-300'
-            }`}
-          >
-            Approval History
-          </button>
-        </div>
-
-        {/* Pending Actions Tab */}
-        {activeTab === 'pending' && (
-          <div className="space-y-4">
-            {pendingActions.map((action) => (
-              <div key={action.id} className="bg-slate-900/50 border border-white/10 rounded-lg p-4 hover:border-white/20 transition-colors">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">
-                      {action.entityType === 'quotation' ? '📋' : '📄'}
-                    </span>
+            <div className="space-y-3">
+              {(view === 'sla' ? overdueActions : filteredInbox).map(action => (
+                <button
+                  key={action.id}
+                  onClick={() => setSelectedActionId(action.id)}
+                  className={`w-full rounded-2xl border p-4 text-left transition-colors ${
+                    selectedAction?.id === action.id
+                      ? 'border-violet-500/40 bg-violet-500/10'
+                      : 'border-white/10 bg-slate-950/50 hover:border-white/20'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-white">{action.entityNumber}</p>
-                      <p className="text-xs text-slate-400">
-                        {action.entityType === 'quotation' ? 'Quotation' : 'Contract'}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-[11px] font-semibold text-blue-200">
+                          {labelize((action.serviceTypeKey ?? 'GENERAL').replace(/^LEASING_/, ''))}
+                        </span>
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${slaBadge(action.slaTone)}`}>
+                          {labelize(action.slaTone)}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm font-semibold text-white">{action.title}</p>
+                      <p className="text-xs text-slate-400">{action.entityLabel} · {labelize(action.entityType)}</p>
+                    </div>
+                    <div className="text-right text-xs text-slate-400">
+                      <div>{action.approvedCount}/{action.steps.length} complete</div>
+                      <div className="mt-1">{elapsedLabel(action.createdAt)}</div>
                     </div>
                   </div>
-                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                    {action.currentStatus}
-                  </span>
-                </div>
 
-                <p className="text-sm text-slate-300 mb-3">{action.actionNeeded}</p>
-
-                <div className="grid grid-cols-3 gap-4 text-xs mb-4">
-                  <div>
-                    <p className="text-slate-500 mb-1">Requestor</p>
-                    <p className="text-slate-300 font-medium">{action.requestor}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500 mb-1">Created</p>
-                    <p className="text-slate-300 font-medium">{action.createdDate}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500 mb-1">Time Elapsed</p>
-                    <p className="text-slate-300 font-medium">{action.timeElapsed}</p>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <button className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 text-xs font-medium border border-emerald-500/30 transition-colors">
-                    Approve
-                  </button>
-                  <button className="px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 text-xs font-medium border border-red-500/30 transition-colors">
-                    Reject
-                  </button>
-                  <button className="px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 text-xs font-medium border border-blue-500/30 transition-colors">
-                    View
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Approval History Tab */}
-        {activeTab === 'history' && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-800/50">
-                <tr className="border-b border-white/5">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Entity Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Entity ID</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Step Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Approver</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Action Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Comments</th>
-                </tr>
-              </thead>
-              <tbody>
-                {approvalHistory.map((item) => (
-                  <tr key={item.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td className="px-4 py-4 text-white">{item.entityType}</td>
-                    <td className="px-4 py-4 font-medium text-blue-400">{item.entityId}</td>
-                    <td className="px-4 py-4 text-white">{item.stepName}</td>
-                    <td className="px-4 py-4 text-white">{item.approver}</td>
-                    <td className="px-4 py-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusBadgeStyle(item.status)}`}>
-                        {item.status}
+                  <div className="mt-3 rounded-xl border border-white/5 bg-black/20 px-3 py-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs text-slate-500">Current step</p>
+                        <p className="text-sm text-slate-200">{action.currentStep?.stepName ?? 'Closed'}</p>
+                      </div>
+                      <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${statusBadge(action.currentStep?.status ?? 'PENDING')}`}>
+                        {labelize(action.currentStep?.status ?? 'PENDING')}
                       </span>
-                    </td>
-                    <td className="px-4 py-4 text-slate-200">{item.actionDate}</td>
-                    <td className="px-4 py-4 text-slate-200 max-w-xs truncate">{item.comments}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-400">
+                      <div>Assignee: <span className="text-slate-200">{action.currentStep?.assignedToEmail ?? action.currentStep?.approverRole ?? 'Unassigned'}</span></div>
+                      <div>Due: <span className="text-slate-200">{formatDateTime(action.currentStep?.dueAt)}</span></div>
+                    </div>
+                  </div>
+                </button>
+              ))}
+
+              {(view === 'sla' ? overdueActions : filteredInbox).length === 0 && (
+                <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/30 px-5 py-10 text-center text-sm text-slate-500">
+                  {view === 'sla'
+                    ? 'No overdue or escalated Leasing runtime approvals right now.'
+                    : 'No pending Leasing runtime approvals in this view.'}
+                </div>
+              )}
+            </div>
           </div>
-        )}
+
+          <div className="rounded-2xl border border-white/10 bg-slate-900/55 p-5">
+            {selectedAction ? (
+              <ActionDetailPanel
+                action={selectedAction}
+                comments={comments}
+                busyId={busyId}
+                onCommentsChange={setComments}
+                onApprove={() => selectedAction.currentStep && void handleAction(selectedAction.currentStep.id, 'APPROVE')}
+                onReject={() => selectedAction.currentStep && void handleAction(selectedAction.currentStep.id, 'REJECT')}
+              />
+            ) : (
+              <div className="flex min-h-[440px] items-center justify-center text-slate-500">
+                Select a Leasing approval item to review details.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MetricCard({ title, value, tone, icon }: { title: string; value: number; tone: 'blue' | 'emerald' | 'amber' | 'rose' | 'orange'; icon: React.ReactNode }) {
+  const tones: Record<typeof tone, string> = {
+    blue: 'from-blue-600/25 to-indigo-600/15 border-blue-500/20 text-blue-200',
+    emerald: 'from-emerald-600/25 to-teal-600/15 border-emerald-500/20 text-emerald-200',
+    amber: 'from-amber-600/25 to-orange-600/15 border-amber-500/20 text-amber-200',
+    rose: 'from-rose-600/25 to-red-600/15 border-rose-500/20 text-rose-200',
+    orange: 'from-orange-600/25 to-amber-600/15 border-orange-500/20 text-orange-200',
+  };
+
+  return (
+    <div className={`rounded-2xl border bg-gradient-to-br p-4 ${tones[tone]}`}>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wider text-white/80">{title}</p>
+        <div className="rounded-xl bg-white/10 p-2 text-white/90">{icon}</div>
+      </div>
+      <div className="mt-4 text-3xl font-bold text-white">{value}</div>
+    </div>
+  );
+}
+
+function ViewButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${
+        active
+          ? 'border-violet-500/40 bg-violet-500/15 text-white'
+          : 'border-white/10 bg-slate-900/50 text-slate-300 hover:bg-slate-800'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function ActionDetailPanel({
+  action,
+  comments,
+  busyId,
+  onCommentsChange,
+  onApprove,
+  onReject,
+}: {
+  action: RuntimeApprovalAction;
+  comments: string;
+  busyId: string | null;
+  onCommentsChange: (value: string) => void;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  const currentStep = action.currentStep;
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-4">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-[11px] font-semibold text-blue-200">
+              {labelize((action.serviceTypeKey ?? 'GENERAL').replace(/^LEASING_/, ''))}
+            </span>
+            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${slaBadge(action.slaTone)}`}>
+              {labelize(action.slaTone)}
+            </span>
+          </div>
+          <h2 className="mt-2 text-2xl font-bold text-white">{action.title}</h2>
+          <p className="mt-1 text-sm text-slate-400">{action.entityLabel} · {labelize(action.entityType)}</p>
+        </div>
+        <Link
+          href={action.href}
+          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-slate-800 px-4 py-2 text-sm text-slate-200 hover:bg-slate-700"
+        >
+          <Eye className="w-4 h-4" />
+          Open Record
+        </Link>
       </div>
 
-      {/* Variance Alert Section */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
-        <h2 className="text-xl font-bold text-white mb-6">Variance Alerts</h2>
+      <div className="grid gap-4 md:grid-cols-4">
+        <InfoCard label="Current step" value={currentStep?.stepName ?? 'Closed'} />
+        <InfoCard label="Assigned to" value={currentStep?.assignedToEmail ?? currentStep?.approverRole ?? 'Unassigned'} />
+        <InfoCard label="Due by" value={formatDateTime(currentStep?.dueAt)} />
+        <InfoCard label="Escalation" value={formatDateTime(currentStep?.escalationAt)} />
+      </div>
+
+      {currentStep?.delegatedFromRole && (
+        <div className="rounded-xl border border-orange-500/20 bg-orange-500/10 px-4 py-3 text-sm text-orange-100">
+          This step was delegated from <strong>{labelize(currentStep.delegatedFromRole)}</strong> because no direct assignee was available or escalation routing was applied.
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-white">Approval sequence</h3>
+          <div className="text-xs text-slate-500">{action.approvedCount}/{action.steps.length} completed</div>
+        </div>
         <div className="space-y-3">
-          {varianceAlerts.map((alert) => (
-            <div
-              key={alert.id}
-              className={`border-l-4 rounded-lg p-4 ${
-                alert.severity === 'ERROR'
-                  ? 'border-l-red-500 bg-red-500/5'
-                  : 'border-l-amber-500 bg-amber-500/5'
-              }`}
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  <span className="text-xl">
-                    {alert.severity === 'ERROR' ? '⚠️' : '⚡'}
-                  </span>
+          {action.steps.map(step => (
+            <div key={step.id} className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-xs font-bold text-white">
+                    {step.stepOrder}
+                  </div>
                   <div>
-                    <p className="font-semibold text-white">{alert.message}</p>
-                    <p className="text-xs text-slate-400 mt-1">Reference: {alert.reference}</p>
+                    <p className="text-sm font-semibold text-white">{step.stepName}</p>
+                    <p className="text-xs text-slate-500">
+                      {step.assignedToEmail ?? step.approverRole ?? 'Unassigned'}
+                      {step.delegatedFromRole ? ` · delegated from ${labelize(step.delegatedFromRole)}` : ''}
+                    </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getSeverityBadgeStyle(alert.severity)}`}>
-                    {alert.severity}
-                  </span>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    alert.status === 'Open'
-                      ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                      : alert.status === 'Acknowledged'
-                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                      : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                  }`}>
-                    {alert.status}
-                  </span>
-                </div>
+                <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${statusBadge(step.status)}`}>
+                  {labelize(step.status)}
+                </span>
               </div>
-              <p className="text-xs text-slate-500">Created: {alert.created}</p>
+              <div className="mt-3 grid gap-2 text-xs text-slate-400 md:grid-cols-3">
+                <div>Due: <span className="text-slate-200">{formatDateTime(step.dueAt)}</span></div>
+                <div>Escalation: <span className="text-slate-200">{formatDateTime(step.escalationAt)}</span></div>
+                <div>Actioned: <span className="text-slate-200">{formatDateTime(step.actionAt)}</span></div>
+              </div>
+              {step.comments && (
+                <div className="mt-3 rounded-xl border border-white/5 bg-black/20 px-3 py-2 text-xs italic text-slate-300">
+                  "{step.comments}"
+                </div>
+              )}
             </div>
           ))}
         </div>
+      </div>
+
+      {currentStep && currentStep.status === 'PENDING' ? (
+        <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+          <h3 className="text-sm font-semibold text-white">Decision</h3>
+          <p className="mt-1 text-xs text-slate-500">Add context for the runtime approval decision. Rejection comments are strongly recommended.</p>
+          <textarea
+            value={comments}
+            onChange={event => onCommentsChange(event.target.value)}
+            rows={4}
+            placeholder="Why is this approval being accepted or rejected?"
+            className="mt-3 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-3 text-sm text-white placeholder:text-slate-500 focus:border-violet-500/40 focus:outline-none"
+          />
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              onClick={onApprove}
+              disabled={busyId === currentStep.id}
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              {busyId === currentStep.id ? 'Working...' : 'Approve'}
+            </button>
+            <button
+              onClick={onReject}
+              disabled={busyId === currentStep.id}
+              className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-500 disabled:opacity-50"
+            >
+              <XCircle className="w-4 h-4" />
+              Reject
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+          This runtime approval action is no longer pending. Review the step timeline above for the full decision trail.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InfoCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="mt-2 text-sm font-medium text-white">{value}</p>
+    </div>
+  );
+}
+
+function CompletedTable({ actions }: { actions: RuntimeApprovalAction[] }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-slate-900/55 overflow-hidden">
+      <div className="border-b border-white/10 px-5 py-4">
+        <h3 className="text-sm font-semibold text-white">Completed approval actions</h3>
+        <p className="text-xs text-slate-500">Closed Leasing approval chains with their final status and step history.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-950/50 text-slate-400">
+            <tr>
+              <th className="px-5 py-3 text-left">Service</th>
+              <th className="px-5 py-3 text-left">Entity</th>
+              <th className="px-5 py-3 text-left">Final Step</th>
+              <th className="px-5 py-3 text-left">Completed</th>
+              <th className="px-5 py-3 text-left">Outcome</th>
+            </tr>
+          </thead>
+          <tbody>
+            {actions.map(action => (
+              <tr key={action.id} className="border-t border-white/5">
+                <td className="px-5 py-4 text-white">{labelize((action.serviceTypeKey ?? 'GENERAL').replace(/^LEASING_/, ''))}</td>
+                <td className="px-5 py-4">
+                  <Link href={action.href} className="font-medium text-blue-300 hover:text-blue-200">
+                    {action.entityLabel}
+                  </Link>
+                  <div className="text-xs text-slate-500">{labelize(action.entityType)}</div>
+                </td>
+                <td className="px-5 py-4 text-slate-200">{action.currentStep?.stepName ?? '-'}</td>
+                <td className="px-5 py-4 text-slate-400">{formatDateTime(action.steps[action.steps.length - 1]?.actionAt ?? action.createdAt)}</td>
+                <td className="px-5 py-4">
+                  <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${statusBadge(action.currentStep?.status ?? 'SKIPPED')}`}>
+                    {labelize(action.currentStep?.status ?? 'SKIPPED')}
+                  </span>
+                </td>
+              </tr>
+            ))}
+            {actions.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-5 py-10 text-center text-slate-500">No completed Leasing approval chains yet.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

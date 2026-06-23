@@ -1,6 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { randomUUID } from 'crypto';
+import {
+  ensureCorporateCustomerIdentityTables,
+  replaceCustomerDomains,
+} from '@/lib/corporate-customer-identity';
+
+type CustomerRow = Record<string, unknown> & {
+  id: string;
+  customer_code?: string | null;
+  customer_type?: string | null;
+  tenant_id?: string | null;
+  domains?: string[] | null;
+  region_name?: string | null;
+  dept_name?: string | null;
+  unit_name?: string | null;
+  region_id?: string | null;
+  department_id?: string | null;
+  unit_id?: string | null;
+};
+
+type CountRow = { count: bigint | number | string };
+
+function errorMessage(err: unknown, fallback: string) {
+  return err instanceof Error ? err.message : fallback;
+}
+
+function requestContext(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id') ?? '';
+  const userId = req.headers.get('x-user-id') ?? '';
+  const role = req.headers.get('x-user-role') ?? '';
+  if (!tenantId || !userId) return null;
+  return { tenantId, userId, role, isSuperAdmin: role === 'SUPER_ADMIN' };
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -8,8 +40,15 @@ export async function GET(req: NextRequest) {
     const status       = searchParams.get('status');
     const customerType = searchParams.get('customerType');
     const search       = searchParams.get('search');
+    const requestedTenantId = searchParams.get('tenantId');
+    const ctx = requestContext(req);
+    if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (requestedTenantId && requestedTenantId !== ctx.tenantId && !ctx.isSuperAdmin) {
+      return NextResponse.json({ error: 'Forbidden', message: 'Tenant boundary violation' }, { status: 403 });
+    }
+    const scopedTenantId = requestedTenantId && ctx.isSuperAdmin ? requestedTenantId : ctx.tenantId;
 
-    let whereClause = `WHERE c.deleted_at IS NULL`;
+    let whereClause = `WHERE c.deleted_at IS NULL AND c.tenant_id::text = '${scopedTenantId.replace(/'/g,"''")}'`;
     if (status)       whereClause += ` AND c.status = '${status.replace(/'/g,"''")}'`;
     if (customerType) whereClause += ` AND c.customer_type = '${customerType.replace(/'/g,"''")}'`;
     if (search) {
@@ -17,12 +56,18 @@ export async function GET(req: NextRequest) {
       whereClause += ` AND (c.name_en ILIKE '%${s}%' OR c.customer_code ILIKE '%${s}%' OR c.email ILIKE '%${s}%' OR c.mobile_number ILIKE '%${s}%' OR c.account_code ILIKE '%${s}%')`;
     }
 
-    const customers = await prisma.$queryRawUnsafe(`
+    const customers = await prisma.$queryRawUnsafe<CustomerRow[]>(`
       SELECT c.*,
+        COALESCE(cd.domains, ARRAY[]::text[]) AS domains,
         r.id as region_id_j, r.name as region_name,
         d.id as dept_id_j,   d.name as dept_name,
         u.id as unit_id_j,   u.name as unit_name
       FROM customers c
+      LEFT JOIN LATERAL (
+        SELECT ARRAY_AGG(domain ORDER BY domain) AS domains
+        FROM customer_domains
+        WHERE tenant_id = c.tenant_id::text AND customer_id = c.id::text
+      ) cd ON TRUE
       LEFT JOIN customer_hierarchy r ON c.region_id     = r.id
       LEFT JOIN customer_hierarchy d ON c.department_id = d.id
       LEFT JOIN customer_hierarchy u ON c.unit_id       = u.id
@@ -31,7 +76,7 @@ export async function GET(req: NextRequest) {
     `);
 
     // Shape the response to match the frontend 'Customer' interface (camelCase)
-    const shaped = (customers as any[]).map(c => ({
+    const shaped = customers.map(c => ({
       id: c.id,
       customerCode: c.customer_code,
       customerType: c.customer_type,
@@ -82,20 +127,25 @@ export async function GET(req: NextRequest) {
       marketingCommunications: c.marketing_communications,
       bookingNotifications: c.booking_notifications,
       status: c.status,
+      tenantId: c.tenant_id,
+      domains: Array.isArray(c.domains) ? c.domains : [],
       region:     c.region_name     ? { id: c.region_id,  name: c.region_name  } : null,
       department: c.dept_name       ? { id: c.department_id,    name: c.dept_name    } : null,
       unit:       c.unit_name       ? { id: c.unit_id,    name: c.unit_name    } : null,
     }));
     return NextResponse.json(shaped);
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('GET /api/customers error:', e);
-    return NextResponse.json({ error: e?.message ?? 'Failed to fetch customers' }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(e, 'Failed to fetch customers') }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    const ctx = requestContext(req);
+    if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    await ensureCorporateCustomerIdentityTables();
 
     if (!body.nameEn?.trim()) {
       return NextResponse.json({ error: 'Customer name (English) is required' }, { status: 400 });
@@ -112,15 +162,15 @@ export async function POST(req: NextRequest) {
                      body.customerType === 'CORPORATE' ? 'CORP' :
                      body.customerType === 'VIP'       ? 'VIP' :
                      body.customerType === 'WALK_IN'   ? 'WLK' : 'CUST';
-      const countResult = await prisma.$queryRaw<{count:bigint}[]>`SELECT COUNT(*) as count FROM customers`;
-      const count = Number((countResult[0] as any)?.count ?? 0);
+      const countResult = await prisma.$queryRaw<CountRow[]>`SELECT COUNT(*) as count FROM customers`;
+      const count = Number(countResult[0]?.count ?? 0);
       body.customerCode = `${prefix}${String(count + 1).padStart(4, '0')}`;
     }
 
     const now = new Date().toISOString();
     await prisma.$executeRawUnsafe(`
       INSERT INTO customers (
-        id, created_at, updated_at, customer_code, customer_type, priority,
+        id, created_at, updated_at, tenant_id, customer_code, customer_type, priority,
         account_code, trade_license, name_en, name_ar, description_en, description_ar,
         email, mobile_number, mobile_country_code, communication_language,
         region_id, department_id, unit_id,
@@ -135,7 +185,7 @@ export async function POST(req: NextRequest) {
         notification_sms_code, notification_sms,
         marketing_communications, booking_notifications, status
       ) VALUES (
-        '${id}', '${now}', '${now}',
+        '${id}', '${now}', '${now}', '${ctx.tenantId.replace(/'/g,"''")}',
         ${body.customerCode ? `'${body.customerCode.replace(/'/g,"''")}'` : 'NULL'},
         '${body.customerType}',
         ${body.priority ? `'${body.priority}'` : 'NULL'},
@@ -210,14 +260,33 @@ export async function POST(req: NextRequest) {
         console.warn('Could not auto-create lessee:', le);
       }
     }
+    const domains = Array.isArray(body.domains ?? body.allowedDomains ?? body.customerDomains)
+      ? (body.domains ?? body.allowedDomains ?? body.customerDomains)
+      : [];
+    if (domains.length > 0) {
+      await replaceCustomerDomains({
+        tenantId: ctx.tenantId,
+        customerId: id,
+        domains,
+        actorUserId: ctx.userId,
+        verificationMethod: 'ADMIN',
+      });
+    }
 
-    const rows = await prisma.$queryRawUnsafe(`SELECT * FROM customers WHERE id = '${id}'`);
-    return NextResponse.json((rows as any[])[0], { status: 201 });
-  } catch (e: any) {
+    const rows = await prisma.$queryRawUnsafe<CustomerRow[]>(`SELECT * FROM customers WHERE id = '${id}'`);
+    const created = rows[0];
+    const domainRows = await prisma.$queryRawUnsafe<Array<{ domain: string }>>(
+      `SELECT domain FROM customer_domains WHERE tenant_id = $1 AND customer_id = $2 ORDER BY domain`,
+      ctx.tenantId,
+      id,
+    ).catch(() => []);
+    return NextResponse.json({ ...created, domains: domainRows.map(row => row.domain) }, { status: 201 });
+  } catch (e: unknown) {
     console.error('POST /api/customers error:', e);
-    if (e?.message?.includes('unique') || e?.code === '23505') {
+    const message = errorMessage(e, 'Failed to create customer');
+    if (message.includes('unique') || (typeof e === 'object' && e !== null && 'code' in e && e.code === '23505')) {
       return NextResponse.json({ error: 'Customer code already exists' }, { status: 409 });
     }
-    return NextResponse.json({ error: e?.message ?? 'Failed to create customer' }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

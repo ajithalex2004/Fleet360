@@ -112,7 +112,7 @@ export async function GET(req: NextRequest) {
          WHERE je.status='POSTED' AND je.entry_date <= $1
            AND c.account_type IN ('INCOME','EXPENSE')`, asOf
       ).catch(() => [{ net: '0' }]);
-      const retainedEarnings = toN(pl?.[0]?.net ?? pl?.net ?? '0');
+      const retainedEarnings = toN(pl?.net ?? '0');
       return [
         ...rows,
         { code: '3200', label: 'Retained Earnings (Current Year P&L)', amount: retainedEarnings },

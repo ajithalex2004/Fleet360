@@ -17,30 +17,20 @@ import {
 import { requireUnderQuota } from '@/lib/plan-limits';
 import type { PlanCode } from '@/lib/billing';
 import { sendEmail } from '@/lib/email';
-import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { requireAdminPermission, resolveTenantBoundary } from '@/lib/admin-policy';
+import { recordAdminChange } from '@/lib/admin-change-history';
 
 export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string }>; }
 
-function authorize(req: NextRequest, tenantId: string): { ok: true; userId: string } | { ok: false; res: NextResponse } {
-  const role     = req.headers.get('x-user-role')   ?? '';
-  const userId   = req.headers.get('x-user-id')     ?? '';
-  const ctxTenant = req.headers.get('x-tenant-id')  ?? '';
-  if (!userId) {
-    return { ok: false, res: NextResponse.json({ ok: false, error: 'Not authenticated' }, { status: 401 }) };
-  }
-  if (role !== 'SUPER_ADMIN' && ctxTenant !== tenantId) {
-    return { ok: false, res: NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 }) };
-  }
-  return { ok: true, userId };
-}
-
 export async function GET(req: NextRequest, { params }: RouteParams) {
-  const { id: tenantId } = await params;
-  const auth = authorize(req, tenantId);
-  if (!auth.ok) return auth.res;
+  const { id } = await params;
+  const auth = await requireAdminPermission(req, 'view', 'users');
+  if (auth instanceof NextResponse) return auth;
+  const tenantId = resolveTenantBoundary(auth.ctx, id);
+  if (tenantId instanceof NextResponse) return tenantId;
 
   await ensureInvitationTable();
 
@@ -84,9 +74,11 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 }
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
-  const { id: tenantId } = await params;
-  const auth = authorize(req, tenantId);
-  if (!auth.ok) return auth.res;
+  const { id } = await params;
+  const auth = await requireAdminPermission(req, 'create', 'users');
+  if (auth instanceof NextResponse) return auth;
+  const tenantId = resolveTenantBoundary(auth.ctx, id);
+  if (tenantId instanceof NextResponse) return tenantId;
 
   let body: { email?: string; roleId?: string };
   try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
@@ -143,6 +135,17 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   try {
     await ensureInvitationTable();
 
+    const beforeRows = await prisma.$queryRawUnsafe<Array<{
+      id: string; email: string; role_id: string; revoked: boolean; used_at: string | null; expires_at: string;
+    }>>(
+      `SELECT id::text, email, role_id, revoked, used_at::text, expires_at::text
+         FROM tenant_invitations
+        WHERE tenant_id = $1 AND LOWER(email) = $2
+        ORDER BY created_at DESC
+        LIMIT 5`,
+      tenantId, email,
+    ).catch(() => []);
+
     // Single active invitation per email × tenant — revoke any prior live one.
     await prisma.$executeRawUnsafe(
       `UPDATE tenant_invitations
@@ -155,12 +158,17 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     const { token, hash } = generateInvitationToken();
     const expiresAt = new Date(Date.now() + INVITATION_TTL_DAYS * 86_400_000);
 
-    await prisma.$executeRawUnsafe(
+    const inserted = await prisma.$queryRawUnsafe<Array<{
+      id: string; tenant_id: string; email: string; role_id: string;
+      invited_by_user_id: string | null; expires_at: string; revoked: boolean;
+    }>>(
       `INSERT INTO tenant_invitations
          (tenant_id, email, role_id, token_hash, invited_by_user_id, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      tenantId, email, roleId, hash, auth.userId, expiresAt,
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id::text, tenant_id, email, role_id, invited_by_user_id, expires_at::text, revoked`,
+      tenantId, email, roleId, hash, auth.ctx.userId, expiresAt,
     );
+    const invitation = inserted[0] ?? null;
 
     const baseUrl   = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
     const acceptUrl = `${baseUrl}/invitation/${encodeURIComponent(token)}`;
@@ -183,18 +191,22 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         `<p style="color:#666;font-size:12px">If you didn&rsquo;t expect this, ignore the email.</p>`,
     });
 
-    void logAudit({
-      tenantId, tenantName: tenant.name,
-      userId: auth.userId,
-      userRole: 'TENANT_ADMIN',
+    await recordAdminChange({
+      req,
+      ctx: auth.ctx,
+      tenantId,
       entityType: 'Invitation',
+      entityId: invitation?.id ?? null,
       entityName: email,
       action: 'CREATE',
-      details: `Invitation sent to ${email} as ${role.name}. Email send: ${send.sent ? 'OK' : `failed (${send.reason ?? 'unknown'})`}.`,
+      before: beforeRows,
+      after: { ...invitation, emailSent: send.sent, emailReason: send.reason ?? null },
+      summary: `Invitation sent to ${email} as ${role.name}. Email send: ${send.sent ? 'OK' : `failed (${send.reason ?? 'unknown'})`}.`,
     });
 
     return NextResponse.json({
       ok: true,
+      invitationId: invitation?.id,
       emailed: send.sent,
       reason:  send.sent ? undefined : send.reason,
       // Caller may still need the URL when SMTP isn't configured (dev environments).

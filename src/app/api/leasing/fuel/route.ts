@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { legacyLeasingBillingWriteMoved } from '@/lib/finance-leasing-billing-routing';
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -11,13 +12,15 @@ export async function GET(req: NextRequest) {
       orderBy: { fuelDate: 'desc' },
     });
     return NextResponse.json(logs);
-  } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+  } catch { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
 export async function POST(req: NextRequest) {
   try {
+    const moved = legacyLeasingBillingWriteMoved(req, '/api/finance/leasing-billing/fuel');
+    if (moved) return moved;
     const body = await req.json();
     const totalCost = body.totalCost ?? (parseFloat(body.liters) * parseFloat(body.costPerLiter || '0'));
     const log = await prisma.leaseFuelLog.create({ data: { ...body, totalCost } });
     return NextResponse.json(log, { status: 201 });
-  } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+  } catch { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }

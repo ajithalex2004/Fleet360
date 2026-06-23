@@ -29,9 +29,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    await prisma.leaseAlert.update({
+    await prisma.leaseAlert.delete({
       where: { id: params.id },
-      data: { deletedAt: new Date() },
     });
     return NextResponse.json({ success: true });
   } catch (e) {

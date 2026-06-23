@@ -11,6 +11,7 @@
 
 import { useEffect, useState } from 'react';
 import { ShieldAlert } from 'lucide-react';
+import { getClientMe, clearClientMeCache } from '@/lib/client-session';
 
 interface MeResponse { impersonatedBy?: string | null; tenantName?: string; userId?: string; }
 
@@ -22,9 +23,7 @@ export default function ImpersonationBanner() {
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch('/api/auth/me', { cache: 'no-store' });
-        if (!r.ok) return;
-        const data = await r.json();
+        const data = await getClientMe();
         if (!cancelled) setInfo(data);
       } catch { /* swallow */ }
     })();
@@ -42,6 +41,7 @@ export default function ImpersonationBanner() {
         alert(data?.error ?? 'Could not stop impersonating.');
         return;
       }
+      clearClientMeCache();
       window.location.href = '/admin/tenants';
     } finally {
       setStop(false);

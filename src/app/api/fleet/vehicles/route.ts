@@ -4,6 +4,7 @@ import { paginate, paginatedResponse } from '@/lib/pagination';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
 import { requireUnderQuota } from '@/lib/plan-limits';
 import type { PlanCode } from '@/lib/billing';
+import { recordOperationalChange, requireOperationalContext } from '@/lib/cross-module-governance';
 
 const toCamel = (s: string) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 const rowToCamel = (r: Record<string, unknown>) =>
@@ -18,10 +19,16 @@ export async function GET(req: NextRequest) {
     const branchId = sp.get('branchId');
     const lifecycleStage = sp.get('lifecycleStage');
     const vehicleTypeId = sp.get('vehicleTypeId');
+    const ctx = requireOperationalContext(req, 'fleet', { requestedTenantId: sp.get('tenantId') });
+    if (ctx instanceof NextResponse) return ctx;
+    const tenantId = ctx.tenantId;
     const { take, skip, page, limit } = paginate(sp);
 
     const conditions: string[] = ['v.deleted_at IS NULL'];
     const params: unknown[] = [];
+
+    params.push(tenantId);
+    conditions.push(`v.tenant_id::text = $${params.length}`);
 
     if (status) {
       params.push(status);
@@ -81,8 +88,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   await ensureFleetSchema();
   try {
+    const ctx = requireOperationalContext(req, 'fleet', { write: true });
+    if (ctx instanceof NextResponse) return ctx;
     // Quota: vehicles per plan.
-    const tenantId = req.headers.get('x-tenant-id') ?? '';
+    const tenantId = ctx.tenantId;
     const tenantPlan = (req.headers.get('x-tenant-plan') ?? 'TRIAL') as PlanCode;
     if (tenantId) {
       const rows = await prisma.$queryRawUnsafe<{ c: bigint }[]>(
@@ -111,7 +120,7 @@ export async function POST(req: NextRequest) {
 
     const record = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
       `INSERT INTO vehicles (
-        id, vehicle_code, make, model, type, year, vin, chassis_no, color,
+        id, tenant_id, vehicle_code, make, model, type, year, vin, chassis_no, color,
         license_plate, registration_no, plate_number,
         plate_code, plate_category, emirate, vehicle_type_id, vehicle_usage,
         hierarchy_id, hierarchy_name, branch_id, branch_name, device_id,
@@ -119,15 +128,16 @@ export async function POST(req: NextRequest) {
         purchase_price, acquisition_type, odometer_reading, fuel_level,
         status, notes, category, created_at, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9,
-        $10, $11, $12,
-        $13, $14, $15, $16, $17,
-        $18, $19, $20, $21, $22,
-        $23, $24, $25::timestamptz,
-        $26, $27, $28, $29,
-        $30, $31, $32, $33::timestamptz, $34::timestamptz
+        $1, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10,
+        $11, $12, $13,
+        $14, $15, $16, $17, $18,
+        $19, $20, $21, $22, $23,
+        $24, $25, $26::timestamptz,
+        $27, $28, $29, $30,
+        $31, $32, $33, $34::timestamptz, $35::timestamptz
       ) RETURNING *`,
       id,
+      tenantId || null,
       vehicleCode,
       body.make ?? null,
       body.model ?? null,
@@ -163,7 +173,17 @@ export async function POST(req: NextRequest) {
       now,
     );
 
-    return NextResponse.json(rowToCamel(record[0]), { status: 201 });
+    const created = rowToCamel(record[0]);
+    await recordOperationalChange({
+      req,
+      ctx,
+      entityType: 'Vehicle',
+      entityId: String(created.id ?? id),
+      action: 'CREATE',
+      after: created,
+      summary: `Created vehicle ${vehicleCode}.`,
+    });
+    return NextResponse.json(created, { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error('Error creating vehicle:', msg);

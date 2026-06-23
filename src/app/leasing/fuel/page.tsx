@@ -1,8 +1,13 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { usePathname } from 'next/navigation';
+import { Banknote, Fuel as FuelIcon, ReceiptText, Wallet } from 'lucide-react';
+import { LeasingBillingMigrationNotice } from '@/components/LeasingBillingMigrationNotice';
+import { KpiCard, KpiGrid, PageHeader } from '@/components/ui/page-theme';
 
 interface FuelLog { id: string; contractId: string; vehicleId?: string; driverId?: string; fuelDate: string; liters: number; costPerLiter?: number; totalCost?: number; currency?: string; station?: string; mileageAtFuel?: number; fuelCardNo?: string; billedToLessee?: boolean; billingStatus?: string; notes?: string; contract?: { contractNumber?: string }; }
-interface Contract { id: string; contractNumber?: string; }
+interface Contract { id: string; contractNumber?: string; lessee?: string; lesseeId?: string | null; }
+interface Lessee { id: string; name: string; }
 
 const STATUS_COLORS: Record<string,string> = {
   PENDING:  'bg-amber-500/20 text-amber-400 border-amber-500/30',
@@ -12,35 +17,49 @@ const STATUS_COLORS: Record<string,string> = {
 };
 
 export default function FuelPage() {
+  const pathname = usePathname();
+  const isLegacyPath = pathname.startsWith('/leasing/');
+  const apiBase = isLegacyPath ? '/api/leasing' : '/api/finance/leasing-billing';
   const [logs, setLogs]           = useState<FuelLog[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
+  const [lessees, setLessees]     = useState<Lessee[]>([]);
   const [filter, setFilter]       = useState('All');
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading]     = useState(true);
   const [saving, setSaving]       = useState(false);
   const [error, setError]         = useState('');
 
-  const emptyForm = { contractId:'', vehicleId:'', driverId:'', fuelDate:'', liters:'', costPerLiter:'', station:'', mileageAtFuel:'', fuelCardNo:'', billedToLessee:true, notes:'' };
+  const emptyForm = { lesseeId:'', contractId:'', vehicleId:'', driverId:'', fuelDate:'', liters:'', costPerLiter:'', station:'', mileageAtFuel:'', fuelCardNo:'', billedToLessee:true, notes:'' };
   const [form, setForm] = useState(emptyForm);
-
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const params = filter !== 'All' ? `?billingStatus=${filter}` : '';
-      const [lRes, cRes] = await Promise.all([fetch(`/api/leasing/fuel${params}`), fetch('/api/leasing/contracts-v2')]);
-      const [lData, cData] = await Promise.all([lRes.json(), cRes.json()]);
+      const [lRes, cRes, lesseesRes] = await Promise.all([fetch(`${apiBase}/fuel${params}`), fetch('/api/leasing/contracts-v2'), fetch('/api/leasing/lessees')]);
+      const [lData, cData, lesseesData] = await Promise.all([lRes.json(), cRes.json(), lesseesRes.json()]);
       setLogs(Array.isArray(lData) ? lData : []);
       setContracts(Array.isArray(cData) ? cData : []);
+      setLessees(Array.isArray(lesseesData) ? lesseesData : lesseesData.lessees ?? []);
     } catch { setError('Failed to load'); } finally { setLoading(false); }
-  }, [filter]);
+  }, [apiBase, filter]);
+
+  const filteredContracts = form.lesseeId
+    ? contracts.filter(contract => contract.lesseeId === form.lesseeId)
+    : contracts;
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (form.contractId && !filteredContracts.some(contract => contract.id === form.contractId)) {
+      setForm(prev => ({ ...prev, contractId: '' }));
+    }
+  }, [filteredContracts, form.contractId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
     try {
       const totalCost = parseFloat(form.liters) * parseFloat(form.costPerLiter || '0');
-      const res = await fetch('/api/leasing/fuel', { method:'POST', headers:{'Content-Type':'application/json'},
+      const res = await fetch(`${apiBase}/fuel`, { method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ ...form, liters: parseFloat(form.liters), costPerLiter: parseFloat(form.costPerLiter||'0'), totalCost,
           mileageAtFuel: form.mileageAtFuel ? parseInt(form.mileageAtFuel) : null,
           fuelDate: new Date(form.fuelDate).toISOString(), vehicleId: form.vehicleId||null, driverId: form.driverId||null }) });
@@ -50,7 +69,7 @@ export default function FuelPage() {
   };
 
   const updateStatus = async (id: string, billingStatus: string) => {
-    await fetch(`/api/leasing/fuel/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ billingStatus }) });
+    await fetch(`${apiBase}/fuel/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ billingStatus }) });
     load();
   };
 
@@ -59,22 +78,33 @@ export default function FuelPage() {
 
   if (loading) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading...</div></div>;
 
+  if (isLegacyPath) {
+    return (
+      <LeasingBillingMigrationNotice
+        title="Leasing fuel chargebacks"
+        financeHref="/finance/leasing-billing/fuel"
+        description="Fuel logs that affect customer billing are now operated from Finance & Billing."
+      />
+    );
+  }
+
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div><h1 className="text-4xl font-bold text-white mb-2">Fuel Management</h1>
-          <p className="text-slate-400">{logs.length} logs  -  {totalLiters.toFixed(0)}L total  -  AED {totalPending.toLocaleString()} pending</p></div>
-        <button onClick={()=>setShowModal(true)} className="rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90">+ Log Fuel</button>
-      </div>
+      <PageHeader
+        title="Fuel Management"
+        subtitle={`${logs.length} logs • ${totalLiters.toFixed(0)}L total • AED ${totalPending.toLocaleString()} pending`}
+        accent="amber"
+        actions={(
+          <button onClick={()=>setShowModal(true)} className="rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90">+ Log Fuel</button>
+        )}
+      />
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
-      <div className="grid grid-cols-4 gap-4">
-        {[{l:'Total Logs',v:logs.length,suffix:'',c:'text-white'},{l:'Total Litres',v:totalLiters.toFixed(0),suffix:'L',c:'text-blue-400'},{l:'Pending Billing',v:`AED ${totalPending.toLocaleString()}`,suffix:'',c:'text-amber-400'},{l:'Collected',v:`AED ${logs.filter(l=>l.billingStatus==='PAID').reduce((s,l)=>s+Number(l.totalCost??0),0).toLocaleString()}`,suffix:'',c:'text-emerald-400'}].map(({l,v,c})=>(
-          <div key={l} className="bg-slate-800/50 border border-white/10 rounded-2xl p-5 text-center">
-            <div className={`text-2xl font-bold ${c}`}>{v}</div>
-            <div className="text-xs text-slate-400 mt-1">{l}</div>
-          </div>
-        ))}
-      </div>
+      <KpiGrid>
+        <KpiCard label="Total Logs" value={logs.length} accent="slate" icon={ReceiptText} sub="Fuel entries" />
+        <KpiCard label="Total Litres" value={`${totalLiters.toFixed(0)}L`} accent="blue" icon={FuelIcon} sub="Across selected logs" />
+        <KpiCard label="Pending Billing" value={`AED ${totalPending.toLocaleString()}`} accent="amber" icon={Wallet} sub="Awaiting settlement" />
+        <KpiCard label="Collected" value={`AED ${logs.filter(l=>l.billingStatus==='PAID').reduce((s,l)=>s+Number(l.totalCost??0),0).toLocaleString()}`} accent="emerald" icon={Banknote} sub="Recovered charges" />
+      </KpiGrid>
       <div className="flex gap-3">
         {['All','PENDING','INVOICED','PAID','ABSORBED'].map(s=>(
           <button key={s} onClick={()=>setFilter(s)} className={`px-4 py-2 rounded-lg text-sm border transition-all ${filter===s?'border-amber-500 bg-amber-500/10 text-white':'border-white/10 text-slate-400 hover:border-white/20'}`}>{s}</button>
@@ -123,18 +153,24 @@ export default function FuelPage() {
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
+                <div><label className="block text-sm font-medium text-slate-300 mb-2">Customer / Lessee</label>
+                  <select value={form.lesseeId} onChange={e=>setForm(p=>({...p,lesseeId:e.target.value}))}
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-amber-500 focus:outline-none">
+                    <option value="">All lessees</option>
+                    {lessees.map(lessee=><option key={lessee.id} value={lessee.id}>{lessee.name}</option>)}
+                  </select></div>
                 <div><label className="block text-sm font-medium text-slate-300 mb-2">Contract *</label>
                   <select value={form.contractId} onChange={e=>setForm(p=>({...p,contractId:e.target.value}))} required
                     className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-amber-500 focus:outline-none">
                     <option value="">Select contract</option>
-                    {contracts.map(c=><option key={c.id} value={c.id}>{c.contractNumber??c.id.slice(0,8)}</option>)}
+                    {filteredContracts.map(c=><option key={c.id} value={c.id}>{c.contractNumber??c.id.slice(0,8)}{c.lessee ? ` - ${c.lessee}` : ''}</option>)}
                   </select></div>
                 <div><label className="block text-sm font-medium text-slate-300 mb-2">Fuel Date *</label>
                   <input type="datetime-local" value={form.fuelDate} onChange={e=>setForm(p=>({...p,fuelDate:e.target.value}))} required
                     className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-amber-500 focus:outline-none"/></div>
                 {[{l:'Litres *',k:'liters',ph:'50',req:true},{l:'Cost per Litre (AED)',k:'costPerLiter',ph:'3.00'},{l:'Station',k:'station',ph:'ENOC Dubai Marina'},{l:'Mileage at Fill',k:'mileageAtFuel',ph:'45000'},{l:'Fuel Card No.',k:'fuelCardNo',ph:'FC-001'},{l:'Vehicle ID',k:'vehicleId',ph:'Optional'},{l:'Driver ID',k:'driverId',ph:'Optional'}].map(({l,k,ph,req})=>(
                   <div key={k}><label className="block text-sm font-medium text-slate-300 mb-2">{l}</label>
-                    <input type="text" value={(form as any)[k]} onChange={e=>setForm(p=>({...p,[k]:e.target.value}))} placeholder={ph} required={req}
+                    <input type="text" value={String(form[k as keyof typeof form] ?? '')} onChange={e=>setForm(p=>({...p,[k]:e.target.value}))} placeholder={ph} required={req}
                       className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"/></div>
                 ))}
                 <div className="flex items-center gap-3">

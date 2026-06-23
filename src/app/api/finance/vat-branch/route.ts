@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireOperationalContext } from '@/lib/cross-module-governance';
 
 /**
  * GET /api/finance/vat-branch
@@ -31,12 +32,12 @@ function quarterDates(q: string): { start: string; end: string } | null {
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const tenantId = searchParams.get('tenantId') ?? '';
+  const ctx = requireOperationalContext(req, 'finance', {
+    requestedTenantId: searchParams.get('tenantId'),
+  });
+  if (ctx instanceof NextResponse) return ctx;
+  const tenantId = ctx.tenantId;
   const quarter  = searchParams.get('quarter') ?? '';
-
-  if (!tenantId) {
-    return NextResponse.json({ error: 'tenantId is required' }, { status: 400 });
-  }
 
   let startDate = searchParams.get('startDate') ?? '';
   let endDate   = searchParams.get('endDate')   ?? '';

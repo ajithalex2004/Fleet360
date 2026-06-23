@@ -31,6 +31,10 @@ import { matchGarages } from '@/services/garageMatching';
 import { EnhancedGarage } from '@/types/maintenance';
 import { useToast } from '@/contexts/ToastContext';
 
+const uploadFile = async (file: File): Promise<{ url: string }> => ({
+    url: URL.createObjectURL(file),
+});
+
 // Comprehensive Maintenance Jobs Database
 const MAINTENANCE_JOBS_DATABASE = {
     [MaintenanceType.PREVENTIVE]: [
@@ -755,7 +759,7 @@ export default function RequestDetailsPage() {
         // Find the latest quotation for the selected garage
         const garageQuotations = request.quotations?.filter(q => q.garageId === selectedGarageForApproval) || [];
         // Sort by date descending to get the latest
-        garageQuotations.sort((a, b) => new Date(b.quotationDate).getTime() - new Date(a.quotationDate).getTime());
+        garageQuotations.sort((a, b) => new Date(b.quotationDate ?? b.submittedDate ?? 0).getTime() - new Date(a.quotationDate ?? a.submittedDate ?? 0).getTime());
 
         const selectedQuote = garageQuotations[0]; // Get the latest one
 
@@ -1832,12 +1836,12 @@ export default function RequestDetailsPage() {
                             <div className="space-y-4 max-h-[60vh] overflow-y-auto">
                                 {request?.quotations
                                     ?.filter(q => q.garageId === historyGarageId)
-                                    .sort((a, b) => new Date(b.quotationDate).getTime() - new Date(a.quotationDate).getTime())
+                                    .sort((a, b) => new Date(b.quotationDate ?? b.submittedDate ?? 0).getTime() - new Date(a.quotationDate ?? a.submittedDate ?? 0).getTime())
                                     .map((quote, index) => (
                                         <div key={quote.id} className="p-4 rounded-lg border border-white/10 bg-slate-800/50">
                                             <div className="flex justify-between items-center mb-2">
                                                 <span className="text-xs font-medium text-slate-500">
-                                                    {new Date(quote.quotationDate).toLocaleString()}
+                                                    {new Date(quote.quotationDate ?? quote.submittedDate ?? 0).toLocaleString()}
                                                 </span>
                                                 {index === 0 && (
                                                     <span className="inline-flex items-center rounded-full bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-300">

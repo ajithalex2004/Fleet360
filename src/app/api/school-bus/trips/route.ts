@@ -10,6 +10,8 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { recordOperationalChange, requireOperationalContext } from '@/lib/cross-module-governance';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
 
 type Row = Record<string, unknown>;
 
@@ -104,9 +106,10 @@ function serialize(rows: Row[]): Row[] {
 export async function GET(req: NextRequest) {
   try {
     await ensureTripTables();
-
     const sp       = new URL(req.url).searchParams;
-    const tenantId = sp.get('tenantId') ?? 'default';
+    const ctx = requireOperationalContext(req, 'bus_ops', { requestedTenantId: sp.get('tenantId') });
+    if (ctx instanceof NextResponse) return ctx;
+    const tenantId = ctx.tenantId;
     const date     = sp.get('date')     ?? new Date().toISOString().slice(0, 10);
     const status   = sp.get('status')   ?? '';
     const routeId  = sp.get('routeId')  ?? '';
@@ -155,10 +158,11 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     await ensureTripTables();
-
+    const ctx = requireOperationalContext(req, 'bus_ops', { write: true });
+    if (ctx instanceof NextResponse) return ctx;
     const body = await req.json();
     const {
-      tenantId = 'default', routeId, routeName, routeCode,
+      routeId, routeName, routeCode,
       vehicleId, vehiclePlate, driverId, driverName, attendantId, attendantName,
       direction = 'PICKUP', session = 'MORNING',
       scheduledDate, scheduledStart,
@@ -169,7 +173,7 @@ export async function POST(req: NextRequest) {
     // Auto trip code
     const today = scheduledDate ?? new Date().toISOString().slice(0, 10);
     const [countRow] = await prisma.$queryRawUnsafe<{ cnt: bigint }[]>(
-      `SELECT COUNT(*) AS cnt FROM school_bus_trips WHERE tenant_id = $1 AND scheduled_date = $2`, tenantId, today,
+      `SELECT COUNT(*) AS cnt FROM school_bus_trips WHERE tenant_id = $1 AND scheduled_date = $2`, ctx.tenantId, today,
     );
     const seq = String(Number(countRow?.cnt ?? 0) + 1).padStart(3, '0');
     const tripCode = `TRIP-${today.replace(/-/g, '')}-${seq}`;
@@ -183,7 +187,7 @@ export async function POST(req: NextRequest) {
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
       RETURNING *
     `,
-      tenantId, tripCode,
+      ctx.tenantId, tripCode,
       routeId ?? null, routeName ?? null, routeCode ?? null,
       vehicleId ?? null, vehiclePlate ?? null,
       driverId ?? null, driverName ?? null,
@@ -192,7 +196,36 @@ export async function POST(req: NextRequest) {
       studentsTotal, stopsTotal, status, notes ?? null,
     );
 
-    return NextResponse.json({ ok: true, trip: serialize([row])[0] }, { status: 201 });
+    const trip = serialize([row])[0];
+    await recordOperationalChange({
+      req,
+      ctx,
+      entityType: 'SchoolBusTrip',
+      entityId: String(row.id ?? tripCode),
+      action: 'CREATE',
+      after: trip,
+      summary: `Created school bus trip ${String(row.trip_code ?? tripCode)}.`,
+    });
+    const workflow = await triggerServiceWorkflow({
+      req,
+      ctx,
+      serviceTypeKey: 'SCHOOL_ROUTE_ALLOCATION',
+      referenceType: 'SchoolBusTrip',
+      referenceId: String(row.id ?? tripCode),
+      referenceNumber: String(row.trip_code ?? tripCode),
+      contextData: {
+        routeId: routeId ?? null,
+        routeName: routeName ?? null,
+        vehicleId: vehicleId ?? null,
+        driverId: driverId ?? null,
+        direction,
+        session,
+        scheduledDate: today,
+        status,
+      },
+    });
+
+    return NextResponse.json({ ok: true, trip, workflow }, { status: 201 });
   } catch (err) {
     console.error('[school-bus/trips POST]', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });

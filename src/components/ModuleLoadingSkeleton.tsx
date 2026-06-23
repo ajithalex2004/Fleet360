@@ -1,45 +1,84 @@
-/**
- * Reusable module loading skeleton — used by all module loading.tsx files.
- * Renders an animated placeholder that matches the standard sidebar + content layout.
- */
 export default function ModuleLoadingSkeleton({ sidebarItems = 12 }: { sidebarItems?: number }) {
   return (
-    <div className="flex flex-col h-screen bg-slate-900 animate-pulse">
-      {/* PlatformHomeBar skeleton */}
-      <div className="h-10 bg-slate-950/90 border-b border-white/5 flex items-center px-4 gap-3 flex-shrink-0">
-        <div className="h-6 w-28 rounded-lg bg-white/5" />
-        <div className="flex-1" />
-        <div className="h-6 w-16 rounded-full bg-white/5" />
-        <div className="h-6 w-24 rounded-full bg-white/5" />
-        <div className="h-6 w-20 rounded-full bg-white/5" />
+    <div className="flex h-screen flex-col bg-[color:var(--bg-primary)]">
+      <div className="h-10 flex-shrink-0 border-b border-white/6 bg-slate-950/90 px-4">
+        <div className="flex h-full items-center gap-3">
+          <div className="fleet-skeleton h-6 w-28 rounded-lg" />
+          <div className="flex-1" />
+          <div className="fleet-skeleton h-6 w-16 rounded-full" />
+          <div className="fleet-skeleton h-6 w-24 rounded-full" />
+          <div className="fleet-skeleton h-6 w-20 rounded-full" />
+        </div>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar skeleton */}
-        <div className="w-56 bg-slate-900 border-r border-white/5 flex flex-col gap-2 p-3 flex-shrink-0">
-          <div className="h-5 w-32 rounded bg-white/5 mb-2" />
-          {Array.from({ length: sidebarItems }).map((_, i) => (
-            <div key={i} className="h-8 rounded-lg bg-white/5" />
-          ))}
+        <div className="w-56 flex-shrink-0 border-r border-white/6 bg-slate-900 p-3">
+          <div className="fleet-skeleton mb-3 h-5 w-32 rounded-lg" />
+          <div className="space-y-2">
+            {Array.from({ length: sidebarItems }).map((_, i) => (
+              <div key={i} className="fleet-skeleton h-8 rounded-xl" />
+            ))}
+          </div>
         </div>
 
-        {/* Main content skeleton */}
-        <div className="flex-1 p-6 flex flex-col gap-4 overflow-hidden">
-          {/* Page title */}
-          <div className="h-8 w-64 rounded bg-white/5" />
+        <div className="flex flex-1 flex-col gap-5 overflow-hidden p-6">
+          <div className="flex items-end justify-between gap-4">
+            <div className="space-y-3">
+              <div className="fleet-skeleton h-9 w-64 rounded-2xl" />
+              <div className="fleet-skeleton h-4 w-80 rounded-xl" />
+            </div>
+            <div className="hidden items-center gap-2 md:flex">
+              <div className="fleet-skeleton h-10 w-24 rounded-2xl" />
+              <div className="fleet-skeleton h-10 w-28 rounded-2xl" />
+            </div>
+          </div>
 
-          {/* KPI strip — 4 tiles */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-5 md:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-24 rounded-xl bg-white/5" />
+              <div key={i} className="interactive-surface relative overflow-hidden rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                <div className="fleet-skeleton h-3.5 w-24 rounded-lg" />
+                <div className="fleet-skeleton mt-6 h-8 w-20 rounded-xl" />
+                <div className="fleet-skeleton mt-3 h-3 w-28 rounded-lg" />
+              </div>
             ))}
           </div>
 
-          {/* Filter bar */}
-          <div className="h-10 rounded-lg bg-white/5" />
+          <div className="flex items-center justify-between gap-4">
+            <div className="fleet-skeleton h-11 w-40 rounded-2xl" />
+            <div className="flex items-center gap-2">
+              <div className="fleet-skeleton h-10 w-28 rounded-full" />
+              <div className="fleet-skeleton h-10 w-28 rounded-full" />
+              <div className="fleet-skeleton h-10 w-28 rounded-full" />
+            </div>
+          </div>
 
-          {/* Main table / content area */}
-          <div className="flex-1 rounded-xl bg-white/5 min-h-0" />
+          <div className="interactive-surface relative min-h-0 flex-1 overflow-hidden rounded-[1.6rem] border border-white/8 bg-white/[0.03]">
+            <div className="grid grid-cols-5 gap-0 border-b border-white/6">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="border-r border-white/6 p-4 last:border-r-0">
+                  <div className="fleet-skeleton h-4 w-24 rounded-lg" />
+                  <div className="fleet-skeleton mt-4 h-11 w-full rounded-2xl" />
+                </div>
+              ))}
+            </div>
+            <div className="space-y-0 p-2">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="grid grid-cols-5 gap-0 border-b border-white/6 last:border-b-0">
+                  {Array.from({ length: 5 }).map((__, j) => (
+                    <div key={j} className="border-r border-white/6 p-4 last:border-r-0">
+                      <div className="fleet-skeleton h-5 w-full rounded-lg" />
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-sm text-slate-300">
+            <div className="fleet-spinner h-5 w-5" />
+            <span>Loading workspace</span>
+            <span className="fleet-loading-dots text-blue-300"><span /><span /><span /></span>
+          </div>
         </div>
       </div>
     </div>

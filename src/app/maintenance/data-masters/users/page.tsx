@@ -49,7 +49,7 @@ export default function UsersPage() {
     const loadUsers = async () => {
         try {
             const data = await getUsers();
-            setUsers(data);
+            setUsers(data as User[]);
         } catch (error) {
             console.error('Failed to load users', error);
         }

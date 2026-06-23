@@ -1,6 +1,7 @@
 'use client';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { hasPermission, canView, canCreate, canEdit, canDelete, canApprove, canExport } from '@/lib/permissions';
+import { clearClientMeCache } from '@/lib/client-session';
 
 interface TenantInfo {
   id: string;
@@ -100,8 +101,32 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
       const { userId, tenantId } = JSON.parse(stored);
       if (!userId || !tenantId) { setIsLoading(false); return; }
 
-      const res = await fetch(`/api/admin/session?userId=${userId}&tenantId=${tenantId}`);
-      if (!res.ok) { localStorage.removeItem(SESSION_KEY); clearCache(); setIsLoading(false); return; }
+      // Retry transient failures (cold/slow DB returning 5xx, or a dropped
+      // connection) before giving up. Critically: NEVER delete the stored
+      // session except on a definitive 401. A flaky DB call or a per-module
+      // access error (403) must not log the user out of the entire app —
+      // that was the cause of "clicking Logistics signs me out".
+      let res: Response | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          res = await fetch(`/api/admin/session?userId=${userId}&tenantId=${tenantId}`);
+        } catch {
+          res = null; // network error — treat as transient
+        }
+        // Stop retrying on a conclusive response; keep retrying on 5xx/network.
+        if (res && (res.ok || res.status === 401 || res.status === 403)) break;
+        await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+      }
+
+      if (!res) { setIsLoading(false); return; }      // network failure — keep session, retry next mount
+      if (res.status === 401) {                       // genuine auth failure — clear and log out
+        localStorage.removeItem(SESSION_KEY);
+        clearCache();
+        setIsLoading(false);
+        return;
+      }
+      if (!res.ok) { setIsLoading(false); return; }   // 403 / persistent 5xx — keep session, just unauth'd this load
+
       const data = await res.json();
 
       const perms = data.permissions ?? [];
@@ -109,7 +134,7 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
       setTenant(data.tenant);
       setPermissions(perms);
       setCache(data.user, data.tenant, perms);  // ← save to module-level cache
-    } catch { /* silently fail - unauthenticated state */ }
+    } catch { /* silently fail - keep current state, do NOT clear session */ }
     finally { setIsLoading(false); }
   }, []);
 
@@ -118,6 +143,7 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
 
   const setCurrentUser = async (userId: string, tenantId: string) => {
     clearCache();  // force fresh fetch for the new user
+    clearClientMeCache();
     localStorage.setItem(SESSION_KEY, JSON.stringify({ userId, tenantId }));
     try {
       await fetch('/api/auth/session', {
@@ -134,6 +160,7 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
   const switchTenant = async (tenantId: string) => {
     if (!user) return;
     clearCache();  // tenant change must fetch fresh permissions
+    clearClientMeCache();
     localStorage.setItem(SESSION_KEY, JSON.stringify({ userId: user.id, tenantId }));
     try {
       await fetch('/api/auth/session', {

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireAdminPermission, requireDangerApproval, resolveTenantBoundary } from '@/lib/admin-policy';
+import { recordAdminChange } from '@/lib/admin-change-history';
+import { syncCanonicalBillingAccount } from '@/lib/canonical-billing';
 
 // ---------------------------------------------------------------------------
 // Table bootstrap
@@ -105,10 +108,18 @@ function addYear(dateStr: string): string {
 // Query params: tenantId, status, moduleCode
 // ---------------------------------------------------------------------------
 export async function GET(req: NextRequest) {
+  const auth = await requireAdminPermission(req, 'view', 'billing');
+  if (auth instanceof NextResponse) return auth;
+
   await ensureTable();
 
   const { searchParams } = new URL(req.url);
-  const tenantId   = searchParams.get('tenantId')   ?? '';
+  const requestedTenantId = searchParams.get('tenantId') ?? '';
+  const scopedTenantId = auth.ctx.isSuperAdmin && !requestedTenantId
+    ? ''
+    : resolveTenantBoundary(auth.ctx, requestedTenantId);
+  if (scopedTenantId instanceof NextResponse) return scopedTenantId;
+  const tenantId   = scopedTenantId;
   const status     = searchParams.get('status')     ?? '';
   const moduleCode = searchParams.get('moduleCode') ?? '';
 
@@ -145,12 +156,12 @@ export async function GET(req: NextRequest) {
      LEFT JOIN LATERAL (
        SELECT COUNT(*) AS vehicle_count
        FROM vehicles
-       WHERE tenant_id = s.tenant_id AND deleted_at IS NULL
+       WHERE tenant_id::text = s.tenant_id AND deleted_at IS NULL
      ) vc ON TRUE
      LEFT JOIN LATERAL (
        SELECT COUNT(*) AS user_count
        FROM user_tenants
-       WHERE tenant_id = s.tenant_id AND is_active = TRUE
+       WHERE tenant_id::text = s.tenant_id AND is_active = TRUE
      ) uc ON TRUE
      ${where}
      ORDER BY s.created_at DESC`,
@@ -160,7 +171,8 @@ export async function GET(req: NextRequest) {
   // Summary counts by status
   type StatusCount = { status: string; cnt: bigint };
   const summary = await prisma.$queryRawUnsafe<StatusCount[]>(
-    `SELECT status, COUNT(*) AS cnt FROM tenant_module_subscriptions GROUP BY status`
+    `SELECT status, COUNT(*) AS cnt FROM tenant_module_subscriptions s ${where} GROUP BY status`,
+    ...values
   ).catch(() => [] as StatusCount[]);
 
   const counts: Record<string, number> = {};
@@ -178,6 +190,14 @@ export async function GET(req: NextRequest) {
 // Body actions: activate | suspend | cancel | (default = create)
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
+  const auth = await requireAdminPermission(req, 'edit', 'billing');
+  if (auth instanceof NextResponse) return auth;
+  const approval = await requireDangerApproval(req, auth.ctx, 'billing.subscription.update', {
+    targetType: 'TenantSubscription',
+    summary: 'Update tenant billing subscription.',
+  });
+  if (approval) return approval;
+
   await ensureTable();
 
   try {
@@ -189,13 +209,15 @@ export async function POST(req: NextRequest) {
       const { id, nextBillingDate } = body;
       if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
-      type SubRow = { billing_cycle: string; next_billing_date: string };
+      type SubRow = { billing_cycle: string; next_billing_date: string; tenant_id: string };
       const [existing] = await prisma.$queryRawUnsafe<SubRow[]>(
-        `SELECT billing_cycle, next_billing_date FROM tenant_module_subscriptions WHERE id = $1`,
+        `SELECT billing_cycle, next_billing_date, tenant_id FROM tenant_module_subscriptions WHERE id = $1`,
         id
       ).catch(() => [] as SubRow[]);
 
       if (!existing) return NextResponse.json({ error: 'Subscription not found' }, { status: 404 });
+      const scopedTenantId = resolveTenantBoundary(auth.ctx, existing.tenant_id);
+      if (scopedTenantId instanceof NextResponse) return scopedTenantId;
 
       const today    = new Date().toISOString().split('T')[0];
       const nbd      = nextBillingDate
@@ -208,6 +230,17 @@ export async function POST(req: NextRequest) {
         nbd, id
       );
 
+      await recordAdminChange({
+        req,
+        ctx: auth.ctx,
+        tenantId: existing.tenant_id,
+        entityType: 'TenantSubscription',
+        entityId: id,
+        action: 'UPDATE',
+        after: { status: 'ACTIVE', next_billing_date: nbd },
+        summary: `Activated tenant subscription ${id}.`,
+      });
+      await syncCanonicalBillingAccount(existing.tenant_id);
       return NextResponse.json({ success: true, action: 'activated', id, next_billing_date: nbd });
     }
 
@@ -216,6 +249,16 @@ export async function POST(req: NextRequest) {
       const { id } = body;
       if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
+      type SubRow = { tenant_id: string; status: string };
+      const [existing] = await prisma.$queryRawUnsafe<SubRow[]>(
+        `SELECT tenant_id, status FROM tenant_module_subscriptions WHERE id = $1`,
+        id
+      ).catch(() => [] as SubRow[]);
+
+      if (!existing) return NextResponse.json({ error: 'Subscription not found' }, { status: 404 });
+      const scopedTenantId = resolveTenantBoundary(auth.ctx, existing.tenant_id);
+      if (scopedTenantId instanceof NextResponse) return scopedTenantId;
+
       await prisma.$executeRawUnsafe(
         `UPDATE tenant_module_subscriptions
             SET status = 'SUSPENDED', updated_at = NOW()
@@ -223,6 +266,18 @@ export async function POST(req: NextRequest) {
         id
       );
 
+      await recordAdminChange({
+        req,
+        ctx: auth.ctx,
+        tenantId: existing.tenant_id,
+        entityType: 'TenantSubscription',
+        entityId: id,
+        action: 'UPDATE',
+        before: existing,
+        after: { status: 'SUSPENDED' },
+        summary: `Suspended tenant subscription ${id}.`,
+      });
+      await syncCanonicalBillingAccount(existing.tenant_id);
       return NextResponse.json({ success: true, action: 'suspended', id });
     }
 
@@ -231,6 +286,16 @@ export async function POST(req: NextRequest) {
       const { id } = body;
       if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
+      type SubRow = { tenant_id: string; status: string };
+      const [existing] = await prisma.$queryRawUnsafe<SubRow[]>(
+        `SELECT tenant_id, status FROM tenant_module_subscriptions WHERE id = $1`,
+        id
+      ).catch(() => [] as SubRow[]);
+
+      if (!existing) return NextResponse.json({ error: 'Subscription not found' }, { status: 404 });
+      const scopedTenantId = resolveTenantBoundary(auth.ctx, existing.tenant_id);
+      if (scopedTenantId instanceof NextResponse) return scopedTenantId;
+
       await prisma.$executeRawUnsafe(
         `UPDATE tenant_module_subscriptions
             SET status = 'CANCELLED', updated_at = NOW()
@@ -238,6 +303,18 @@ export async function POST(req: NextRequest) {
         id
       );
 
+      await recordAdminChange({
+        req,
+        ctx: auth.ctx,
+        tenantId: existing.tenant_id,
+        entityType: 'TenantSubscription',
+        entityId: id,
+        action: 'UPDATE',
+        before: existing,
+        after: { status: 'CANCELLED' },
+        summary: `Cancelled tenant subscription ${id}.`,
+      });
+      await syncCanonicalBillingAccount(existing.tenant_id);
       return NextResponse.json({ success: true, action: 'cancelled', id });
     }
 
@@ -255,6 +332,8 @@ export async function POST(req: NextRequest) {
     if (!moduleCode) return NextResponse.json({ error: 'moduleCode is required' }, { status: 400 });
     if (basePrice === undefined || basePrice === null)
       return NextResponse.json({ error: 'basePrice is required' }, { status: 400 });
+    const scopedTenantId = resolveTenantBoundary(auth.ctx, tenantId);
+    if (scopedTenantId instanceof NextResponse) return scopedTenantId;
 
     const sd  = startDate ?? new Date().toISOString().split('T')[0];
     const nbd = billingCycle === 'ANNUAL' ? addYear(sd) : addMonth(sd);
@@ -285,12 +364,23 @@ export async function POST(req: NextRequest) {
            notes             = EXCLUDED.notes,
            updated_at        = NOW()
        RETURNING id`,
-      tenantId, moduleCode, planTier, billingCycle, Number(basePrice), currency,
+      scopedTenantId, moduleCode, planTier, billingCycle, Number(basePrice), currency,
       Number(maxVehicles), Number(maxUsers), Number(maxStudents),
       Number(setupFee), Boolean(setupFeePaid),
       status, trialEndDate, sd, nbd, notes
     );
 
+    await recordAdminChange({
+      req,
+      ctx: auth.ctx,
+      tenantId: scopedTenantId,
+      entityType: 'TenantSubscription',
+      entityId: row.id,
+      action: 'CREATE',
+      after: { tenantId: scopedTenantId, moduleCode, planTier, billingCycle, basePrice, currency, status },
+      summary: `Created/updated ${moduleCode} subscription for tenant ${scopedTenantId}.`,
+    });
+    await syncCanonicalBillingAccount(scopedTenantId);
     return NextResponse.json({ success: true, id: row.id, next_billing_date: nbd }, { status: 201 });
 
   } catch (err) {
@@ -305,6 +395,15 @@ export async function POST(req: NextRequest) {
 // Body: { id, basePrice?, maxVehicles?, maxUsers?, maxStudents?, planTier?, billingCycle?, notes? }
 // ---------------------------------------------------------------------------
 export async function PATCH(req: NextRequest) {
+  const auth = await requireAdminPermission(req, 'edit', 'billing');
+  if (auth instanceof NextResponse) return auth;
+  const approval = await requireDangerApproval(req, auth.ctx, 'billing.subscription.update', {
+    targetType: 'TenantSubscription',
+    targetId: req.nextUrl.searchParams.get('id') ?? null,
+    summary: 'Update tenant billing subscription pricing or limits.',
+  });
+  if (approval) return approval;
+
   await ensureTable();
 
   try {
@@ -312,6 +411,14 @@ export async function PATCH(req: NextRequest) {
     const { id, basePrice, maxVehicles, maxUsers, maxStudents, planTier, billingCycle, notes } = body;
 
     if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+
+    const before = await prisma.$queryRawUnsafe<Row[]>(
+      `SELECT * FROM tenant_module_subscriptions WHERE id = $1 LIMIT 1`,
+      id,
+    ).catch(() => [] as Row[]);
+    if (!before[0]) return NextResponse.json({ error: 'Subscription not found' }, { status: 404 });
+    const scopedTenantId = resolveTenantBoundary(auth.ctx, String(before[0].tenant_id ?? ''));
+    if (scopedTenantId instanceof NextResponse) return scopedTenantId;
 
     const setClauses: string[] = ['updated_at = NOW()'];
     const values: unknown[]    = [];
@@ -360,6 +467,22 @@ export async function PATCH(req: NextRequest) {
 
     if (!updated) return NextResponse.json({ error: 'Subscription not found' }, { status: 404 });
 
+    const after = await prisma.$queryRawUnsafe<Row[]>(
+      `SELECT * FROM tenant_module_subscriptions WHERE id = $1 LIMIT 1`,
+      id,
+    ).catch(() => [] as Row[]);
+    await recordAdminChange({
+      req,
+      ctx: auth.ctx,
+      tenantId: String(after[0]?.tenant_id ?? before[0]?.tenant_id ?? auth.ctx.tenantId),
+      entityType: 'TenantSubscription',
+      entityId: updated.id,
+      action: 'UPDATE',
+      before: before[0] ?? null,
+      after: after[0] ?? null,
+      summary: `Updated tenant subscription ${updated.id}.`,
+    });
+    await syncCanonicalBillingAccount(String(after[0]?.tenant_id ?? before[0]?.tenant_id ?? auth.ctx.tenantId));
     return NextResponse.json({ success: true, id: updated.id });
 
   } catch (err) {

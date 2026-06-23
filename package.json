@@ -3,9 +3,12 @@
     "version": "0.1.0",
     "private": true,
     "scripts": {
-        "dev": "next dev --turbopack",
+        "dev": "node scripts/dev-single-port.mjs",
         "build": "next build",
         "start": "next start",
+        "check:prod": "node scripts/check-production-readiness.mjs",
+        "check:deploy": "node scripts/check-deploy-readiness.mjs",
+        "check:deploy:e2e": "node scripts/check-deploy-readiness.mjs --with-e2e",
         "lint": "next lint",
         "typecheck": "tsc --noEmit",
         "setup-hooks": "git config core.hooksPath scripts/githooks",
@@ -48,6 +51,7 @@
         "react-dom": "^19.0.0",
         "stripe": "^22.1.1",
         "uuid": "^13.0.0",
+        "xlsx": "^0.18.5",
         "zod": "^4.1.13",
         "zod-to-json-schema": "^3.25.0",
         "zustand": "^5.0.8"

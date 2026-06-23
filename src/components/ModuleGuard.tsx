@@ -32,6 +32,8 @@ import { usePermissions } from '@/contexts/PermissionContext';
 interface Props {
   /** Must match the module ID in ALL_MODULES (platform/page.tsx) and tenant.enabledModules */
   moduleId: string;
+  /** Optional secondary modules that can access this route. Useful for Finance-owned source-module workspaces. */
+  allowedModuleIds?: string[];
   /** Optional display name for the "not subscribed" wall. Defaults to moduleId. */
   moduleName?: string;
   /** Optional icon emoji for the wall card */
@@ -39,16 +41,42 @@ interface Props {
   children: React.ReactNode;
 }
 
-export default function ModuleGuard({ moduleId, moduleName, moduleIcon = '🔒', children }: Props) {
+export default function ModuleGuard({ moduleId, allowedModuleIds = [], moduleName, moduleIcon = '🔒', children }: Props) {
   const { user, tenant, isLoading, isAuthenticated } = usePermissions();
   // Derive super-admin from user.roleCode — no extra API fetch needed
   const isSuperAdmin = user?.roleCode === 'SUPER_ADMIN';
 
   // While loading — show a neutral spinner so nothing flashes
-  if (isLoading || !isAuthenticated) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center px-6">
+        <div className="max-w-md w-full text-center">
+          <div className="w-20 h-20 rounded-2xl bg-slate-800 border border-white/10 flex items-center justify-center text-4xl mx-auto mb-6 grayscale">
+            {moduleIcon}
+          </div>
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-800/60 px-3 py-1 mb-4">
+            <span className="text-slate-500 text-xs">🔒</span>
+            <span className="text-slate-500 text-xs font-semibold uppercase tracking-wide">Sign In Required</span>
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-3">Sign in to continue</h1>
+          <p className="text-slate-400 text-sm leading-relaxed mb-8">
+            Your Fleet360 session is missing or expired. Sign in again to access {moduleName ?? moduleId}.
+          </p>
+          <Link
+            href="/login"
+            className="inline-flex items-center justify-center px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-medium hover:opacity-90 transition-all"
+          >
+            Go to Sign In
+          </Link>
+        </div>
       </div>
     );
   }
@@ -60,7 +88,8 @@ export default function ModuleGuard({ moduleId, moduleName, moduleIcon = '🔒',
   if (!tenant || tenant.enabledModules.length === 0) return <>{children}</>;
 
   // Module is in the tenant's enabled list → allow
-  if (tenant.enabledModules.includes(moduleId)) return <>{children}</>;
+  const acceptedModules = [moduleId, ...allowedModuleIds];
+  if (acceptedModules.some(m => tenant.enabledModules.includes(m))) return <>{children}</>;
 
   // ── ACCESS DENIED WALL ─────────────────────────────────────────────────────
   const displayName = moduleName ?? moduleId;

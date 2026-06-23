@@ -1,5 +1,9 @@
 'use client';
 import React, { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
+import { Banknote, Landmark, ReceiptText, ShieldCheck } from 'lucide-react';
+import { LeasingBillingMigrationNotice } from '@/components/LeasingBillingMigrationNotice';
+import { KpiCard, KpiGrid, PageHeader } from '@/components/ui/page-theme';
 
 interface Receipt {
   id: string;
@@ -38,6 +42,10 @@ interface NewReceiptForm {
 }
 
 export default function ReceiptsPage() {
+  const pathname = usePathname();
+  const isLegacyPath = pathname.startsWith('/leasing/');
+  const apiBase = isLegacyPath ? '/api/leasing' : '/api/finance/leasing-billing';
+  const receiptPdfBase = `${apiBase}/receipts`;
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,7 +65,6 @@ export default function ReceiptsPage() {
     branch: '',
     notes: '',
   });
-
   useEffect(() => {
     const mockReceipts: Receipt[] = [
       {
@@ -138,7 +145,7 @@ export default function ReceiptsPage() {
     ];
 
     Promise.all([
-      fetch('/api/leasing/receipts').then(r => r.ok ? r.json() : []),
+      fetch(`${apiBase}/receipts`).then(r => r.ok ? r.json() : []),
       fetch('/api/leasing/contracts-v2').then(r => r.ok ? r.json() : []),
     ])
       .then(([receiptsData, contractsData]) => {
@@ -147,7 +154,7 @@ export default function ReceiptsPage() {
       })
       .catch(() => { setReceipts(mockReceipts); setContracts(mockContracts); })
       .finally(() => setLoading(false));
-  }, []);
+  }, [apiBase]);
 
   const getPaymentTypeBadgeStyle = (type: string) => {
     switch (type) {
@@ -189,10 +196,10 @@ export default function ReceiptsPage() {
     const contractId = newReceiptForm.contractId;
     console.log('Creating receipt:', newReceiptForm);
     try {
-      const response = await fetch(`/api/leasing/contracts-v2/${contractId}/receipts`, {
+      const response = await fetch(`${apiBase}/receipts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newReceiptForm),
+        body: JSON.stringify({ ...newReceiptForm, contractId }),
       });
       if (response.ok) {
         setShowNewReceipt(false);
@@ -223,41 +230,40 @@ export default function ReceiptsPage() {
     );
   }
 
+  if (isLegacyPath) {
+    return (
+      <LeasingBillingMigrationNotice
+        title="Leasing receipts"
+        financeHref="/finance/leasing-billing/receipts"
+        description="Receipt entry and collection evidence now live under Finance & Billing."
+      />
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Lease Receipts</h1>
-          <p className="text-slate-400">Track all payment receipts and collections</p>
-        </div>
-        <button
-          onClick={() => setShowNewReceipt(true)}
-          className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90 transition-opacity"
-        >
-          New Receipt
-        </button>
-      </div>
+      <PageHeader
+        title="Lease Receipts"
+        subtitle="Track all payment receipts and collections"
+        accent="blue"
+        actions={(
+          <button
+            onClick={() => setShowNewReceipt(true)}
+            className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+          >
+            New Receipt
+          </button>
+        )}
+      />
 
       {/* Stats Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-4 backdrop-blur-sm">
-          <p className="text-slate-400 text-xs font-medium mb-1">Total Receipts</p>
-          <p className="text-2xl font-bold text-white">{stats.totalReceipts}</p>
-        </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-4 backdrop-blur-sm">
-          <p className="text-slate-400 text-xs font-medium mb-1">Deposits Collected</p>
-          <p className="text-2xl font-bold text-amber-400">{stats.depositsCollected.toLocaleString()} AED</p>
-        </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-4 backdrop-blur-sm">
-          <p className="text-slate-400 text-xs font-medium mb-1">Security Deposits</p>
-          <p className="text-2xl font-bold text-purple-400">{stats.securityDeposits.toLocaleString()} AED</p>
-        </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-4 backdrop-blur-sm">
-          <p className="text-slate-400 text-xs font-medium mb-1">Monthly Payments</p>
-          <p className="text-2xl font-bold text-blue-400">{stats.monthlyPayments.toLocaleString()} AED</p>
-        </div>
-      </div>
+      <KpiGrid>
+        <KpiCard label="Total Receipts" value={stats.totalReceipts} accent="slate" icon={ReceiptText} sub="Captured collections" />
+        <KpiCard label="Deposits Collected" value={`${stats.depositsCollected.toLocaleString()} AED`} accent="amber" icon={Banknote} sub="Upfront deposits" />
+        <KpiCard label="Security Deposits" value={`${stats.securityDeposits.toLocaleString()} AED`} accent="violet" icon={ShieldCheck} sub="Held as security" />
+        <KpiCard label="Monthly Payments" value={`${stats.monthlyPayments.toLocaleString()} AED`} accent="blue" icon={Landmark} sub="Recurring settlements" />
+      </KpiGrid>
 
       {/* Search Bar */}
       <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-4 backdrop-blur-sm">
@@ -314,14 +320,14 @@ export default function ReceiptsPage() {
                 <td className="px-4 py-4 text-sm">
                   <div className="flex items-center gap-2 text-xs">
                     <a
-                      href={`/api/leasing/receipts/${receipt.id}/pdf?lang=en&download=1`}
+                      href={`${receiptPdfBase}/${receipt.id}/pdf?lang=en&download=1`}
                       className="text-emerald-400 hover:text-emerald-300"
                       title="Download bilingual receipt (EN layout)"
                     >
                       PDF·EN
                     </a>
                     <a
-                      href={`/api/leasing/receipts/${receipt.id}/pdf?lang=ar&download=1`}
+                      href={`${receiptPdfBase}/${receipt.id}/pdf?lang=ar&download=1`}
                       className="text-emerald-400 hover:text-emerald-300"
                       title="Download bilingual receipt (AR layout)"
                     >
@@ -371,7 +377,7 @@ export default function ReceiptsPage() {
                   <label className="block text-sm font-medium text-slate-300 mb-2">Payment Type</label>
                   <select
                     value={newReceiptForm.paymentType}
-                    onChange={(e) => setNewReceiptForm({ ...newReceiptForm, paymentType: e.target.value as any })}
+                    onChange={(e) => setNewReceiptForm({ ...newReceiptForm, paymentType: e.target.value as NewReceiptForm['paymentType'] })}
                     className="w-full px-4 py-2 bg-slate-900/50 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500/50"
                   >
                     <option value="DEPOSIT">Deposit</option>
@@ -420,8 +426,8 @@ export default function ReceiptsPage() {
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">Payment Method</label>
                 <select
-                  value={newReceiptForm.paymentMethod}
-                  onChange={(e) => setNewReceiptForm({ ...newReceiptForm, paymentMethod: e.target.value as any })}
+                    value={newReceiptForm.paymentMethod}
+                    onChange={(e) => setNewReceiptForm({ ...newReceiptForm, paymentMethod: e.target.value as NewReceiptForm['paymentMethod'] })}
                   className="w-full px-4 py-2 bg-slate-900/50 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500/50"
                 >
                   <option value="CASH">Cash</option>

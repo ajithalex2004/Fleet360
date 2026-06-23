@@ -26,7 +26,11 @@ export interface QuotationVehicle {
 }
 
 export interface QuotationLine {
+  itemType?: string | null;
   description: string;
+  quantity?: number | null;
+  unitRate?: number | null;
+  monthlyAmount?: number | null;
   amount: number;
 }
 
@@ -342,6 +346,47 @@ export function QuotationPdf({ data, lang }: { data: QuotationPdfData; lang: Lan
                   </View>
                 );
               })}
+            </View>
+          </View>
+        )}
+
+        {/* OPTIONAL ELEMENTS */}
+        {data.lines && data.lines.length > 0 && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { fontFamily: font }]}>
+              {lang === 'ar' ? 'Ø§Ù„Ø¹Ù†Ø§ØµØ± Ø§Ù„Ø§Ø®ØªÙŠØ§Ø±ÙŠØ©' : 'Optional Elements'}
+            </Text>
+            <View style={styles.table}>
+              <View style={styles.tableHead}>
+                <Text style={[styles.tableHeadCell, { fontFamily: font, flex: 1.4 }]}>
+                  {lang === 'ar' ? 'Ø§Ù„Ù†ÙˆØ¹' : 'Type'}
+                </Text>
+                <Text style={[styles.tableHeadCell, { fontFamily: font, flex: 3 }]}>
+                  {lang === 'ar' ? 'Ø§Ù„ÙˆØµÙ' : 'Description'}
+                </Text>
+                <Text style={[styles.tableHeadCell, { fontFamily: font, flex: 1, textAlign: 'right' }]}>
+                  {t('qty', lang)}
+                </Text>
+                <Text style={[styles.tableHeadCell, { fontFamily: font, flex: 1.6, textAlign: 'right' }]}>
+                  {lang === 'ar' ? 'Ø´Ù‡Ø±ÙŠØ§Ù‹' : 'Monthly'}
+                </Text>
+                <Text style={[styles.tableHeadCell, { fontFamily: font, flex: 1.8, textAlign: 'right' }]}>
+                  {lang === 'ar' ? 'Ø§Ù„Ø¥Ø¬Ù…Ø§Ù„ÙŠ' : 'Contract Total'}
+                </Text>
+              </View>
+              {data.lines.map((line, i) => (
+                <View key={`${line.description}-${i}`} style={[styles.tableRow, i % 2 === 1 ? styles.tableRowAlt : {}]}>
+                  <Text style={[styles.cellText, { fontFamily: font, flex: 1.4 }]}>{line.itemType ?? 'OTHER'}</Text>
+                  <Text style={[styles.cellText, { fontFamily: font, flex: 3 }]}>{line.description}</Text>
+                  <Text style={[styles.cellAmount, { fontFamily: font, flex: 1 }]}>{line.quantity ?? 1}</Text>
+                  <Text style={[styles.cellAmount, { fontFamily: font, flex: 1.6 }]}>
+                    {formatMoney(line.monthlyAmount ?? line.unitRate ?? 0, currency)}
+                  </Text>
+                  <Text style={[styles.cellAmount, { fontFamily: font, flex: 1.8 }]}>
+                    {formatMoney(line.amount, currency)}
+                  </Text>
+                </View>
+              ))}
             </View>
           </View>
         )}

@@ -24,6 +24,8 @@ import {
 } from '@/lib/service-config/resolvers';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { applyBindings } from '@/lib/service-tickets/field-resolver';
+import { recordOperationalChange, requireOperationalContext } from '@/lib/cross-module-governance';
 
 export const runtime = 'nodejs';
 
@@ -81,8 +83,9 @@ function rowToApi(r: Row, matrix?: SlaMatrix) {
 }
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ ok: false, error: 'Not authenticated' }, { status: 401 });
+  const ctx = requireOperationalContext(req, 'service_tickets');
+  if (ctx instanceof NextResponse) return ctx;
+  const tenantId = ctx.tenantId;
 
   const sp = req.nextUrl.searchParams;
   const type   = sp.get('type');         // TicketType or null = all
@@ -132,15 +135,24 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  const userId   = req.headers.get('x-user-id');
-  if (!tenantId || !userId) return NextResponse.json({ ok: false, error: 'Not authenticated' }, { status: 401 });
+  const ctx = requireOperationalContext(req, 'service_tickets', { write: true });
+  if (ctx instanceof NextResponse) return ctx;
+  const tenantId = ctx.tenantId;
+  const userId = ctx.userId;
 
   let body: {
     ticketType?: string; title?: string; description?: string;
     priority?: string; vehicleId?: string; relatedDriverId?: string;
     dueDate?: string; requestorName?: string;
     customFields?: Record<string, unknown>;
+    /** Phase B+ — id of the selected MaintenanceType row for fields whose
+     *  source reads from `maintenanceType.*`. Optional; only meaningful for
+     *  MAINTENANCE tickets that use the Maintenance Type Master. */
+    maintenanceTypeId?: string;
+    /** Phase B — multi-attachment uploads. Each item carries the
+     *  AttachmentType code (from the Attachment Master) plus the file
+     *  metadata. Stored as-is in service_tickets.attachments JSONB. */
+    attachments?: Array<{ id?: string; type: string; fileName: string; url: string; uploadedAt?: string }>;
   };
   try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
 
@@ -182,14 +194,47 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: `${longLabel} requires a vehicle.` }, { status: 400 });
   }
 
-  // Validate per-type required fields against the resolved schema.
-  const customFields = (body.customFields && typeof body.customFields === 'object')
-    ? body.customFields
+  // ── Phase B+ — apply field bindings before validation ─────────────────
+  // Sources (currentUser.*, vehicle.*, maintenanceType.*, …) overwrite
+  // whatever the client sent; bindTo redirects values from the JSONB blob
+  // into the named top-level columns. Required-field validation runs
+  // against the post-binding values so server-supplied data satisfies
+  // requireds without the client having to send it.
+  const incomingCustomFields = (body.customFields && typeof body.customFields === 'object')
+    ? body.customFields as Record<string, unknown>
     : {};
   const resolvedFormFields = cfg.rules.formFields.fields ?? [];
+  const binding = await applyBindings(resolvedFormFields, incomingCustomFields, {
+    tenantId,
+    userId,
+    selectedVehicleId:         body.vehicleId ?? null,
+    selectedMaintenanceTypeId: body.maintenanceTypeId ?? null,
+  });
+  if (binding.warnings.length) {
+    console.warn('[service-tickets POST] field-binding warnings:', binding.warnings);
+  }
+  const customFields = binding.customFields;
+
+  // Pull bound values out into typed locals — these win over body fields
+  // when present. The form's "Requested by" with bindTo='requestorName'
+  // routes here, for example.
+  const boundRequestorName  = binding.columnOverrides.requestorName  as string | undefined;
+  const boundRequestorId    = binding.columnOverrides.requestorId    as string | undefined;
+  const boundAssignedTo     = binding.columnOverrides.assignedTo     as string | undefined;
+  const boundPriority       = binding.columnOverrides.priority       as string | undefined;
+  const boundDueDate        = binding.columnOverrides.dueDate        as string | undefined;
+  const boundVehicleId      = binding.columnOverrides.vehicleId      as string | undefined;
+  const boundRelatedDriverId = binding.columnOverrides.relatedDriverId as string | undefined;
+
+  // Validate required form fields against the post-binding values.
   for (const f of resolvedFormFields) {
     if (!f.required) continue;
-    const v = customFields[f.key];
+    // Skip fields whose value is now living in a top-level column rather
+    // than customFields — those are checked via column existence below.
+    const target = f.bindTo ?? 'customFields';
+    const v = target === 'customFields'
+      ? customFields[f.key]
+      : binding.columnOverrides[target as Exclude<typeof target, 'customFields'>];
     const empty = v === undefined || v === null || v === '' || v === false;
     if (empty && f.type !== 'checkbox') {
       return NextResponse.json({ ok: false, error: `${f.label} is required for ${longLabel}.` }, { status: 400 });
@@ -207,10 +252,37 @@ export async function POST(req: NextRequest) {
     const readableId = await nextReadableId(tenantId, ticketType, resolvedPrefix);
     const nowIso = new Date().toISOString();
 
+    // Apply column overrides from the bindings layer. Each `boundX` wins
+    // over the corresponding body field; the body field wins over the
+    // hard-coded default. Validates the boundPriority is one of the
+    // allowed values (the resolver could return any string for a
+    // misconfigured maintenanceType.defaultPriority source).
+    const finalRequestorId    = boundRequestorId    ?? userId;
+    const finalRequestorName  = boundRequestorName  ?? body.requestorName       ?? null;
+    const finalVehicleId      = boundVehicleId      ?? body.vehicleId           ?? null;
+    const finalRelatedDriver  = boundRelatedDriverId ?? body.relatedDriverId    ?? null;
+    const finalDueDate        = boundDueDate        ?? body.dueDate             ?? null;
+    const finalAssignedTo     = boundAssignedTo                                  ?? null;
+    const finalPriority       = (['Low', 'Medium', 'High'].includes(boundPriority ?? '')
+                                 ? boundPriority : priority) as 'Low' | 'Medium' | 'High';
+
+    // Phase B — multi-attachment payload. Each item is { id?, type, fileName, url, uploadedAt? }
+    // matching TicketAttachment. Dedup IDs and stamp uploadedAt server-side
+    // so clients can't fake creation times.
+    const attachments = Array.isArray(body.attachments)
+      ? body.attachments.map((a, i) => ({
+          id:         a.id ?? `att-${nowIso}-${i}`,
+          type:       String(a.type ?? 'OTHER'),
+          fileName:   String(a.fileName ?? 'file'),
+          url:        String(a.url ?? ''),
+          uploadedAt: nowIso,
+        }))
+      : [];
+
     const initialHistory = [{
       status: initialStatus,
       date: nowIso,
-      actor: body.requestorName ?? userId,
+      actor: finalRequestorName ?? finalRequestorId,
       note: initialStatus === 'Awaiting Approval' ? 'Submitted — awaiting approval' : 'Submitted',
     }];
 
@@ -218,18 +290,20 @@ export async function POST(req: NextRequest) {
       `INSERT INTO service_tickets (
          tenant_id, ticket_type, readable_id, requestor_id, requestor_name,
          vehicle_id, related_driver_id, title, description, priority, status, due_date,
-         history, custom_fields
+         history, custom_fields, attachments, assigned_to
        ) VALUES (
-         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::date, $13::jsonb, $14::jsonb
+         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::date,
+         $13::jsonb, $14::jsonb, $15::jsonb, $16
        )
        RETURNING id::text, tenant_id, ticket_type, readable_id, requestor_id, requestor_name,
                  vehicle_id, related_driver_id, title, description, priority, status,
                  due_date::text, assigned_to, maintenance_request_id, history, attachments, comments, custom_fields,
                  created_at::text, updated_at::text`,
-      tenantId, ticketType, readableId, userId, body.requestorName ?? null,
-      body.vehicleId ?? null, body.relatedDriverId ?? null,
-      title, description || null, priority, initialStatus, body.dueDate ?? null,
+      tenantId, ticketType, readableId, finalRequestorId, finalRequestorName,
+      finalVehicleId, finalRelatedDriver,
+      title, description || null, finalPriority, initialStatus, finalDueDate,
       JSON.stringify(initialHistory), JSON.stringify(customFields),
+      JSON.stringify(attachments), finalAssignedTo,
     );
 
     const ticket = inserted[0];
@@ -244,6 +318,15 @@ export async function POST(req: NextRequest) {
       entityName: readableId,
       action: 'CREATE',
       details: `Created ${longLabel} ${readableId}: ${title} (${priority}) — initial status ${initialStatus} via ${statusSource}`,
+    });
+    void recordOperationalChange({
+      req,
+      ctx,
+      entityType: 'ServiceTicket',
+      entityId: ticket.id,
+      action: 'CREATE',
+      after: rowToApi(ticket),
+      summary: `Created ${longLabel} ${readableId}: ${title}.`,
     });
 
     // Enrich response with the resolved SLA target — single-type lookup.

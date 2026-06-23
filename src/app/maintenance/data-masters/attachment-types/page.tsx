@@ -1,339 +1,389 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { AttachmentType } from '@/types/maintenance';
+/**
+ * Attachment Type Master — admin UI.
+ *
+ * Replaces the previous mock-only page (which initialised from the
+ * AttachmentType enum and lost data on refresh). Now reads + writes
+ * /api/data-masters/attachment-types so types persist per tenant.
+ *
+ * Each row defines a category of attachment that the maintenance ticket
+ * form's multi-attachment widget shows in its Type dropdown. Optional
+ * filters:
+ *   • appliesTo[]  — restrict the type to certain ticket types (empty = all)
+ *   • required     — mark required so the form warns when missing
+ *   • allowedMime[]— MIME whitelist (empty = any)
+ *   • maxSizeMb    — soft size cap shown in the UI
+ */
 
-interface AttachmentTypeMaster {
-    id: string;
-    name: string;
-    description: string;
-    isActive: boolean;
-    createdAt: string;
-    updatedAt: string;
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Plus, Search, Pencil, Trash2, Power, Save, X, AlertCircle, Paperclip,
+} from 'lucide-react';
+
+interface AttachmentType {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  appliesTo: string[];
+  required: boolean;
+  maxFileSizeMb: number | null;
+  allowedMimeTypes: string[];
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
+const TICKET_TYPES = [
+  'MAINTENANCE', 'RENEWAL', 'CLEANING', 'SUPPORT', 'INCIDENT', 'TOWING', 'COMPLAINT',
+] as const;
+
 export default function AttachmentTypeMasterPage() {
-    const [attachmentTypes, setAttachmentTypes] = useState<AttachmentTypeMaster[]>([]);
-    const [showAddModal, setShowAddModal] = useState(false);
-    const [editingType, setEditingType] = useState<AttachmentTypeMaster | null>(null);
-    const [formData, setFormData] = useState({
-        name: '',
-        description: '',
-        isActive: true
+  const [rows, setRows]       = useState<AttachmentType[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState<string | null>(null);
+  const [search, setSearch]   = useState('');
+  const [editing, setEditing] = useState<AttachmentType | 'new' | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const res = await fetch('/api/data-masters/attachment-types');
+      if (!res.ok) throw new Error(`Failed (${res.status})`);
+      const data = await res.json();
+      setRows(data.types ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Load failed');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return rows;
+    const q = search.toLowerCase();
+    return rows.filter(r =>
+      r.code.toLowerCase().includes(q) ||
+      r.name.toLowerCase().includes(q) ||
+      (r.description ?? '').toLowerCase().includes(q),
+    );
+  }, [rows, search]);
+
+  const stats = useMemo(() => ({
+    total:    rows.length,
+    active:   rows.filter(r => r.isActive).length,
+    required: rows.filter(r => r.required).length,
+  }), [rows]);
+
+  const toggleActive = async (row: AttachmentType) => {
+    const res = await fetch(`/api/data-masters/attachment-types/${row.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isActive: !row.isActive }),
     });
-    const [searchQuery, setSearchQuery] = useState('');
+    if (res.ok) void load();
+  };
 
-    // Initialize with existing enum values
-    useEffect(() => {
-        const initialTypes: AttachmentTypeMaster[] = Object.values(AttachmentType).map((type, index) => ({
-            id: `att-type-${index + 1}`,
-            name: type,
-            description: `${type} documents and files`,
-            isActive: true,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        }));
-        setAttachmentTypes(initialTypes);
-    }, []);
+  const remove = async (row: AttachmentType) => {
+    if (!window.confirm(`Delete "${row.name}"?\n\nIt is soft-deleted, so historical attachments retain the reference.`)) return;
+    const res = await fetch(`/api/data-masters/attachment-types/${row.id}`, { method: 'DELETE' });
+    if (res.ok) void load();
+  };
 
-    const handleAdd = () => {
-        const newType: AttachmentTypeMaster = {
-            id: `att-type-${Date.now()}`,
-            name: formData.name,
-            description: formData.description,
-            isActive: formData.isActive,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        };
-        setAttachmentTypes([...attachmentTypes, newType]);
-        setShowAddModal(false);
-        resetForm();
-    };
-
-    const handleEdit = (type: AttachmentTypeMaster) => {
-        setEditingType(type);
-        setFormData({
-            name: type.name,
-            description: type.description,
-            isActive: type.isActive
-        });
-        setShowAddModal(true);
-    };
-
-    const handleUpdate = () => {
-        if (!editingType) return;
-        const updated = attachmentTypes.map(t =>
-            t.id === editingType.id
-                ? { ...t, ...formData, updatedAt: new Date().toISOString() }
-                : t
-        );
-        setAttachmentTypes(updated);
-        setShowAddModal(false);
-        setEditingType(null);
-        resetForm();
-    };
-
-    const handleToggleActive = (id: string) => {
-        const updated = attachmentTypes.map(t =>
-            t.id === id
-                ? { ...t, isActive: !t.isActive, updatedAt: new Date().toISOString() }
-                : t
-        );
-        setAttachmentTypes(updated);
-    };
-
-    const handleDelete = (id: string) => {
-        if (confirm('Are you sure you want to delete this attachment type?')) {
-            setAttachmentTypes(attachmentTypes.filter(t => t.id !== id));
-        }
-    };
-
-    const resetForm = () => {
-        setFormData({ name: '', description: '', isActive: true });
-    };
-
-    const filteredTypes = attachmentTypes.filter(type =>
-        type.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        type.description.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold text-white">Attachment Type Master</h1>
-                    <p className="text-sm text-slate-500 mt-1">Manage attachment types for maintenance requests</p>
-                </div>
-                <button
-                    onClick={() => {
-                        setEditingType(null);
-                        resetForm();
-                        setShowAddModal(true);
-                    }}
-                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                    Add Attachment Type
-                </button>
-            </div>
-
-            {/* Search */}
-            <div className="rounded-xl border border-white/10 bg-slate-900 p-4 shadow-sm">
-                <div className="relative">
-                    <input
-                        type="text"
-                        placeholder="Search attachment types..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full rounded-lg border border-white/15 px-4 py-2 pl-10 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
-                    />
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="absolute left-3 top-2.5 h-5 w-5 text-slate-400">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-                    </svg>
-                </div>
-            </div>
-
-            {/* Stats */}
-            <div className="grid gap-4 md:grid-cols-3">
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-sm font-medium text-slate-500">Total Types</p>
-                            <p className="text-2xl font-bold text-white mt-1">{attachmentTypes.length}</p>
-                        </div>
-                        <div className="rounded-full bg-blue-500/20 p-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-blue-600">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
-                            </svg>
-                        </div>
-                    </div>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-sm font-medium text-slate-500">Active</p>
-                            <p className="text-2xl font-bold text-green-600 mt-1">{attachmentTypes.filter(t => t.isActive).length}</p>
-                        </div>
-                        <div className="rounded-full bg-emerald-500/20 p-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-green-600">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                            </svg>
-                        </div>
-                    </div>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-sm font-medium text-slate-500">Inactive</p>
-                            <p className="text-2xl font-bold text-slate-400 mt-1">{attachmentTypes.filter(t => !t.isActive).length}</p>
-                        </div>
-                        <div className="rounded-full bg-slate-700/40 p-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-slate-400">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />
-                            </svg>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Table */}
-            <div className="rounded-xl border border-white/10 bg-slate-900 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead className="bg-slate-800/50 border-b border-white/10">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Type Name</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Description</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Last Updated</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/10">
-                            {filteredTypes.length === 0 ? (
-                                <tr>
-                                    <td colSpan={5} className="px-6 py-12 text-center text-slate-300">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 mx-auto text-white mb-2">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-                                        </svg>
-                                        <p className="text-sm">No attachment types found</p>
-                                    </td>
-                                </tr>
-                            ) : (
-                                filteredTypes.map((type) => (
-                                    <tr key={type.id} className="hover:bg-white/5">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center">
-                                                <div className="flex-shrink-0 h-10 w-10 rounded-full bg-blue-500/20 flex items-center justify-center">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-600">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
-                                                    </svg>
-                                                </div>
-                                                <div className="ml-4">
-                                                    <div className="text-sm font-medium text-white">{type.name}</div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="text-sm text-slate-300">{type.description}</div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${type.isActive
-                                                    ? 'bg-emerald-500/20 text-emerald-300'
-                                                    : 'bg-slate-700/40 text-slate-200'
-                                                }`}>
-                                                {type.isActive ? 'Active' : 'Inactive'}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                                            {new Date(type.updatedAt).toLocaleDateString()}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <button
-                                                    onClick={() => handleToggleActive(type.id)}
-                                                    className={`rounded-lg px-3 py-1.5 text-xs font-medium ${type.isActive
-                                                            ? 'bg-slate-700/40 text-slate-300 hover:bg-slate-200'
-                                                            : 'bg-emerald-500/20 text-green-700 hover:bg-green-200'
-                                                        }`}
-                                                >
-                                                    {type.isActive ? 'Deactivate' : 'Activate'}
-                                                </button>
-                                                <button
-                                                    onClick={() => handleEdit(type)}
-                                                    className="rounded-lg bg-blue-500/20 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-200"
-                                                >
-                                                    Edit
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(type.id)}
-                                                    className="rounded-lg bg-red-500/20 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-200"
-                                                >
-                                                    Delete
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            {/* Add/Edit Modal */}
-            {showAddModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-                    <div className="w-full max-w-md rounded-xl bg-slate-900 p-6 shadow-2xl">
-                        <h3 className="text-lg font-bold text-white">
-                            {editingType ? 'Edit Attachment Type' : 'Add Attachment Type'}
-                        </h3>
-                        <p className="mt-1 text-sm text-slate-500">
-                            {editingType ? 'Update the attachment type details' : 'Create a new attachment type'}
-                        </p>
-
-                        <div className="mt-4 space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-300">Type Name</label>
-                                <input
-                                    type="text"
-                                    value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    className="mt-1 block w-full rounded-lg border border-white/15 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
-                                    placeholder="e.g., Purchase Order"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-slate-300">Description</label>
-                                <textarea
-                                    value={formData.description}
-                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                    rows={3}
-                                    className="mt-1 block w-full rounded-lg border border-white/15 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                    placeholder="Describe this attachment type..."
-                                />
-                            </div>
-
-                            <div className="flex items-center">
-                                <input
-                                    type="checkbox"
-                                    id="isActive"
-                                    checked={formData.isActive}
-                                    onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                                    className="h-4 w-4 rounded border-white/15 text-blue-600 focus:ring-blue-500"
-                                />
-                                <label htmlFor="isActive" className="ml-2 text-sm text-slate-300">
-                                    Active
-                                </label>
-                            </div>
-                        </div>
-
-                        <div className="mt-6 flex justify-end gap-3">
-                            <button
-                                onClick={() => {
-                                    setShowAddModal(false);
-                                    setEditingType(null);
-                                    resetForm();
-                                }}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={editingType ? handleUpdate : handleAdd}
-                                disabled={!formData.name.trim()}
-                                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {editingType ? 'Update' : 'Add'} Type
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+  return (
+    <div className="min-h-screen bg-slate-950 p-6 space-y-5">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-blue-500/15 text-blue-300 flex items-center justify-center">
+          <Paperclip className="w-5 h-5" />
         </div>
-    );
+        <div className="flex-1">
+          <h1 className="text-xl font-bold text-white">Attachment Type Master</h1>
+          <p className="text-xs text-slate-400">
+            Categories shown in the Type dropdown of the multi-attachment widget on ticket forms.
+          </p>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-3 max-w-md">
+        <StatCard label="Total"    value={stats.total}    tone="blue" />
+        <StatCard label="Active"   value={stats.active}   tone="emerald" />
+        <StatCard label="Required" value={stats.required} tone="rose" />
+      </div>
+
+      {/* Search + add */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 max-w-md">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search by code, name, description…"
+            className="w-full bg-slate-900 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <button onClick={() => setEditing('new')}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold">
+          <Plus className="w-4 h-4" /> Add Type
+        </button>
+      </div>
+
+      {error && (
+        <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2 text-rose-300 text-sm flex items-center gap-2">
+          <AlertCircle className="w-4 h-4" /> {error}
+        </div>
+      )}
+
+      {/* Table */}
+      <div className="bg-slate-900 border border-white/10 rounded-2xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-800/60 text-slate-400 text-[11px] uppercase tracking-wider">
+            <tr>
+              <th className="px-4 py-2.5 text-left">Code</th>
+              <th className="px-4 py-2.5 text-left">Name</th>
+              <th className="px-4 py-2.5 text-left">Applies To</th>
+              <th className="px-4 py-2.5 text-left">Required</th>
+              <th className="px-4 py-2.5 text-left">Max Size</th>
+              <th className="px-4 py-2.5 text-left">Status</th>
+              <th className="px-4 py-2.5 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              [...Array(5)].map((_, i) => (
+                <tr key={i} className="border-t border-white/5">
+                  <td colSpan={7} className="px-4 py-3"><div className="h-4 rounded bg-slate-800/60 animate-pulse" /></td>
+                </tr>
+              ))
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500 text-sm">No attachment types yet — add the first one.</td></tr>
+            ) : (
+              filtered.map(row => (
+                <tr key={row.id} className="border-t border-white/5 hover:bg-white/5">
+                  <td className="px-4 py-2.5 text-slate-300 font-mono text-xs">{row.code}</td>
+                  <td className="px-4 py-2.5 text-white">{row.name}</td>
+                  <td className="px-4 py-2.5">
+                    {row.appliesTo.length === 0 ? (
+                      <span className="text-[11px] text-slate-500 italic">All ticket types</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {row.appliesTo.slice(0, 3).map(t => (
+                          <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/30 font-mono">
+                            {t}
+                          </span>
+                        ))}
+                        {row.appliesTo.length > 3 && (
+                          <span className="text-[10px] text-slate-500">+{row.appliesTo.length - 3}</span>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {row.required ? (
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                        Required
+                      </span>
+                    ) : (
+                      <span className="text-slate-500 text-xs">Optional</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-slate-300 tabular-nums text-xs">
+                    {row.maxFileSizeMb == null ? '—' : `${row.maxFileSizeMb} MB`}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <button onClick={() => toggleActive(row)}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
+                        row.isActive
+                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                          : 'bg-slate-700/40 text-slate-400 border-white/10'
+                      }`}>
+                      <Power className="w-3 h-3" /> {row.isActive ? 'Active' : 'Inactive'}
+                    </button>
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    <button onClick={() => setEditing(row)} className="inline-flex items-center gap-1 px-2 py-1 rounded text-amber-300 hover:bg-amber-500/10 text-xs">
+                      <Pencil className="w-3 h-3" /> Edit
+                    </button>
+                    <button onClick={() => remove(row)} className="inline-flex items-center gap-1 px-2 py-1 rounded text-rose-300 hover:bg-rose-500/10 text-xs ml-1">
+                      <Trash2 className="w-3 h-3" /> Delete
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Edit modal */}
+      {editing && (
+        <EditModal
+          initial={editing === 'new' ? null : editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); void load(); }} />
+      )}
+    </div>
+  );
+}
+
+function StatCard({ label, value, tone }: { label: string; value: number; tone: 'blue' | 'emerald' | 'rose' }) {
+  const cls = {
+    blue:    'bg-blue-500/10    border-blue-500/30    text-blue-300',
+    emerald: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300',
+    rose:    'bg-rose-500/10    border-rose-500/30    text-rose-300',
+  }[tone];
+  return (
+    <div className={`rounded-xl border px-3 py-2 ${cls}`}>
+      <p className="text-[10px] uppercase tracking-wider opacity-70">{label}</p>
+      <p className="text-xl font-bold tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+function EditModal({ initial, onClose, onSaved }: {
+  initial: AttachmentType | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [code, setCode]                     = useState(initial?.code ?? '');
+  const [name, setName]                     = useState(initial?.name ?? '');
+  const [description, setDescription]       = useState(initial?.description ?? '');
+  const [appliesTo, setAppliesTo]           = useState<string[]>(initial?.appliesTo ?? []);
+  const [required, setRequired]             = useState<boolean>(initial?.required ?? false);
+  const [maxFileSizeMb, setMaxFileSizeMb]   = useState<string>(initial?.maxFileSizeMb != null ? String(initial.maxFileSizeMb) : '10');
+  const [allowedMime, setAllowedMime]       = useState<string>((initial?.allowedMimeTypes ?? []).join(', '));
+  const [sortOrder, setSortOrder]           = useState<string>(initial != null ? String(initial.sortOrder) : '100');
+  const [busy, setBusy]                     = useState(false);
+  const [err, setErr]                       = useState<string | null>(null);
+
+  const toggleApplies = (t: string) => {
+    setAppliesTo(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
+  };
+
+  const submit = async () => {
+    if (!code.trim() || !name.trim()) { setErr('Code and name are required'); return; }
+    setBusy(true); setErr(null);
+    try {
+      const body = {
+        code: code.trim(),
+        name: name.trim(),
+        description: description.trim() || null,
+        appliesTo,
+        required,
+        maxFileSizeMb: maxFileSizeMb === '' ? null : Number(maxFileSizeMb),
+        allowedMimeTypes: allowedMime.split(',').map(s => s.trim()).filter(Boolean),
+        sortOrder: sortOrder === '' ? 100 : Number(sortOrder),
+      };
+      const res = await fetch(
+        initial ? `/api/data-masters/attachment-types/${initial.id}` : '/api/data-masters/attachment-types',
+        { method: initial ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+      );
+      const d = await res.json();
+      if (!res.ok) { setErr(d?.error ?? 'Save failed'); return; }
+      onSaved();
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-white/10">
+          <h2 className="text-lg font-bold text-white">{initial ? 'Edit Attachment Type' : 'New Attachment Type'}</h2>
+          <button onClick={onClose} className="ml-auto p-1 text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Code" required>
+              <input value={code} onChange={e => setCode(e.target.value.toUpperCase())} disabled={!!initial}
+                placeholder="INVOICE"
+                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" />
+              {initial && <p className="text-[10px] text-slate-500 mt-0.5">Code is fixed once saved.</p>}
+            </Field>
+            <Field label="Name" required>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="Invoice"
+                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </Field>
+          </div>
+
+          <Field label="Description">
+            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
+              placeholder="What this category is used for"
+              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </Field>
+
+          <Field label="Applies To" hint="Leave empty to allow on every ticket type.">
+            <div className="flex flex-wrap gap-1.5">
+              {TICKET_TYPES.map(t => {
+                const active = appliesTo.includes(t);
+                return (
+                  <button key={t} type="button" onClick={() => toggleApplies(t)}
+                    className={`px-2.5 py-1 rounded-md text-[11px] border ${
+                      active
+                        ? 'bg-blue-500/20 text-blue-200 border-blue-500/40'
+                        : 'bg-slate-800/60 text-slate-400 border-white/10'
+                    }`}>
+                    {t}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="Required">
+              <button type="button" onClick={() => setRequired(v => !v)}
+                className={`w-full px-3 py-2 rounded-lg border text-sm ${
+                  required
+                    ? 'bg-rose-500/15 text-rose-200 border-rose-500/40'
+                    : 'bg-slate-800 text-slate-400 border-white/10'
+                }`}>
+                {required ? 'Required' : 'Optional'}
+              </button>
+            </Field>
+            <Field label="Max Size (MB)">
+              <input type="number" min={0} value={maxFileSizeMb}
+                onChange={e => setMaxFileSizeMb(e.target.value)}
+                placeholder="10"
+                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </Field>
+            <Field label="Sort Order">
+              <input type="number" value={sortOrder}
+                onChange={e => setSortOrder(e.target.value)}
+                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </Field>
+          </div>
+
+          <Field label="Allowed MIME Types" hint="Comma-separated. Leave empty to accept any. Wildcards OK (e.g. image/*).">
+            <input value={allowedMime} onChange={e => setAllowedMime(e.target.value)}
+              placeholder="application/pdf, image/*"
+              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </Field>
+
+          {err && <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2 text-rose-300 text-xs flex items-center gap-2"><AlertCircle className="w-3 h-3" /> {err}</div>}
+        </div>
+
+        <div className="flex items-center gap-2 px-5 py-3 border-t border-white/10">
+          <button onClick={submit} disabled={busy}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold disabled:opacity-50">
+            <Save className="w-4 h-4" /> {busy ? 'Saving…' : 'Save'}
+          </button>
+          <button onClick={onClose} className="px-3 py-2 text-slate-400 hover:text-white text-sm">Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children, hint, required }: { label: string; children: React.ReactNode; hint?: string; required?: boolean }) {
+  return (
+    <div className="space-y-1">
+      <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+        {label}{required && <span className="text-rose-400">*</span>}
+      </label>
+      {children}
+      {hint && <p className="text-[10px] text-slate-500">{hint}</p>}
+    </div>
+  );
 }

@@ -14,6 +14,7 @@ import * as oidc from 'openid-client';
 import { findSsoConfigByEmail } from '@/lib/sso';
 import { signSsoState } from '@/lib/sso-state';
 import { captureException } from '@/lib/sentry';
+import { recordLoginAttempt } from '@/lib/auth-security';
 
 export const runtime = 'nodejs';
 
@@ -25,11 +26,13 @@ export async function GET(req: NextRequest) {
   const ret   = url.searchParams.get('returnTo') ?? '/platform';
 
   if (!email || !/.+@.+\..+/.test(email)) {
+    await logSsoAttempt(req, email || 'unknown', null, false, 'SSO_MISSING_EMAIL');
     return redirectTo(req, '/login?sso=missing-email');
   }
 
   const cfg = await findSsoConfigByEmail(email);
   if (!cfg || !cfg.isActive) {
+    await logSsoAttempt(req, email, cfg?.tenantId ?? null, false, 'SSO_NOT_CONFIGURED');
     return redirectTo(req, `/login?sso=unknown&email=${encodeURIComponent(email)}`);
   }
 
@@ -73,9 +76,11 @@ export async function GET(req: NextRequest) {
       maxAge: 600, // 10 min
       path: '/',
     });
+    await logSsoAttempt(req, email, cfg.tenantId, true, null);
     return res;
   } catch (err) {
     captureException(err, { context: 'auth.sso.initiate', tags: { tenantId: cfg.tenantId } });
+    await logSsoAttempt(req, email, cfg.tenantId, false, 'SSO_DISCOVERY_FAILED');
     return redirectTo(req, '/login?sso=discovery-failed');
   }
 }
@@ -85,4 +90,21 @@ function redirectTo(req: NextRequest, path: string): NextResponse {
   url.pathname = path.split('?')[0];
   url.search   = path.includes('?') ? '?' + path.split('?')[1] : '';
   return NextResponse.redirect(url);
+}
+
+async function logSsoAttempt(
+  req: NextRequest,
+  email: string,
+  tenantId: string | null,
+  success: boolean,
+  failureReason: string | null,
+) {
+  await recordLoginAttempt({
+    email,
+    tenantId,
+    success,
+    failureReason,
+    ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? req.headers.get('x-real-ip'),
+    userAgent: req.headers.get('user-agent'),
+  }).catch(() => undefined);
 }

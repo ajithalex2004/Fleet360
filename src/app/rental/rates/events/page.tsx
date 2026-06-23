@@ -9,6 +9,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, Plus, Trash2 } from 'lucide-react';
+import ActionDialog from '@/components/ui/ActionDialog';
+import { useRentalMasterData } from '@/hooks/useRentalMasterData';
 
 interface RateEvent {
   id: string;
@@ -51,12 +53,15 @@ const blankForm = {
 };
 
 export default function RateEventsPage() {
+  const { masterData } = useRentalMasterData();
   const [events, setEvents] = useState<RateEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(blankForm);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<RateEvent | null>(null);
+  const presets = masterData.rateEventPresets.length ? masterData.rateEventPresets : PRESETS;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -105,9 +110,11 @@ export default function RateEventsPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm('Soft-delete this event?')) return;
     const res = await fetch(`/api/rental/rate-events/${id}`, { method: 'DELETE' });
-    if (res.ok) load();
+    if (res.ok) {
+      setPendingDelete(null);
+      load();
+    }
   }
 
   return (
@@ -135,7 +142,7 @@ export default function RateEventsPage() {
       <div className="bg-slate-900/40 border border-slate-700 rounded-xl p-4">
         <div className="text-xs text-slate-400 mb-2">Quick presets — click to load form:</div>
         <div className="flex flex-wrap gap-2">
-          {PRESETS.map((p) => (
+          {presets.map((p) => (
             <button
               key={p.eventCode}
               onClick={() => { applyPreset(p); setShowForm(true); }}
@@ -201,7 +208,7 @@ export default function RateEventsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <button
-                        onClick={() => remove(e.id)}
+                        onClick={() => setPendingDelete(e)}
                         className="text-rose-400 hover:text-rose-300"
                         title="Soft-delete"
                       >
@@ -338,6 +345,21 @@ export default function RateEventsPage() {
           </div>
         </div>
       )}
+
+      <ActionDialog
+        open={!!pendingDelete}
+        title="Soft-delete rate event"
+        description="Review this calendar event before removing it from the yield engine."
+        details={pendingDelete ? [
+          `Event: ${pendingDelete.name}`,
+          `Code: ${pendingDelete.eventCode}`,
+          `Multiplier: ${Number(pendingDelete.multiplier).toFixed(2)}x`,
+        ] : undefined}
+        tone="danger"
+        confirmLabel="Delete event"
+        onClose={() => setPendingDelete(null)}
+        onConfirm={pendingDelete ? () => remove(pendingDelete.id) : undefined}
+      />
     </div>
   );
 }

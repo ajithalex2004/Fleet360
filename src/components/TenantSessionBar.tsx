@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { usePermissions } from '@/contexts/PermissionContext';
 import UserSwitcher from '@/components/UserSwitcher';
+import { getClientMe } from '@/lib/client-session';
 
 interface User   { id: string; username: string; firstName?: string; lastName?: string; }
 interface Tenant { id: string; name: string; code?: string; }
@@ -24,10 +25,8 @@ export default function TenantSessionBar() {
    */
   const autoBridgeCookieSession = useCallback(async () => {
     try {
-      const res = await fetch('/api/auth/me');
-      if (!res.ok) return;
-      const me = await res.json();
-      if (me.userId && me.tenantId) {
+      const me = await getClientMe();
+      if (me?.userId && me.tenantId) {
         setBridging(true);
         await setCurrentUser(me.userId, me.tenantId);
       }
@@ -57,9 +56,8 @@ export default function TenantSessionBar() {
 
         // Pre-select the current cookie session user & tenant in the dropdowns
         try {
-          const meRes = await fetch('/api/auth/me');
-          if (meRes.ok) {
-            const me = await meRes.json();
+          const me = await getClientMe();
+          if (me) {
             if (me.userId   && userList.some(x => x.id === me.userId))     setSelUser(me.userId);
             if (me.tenantId && tenantList.some(x => x.id === me.tenantId)) setSelTenant(me.tenantId);
           }

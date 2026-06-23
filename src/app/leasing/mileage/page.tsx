@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { Plus, Edit2 } from 'lucide-react';
+import { LeasingBillingMigrationNotice } from '@/components/LeasingBillingMigrationNotice';
 
 interface MileageReading {
   id: string;
@@ -32,7 +34,14 @@ interface MileageOverage {
 
 interface Contract {
   id: string;
-  contractNo: string;
+  contractNumber?: string;
+  lessee?: string;
+  lesseeId?: string | null;
+}
+
+interface Lessee {
+  id: string;
+  name: string;
 }
 
 const getStatusBadgeColor = (status: string) => {
@@ -51,10 +60,14 @@ const getStatusBadgeColor = (status: string) => {
 };
 
 export default function MileagePage() {
+  const pathname = usePathname();
+  const isLegacyPath = pathname.startsWith('/leasing/');
+  const apiBase = isLegacyPath ? '/api/leasing' : '/api/finance/leasing-billing';
   const [activeTab, setActiveTab] = useState<'readings' | 'overages'>('readings');
   const [readings, setReadings] = useState<MileageReading[]>([]);
   const [overages, setOverages] = useState<MileageOverage[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
+  const [lessees, setLessees] = useState<Lessee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showNewReadingModal, setShowNewReadingModal] = useState(false);
@@ -62,6 +75,7 @@ export default function MileagePage() {
   const [selectedOverage, setSelectedOverage] = useState<MileageOverage | null>(null);
 
   const [readingFormData, setReadingFormData] = useState({
+    lesseeId: '',
     contractId: '',
     vehicleId: '',
     readingDate: '',
@@ -73,37 +87,43 @@ export default function MileagePage() {
   });
 
   const [overageStatus, setOverageStatus] = useState('PENDING');
-
   const fetchReadings = useCallback(async () => {
     try {
-      const response = await fetch('/api/leasing/mileage-readings');
+      const response = await fetch(`${apiBase}/mileage-readings`);
       if (!response.ok) throw new Error('Failed to fetch readings');
       const data = await response.json();
       setReadings(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error fetching readings');
     }
-  }, []);
+  }, [apiBase]);
 
   const fetchOverages = useCallback(async () => {
     try {
-      const response = await fetch('/api/leasing/mileage-overages');
+      const response = await fetch(`${apiBase}/mileage-overages`);
       if (!response.ok) throw new Error('Failed to fetch overages');
       const data = await response.json();
       setOverages(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error fetching overages');
     }
-  }, []);
+  }, [apiBase]);
 
   const fetchContracts = useCallback(async () => {
     try {
-      const response = await fetch('/api/leasing/contracts-v2');
-      if (!response.ok) throw new Error('Failed to fetch contracts');
-      const data = await response.json();
-      setContracts(data);
+      const [contractsRes, lesseesRes] = await Promise.all([
+        fetch('/api/leasing/contracts-v2'),
+        fetch('/api/leasing/lessees'),
+      ]);
+      if (!contractsRes.ok) throw new Error('Failed to fetch contracts');
+      const contractsData = await contractsRes.json();
+      setContracts(Array.isArray(contractsData) ? contractsData : []);
+      if (lesseesRes.ok) {
+        const lesseesData = await lesseesRes.json();
+        setLessees(Array.isArray(lesseesData) ? lesseesData : lesseesData.lessees ?? []);
+      }
     } catch (err) {
-      console.error('Error fetching contracts:', err);
+      console.error('Error fetching contracts / lessees:', err);
     }
   }, []);
 
@@ -118,7 +138,7 @@ export default function MileagePage() {
 
   const handleAddReading = async () => {
     try {
-      const response = await fetch('/api/leasing/mileage-readings', {
+      const response = await fetch(`${apiBase}/mileage-readings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -128,6 +148,7 @@ export default function MileagePage() {
       });
       if (!response.ok) throw new Error('Failed to add reading');
       setReadingFormData({
+        lesseeId: '',
         contractId: '',
         vehicleId: '',
         readingDate: '',
@@ -145,10 +166,20 @@ export default function MileagePage() {
     }
   };
 
+  const filteredContracts = readingFormData.lesseeId
+    ? contracts.filter(contract => contract.lesseeId === readingFormData.lesseeId)
+    : contracts;
+
+  useEffect(() => {
+    if (readingFormData.contractId && !filteredContracts.some(contract => contract.id === readingFormData.contractId)) {
+      setReadingFormData(prev => ({ ...prev, contractId: '' }));
+    }
+  }, [filteredContracts, readingFormData.contractId]);
+
   const handleUpdateOverageStatus = async () => {
     if (!selectedOverage) return;
     try {
-      const response = await fetch(`/api/leasing/mileage-overages/${selectedOverage.id}`, {
+      const response = await fetch(`${apiBase}/mileage-overages/${selectedOverage.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: overageStatus }),
@@ -162,6 +193,13 @@ export default function MileagePage() {
   };
 
   return (
+    isLegacyPath ? (
+      <LeasingBillingMigrationNotice
+        title="Leasing mileage and overages"
+        financeHref="/finance/leasing-billing/mileage"
+        description="Mileage capture that feeds invoicing and overage status is now anchored in Finance & Billing."
+      />
+    ) : (
     <div className="min-h-screen bg-[#0c1a3e] text-slate-100 p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
@@ -311,6 +349,19 @@ export default function MileagePage() {
               </div>
               <div className="p-6 space-y-4">
                 <div>
+                  <label className="block text-sm font-medium mb-1">Customer / Lessee</label>
+                  <select
+                    value={readingFormData.lesseeId}
+                    onChange={e => setReadingFormData({...readingFormData, lesseeId: e.target.value})}
+                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                  >
+                    <option value="">All lessees</option>
+                    {lessees.map(lessee => (
+                      <option key={lessee.id} value={lessee.id}>{lessee.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
                   <label className="block text-sm font-medium mb-1">Contract</label>
                   <select
                     value={readingFormData.contractId}
@@ -318,8 +369,10 @@ export default function MileagePage() {
                     className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
                   >
                     <option value="">Select contract</option>
-                    {contracts.map(c => (
-                      <option key={c.id} value={c.id}>{c.contractNo}</option>
+                    {filteredContracts.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.contractNumber ?? c.id.slice(0, 8)}{c.lessee ? ` - ${c.lessee}` : ''}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -459,5 +512,6 @@ export default function MileagePage() {
         )}
       </div>
     </div>
+    )
   );
 }

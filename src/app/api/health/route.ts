@@ -11,7 +11,9 @@
  */
 
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { getDatabaseTarget, prisma } from '@/lib/prisma';
+import { retryDb } from '@/lib/db-retry';
+import { getProductionReadiness } from '@/lib/production-readiness';
 
 export const dynamic = 'force-dynamic'; // never cache
 
@@ -26,7 +28,7 @@ export async function GET() {
   let dbStatus: 'connected' | 'error' = 'connected';
   let dbError: string | undefined;
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    await retryDb(() => prisma.$queryRaw`SELECT 1`, { attempts: 3, delayMs: 750 });
   } catch (err) {
     dbStatus = 'error';
     dbError = err instanceof Error ? err.message : String(err);
@@ -37,7 +39,7 @@ export async function GET() {
     return NextResponse.json(
       {
         status: 'unhealthy',
-        db: { status: 'error', latencyMs: dbLatencyMs, error: dbError },
+        db: { status: 'error', latencyMs: dbLatencyMs, error: dbError, target: getDatabaseTarget() },
         release: RELEASE,
         timestamp: new Date().toISOString(),
       },
@@ -45,23 +47,26 @@ export async function GET() {
     );
   }
 
-  // Optional integration checks — missing keys make us "degraded", not failed.
-  const integrations = {
-    stripe:        !!process.env.STRIPE_SECRET_KEY,
-    sendgrid:      !!process.env.SENDGRID_API_KEY && !!(process.env.EMAIL_FROM ?? process.env.SMTP_FROM),
-    sentry:        !!(process.env.SENTRY_DSN ?? process.env.NEXT_PUBLIC_SENTRY_DSN),
-    ssoEncryption: !!process.env.SSO_ENCRYPTION_KEY,
-    appUrl:        !!process.env.NEXT_PUBLIC_APP_URL,
-    sessionSecret: !!process.env.SESSION_SECRET,
-  };
-  const missing = Object.entries(integrations).filter(([, v]) => !v).map(([k]) => k);
-  const status  = missing.length > 0 ? 'degraded' : 'ok';
+  // Required readiness gaps make health degraded; recommended gaps remain visible.
+  const readiness = getProductionReadiness();
+  const status = readiness.status === 'ready' ? 'ok' : 'degraded';
 
   return NextResponse.json({
     status,
-    db: { status: dbStatus, latencyMs: dbLatencyMs },
-    integrations,
-    missingConfig: missing,
+    db: { status: dbStatus, latencyMs: dbLatencyMs, target: getDatabaseTarget() },
+    integrations: readiness.integrations,
+    readiness: {
+      status: readiness.status,
+      missingRequired: readiness.missingRequired,
+      missingRecommended: readiness.missingRecommended,
+      missingOptional: readiness.missingOptional,
+      checks: readiness.checks,
+    },
+    missingConfig: [
+      ...readiness.missingRequired,
+      ...readiness.missingRecommended,
+      ...readiness.missingOptional,
+    ],
     release: RELEASE,
     timestamp: new Date().toISOString(),
   });

@@ -62,7 +62,7 @@ test.beforeAll(async () => {
 
     const roleId = crypto.randomUUID();
     await prisma.role.create({
-      data: { id: roleId, tenantId: tmTenantId, name: 'Tenant Admin', code: 'TENANT_ADMIN' },
+      data: { id: roleId, tenantId: tmTenantId, name: 'Tenant Administrator', code: 'TENANT_ADMIN' },
     });
     await prisma.userTenant.create({
       data: { id: crypto.randomUUID(), userId: tmUserId, tenantId: tmTenantId, roleId, isActive: true },

@@ -31,7 +31,7 @@ export const mockAlertConfigs: any[] = []; // Placeholder
 
 // API Helpers
 export const api = {
-    get: async (endpoint: string) => {
+    get: async <T = unknown>(endpoint: string): Promise<T> => {
         const res = await fetch(`/api/${endpoint}`, { cache: 'no-store' });
         if (!res.ok) {
             let errorDetails = `Status: ${res.status}`;
@@ -43,7 +43,7 @@ export const api = {
             }
             throw new Error(`Failed to fetch ${endpoint} (${errorDetails})`);
         }
-        return res.json();
+        return res.json() as Promise<T>;
     },
     post: async (endpoint: string, data: any) => {
         const response = await fetch(`/api/${endpoint}`, {
@@ -93,15 +93,15 @@ export const api = {
     },
 };
 // Vehicles
-export const getVehicles = () => api.get('vehicles');
-export const getVehicleById = async (id: string) => api.get(`vehicles/${id}`);
+export const getVehicles = () => api.get<Vehicle[]>('vehicles');
+export const getVehicleById = async (id: string) => api.get<Vehicle>(`vehicles/${id}`);
 export const createVehicle = (vehicle: any) => api.post('vehicles', vehicle);
 export const updateVehicle = (id: string, updates: any) => api.patch(`vehicles/${id}`, updates);
 export const deleteVehicle = (id: string) => api.delete(`vehicles/${id}`);
 
 // Drivers
-export const getDrivers = () => api.get('drivers');
-export const getDriverById = async (id: string) => api.get(`drivers/${id}`);
+export const getDrivers = () => api.get<Driver[]>('drivers');
+export const getDriverById = async (id: string) => api.get<Driver>(`drivers/${id}`);
 export const createDriver = (driver: any) => api.post('drivers', driver);
 export const updateDriver = (id: string, updates: any) => api.patch(`drivers/${id}`, updates);
 export const deleteDriver = (id: string) => api.delete(`drivers/${id}`);
@@ -113,7 +113,7 @@ export const updateUser = (id: string, updates: any) => api.patch(`users/${id}`,
 export const deleteUser = (id: string) => api.delete(`users/${id}`);
 
 // Garages
-export const getGarages = () => api.get('garages');
+export const getGarages = () => api.get<Garage[]>('garages');
 export const createGarage = (garage: Garage) => api.post('garages', garage);
 export const updateGarage = (id: string, garage: Garage) => api.put(`garages/${id}`, garage);
 export const deleteGarage = (id: string) => api.delete(`garages/${id}`);
@@ -121,8 +121,8 @@ export const deleteGarage = (id: string) => api.delete(`garages/${id}`);
 
 
 // Maintenance Requests
-export const getMaintenanceRequests = () => api.get('maintenance-requests');
-export const getMaintenanceRequestById = (id: string) => api.get(`maintenance-requests/${id}`);
+export const getMaintenanceRequests = () => api.get<MaintenanceRequest[]>('maintenance-requests');
+export const getMaintenanceRequestById = (id: string) => api.get<MaintenanceRequest>(`maintenance-requests/${id}`);
 export const createMaintenanceRequest = (request: Omit<MaintenanceRequest, 'id' | 'status' | 'comments'>) => api.post('maintenance-requests', request);
 export const updateMaintenanceRequest = (id: string, updates: Partial<MaintenanceRequest>) => api.patch(`maintenance-requests/${id}`, updates);
 
@@ -134,7 +134,7 @@ export const updateQuotation = (id: string, updates: any) => api.patch(`quotatio
 export const createWorkOrder = (workOrder: any) => api.post('work-orders', workOrder);
 
 // Alerts
-export const getAlerts = () => api.get('alerts');
+export const getAlerts = () => api.get<Alert[]>('alerts');
 export const createAlert = (alert: any) => api.post('alerts', alert);
 export const updateAlert = (id: string, updates: Partial<Alert>) => api.patch(`alerts/${id}`, updates);
 
@@ -189,7 +189,7 @@ export const sendEmailNotification = async (to: string, subject: string, body: s
 };
 
 // Alert Configs
-export const getAlertConfigs = () => api.get('alert-configs');
+export const getAlertConfigs = () => api.get<any[]>('alert-configs');
 export const createAlertConfig = (config: any) => api.post('alert-configs', config);
 export const updateAlertConfig = (id: string, updates: any) => api.patch(`alert-configs/${id}`, updates);
 export const deleteAlertConfig = (id: string) => api.delete(`alert-configs/${id}`);

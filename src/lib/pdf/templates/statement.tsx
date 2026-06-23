@@ -8,7 +8,7 @@ import type { Lang } from '../theme';
 import { colors, spacing, typography, fontFor, dirFor, formatMoney, formatDate } from '../theme';
 import { t } from '../i18n';
 
-export type StatementTxnType = 'INVOICE' | 'PAYMENT';
+export type StatementTxnType = 'INVOICE' | 'PAYMENT' | 'CREDIT_NOTE' | 'DEPOSIT' | 'DEPOSIT_DEDUCTION' | 'DEPOSIT_REFUND';
 
 export interface StatementTransaction {
   date: string | Date;
@@ -71,6 +71,14 @@ const s = StyleSheet.create({
 
 export function StatementPdf({ data, lang }: { data: StatementPdfData; lang: Lang }) {
   const dir = dirFor(lang); const font = fontFor(lang); const ccy = data.currency;
+  const txnLabelKey: Record<StatementTxnType, 'txn_INVOICE' | 'txn_PAYMENT' | 'txn_CREDIT_NOTE' | 'txn_DEPOSIT' | 'txn_DEPOSIT_DEDUCTION' | 'txn_DEPOSIT_REFUND'> = {
+    INVOICE: 'txn_INVOICE',
+    PAYMENT: 'txn_PAYMENT',
+    CREDIT_NOTE: 'txn_CREDIT_NOTE',
+    DEPOSIT: 'txn_DEPOSIT',
+    DEPOSIT_DEDUCTION: 'txn_DEPOSIT_DEDUCTION',
+    DEPOSIT_REFUND: 'txn_DEPOSIT_REFUND',
+  };
 
   return (
     <Document title={`${t('accountStatement', lang)} — ${data.lessee.name}`} author={data.vendor.name} creator="Fleet360 Platform">
@@ -132,7 +140,7 @@ export function StatementPdf({ data, lang }: { data: StatementPdfData; lang: Lan
               data.transactions.map((tx, i) => (
                 <View key={i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]}>
                   <Text style={[s.cellText, { fontFamily: font, flex: 1.5 }]}>{formatDate(tx.date, lang)}</Text>
-                  <Text style={[s.cellText, { fontFamily: font, flex: 1.5 }]}>{t(`txn_${tx.type}` as any, lang) ?? tx.type}</Text>
+                  <Text style={[s.cellText, { fontFamily: font, flex: 1.5 }]}>{t(txnLabelKey[tx.type], lang)}</Text>
                   <Text style={[s.cellText, { fontFamily: font, flex: 2 }]}>{tx.reference}{tx.description ? ` · ${tx.description}` : ''}</Text>
                   <Text style={[s.cellAmount, { fontFamily: font, flex: 1.2 }]}>{tx.debit ? formatMoney(tx.debit, ccy) : '—'}</Text>
                   <Text style={[s.cellAmount, { fontFamily: font, flex: 1.2 }]}>{tx.credit ? formatMoney(tx.credit, ccy) : '—'}</Text>

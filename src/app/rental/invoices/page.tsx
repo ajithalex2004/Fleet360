@@ -100,6 +100,7 @@ export default function RentalInvoicesPage() {
   const [voidModal, setVoidModal]     = useState(false);
   const [voidReason, setVoidReason]   = useState('');
   const [voidLoading, setVoidLoading] = useState(false);
+  const [voidError, setVoidError]     = useState('');
 
   const limit = 20;
 
@@ -162,15 +163,17 @@ export default function RentalInvoicesPage() {
   const voidInvoice = async () => {
     if (!selected || !voidReason.trim()) return;
     setVoidLoading(true);
+    setVoidError('');
     try {
       const res  = await fetch('/api/rental/invoices/' + selected.id + '/void', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: voidReason }),
       });
       const json = await res.json();
-      if (!res.ok) { alert(json.error ?? 'Void failed'); return; }
+      if (!res.ok) { setVoidError(json.error ?? 'Void failed'); return; }
       setVoidModal(false);
       setVoidReason('');
+      setVoidError('');
       openDetail(json.invoice);
       fetchInvoices();
     } finally {
@@ -428,7 +431,7 @@ export default function RentalInvoicesPage() {
                 </button>
               )}
               {!['PAID'].includes(selected.status) && (
-                <button onClick={() => { setVoidModal(true); setVoidReason(''); }}
+                <button onClick={() => { setVoidModal(true); setVoidReason(''); setVoidError(''); }}
                   className="px-3 py-2 rounded-lg bg-red-500/20 text-red-300 hover:bg-red-500/30 border border-red-500/30 text-xs font-medium">
                   Void
                 </button>
@@ -552,6 +555,7 @@ export default function RentalInvoicesPage() {
               <button onClick={() => setVoidModal(false)} className="text-slate-400 hover:text-white text-2xl">×</button>
             </div>
             <div className="p-5 space-y-3">
+              {voidError && <p className="text-sm text-red-400">{voidError}</p>}
               <p className="text-sm text-slate-300">This action cannot be undone. A credit note will be automatically created if any payments were recorded.</p>
               <div>
                 <label className="block text-xs text-slate-400 mb-1">Reason for Voiding *</label>

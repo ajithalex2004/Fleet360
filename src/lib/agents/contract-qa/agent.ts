@@ -103,10 +103,13 @@ async function tool_get_contract(contractId: string) {
     where: { id: contractId },
     include: {
       vehicles: true,
-      lessee: { select: { name: true, type: true } },
     },
   });
   if (!c) return { error: 'Contract not found' };
+  const lessee = await prisma.lessee.findUnique({
+    where: { id: c.lesseeId },
+    select: { name: true, type: true },
+  });
   return {
     contractNumber: c.contractNumber,
     agreementType: c.agreementType,
@@ -126,14 +129,14 @@ async function tool_get_contract(contractId: string) {
     insuranceIncluded: c.insuranceIncluded ?? false,
     maintenanceIncluded: c.maintenanceIncluded ?? false,
     driverIncluded: c.driverIncluded ?? false,
-    vehicles: (c.vehicles ?? []).map(v => ({
+    vehicles: (c.vehicles ?? []).map((v) => ({
       vehicleType: v.vehicleType,
       make: v.make,
       model: v.model,
       year: v.year,
       monthlyRate: v.monthlyRate ? Number(v.monthlyRate) : null,
     })),
-    lessee: c.lessee ? { name: c.lessee.name, type: c.lessee.type } : null,
+    lessee: lessee ? { name: lessee.name, type: lessee.type } : null,
   };
 }
 

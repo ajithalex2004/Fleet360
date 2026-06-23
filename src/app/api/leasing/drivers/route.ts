@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { buildLesseeDisplayName } from '@/lib/leasing-lessee-display';
 
 export const runtime = 'nodejs';
 
@@ -35,6 +36,39 @@ export async function GET(req: NextRequest) {
     arr.push(a);
     activeByDriver.set(a.driverId, arr);
   }
+
+  const contractIds = [...new Set(activeAllocations.map((allocation) => allocation.contractId))];
+  const activeContracts = contractIds.length
+    ? await prisma.leaseContract2.findMany({
+        where: { id: { in: contractIds }, deletedAt: null },
+        select: {
+          id: true,
+          contractNumber: true,
+          lesseeId: true,
+          quotation: {
+            select: {
+              lesseeId: true,
+              lessee: { select: { name: true } },
+              inquiry: { select: { customerName: true, companyName: true } },
+            },
+          },
+        },
+      })
+    : [];
+  const contractById = new Map(
+    activeContracts.map((contract) => [
+      contract.id,
+      {
+        id: contract.id,
+        contractNumber: contract.contractNumber,
+        lesseeId: contract.lesseeId ?? contract.quotation?.lesseeId ?? null,
+        lessee:
+          buildLesseeDisplayName(contract.quotation ?? { lesseeId: contract.lesseeId }) ??
+          contract.lesseeId ??
+          'Unknown',
+      },
+    ]),
+  );
 
   const driverIds = all ? undefined : [...new Set(activeAllocations.map(a => a.driverId))];
   if (!all && (!driverIds || driverIds.length === 0)) {
@@ -89,6 +123,9 @@ export async function GET(req: NextRequest) {
     licenseExpiryStatus: flagExpiry(d.licenseExpiry),
     emiratesIdExpiryStatus: flagExpiry(d.emiratesIdExpiry),
     visaExpiryStatus: flagExpiry(d.visaExpiry),
+    activeContracts: (activeByDriver.get(d.id) ?? [])
+      .map((allocation) => contractById.get(allocation.contractId))
+      .filter(Boolean),
   }));
 
   return NextResponse.json(out);

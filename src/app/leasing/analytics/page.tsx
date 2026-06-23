@@ -1,6 +1,7 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { PageHeader } from '@/components/ui/page-theme';
 
 interface KPIs {
   activeContracts: number;
@@ -12,7 +13,6 @@ interface KPIs {
   totalUnbilled: number;
   expiringPolicies: number;
   renewalsPending: number;
-  remarketingPL: number;
   totalLessees: number;
   corporateLessees: number;
   utilisationPct: number;
@@ -41,34 +41,88 @@ interface AnalyticsData {
   topContracts: TopContract[];
 }
 
+const ANALYTICS_CACHE_TTL_MS = 120_000;
+
+function analyticsCacheKey() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const session = JSON.parse(localStorage.getItem('xl_mobility_session') ?? '{}') as { tenantId?: string };
+    return session.tenantId ? `leasing-analytics:${session.tenantId}` : null;
+  } catch {
+    return null;
+  }
+}
+
+function readCachedAnalytics() {
+  const key = analyticsCacheKey();
+  if (!key || typeof window === 'undefined') return null;
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(key) ?? 'null') as { ts: number; data: AnalyticsData } | null;
+    if (!cached?.data || Date.now() - cached.ts > ANALYTICS_CACHE_TTL_MS) return null;
+    return cached;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedAnalytics(data: AnalyticsData) {
+  const key = analyticsCacheKey();
+  if (!key || typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ ts: Date.now(), data }));
+  } catch {
+    // Cache writes are best effort; analytics must still render without them.
+  }
+}
+
 export default function AnalyticsPage() {
   const [data, setData]               = useState<AnalyticsData | null>(null);
   const [loading, setLoading]         = useState(true);
+  const [refreshing, setRefreshing]   = useState(false);
   const [error, setError]             = useState<string | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const dataRef = useRef<AnalyticsData | null>(null);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (force = false) => {
+    const initialLoad = !dataRef.current;
+    if (initialLoad) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
     setError(null);
     try {
-      const res = await fetch('/api/leasing/analytics');
+      const url = force ? `/api/leasing/analytics?refresh=${Date.now()}` : '/api/leasing/analytics';
+      const res = await fetch(url, force ? { cache: 'no-store' } : undefined);
       if (!res.ok) throw new Error(`API error: ${res.status}`);
-      const json = await res.json();
+      const json = await res.json() as AnalyticsData;
       setData(json);
+      dataRef.current = json;
+      writeCachedAnalytics(json);
       setLastRefreshed(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load analytics');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    const cached = readCachedAnalytics();
+    if (cached) {
+      setData(cached.data);
+      dataRef.current = cached.data;
+      setLastRefreshed(new Date(cached.ts));
+      setLoading(false);
+    }
+    loadData();
+  }, [loadData]);
 
   const collectionColor = (r: number) =>
-    r > 90 ? 'text-emerald-300 bg-emerald-900/30 border-emerald-700'
-    : r > 70 ? 'text-amber-300 bg-amber-900/30 border-amber-700'
-    : 'text-rose-300 bg-rose-900/30 border-rose-700';
+    r > 90 ? 'fleet-readable-panel bg-emerald-100 border-emerald-400'
+    : r > 70 ? 'fleet-readable-panel bg-amber-100 border-amber-400'
+    : 'fleet-readable-panel bg-rose-100 border-rose-500';
 
   if (loading) return (
     <div className="flex items-center justify-center h-full">
@@ -103,25 +157,20 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Analytics & BI</h1>
-          <p className="text-slate-400">
-            Real-time leasing portfolio intelligence
-            {lastRefreshed && (
-              <span className="ml-3 text-xs text-slate-500">
-                Last refreshed: {lastRefreshed.toLocaleTimeString()}
-              </span>
-            )}
-          </p>
-        </div>
-        <button
-          onClick={loadData}
-          className="px-5 py-2.5 rounded-xl bg-slate-700 border border-white/10 text-white text-sm font-medium hover:bg-slate-600 transition-all"
-        >
-          Refresh
-        </button>
-      </div>
+      <PageHeader
+        title="Analytics & BI"
+        subtitle={`Real-time leasing portfolio intelligence${lastRefreshed ? ` • Last refreshed: ${lastRefreshed.toLocaleTimeString()}` : ''}`}
+        accent="blue"
+        actions={(
+          <button
+            onClick={() => loadData(true)}
+            disabled={refreshing}
+            className="px-5 py-2.5 rounded-xl bg-slate-700 border border-white/10 text-white text-sm font-medium hover:bg-slate-600 transition-all"
+          >
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
+        )}
+      />
 
       {error && (
         <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>
@@ -192,7 +241,7 @@ export default function AnalyticsPage() {
           </div>
           <div className="text-right">
             <div className="text-xs opacity-60">Target: 95%</div>
-            <div className={`text-sm font-semibold mt-1 ${(kpis.collectionRate ?? 0) >= 95 ? 'text-emerald-300' : (kpis.collectionRate ?? 0) >= 70 ? 'text-amber-300' : 'text-rose-300'}`}>
+            <div className="mt-1 text-sm font-semibold">
               {(kpis.collectionRate ?? 0) >= 95 ? 'On Target' : (kpis.collectionRate ?? 0) >= 70 ? 'Below Target' : 'Critical'}
             </div>
           </div>
@@ -324,31 +373,21 @@ export default function AnalyticsPage() {
         )}
       </div>
 
-      {/* Remarketing P&L */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-2">Remarketing P&L</h2>
-          <p className="text-slate-400 text-sm mb-4">Total profit from sold end-of-lease vehicles</p>
-          <div className={`text-4xl font-bold ${(kpis.remarketingPL ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-            AED {(kpis.remarketingPL ?? 0).toLocaleString()}
+      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
+        <h2 className="text-lg font-semibold text-white mb-2">Lessee Portfolio</h2>
+        <p className="text-slate-400 text-sm mb-4">Active lessee breakdown by type</p>
+        <div className="flex items-end gap-6">
+          <div>
+            <div className="text-4xl font-bold text-white">{kpis.totalLessees ?? 0}</div>
+            <div className="text-xs text-slate-400 mt-1">Total Lessees</div>
           </div>
-        </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-2">Lessee Portfolio</h2>
-          <p className="text-slate-400 text-sm mb-4">Active lessee breakdown by type</p>
-          <div className="flex items-end gap-6">
-            <div>
-              <div className="text-4xl font-bold text-white">{kpis.totalLessees ?? 0}</div>
-              <div className="text-xs text-slate-400 mt-1">Total Lessees</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-blue-400">{kpis.corporateLessees ?? 0}</div>
-              <div className="text-xs text-slate-400 mt-1">Corporate</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-violet-400">{(kpis.totalLessees ?? 0) - (kpis.corporateLessees ?? 0)}</div>
-              <div className="text-xs text-slate-400 mt-1">Individual</div>
-            </div>
+          <div>
+            <div className="text-2xl font-bold text-blue-400">{kpis.corporateLessees ?? 0}</div>
+            <div className="text-xs text-slate-400 mt-1">Corporate</div>
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-violet-400">{(kpis.totalLessees ?? 0) - (kpis.corporateLessees ?? 0)}</div>
+            <div className="text-xs text-slate-400 mt-1">Individual</div>
           </div>
         </div>
       </div>

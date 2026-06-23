@@ -10,6 +10,7 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { signSession } from '@/lib/tenant-session';
+import { newSessionId, registerSession } from '@/lib/session-registry';
 
 // ── Free email domains blocklist ─────────────────────────────────────────────
 const FREE_EMAIL_DOMAINS = new Set([
@@ -366,11 +367,11 @@ export async function POST(request: NextRequest) {
         role = await tx.role.create({
           data: {
             id:          crypto.randomUUID(),
-            name:        'Tenant Admin',
+            name:        'Tenant Administrator',
             code:        'TENANT_ADMIN',
             tenantId:    tenant.id,
             isSystem:    true,
-            description: 'Full administrative access within this organisation',
+            description: 'Full access within their tenant - all modules except platform admin',
           },
         });
       }
@@ -425,11 +426,24 @@ export async function POST(request: NextRequest) {
     void import('@/lib/billing').then(m => m.startTrialForTenant(tenant.id)).catch(() => {});
 
     // Set session cookie — newly provisioned users always start as TENANT_ADMIN
+    const sessionId = newSessionId();
+    const expiresAt = new Date(Date.now() + 86_400_000);
     const sessionToken = await signSession({
+      sessionId,
       userId:   user.id,
       tenantId: tenant.id,
       plan:     tenant.plan ?? 'TRIAL',
       role:     'TENANT_ADMIN',
+    });
+    await registerSession({
+      id: sessionId,
+      userId: user.id,
+      tenantId: tenant.id,
+      plan: tenant.plan ?? 'TRIAL',
+      role: 'TENANT_ADMIN',
+      expiresAt,
+      ipAddress: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? request.headers.get('x-real-ip'),
+      userAgent: request.headers.get('user-agent'),
     });
 
     const payload: Record<string, unknown> = {

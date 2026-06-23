@@ -4,6 +4,8 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { ensureOperationalTenantColumn, recordOperationalChange, requireOperationalContext } from '@/lib/cross-module-governance';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
 
 const INIT = `
   CREATE TABLE IF NOT EXISTS finance_collection_cases (
@@ -29,7 +31,8 @@ const INIT = `
     promised_amount    NUMERIC(15,2),
     assigned_to        TEXT,
     notes              TEXT,
-    timeline           JSONB DEFAULT '[]'::jsonb
+    timeline           JSONB DEFAULT '[]'::jsonb,
+    tenant_id          TEXT
   );
 `;
 
@@ -46,21 +49,25 @@ async function nextCaseNo(): Promise<string> {
 
 export async function GET(req: NextRequest) {
   await prisma.$executeRawUnsafe(INIT).catch(() => {});
+  await ensureOperationalTenantColumn('finance_collection_cases').catch(() => {});
+  const ctx = requireOperationalContext(req, 'finance', { requestedTenantId: req.nextUrl.searchParams.get('tenantId') });
+  if (ctx instanceof NextResponse) return ctx;
   const sp     = req.nextUrl.searchParams;
   const status = sp.get('status');
   const page   = Math.max(1, parseInt(sp.get('page')  ?? '1'));
   const limit  = Math.min(100, parseInt(sp.get('limit') ?? '50'));
   const offset = (page - 1) * limit;
 
-  let where = `WHERE deleted_at IS NULL`;
-  const params: unknown[] = [];
-  let pi = 1;
+  let where = `WHERE deleted_at IS NULL AND tenant_id::text = $1`;
+  const params: unknown[] = [ctx.tenantId];
+  let pi = 2;
   if (status) { where += ` AND status = $${pi++}`; params.push(status); }
 
   // Recalculate days_overdue on every fetch
   await prisma.$executeRawUnsafe(
     `UPDATE finance_collection_cases SET days_overdue = GREATEST(0, CURRENT_DATE - due_date), updated_at = NOW()
-     WHERE deleted_at IS NULL AND status NOT IN ('SETTLED','WRITTEN_OFF','CLOSED')`
+     WHERE deleted_at IS NULL AND tenant_id::text = $1 AND status NOT IN ('SETTLED','WRITTEN_OFF','CLOSED')`,
+    ctx.tenantId,
   ).catch(() => {});
 
   const [rows, aging] = await Promise.all([
@@ -79,8 +86,9 @@ export async function GET(req: NextRequest) {
          COUNT(*)::text as count,
          COALESCE(SUM(outstanding_amount),0)::text as total
        FROM finance_collection_cases
-       WHERE deleted_at IS NULL AND status NOT IN ('SETTLED','WRITTEN_OFF','CLOSED')
-       GROUP BY 1 ORDER BY 1`
+       WHERE deleted_at IS NULL AND tenant_id::text = $1 AND status NOT IN ('SETTLED','WRITTEN_OFF','CLOSED')
+       GROUP BY 1 ORDER BY 1`,
+      ctx.tenantId,
     ).catch(() => []),
   ]);
 
@@ -93,10 +101,12 @@ export async function GET(req: NextRequest) {
             total_amount::text, paid_amount::text, due_date
      FROM finance_invoices
      WHERE deleted_at IS NULL
+       AND tenant_id::text = $1
        AND payment_status IN ('SENT','PARTIAL','OVERDUE')
        AND due_date < CURRENT_DATE
-       AND id NOT IN (SELECT invoice_id FROM finance_collection_cases WHERE deleted_at IS NULL)
-     ORDER BY due_date ASC LIMIT 20`
+       AND id NOT IN (SELECT invoice_id FROM finance_collection_cases WHERE deleted_at IS NULL AND tenant_id::text = $1)
+     ORDER BY due_date ASC LIMIT 20`,
+    ctx.tenantId,
   ).catch(() => []);
 
   return NextResponse.json({ data: rows, aging, overdueInvoices, page, limit });
@@ -104,6 +114,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   await prisma.$executeRawUnsafe(INIT).catch(() => {});
+  await ensureOperationalTenantColumn('finance_collection_cases').catch(() => {});
+  const ctx = requireOperationalContext(req, 'finance', { write: true });
+  if (ctx instanceof NextResponse) return ctx;
   const body   = await req.json();
   const caseNo = await nextCaseNo();
 
@@ -114,15 +127,41 @@ export async function POST(req: NextRequest) {
   const [row] = await prisma.$queryRawUnsafe<CaseRow[]>(
     `INSERT INTO finance_collection_cases
        (case_no, invoice_id, invoice_no, client_name, client_email, client_phone,
-        invoice_amount, paid_amount, outstanding_amount, due_date, days_overdue, assigned_to, notes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        invoice_amount, paid_amount, outstanding_amount, due_date, days_overdue, assigned_to, notes, tenant_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
      RETURNING *`,
     caseNo, body.invoiceId, body.invoiceNo, body.clientName,
     body.clientEmail ?? null, body.clientPhone ?? null,
     body.invoiceAmount, body.paidAmount ?? 0, outstanding,
-    body.dueDate, daysOverdue, body.assignedTo ?? null, body.notes ?? null,
+    body.dueDate, daysOverdue, body.assignedTo ?? null, body.notes ?? null, ctx.tenantId,
   ).catch(() => []);
 
   if (!row) return NextResponse.json({ error: 'Failed to create collection case' }, { status: 500 });
-  return NextResponse.json(row, { status: 201 });
+  await recordOperationalChange({
+    req,
+    ctx,
+    entityType: 'FinanceCollectionCase',
+    entityId: String(row.id ?? caseNo),
+    action: 'CREATE',
+    after: row,
+    summary: `Created collection case ${String(row.case_no ?? caseNo)}.`,
+  });
+  const workflow = await triggerServiceWorkflow({
+    req,
+    ctx,
+    serviceTypeKey: 'FINANCE_RECEIVABLE_EXCEPTION',
+    referenceType: 'CollectionCase',
+    referenceId: String(row.id ?? caseNo),
+    referenceNumber: String(row.case_no ?? caseNo),
+    contextData: {
+      invoiceId: body.invoiceId,
+      invoiceNo: body.invoiceNo,
+      clientName: body.clientName,
+      outstandingAmount: outstanding,
+      status: row.status ?? 'OPEN',
+      daysOverdue,
+    },
+    force: daysOverdue > 0,
+  });
+  return NextResponse.json({ ...row, workflow }, { status: 201 });
 }

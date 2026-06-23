@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { ArrowRight, Building2, CalendarPlus, CarFront, Headphones, Route, ShieldCheck } from 'lucide-react';
 
 interface ActiveService {
   id: string;
@@ -12,6 +13,8 @@ interface ActiveService {
 
 interface CustomerData {
   name: string;
+  customerName: string;
+  totalBookings: number;
   activeServices: ActiveService[];
 }
 
@@ -20,113 +23,134 @@ export default function CustomerHome() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const res = await fetch('/api/customer/profile');
-        if (res.ok) {
-          const data = await res.json();
+    let mounted = true;
+    fetch('/api/customer/profile', { cache: 'no-store' })
+      .then(res => res.ok ? res.json() : null)
+      .then(async (data) => {
+        if (!mounted) return;
+        if (data) {
           setCustomerData(data);
+          return;
         }
-      } catch (error) {
-        console.error('Error fetching customer data:', error);
-        setCustomerData({ name: 'User', activeServices: [] });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
+        const identity = await fetch('/api/customer/identity', { cache: 'no-store' })
+          .then(res => res.ok ? res.json() : null)
+          .catch(() => null);
+        const customer = identity?.customer;
+        setCustomerData(customer ? {
+          name: customer.customerName,
+          customerName: customer.customerName,
+          totalBookings: 0,
+          activeServices: [{
+            id: customer.customerId,
+            type: 'Corporate Transport Account',
+            reference: customer.domain || 'Corporate customer',
+            status: 'active',
+          }],
+        } : null);
+      })
+      .catch(() => {
+        if (mounted) setCustomerData(null);
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => { mounted = false; };
   }, []);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      <div className="grid gap-4">
+        <div className="h-36 animate-pulse rounded-lg bg-white/5" />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="h-28 animate-pulse rounded-lg bg-white/5" />
+          <div className="h-28 animate-pulse rounded-lg bg-white/5" />
+        </div>
       </div>
     );
   }
 
+  const quickActions = [
+    { label: 'Bookings', href: '/customer/my-bookings', detail: 'Reservations and trip status', icon: CalendarPlus },
+    { label: 'Services', href: '/customer/my-services', detail: 'Active agreements and entitlements', icon: CarFront },
+    { label: 'Transport', href: '/customer/transport', detail: 'Corporate shuttle schedules', icon: Route },
+    { label: 'Support', href: '/customer/profile', detail: 'Contacts and account details', icon: Headphones },
+  ];
+
   return (
-    <div className="space-y-6">
-      {/* Welcome Banner */}
-      <div className="bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl p-6 text-white">
-        <h1 className="text-2xl font-bold mb-1">Hello, {customerData?.name || 'User'}!</h1>
-        <p className="text-blue-100 text-sm">Welcome back to your transport dashboard</p>
-      </div>
-
-      {/* Quick Action Cards */}
-      <div className="space-y-3">
-        <h2 className="text-sm font-semibold text-slate-300 px-2">Quick Actions</h2>
-
-        <Link href="/customer/my-bookings">
-          <div className="bg-slate-800/50 border border-white/10 rounded-xl p-4 active:bg-slate-700/50 transition-all cursor-pointer">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">🚗</span>
-              <div className="flex-1">
-                <p className="text-white font-medium text-sm">Book a Car</p>
-                <p className="text-slate-400 text-xs">Reserve a vehicle</p>
-              </div>
-              <span className="text-slate-400">→</span>
+    <div className="space-y-6 pb-20 lg:pb-0">
+      <section className="overflow-hidden rounded-lg border border-white/10 bg-gradient-to-br from-slate-900 via-[#102033] to-[#082126] p-6 sm:p-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-2xl">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-md border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-semibold text-cyan-100">
+              <Building2 className="h-4 w-4" />
+              {customerData?.customerName ?? 'Corporate Portal'}
             </div>
+            <h1 className="text-3xl font-bold tracking-normal text-white sm:text-4xl">
+              Welcome, {customerData?.name ?? 'Customer'}
+            </h1>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">
+              Your corporate mobility account is ready for bookings, services, transport updates, and support.
+            </p>
           </div>
-        </Link>
-
-        <Link href="/customer/my-services">
-          <div className="bg-slate-800/50 border border-white/10 rounded-xl p-4 active:bg-slate-700/50 transition-all cursor-pointer">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">🔑</span>
-              <div className="flex-1">
-                <p className="text-white font-medium text-sm">My Lease</p>
-                <p className="text-slate-400 text-xs">View leasing details</p>
-              </div>
-              <span className="text-slate-400">→</span>
+          <div className="grid grid-cols-2 gap-3 sm:min-w-[280px]">
+            <div className="rounded-lg border border-white/10 bg-white/[0.04] p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Bookings</p>
+              <p className="mt-2 text-3xl font-bold text-white">{customerData?.totalBookings ?? 0}</p>
             </div>
-          </div>
-        </Link>
-
-        <Link href="/customer/transport">
-          <div className="bg-slate-800/50 border border-white/10 rounded-xl p-4 active:bg-slate-700/50 transition-all cursor-pointer">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">🚌</span>
-              <div className="flex-1">
-                <p className="text-white font-medium text-sm">My Shuttle</p>
-                <p className="text-slate-400 text-xs">Staff transport schedule</p>
-              </div>
-              <span className="text-slate-400">→</span>
+            <div className="rounded-lg border border-white/10 bg-white/[0.04] p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Services</p>
+              <p className="mt-2 text-3xl font-bold text-white">{customerData?.activeServices?.length ?? 0}</p>
             </div>
-          </div>
-        </Link>
-
-        <div className="bg-slate-800/50 border border-white/10 rounded-xl p-4 cursor-pointer hover:bg-slate-700/50 transition-all">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">💬</span>
-            <div className="flex-1">
-              <p className="text-white font-medium text-sm">Contact Support</p>
-              <p className="text-slate-400 text-xs">Get help anytime</p>
-            </div>
-            <span className="text-slate-400">→</span>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Active Services */}
-      {customerData?.activeServices && customerData.activeServices.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-slate-300 px-2">Active Services</h2>
-          {customerData.activeServices.map((service) => (
-            <div key={service.id} className="bg-slate-800/50 border border-white/10 rounded-xl p-4">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-white font-medium text-sm">{service.type}</p>
-                <span className="text-xs px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  {service.status}
-                </span>
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {quickActions.map((action) => {
+          const Icon = action.icon;
+          return (
+            <Link
+              key={action.href}
+              href={action.href}
+              className="group rounded-lg border border-white/10 bg-slate-900/70 p-4 transition hover:border-cyan-300/40 hover:bg-slate-900"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-md bg-cyan-300/10 text-cyan-200">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <ArrowRight className="h-4 w-4 text-slate-500 transition group-hover:translate-x-0.5 group-hover:text-cyan-200" />
               </div>
-              <p className="text-slate-400 text-xs">{service.reference}</p>
-            </div>
-          ))}
+              <p className="mt-4 text-base font-bold text-white">{action.label}</p>
+              <p className="mt-1 text-sm leading-5 text-slate-400">{action.detail}</p>
+            </Link>
+          );
+        })}
+      </section>
+
+      <section className="rounded-lg border border-white/10 bg-slate-900/70">
+        <div className="flex items-center justify-between border-b border-white/10 p-4">
+          <div>
+            <h2 className="text-lg font-bold text-white">Active Services</h2>
+            <p className="text-sm text-slate-400">Linked to your corporate customer account</p>
+          </div>
+          <ShieldCheck className="h-5 w-5 text-emerald-300" />
         </div>
-      )}
+        <div className="divide-y divide-white/10">
+          {customerData?.activeServices?.length ? customerData.activeServices.map((service) => (
+            <div key={service.id} className="flex items-center justify-between gap-4 p-4">
+              <div>
+                <p className="font-semibold text-white">{service.type}</p>
+                <p className="mt-1 text-sm text-slate-400">{service.reference}</p>
+              </div>
+              <span className="rounded-md border border-emerald-300/20 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
+                {service.status}
+              </span>
+            </div>
+          )) : (
+            <div className="p-6 text-sm text-slate-400">No active services found.</div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

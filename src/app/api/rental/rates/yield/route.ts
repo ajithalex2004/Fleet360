@@ -19,6 +19,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { requireOperationalContext } from '@/lib/cross-module-governance';
+import { ensureRentalGovernance } from '@/lib/rental-governance';
 import {
   calculateYieldRate,
   type RateEventSnapshot,
@@ -36,8 +38,24 @@ const bodySchema = z.object({
   fleetUtilizationPct: z.number().min(0).max(100).optional(),
 });
 
+const asString = (value: unknown, fallback = ''): string =>
+  typeof value === 'string' ? value : fallback;
+
+const asNullableString = (value: unknown): string | null =>
+  typeof value === 'string' ? value : null;
+
+const asDate = (value: unknown): Date => {
+  if (value instanceof Date) return value;
+  const parsed = new Date(String(value ?? ''));
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+};
+
 export async function POST(req: NextRequest) {
+  await ensureRentalGovernance();
   try {
+    const ctx = requireOperationalContext(req, 'rac');
+    if (ctx instanceof NextResponse) return ctx;
+
     const json = await req.json();
     const parsed = bodySchema.safeParse(json);
     if (!parsed.success) {
@@ -61,42 +79,49 @@ export async function POST(req: NextRequest) {
 
     // Pull pricing rules for this category. Schema columns vary; we project
     // only what the engine needs.
-    const ruleRows = await prisma.pricingRule.findMany({
-      where: {
-        // PricingRule schema doesn't have an isActive field consistently —
-        // use what's available.
-        vehicleCategory: parsed.data.vehicleCategory,
-      },
-    });
-    const rules: YieldRule[] = ruleRows.map((r: any) => ({
-      id: r.id,
-      name: r.name ?? null,
-      vehicleCategory: r.vehicleCategory ?? r.vehicle_category,
-      baseDailyRate: Number(r.baseDailyRate ?? r.base_daily_rate ?? 0),
-      weekendDailyRate: r.weekendDailyRate ? Number(r.weekendDailyRate) : null,
-      isActive: r.isActive ?? true,
+    const ruleRows = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT *
+         FROM pricing_rules
+        WHERE vehicle_category = $1
+          AND (tenant_id::text = $2 OR tenant_id IS NULL OR tenant_id::text = 'GLOBAL')
+        ORDER BY priority DESC, created_at DESC`,
+      parsed.data.vehicleCategory,
+      ctx.tenantId,
+    );
+    const rules: YieldRule[] = ruleRows.map((r) => ({
+      id: String(r.id),
+      name: typeof r.name === 'string' ? r.name : null,
+      vehicleCategory: String(r.vehicle_category ?? r.vehicleCategory ?? ''),
+      baseDailyRate: Number(r.base_daily_rate ?? r.baseDailyRate ?? 0),
+      weekendDailyRate: r.weekend_daily_rate != null || r.weekendDailyRate != null
+        ? Number(r.weekend_daily_rate ?? r.weekendDailyRate)
+        : null,
+      isActive: Boolean(r.is_active ?? r.isActive ?? true),
     }));
 
     // Pull events that overlap the pickup date.
-    const eventRows = await prisma.rateEvent.findMany({
-      where: {
-        isActive: true,
-        deletedAt: null,
-        dateFrom: { lte: pickupDate },
-        dateTo: { gte: pickupDate },
-      },
-    });
+    const eventRows = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT *
+         FROM rate_events
+        WHERE is_active = true
+          AND deleted_at IS NULL
+          AND date_from <= $1::timestamptz
+          AND date_to >= $1::timestamptz
+          AND (tenant_id::text = $2 OR tenant_id IS NULL OR tenant_id::text = 'GLOBAL')`,
+      pickupDate.toISOString(),
+      ctx.tenantId,
+    );
     const events: RateEventSnapshot[] = eventRows.map(e => ({
-      id: e.id,
-      eventCode: e.eventCode,
-      name: e.name,
-      dateFrom: e.dateFrom,
-      dateTo: e.dateTo,
+      id: asString(e.id),
+      eventCode: asString(e.event_code ?? e.eventCode),
+      name: asString(e.name),
+      dateFrom: asDate(e.date_from ?? e.dateFrom),
+      dateTo: asDate(e.date_to ?? e.dateTo),
       multiplier: Number(e.multiplier),
-      applicableCategories: e.applicableCategories,
-      applicableChannels: e.applicableChannels,
-      priority: e.priority ?? 0,
-      isActive: e.isActive ?? true,
+      applicableCategories: asNullableString(e.applicable_categories ?? e.applicableCategories),
+      applicableChannels: asNullableString(e.applicable_channels ?? e.applicableChannels),
+      priority: Number(e.priority ?? 0),
+      isActive: Boolean(e.is_active ?? e.isActive ?? true),
     }));
 
     // Auto-calculate utilization if not provided. Heuristic: count rentals
@@ -105,16 +130,20 @@ export async function POST(req: NextRequest) {
     let utilizationPct = parsed.data.fleetUtilizationPct;
     if (utilizationPct == null) {
       try {
-        const now = new Date();
         const [activeBookings, fleetSize] = await Promise.all([
-          prisma.rentalBooking.count({
-            where: {
-              vehicleCategory: parsed.data.vehicleCategory,
-              status: { in: ['CONFIRMED', 'ACTIVE'] },
-              pickupDate: { lte: pickupDate },
-              dropoffDate: { gte: pickupDate },
-            },
-          }),
+          prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+            `SELECT COUNT(*)::bigint AS count
+               FROM rental_bookings
+              WHERE tenant_id::text = $1
+                AND deleted_at IS NULL
+                AND vehicle_category = $2
+                AND status IN ('CONFIRMED', 'ACTIVE')
+                AND pickup_date <= $3::timestamptz
+                AND dropoff_date >= $3::timestamptz`,
+            ctx.tenantId,
+            parsed.data.vehicleCategory,
+            pickupDate.toISOString(),
+          ).then(rows => Number(rows[0]?.count ?? 0)),
           prisma.vehicle.count({
             where: {
               type: parsed.data.vehicleCategory,

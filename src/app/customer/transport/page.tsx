@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { BusFront, CalendarDays, Clock, MapPin, SearchX } from 'lucide-react';
 
 interface ShuttleTrip {
   id: string;
@@ -26,126 +27,118 @@ export default function TransportPage() {
   const [viewMode, setViewMode] = useState<'today' | 'weekly'>('today');
 
   useEffect(() => {
-    fetchSchedules();
+    let mounted = true;
+    fetch('/api/customer/transport', { cache: 'no-store' })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (!mounted) return;
+        setTodayTrips(data?.todayTrips ?? []);
+        setWeeklySchedule(data?.weeklySchedule ?? []);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setTodayTrips([]);
+        setWeeklySchedule([]);
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => { mounted = false; };
   }, []);
 
-  const fetchSchedules = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch('/api/bus-ops/schedules');
-      if (res.ok) {
-        const data = await res.json();
-        setTodayTrips(data.todayTrips || []);
-        setWeeklySchedule(data.weeklySchedule || []);
-      }
-    } catch (error) {
-      console.error('Error fetching schedules:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <div className="h-44 animate-pulse rounded-lg bg-white/5" />;
   }
 
   const getStatusColor = (status: string) => {
-    if (status === 'in_progress') return 'bg-emerald-500/20 text-emerald-400';
-    if (status === 'completed') return 'bg-blue-500/20 text-blue-400';
-    return 'bg-amber-500/20 text-amber-400';
+    if (status === 'in_progress') return 'bg-emerald-400/10 text-emerald-200 border-emerald-300/20';
+    if (status === 'completed') return 'bg-cyan-400/10 text-cyan-200 border-cyan-300/20';
+    return 'bg-amber-400/10 text-amber-200 border-amber-300/20';
   };
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold text-white">My Shuttle</h1>
+    <div className="space-y-5 pb-20 lg:pb-0">
+      <div>
+        <h1 className="text-2xl font-bold text-white">Corporate Transport</h1>
+        <p className="mt-1 text-sm text-slate-400">Shuttle routes and schedules assigned to your company</p>
+      </div>
 
-      {/* View Mode Tabs */}
-      <div className="flex gap-2">
+      <div className="grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-slate-900/70 p-1">
         <button
           onClick={() => setViewMode('today')}
-          className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-            viewMode === 'today'
-              ? 'bg-blue-600 text-white'
-              : 'bg-slate-800/50 text-slate-300 border border-white/10'
+          className={`h-10 rounded-md text-sm font-semibold transition ${
+            viewMode === 'today' ? 'bg-cyan-500 text-slate-950' : 'text-slate-300 hover:bg-white/5'
           }`}
         >
-          Today's Trips
+          Today
         </button>
         <button
           onClick={() => setViewMode('weekly')}
-          className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-            viewMode === 'weekly'
-              ? 'bg-blue-600 text-white'
-              : 'bg-slate-800/50 text-slate-300 border border-white/10'
+          className={`h-10 rounded-md text-sm font-semibold transition ${
+            viewMode === 'weekly' ? 'bg-cyan-500 text-slate-950' : 'text-slate-300 hover:bg-white/5'
           }`}
         >
           Weekly Schedule
         </button>
       </div>
 
-      {/* Today's Trips */}
       {viewMode === 'today' && (
         <div className="space-y-3">
-          {todayTrips.length > 0 ? (
-            todayTrips.map((trip) => (
-              <div key={trip.id} className="bg-slate-800/50 border border-white/10 rounded-xl p-4">
-                <div className="flex items-start justify-between mb-3">
+          {todayTrips.length > 0 ? todayTrips.map((trip) => (
+            <div key={trip.id} className="rounded-lg border border-white/10 bg-slate-900/70 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex gap-3">
+                  <BusFront className="mt-1 h-6 w-6 text-cyan-200" />
                   <div>
-                    <p className="text-white font-semibold text-sm">{trip.route}</p>
-                    <p className="text-slate-400 text-xs mt-1">
-                      Departure: <span className="text-white font-medium">{trip.departureTime}</span>
+                    <p className="font-semibold text-white">{trip.route}</p>
+                    <p className="mt-2 flex items-center gap-2 text-sm text-slate-400">
+                      <Clock className="h-4 w-4" />
+                      {trip.departureTime}
+                    </p>
+                    <p className="mt-1 flex items-center gap-2 text-sm text-slate-400">
+                      <MapPin className="h-4 w-4" />
+                      {trip.boardingStop}
                     </p>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(trip.status)}`}>
-                    {trip.status.replace('_', ' ')}
-                  </span>
                 </div>
-                <div className="space-y-2 mb-4 text-xs text-slate-300">
-                  <p>📍 Boarding Stop: {trip.boardingStop}</p>
-                  <p>🚌 Vehicle: {trip.vehicle}</p>
-                </div>
-                {trip.status === 'scheduled' && (
-                  <button className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium py-2 rounded-lg transition-all">
-                    Mark Attendance
-                  </button>
-                )}
+                <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${getStatusColor(trip.status)}`}>
+                  {trip.status.replace('_', ' ')}
+                </span>
               </div>
-            ))
-          ) : (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <span className="text-4xl mb-2">🚌</span>
-              <p className="text-slate-400 text-sm">No trips scheduled for today</p>
             </div>
+          )) : (
+            <EmptyState label="No trips scheduled for today" />
           )}
         </div>
       )}
 
-      {/* Weekly Schedule */}
       {viewMode === 'weekly' && (
         <div className="space-y-3">
-          {weeklySchedule.length > 0 ? (
-            weeklySchedule.map((item) => (
-              <div key={item.id} className="bg-slate-800/50 border border-white/10 rounded-xl p-4">
-                <p className="text-white font-semibold text-sm mb-2">{item.day}</p>
-                <div className="space-y-2 text-xs text-slate-300">
-                  <p>Route: <span className="text-white font-medium">{item.route}</span></p>
-                  <p>Departure: <span className="text-white font-medium">{item.departureTime}</span></p>
-                  <p>Stop: <span className="text-white font-medium">{item.boardingStop}</span></p>
+          {weeklySchedule.length > 0 ? weeklySchedule.map((item) => (
+            <div key={item.id} className="rounded-lg border border-white/10 bg-slate-900/70 p-4">
+              <div className="flex items-start gap-3">
+                <CalendarDays className="mt-1 h-6 w-6 text-cyan-200" />
+                <div>
+                  <p className="font-semibold text-white">{item.day}</p>
+                  <p className="mt-2 text-sm text-slate-400">{item.route}</p>
+                  <p className="mt-1 text-sm text-slate-400">{item.departureTime} from {item.boardingStop}</p>
                 </div>
               </div>
-            ))
-          ) : (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <span className="text-4xl mb-2">📅</span>
-              <p className="text-slate-400 text-sm">No weekly schedule available</p>
             </div>
+          )) : (
+            <EmptyState label="No weekly schedule available" />
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function EmptyState({ label }: { label: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center rounded-lg border border-white/10 bg-slate-900/70 py-12 text-center">
+      <SearchX className="mb-3 h-10 w-10 text-slate-500" />
+      <p className="text-sm text-slate-400">{label}</p>
     </div>
   );
 }

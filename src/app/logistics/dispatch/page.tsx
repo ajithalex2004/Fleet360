@@ -1,6 +1,19 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
+import {
+  combineMasterOptions,
+  masterLabel,
+  masterValue,
+  LogisticsMessage,
+  readLogisticsApiError,
+  ShipmentValidationSummary,
+  type LogisticsApiError,
+  type LogisticsComplianceBlocker,
+  useLogisticsMasterData,
+  useShipmentValidation,
+  validateShipmentPayload,
+} from '@/components/logistics/master-data-fields';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -38,6 +51,16 @@ function parseNotes(notes: string | null): {
   try { return JSON.parse(notes); } catch { return { cargo: notes }; }
 }
 
+function localDateTime(hoursFromNow = 0) {
+  const date = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 16);
+}
+
+function toIsoOrNull(value: string) {
+  return value ? new Date(value).toISOString() : null;
+}
+
 // ── 10-stage lifecycle ────────────────────────────────────────────────────────
 
 type StageKey =
@@ -66,7 +89,7 @@ const STAGES: Stage[] = [
   { status: 'APPROVED',         label: 'Approved',          icon: '✅', phase: 'pre',
     color: 'text-sky-400',     bg: 'bg-sky-500/5',     headerBg: 'bg-sky-500/10 border-sky-500/20',
     nextStatus: 'ASSIGNED',     nextLabel: 'Assign' },
-  { status: 'ASSIGNED',         label: 'Assigned',          icon: '👤', phase: 'pre',
+  { status: 'ASSIGNED',         label: 'Assigned',          icon: '🤵', phase: 'pre',
     color: 'text-violet-400',  bg: 'bg-violet-500/5',  headerBg: 'bg-violet-500/10 border-violet-500/20',
     nextStatus: 'DISPATCHED',   nextLabel: 'Dispatch' },
   { status: 'DISPATCHED',       label: 'Dispatched',        icon: '🚦', phase: 'transit',
@@ -136,6 +159,15 @@ function AssignModal({
   const [note,        setNote]        = useState('');
   const [saving,      setSaving]      = useState(false);
   const [error,       setError]       = useState('');
+  const [apiError,    setApiError]    = useState<LogisticsApiError | null>(null);
+  const [complianceBlockers, setComplianceBlockers] = useState<LogisticsComplianceBlocker[]>([]);
+  const [overrideReason, setOverrideReason] = useState('');
+  const masterData = useLogisticsMasterData(['PICKUP_LOCATION', 'AIRPORT', 'COUNTRY']);
+  const locationOptions = combineMasterOptions(
+    masterData.optionsFor('PICKUP_LOCATION'),
+    masterData.optionsFor('AIRPORT'),
+    masterData.optionsFor('COUNTRY'),
+  );
 
   useEffect(() => {
     Promise.all([
@@ -150,9 +182,11 @@ function AssignModal({
   const handle = async () => {
     setSaving(true);
     setError('');
+    setApiError(null);
     try {
       const selectedDriver  = drivers.find(d => d.id === driverId);
       const selectedVehicle = vehicles.find(v => v.id === vehicleId);
+      const requestOverride = complianceBlockers.length > 0 && overrideReason.trim().length > 0;
       const res = await fetch(`/api/logistics/trips/${booking.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -164,9 +198,16 @@ function AssignModal({
           driverId:     driverId  || undefined,
           driverName:   selectedDriver  ? `${selectedDriver.firstName} ${selectedDriver.lastName}` : undefined,
           vehiclePlate: selectedVehicle?.plateNumber ?? undefined,
+          overrideCompliance: requestOverride,
+          overrideReason: requestOverride ? overrideReason.trim() : undefined,
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const parsed = await readLogisticsApiError(res);
+        setApiError(parsed);
+        setComplianceBlockers(parsed.blockers);
+        return;
+      }
       // Also patch origin/destination if changed
       if (origin !== notes.origin || destination !== notes.destination) {
         const notesObj = { ...notes, origin, destination };
@@ -176,6 +217,8 @@ function AssignModal({
           body: JSON.stringify({ notes: JSON.stringify(notesObj) }),
         });
       }
+      setComplianceBlockers([]);
+      setOverrideReason('');
       onDone();
       onClose();
     } catch (e) {
@@ -229,13 +272,23 @@ function AssignModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Origin</label>
-              <input value={origin} onChange={e => setOrigin(e.target.value)} placeholder="Pickup location"
-                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40" />
+              <select value={origin} onChange={e => setOrigin(e.target.value)}
+                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40">
+                <option value="">{masterData.loading ? 'Loading locations...' : 'Select origin'}</option>
+                {locationOptions.map(item => (
+                  <option key={`origin-${item.type}-${item.id}`} value={masterValue(item)}>{masterLabel(item)}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Destination</label>
-              <input value={destination} onChange={e => setDestination(e.target.value)} placeholder="Delivery location"
-                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40" />
+              <select value={destination} onChange={e => setDestination(e.target.value)}
+                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40">
+                <option value="">{masterData.loading ? 'Loading locations...' : 'Select destination'}</option>
+                {locationOptions.map(item => (
+                  <option key={`destination-${item.type}-${item.id}`} value={masterValue(item)}>{masterLabel(item)}</option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -246,7 +299,41 @@ function AssignModal({
           </div>
         </div>
 
-        {error && (
+        {apiError && (
+          <LogisticsMessage
+            type={apiError.code === 'LOGISTICS_OVERRIDE_APPROVAL_REQUIRED' ? 'warning' : 'error'}
+            title={apiError.code === 'LOGISTICS_OVERRIDE_APPROVAL_REQUIRED' ? 'Approval queued' : 'Dispatch action blocked'}
+            message={apiError.message}
+            issues={apiError.issues}
+            warnings={apiError.warnings}
+            blockers={apiError.blockers}
+            approvalRequest={apiError.approvalRequest}
+          />
+        )}
+
+        {complianceBlockers.length > 0 && apiError?.code !== 'LOGISTICS_OVERRIDE_APPROVAL_REQUIRED' && (
+          <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-amber-200">
+              Super Admin override reason
+            </p>
+            <textarea
+              value={overrideReason}
+              onChange={event => setOverrideReason(event.target.value)}
+              rows={3}
+              placeholder="Explain why dispatch should proceed despite the listed compliance blockers."
+              className="w-full rounded-xl border border-amber-400/30 bg-slate-950/70 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-amber-300 focus:outline-none"
+            />
+            <p className="text-xs text-amber-100/80">
+              Saving again will queue an approval request. Dispatch executes only after approval.
+            </p>
+          </div>
+        )}
+
+        {!apiError && error && (
+          <LogisticsMessage type="error" title="Dispatch action failed" message={error} />
+        )}
+
+        {false && !apiError && error && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-2.5 text-red-400 text-xs">⚠️ {error}</div>
         )}
 
@@ -257,7 +344,11 @@ function AssignModal({
           </button>
           <button onClick={handle} disabled={saving}
             className={`flex-1 py-2.5 rounded-xl text-white font-semibold text-sm transition-colors disabled:opacity-40 ${stageInfo?.headerBg ?? 'bg-amber-500/20 border-amber-500/30'} border`}>
-            {saving ? 'Saving…' : `${stageInfo?.icon} ${stageInfo?.nextLabel ?? stageInfo?.label}`}
+            {saving
+              ? 'Saving...'
+              : complianceBlockers.length > 0 && overrideReason.trim()
+                ? 'Request override approval'
+                : `${stageInfo?.icon} ${stageInfo?.nextLabel ?? stageInfo?.label}`}
           </button>
         </div>
       </div>
@@ -322,51 +413,108 @@ function StatusTimeline({ bookingId, onClose }: { bookingId: string; onClose: ()
 // ── New Trip Modal ────────────────────────────────────────────────────────────
 
 function NewTripModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const masterData = useLogisticsMasterData(['CUSTOMER', 'SHIPPER', 'PICKUP_LOCATION', 'AIRPORT', 'COUNTRY', 'SERVICE_TYPE']);
   const [form, setForm] = useState({
     requestorName: '', origin: '', destination: '', cargo: '',
-    shipmentType: '', startDate: new Date().toISOString().slice(0, 10),
+    shipmentType: 'FTL',
+    pickupWindowFrom: localDateTime(1),
+    pickupWindowTo: localDateTime(3),
+    deliveryWindowFrom: localDateTime(6),
+    deliveryWindowTo: localDateTime(10),
   });
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
+  const [apiError, setApiError] = useState<LogisticsApiError | null>(null);
+
+  const customerOptions = combineMasterOptions(masterData.optionsFor('CUSTOMER'), masterData.optionsFor('SHIPPER'));
+  const locationOptions = combineMasterOptions(masterData.optionsFor('PICKUP_LOCATION'), masterData.optionsFor('AIRPORT'), masterData.optionsFor('COUNTRY'));
+  const serviceTypeOptions = masterData.optionsFor('SERVICE_TYPE');
+
+  const shipmentPayload = useMemo(() => ({
+    cargoOwnerName: form.requestorName || null,
+    pickupWindowFrom: toIsoOrNull(form.pickupWindowFrom),
+    pickupWindowTo: toIsoOrNull(form.pickupWindowTo),
+    deliveryWindowFrom: toIsoOrNull(form.deliveryWindowFrom),
+    deliveryWindowTo: toIsoOrNull(form.deliveryWindowTo),
+    shipmentType: form.shipmentType || null,
+    originName: form.origin || null,
+    destinationName: form.destination || null,
+    stops: [
+      {
+        sequenceNo: 1,
+        stopType: 'PICKUP',
+        locationName: form.origin || null,
+        plannedArrivalAt: toIsoOrNull(form.pickupWindowFrom),
+        plannedDepartAt: toIsoOrNull(form.pickupWindowTo),
+      },
+      {
+        sequenceNo: 2,
+        stopType: 'DELIVERY',
+        locationName: form.destination || null,
+        plannedArrivalAt: toIsoOrNull(form.deliveryWindowFrom),
+        plannedDepartAt: toIsoOrNull(form.deliveryWindowTo),
+      },
+    ],
+  }), [form]);
+  const validation = useShipmentValidation(shipmentPayload, masterData.tenantId);
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(prev => ({ ...prev, [k]: e.target.value }));
 
   const handleCreate = async () => {
-    if (!form.startDate) { setError('Start date is required'); return; }
-    setSaving(true); setError('');
+    if (!masterData.tenantId) { setError('Tenant context is still loading. Please try again.'); return; }
+    if (!form.pickupWindowFrom) { setError('Pickup ready time is required'); return; }
+    setSaving(true); setError(''); setApiError(null);
     try {
+      const validationResult = await validateShipmentPayload(shipmentPayload, masterData.tenantId);
+      if (!validationResult.ok) {
+        setError(validationResult.issues.join(' '));
+        return;
+      }
       const ref = `LOG-${Date.now().toString(36).toUpperCase()}`;
-      const res = await fetch('/api/bookings', {
+      const res = await fetch(`/api/logistics/shipments?tenantId=${encodeURIComponent(masterData.tenantId)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          bookingRef: ref, serviceType: 'LOGISTICS',
-          requestorName: form.requestorName || 'Operations',
-          startDate: new Date(form.startDate).toISOString(),
+          ...shipmentPayload,
+          shipmentNo: ref,
+          cargoOwnerName: form.requestorName || 'Operations',
           status: 'PENDING',
+          sourceChannel: 'dispatch-board',
           notes: JSON.stringify({
             origin: form.origin, destination: form.destination,
             cargo: form.cargo, shipmentType: form.shipmentType,
           }),
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const parsed = await readLogisticsApiError(res);
+        setApiError(parsed);
+        throw new Error(parsed.message);
+      }
       onCreated(); onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create trip');
     } finally { setSaving(false); }
   };
 
+  const fallbackServiceTypes = ['FTL','LTL','EXPRESS','REEFER'].map(code => ({
+    id: code,
+    type: 'SERVICE_TYPE',
+    code,
+    label: code,
+    status: 'ACTIVE',
+  }));
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-slate-900 border border-white/20 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4">
+      <div className="bg-slate-900 border border-white/20 rounded-2xl p-6 w-full max-w-2xl shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-bold text-white">➕ New Logistics Trip</h3>
           <button onClick={onClose} className="text-slate-500 hover:text-white text-xl leading-none">✕</button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="hidden grid-cols-2 gap-3">
           {[
             { key: 'requestorName', label: 'Customer / Requestor', span: true, placeholder: 'Company or person' },
             { key: 'origin',        label: 'Origin',               span: false, placeholder: 'Pickup address' },
@@ -391,7 +539,88 @@ function NewTripModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
           </div>
         </div>
 
-        {error && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2">
+            <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Customer / Requestor</label>
+            <select value={form.requestorName} onChange={set('requestorName')}
+              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40">
+              <option value="">{masterData.loading ? 'Loading customers...' : 'Select customer / shipper'}</option>
+              {customerOptions.map(item => <option key={`${item.type}-${item.code}`} value={masterValue(item)}>{masterLabel(item)}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Origin</label>
+            <select value={form.origin} onChange={set('origin')}
+              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40">
+              <option value="">Select origin</option>
+              {locationOptions.map(item => <option key={`origin-${item.type}-${item.code}`} value={masterValue(item)}>{masterLabel(item)}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Destination</label>
+            <select value={form.destination} onChange={set('destination')}
+              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40">
+              <option value="">Select destination</option>
+              {locationOptions.map(item => <option key={`destination-${item.type}-${item.code}`} value={masterValue(item)}>{masterLabel(item)}</option>)}
+            </select>
+          </div>
+          <div className="col-span-2">
+            <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Cargo Description</label>
+            <textarea value={form.cargo} onChange={set('cargo')} rows={2} placeholder="What is being transported?"
+              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Service Type</label>
+            <select value={form.shipmentType} onChange={set('shipmentType')}
+              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40">
+              <option value="">Select service type</option>
+              {(serviceTypeOptions.length ? serviceTypeOptions : fallbackServiceTypes).map(item => (
+                <option key={`${item.type}-${item.code}`} value={item.code}>{masterLabel(item)}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Pickup Ready</label>
+            <input type="datetime-local" value={form.pickupWindowFrom} onChange={set('pickupWindowFrom')}
+              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Pickup Deadline</label>
+            <input type="datetime-local" value={form.pickupWindowTo} onChange={set('pickupWindowTo')}
+              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Delivery ETA</label>
+            <input type="datetime-local" value={form.deliveryWindowFrom} onChange={set('deliveryWindowFrom')}
+              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Delivery Deadline</label>
+            <input type="datetime-local" value={form.deliveryWindowTo} onChange={set('deliveryWindowTo')}
+              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40" />
+          </div>
+        </div>
+
+        {masterData.error && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-2.5 text-amber-200 text-xs">{masterData.error}</div>
+        )}
+        <ShipmentValidationSummary result={validation.result} validating={validation.validating} />
+
+        {apiError && (
+          <LogisticsMessage
+            type="error"
+            title="Shipment validation failed"
+            message={apiError.message}
+            issues={apiError.issues}
+            warnings={apiError.warnings}
+          />
+        )}
+
+        {!apiError && error && (
+          <LogisticsMessage type="error" title="Shipment creation failed" message={error} />
+        )}
+
+        {false && error && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-2.5 text-red-400 text-xs">⚠️ {error}</div>
         )}
         <div className="flex gap-3">
@@ -399,8 +628,8 @@ function NewTripModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
             className="flex-1 py-2.5 rounded-xl border border-white/10 text-slate-300 text-sm hover:bg-slate-800 transition-colors">
             Cancel
           </button>
-          <button onClick={handleCreate} disabled={saving}
-            className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-white font-semibold text-sm transition-colors disabled:opacity-40">
+          <button onClick={handleCreate} disabled={saving || !validation.result.ok}
+            className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-sm transition-colors disabled:opacity-40">
             {saving ? 'Creating…' : '➕ Create Trip'}
           </button>
         </div>
@@ -470,7 +699,7 @@ function BookingCard({
       {(notes.vehiclePlate || notes.driverName) && (
         <div className="text-xs space-y-0.5">
           {notes.vehiclePlate && <p className="text-amber-400">🚛 {notes.vehiclePlate}</p>}
-          {notes.driverName   && <p className="text-blue-400">👤 {notes.driverName}</p>}
+          {notes.driverName   && <p className="text-blue-400">🤵 {notes.driverName}</p>}
         </div>
       )}
 
@@ -606,22 +835,35 @@ export default function LogisticsDispatchPage() {
   const [transitioning,  setTransitioning]  = useState<string | null>(null);
   const [lastRefresh,    setLastRefresh]    = useState<Date>(new Date());
   const [phase,          setPhase]          = useState<PhaseFilter>('all');
+  const [loadError,      setLoadError]      = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  // withBackfill: only the FIRST load reconciles legacy bookings into shipment
+  // orders (an expensive, write-heavy pass). The 30s polls skip it so they stay
+  // fast and reliable. Re-running the backfill on every poll made the board's
+  // GET time out under DB latency — and because the old code swallowed the
+  // error silently, a freshly-created trip simply never appeared with no hint
+  // as to why. That was the "New Trip not reflecting on the Dispatch Board" bug.
+  const load = useCallback(async (withBackfill = false) => {
     try {
-      const res = await fetch('/api/bookings?serviceType=LOGISTICS&limit=500', { cache: 'no-store' });
-      if (res.ok) {
-        const data = await res.json();
-        setBookings(Array.isArray(data) ? data : data.data ?? []);
-        setLastRefresh(new Date());
+      const url = `/api/logistics/shipments?view=booking&limit=500${withBackfill ? '' : '&autoBackfill=false'}`;
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) {
+        setLoadError(`Couldn’t refresh the board (server returned ${res.status}). Showing the last loaded data — retrying shortly.`);
+        return;
       }
-    } catch { /* silent */ }
+      const data = await res.json();
+      setBookings(Array.isArray(data) ? data : data.data ?? []);
+      setLoadError(null);
+      setLastRefresh(new Date());
+    } catch {
+      setLoadError('Couldn’t reach the server to refresh the board. Showing the last loaded data — retrying shortly.');
+    }
     finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
-    load();
-    const t = setInterval(load, 30_000);
+    load(true);                                   // first load reconciles legacy bookings
+    const t = setInterval(() => load(false), 30_000);  // polls skip the heavy backfill
     return () => clearInterval(t);
   }, [load]);
 
@@ -700,6 +942,19 @@ export default function LogisticsDispatchPage() {
             </button>
           </div>
         </div>
+
+        {/* Load-error banner — surfaces a failed refresh instead of silently
+            showing stale data (which is how a freshly-created trip used to
+            appear "missing"). */}
+        {loadError && (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-300">
+            <span>⚠️ {loadError}</span>
+            <button onClick={() => load(false)}
+              className="whitespace-nowrap rounded-lg border border-amber-500/40 px-3 py-1 text-xs font-medium text-amber-200 hover:bg-amber-500/20">
+              Retry now
+            </button>
+          </div>
+        )}
 
         {/* SLA Alert Banner */}
         <SlaAlertBanner />

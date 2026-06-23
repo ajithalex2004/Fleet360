@@ -35,7 +35,7 @@ interface Job {
   status: JobStatus; origin_address?: string; destination_address?: string;
   origin_lat?: number; origin_lng?: number; dest_lat?: number; dest_lng?: number;
   assigned_driver_id?: string; assigned_vehicle_id?: string;
-  created_at: string; updated_at: string; attempt_count: number; sla_deadline?: string;
+  created_at: string; updated_at?: string; attempt_count?: number; current_attempt?: number; max_attempts?: number; passenger_count?: number; scheduled_pickup?: string; sla_deadline?: string;
 }
 interface Driver {
   driver_id: string; driver_name: string; driver_phone?: string; driver_rating?: number;
@@ -480,7 +480,7 @@ export default function CommandCentre() {
       // Filter out SCHOOL_BUS and AMBULANCE — each has a dedicated dispatch board:
       //   SCHOOL_BUS → /school-bus/dispatch
       //   AMBULANCE  → /incidents/ambulance/dispatch
-      setJobs((jr.data??[]).filter((j:Job)=>j.service_type!=='SCHOOL_BUS'&&j.service_type!=='AMBULANCE' as any));
+      setJobs((jr.data??[]).filter((j:Job)=>String(j.service_type)!=='SCHOOL_BUS'&&String(j.service_type)!=='AMBULANCE'));
       setDrivers(dr.data??[]);
     } finally { setLoading(false); }
   },[]);
@@ -504,7 +504,7 @@ export default function CommandCentre() {
           id:           String(s.job_b_id),
           tenant_id:    tenantId,
           service_type: String(s.job_b_service_type ?? 'PASSENGER') as Job['service_type'],
-          priority:     String(s.job_b_priority     ?? 'NORMAL'),
+          priority:     String(s.job_b_priority     ?? 'NORMAL') as Job['priority'],
           status:       String(s.job_b_status        ?? 'PENDING') as Job['status'],
           origin_lat:   s.job_b_origin_lat  != null ? Number(s.job_b_origin_lat)  : undefined,
           origin_lng:   s.job_b_origin_lng  != null ? Number(s.job_b_origin_lng)  : undefined,
@@ -868,7 +868,7 @@ export default function CommandCentre() {
             {(['vehicles','drivers'] as const).map(t=>(
               <button key={t} onClick={()=>setRightTab(t)}
                 className={`flex-1 py-3 text-sm font-bold border-b-2 -mb-px transition-all ${rightTab===t?'text-white border-blue-500':'text-slate-500 border-transparent hover:text-slate-300'}`}>
-                {t==='vehicles'?'🚗 Vehicles':'👤 Drivers'}
+                {t==='vehicles'?'🚗 Vehicles':'🤵 Drivers'}
               </button>
             ))}
           </div>

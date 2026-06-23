@@ -1,17 +1,21 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import PasswordInput from '@/components/ui/PasswordInput';
+import { MODULE_ACCESS_PRESETS, type ModuleAccessPreset } from '@/lib/module-access-presets';
 
 const ALL_MODULES = [
-  'fleet', 'driver', 'rental', 'leasing', 'maintenance',
-  'finance', 'bus-ops', 'staff', 'logistics', 'booking',
-  'compliance', 'admin',
+  'leasing', 'rac', 'bus_ops', 'fleet', 'maintenance',
+  'finance', 'drivers', 'compliance', 'reports', 'admin',
 ] as const;
 type ModuleKey = typeof ALL_MODULES[number];
 
-const MODULE_META: Record<ModuleKey, { label: string; icon: string; color: string }> = {
+const MODULE_META: Record<string, { label: string; icon: string; color: string }> = {
+  drivers:     { label: 'Drivers',       icon: 'D', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' },
+  rac:         { label: 'Rental (RAC)',  icon: 'R', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+  bus_ops:     { label: 'Staff Transport', icon: 'B', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
+  reports:     { label: 'Reports',       icon: 'R', color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' },
   fleet:       { label: 'Fleet',         icon: '🚗', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
-  driver:      { label: 'Driver',        icon: '👤', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' },
+  driver:      { label: 'Driver',        icon: '🤵', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' },
   rental:      { label: 'Rental (RAC)',  icon: '🔑', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
   leasing:     { label: 'Leasing',       icon: '📄', color: 'bg-violet-500/20 text-violet-400 border-violet-500/30' },
   maintenance: { label: 'Maintenance',   icon: '🔧', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
@@ -34,17 +38,34 @@ interface User {
   department?: string;
   position?: string;
   isActive: boolean;
-  moduleAccess: Partial<Record<ModuleKey, { role: string }>> | null;
+  moduleAccess: Partial<Record<ModuleKey, { role: ModuleAccessPreset; permissions?: string[] }>> | null;
+  tenants?: Array<{
+    tenantId: string;
+    tenantName: string;
+    tenantCode?: string | null;
+    roleId: string;
+    roleName: string;
+    roleCode: string;
+    isActive: boolean;
+  }>;
   lastLoginAt?: string | null;
   createdAt: string;
 }
 
 interface Role   { id: string; name: string; code: string; isSystem?: boolean }
 interface Tenant { id: string; name: string; code?: string }
+interface Invitation {
+  id: string;
+  tenantName?: string | null;
+  email: string;
+  roleName?: string | null;
+  status: 'pending' | 'accepted' | 'revoked' | 'expired';
+  invitedBy?: string | null;
+  createdAt: string;
+  expiresAt: string;
+}
 
 const USER_TYPES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'STAFF', 'DRIVER', 'CUSTOMER', 'VIEWER'];
-const MODULE_ROLES = ['admin', 'manager', 'operator', 'viewer'];
-
 const EMPTY_USER = {
   username: '', email: '', firstName: '', lastName: '', department: '',
   position: '', userType: 'STAFF', isActive: true,
@@ -54,8 +75,10 @@ export default function UsersPage() {
   const [users, setUsers]     = useState<User[]>([]);
   const [roles, setRoles]     = useState<Role[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [search, setSearch]   = useState('');
-  const [activeFilter, setActiveFilter] = useState<'' | 'true' | 'false'>('');
+  const [activeFilter, setActiveFilter] = useState<'' | 'true' | 'false'>('true');
   const [moduleFilter, setModuleFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
@@ -67,13 +90,21 @@ export default function UsersPage() {
   const [showEdit, setShowEdit]       = useState<User | null>(null);
   const [showAssign, setShowAssign]   = useState<User | null>(null);
   const [showModules, setShowModules] = useState<User | null>(null);
+  const [deleteUser, setDeleteUser]   = useState<User | null>(null);
+  const [showImport, setShowImport]   = useState(false);
+  const [confirmBulkDeactivate, setConfirmBulkDeactivate] = useState(false);
 
   const [userForm, setUserForm]   = useState(EMPTY_USER);
   const [editForm, setEditForm]   = useState<Partial<User & { newPassword: string }>>({});
   const [assignForm, setAssignForm] = useState({ tenantId: '', roleId: '' });
+  const [createTenantId, setCreateTenantId] = useState('');
+  const [createRoleId, setCreateRoleId] = useState('');
 
   // Module access editor state (for showModules modal)
-  const [moduleEdits, setModuleEdits] = useState<Partial<Record<ModuleKey, { role: string } | null>>>({});
+  const [moduleEdits, setModuleEdits] = useState<Partial<Record<ModuleKey, { role: ModuleAccessPreset } | null>>>({});
+  const [importTenantId, setImportTenantId] = useState('');
+  const [importRoleId, setImportRoleId] = useState('');
+  const [importText, setImportText] = useState('email,username,firstName,lastName,department,position\n');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,12 +117,15 @@ export default function UsersPage() {
         fetch('/api/admin/roles'),
         fetch('/api/admin/tenants'),
       ]);
+      const invRes = await fetch('/api/admin/invitations?status=pending').catch(() => null);
       const uData = await uRes.json();
       const rData = await rRes.json().catch(() => []);
       const tData = await tRes.json().catch(() => []);
+      const invData = invRes?.ok ? await invRes.json().catch(() => ({})) : {};
       setUsers(Array.isArray(uData) ? uData : []);
       setRoles(Array.isArray(rData) ? rData : []);
       setTenants(Array.isArray(tData) ? tData : []);
+      setInvitations(Array.isArray(invData.invitations) ? invData.invitations : []);
       setError('');
     } catch { setError('Failed to load users'); }
     finally { setLoading(false); }
@@ -110,16 +144,77 @@ export default function UsersPage() {
     );
   });
 
+  const toggleSelected = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDeactivate = async () => {
+    if (selectedIds.size === 0) return;
+    setConfirmBulkDeactivate(true);
+  };
+
+  const performBulkDeactivate = async () => {
+    if (selectedIds.size === 0) return;
+    setSaving(true); setFormError('');
+    try {
+      const res = await fetch('/api/admin/users/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'deactivate', userIds: [...selectedIds] }),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error ?? 'Bulk deactivate failed'); }
+      setSelectedIds(new Set());
+      setConfirmBulkDeactivate(false);
+      load();
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Bulk deactivate failed');
+    } finally { setSaving(false); }
+  };
+
+  const handleImport = async () => {
+    setSaving(true); setFormError('');
+    try {
+      const lines = importText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const [headerLine, ...rows] = lines;
+      const headers = headerLine.split(',').map(h => h.trim());
+      const users = rows.map(row => {
+        const cols = row.split(',').map(c => c.trim());
+        return Object.fromEntries(headers.map((h, i) => [h, cols[i] ?? '']));
+      });
+      const res = await fetch('/api/admin/users/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'import', tenantId: importTenantId || undefined, roleId: importRoleId, users }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Import failed');
+      setShowImport(false);
+      load();
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Import failed');
+    } finally { setSaving(false); }
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true); setFormError('');
     try {
       const res = await fetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...userForm, moduleAccess: {} }),
+        body: JSON.stringify({
+          ...userForm,
+          tenantId: createTenantId || undefined,
+          roleId: createRoleId || undefined,
+          moduleAccess: {},
+        }),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? 'Failed'); }
-      setShowCreate(false); setUserForm(EMPTY_USER); load();
+      setShowCreate(false); setUserForm(EMPTY_USER); setCreateTenantId(''); setCreateRoleId(''); load();
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : 'Failed to create user');
     } finally { setSaving(false); }
@@ -132,6 +227,23 @@ export default function UsersPage() {
       body: JSON.stringify({ isActive: !u.isActive }),
     });
     load();
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteUser) return;
+    setSaving(true);
+    setFormError('');
+    try {
+      const res = await fetch(`/api/admin/users/${deleteUser.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Failed to delete user');
+      setDeleteUser(null);
+      setUsers(prev => prev.filter(u => u.id !== deleteUser.id));
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Failed to delete user');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleAssign = async (e: React.FormEvent) => {
@@ -217,7 +329,7 @@ export default function UsersPage() {
     if (!showModules) return;
     setSaving(true); setFormError('');
     // Filter out nulls (removed modules)
-    const access: Partial<Record<ModuleKey, { role: string }>> = {};
+    const access: Partial<Record<ModuleKey, { role: ModuleAccessPreset }>> = {};
     for (const [k, v] of Object.entries(moduleEdits)) {
       if (v !== null && v !== undefined) access[k as ModuleKey] = v;
     }
@@ -250,10 +362,22 @@ export default function UsersPage() {
           <h1 className="text-3xl font-bold text-white">User Management</h1>
           <p className="text-slate-400 mt-1">{users.length} users — global identity &amp; module access control</p>
         </div>
-        <button onClick={() => { setShowCreate(true); setFormError(''); }}
-          className="px-5 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl font-semibold text-sm hover:opacity-90">
-          + New User
-        </button>
+        <div className="flex items-center gap-2">
+          {selectedIds.size > 0 && (
+            <button onClick={handleBulkDeactivate} disabled={saving}
+              className="px-4 py-2.5 bg-rose-500/20 border border-rose-500/30 text-rose-300 rounded-xl font-semibold text-sm hover:bg-rose-500/30 disabled:opacity-50">
+              Deactivate {selectedIds.size}
+            </button>
+          )}
+          <button onClick={() => { setShowImport(true); setFormError(''); }}
+            className="px-4 py-2.5 bg-slate-700 text-white rounded-xl font-semibold text-sm hover:bg-slate-600">
+            Import
+          </button>
+          <button onClick={() => { setShowCreate(true); setCreateRoleId(roles[0]?.id ?? ''); setFormError(''); }}
+            className="px-5 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl font-semibold text-sm hover:opacity-90">
+            + New User
+          </button>
+        </div>
       </div>
 
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
@@ -265,9 +389,9 @@ export default function UsersPage() {
           className="flex-1 min-w-[200px] bg-slate-800/60 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-violet-500/50" />
         <select value={activeFilter} onChange={e => setActiveFilter(e.target.value as '' | 'true' | 'false')}
           className="bg-slate-800/60 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none">
+          <option value="true">Active Users</option>
+          <option value="false">Inactive / Deleted</option>
           <option value="">All Users</option>
-          <option value="true">Active Only</option>
-          <option value="false">Inactive Only</option>
         </select>
         <select value={moduleFilter} onChange={e => setModuleFilter(e.target.value)}
           className="bg-slate-800/60 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none">
@@ -285,7 +409,7 @@ export default function UsersPage() {
             <table className="w-full text-sm">
               <thead className="bg-slate-800/60 border-b border-white/10">
                 <tr>
-                  {['Name', 'Username', 'Email', 'Dept / Type', 'Status', 'Module Access', 'Last Login', 'Actions'].map(h => (
+                  {['', 'Name', 'Username', 'Email', 'Dept / Type', 'Status', 'Tenant Roles', 'Module Access', 'Last Login', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -295,6 +419,14 @@ export default function UsersPage() {
                   const modules = u.moduleAccess ? Object.keys(u.moduleAccess) as ModuleKey[] : [];
                   return (
                     <tr key={u.id} className={`hover:bg-white/5 transition-colors ${!u.isActive ? 'opacity-60' : ''}`}>
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(u.id)}
+                          onChange={() => toggleSelected(u.id)}
+                          className="w-4 h-4 accent-violet-500"
+                        />
+                      </td>
                       <td className="px-4 py-3 font-medium text-white whitespace-nowrap">
                         {u.firstName ?? ''} {u.lastName ?? ''}
                         {!u.firstName && !u.lastName && <span className="text-slate-400">—</span>}
@@ -314,6 +446,21 @@ export default function UsersPage() {
                           <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${u.isActive ? 'translate-x-5' : ''}`} />
                         </button>
                         <div className="text-xs text-slate-500 mt-1">{u.isActive ? 'Active' : 'Inactive'}</div>
+                      </td>
+                      <td className="px-4 py-3 max-w-[220px]">
+                        <div className="flex flex-wrap gap-1">
+                          {(u.tenants ?? []).slice(0, 2).map(t => (
+                            <span key={`${t.tenantId}:${t.roleId}`} className={`px-1.5 py-0.5 rounded text-xs border ${
+                              t.isActive ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-slate-700 text-slate-500 border-white/5'
+                            }`}>
+                              {t.tenantName || t.tenantCode || t.tenantId.slice(0, 8)} · {t.roleName}
+                            </span>
+                          ))}
+                          {(u.tenants?.length ?? 0) > 2 && (
+                            <span className="px-1.5 py-0.5 rounded text-xs bg-slate-700 text-slate-400">+{(u.tenants?.length ?? 0) - 2}</span>
+                          )}
+                          {(u.tenants?.length ?? 0) === 0 && <span className="text-xs text-slate-600">No tenant</span>}
+                        </div>
                       </td>
                       <td className="px-4 py-3 max-w-[200px]">
                         <div className="flex flex-wrap gap-1">
@@ -348,6 +495,11 @@ export default function UsersPage() {
                             className="px-2.5 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors whitespace-nowrap">
                             Tenant
                           </button>
+                          <button onClick={() => { setDeleteUser(u); setFormError(''); }}
+                            disabled={!u.isActive}
+                            className="px-2.5 py-1.5 text-xs bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 rounded-lg transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed">
+                            Delete
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -360,6 +512,36 @@ export default function UsersPage() {
       </div>
 
       {/* ── Create User Modal ── */}
+      <div className="bg-slate-800/40 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
+          <div>
+            <h2 className="text-white font-semibold">Pending Invitations</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Invitation lifecycle is visible from the global user hub.</p>
+          </div>
+          <span className="text-xs text-slate-400">{invitations.length} pending</span>
+        </div>
+        {invitations.length === 0 ? (
+          <div className="px-5 py-8 text-sm text-slate-500">No pending invitations.</div>
+        ) : (
+          <div className="divide-y divide-white/5">
+            {invitations.slice(0, 10).map(inv => (
+              <div key={inv.id} className="px-5 py-3 flex items-center gap-4 text-sm">
+                <div className="flex-1 min-w-0">
+                  <p className="text-white truncate">{inv.email}</p>
+                  <p className="text-xs text-slate-500 truncate">
+                    {inv.tenantName ?? 'Current tenant'} - {inv.roleName ?? 'Role'} - invited by {inv.invitedBy ?? 'system'}
+                  </p>
+                </div>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                  {inv.status}
+                </span>
+                <span className="text-xs text-slate-500">Expires {new Date(inv.expiresAt).toLocaleDateString()}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto bg-slate-900 border border-white/10 rounded-2xl p-8">
@@ -377,12 +559,12 @@ export default function UsersPage() {
                   { l: 'Last Name',     k: 'lastName',   ph: 'Al-Mansouri' },
                   { l: 'Department',    k: 'department', ph: 'Operations' },
                   { l: 'Position',      k: 'position',   ph: 'Fleet Manager' },
-                ] as const).map(({ l, k, ph, req }) => (
+                ] as Array<{ l: string; k: keyof typeof EMPTY_USER; ph: string; req?: boolean }>).map(({ l, k, ph, req }) => (
                   <div key={k}>
                     <label className="block text-sm font-medium text-slate-300 mb-2">{l}</label>
                     <input
                       type={k === 'email' ? 'email' : 'text'}
-                      value={(userForm as Record<string, string>)[k] ?? ''}
+                      value={String(userForm[k] ?? '')}
                       onChange={e => setUserForm(p => ({ ...p, [k]: e.target.value }))}
                       placeholder={ph} required={req}
                       className="w-full px-4 py-2 rounded-xl bg-slate-800 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none text-sm"
@@ -397,10 +579,28 @@ export default function UsersPage() {
                   {USER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Tenant</label>
+                  <select value={createTenantId} onChange={e => setCreateTenantId(e.target.value)}
+                    className="w-full px-4 py-2 rounded-xl bg-slate-800 border border-white/10 text-white focus:border-violet-500 focus:outline-none text-sm">
+                    <option value="">Current tenant</option>
+                    {tenants.map(t => <option key={t.id} value={t.id}>{t.name} {t.code ? `(${t.code})` : ''}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Role *</label>
+                  <select value={createRoleId} onChange={e => setCreateRoleId(e.target.value)} required
+                    className="w-full px-4 py-2 rounded-xl bg-slate-800 border border-white/10 text-white focus:border-violet-500 focus:outline-none text-sm">
+                    <option value="">Select role</option>
+                    {roles.map(r => <option key={r.id} value={r.id}>{r.name} {r.isSystem ? '(System)' : ''}</option>)}
+                  </select>
+                </div>
+              </div>
               <div className="flex gap-4 justify-end pt-4">
                 <button type="button" onClick={() => setShowCreate(false)}
                   className="px-6 py-2.5 rounded-xl border border-white/10 text-white hover:bg-white/5 text-sm">Cancel</button>
-                <button type="submit" disabled={saving}
+                <button type="submit" disabled={saving || !createRoleId}
                   className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50 text-sm font-semibold">
                   {saving ? 'Creating…' : 'Create User'}
                 </button>
@@ -411,6 +611,48 @@ export default function UsersPage() {
       )}
 
       {/* ── Module Access Editor Modal ── */}
+      {showImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-2xl bg-slate-900 border border-white/10 rounded-2xl p-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-white">Import Users</h2>
+              <button onClick={() => setShowImport(false)} className="text-slate-400 hover:text-white text-2xl">×</button>
+            </div>
+            {formError && <div className="mb-4 bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm">{formError}</div>}
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Tenant</label>
+                <select value={importTenantId} onChange={e => setImportTenantId(e.target.value)}
+                  className="w-full px-4 py-2 rounded-xl bg-slate-800 border border-white/10 text-white text-sm">
+                  <option value="">Current tenant</option>
+                  {tenants.map(t => <option key={t.id} value={t.id}>{t.name} {t.code ? `(${t.code})` : ''}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Role *</label>
+                <select value={importRoleId} onChange={e => setImportRoleId(e.target.value)} required
+                  className="w-full px-4 py-2 rounded-xl bg-slate-800 border border-white/10 text-white text-sm">
+                  <option value="">Select role</option>
+                  {roles.map(r => <option key={r.id} value={r.id}>{r.name} {r.isSystem ? '(System)' : ''}</option>)}
+                </select>
+              </div>
+            </div>
+            <textarea value={importText} onChange={e => setImportText(e.target.value)}
+              rows={10}
+              className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-white/10 text-white text-sm font-mono"
+            />
+            <div className="flex justify-end gap-3 mt-5">
+              <button onClick={() => setShowImport(false)}
+                className="px-5 py-2.5 rounded-xl border border-white/10 text-white hover:bg-white/5 text-sm">Cancel</button>
+              <button onClick={handleImport} disabled={saving || !importRoleId}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50 text-sm font-semibold">
+                {saving ? 'Importing…' : 'Import Users'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showModules && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-900 border border-white/10 rounded-2xl">
@@ -423,7 +665,7 @@ export default function UsersPage() {
             </div>
             <div className="p-6 space-y-3">
               {formError && <div className="mb-4 bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm">{formError}</div>}
-              <p className="text-xs text-slate-500 mb-4">Toggle access to each module and set the user's role within it.</p>
+              <p className="text-xs text-slate-500 mb-4">Toggle access to each module and set the user&apos;s role within it.</p>
               {ALL_MODULES.map(mod => {
                 const meta    = MODULE_META[mod];
                 const current = moduleEdits[mod];
@@ -446,12 +688,17 @@ export default function UsersPage() {
                     {enabled && (
                       <select
                         value={current?.role ?? 'viewer'}
-                        onChange={e => setModuleEdits(p => ({ ...p, [mod]: { role: e.target.value } }))}
+                        onChange={e => setModuleEdits(p => ({ ...p, [mod]: { role: e.target.value as ModuleAccessPreset } }))}
                         className="px-3 py-1.5 rounded-lg bg-slate-700 border border-white/10 text-white text-xs focus:outline-none focus:border-violet-500"
                         onClick={e => e.stopPropagation()}
                       >
-                        {MODULE_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                        {MODULE_ACCESS_PRESETS.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
                       </select>
+                    )}
+                    {enabled && (
+                      <span className="text-[11px] text-slate-500 max-w-[220px]">
+                        {MODULE_ACCESS_PRESETS.find(p => p.key === (current?.role ?? 'viewer'))?.description}
+                      </span>
                     )}
                     {!enabled && <span className="text-xs text-slate-600">No access</span>}
                   </div>
@@ -471,6 +718,69 @@ export default function UsersPage() {
       )}
 
       {/* ── Edit User Modal ── */}
+      {deleteUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-slate-900 border border-rose-500/30 rounded-2xl shadow-2xl">
+            <div className="px-6 py-5 border-b border-white/10">
+              <h2 className="text-lg font-bold text-white">Delete User</h2>
+              <p className="text-sm text-slate-400 mt-1">This deactivates the user and keeps audit/history records intact.</p>
+            </div>
+            <div className="p-6 space-y-3">
+              {formError && <div className="bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-xl text-sm">{formError}</div>}
+              <div className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                <div className="text-sm font-semibold text-white">
+                  {deleteUser.firstName || deleteUser.lastName ? `${deleteUser.firstName ?? ''} ${deleteUser.lastName ?? ''}`.trim() : deleteUser.username}
+                </div>
+                <div className="text-xs text-slate-400 mt-1">{deleteUser.email}</div>
+                <div className="text-xs text-slate-500 mt-2">
+                  {deleteUser.tenants?.length ?? 0} tenant assignment(s), {Object.keys(deleteUser.moduleAccess ?? {}).length} module access assignment(s)
+                </div>
+              </div>
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                Existing records remain linked to this user. Use Activate later if access needs to be restored.
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-white/10 flex justify-end gap-2">
+              <button onClick={() => setDeleteUser(null)}
+                className="px-4 py-2 rounded-xl text-sm text-slate-300 hover:text-white hover:bg-white/5">
+                Cancel
+              </button>
+              <button onClick={handleDeleteUser} disabled={saving}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-sm font-semibold">
+                {saving ? 'Deleting...' : 'Delete user'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmBulkDeactivate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-slate-900 border border-rose-500/30 rounded-2xl shadow-2xl">
+            <div className="px-6 py-5 border-b border-white/10">
+              <h2 className="text-lg font-bold text-white">Deactivate Users</h2>
+              <p className="text-sm text-slate-400 mt-1">This removes login access while preserving audit and history.</p>
+            </div>
+            <div className="p-6 space-y-3">
+              {formError && <div className="bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-xl text-sm">{formError}</div>}
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                Deactivate {selectedIds.size} selected user(s)?
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-white/10 flex justify-end gap-2">
+              <button onClick={() => setConfirmBulkDeactivate(false)}
+                className="px-4 py-2 rounded-xl text-sm text-slate-300 hover:text-white hover:bg-white/5">
+                Cancel
+              </button>
+              <button onClick={performBulkDeactivate} disabled={saving}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-sm font-semibold">
+                {saving ? 'Deactivating...' : 'Deactivate users'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showEdit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto bg-slate-900 border border-white/10 rounded-2xl p-8">

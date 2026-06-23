@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { logAudit } from '@/lib/audit';
+import { requireAdminPermission, resolveTenantBoundary } from '@/lib/admin-policy';
+import { recordAdminChange } from '@/lib/admin-change-history';
 
 // ---------------------------------------------------------------------------
 // UAE Emirates
@@ -140,9 +141,14 @@ function serializeRow(row: Row): Row {
 // ---------------------------------------------------------------------------
 export async function GET(req: NextRequest) {
   await ensureTable();
+  const auth = await requireAdminPermission(req, 'view', 'branches');
+  if (auth instanceof NextResponse) return auth;
 
   const { searchParams } = new URL(req.url);
-  const tenantId        = searchParams.get('tenantId') ?? '';
+  const requestedTenantId = searchParams.get('tenantId') ?? '';
+  const tenantBoundary = resolveTenantBoundary(auth.ctx, requestedTenantId);
+  if (tenantBoundary instanceof NextResponse) return tenantBoundary;
+  const tenantId        = auth.ctx.isSuperAdmin && !requestedTenantId ? '' : tenantBoundary;
   const emirate         = searchParams.get('emirate') ?? '';
   const includeInactive = searchParams.get('includeInactive') === 'true';
 
@@ -184,11 +190,11 @@ export async function GET(req: NextRequest) {
        LEFT JOIN tenants t ON t.id::text = b.tenant_id
        LEFT JOIN LATERAL (
          SELECT COUNT(*) AS cnt FROM finance_invoices
-         WHERE branch_id = b.id AND deleted_at IS NULL
+         WHERE branch_id::text = b.id::text AND deleted_at IS NULL
        ) ic ON TRUE
        LEFT JOIN LATERAL (
          SELECT COUNT(*) AS cnt FROM vehicles
-         WHERE branch_id = b.id AND deleted_at IS NULL
+         WHERE branch_id::text = b.id::text AND deleted_at IS NULL
        ) vc ON TRUE
        WHERE ${where}
        ORDER BY b.is_default DESC, b.branch_name ASC`,
@@ -233,6 +239,8 @@ export async function GET(req: NextRequest) {
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
   await ensureTable();
+  const auth = await requireAdminPermission(req, 'create', 'branches');
+  if (auth instanceof NextResponse) return auth;
 
   try {
     const body = await req.json();
@@ -249,12 +257,14 @@ export async function POST(req: NextRequest) {
 
     if (!tenantId)   return NextResponse.json({ error: 'tenantId is required' }, { status: 400 });
     if (!branchName) return NextResponse.json({ error: 'branchName is required' }, { status: 400 });
+    const tenantBoundary = resolveTenantBoundary(auth.ctx, tenantId);
+    if (tenantBoundary instanceof NextResponse) return tenantBoundary;
 
     // If marking as default, clear existing default for this tenant
     if (isDefault) {
       await prisma.$executeRawUnsafe(
         `UPDATE tenant_branches SET is_default = FALSE WHERE tenant_id = $1 AND deleted_at IS NULL`,
-        tenantId
+        tenantBoundary
       ).catch(() => {});
     }
 
@@ -272,7 +282,7 @@ export async function POST(req: NextRequest) {
                $10,$11,$12,
                $13,$14,$15)
        RETURNING id`,
-      tenantId, branchName, nullify(emirate) ?? 'DUBAI',
+      tenantBoundary, branchName, nullify(emirate) ?? 'DUBAI',
       nullify(tradeLicenseNo), nullify(tradeLicenseAuthority),
       nullify(tradeLicenseExpiry),
       nullify(billingAddress), nullify(billingCity), nullify(billingPoBox),
@@ -280,13 +290,15 @@ export async function POST(req: NextRequest) {
       nullify(costCenterCode), isDefault, nullify(notes)
     );
 
-    // Audit log
-    logAudit({
-      tenantId: tenantId, entityType: 'Branch',
+    await recordAdminChange({
+      req,
+      ctx: auth.ctx,
+      tenantId: tenantBoundary,
+      entityType: 'Branch',
       entityId: row.id, entityName: branchName,
       action: 'CREATE',
-      details: `Branch "${branchName}" created in ${nullify(emirate) ?? 'DUBAI'}`,
-      ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? req.headers.get('x-real-ip') ?? undefined,
+      after: { tenantId: tenantBoundary, branchName, emirate, tradeLicenseNo, tradeLicenseAuthority, tradeLicenseExpiry, billingAddress, billingCity, billingPoBox, contactName, contactEmail, contactPhone, costCenterCode, isDefault, notes },
+      summary: `Branch "${branchName}" created in ${nullify(emirate) ?? 'DUBAI'}.`,
     });
 
     return NextResponse.json({ success: true, id: row.id }, { status: 201 });
@@ -302,12 +314,23 @@ export async function POST(req: NextRequest) {
 // ---------------------------------------------------------------------------
 export async function PATCH(req: NextRequest) {
   await ensureTable();
+  const auth = await requireAdminPermission(req, 'edit', 'branches');
+  if (auth instanceof NextResponse) return auth;
 
   try {
     const body = await req.json();
     const { id, tenantId, ...fields } = body;
 
     if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    const beforeRows = await prisma.$queryRawUnsafe<Row[]>(
+      `SELECT * FROM tenant_branches WHERE id = $1::uuid AND deleted_at IS NULL LIMIT 1`,
+      id,
+    );
+    const before = beforeRows[0] ? serializeRow(beforeRows[0]) : null;
+    if (!before) return NextResponse.json({ error: 'Branch not found' }, { status: 404 });
+    const tenantBoundary = resolveTenantBoundary(auth.ctx, String(before.tenant_id));
+    if (tenantBoundary instanceof NextResponse) return tenantBoundary;
+    if (tenantId && tenantId !== tenantBoundary) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const fieldMap: Record<string, string> = {
       branchName:            'branch_name',
@@ -349,20 +372,36 @@ export async function PATCH(req: NextRequest) {
     }
 
     // If marking as default, clear others for this tenant
-    if (fields.isDefault === true && tenantId) {
+    if (fields.isDefault === true) {
       await prisma.$executeRawUnsafe(
-        `UPDATE tenant_branches SET is_default = FALSE WHERE tenant_id = $1 AND id != $2 AND deleted_at IS NULL`,
-        tenantId, id
+        `UPDATE tenant_branches SET is_default = FALSE WHERE tenant_id = $1 AND id != $2::uuid AND deleted_at IS NULL`,
+        tenantBoundary, id
       ).catch(() => {});
     }
 
     values.push(id);
     const [updated] = await prisma.$queryRawUnsafe<{ id: string }[]>(
-      `UPDATE tenant_branches SET ${setClauses.join(', ')} WHERE id = $${values.length} AND deleted_at IS NULL RETURNING id`,
+      `UPDATE tenant_branches SET ${setClauses.join(', ')} WHERE id = $${values.length}::uuid AND deleted_at IS NULL RETURNING id`,
       ...values
     );
 
     if (!updated) return NextResponse.json({ error: 'Branch not found' }, { status: 404 });
+    const [afterRow] = await prisma.$queryRawUnsafe<Row[]>(
+      `SELECT * FROM tenant_branches WHERE id = $1::uuid LIMIT 1`,
+      updated.id,
+    );
+    await recordAdminChange({
+      req,
+      ctx: auth.ctx,
+      tenantId: tenantBoundary,
+      entityType: 'Branch',
+      entityId: updated.id,
+      entityName: String(afterRow?.branch_name ?? before.branch_name ?? updated.id),
+      action: 'UPDATE',
+      before,
+      after: afterRow ? serializeRow(afterRow) : { id: updated.id },
+      summary: `Updated branch ${String(afterRow?.branch_name ?? before.branch_name ?? updated.id)}.`,
+    });
 
     return NextResponse.json({ success: true, id: updated.id });
   } catch (err) {
@@ -377,10 +416,20 @@ export async function PATCH(req: NextRequest) {
 // ---------------------------------------------------------------------------
 export async function DELETE(req: NextRequest) {
   await ensureTable();
+  const auth = await requireAdminPermission(req, 'delete', 'branches');
+  if (auth instanceof NextResponse) return auth;
 
   try {
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    const beforeRows = await prisma.$queryRawUnsafe<Row[]>(
+      `SELECT * FROM tenant_branches WHERE id = $1::uuid AND deleted_at IS NULL LIMIT 1`,
+      id,
+    );
+    const before = beforeRows[0] ? serializeRow(beforeRows[0]) : null;
+    if (!before) return NextResponse.json({ error: 'Branch not found or already deleted' }, { status: 404 });
+    const tenantBoundary = resolveTenantBoundary(auth.ctx, String(before.tenant_id));
+    if (tenantBoundary instanceof NextResponse) return tenantBoundary;
 
     // Use RETURNING to confirm the row was actually found and updated
     const deleted = await prisma.$queryRawUnsafe<{ id: string }[]>(
@@ -395,12 +444,17 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Branch not found or already deleted' }, { status: 404 });
     }
 
-    // Audit log
-    logAudit({
-      entityType: 'Branch', entityId: id,
+    await recordAdminChange({
+      req,
+      ctx: auth.ctx,
+      tenantId: tenantBoundary,
+      entityType: 'Branch',
+      entityId: id,
+      entityName: String(before.branch_name ?? id),
       action: 'DELETE',
-      details: `Branch ${id} permanently deleted`,
-      ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? req.headers.get('x-real-ip') ?? undefined,
+      before,
+      after: { ...before, deleted_at: new Date().toISOString(), is_active: false },
+      summary: `Deleted branch ${String(before.branch_name ?? id)}.`,
     });
 
     return NextResponse.json({ success: true, id });

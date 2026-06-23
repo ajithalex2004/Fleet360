@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth';
+import { recordServiceConfigChange, requireServiceConfigApproval, requireServiceConfigPermission } from '@/lib/service-config/auth';
 import { ensureServiceConfigTables } from '@/lib/service-config/schema';
 import { SERVICE_TONES } from '@/types/service-config';
 import { logAudit } from '@/lib/audit';
@@ -24,10 +24,8 @@ interface TypeRow {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = authorizeServiceConfig(req);
+  const auth = await requireServiceConfigPermission(req, 'create');
   if (!auth.ok) return auth.res;
-  const adminCheck = requireAdmin(auth);
-  if (!adminCheck.ok) return adminCheck.res;
 
   let body: {
     categoryId?: string; key?: string; name?: string; description?: string;
@@ -45,6 +43,14 @@ export async function POST(req: NextRequest) {
   const tone = (SERVICE_TONES as readonly string[]).includes(body.tone ?? '') ? body.tone! : 'violet';
   const priority = ['Low', 'Medium', 'High'].includes(body.defaultPriority ?? '') ? body.defaultPriority! : 'Medium';
   const sortOrder = Number.isFinite(body.sortOrder) ? Number(body.sortOrder) : 100;
+
+  const approval = await requireServiceConfigApproval(req, auth, 'service_config.type.create', {
+    targetType: 'ServiceType',
+    targetId: key,
+    summary: `Create service type ${name} (${key}).`,
+    payload: { categoryId, key, name, tone, priority, sortOrder },
+  });
+  if (approval) return approval;
 
   await ensureServiceConfigTables();
 
@@ -81,10 +87,15 @@ export async function POST(req: NextRequest) {
       t.id,
     );
 
-    void logAudit({
-      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
-      entityType: 'ServiceType', entityId: t.id, entityName: name,
-      action: 'CREATE', details: `Created service type ${name} (${key})`,
+    await recordServiceConfigChange({
+      req,
+      auth,
+      entityType: 'ServiceType',
+      entityId: t.id,
+      entityName: name,
+      action: 'CREATE',
+      after: t,
+      summary: `Created service type ${name} (${key}).`,
     });
 
     return NextResponse.json({ ok: true, type: t }, { status: 201 });

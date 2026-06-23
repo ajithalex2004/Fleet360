@@ -8,15 +8,15 @@
  * depend on extending tailwind.config.* — easy to dispose of if the
  * direction isn't right.
  *
- * Compare this against /platform/v2 (current modern home) and
- * /platform (classic) to evaluate the gold/blue palette before
+ * Compare this against /platform (current home) to evaluate the
+ * gold/blue palette before
  * rolling it out system-wide via tailwind.config + page-theme.tsx.
  */
 
 import React from 'react';
 import {
   Sparkles, ArrowUpRight, Banknote, Activity, AlertTriangle, CheckCircle2,
-  Siren, Car, Wrench, Truck, Bus, School, Bot, BarChart3, Users, UserCog,
+  Siren, Car, Wrench, Truck, Bus, School, Bot, UserCog,
   Building2, Smartphone, Radio, Leaf, Package, ChevronRight, RefreshCw, Plus,
   ListChecks, Search,
 } from 'lucide-react';
@@ -280,10 +280,7 @@ export default function BrandPreviewPage() {
 
         <footer className="text-center text-[11px] pt-4" style={{ color: 'rgba(255,255,255,0.3)' }}>
           Brand preview — compare against{' '}
-          <a href="/platform/v2" className="hover:text-white" style={{ color: C.gold }}>/platform/v2</a>
-          {' · '}
-          <a href="/platform" className="hover:text-white" style={{ color: C.blueBright }}>/platform</a>
-          {' · then decide whether to roll out via tailwind.config + page-theme.tsx.'}
+          <a href="/platform" className="hover:text-white" style={{ color: C.gold }}>/platform</a>
         </footer>
       </main>
     </div>

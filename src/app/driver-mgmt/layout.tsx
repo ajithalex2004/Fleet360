@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -7,9 +7,9 @@ import { useLanguage } from '@/contexts/LanguageContext';
 
 import ModuleGuard from '@/components/ModuleGuard';
 const navItems = [
-  { href: '/driver-mgmt',                      label: 'Dashboard',      icon: 'D' },
-  { href: '/driver-mgmt/profiles',             label: 'Driver Profiles', icon: 'P' },
-  { href: '/driver-mgmt/profiles?expiring=true', label: 'Compliance',   icon: '⚠', compliance: true },
+  { href: '/driver-mgmt',                      label: 'Dashboard',      icon: '🤵' },
+  { href: '/driver-mgmt/profiles',             label: 'Driver Profiles', icon: '🤵' },
+  { href: '/driver-mgmt/profiles?expiring=true', label: 'Compliance',   icon: 'âš ', compliance: true },
   { href: '/driver-mgmt/documents',            label: 'Documents',      icon: 'D' },
   { href: '/driver-mgmt/shifts',               label: 'Shifts',         icon: 'S' },
   { href: '/driver-mgmt/training',             label: 'Training',       icon: 'T' },
@@ -25,13 +25,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { tLabel, t } = useLanguage();
   return (
-    <ModuleGuard moduleId="driver-mgmt" moduleName="Driver Management" moduleIcon="👤">
+    <ModuleGuard moduleId="driver-mgmt" moduleName="Driver Management" moduleIcon="🤵">
     <div className="flex flex-col h-screen bg-slate-900">
-      <PlatformHomeBar moduleName={t('module.driver')} moduleIcon="D" accentColor="from-blue-500 to-indigo-600" />
+      <PlatformHomeBar moduleName={t('module.driver')} moduleIcon="🤵" accentColor="from-blue-500 to-indigo-600" />
       <div className="flex flex-1 overflow-hidden">
         <div className="w-64 border-r border-white/10 bg-black overflow-y-auto flex-shrink-0">
           <div className="p-5 border-b border-white/10 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500 to-teal-500 flex items-center justify-center text-white font-bold">D</div>
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500 to-teal-500 flex items-center justify-center text-white font-bold">🤵</div>
             <div>
               <p className="text-white font-semibold text-sm">{t('module.driver')}</p>
               <p className="text-slate-400 text-xs">Personnel Management</p>

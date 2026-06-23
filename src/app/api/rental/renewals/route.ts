@@ -4,6 +4,11 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import {
+  recordOperationalChange,
+  requireOperationalContext,
+} from '@/lib/cross-module-governance';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
 
 const INIT = `
   CREATE TABLE IF NOT EXISTS rental_renewals (
@@ -25,6 +30,7 @@ const INIT = `
     vat_amount        NUMERIC(12,2),
     total_amount      NUMERIC(12,2),
     deposit_top_up    NUMERIC(12,2) DEFAULT 0,
+    tenant_id         TEXT,
     status            TEXT DEFAULT 'PENDING',
     approved_by       TEXT,
     approved_at       TIMESTAMPTZ,
@@ -33,6 +39,11 @@ const INIT = `
 `;
 
 type Row = Record<string, unknown>;
+
+const MIGRATE = `
+  ALTER TABLE rental_renewals ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+  CREATE INDEX IF NOT EXISTS idx_rental_renewals_tenant_id ON rental_renewals(tenant_id);
+`;
 
 async function nextNo(): Promise<string> {
   const [r] = await prisma
@@ -48,6 +59,9 @@ async function nextNo(): Promise<string> {
 /* ─── GET ─── */
 export async function GET(req: NextRequest) {
   await prisma.$executeRawUnsafe(INIT).catch(() => {});
+  await prisma.$executeRawUnsafe(MIGRATE).catch(() => {});
+  const ctx = requireOperationalContext(req, 'rac', { requestedTenantId: req.nextUrl.searchParams.get('tenantId') });
+  if (ctx instanceof NextResponse) return ctx;
 
   const sp = req.nextUrl.searchParams;
   const status = sp.get('status');
@@ -56,9 +70,9 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(100, parseInt(sp.get('limit') ?? '50'));
   const offset = (page - 1) * limit;
 
-  let where = `WHERE deleted_at IS NULL`;
-  const params: unknown[] = [];
-  let pi = 1;
+  let where = `WHERE deleted_at IS NULL AND tenant_id::text = $1`;
+  const params: unknown[] = [ctx.tenantId];
+  let pi = 2;
 
   if (status && status !== 'ALL') {
     where += ` AND status=$${pi++}`;
@@ -123,6 +137,9 @@ export async function GET(req: NextRequest) {
 /* ─── POST ─── */
 export async function POST(req: NextRequest) {
   await prisma.$executeRawUnsafe(INIT).catch(() => {});
+  await prisma.$executeRawUnsafe(MIGRATE).catch(() => {});
+  const ctx = requireOperationalContext(req, 'rac', { write: true });
+  if (ctx instanceof NextResponse) return ctx;
 
   const body = await req.json();
   const renewalNo = await nextNo();
@@ -146,8 +163,8 @@ export async function POST(req: NextRequest) {
       `INSERT INTO rental_renewals
          (renewal_no, agreement_id, agreement_no, customer_name, vehicle_name, vehicle_no,
           original_end_date, new_end_date, extension_days, daily_rate,
-          renewal_amount, vat_amount, total_amount, deposit_top_up, status, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+          renewal_amount, vat_amount, total_amount, deposit_top_up, tenant_id, status, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
        RETURNING *`,
       renewalNo,
       body.agreementId ?? null,
@@ -163,23 +180,58 @@ export async function POST(req: NextRequest) {
       vatAmount,
       totalAmount,
       depositTopUp,
+      ctx.tenantId,
       body.status ?? 'PENDING',
       body.notes ?? null,
     )
     .catch(() => []);
 
   if (!row) return NextResponse.json({ error: 'Failed to create renewal' }, { status: 500 });
-  return NextResponse.json(row, { status: 201 });
+  await recordOperationalChange({
+    req,
+    ctx,
+    entityType: 'RentalRenewal',
+    entityId: String(row.id ?? renewalNo),
+    action: 'CREATE',
+    after: row,
+    summary: `Created RAC renewal ${String(row.renewal_no ?? renewalNo)}.`,
+  });
+  const workflow = await triggerServiceWorkflow({
+    req,
+    ctx,
+    serviceTypeKey: 'RAC_RESERVATIONS',
+    referenceType: 'RentalRenewal',
+    referenceId: String(row.id ?? renewalNo),
+    referenceNumber: String(row.renewal_no ?? renewalNo),
+    contextData: {
+      agreementId: body.agreementId ?? null,
+      agreementNo: body.agreementNo ?? null,
+      customerName: body.customerName ?? null,
+      vehicleNo: body.vehicleNo ?? null,
+      totalAmount,
+      status: body.status ?? 'PENDING',
+    },
+  });
+  return NextResponse.json({ ...row, workflow }, { status: 201 });
 }
 
 /* ─── PATCH ─── */
 export async function PATCH(req: NextRequest) {
   await prisma.$executeRawUnsafe(INIT).catch(() => {});
+  await prisma.$executeRawUnsafe(MIGRATE).catch(() => {});
+  const ctx = requireOperationalContext(req, 'rac', { write: true });
+  if (ctx instanceof NextResponse) return ctx;
 
   const body = await req.json();
   const { id, status, approvedBy, notes, ...rest } = body;
 
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+  const [before] = await prisma.$queryRawUnsafe<Row[]>(
+    `SELECT * FROM rental_renewals WHERE id = $1 AND tenant_id::text = $2 AND deleted_at IS NULL LIMIT 1`,
+    id,
+    ctx.tenantId,
+  ).catch(() => []);
+  if (!before) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const sets: string[] = [];
   const params: unknown[] = [];
@@ -229,11 +281,38 @@ export async function PATCH(req: NextRequest) {
 
   const [row] = await prisma
     .$queryRawUnsafe<Row[]>(
-      `UPDATE rental_renewals SET ${sets.join(',')} WHERE id=$${pi} RETURNING *`,
+      `UPDATE rental_renewals SET ${sets.join(',')} WHERE id=$${pi} AND tenant_id::text = $${pi + 1} RETURNING *`,
       ...params,
+      ctx.tenantId,
     )
     .catch(() => []);
 
   if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  return NextResponse.json(row);
+  await recordOperationalChange({
+    req,
+    ctx,
+    entityType: 'RentalRenewal',
+    entityId: String(id),
+    action: status && status !== before.status ? 'STATUS_CHANGE' : 'UPDATE',
+    before,
+    after: row,
+    summary: `Updated RAC renewal ${String(row.renewal_no ?? id)}.`,
+  });
+  const workflow = await triggerServiceWorkflow({
+    req,
+    ctx,
+    serviceTypeKey: 'RAC_RESERVATIONS',
+    referenceType: 'RentalRenewal',
+    referenceId: String(id),
+    referenceNumber: String(row.renewal_no ?? id),
+    contextData: {
+      agreementId: row.agreement_id ?? null,
+      agreementNo: row.agreement_no ?? null,
+      previousStatus: before.status ?? null,
+      status: row.status ?? null,
+      totalAmount: row.total_amount ?? null,
+    },
+    force: status === 'APPROVED' || status === 'REJECTED',
+  });
+  return NextResponse.json({ ...row, workflow });
 }

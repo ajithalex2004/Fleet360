@@ -12,7 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth';
+import { authorizeServiceConfig, recordServiceConfigChange, requireServiceConfigApproval, requireServiceConfigPermission } from '@/lib/service-config/auth';
 import { ensureServiceConfigTables } from '@/lib/service-config/schema';
 import { LINKED_MODULES, type LinkedModule } from '@/types/service-config';
 import { logAudit } from '@/lib/audit';
@@ -27,6 +27,39 @@ interface MappingRow {
   workflow_engine_enabled: boolean; notification_engine_enabled: boolean;
   approval_engine_enabled: boolean; finance_engine_enabled: boolean;
   dispatch_engine_enabled: boolean; updated_at: string;
+}
+
+const LINKED_MODULE_ALIASES: Record<string, LinkedModule> = {
+  service_ticketing: 'SERVICE_TICKETING',
+  service_tickets: 'SERVICE_TICKETING',
+  tickets: 'SERVICE_TICKETING',
+  maintenance: 'MAINTENANCE',
+  booking: 'BOOKING',
+  leasing: 'LEASING',
+  rac: 'RAC',
+  rental: 'RAC',
+  bus_ops: 'STAFF_TRANSPORT',
+  'bus-ops': 'STAFF_TRANSPORT',
+  staff_transport: 'STAFF_TRANSPORT',
+  staff: 'STAFF_TRANSPORT',
+  school_bus: 'SCHOOL_BUS',
+  'school-bus': 'SCHOOL_BUS',
+  logistics: 'LOGISTICS',
+  incident: 'INCIDENT',
+  incidents: 'INCIDENT',
+  compliance: 'INCIDENT',
+  finance: 'FINANCE',
+  admin: 'ADMIN',
+};
+
+function normalizeLinkedModule(value: unknown): LinkedModule | null {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  if ((LINKED_MODULES as readonly string[]).includes(raw)) return raw as LinkedModule;
+  const token = raw.toLowerCase().replace(/\s+/g, '_');
+  const upper = token.toUpperCase();
+  if ((LINKED_MODULES as readonly string[]).includes(upper)) return upper as LinkedModule;
+  return LINKED_MODULE_ALIASES[token] ?? null;
 }
 
 async function ownsType(tenantId: string, typeId: string): Promise<boolean> {
@@ -46,7 +79,6 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   if (!await ownsType(auth.tenantId, id)) {
     return NextResponse.json({ ok: false, error: 'Service type not found' }, { status: 404 });
   }
-
   let rows = await prisma.$queryRawUnsafe<MappingRow[]>(
     `SELECT service_type_id::text, linked_module, sub_module,
             workflow_engine_enabled, notification_engine_enabled,
@@ -80,16 +112,25 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 }
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
-  const auth = authorizeServiceConfig(req);
+  const auth = await requireServiceConfigPermission(req, 'edit');
   if (!auth.ok) return auth.res;
-  const adminCheck = requireAdmin(auth);
-  if (!adminCheck.ok) return adminCheck.res;
 
   const { id } = await params;
   await ensureServiceConfigTables();
   if (!await ownsType(auth.tenantId, id)) {
     return NextResponse.json({ ok: false, error: 'Service type not found' }, { status: 404 });
   }
+  const beforeRows = await prisma.$queryRawUnsafe<MappingRow[]>(
+    `SELECT service_type_id::text, linked_module, sub_module,
+            workflow_engine_enabled, notification_engine_enabled,
+            approval_engine_enabled, finance_engine_enabled,
+            dispatch_engine_enabled, updated_at::text
+       FROM service_module_mapping
+      WHERE service_type_id = $1::uuid
+      LIMIT 1`,
+    id,
+  ).catch(() => []);
+  const before = beforeRows[0] ?? null;
 
   let body: {
     linkedModule?: string; subModule?: string | null;
@@ -99,11 +140,19 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   };
   try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
 
-  if (!body.linkedModule || !(LINKED_MODULES as readonly string[]).includes(body.linkedModule)) {
+  const linkedModule = normalizeLinkedModule(body.linkedModule);
+  if (!linkedModule) {
     return NextResponse.json({ ok: false, error: `linkedModule must be one of ${LINKED_MODULES.join(', ')}` }, { status: 400 });
   }
-  const linkedModule = body.linkedModule as LinkedModule;
   const subModule    = (typeof body.subModule === 'string' && body.subModule.trim().length > 0) ? body.subModule.trim() : null;
+
+  const approval = await requireServiceConfigApproval(req, auth, 'service_config.module_mapping.update', {
+    targetType: 'ServiceModuleMapping',
+    targetId: id,
+    summary: `Update module mapping for service type ${id}.`,
+    payload: { ...body, linkedModule, subModule },
+  });
+  if (approval) return approval;
 
   try {
     const updated = await prisma.$queryRawUnsafe<MappingRow[]>(
@@ -135,6 +184,17 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       entityType: 'ServiceModuleMapping', entityId: id,
       action: 'UPDATE',
       details: `Module mapping → ${linkedModule}${subModule ? ` / ${subModule}` : ''}`,
+    });
+
+    await recordServiceConfigChange({
+      req,
+      auth,
+      entityType: 'ServiceModuleMapping',
+      entityId: id,
+      action: 'UPDATE',
+      before,
+      after: updated[0],
+      summary: `Updated module mapping to ${linkedModule}${subModule ? ` / ${subModule}` : ''}.`,
     });
 
     return NextResponse.json({ ok: true, mapping: updated[0] });

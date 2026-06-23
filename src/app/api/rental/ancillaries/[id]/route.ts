@@ -1,39 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withAudit } from '@/lib/with-audit';
+import { recordOperationalChange, requireOperationalContext } from '@/lib/cross-module-governance';
+import { ensureRentalGovernance, rentalEntityVisible } from '@/lib/rental-governance';
 import { captureException } from '@/lib/sentry';
 
 export const runtime = 'nodejs';
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  await ensureRentalGovernance();
   const { id } = await params;
   try {
-    const item = await prisma.rentalAncillary.findUnique({ where: { id } });
-    if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.json(item);
-  } catch (err) {
-    captureException(err, { context: 'rental.ancillaries.[id].GET' });
+    const ctx = requireOperationalContext(req, 'rac');
+    if (ctx instanceof NextResponse) return ctx;
+
+    const visible = await rentalEntityVisible('rental_ancillaries', id, ctx.tenantId, { includeGlobal: true });
+    if (!visible) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    const rows = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT *
+         FROM rental_ancillaries
+        WHERE id = $1
+          AND (tenant_id::text = $2 OR tenant_id IS NULL OR tenant_id::text = 'GLOBAL')
+        LIMIT 1`,
+      id,
+      ctx.tenantId,
+    );
+    if (!rows[0]) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    return NextResponse.json(rows[0]);
+  } catch (error) {
+    captureException(error, { context: 'rental.ancillaries.[id].GET' });
     return NextResponse.json({ error: 'Failed' }, { status: 500 });
   }
 }
 
-export const DELETE = withAudit(
-  async (_req: NextRequest, ctx: { params: Promise<{ id: string }> }) => {
-    const { id } = await ctx.params;
-    try {
-      await prisma.rentalAncillary.update({
-        where: { id },
-        data: { deletedAt: new Date(), isActive: false },
-      });
-      return NextResponse.json({ ok: true, id });
-    } catch (err) {
-      captureException(err, { context: 'rental.ancillaries.[id].DELETE' });
-      return NextResponse.json({ error: 'Failed to delete' }, { status: 500 });
-    }
-  },
-  {
-    entityType: 'RentalAncillary',
-    action: 'DELETE',
-    describe: () => 'Soft-deleted ancillary',
-  },
-);
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  await ensureRentalGovernance();
+  const { id } = await params;
+  try {
+    const ctx = requireOperationalContext(req, 'rac', { write: true });
+    if (ctx instanceof NextResponse) return ctx;
+
+    const visible = await rentalEntityVisible('rental_ancillaries', id, ctx.tenantId);
+    if (!visible) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    const before = await prisma.rentalAncillary.findUnique({ where: { id } });
+    await prisma.rentalAncillary.update({
+      where: { id },
+      data: { deletedAt: new Date(), isActive: false },
+    });
+    await recordOperationalChange({
+      req,
+      ctx,
+      entityType: 'RentalAncillary',
+      entityId: id,
+      action: 'DELETE',
+      before,
+      summary: 'Soft-deleted ancillary.',
+    });
+    return NextResponse.json({ ok: true, id });
+  } catch (error) {
+    captureException(error, { context: 'rental.ancillaries.[id].DELETE' });
+    return NextResponse.json({ error: 'Failed to delete' }, { status: 500 });
+  }
+}

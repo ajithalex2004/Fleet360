@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureAuditTable, logAudit, AuditPayload } from '@/lib/audit';
+import { requireAdminPermission, resolveTenantBoundary } from '@/lib/admin-policy';
 
 // ---------------------------------------------------------------------------
 // GET /api/admin/audit-logs
@@ -11,10 +12,15 @@ import { ensureAuditTable, logAudit, AuditPayload } from '@/lib/audit';
 // ---------------------------------------------------------------------------
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireAdminPermission(req, 'view', 'audit');
+    if (auth instanceof NextResponse) return auth;
+
     await ensureAuditTable();
 
     const sp        = new URL(req.url).searchParams;
-    const tenantId  = sp.get('tenantId')  ?? '';
+    const scopedTenant = resolveTenantBoundary(auth.ctx, sp.get('tenantId'));
+    if (scopedTenant instanceof NextResponse) return scopedTenant;
+    const tenantId  = scopedTenant;
     const branchId  = sp.get('branchId')  ?? '';
     const entityType= sp.get('entityType')?? '';
     const userId    = sp.get('userId')    ?? '';
@@ -86,6 +92,9 @@ export async function GET(req: NextRequest) {
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireAdminPermission(req, 'create', 'audit');
+    if (auth instanceof NextResponse) return auth;
+
     const body: AuditPayload = await req.json();
     if (!body.entityType || !body.action) {
       return NextResponse.json({ error: 'entityType and action are required' }, { status: 400 });
@@ -96,6 +105,11 @@ export async function POST(req: NextRequest) {
       ?? req.headers.get('x-real-ip')
       ?? undefined;
     body.userAgent = body.userAgent ?? req.headers.get('user-agent') ?? undefined;
+    if (!auth.ctx.isSuperAdmin) {
+      body.tenantId = auth.ctx.tenantId;
+    }
+    body.userId = body.userId ?? auth.ctx.userId;
+    body.userRole = body.userRole ?? auth.ctx.role;
 
     await logAudit(body);
     return NextResponse.json({ ok: true });

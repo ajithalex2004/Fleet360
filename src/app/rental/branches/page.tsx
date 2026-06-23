@@ -1,4 +1,6 @@
 'use client';
+import ActionDialog from '@/components/ui/ActionDialog';
+import { useRentalMasterData } from '@/hooks/useRentalMasterData';
 import React, { useState, useEffect, useCallback } from 'react';
 
 interface Branch {
@@ -45,6 +47,7 @@ const emptyForm = {
 };
 
 export default function BranchesPage() {
+  const { masterData } = useRentalMasterData();
   const [branches, setBranches]   = useState<Branch[]>([]);
   const [stats, setStats]         = useState<Stats | null>(null);
   const [viewMode, setViewMode]   = useState<'grid' | 'table'>('grid');
@@ -56,6 +59,10 @@ export default function BranchesPage() {
   const [formData, setFormData]   = useState(emptyForm);
   const [search, setSearch]       = useState('');
   const [emirateFilter, setEmirateFilter] = useState('ALL');
+  const [pendingStatusBranch, setPendingStatusBranch] = useState<Branch | null>(null);
+  const [statusBusy, setStatusBusy] = useState(false);
+  const emirates = masterData.emirates.length ? masterData.emirates : EMIRATES;
+  const emirateMap = masterData.emirates.length ? Object.fromEntries(emirates.map((entry) => [entry.key, entry])) : EMIRATE_MAP;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -142,15 +149,18 @@ export default function BranchesPage() {
 
   const handleToggleStatus = async (b: Branch) => {
     const newStatus = b.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
-    if (!confirm(`Set branch "${b.branchName}" to ${newStatus}?`)) return;
+    setStatusBusy(true);
     try {
       await fetch('/api/rental/branches', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: b.id, status: newStatus }),
       });
+      setPendingStatusBranch(null);
       load();
     } catch {
       setError('Failed to update branch status');
+    } finally {
+      setStatusBusy(false);
     }
   };
 
@@ -211,7 +221,7 @@ export default function BranchesPage() {
             className="px-3 py-1.5 rounded-lg bg-slate-800/60 border border-white/10 text-sm text-white focus:border-teal-500 focus:outline-none"
           >
             <option value="ALL">All Emirates</option>
-            {EMIRATES.map(em => (
+            {emirates.map(em => (
               <option key={em.key} value={em.key}>{em.flag} {em.label}</option>
             ))}
           </select>
@@ -252,7 +262,7 @@ export default function BranchesPage() {
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {branches.map(b => {
-            const em = EMIRATE_MAP[b.emirate];
+            const em = emirateMap[b.emirate];
             const isActive = b.status === 'ACTIVE';
             return (
               <div
@@ -323,7 +333,7 @@ export default function BranchesPage() {
                     Edit
                   </button>
                   <button
-                    onClick={() => handleToggleStatus(b)}
+                    onClick={() => setPendingStatusBranch(b)}
                     className={`flex-1 text-sm py-1.5 rounded-lg border ${
                       isActive
                         ? 'bg-slate-500/20 text-slate-400 border-slate-500/30 hover:bg-slate-500/30'
@@ -351,7 +361,7 @@ export default function BranchesPage() {
               </thead>
               <tbody>
                 {branches.map(b => {
-                  const em = EMIRATE_MAP[b.emirate];
+                  const em = emirateMap[b.emirate];
                   const isActive = b.status === 'ACTIVE';
                   return (
                     <tr key={b.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
@@ -386,7 +396,7 @@ export default function BranchesPage() {
                             Edit
                           </button>
                           <button
-                            onClick={() => handleToggleStatus(b)}
+                            onClick={() => setPendingStatusBranch(b)}
                             className={`text-xs px-2.5 py-1 rounded border ${
                               isActive
                                 ? 'bg-slate-500/20 text-slate-400 border-slate-500/30 hover:bg-slate-500/30'
@@ -435,7 +445,7 @@ export default function BranchesPage() {
                     onChange={e => setFormData(p => ({ ...p, emirate: e.target.value }))}
                     className={inputCls}
                   >
-                    {EMIRATES.map(em => (
+                    {emirates.map(em => (
                       <option key={em.key} value={em.key}>{em.flag} {em.label}</option>
                     ))}
                   </select>
@@ -529,6 +539,21 @@ export default function BranchesPage() {
           </div>
         </div>
       )}
+      <ActionDialog
+        open={!!pendingStatusBranch}
+        title={pendingStatusBranch?.status === 'ACTIVE' ? 'Deactivate branch' : 'Activate branch'}
+        description="Review the branch status change before applying it."
+        details={pendingStatusBranch ? [
+          `Branch: ${pendingStatusBranch.branchName}`,
+          `Code: ${pendingStatusBranch.branchCode}`,
+          `Next status: ${pendingStatusBranch.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'}`,
+        ] : undefined}
+        tone={pendingStatusBranch?.status === 'ACTIVE' ? 'warning' : 'info'}
+        confirmLabel={pendingStatusBranch?.status === 'ACTIVE' ? 'Deactivate branch' : 'Activate branch'}
+        busy={statusBusy}
+        onClose={() => !statusBusy && setPendingStatusBranch(null)}
+        onConfirm={pendingStatusBranch ? () => handleToggleStatus(pendingStatusBranch) : undefined}
+      />
     </div>
   );
 }

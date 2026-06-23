@@ -136,14 +136,14 @@ export async function getEligibleCandidates(
     // Service-specific hard constraints
     switch (job.serviceType) {
       case 'PASSENGER':
-        if (!meetsPassengerConstraints(meta as PassengerMeta, row)) continue;
+        if (!meetsPassengerConstraints(meta as unknown as PassengerMeta, row)) continue;
         break;
       case 'FREIGHT':
       case 'DELIVERY':
-        if (!meetsFreightConstraints(meta as FreightMeta, row)) continue;
+        if (!meetsFreightConstraints(meta as unknown as FreightMeta, row)) continue;
         break;
       case 'TECHNICIAN':
-        if (!meetsTechnicianConstraints(meta as TechnicianMeta, row)) continue;
+        if (!meetsTechnicianConstraints(meta as unknown as TechnicianMeta, row)) continue;
         break;
     }
 

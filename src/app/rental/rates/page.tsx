@@ -1,5 +1,7 @@
 'use client';
+import { useRentalMasterData } from '@/hooks/useRentalMasterData';
 import { useState, useEffect, useCallback } from 'react';
+import ActionDialog from '@/components/ui/ActionDialog';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface PricingRule {
@@ -84,6 +86,7 @@ const emptyRule = (): Partial<PricingRule> => ({
 // MAIN COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
 export default function RateEnginePage() {
+  const { masterData } = useRentalMasterData();
   const [rules, setRules]           = useState<PricingRule[]>([]);
   const [total, setTotal]           = useState(0);
   const [page, setPage]             = useState(1);
@@ -96,6 +99,7 @@ export default function RateEnginePage() {
   const [editRule, setEditRule]     = useState<Partial<PricingRule>>(emptyRule());
   const [saving, setSaving]         = useState(false);
   const [formError, setFormError]   = useState('');
+  const [pendingDelete, setPendingDelete] = useState<PricingRule | null>(null);
 
   // Rate Calculator state
   const [calcOpen, setCalcOpen]     = useState(false);
@@ -112,6 +116,10 @@ export default function RateEnginePage() {
   const [calcResult, setCalcResult] = useState<RateCalcResult | null>(null);
   const [calcLoading, setCalcLoading] = useState(false);
   const [calcError, setCalcError]   = useState('');
+  const vehicleCategories = masterData.rateVehicleCategories.length ? masterData.rateVehicleCategories : VEHICLE_CATEGORIES;
+  const customerTypes = masterData.customerTypes.length ? masterData.customerTypes : CUSTOMER_TYPES;
+  const channels = masterData.rateChannels.length ? masterData.rateChannels : CHANNELS;
+  const currencies = masterData.currencies.length ? masterData.currencies : CURRENCIES;
 
   const limit = 20;
 
@@ -155,8 +163,8 @@ export default function RateEnginePage() {
 
   // ── Delete rule ──────────────────────────────────────────────────────────
   const deleteRule = async (id: string) => {
-    if (!confirm('Delete this pricing rule?')) return;
     await fetch('/api/rental/rates/' + id, { method: 'DELETE' });
+    setPendingDelete(null);
     fetchRules();
   };
 
@@ -217,7 +225,7 @@ export default function RateEnginePage() {
                 onChange={e => setCalcInput(p => ({ ...p, vehicleCategory: e.target.value }))}
                 className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm"
               >
-                {VEHICLE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                {vehicleCategories.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             </div>
             <div>
@@ -237,7 +245,7 @@ export default function RateEnginePage() {
               <select value={calcInput.customerType}
                 onChange={e => setCalcInput(p => ({ ...p, customerType: e.target.value }))}
                 className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
-                {CUSTOMER_TYPES.map(c => <option key={c}>{c}</option>)}
+                {customerTypes.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
             <div>
@@ -245,7 +253,7 @@ export default function RateEnginePage() {
               <select value={calcInput.channel}
                 onChange={e => setCalcInput(p => ({ ...p, channel: e.target.value }))}
                 className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
-                {CHANNELS.map(c => <option key={c}>{c}</option>)}
+                {channels.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
             <div>
@@ -253,7 +261,7 @@ export default function RateEnginePage() {
               <select value={calcInput.currency}
                 onChange={e => setCalcInput(p => ({ ...p, currency: e.target.value }))}
                 className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
-                {CURRENCIES.map(c => <option key={c}>{c}</option>)}
+                {currencies.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
             <div>
@@ -327,7 +335,7 @@ export default function RateEnginePage() {
         <select value={filterCat} onChange={e => { setFilterCat(e.target.value); setPage(1); }}
           className="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm">
           <option value="">All Categories</option>
-          {VEHICLE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+          {vehicleCategories.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
         </select>
         <select value={filterActive} onChange={e => { setFilterActive(e.target.value); setPage(1); }}
           className="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm">
@@ -409,7 +417,7 @@ export default function RateEnginePage() {
                         Edit
                       </button>
                       <button
-                        onClick={() => deleteRule(rule.id)}
+                        onClick={() => setPendingDelete(rule)}
                         className="px-3 py-1 rounded text-xs bg-red-500/20 text-red-300 hover:bg-red-500/30 transition"
                       >
                         Delete
@@ -466,7 +474,7 @@ export default function RateEnginePage() {
                     <select value={editRule.vehicleCategory ?? 'ECONOMY'}
                       onChange={e => setEditRule(p => ({ ...p, vehicleCategory: e.target.value }))}
                       className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
-                      {VEHICLE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                      {vehicleCategories.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                     </select>
                   </div>
                   <div>
@@ -474,7 +482,7 @@ export default function RateEnginePage() {
                     <select value={editRule.currency ?? 'AED'}
                       onChange={e => setEditRule(p => ({ ...p, currency: e.target.value }))}
                       className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
-                      {CURRENCIES.map(c => <option key={c}>{c}</option>)}
+                      {currencies.map(c => <option key={c}>{c}</option>)}
                     </select>
                   </div>
                   <div>
@@ -539,7 +547,7 @@ export default function RateEnginePage() {
                       onChange={e => setEditRule(p => ({ ...p, customerType: e.target.value || undefined }))}
                       className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
                       <option value="">All Customers</option>
-                      {CUSTOMER_TYPES.map(c => <option key={c}>{c}</option>)}
+                      {customerTypes.map(c => <option key={c}>{c}</option>)}
                     </select>
                   </div>
                   <div>
@@ -548,7 +556,7 @@ export default function RateEnginePage() {
                       onChange={e => setEditRule(p => ({ ...p, channel: e.target.value || undefined }))}
                       className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
                       <option value="">All Channels</option>
-                      {CHANNELS.map(c => <option key={c}>{c}</option>)}
+                      {channels.map(c => <option key={c}>{c}</option>)}
                     </select>
                   </div>
                 </div>
@@ -643,6 +651,20 @@ export default function RateEnginePage() {
           </div>
         </div>
       )}
+      <ActionDialog
+        open={!!pendingDelete}
+        title="Delete pricing rule"
+        description="Review the rule before removing it from active rental pricing."
+        details={pendingDelete ? [
+          `Rule: ${pendingDelete.name}`,
+          `Category: ${pendingDelete.vehicleCategory}`,
+          `Base daily rate: ${fmt(pendingDelete.baseDailyRate, pendingDelete.currency)}`,
+        ] : undefined}
+        tone="danger"
+        confirmLabel="Delete rule"
+        onClose={() => setPendingDelete(null)}
+        onConfirm={pendingDelete ? () => deleteRule(pendingDelete.id) : undefined}
+      />
     </div>
   );
 }

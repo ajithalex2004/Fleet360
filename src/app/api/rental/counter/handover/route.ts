@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
           signedAt: data.signatureDataUrl ? new Date() : null,
           signedBy: data.signatureDataUrl ? booking.customerId : null,
           openBranchId: data.openBranchId ?? null,
-          notes: data.notes,
+          remarks: data.notes,
           sourceType: 'BOOKING',
         },
         update: {
@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
           status: data.signatureDataUrl ? 'ACTIVE' : 'DRAFT',
           signedAt: data.signatureDataUrl ? new Date() : null,
           openBranchId: data.openBranchId ?? null,
-          notes: data.notes,
+          remarks: data.notes,
           ...(vehicleId ? { vehicleId } : {}),
         },
       });

@@ -10,9 +10,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, Plus } from 'lucide-react';
+import { subscribeAdminNotificationRefresh } from '@/components/admin/admin-notification-realtime';
 import { useRuleTab } from './use-rule-tab';
 import { Field, NumberInput, Toggle, ChipMultiSelect, SaveBar, Section, type RuleTabProps } from './shared';
 import { DEFAULT_APPROVAL_RULES, type ApprovalRules } from '@/types/service-rules';
+import { getWorkflowProcedureCandidates } from '@/lib/service-config/workflow-procedure';
 
 const SUGGESTED_ROLES = [
   'TENANT_ADMIN', 'OPERATIONS_MANAGER', 'FINANCE_MANAGER', 'FLEET_MANAGER',
@@ -21,7 +23,7 @@ const SUGGESTED_ROLES = [
 
 interface WorkflowOption { id: string; name: string; isActive: boolean }
 
-export function ApprovalTab({ typeId, scopeId, scopeLookup, typeKey, onSwitchTab }: RuleTabProps) {
+export function ApprovalTab({ typeId, scopeId, scopeLookup, typeKey, typeName, onSwitchTab }: RuleTabProps) {
   const { rules, patch, loading, saving, savedMsg, error, configured, ownedScope, save, reload } =
     useRuleTab<ApprovalRules>(typeId, 'approval', DEFAULT_APPROVAL_RULES, scopeId);
 
@@ -34,9 +36,12 @@ export function ApprovalTab({ typeId, scopeId, scopeLookup, typeKey, onSwitchTab
   useEffect(() => {
     if (!typeKey) { setWfLoading(false); return; }
     let cancelled = false;
-    (async () => {
+    const loadWorkflowOptions = async () => {
       try {
-        const res = await fetch('/api/admin/workflows');
+        const procedureCandidates = getWorkflowProcedureCandidates(typeKey, typeName);
+        const qs = new URLSearchParams({ serviceTypeId: typeId });
+        qs.set('lite', '1');
+        const res = await fetch(`/api/admin/workflows?${qs.toString()}`);
         if (!res.ok) return;
         const all: Array<{ id: string; name: string; procedure: string; isActive: boolean; serviceTypeId?: string | null }> = await res.json();
         if (cancelled) return;
@@ -44,16 +49,29 @@ export function ApprovalTab({ typeId, scopeId, scopeLookup, typeKey, onSwitchTab
           all
             .filter(w =>
               (w.serviceTypeId && w.serviceTypeId === typeId)
-              || (!w.serviceTypeId && w.procedure === typeKey)
+              || (!w.serviceTypeId && procedureCandidates.includes(String(w.procedure ?? '').trim().toUpperCase()))
             )
             .map(w => ({ id: w.id, name: w.name, isActive: w.isActive })),
         );
       } finally {
         if (!cancelled) setWfLoading(false);
       }
-    })();
-    return () => { cancelled = true; };
-  }, [typeId, typeKey]);
+    };
+    void loadWorkflowOptions();
+    const unsubscribe = subscribeAdminNotificationRefresh((detail) => {
+      const reason = String(detail?.reason ?? '');
+      if (
+        reason.startsWith('approval-')
+        || reason.startsWith('workflow-')
+      ) {
+        void loadWorkflowOptions();
+      }
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [typeId, typeKey, typeName]);
 
   const dirty = useMemo(() => JSON.stringify(rules) !== JSON.stringify(DEFAULT_APPROVAL_RULES) || configured, [rules, configured]);
 
@@ -90,7 +108,7 @@ export function ApprovalTab({ typeId, scopeId, scopeLookup, typeKey, onSwitchTab
                 <button type="button"
                   onClick={() => onSwitchTab('workflow')}
                   title="Open the Workflow tab to edit steps"
-                  className="inline-flex items-center gap-1 px-2.5 rounded-lg bg-slate-800 border border-white/10 hover:border-violet-500/40 text-violet-300 text-xs whitespace-nowrap">
+                  className="inline-flex items-center gap-1 rounded-lg border border-violet-300 bg-violet-100 px-2.5 text-xs whitespace-nowrap text-violet-900 shadow-sm transition hover:bg-violet-200">
                   {workflowOptions.length === 0 ? (
                     <><Plus className="w-3.5 h-3.5" /> Create</>
                   ) : (

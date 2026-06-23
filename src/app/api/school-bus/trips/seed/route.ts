@@ -229,7 +229,7 @@ export async function POST() {
       const tripDate = dateStr(plan.daysAgo);
 
       // Unique trip code per route+date
-      const safeCode = `${route.code}-${tripDate}-${plan.session ?? route.session}`;
+      const safeCode = `${route.code}-${tripDate}-${(plan as { session?: string }).session ?? route.session}`;
 
       // Skip if already exists
       const [existing] = await query<{ id: string }>(

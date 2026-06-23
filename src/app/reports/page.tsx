@@ -14,7 +14,7 @@ interface ScheduledReport {
 }
 
 interface ReportCategory {
-  id: string;
+  id: number;
   name: string;
   description: string;
   href: string;
@@ -77,9 +77,9 @@ export default function ReportsDashboard() {
     },
     {
       id: 5,
-      name: 'Custom Report',
-      description: 'Create custom analytics',
-      href: '#',
+      name: 'Dynamic Reports',
+      description: 'Drag-and-drop report writer with exports',
+      href: '/reports/dynamic',
       icon: '📋',
     },
     {

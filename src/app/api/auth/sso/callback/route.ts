@@ -18,8 +18,11 @@ import { prisma } from '@/lib/prisma';
 import { findSsoConfigByTenant } from '@/lib/sso';
 import { verifySsoState } from '@/lib/sso-state';
 import { signSession } from '@/lib/tenant-session';
+import { newSessionId, registerSession } from '@/lib/session-registry';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { recordLoginAttempt } from '@/lib/auth-security';
+import { ensureCustomerUserLink, resolveCorporateCustomerByEmail } from '@/lib/corporate-customer-identity';
 
 export const runtime = 'nodejs';
 
@@ -38,7 +41,10 @@ export async function GET(req: NextRequest) {
   }
 
   const cfg = await findSsoConfigByTenant(state.tenantId);
-  if (!cfg || !cfg.isActive) return redirectAndClear(req, '/login?sso=config-missing');
+  if (!cfg || !cfg.isActive) {
+    await logSsoCallback(req, state.email, state.tenantId, null, false, 'SSO_CONFIG_MISSING');
+    return redirectAndClear(req, '/login?sso=config-missing');
+  }
 
   try {
     const config = await oidc.discovery(new URL(cfg.issuer), cfg.clientId, cfg.clientSecret);
@@ -50,7 +56,10 @@ export async function GET(req: NextRequest) {
     });
 
     const claims = tokens.claims();
-    if (!claims) return redirectAndClear(req, '/login?sso=no-claims');
+    if (!claims) {
+      await logSsoCallback(req, state.email, cfg.tenantId, null, false, 'SSO_NO_CLAIMS');
+      return redirectAndClear(req, '/login?sso=no-claims');
+    }
 
     const sub      = String(claims.sub);
     const idEmail  = typeof claims.email === 'string' ? claims.email.toLowerCase() : '';
@@ -59,10 +68,14 @@ export async function GET(req: NextRequest) {
     const givenN   = typeof claims.given_name  === 'string' ? claims.given_name  : '';
     const familyN  = typeof claims.family_name === 'string' ? claims.family_name : '';
 
-    if (!email) return redirectAndClear(req, '/login?sso=no-email');
+    if (!email) {
+      await logSsoCallback(req, state.email, cfg.tenantId, null, false, 'SSO_NO_EMAIL');
+      return redirectAndClear(req, '/login?sso=no-email');
+    }
 
     const domain = email.split('@')[1]?.toLowerCase();
     if (!domain || !cfg.allowedEmailDomains.includes(domain)) {
+      await logSsoCallback(req, email, cfg.tenantId, null, false, 'SSO_DOMAIN_NOT_ALLOWED');
       return redirectAndClear(req, '/login?sso=domain-not-allowed');
     }
 
@@ -70,17 +83,25 @@ export async function GET(req: NextRequest) {
       where: { id: cfg.tenantId },
       select: { id: true, name: true, plan: true, isActive: true },
     });
-    if (!tenant || !tenant.isActive) return redirectAndClear(req, '/login?sso=tenant-inactive');
+    if (!tenant || !tenant.isActive) {
+      await logSsoCallback(req, email, cfg.tenantId, null, false, 'SSO_TENANT_INACTIVE');
+      return redirectAndClear(req, '/login?sso=tenant-inactive');
+    }
+    const customerContext = await resolveCorporateCustomerByEmail(cfg.tenantId, email).catch(() => null);
 
     // Resolve role: explicit defaultRoleId, else TENANT_ADMIN for this tenant, else any tenant role.
     const role = await pickProvisioningRole(cfg.tenantId, cfg.defaultRoleId);
-    if (!role) return redirectAndClear(req, '/login?sso=no-role');
+    if (!role) {
+      await logSsoCallback(req, email, cfg.tenantId, null, false, 'SSO_NO_ROLE');
+      return redirectAndClear(req, '/login?sso=no-role');
+    }
 
     // Match or JIT-create user.
     let user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
       if (!cfg.jitEnabled) {
+        await logSsoCallback(req, email, cfg.tenantId, null, false, 'SSO_USER_NOT_PROVISIONED');
         return redirectAndClear(req, '/login?sso=user-not-provisioned');
       }
       // First/last name fallbacks.
@@ -109,20 +130,37 @@ export async function GET(req: NextRequest) {
         details: `JIT-provisioned via OIDC SSO (sub=${sub}, issuer=${cfg.issuer}).`,
       });
     } else {
-      if (!user.isActive) return redirectAndClear(req, '/login?sso=account-disabled');
+      if (!user.isActive) {
+        await logSsoCallback(req, email, cfg.tenantId, user.id, false, 'SSO_ACCOUNT_DISABLED');
+        return redirectAndClear(req, '/login?sso=account-disabled');
+      }
 
       // Ensure UserTenant exists / is active.
       const membership = await prisma.userTenant.findUnique({
         where: { userId_tenantId: { userId: user.id, tenantId: cfg.tenantId } },
       }).catch(() => null);
       if (!membership) {
-        if (!cfg.jitEnabled) return redirectAndClear(req, '/login?sso-membership-missing');
+        if (!cfg.jitEnabled) {
+          await logSsoCallback(req, email, cfg.tenantId, user.id, false, 'SSO_MEMBERSHIP_MISSING');
+          return redirectAndClear(req, '/login?sso-membership-missing');
+        }
         await prisma.userTenant.create({
           data: { id: crypto.randomUUID(), userId: user.id, tenantId: cfg.tenantId, roleId: role.id, isActive: true },
         });
       } else if (!membership.isActive) {
         await prisma.userTenant.update({ where: { id: membership.id }, data: { isActive: true } });
       }
+    }
+    if (customerContext) {
+      await ensureCustomerUserLink({
+        tenantId: tenant.id,
+        customerId: customerContext.customerId,
+        userId: user.id,
+        role: customerContext.role,
+        source: 'SSO_DOMAIN',
+      }).catch(err => {
+        console.warn('[sso.callback] customer user link failed:', err);
+      });
     }
 
     void logAudit({
@@ -132,11 +170,26 @@ export async function GET(req: NextRequest) {
       details: `OIDC SSO login (issuer=${cfg.issuer}, sub=${sub}).`,
     });
 
+    const sessionId = newSessionId();
+    const expiresAt = new Date(Date.now() + 86_400_000);
     const sessionToken = await signSession({
+      sessionId,
       userId:   user.id,
       tenantId: tenant.id,
+      ...(customerContext ? { customerId: customerContext.customerId, customerRole: customerContext.role } : {}),
       plan:     tenant.plan ?? 'TRIAL',
       role:     role.code,
+    });
+    await logSsoCallback(req, email, tenant.id, user.id, true, null);
+    await registerSession({
+      id: sessionId,
+      userId: user.id,
+      tenantId: tenant.id,
+      plan: tenant.plan ?? 'TRIAL',
+      role: role.code,
+      expiresAt,
+      ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? req.headers.get('x-real-ip'),
+      userAgent: req.headers.get('user-agent'),
     });
 
     const r = NextResponse.redirect(new URL(state.returnTo || '/platform', new URL(req.url).origin));
@@ -149,6 +202,7 @@ export async function GET(req: NextRequest) {
     return r;
   } catch (err) {
     captureException(err, { context: 'auth.sso.callback', tags: { tenantId: state.tenantId } });
+    await logSsoCallback(req, state.email, state.tenantId, null, false, 'SSO_CALLBACK_FAILED');
     return redirectAndClear(req, '/login?sso=callback-failed');
   }
 }
@@ -178,4 +232,23 @@ function redirectAndClear(req: NextRequest, path: string): NextResponse {
   const r = redirect(req, path);
   r.cookies.delete(SSO_STATE_COOKIE);
   return r;
+}
+
+async function logSsoCallback(
+  req: NextRequest,
+  email: string,
+  tenantId: string | null,
+  userId: string | null,
+  success: boolean,
+  failureReason: string | null,
+) {
+  await recordLoginAttempt({
+    email,
+    tenantId,
+    userId,
+    success,
+    failureReason,
+    ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? req.headers.get('x-real-ip'),
+    userAgent: req.headers.get('user-agent'),
+  }).catch(() => undefined);
 }

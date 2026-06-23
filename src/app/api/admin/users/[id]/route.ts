@@ -7,18 +7,25 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { assertUserInTenant, requireAdminRole } from '@/lib/admin-auth';
+import { recordAdminChange } from '@/lib/admin-change-history';
+import { MODULES } from '@/lib/permissions';
+import { normalizeModuleAccessRecord } from '@/lib/module-access-presets';
 
 type Params = { params: Promise<{ id: string }> };
 
-const ALL_MODULES = [
-  'fleet', 'maintenance', 'booking', 'logistics',
-  'staff', 'school_bus', 'incident', 'rental', 'leasing',
-  'finance', 'admin', 'reports',
-] as const;
+const ALL_MODULES = MODULES;
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   try {
+    const auth = requireAdminRole(req, ['SUPER_ADMIN', 'TENANT_ADMIN']);
+    if (auth instanceof NextResponse) return auth;
+
     const { id } = await params;
+    if (!auth.isSuperAdmin && !(await assertUserInTenant(id, auth.tenantId))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const user = await prisma.user.findUnique({ where: { id } });
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
@@ -36,8 +43,16 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
+    const auth = requireAdminRole(req, ['SUPER_ADMIN', 'TENANT_ADMIN']);
+    if (auth instanceof NextResponse) return auth;
+
     const { id } = await params;
+    if (!auth.isSuperAdmin && !(await assertUserInTenant(id, auth.tenantId))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body    = await req.json();
+    const before = await prisma.user.findUnique({ where: { id } });
 
     const {
       username, email, firstName, lastName,
@@ -46,9 +61,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       isActive, moduleAccess,
     } = body;
 
+    const normalizedModuleAccess = normalizeModuleAccessRecord(moduleAccess);
+
     // Validate moduleAccess keys
-    if (moduleAccess) {
-      const invalid = Object.keys(moduleAccess).filter(
+    if (normalizedModuleAccess) {
+      const invalid = Object.keys(normalizedModuleAccess as Record<string, unknown>).filter(
         k => !(ALL_MODULES as readonly string[]).includes(k)
       );
       if (invalid.length) {
@@ -72,9 +89,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (userType     !== undefined) data.userType     = userType;
     if (employeeId   !== undefined) data.employeeId   = employeeId;
     if (isActive     !== undefined) data.isActive     = isActive;
-    if (moduleAccess !== undefined) data.moduleAccess = moduleAccess;
+    if (moduleAccess !== undefined) data.moduleAccess = normalizedModuleAccess;
 
     const user = await prisma.user.update({ where: { id }, data });
+    await recordAdminChange({
+      req,
+      ctx: auth,
+      tenantId: auth.tenantId,
+      entityType: 'User',
+      entityId: user.id,
+      entityName: user.email,
+      action: 'UPDATE',
+      before,
+      after: user,
+      summary: `Updated user ${user.email}.`,
+    });
     return NextResponse.json(user);
   } catch (e) {
     console.error('[Admin Hub] PATCH /api/admin/users/[id]:', e);
@@ -82,13 +111,31 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, { params }: Params) {
   try {
+    const auth = requireAdminRole(req, ['SUPER_ADMIN', 'TENANT_ADMIN']);
+    if (auth instanceof NextResponse) return auth;
+
     const { id } = await params;
+    if (!auth.isSuperAdmin && !(await assertUserInTenant(id, auth.tenantId))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     // Soft-delete: deactivate rather than hard-delete
     const user = await prisma.user.update({
       where: { id },
       data:  { isActive: false, updatedAt: new Date() },
+    });
+    await recordAdminChange({
+      req,
+      ctx: auth,
+      tenantId: auth.tenantId,
+      entityType: 'User',
+      entityId: user.id,
+      entityName: user.email,
+      action: 'DELETE',
+      after: user,
+      summary: `Deactivated user ${user.email}.`,
     });
     return NextResponse.json({ success: true, message: 'User deactivated', user });
   } catch (e) {

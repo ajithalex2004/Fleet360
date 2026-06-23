@@ -51,8 +51,8 @@ function CrayonRender({ node }: { node: CrayonNode | string | unknown }): React.
     case 'Header':
       return (
         <div className="px-5 py-4 border-b border-white/10">
-          {p.title    && <h3 className="text-base font-bold text-white">{String(p.title)}</h3>}
-          {p.subtitle && <p className="text-sm text-slate-400 mt-0.5">{String(p.subtitle)}</p>}
+          {p.title != null && <h3 className="text-base font-bold text-white">{String(p.title)}</h3>}
+          {p.subtitle != null && <p className="text-sm text-slate-400 mt-0.5">{String(p.subtitle)}</p>}
         </div>
       );
     case 'TextContent':
@@ -66,7 +66,7 @@ function CrayonRender({ node }: { node: CrayonNode | string | unknown }): React.
       const items = (p.items ?? []) as Array<{ title: string; subtitle?: string; iconName?: string; value?: string; name?: string }>;
       return (
         <div className="px-5 py-3">
-          {p.heading && <p className="text-xs text-slate-500 uppercase tracking-wider mb-2 font-medium">{String(p.heading)}</p>}
+          {p.heading != null && <p className="text-xs text-slate-500 uppercase tracking-wider mb-2 font-medium">{String(p.heading)}</p>}
           <div className="space-y-1.5">
             {items.map((item, i) => {
               const prompt = BUTTON_PROMPTS[item.name ?? ''] ?? `Show me ${item.title}`;
@@ -95,7 +95,7 @@ function CrayonRender({ node }: { node: CrayonNode | string | unknown }): React.
       const items = (p.items ?? []) as Array<{ key: string; value: string }>;
       return (
         <div className="px-5 py-3 space-y-1">
-          {p.heading && <p className="text-xs text-slate-500 uppercase tracking-wider mb-2 font-medium">{String(p.heading)}</p>}
+          {p.heading != null && <p className="text-xs text-slate-500 uppercase tracking-wider mb-2 font-medium">{String(p.heading)}</p>}
           {items.map((item, i) => (
             <div key={i} className="flex justify-between text-sm py-1 border-b border-white/5 last:border-0">
               <span className="text-slate-400">{item.key}</span>
@@ -109,7 +109,7 @@ function CrayonRender({ node }: { node: CrayonNode | string | unknown }): React.
       const stats = (p.items ?? []) as Array<{ label: string; value: string; trend?: string }>;
       return (
         <div className="px-5 py-3">
-          {p.heading && <p className="text-xs text-slate-500 uppercase tracking-wider mb-2 font-medium">{String(p.heading)}</p>}
+          {p.heading != null && <p className="text-xs text-slate-500 uppercase tracking-wider mb-2 font-medium">{String(p.heading)}</p>}
           <div className="grid grid-cols-2 gap-3">
             {stats.map((s, i) => (
               <div key={i} className="bg-slate-900/40 rounded-xl p-3 text-center">
@@ -166,9 +166,9 @@ function CrayonRender({ node }: { node: CrayonNode | string | unknown }): React.
               : 'bg-slate-700 border border-white/10 text-slate-200 hover:bg-slate-600'
           }`}
         >
-          {p.iconLeft  && typeof p.iconLeft  === 'object' && <span className="mr-1.5">{ICON_MAP[(p.iconLeft  as CrayonNode).props?.name as string] ?? ''}</span>}
+          {p.iconLeft != null && typeof p.iconLeft  === 'object' && <span className="mr-1.5">{ICON_MAP[(p.iconLeft  as CrayonNode).props?.name as string] ?? ''}</span>}
           {label}
-          {p.iconRight && typeof p.iconRight === 'object' && <span className="ml-1.5">{ICON_MAP[(p.iconRight as CrayonNode).props?.name as string] ?? ''}</span>}
+          {p.iconRight != null && typeof p.iconRight === 'object' && <span className="ml-1.5">{ICON_MAP[(p.iconRight as CrayonNode).props?.name as string] ?? ''}</span>}
         </button>
       );
     }

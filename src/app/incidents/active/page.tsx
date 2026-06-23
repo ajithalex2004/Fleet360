@@ -214,8 +214,8 @@ function IncidentDrawer({ incident, onClose, onUpdated }: { incident: Incident; 
             {[
               ['📍 Location',  inc.location],
               ['📅 Date',      inc.incident_date ? new Date(inc.incident_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : null],
-              ['🚗 Vehicle',   (inc as Record<string, unknown>).vehicle_plate as string | null],
-              ['👤 Driver',    (inc as Record<string, unknown>).driver_name as string | null],
+              ['🚗 Vehicle',   (inc as unknown as Record<string, unknown>).vehicle_plate as string | null],
+              ['👤 Driver',    (inc as unknown as Record<string, unknown>).driver_name as string | null],
               ['🧑 Assigned',  inc.assigned_to],
             ].map(([label, val]) => val ? (
               <div key={label as string} className="flex gap-3 text-xs">
@@ -226,7 +226,7 @@ function IncidentDrawer({ incident, onClose, onUpdated }: { incident: Incident; 
           </div>
 
           {/* Workflow Actions */}
-          {inc.status !== 'CLOSED' && (
+          {String(inc.status) !== 'CLOSED' && (
             <div>
               <p className="text-xs text-red-400 uppercase tracking-wider font-semibold mb-2">Actions</p>
               <div className="flex flex-wrap gap-2">
@@ -242,7 +242,7 @@ function IncidentDrawer({ incident, onClose, onUpdated }: { incident: Incident; 
                     🚨 Escalate
                   </button>
                 ) : null}
-                {inc.status !== 'RESOLVED' && inc.status !== 'CLOSED' ? (
+                {inc.status !== 'RESOLVED' && String(inc.status) !== 'CLOSED' ? (
                   <button disabled={advancing} onClick={() => setShowResolve(true)}
                     className="text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-2 rounded-lg hover:bg-emerald-500/30 transition-colors disabled:opacity-50">
                     ✅ Resolve

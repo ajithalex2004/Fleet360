@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { LogisticsConfirmDialog, LogisticsMessage, readLogisticsApiError } from '@/components/logistics/master-data-fields';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -91,7 +92,7 @@ function AddStopModal({ onClose, onSaved, bookingId }: {
           cargoItems: items.filter(i => i.desc.trim()),
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error((await readLogisticsApiError(res)).message);
       onSaved();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Save failed');
@@ -445,6 +446,9 @@ export default function ManifestPage() {
   const [loading,      setLoading]      = useState(true);
   const [showAdd,      setShowAdd]      = useState(false);
   const [confirmStop,  setConfirmStop]  = useState<ManifestStop | null>(null);
+  const [deleteStopTarget, setDeleteStopTarget] = useState<ManifestStop | null>(null);
+  const [deletingStop, setDeletingStop] = useState(false);
+  const [pageError, setPageError] = useState('');
 
   const load = useCallback(async () => {
     if (!bookingId) return;
@@ -458,13 +462,22 @@ export default function ManifestPage() {
   useEffect(() => { load(); }, [load]);
 
   const deleteStop = async (stopId: string) => {
-    if (!confirm('Remove this stop from the manifest?')) return;
-    await fetch(`/api/logistics/trips/${bookingId}/manifest`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stopId }),
-    });
-    load();
+    setDeletingStop(true);
+    setPageError('');
+    try {
+      const res = await fetch(`/api/logistics/trips/${bookingId}/manifest`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stopId }),
+      });
+      if (!res.ok) throw new Error((await readLogisticsApiError(res)).message);
+      setDeleteStopTarget(null);
+      await load();
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : 'Failed to remove manifest stop');
+    } finally {
+      setDeletingStop(false);
+    }
   };
 
   const handlePrint = () => window.print();
@@ -503,6 +516,19 @@ export default function ManifestPage() {
       {confirmStop && (
         <DeliveryModal stop={confirmStop} bookingId={bookingId}
           onClose={() => setConfirmStop(null)} onSaved={() => { setConfirmStop(null); load(); }} />
+      )}
+      {deleteStopTarget && (
+        <LogisticsConfirmDialog
+          title="Remove manifest stop"
+          message={`Remove stop ${deleteStopTarget.stop_number}: ${deleteStopTarget.stop_name}?`}
+          confirmLabel={deletingStop ? 'Removing...' : 'Remove stop'}
+          tone="danger"
+          busy={deletingStop}
+          onCancel={() => {
+            if (!deletingStop) setDeleteStopTarget(null);
+          }}
+          onConfirm={() => deleteStop(deleteStopTarget.id)}
+        />
       )}
 
       {/* Print view (hidden on screen) */}
@@ -543,6 +569,9 @@ export default function ManifestPage() {
           <div><p className="text-xs text-slate-500">Driver</p><p className="text-white">{booking.driverName ?? '—'}</p></div>
           <div><p className="text-xs text-slate-500">Vehicle</p><p className="text-amber-400">{booking.vehiclePlate ?? '—'}</p></div>
         </div>
+        {pageError && (
+          <LogisticsMessage type="error" title="Manifest action failed" message={pageError} />
+        )}
 
         {/* Progress */}
         {summary.totalStops > 0 && (
@@ -579,7 +608,7 @@ export default function ManifestPage() {
             {stops.map(stop => (
               <StopCard key={stop.id} stop={stop}
                 onConfirm={setConfirmStop}
-                onDelete={deleteStop}
+                onDelete={stopId => setDeleteStopTarget(stops.find(item => item.id === stopId) ?? null)}
               />
             ))}
           </div>

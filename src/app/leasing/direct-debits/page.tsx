@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
+import { LeasingBillingMigrationNotice } from '@/components/LeasingBillingMigrationNotice';
 
 interface DirectDebit {
   id: string;
@@ -25,6 +27,9 @@ interface Lessee {
 type StatusFilter = 'All' | 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'CANCELLED';
 
 export default function DirectDebitsPage() {
+  const pathname = usePathname();
+  const isLegacyPath = pathname.startsWith('/leasing/');
+  const apiBase = isLegacyPath ? '/api/leasing' : '/api/finance/leasing-billing';
   const [mandates, setMandates] = useState<DirectDebit[]>([]);
   const [lessees, setLessees] = useState<Lessee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,13 +47,12 @@ export default function DirectDebitsPage() {
     currency: 'AED',
     notes: '',
   });
-
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
         const [mandatesRes, lesseesRes] = await Promise.all([
-          fetch('/api/leasing/direct-debits'),
+          fetch(`${apiBase}/direct-debits`),
           fetch('/api/leasing/lessees'),
         ]);
 
@@ -70,14 +74,14 @@ export default function DirectDebitsPage() {
     };
 
     loadData();
-  }, []);
+  }, [apiBase]);
 
   const handleCreateMandate = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
 
     try {
-      const res = await fetch('/api/leasing/direct-debits', {
+      const res = await fetch(`${apiBase}/direct-debits`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -111,7 +115,7 @@ export default function DirectDebitsPage() {
     }
 
     try {
-      const res = await fetch(`/api/leasing/direct-debits/${id}`, {
+      const res = await fetch(`${apiBase}/direct-debits/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -157,6 +161,13 @@ export default function DirectDebitsPage() {
   };
 
   return (
+    isLegacyPath ? (
+      <LeasingBillingMigrationNotice
+        title="Leasing direct debits"
+        financeHref="/finance/leasing-billing/direct-debits"
+        description="Mandate creation, suspension, and billing collections are now governed from Finance & Billing."
+      />
+    ) : (
     <div className="min-h-screen bg-gray-900 p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
@@ -419,5 +430,6 @@ export default function DirectDebitsPage() {
         </div>
       )}
     </div>
+    )
   );
 }

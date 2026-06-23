@@ -15,10 +15,10 @@ import type { ReactElement } from 'react';
 import { registerFonts } from './fonts';
 import { captureException } from '@/lib/sentry';
 
-export async function renderPdf(document: ReactElement<DocumentProps>): Promise<Buffer> {
+export async function renderPdf(document: ReactElement): Promise<Buffer> {
   registerFonts();
   try {
-    return await renderToBuffer(document);
+    return await renderToBuffer(document as ReactElement<DocumentProps>);
   } catch (err) {
     captureException(err, { context: 'pdf.render' });
     throw err;

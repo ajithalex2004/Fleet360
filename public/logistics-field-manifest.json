@@ -1,0 +1,18 @@
+{
+  "name": "Fleet360 Logistics Field Ops",
+  "short_name": "Field Ops",
+  "description": "Mobile pickup, delivery, ETA, exception, photo, and POD updates for Fleet360 Logistics.",
+  "start_url": "/logistics/field-ops",
+  "scope": "/logistics/field-ops",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#059669",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

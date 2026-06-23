@@ -8,6 +8,7 @@ interface Incident {
   incidentDate: string; incidentType: string; severity?: string; location?: string; description?: string;
   injuriesReported?: boolean; policeReport?: boolean; policeReportNo?: string;
   actionTaken?: string; status?: string; resolvedAt?: string; resolvedBy?: string; createdAt?: string;
+  workOrderId?: string; workOrderNo?: string; workOrderStatus?: string; workOrderPriority?: string;
 }
 
 const TYPES     = ['ACCIDENT','BREAKDOWN','DELAY','MEDICAL','PASSENGER_COMPLAINT','OTHER'];
@@ -124,7 +125,7 @@ export default function IncidentsPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/5">
-                {['Incident No.','Date','Type','Severity','Location','Description','Injuries','Status','Actions'].map(h=>(
+                {['Incident No.','Date','Type','Severity','Location','Description','Injuries','Work Order','Status','Actions'].map(h=>(
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-400">{h}</th>
                 ))}
               </tr>
@@ -141,6 +142,15 @@ export default function IncidentsPage() {
                   <td className="px-4 py-3 text-sm text-white">{inc.location ?? '-'}</td>
                   <td className="px-4 py-3 text-sm text-white max-w-xs truncate">{inc.description ?? '-'}</td>
                   <td className="px-4 py-3 text-sm">{inc.injuriesReported ? <span className="text-rose-400">Yes</span> : <span className="text-slate-300">No</span>}</td>
+                  <td className="px-4 py-3 text-sm">
+                    {inc.workOrderNo ? (
+                      <span className="inline-flex items-center rounded-full border border-blue-400/40 bg-blue-500/10 px-2.5 py-1 text-xs font-semibold text-blue-300">
+                        {inc.workOrderNo}
+                      </span>
+                    ) : (
+                      <span className="text-slate-500">-</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLORS[inc.status ?? 'OPEN']}`}>{inc.status ?? 'OPEN'}</span>
                   </td>

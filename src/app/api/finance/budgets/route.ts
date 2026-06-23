@@ -92,28 +92,28 @@ export async function GET(req: NextRequest) {
 
   // ── Budget entries ─────────────────────────────────────────────────────────
   let budgets = await prisma.financeBudget.findMany({
-    where: { deletedAt: null, year },
+    where: { year },
     orderBy: { category: 'asc' },
   }).catch(() => []);
 
   // Auto-seed default budget categories if empty
   if (budgets.length === 0) {
     const defaults = [
-      { category: 'MAINTENANCE',     budgetAmount: 50000,  notes: 'Vehicle maintenance & repairs' },
-      { category: 'FUEL',            budgetAmount: 30000,  notes: 'Fleet fuel costs' },
-      { category: 'LEASING',         budgetAmount: 80000,  notes: 'Vehicle lease payments' },
-      { category: 'STAFF_TRANSPORT', budgetAmount: 20000,  notes: 'Staff bus operations' },
-      { category: 'SCHOOL_BUS',      budgetAmount: 15000,  notes: 'School bus operations' },
-      { category: 'RAC',             budgetAmount: 10000,  notes: 'RAC operating costs' },
-      { category: 'LOGISTICS',       budgetAmount: 40000,  notes: 'Logistics operating costs' },
-      { category: 'INSURANCE',       budgetAmount: 25000,  notes: 'Fleet insurance premiums' },
+      { category: 'MAINTENANCE',     budgetAmount: 50000 },
+      { category: 'FUEL',            budgetAmount: 30000 },
+      { category: 'LEASING',         budgetAmount: 80000 },
+      { category: 'STAFF_TRANSPORT', budgetAmount: 20000 },
+      { category: 'SCHOOL_BUS',      budgetAmount: 15000 },
+      { category: 'RAC',             budgetAmount: 10000 },
+      { category: 'LOGISTICS',       budgetAmount: 40000 },
+      { category: 'INSURANCE',       budgetAmount: 25000 },
     ];
     for (const d of defaults) {
       await prisma.financeBudget.create({
-        data: { ...d, year, month: month || null, actualAmount: 0 },
+        data: { ...d, year, month: month ?? 0, actualAmount: 0 },
       }).catch(() => {});
     }
-    budgets = await prisma.financeBudget.findMany({ where: { deletedAt: null, year }, orderBy: { category: 'asc' } }).catch(() => []);
+    budgets = await prisma.financeBudget.findMany({ where: { year }, orderBy: { category: 'asc' } }).catch(() => []);
   }
 
   // Merge live actuals into budget rows
@@ -133,7 +133,7 @@ export async function GET(req: NextRequest) {
       variancePct,
       isOverBudget: variance > 0,
       utilizationPct: budget > 0 ? Math.min(100, Math.round((actual / budget) * 100)) : 0,
-      notes:        b.notes,
+      notes:        null,
       source:       liveActuals[b.category] != null ? 'LIVE' : 'MANUAL',
     };
   });
@@ -160,10 +160,9 @@ export async function POST(req: NextRequest) {
       data: {
         category:     body.category,
         year:         body.year ?? new Date().getFullYear(),
-        month:        body.month ?? null,
+        month:        body.month ?? 0,
         budgetAmount: body.budgetAmount ?? 0,
         actualAmount: 0,
-        notes:        body.notes ?? null,
       },
     });
     return NextResponse.json(budget, { status: 201 });

@@ -1,4 +1,5 @@
 'use client';
+import { useRentalMasterData } from '@/hooks/useRentalMasterData';
 import React, { useState, useEffect, useCallback } from 'react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -96,6 +97,7 @@ const EMPTY_FORM = {
 // Component
 // ─────────────────────────────────────────────────────────────────────────────
 export default function RentalStaffPage() {
+  const { masterData } = useRentalMasterData();
   const [staff, setStaff]         = useState<StaffMember[]>([]);
   const [kpi, setKpi]             = useState<KPI>({ total: 0, active: 0, on_leave: 0, branch_managers: 0 });
   const [loading, setLoading]     = useState(true);
@@ -108,6 +110,9 @@ export default function RentalStaffPage() {
 
   const [showAssign, setShowAssign]       = useState(false);
   const [showTransfer, setShowTransfer]   = useState(false);
+  const roles = masterData.staffRoles.length ? masterData.staffRoles : ROLES;
+  const moduleOptions = masterData.staffModules.length ? masterData.staffModules : MODULE_OPTIONS;
+  const uaeEmirates = masterData.emirates.length ? masterData.emirates.map((entry) => entry.label) : UAE_EMIRATES;
   const [editTarget, setEditTarget]       = useState<StaffMember | null>(null);
   const [transferTarget, setTransferTarget] = useState<StaffMember | null>(null);
 
@@ -267,7 +272,7 @@ export default function RentalStaffPage() {
         <select value={filterRole} onChange={e => setFilterRole(e.target.value)}
           className="px-4 py-2 bg-slate-800/60 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-teal-500/50">
           <option value="">All Roles</option>
-          {ROLES.map(r => <option key={r} value={r}>{r.replace(/_/g,' ')}</option>)}
+          {roles.map(r => <option key={r} value={r}>{r.replace(/_/g,' ')}</option>)}
         </select>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
           className="px-4 py-2 bg-slate-800/60 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-teal-500/50">
@@ -298,7 +303,7 @@ export default function RentalStaffPage() {
         <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-16 text-center">
           <div className="text-5xl mb-4">👔</div>
           <p className="text-slate-300 text-lg font-semibold">No staff assignments found</p>
-          <p className="text-slate-500 text-sm mt-1">Click "+ Assign Staff" to add your first team member</p>
+          <p className="text-slate-500 text-sm mt-1">Click &quot;+ Assign Staff&quot; to add your first team member</p>
         </div>
       ) : view === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -492,14 +497,14 @@ export default function RentalStaffPage() {
                 <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Role *</label>
                 <select value={form.role} onChange={e => setForm({...form, role: e.target.value})}
                   className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-teal-500/50">
-                  {ROLES.map(r => <option key={r} value={r}>{r.replace(/_/g,' ')}</option>)}
+                  {roles.map(r => <option key={r} value={r}>{r.replace(/_/g,' ')}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Module *</label>
                 <select value={form.module} onChange={e => setForm({...form, module: e.target.value})}
                   className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-teal-500/50">
-                  {MODULE_OPTIONS.map(m => <option key={m} value={m}>{m}</option>)}
+                  {moduleOptions.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
               <div>
@@ -513,7 +518,7 @@ export default function RentalStaffPage() {
                 <select value={form.emirate} onChange={e => setForm({...form, emirate: e.target.value})}
                   className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-teal-500/50">
                   <option value="">Select Emirate</option>
-                  {UAE_EMIRATES.map(e => <option key={e} value={e}>{e}</option>)}
+                  {uaeEmirates.map(e => <option key={e} value={e}>{e}</option>)}
                 </select>
               </div>
               <div>
@@ -580,7 +585,7 @@ export default function RentalStaffPage() {
                 <select value={transferForm.emirate} onChange={e => setTransferForm({...transferForm, emirate: e.target.value})}
                   className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-teal-500/50">
                   <option value="">Select Emirate</option>
-                  {UAE_EMIRATES.map(e => <option key={e} value={e}>{e}</option>)}
+                  {uaeEmirates.map(e => <option key={e} value={e}>{e}</option>)}
                 </select>
               </div>
               <div>

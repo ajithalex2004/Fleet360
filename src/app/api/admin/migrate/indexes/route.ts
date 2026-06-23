@@ -1,5 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireAdminPermission, requireDangerApproval } from '@/lib/admin-policy';
+import { recordAdminChange } from '@/lib/admin-change-history';
 
 const INDEXES = [
   // MaintenanceRequest
@@ -50,7 +52,16 @@ const INDEXES = [
   'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_driver_shifts_shift_date ON driver_shifts(shift_date)',
 ];
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const auth = await requireAdminPermission(req, 'edit', 'platform');
+  if (auth instanceof NextResponse) return auth;
+  const approval = await requireDangerApproval(req, auth.ctx, 'migrate.indexes', {
+    targetType: 'Migration',
+    targetId: 'indexes',
+    summary: 'Run admin index migration.',
+  });
+  if (approval) return approval;
+
   const results: { index: string; status: 'created' | 'skipped'; error?: string }[] = [];
   for (const sql of INDEXES) {
     const name = sql.match(/IF NOT EXISTS (\S+)/)?.[1] ?? sql;
@@ -63,10 +74,23 @@ export async function POST() {
   }
   const created = results.filter(r => r.status === 'created').length;
   const skipped = results.filter(r => r.status === 'skipped').length;
+  await recordAdminChange({
+    req,
+    ctx: auth.ctx,
+    tenantId: null,
+    entityType: 'Migration',
+    entityId: 'indexes',
+    action: 'UPDATE',
+    after: { created, skipped, results },
+    summary: `Ran index migration: ${created} created, ${skipped} skipped.`,
+  });
   return NextResponse.json({ created, skipped, results });
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await requireAdminPermission(req, 'view', 'platform');
+  if (auth instanceof NextResponse) return auth;
+
   // Check which indexes already exist
   const rows = await prisma.$queryRaw<{ indexname: string }[]>`
     SELECT indexname FROM pg_indexes

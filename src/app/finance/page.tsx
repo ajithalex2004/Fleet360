@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { Banknote, RefreshCw, X } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 
@@ -112,14 +113,6 @@ export default function FinanceDashboard() {
 
   const s   = data?.summary;
   const mods = data?.modules;
-  const maxRevenue = Math.max(
-    mods?.rental.total      ?? 0,
-    mods?.leasing.total     ?? 0,
-    mods?.general.total     ?? 0,
-    mods?.maintenance.total ?? 0,
-    1,
-  );
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -316,10 +309,10 @@ export default function FinanceDashboard() {
                           )}
                         </td>
                         <td className="px-5 py-4">
-                          {key === 'rental'      && <a href="/rental/invoices" className="text-xs text-blue-400 hover:underline">View →</a>}
-                          {key === 'leasing'     && <a href="/leasing/invoices" className="text-xs text-violet-400 hover:underline">View →</a>}
-                          {key === 'maintenance' && <a href="/maintenance/invoices" className="text-xs text-amber-400 hover:underline">View →</a>}
-                          {key === 'payments'    && <a href="/finance/payments" className="text-xs text-green-400 hover:underline">View →</a>}
+                          {key === 'rental'      && <Link href="/rental/invoices" className="text-xs text-blue-400 hover:underline">View →</Link>}
+                          {key === 'leasing'     && <Link href="/finance/leasing-billing/invoices" className="text-xs text-violet-400 hover:underline">View →</Link>}
+                          {key === 'maintenance' && <Link href="/maintenance/invoices" className="text-xs text-amber-400 hover:underline">View →</Link>}
+                          {key === 'payments'    && <Link href="/finance/payments" className="text-xs text-green-400 hover:underline">View →</Link>}
                         </td>
                       </tr>
                     );

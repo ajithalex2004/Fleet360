@@ -1,11 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendBookingConfirmedWhatsApp } from '@/lib/whatsapp';
+import {
+  attachTenantToEntity,
+  entityBelongsToTenant,
+  recordOperationalChange,
+  requireOperationalContext,
+} from '@/lib/cross-module-governance';
+import { ensureRentalGovernance } from '@/lib/rental-governance';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
 
 // POST /api/rental/bookings/[id]/confirm
 // Confirms a PENDING booking and generates a RentalAgreement
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  await ensureRentalGovernance();
   try {
+    const ctx = requireOperationalContext(req, 'rac', { write: true });
+    if (ctx instanceof NextResponse) return ctx;
+    if (!(await entityBelongsToTenant('rental_bookings', params.id, ctx.tenantId, { activeOnly: true }))) {
+      return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+    }
     const body = await req.json();
     const booking = await prisma.rentalBooking.findUnique({
       where: { id: params.id },
@@ -40,6 +54,36 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         },
       }),
     ]);
+    await attachTenantToEntity('rental_agreements', agreement.id, ctx.tenantId);
+    await recordOperationalChange({
+      req,
+      ctx,
+      entityType: 'RentalBooking',
+      entityId: params.id,
+      action: 'STATUS_CHANGE',
+      before: booking,
+      after: updatedBooking,
+      summary: `Confirmed rental booking ${updatedBooking.bookingRef ?? updatedBooking.id} and created agreement ${agreement.agreementNo}.`,
+    });
+
+    const workflow = await triggerServiceWorkflow({
+      req,
+      ctx,
+      serviceTypeKey: 'RAC_RENTAL_AGREEMENT',
+      referenceType: 'RentalAgreement',
+      referenceId: agreement.id,
+      referenceNumber: agreement.agreementNo ?? agreement.id,
+      contextData: {
+        bookingId: updatedBooking.id,
+        bookingRef: updatedBooking.bookingRef,
+        agreementId: agreement.id,
+        agreementNo,
+        customerId: booking.customerId,
+        vehicleId: booking.vehicleId,
+        totalAmount: booking.totalAmount ?? null,
+        status: updatedBooking.status,
+      },
+    });
 
     // Best-effort WhatsApp confirmation (never fails the request).
     void sendBookingConfirmedWhatsApp(
@@ -56,7 +100,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       },
     );
 
-    return NextResponse.json({ booking: updatedBooking, agreement });
+    return NextResponse.json({ booking: updatedBooking, agreement, workflow });
   } catch (error) {
     console.error('Error confirming booking:', error);
     return NextResponse.json({ error: 'Failed to confirm booking' }, { status: 500 });

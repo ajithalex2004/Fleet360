@@ -487,7 +487,7 @@ export default function VendorQuotePage() {
                                                 <div>Requested: {new Date(req.requestDate).toLocaleDateString()}</div>
                                                 {isSubmitted && req.quotations?.find(q => q.garageId === currentGarageId)?.quotationDate && (
                                                     <div className="text-emerald-600 font-medium">
-                                                        Submitted: {new Date(req.quotations?.find(q => q.garageId === currentGarageId)!.quotationDate).toLocaleDateString()}
+                                                        Submitted: {new Date(req.quotations?.find(q => q.garageId === currentGarageId)?.quotationDate ?? new Date().toISOString()).toLocaleDateString()}
                                                     </div>
                                                 )}
                                             </div>

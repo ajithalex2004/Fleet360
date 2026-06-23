@@ -4,9 +4,16 @@
  * Called by UserSwitcher sign-out and any "Log out" button in the platform.
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifySession } from '@/lib/tenant-session';
+import { revokeSession } from '@/lib/session-registry';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const token = request.cookies.get('xl-session')?.value;
+  const session = token ? await verifySession(token) : null;
+  if (session?.sessionId) {
+    await revokeSession(session.sessionId, session.userId, 'logout');
+  }
   const response = NextResponse.json({ ok: true, message: 'Logged out successfully.' });
   // Expire the cookie immediately
   response.cookies.set('xl-session', '', {

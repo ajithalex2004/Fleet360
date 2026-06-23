@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { assertUserInTenant, requireAdminRole } from '@/lib/admin-auth';
 
 function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -16,6 +17,9 @@ function hashPassword(password: string): string {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = requireAdminRole(request, ['SUPER_ADMIN', 'TENANT_ADMIN']);
+    if (auth instanceof NextResponse) return auth;
+
     const { userId, password } = await request.json() as { userId?: string; password?: string };
 
     if (!userId || !password) {
@@ -29,6 +33,10 @@ export async function POST(request: NextRequest) {
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    if (!auth.isSuperAdmin && !(await assertUserInTenant(userId, auth.tenantId))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Ensure password_hash column exists

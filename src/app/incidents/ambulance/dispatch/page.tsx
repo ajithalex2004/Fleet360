@@ -210,7 +210,7 @@ export default function AmbulanceDispatchPage() {
   const [loading, setLoading] = useState(true);
   const [tab,     setTab]     = useState<'active'|'all'|'fleet'>('active');
   const [toast,   setToast]   = useState<{ msg: string; ok: boolean } | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval>>();
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   async function load() {
     try {
@@ -228,7 +228,9 @@ export default function AmbulanceDispatchPage() {
   useEffect(() => {
     load();
     pollRef.current = setInterval(load, 15_000);
-    return () => clearInterval(pollRef.current);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, []);
 
   async function handleDispatch(jobId: string) {

@@ -249,6 +249,26 @@ interface TenantRow {
   isActive?: boolean;
   modules?: { module: string; isEnabled: boolean }[];
   _count?: { userTenants: number; roles: number };
+  health?: {
+    score: number;
+    status: 'HEALTHY' | 'ATTENTION' | 'BLOCKED';
+    enabledModules: number;
+    pendingApprovals: number;
+    issues: Array<{ severity: 'error' | 'warning' | 'info'; message: string }>;
+  };
+  readiness?: {
+    score: number;
+    status: 'READY' | 'ATTENTION' | 'BLOCKED';
+    blockers: Array<{ key: string; label: string; message: string; actionHref?: string }>;
+    warnings: Array<{ key: string; label: string; message: string; actionHref?: string }>;
+    metrics: {
+      enabledModules: number;
+      activeUsers: number;
+      pendingApprovals: number;
+      failedLogins24h: number;
+      activeModuleSubscriptions: number;
+    };
+  } | null;
 }
 
 // bookingTypes stored as { serviceKey: string[] }
@@ -283,6 +303,9 @@ export default function TenantsPage() {
   const [loading,   setLoading]   = useState(true);
   const [saving,    setSaving]    = useState(false);
   const [error,     setError]     = useState('');
+  const [actionMsg, setActionMsg] = useState('');
+  const [busyTenantId, setBusyTenantId] = useState<string | null>(null);
+  const [pendingImpersonation, setPendingImpersonation] = useState<TenantRow | null>(null);
   const [form,      setForm]      = useState(emptyForm);
   // which service-type panels are expanded
   const [expanded,  setExpanded]  = useState<Record<string, boolean>>({
@@ -375,26 +398,47 @@ export default function TenantsPage() {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error ?? 'Failed to create tenant');
       }
-      closeModal(); load();
+      await load();
+      closeModal();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to create tenant');
     } finally { setSaving(false); }
   };
 
   const toggleActive = async (t: TenantRow) => {
-    await fetch(`/api/admin/tenants/${t.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isActive: !t.isActive }),
-    });
-    load();
+    setBusyTenantId(t.id);
+    setActionMsg('');
+    try {
+      const res = await fetch(`/api/admin/tenants/${t.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: !t.isActive }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 428) {
+        setActionMsg(`Tenant status change queued for approval: ${data.approvalRequest?.id ?? 'pending request'}. Approve it, then retry.`);
+        return;
+      }
+      if (!res.ok) {
+        setActionMsg(data.error ?? 'Tenant status update failed.');
+        return;
+      }
+      setActionMsg(`Tenant ${t.isActive ? 'deactivation' : 'activation'} applied.`);
+      load();
+    } finally {
+      setBusyTenantId(null);
+    }
   };
 
   const impersonate = async (t: TenantRow) => {
-    const ok = window.confirm(
-      `Impersonate ${t.name}?\n\nYou'll be signed in as a tenant admin for 1 hour.\n` +
-      `Every action is audited as your account. Use the amber banner at the top to stop.`
-    );
-    if (!ok) return;
+    setPendingImpersonation(t);
+    return;
+  };
+
+  const confirmImpersonation = async () => {
+    const t = pendingImpersonation;
+    if (!t) return;
+    setBusyTenantId(t.id);
+    setActionMsg('');
     try {
       const res = await fetch('/api/admin/impersonate', {
         method: 'POST',
@@ -403,12 +447,15 @@ export default function TenantsPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data?.error ?? 'Could not impersonate.');
+        setActionMsg(data?.error ?? 'Could not impersonate.');
         return;
       }
       window.location.href = '/platform';
     } catch {
-      alert('Network error — could not impersonate.');
+      setActionMsg('Network error - could not impersonate.');
+    } finally {
+      setBusyTenantId(null);
+      setPendingImpersonation(null);
     }
   };
 
@@ -417,6 +464,15 @@ export default function TenantsPage() {
 
   // total selected booking types across all service types
   const totalBookingSelected = Object.values(form.bookingTypes).reduce((s, a) => s + a.length, 0);
+  const readinessSummary = tenants.reduce((acc, tenant) => {
+    const status = tenant.readiness?.status;
+    if (status === 'READY') acc.ready += 1;
+    if (status === 'ATTENTION') acc.attention += 1;
+    if (status === 'BLOCKED') acc.blocked += 1;
+    acc.score += tenant.readiness?.score ?? tenant.health?.score ?? 0;
+    return acc;
+  }, { ready: 0, attention: 0, blocked: 0, score: 0 });
+  const readinessAverage = tenants.length ? Math.round(readinessSummary.score / tenants.length) : 0;
 
   // ── render ────────────────────────────────────────────────────────────────
   if (loading) return (
@@ -443,8 +499,63 @@ export default function TenantsPage() {
       {error && !showModal && (
         <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>
       )}
+      {actionMsg && !showModal && (
+        <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl px-4 py-3 text-blue-200 text-sm">{actionMsg}</div>
+      )}
 
       {/* ── Tenant list ─────────────────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-white/10 bg-slate-900/60 overflow-hidden">
+        <div className="px-5 py-4 border-b border-white/10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-white">Tenant Readiness Dashboard</h2>
+            <p className="text-sm text-slate-400">Unified operating view across identity, access, billing, security, configuration, and approvals.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="text-sm text-slate-300">
+              Average readiness <span className="font-bold text-white">{readinessAverage}%</span>
+            </div>
+            <Link href="/admin/tenants/readiness" className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500">
+              Open readiness
+            </Link>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-white/10">
+          {[
+            ['Ready', readinessSummary.ready, 'text-emerald-300'],
+            ['Needs Attention', readinessSummary.attention, 'text-amber-300'],
+            ['Blocked', readinessSummary.blocked, 'text-rose-300'],
+            ['Tenants', tenants.length, 'text-blue-300'],
+          ].map(([label, value, color]) => (
+            <div key={String(label)} className="p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{label}</p>
+              <p className={`mt-2 text-3xl font-bold ${color}`}>{value}</p>
+            </div>
+          ))}
+        </div>
+        {tenants.some(t => (t.readiness?.blockers?.length ?? 0) > 0 || (t.readiness?.warnings?.length ?? 0) > 0) && (
+          <div className="border-t border-white/10 p-5 grid grid-cols-1 lg:grid-cols-3 gap-3">
+            {tenants
+              .filter(t => (t.readiness?.blockers?.length ?? 0) > 0 || (t.readiness?.warnings?.length ?? 0) > 0)
+              .slice(0, 3)
+              .map(t => {
+                const topIssue = t.readiness?.blockers?.[0] ?? t.readiness?.warnings?.[0];
+                return (
+                  <div key={t.id} className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-white truncate">{t.name}</p>
+                      <span className="text-xs font-semibold text-amber-200">{t.readiness?.score ?? t.health?.score ?? 0}%</span>
+                    </div>
+                    <p className="mt-2 text-xs text-amber-100 line-clamp-2">{topIssue?.message}</p>
+                    <Link href={topIssue?.actionHref || `/admin/tenants/${t.id}`} className="mt-3 inline-block text-xs text-blue-200 hover:text-blue-100">
+                      Review action
+                    </Link>
+                  </div>
+                );
+              })}
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 gap-4">
         {tenants.length === 0 ? (
           <div className="text-center text-slate-400 py-16 bg-slate-800/30 border border-white/5 rounded-2xl">
@@ -452,6 +563,7 @@ export default function TenantsPage() {
           </div>
         ) : tenants.map(t => (
           <div key={t.id}
+            data-testid="tenant-card"
             className={`bg-slate-800/50 border rounded-2xl p-6 transition-all ${t.isActive ? 'border-white/10' : 'border-white/5 opacity-60'}`}>
             <div className="flex items-start justify-between mb-4">
               <div>
@@ -471,6 +583,16 @@ export default function TenantsPage() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2 mb-4">
+              {t.health && (
+                <span className={`px-2 py-1 rounded text-xs font-semibold border ${healthClass(t.health.status)}`}>
+                  Health {t.health.score}% - {t.health.status}
+                </span>
+              )}
+              {t.health?.pendingApprovals ? (
+                <span className="px-2 py-1 rounded text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  {t.health.pendingApprovals} approval pending
+                </span>
+              ) : null}
               {ALL_MODULE_KEYS.map(m => {
                 const enabled = t.modules?.find(tm => tm.module === m)?.isEnabled;
                 return (
@@ -508,17 +630,27 @@ export default function TenantsPage() {
                 Ticket Types
               </Link>
               <button onClick={() => impersonate(t)}
-                disabled={!t.isActive}
+                disabled={!t.isActive || busyTenantId === t.id}
                 className="text-xs px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 disabled:opacity-40 disabled:cursor-not-allowed">
                 Impersonate
               </button>
               <button onClick={() => toggleActive(t)}
+                disabled={busyTenantId === t.id}
                 className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${t.isActive
                   ? 'bg-rose-500/20 text-rose-400 border-rose-500/30 hover:bg-rose-500/30'
                   : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30'}`}>
-                {t.isActive ? 'Deactivate' : 'Activate'}
+                {busyTenantId === t.id ? 'Working...' : t.isActive ? 'Deactivate' : 'Activate'}
               </button>
             </div>
+            {t.health?.issues?.length ? (
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+                {t.health.issues.slice(0, 4).map((issue, idx) => (
+                  <div key={`${issue.message}-${idx}`} className={`rounded-lg border px-3 py-2 text-xs ${issueClass(issue.severity)}`}>
+                    {issue.message}
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         ))}
       </div>
@@ -529,6 +661,39 @@ export default function TenantsPage() {
           (flex-1 min-h-0 overflow-y-auto) + footer (flex-shrink-0)
           This ensures the modal never exceeds the viewport.
       ══════════════════════════════════════════════════════════════════════ */}
+      {pendingImpersonation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-amber-500/30 bg-slate-900 shadow-2xl">
+            <div className="px-6 py-5 border-b border-white/10">
+              <h2 className="text-lg font-bold text-white">Review impersonation</h2>
+              <p className="text-sm text-slate-400 mt-1">You are about to enter {pendingImpersonation.name} as a tenant admin for operational support.</p>
+            </div>
+            <div className="p-6 space-y-3 text-sm text-slate-300">
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-amber-200">
+                Every action remains audited against your admin account and this tenant context.
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="rounded-lg bg-slate-950/70 border border-white/10 p-3">
+                  <div className="text-slate-500">Tenant</div>
+                  <div className="text-white font-semibold mt-1">{pendingImpersonation.name}</div>
+                </div>
+                <div className="rounded-lg bg-slate-950/70 border border-white/10 p-3">
+                  <div className="text-slate-500">Health</div>
+                  <div className="text-white font-semibold mt-1">{pendingImpersonation.health?.score ?? '-'}%</div>
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-white/10 flex justify-end gap-2">
+              <button onClick={() => setPendingImpersonation(null)} className="px-4 py-2 rounded-xl text-sm text-slate-300 hover:text-white hover:bg-white/5">Cancel</button>
+              <button onClick={confirmImpersonation} disabled={busyTenantId === pendingImpersonation.id}
+                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-sm font-semibold text-white">
+                {busyTenantId === pendingImpersonation.id ? 'Starting...' : 'Start impersonation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           {/*
@@ -875,6 +1040,18 @@ export default function TenantsPage() {
 // ─────────────────────────────────────────────────────────────────────────────
 // SUB-COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
+
+function healthClass(status: NonNullable<TenantRow['health']>['status']) {
+  if (status === 'HEALTHY') return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+  if (status === 'ATTENTION') return 'bg-amber-500/20 text-amber-300 border-amber-500/30';
+  return 'bg-rose-500/20 text-rose-300 border-rose-500/30';
+}
+
+function issueClass(severity: 'error' | 'warning' | 'info') {
+  if (severity === 'error') return 'bg-rose-500/10 text-rose-200 border-rose-500/30';
+  if (severity === 'warning') return 'bg-amber-500/10 text-amber-200 border-amber-500/30';
+  return 'bg-blue-500/10 text-blue-200 border-blue-500/30';
+}
 
 function Section({
   icon, iconBg, title, desc, children,

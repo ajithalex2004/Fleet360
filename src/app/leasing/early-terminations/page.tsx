@@ -1,6 +1,8 @@
 'use client';
 import { contractToEarlyTermination, toDateInput } from '@/lib/autoFill';
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import RowActionMenu from '@/components/ui/RowActionMenu';
+import SmartDataGridHeader from '@/components/ui/SmartDataGridHeader';
 
 interface Termination {
   id: string;
@@ -18,7 +20,24 @@ interface Termination {
   status: string;
 }
 
+interface Contract {
+  id: string;
+  contractNumber: string;
+  lessee: string;
+  lesseeId?: string | null;
+  startDate: string;
+  endDate: string;
+  monthlyRate: number;
+  status: string;
+}
+
+interface Lessee {
+  id: string;
+  name: string;
+}
+
 interface FormData {
+  lesseeId?: string;
   contractId: string;
   remainingMonths: number;
   monthlyRate: number;
@@ -30,8 +49,27 @@ interface FormData {
 
 export default function EarlyTerminationsPage() {
   const [terminations, setTerminations] = useState<Termination[]>([]);
-  const [filteredTerminations, setFilteredTerminations] = useState<Termination[]>([]);
+  const [contracts, setContracts] = useState<Contract[]>([]);
+  const [lessees, setLessees] = useState<Lessee[]>([]);
   const [statusFilter, setStatusFilter] = useState('All');
+  const [sortKey, setSortKey] = useState<'terminationNo' | 'contractId' | 'requestDate' | 'effectiveDate' | 'remainingMonths' | 'monthlyRate' | 'penaltyPct' | 'penaltyAmount' | 'outstandingPayments' | 'depositRefund' | 'settlementTotal' | 'status'>('terminationNo');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [columnFilters, setColumnFilters] = useState({
+    terminationNo: '',
+    contract: '',
+    requestDate: '',
+    effectiveDate: '',
+    remainingMonths: '',
+    monthlyRate: '',
+    penaltyPct: '',
+    penaltyAmount: '',
+    outstandingPayments: '',
+    depositRefund: '',
+    settlementTotal: '',
+    status: 'All',
+  });
+  const [selectedCalculatorLesseeId, setSelectedCalculatorLesseeId] = useState('');
+  const [selectedFormLesseeId, setSelectedFormLesseeId] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [calculatorData, setCalculatorData] = useState({
@@ -71,34 +109,154 @@ export default function EarlyTerminationsPage() {
     }
   }, []);
 
+  const fetchContractsAndLessees = useCallback(async () => {
+    try {
+      const [contractsRes, lesseesRes] = await Promise.all([
+        fetch('/api/leasing/contracts-v2'),
+        fetch('/api/leasing/lessees'),
+      ]);
+      if (contractsRes.ok) {
+        const contractsData = await contractsRes.json();
+        setContracts(Array.isArray(contractsData) ? contractsData : []);
+      }
+      if (lesseesRes.ok) {
+        const lesseesData = await lesseesRes.json();
+        setLessees(Array.isArray(lesseesData) ? lesseesData : lesseesData.lessees ?? []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch contracts / lessees:', error);
+    }
+  }, []);
+
   useEffect(() => {
     fetchTerminations();
-  }, [fetchTerminations]);
+    fetchContractsAndLessees();
+  }, [fetchTerminations, fetchContractsAndLessees]);
 
-  useEffect(() => {
-    let filtered = terminations;
+  const contractLabelById = useMemo(
+    () => new Map(contracts.map((contract) => [contract.id, `${contract.contractNumber} - ${contract.lessee}`])),
+    [contracts],
+  );
 
-    if (statusFilter !== 'All') {
-      filtered = filtered.filter((t) => t.status === statusFilter);
+  const displayedTerminations = useMemo(() => {
+    const filtered = terminations.filter((term) => {
+      const contractLabel = contractLabelById.get(term.contractId) ?? term.contractId;
+      return (
+        (statusFilter === 'All' || term.status === statusFilter) &&
+        (!columnFilters.terminationNo || term.terminationNo.toLowerCase().includes(columnFilters.terminationNo.toLowerCase())) &&
+        (!columnFilters.contract || contractLabel.toLowerCase().includes(columnFilters.contract.toLowerCase())) &&
+        (!columnFilters.requestDate || term.requestDate.includes(columnFilters.requestDate)) &&
+        (!columnFilters.effectiveDate || term.effectiveDate.includes(columnFilters.effectiveDate)) &&
+        (!columnFilters.remainingMonths || String(term.remainingMonths).includes(columnFilters.remainingMonths)) &&
+        (!columnFilters.monthlyRate || String(term.monthlyRate).includes(columnFilters.monthlyRate)) &&
+        (!columnFilters.penaltyPct || String(term.penaltyPct).includes(columnFilters.penaltyPct)) &&
+        (!columnFilters.penaltyAmount || String(term.penaltyAmount).includes(columnFilters.penaltyAmount)) &&
+        (!columnFilters.outstandingPayments || String(term.outstandingPayments).includes(columnFilters.outstandingPayments)) &&
+        (!columnFilters.depositRefund || String(term.depositRefund).includes(columnFilters.depositRefund)) &&
+        (!columnFilters.settlementTotal || String(term.settlementTotal).includes(columnFilters.settlementTotal)) &&
+        (columnFilters.status === 'All' || term.status === columnFilters.status)
+      );
+    });
+
+    filtered.sort((left, right) => {
+      const leftValue = ({
+        terminationNo: left.terminationNo,
+        contractId: contractLabelById.get(left.contractId) ?? left.contractId,
+        requestDate: left.requestDate,
+        effectiveDate: left.effectiveDate,
+        remainingMonths: left.remainingMonths,
+        monthlyRate: left.monthlyRate,
+        penaltyPct: left.penaltyPct,
+        penaltyAmount: left.penaltyAmount,
+        outstandingPayments: left.outstandingPayments,
+        depositRefund: left.depositRefund,
+        settlementTotal: left.settlementTotal,
+        status: left.status,
+      })[sortKey];
+      const rightValue = ({
+        terminationNo: right.terminationNo,
+        contractId: contractLabelById.get(right.contractId) ?? right.contractId,
+        requestDate: right.requestDate,
+        effectiveDate: right.effectiveDate,
+        remainingMonths: right.remainingMonths,
+        monthlyRate: right.monthlyRate,
+        penaltyPct: right.penaltyPct,
+        penaltyAmount: right.penaltyAmount,
+        outstandingPayments: right.outstandingPayments,
+        depositRefund: right.depositRefund,
+        settlementTotal: right.settlementTotal,
+        status: right.status,
+      })[sortKey];
+      const comparison =
+        typeof leftValue === 'number' && typeof rightValue === 'number'
+          ? leftValue - rightValue
+          : String(leftValue).localeCompare(String(rightValue));
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+
+    return filtered;
+  }, [columnFilters, contractLabelById, sortDirection, sortKey, statusFilter, terminations]);
+
+  const toggleSort = (key: typeof sortKey) => {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+      return;
     }
+    setSortKey(key);
+    setSortDirection('asc');
+  };
 
-    setFilteredTerminations(filtered);
-  }, [statusFilter, terminations]);
-
-  const calculateTermination = (data: typeof calculatorData) => {
+  const calculateTermination = useCallback((data: typeof calculatorData) => {
     const penaltyAmount = (data.monthlyRate * data.remainingMonths * data.penaltyPct) / 100;
     const totalSettlement = penaltyAmount + data.outstandingPayments - data.depositRefund;
     setCalculatedValues({
       penaltyAmount,
       totalSettlement,
     });
-  };
+  }, []);
+
+  const autofillTerminationFields = useCallback((contractId: string, target: 'calculator' | 'form') => {
+    const contract = contracts.find((item) => item.id === contractId);
+    if (!contract) return;
+    const filled = contractToEarlyTermination({ ...contract, lesseeId: contract.lesseeId ?? undefined });
+    if (target === 'calculator') {
+      const next = {
+        contractId,
+        remainingMonths: filled.remainingMonths,
+        monthlyRate: filled.monthlyRate,
+        penaltyPct: filled.penaltyPct,
+        outstandingPayments: calculatorData.outstandingPayments,
+        depositRefund: calculatorData.depositRefund,
+      };
+      setCalculatorData(next);
+      calculateTermination(next);
+      return;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      contractId,
+      remainingMonths: filled.remainingMonths,
+      monthlyRate: filled.monthlyRate,
+      penaltyPct: filled.penaltyPct,
+      effectiveDate: prev.effectiveDate || toDateInput(new Date().toISOString()),
+    }));
+  }, [calculateTermination, calculatorData.depositRefund, calculatorData.outstandingPayments, contracts]);
 
   const handleCalculatorChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    if (name === 'contractId') {
+      const updatedData = {
+        ...calculatorData,
+        contractId: value,
+      };
+      setCalculatorData(updatedData);
+      autofillTerminationFields(value, 'calculator');
+      return;
+    }
     const updatedData = {
       ...calculatorData,
-      [name]: name === 'contractId' ? value : parseFloat(value) || 0,
+      [name]: parseFloat(value) || 0,
     };
     setCalculatorData(updatedData);
     calculateTermination(updatedData);
@@ -106,11 +264,24 @@ export default function EarlyTerminationsPage() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    if (name === 'contractId') {
+      setFormData((prev) => ({ ...prev, contractId: value }));
+      autofillTerminationFields(value, 'form');
+      return;
+    }
     setFormData((prev) => ({
       ...prev,
-      [name]: name === 'effectiveDate' ? value : parseFloat(value) || (name === 'contractId' ? value : 0),
+      [name]: name === 'effectiveDate' ? value : parseFloat(value) || 0,
     }));
   };
+
+  const calculatorContracts = selectedCalculatorLesseeId
+    ? contracts.filter((contract) => contract.lesseeId === selectedCalculatorLesseeId)
+    : contracts;
+
+  const formContracts = selectedFormLesseeId
+    ? contracts.filter((contract) => contract.lesseeId === selectedFormLesseeId)
+    : contracts;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -199,33 +370,36 @@ export default function EarlyTerminationsPage() {
         <h3 className="text-lg font-semibold text-white mb-4">Settlement Calculator</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-2">Contract ID</label>
-            <input
-              type="text"
+            <label className="block text-xs font-medium text-slate-400 mb-2">Customer / Lessee</label>
+            <select
+              value={selectedCalculatorLesseeId}
+              onChange={(e) => {
+                setSelectedCalculatorLesseeId(e.target.value);
+                setCalculatorData((prev) => ({ ...prev, contractId: '' }));
+              }}
+              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none text-sm"
+            >
+              <option value="">All lessees</option>
+              {lessees.map((lessee) => (
+                <option key={lessee.id} value={lessee.id}>{lessee.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-2">Contract</label>
+            <select
               name="contractId"
               value={calculatorData.contractId}
               onChange={handleCalculatorChange}
-              onBlur={async (e) => {
-                const val = e.target.value.trim();
-                if (!val) return;
-                try {
-                  const res = await fetch(`/api/leasing/contracts-v2?search=${encodeURIComponent(val)}`);
-                  const data = await res.json();
-                  const contract = Array.isArray(data) ? data.find((cc: any) => cc.contractNumber === val || cc.id === val) : null;
-                  if (contract) {
-                    const filled = contractToEarlyTermination(contract);
-                    setCalculatorData((prev: any) => ({
-                      ...prev,
-                      remainingMonths: filled.remainingMonths,
-                      monthlyRate:     filled.monthlyRate,
-                      penaltyPct:      filled.penaltyPct,
-                    }));
-                  }
-                } catch {}
-              }}
-              placeholder="LC-001 (tab out to auto-fill)"
-              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none text-sm"
-            />
+              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none text-sm"
+            >
+              <option value="">Select a contract</option>
+              {calculatorContracts.map((contract) => (
+                <option key={contract.id} value={contract.id}>
+                  {contract.contractNumber} - {contract.lessee}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-400 mb-2">Remaining Months</label>
@@ -314,30 +488,34 @@ export default function EarlyTerminationsPage() {
       </div>
 
       {/* Terminations Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+      <div className="smart-data-grid-surface p-6 backdrop-blur-sm">
         <table className="w-full">
-          <thead className="bg-slate-800/50">
-            <tr className="border-b border-white/5">
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Termination No</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Contract</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Request Date</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Effective Date</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Remaining Months</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Monthly Rate</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Penalty %</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Penalty Amount</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Outstanding</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Deposit Refund</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Settlement Total</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Status</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Actions</th>
-            </tr>
-          </thead>
+          <SmartDataGridHeader
+            sortKey={sortKey}
+            sortDirection={sortDirection}
+            onSort={(key) => toggleSort(key as typeof sortKey)}
+            columnResizeStorageKey="leasing-early-terminations-column-widths"
+            columns={[
+              { key: 'terminationNo', label: 'Termination No', sortable: true, filter: <input value={columnFilters.terminationNo} onChange={(e) => setColumnFilters((prev) => ({ ...prev, terminationNo: e.target.value }))} placeholder="Search..." className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" /> },
+              { key: 'contractId', label: 'Contract', sortable: true, filter: <input value={columnFilters.contract} onChange={(e) => setColumnFilters((prev) => ({ ...prev, contract: e.target.value }))} placeholder="Search..." className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" /> },
+              { key: 'requestDate', label: 'Request Date', sortable: true, filter: <input value={columnFilters.requestDate} onChange={(e) => setColumnFilters((prev) => ({ ...prev, requestDate: e.target.value }))} placeholder="YYYY-MM-DD" className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" /> },
+              { key: 'effectiveDate', label: 'Effective Date', sortable: true, filter: <input value={columnFilters.effectiveDate} onChange={(e) => setColumnFilters((prev) => ({ ...prev, effectiveDate: e.target.value }))} placeholder="YYYY-MM-DD" className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" /> },
+              { key: 'remainingMonths', label: 'Remaining Months', sortable: true, filter: <input value={columnFilters.remainingMonths} onChange={(e) => setColumnFilters((prev) => ({ ...prev, remainingMonths: e.target.value }))} placeholder="e.g. 12" className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" /> },
+              { key: 'monthlyRate', label: 'Monthly Rate', sortable: true, filter: <input value={columnFilters.monthlyRate} onChange={(e) => setColumnFilters((prev) => ({ ...prev, monthlyRate: e.target.value }))} placeholder="Amount..." className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" /> },
+              { key: 'penaltyPct', label: 'Penalty %', sortable: true, filter: <input value={columnFilters.penaltyPct} onChange={(e) => setColumnFilters((prev) => ({ ...prev, penaltyPct: e.target.value }))} placeholder="%" className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" /> },
+              { key: 'penaltyAmount', label: 'Penalty Amount', sortable: true, filter: <input value={columnFilters.penaltyAmount} onChange={(e) => setColumnFilters((prev) => ({ ...prev, penaltyAmount: e.target.value }))} placeholder="Amount..." className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" /> },
+              { key: 'outstandingPayments', label: 'Outstanding', sortable: true, filter: <input value={columnFilters.outstandingPayments} onChange={(e) => setColumnFilters((prev) => ({ ...prev, outstandingPayments: e.target.value }))} placeholder="Amount..." className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" /> },
+              { key: 'depositRefund', label: 'Deposit Refund', sortable: true, filter: <input value={columnFilters.depositRefund} onChange={(e) => setColumnFilters((prev) => ({ ...prev, depositRefund: e.target.value }))} placeholder="Amount..." className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" /> },
+              { key: 'settlementTotal', label: 'Settlement Total', sortable: true, filter: <input value={columnFilters.settlementTotal} onChange={(e) => setColumnFilters((prev) => ({ ...prev, settlementTotal: e.target.value }))} placeholder="Amount..." className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" /> },
+              { key: 'status', label: 'Status', sortable: true, filter: <select value={columnFilters.status} onChange={(e) => setColumnFilters((prev) => ({ ...prev, status: e.target.value }))} className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white focus:border-blue-500 focus:outline-none"><option>All</option><option>DRAFT</option><option>PENDING_APPROVAL</option><option>APPROVED</option><option>EXECUTED</option><option>CANCELLED</option></select> },
+            ]}
+            actionHeader="Actions"
+          />
           <tbody>
-            {filteredTerminations.map((term) => (
+            {displayedTerminations.map((term) => (
               <tr key={term.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                 <td className="px-6 py-4 text-sm font-medium text-white">{term.terminationNo}</td>
-                <td className="px-6 py-4 text-sm text-white">{term.contractId}</td>
+                <td className="px-6 py-4 text-sm text-white">{contractLabelById.get(term.contractId) ?? term.contractId}</td>
                 <td className="px-6 py-4 text-sm text-slate-200">{term.requestDate}</td>
                 <td className="px-6 py-4 text-sm text-slate-200">{term.effectiveDate}</td>
                 <td className="px-6 py-4 text-sm text-white">{term.remainingMonths}</td>
@@ -360,39 +538,40 @@ export default function EarlyTerminationsPage() {
                     {term.status}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-sm space-x-2">
-                  {term.status === 'DRAFT' && (
-                    <button
-                      onClick={() => handleStatusChange(term.id, 'PENDING_APPROVAL')}
-                      className="text-blue-400 hover:text-blue-300 transition-colors text-xs"
-                    >
-                      Submit
-                    </button>
-                  )}
-                  {term.status === 'PENDING_APPROVAL' && (
-                    <>
-                      <button
-                        onClick={() => handleStatusChange(term.id, 'APPROVED')}
-                        className="text-emerald-400 hover:text-emerald-300 transition-colors text-xs"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => handleStatusChange(term.id, 'CANCELLED')}
-                        className="text-rose-400 hover:text-rose-300 transition-colors text-xs"
-                      >
-                        Reject
-                      </button>
-                    </>
-                  )}
-                  {term.status === 'APPROVED' && (
-                    <button
-                      onClick={() => handleStatusChange(term.id, 'EXECUTED')}
-                      className="text-emerald-400 hover:text-emerald-300 transition-colors text-xs"
-                    >
-                      Execute
-                    </button>
-                  )}
+                <td className="px-6 py-4 text-sm">
+                  <RowActionMenu
+                    actions={[
+                      ...(term.status === 'DRAFT'
+                        ? [
+                            {
+                              label: 'Submit',
+                              onSelect: () => handleStatusChange(term.id, 'PENDING_APPROVAL'),
+                            },
+                          ]
+                        : []),
+                      ...(term.status === 'PENDING_APPROVAL'
+                        ? [
+                            {
+                              label: 'Approve',
+                              onSelect: () => handleStatusChange(term.id, 'APPROVED'),
+                            },
+                            {
+                              label: 'Reject',
+                              onSelect: () => handleStatusChange(term.id, 'CANCELLED'),
+                              tone: 'danger' as const,
+                            },
+                          ]
+                        : []),
+                      ...(term.status === 'APPROVED'
+                        ? [
+                            {
+                              label: 'Execute',
+                              onSelect: () => handleStatusChange(term.id, 'EXECUTED'),
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
                 </td>
               </tr>
             ))}
@@ -417,16 +596,38 @@ export default function EarlyTerminationsPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Contract ID</label>
-                  <input
-                    type="text"
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Customer / Lessee</label>
+                  <select
+                    value={selectedFormLesseeId}
+                    onChange={(e) => {
+                      setSelectedFormLesseeId(e.target.value);
+                      setFormData((prev) => ({ ...prev, contractId: '' }));
+                    }}
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="">All lessees</option>
+                    {lessees.map((lessee) => (
+                      <option key={lessee.id} value={lessee.id}>{lessee.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Contract</label>
+                  <select
                     name="contractId"
                     value={formData.contractId}
                     onChange={handleInputChange}
                     required
-                    placeholder="LC-001"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
-                  />
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="">Select a contract</option>
+                    {formContracts.map((contract) => (
+                      <option key={contract.id} value={contract.id}>
+                        {contract.contractNumber} - {contract.lessee}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>

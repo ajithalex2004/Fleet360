@@ -1,12 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { randomUUID } from 'crypto';
+import { requireAdminPermission, requireDangerApproval } from '@/lib/admin-policy';
+import { recordAdminChange } from '@/lib/admin-change-history';
 
 function addMonths(d: Date, m: number) { const r = new Date(d); r.setMonth(r.getMonth() + m); return r; }
 function ago(days: number) { return new Date(Date.now() - days * 86400000); }
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireAdminPermission(req, 'edit', 'platform');
+    if (auth instanceof NextResponse) return auth;
+    const approval = await requireDangerApproval(req, auth.ctx, 'seed.leasing-demo', {
+      targetType: 'Seed',
+      targetId: 'leasing-demo',
+      summary: 'Seed leasing demo data.',
+    });
+    if (approval) return approval;
+
     const results: Record<string, number> = {};
 
     //  1. Customer Hierarchy 
@@ -360,7 +371,7 @@ export async function POST(req: NextRequest) {
           vehicleType: cd.vehicleType,
           make: cd.vehicleType === 'SEDAN' ? 'Toyota' : cd.vehicleType === 'SUV' ? 'Nissan' : cd.vehicleType === 'TRUCK' ? 'Isuzu' : 'Ford',
           model: cd.vehicleType === 'SEDAN' ? 'Camry' : cd.vehicleType === 'SUV' ? 'Patrol' : cd.vehicleType === 'TRUCK' ? 'Forward Truck' : 'Transit Van',
-          year: 2023, quantity: cd.vehicleCount, monthlyRate: cd.monthlyRate / cd.vehicleCount,
+          year: 2023, monthlyRate: cd.monthlyRate / cd.vehicleCount,
           mileageStart: Math.floor(Math.random() * 5000) + 1000, status: 'ACTIVE',
         },
         update: {},
@@ -555,6 +566,16 @@ export async function POST(req: NextRequest) {
 
     // Summary
     const total = Object.values(results).reduce((s,v) => s+v, 0);
+    await recordAdminChange({
+      req,
+      ctx: auth.ctx,
+      tenantId: null,
+      entityType: 'Seed',
+      entityId: 'leasing-demo',
+      action: 'UPDATE',
+      after: results,
+      summary: `Seeded UAE leasing demo data (${total} records created/updated).`,
+    });
     return NextResponse.json({
       success: true,
       message: `UAE Leasing demo data seeded successfully. ${total} records created/updated.`,

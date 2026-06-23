@@ -250,13 +250,23 @@ describe('GET /api/auth/me — SUPER_ADMIN session', () => {
     expect(body.role).toBe('SUPER_ADMIN');
   });
 
-  it('returns empty navPermissions for SUPER_ADMIN (no tenant-level restrictions)', async () => {
+  it('returns explicit unrestricted navPermissions for SUPER_ADMIN', async () => {
     if (!serverAvailable) return;
 
     const res = await makeRequest('GET', '/api/auth/me', undefined, seed.headers);
     const body = await res.json();
-    // SUPER_ADMIN gets an empty object (no nav restrictions)
-    expect(body.navPermissions).toEqual({});
+    // SUPER_ADMIN is represented as an explicit allow-map in the unified admin policy model.
+    expect(body.navPermissions).toMatchObject({
+      overview: true,
+      users: true,
+      roles: true,
+      tenants: true,
+      'service-config': true,
+    });
+    expect(Object.values(body.navPermissions)).toEqual(
+      expect.arrayContaining([true]),
+    );
+    expect(Object.values(body.navPermissions).every(Boolean)).toBe(true);
   });
 });
 

@@ -1,6 +1,7 @@
 'use client';
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { LogisticsMessage, readLogisticsApiError } from '@/components/logistics/master-data-fields';
 
 interface PodData {
   recipientName: string;
@@ -183,7 +184,7 @@ export default function EpodPage() {
           submittedBy:  submittedBy.trim() || 'Driver',
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error((await readLogisticsApiError(res)).message);
       setSubmitted(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Submission failed');
@@ -407,6 +408,10 @@ export default function EpodPage() {
       </div>
 
       {error && (
+        <LogisticsMessage type="error" title="POD submission needs attention" message={error} />
+      )}
+
+      {false && error && (
         <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 text-sm">
           ⚠️ {error}
         </div>

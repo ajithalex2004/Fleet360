@@ -1,4 +1,5 @@
 'use client';
+import { useRentalMasterData } from '@/hooks/useRentalMasterData';
 import React, { useState, useEffect, useCallback } from 'react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -45,8 +46,6 @@ const STATUS_SUMMARY_COLORS: Record<string, { bg: string; text: string; border: 
   LOST:      { bg: 'bg-red-500/10',     text: 'text-red-400',     border: 'border-red-500/20',     icon: '❌' },
 };
 
-const VEHICLE_TYPES = ['Economy', 'Sedan', 'SUV', 'Luxury', 'Van', 'Bus'];
-const SOURCES = ['WALK_IN', 'PHONE', 'WEBSITE', 'WHATSAPP', 'REFERRAL'];
 const STATUSES = ['NEW', 'CONTACTED', 'QUOTED', 'CONVERTED', 'LOST'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -76,6 +75,7 @@ const emptyForm = {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function InquiriesPage() {
+  const { masterData } = useRentalMasterData();
   const [inquiries, setInquiries]     = useState<Inquiry[]>([]);
   const [counts, setCounts]           = useState<StatusCount[]>([]);
   const [activeTab, setActiveTab]     = useState('ALL');
@@ -485,7 +485,7 @@ export default function InquiriesPage() {
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Vehicle Type</label>
                   <select className={inputCls} {...field('vehicleType')}>
                     <option value="">Select vehicle type</option>
-                    {VEHICLE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+                    {masterData.vehicleCategories.map(v => <option key={v} value={v}>{v}</option>)}
                   </select>
                 </div>
               </div>
@@ -524,7 +524,7 @@ export default function InquiriesPage() {
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Source</label>
                   <select className={inputCls} {...field('source')}>
-                    {SOURCES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+                    {masterData.inquirySources.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
                   </select>
                 </div>
                 <div>

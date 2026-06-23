@@ -1,7 +1,10 @@
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
-import { AlertCircle, Plus, Edit2, FileText } from 'lucide-react';
+import Link from 'next/link';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertCircle, ArrowRight, ShieldCheck, FileWarning, Banknote } from 'lucide-react';
+import { KpiCard, KpiGrid, PageHeader } from '@/components/ui/page-theme';
+import SmartDataGridHeader from '@/components/ui/SmartDataGridHeader';
 
 interface Claim {
   id: string;
@@ -33,14 +36,39 @@ interface InsurancePolicy {
 
 interface Contract {
   id: string;
-  contractNo: string;
+  contractNumber?: string;
+  lessee?: string;
+  lesseeId?: string | null;
 }
 
-const getExpiryColor = (days: number) => {
-  if (days > 60) return 'text-green-400';
-  if (days > 30 && days <= 60) return 'text-amber-400';
-  if (days > 15 && days <= 30) return 'text-orange-400';
-  return 'text-red-400';
+interface Lessee {
+  id: string;
+  name: string;
+}
+
+type InsuranceSortKey =
+  | 'policyNo'
+  | 'lessee'
+  | 'contract'
+  | 'insurer'
+  | 'coverageType'
+  | 'premium'
+  | 'expiryDate'
+  | 'daysToExpiry'
+  | 'claims'
+  | 'status';
+
+type InsuranceColumnFilters = {
+  policyNo: string;
+  lessee: string;
+  contract: string;
+  insurer: string;
+  coverageType: string;
+  premium: string;
+  expiryDate: string;
+  daysToExpiry: string;
+  claims: string;
+  status: string;
 };
 
 const getStatusBadgeColor = (status: string) => {
@@ -58,612 +86,463 @@ const getStatusBadgeColor = (status: string) => {
   }
 };
 
+const getExpiryColor = (days: number) => {
+  if (days < 0) return 'text-red-400';
+  if (days <= 30) return 'text-orange-400';
+  if (days <= 60) return 'text-amber-400';
+  return 'text-emerald-400';
+};
+
 export default function InsurancePage() {
   const [policies, setPolicies] = useState<InsurancePolicy[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
+  const [lessees, setLessees] = useState<Lessee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('All');
-  const [showNewModal, setShowNewModal] = useState(false);
-  const [showClaimModal, setShowClaimModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedPolicy, setSelectedPolicy] = useState<InsurancePolicy | null>(null);
-  const [expiringAlert, setExpiringAlert] = useState(false);
-
-  const [formData, setFormData] = useState({
+  const [selectedLesseeId, setSelectedLesseeId] = useState('');
+  const [selectedContractId, setSelectedContractId] = useState('');
+  const [sortKey, setSortKey] = useState<InsuranceSortKey>('expiryDate');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [columnFilters, setColumnFilters] = useState<InsuranceColumnFilters>({
+    policyNo: '',
+    lessee: '',
+    contract: '',
     insurer: '',
-    coverageType: 'COMPREHENSIVE',
+    coverageType: '',
     premium: '',
-    startDate: '',
     expiryDate: '',
-    renewalReminderDays: 30,
-    deductible: '',
-    contractId: '',
-    notes: '',
+    daysToExpiry: '',
+    claims: '',
+    status: '',
   });
 
-  const [claimData, setClaimData] = useState({
-    claimType: 'ACCIDENT',
-    claimDate: '',
-    incidentDate: '',
-    description: '',
-    claimAmount: '',
-    deductible: '',
-  });
-
-  const fetchPolicies = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/leasing/insurance');
-      if (!response.ok) throw new Error('Failed to fetch policies');
-      const data = await response.json();
-      setPolicies(data);
+      setError(null);
+      const [policiesRes, contractsRes, lesseesRes] = await Promise.all([
+        fetch('/api/leasing/insurance'),
+        fetch('/api/leasing/contracts-v2'),
+        fetch('/api/leasing/lessees'),
+      ]);
 
-      const hasExpiring = data.some((p: InsurancePolicy) => p.daysToExpiry <= 30 && p.status !== 'EXPIRED');
-      setExpiringAlert(hasExpiring);
+      if (!policiesRes.ok) throw new Error('Failed to fetch lease insurance status');
+      const policiesData = await policiesRes.json();
+      setPolicies(Array.isArray(policiesData) ? policiesData : []);
+
+      if (contractsRes.ok) {
+        const contractsData = await contractsRes.json();
+        setContracts(Array.isArray(contractsData) ? contractsData : []);
+      }
+
+      if (lesseesRes.ok) {
+        const lesseesData = await lesseesRes.json();
+        setLessees(Array.isArray(lesseesData) ? lesseesData : lesseesData.lessees ?? []);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error fetching policies');
+      setError(err instanceof Error ? err.message : 'Error fetching insurance status');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const fetchContracts = useCallback(async () => {
-    try {
-      const response = await fetch('/api/leasing/contracts-v2');
-      if (!response.ok) throw new Error('Failed to fetch contracts');
-      const data = await response.json();
-      setContracts(data);
-    } catch (err) {
-      console.error('Error fetching contracts:', err);
-    }
-  }, []);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const contractById = useMemo(
+    () => new Map(contracts.map((contract) => [contract.id, contract])),
+    [contracts],
+  );
+
+  const lesseeContracts = selectedLesseeId
+    ? contracts.filter((contract) => contract.lesseeId === selectedLesseeId)
+    : contracts;
 
   useEffect(() => {
-    fetchPolicies();
-    fetchContracts();
-  }, [fetchPolicies, fetchContracts]);
-
-  const handleNewPolicy = async () => {
-    try {
-      const response = await fetch('/api/leasing/insurance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          premium: parseFloat(formData.premium),
-          deductible: parseFloat(formData.deductible),
-          renewalReminderDays: parseInt(formData.renewalReminderDays.toString()),
-        }),
-      });
-      if (!response.ok) throw new Error('Failed to create policy');
-      setFormData({
-        insurer: '',
-        coverageType: 'COMPREHENSIVE',
-        premium: '',
-        startDate: '',
-        expiryDate: '',
-        renewalReminderDays: 30,
-        deductible: '',
-        contractId: '',
-        notes: '',
-      });
-      setShowNewModal(false);
-      fetchPolicies();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error creating policy');
+    if (selectedContractId && !lesseeContracts.some((contract) => contract.id === selectedContractId)) {
+      setSelectedContractId('');
     }
-  };
+  }, [lesseeContracts, selectedContractId]);
 
-  const handleAddClaim = async () => {
-    if (!selectedPolicy) return;
-    try {
-      const response = await fetch(`/api/leasing/insurance/${selectedPolicy.id}/claims`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...claimData,
-          claimAmount: parseFloat(claimData.claimAmount),
-          deductible: parseFloat(claimData.deductible),
-        }),
-      });
-      if (!response.ok) throw new Error('Failed to add claim');
-      setClaimData({
-        claimType: 'ACCIDENT',
-        claimDate: '',
-        incidentDate: '',
-        description: '',
-        claimAmount: '',
-        deductible: '',
-      });
-      setShowClaimModal(false);
-      fetchPolicies();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error adding claim');
-    }
-  };
+  const filteredPolicies = useMemo(() => {
+    const normalizedPolicyNo = columnFilters.policyNo.trim().toLowerCase();
+    const normalizedLessee = columnFilters.lessee.trim().toLowerCase();
+    const normalizedContract = columnFilters.contract.trim().toLowerCase();
+    const normalizedInsurer = columnFilters.insurer.trim().toLowerCase();
+    const normalizedPremium = columnFilters.premium.trim().toLowerCase();
+    const normalizedExpiryDate = columnFilters.expiryDate.trim().toLowerCase();
+    const normalizedDaysToExpiry = columnFilters.daysToExpiry.trim().toLowerCase();
+    const normalizedClaims = columnFilters.claims.trim().toLowerCase();
 
-  const handleEditPolicy = async () => {
-    if (!selectedPolicy) return;
-    try {
-      const response = await fetch(`/api/leasing/insurance/${selectedPolicy.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          premium: parseFloat(formData.premium),
-          deductible: parseFloat(formData.deductible),
-          renewalReminderDays: parseInt(formData.renewalReminderDays.toString()),
-        }),
-      });
-      if (!response.ok) throw new Error('Failed to update policy');
-      setShowEditModal(false);
-      setFormData({
-        insurer: '',
-        coverageType: 'COMPREHENSIVE',
-        premium: '',
-        startDate: '',
-        expiryDate: '',
-        renewalReminderDays: 30,
-        deductible: '',
-        contractId: '',
-        notes: '',
-      });
-      fetchPolicies();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error updating policy');
-    }
-  };
+    const visiblePolicies = policies.filter((policy) => {
+      if (statusFilter !== 'All' && policy.status !== statusFilter) return false;
+      const linkedContract = contractById.get(policy.contractId);
+      const lesseeName = linkedContract?.lessee ?? '';
 
-  const filteredPolicies = statusFilter === 'All' 
-    ? policies 
-    : policies.filter(p => p.status === statusFilter);
-
-  const openEditModal = (policy: InsurancePolicy) => {
-    setSelectedPolicy(policy);
-    setFormData({
-      insurer: policy.insurer,
-      coverageType: policy.coverageType,
-      premium: policy.premium.toString(),
-      startDate: policy.startDate,
-      expiryDate: policy.expiryDate,
-      renewalReminderDays: policy.renewalReminderDays,
-      deductible: policy.deductible.toString(),
-      contractId: policy.contractId,
-      notes: policy.notes,
+      if (selectedLesseeId && linkedContract?.lesseeId !== selectedLesseeId) return false;
+      if (selectedContractId && policy.contractId !== selectedContractId) return false;
+      if (normalizedPolicyNo && !policy.policyNo.toLowerCase().includes(normalizedPolicyNo)) return false;
+      if (normalizedLessee && !lesseeName.toLowerCase().includes(normalizedLessee)) return false;
+      if (normalizedContract && !policy.contract.toLowerCase().includes(normalizedContract)) return false;
+      if (normalizedInsurer && !policy.insurer.toLowerCase().includes(normalizedInsurer)) return false;
+      if (columnFilters.coverageType && policy.coverageType !== columnFilters.coverageType) return false;
+      if (normalizedPremium && !String(policy.premium).includes(normalizedPremium)) return false;
+      if (normalizedExpiryDate && !policy.expiryDate.toLowerCase().includes(normalizedExpiryDate)) return false;
+      if (normalizedDaysToExpiry && !String(policy.daysToExpiry).includes(normalizedDaysToExpiry)) return false;
+      if (normalizedClaims && !String(policy.claims.length).includes(normalizedClaims)) return false;
+      if (columnFilters.status && policy.status !== columnFilters.status) return false;
+      return true;
     });
-    setShowEditModal(true);
+
+    return [...visiblePolicies].sort((left, right) => {
+      const leftContract = contractById.get(left.contractId);
+      const rightContract = contractById.get(right.contractId);
+
+      const leftValue: Record<InsuranceSortKey, string | number> = {
+        policyNo: left.policyNo,
+        lessee: leftContract?.lessee ?? '',
+        contract: left.contract,
+        insurer: left.insurer,
+        coverageType: left.coverageType,
+        premium: left.premium,
+        expiryDate: left.expiryDate,
+        daysToExpiry: left.daysToExpiry,
+        claims: left.claims.length,
+        status: left.status,
+      };
+      const rightValue: Record<InsuranceSortKey, string | number> = {
+        policyNo: right.policyNo,
+        lessee: rightContract?.lessee ?? '',
+        contract: right.contract,
+        insurer: right.insurer,
+        coverageType: right.coverageType,
+        premium: right.premium,
+        expiryDate: right.expiryDate,
+        daysToExpiry: right.daysToExpiry,
+        claims: right.claims.length,
+        status: right.status,
+      };
+
+      const a = leftValue[sortKey];
+      const b = rightValue[sortKey];
+      const comparison =
+        typeof a === 'number' && typeof b === 'number'
+          ? a - b
+          : String(a).localeCompare(String(b));
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [columnFilters, contractById, policies, selectedContractId, selectedLesseeId, sortDirection, sortKey, statusFilter]);
+
+  const expiringSoonCount = filteredPolicies.filter(
+    (policy) => policy.daysToExpiry <= 30 && policy.status !== 'EXPIRED' && policy.status !== 'CANCELLED',
+  ).length;
+  const activeCount = filteredPolicies.filter((policy) => policy.status === 'ACTIVE').length;
+  const totalClaims = filteredPolicies.reduce((sum, policy) => sum + policy.claims.length, 0);
+  const totalPremium = filteredPolicies.reduce((sum, policy) => sum + policy.premium, 0);
+
+  const updateColumnFilter = (key: keyof InsuranceColumnFilters, value: string) => {
+    setColumnFilters((prev) => ({ ...prev, [key]: value }));
   };
 
   return (
-    <div className="min-h-screen bg-[#0c1a3e] text-slate-100 p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold">Insurance Management</h1>
-          <button
-            onClick={() => setShowNewModal(true)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition"
-          >
-            <Plus size={20} /> New Policy
-          </button>
-        </div>
+    <div className="min-h-screen bg-[#0c1a3e] p-6 text-slate-100">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <PageHeader
+          title="Lease Insurance Status"
+          subtitle="Lease-scoped insurance visibility for active contracts, lessees, expiries, and claim impact."
+          accent="blue"
+          actions={(
+            <Link
+              href="/fleet/insurance"
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
+            >
+              Open Fleet Insurance <ArrowRight size={16} />
+            </Link>
+          )}
+        />
 
-        {expiringAlert && (
-          <div className="mb-6 p-4 bg-orange-900/30 border border-orange-700 rounded-lg flex items-start gap-3">
-            <AlertCircle className="text-orange-400 mt-0.5" size={20} />
+        {expiringSoonCount > 0 && (
+          <div className="flex items-start gap-3 rounded-lg border border-orange-700 bg-orange-900/30 p-4">
+            <AlertCircle className="mt-0.5 text-orange-400" size={20} />
             <div>
-              <p className="font-semibold text-orange-200">Expiring Policies Alert</p>
-              <p className="text-orange-300 text-sm">One or more policies expire within 30 days. Review and renew as needed.</p>
+              <p className="font-semibold text-orange-200">Expiring lease-linked policies</p>
+              <p className="text-sm text-orange-300">
+                {expiringSoonCount} {expiringSoonCount === 1 ? 'policy is' : 'policies are'} expiring within 30 days.
+                Coordinate renewal from Fleet Insurance.
+              </p>
             </div>
           </div>
         )}
 
         {error && (
-          <div className="mb-6 p-4 bg-red-900/30 border border-red-700 rounded-lg">
+          <div className="rounded-lg border border-red-700 bg-red-900/30 p-4">
             <p className="text-red-200">{error}</p>
           </div>
         )}
 
-        <div className="mb-6 flex gap-2">
-          {['All', 'ACTIVE', 'EXPIRING_SOON', 'EXPIRED', 'CANCELLED'].map(status => (
-            <button
-              key={status}
-              onClick={() => setStatusFilter(status)}
-              className={`px-4 py-2 rounded-lg transition ${
-                statusFilter === status
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-              }`}
-            >
-              {status}
-            </button>
-          ))}
+        <KpiGrid>
+          <KpiCard label="Visible Policies" value={filteredPolicies.length} accent="slate" icon={ShieldCheck} sub="Lease-linked view" />
+          <KpiCard label="Active" value={activeCount} accent="emerald" icon={ShieldCheck} sub="Currently covered" />
+          <KpiCard label="Claims" value={totalClaims} accent="amber" icon={FileWarning} sub="Across selected policies" />
+          <KpiCard label="Premium Value" value={`AED ${totalPremium.toLocaleString()}`} accent="blue" icon={Banknote} sub={`${expiringSoonCount} expiring soon`} />
+        </KpiGrid>
+
+        <div className="flex flex-wrap gap-3 rounded-2xl border border-white/5 bg-slate-800/40 p-4">
+          <select
+            value={selectedLesseeId}
+            onChange={(e) => setSelectedLesseeId(e.target.value)}
+            className="min-w-[220px] rounded-xl border border-white/10 bg-slate-800 px-4 py-2.5 text-sm text-white focus:border-blue-500/50 focus:outline-none"
+          >
+            <option value="">All lessees</option>
+            {lessees.map((lessee) => (
+              <option key={lessee.id} value={lessee.id}>
+                {lessee.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={selectedContractId}
+            onChange={(e) => setSelectedContractId(e.target.value)}
+            className="min-w-[220px] rounded-xl border border-white/10 bg-slate-800 px-4 py-2.5 text-sm text-white focus:border-blue-500/50 focus:outline-none"
+          >
+            <option value="">All contracts</option>
+            {lesseeContracts.map((contract) => (
+              <option key={contract.id} value={contract.id}>
+                {contract.contractNumber ?? contract.id.slice(0, 8)}
+                {contract.lessee ? ` - ${contract.lessee}` : ''}
+              </option>
+            ))}
+          </select>
+          <div className="flex flex-wrap gap-2">
+            {['All', 'ACTIVE', 'EXPIRING_SOON', 'EXPIRED', 'CANCELLED'].map((status) => (
+              <button
+                key={status}
+                onClick={() => setStatusFilter(status)}
+                className={`rounded-lg px-4 py-2 text-sm transition ${
+                  statusFilter === status
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
         </div>
 
         {loading ? (
-          <div className="text-center py-12">Loading policies...</div>
+          <div className="py-12 text-center text-slate-400">Loading lease insurance status...</div>
         ) : (
-          <div className="overflow-x-auto bg-slate-800 rounded-lg border border-slate-700">
+          <div className="smart-data-grid-surface">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-700 bg-slate-900">
-                  <th className="px-4 py-3 text-left">Policy No</th>
-                  <th className="px-4 py-3 text-left">Contract</th>
-                  <th className="px-4 py-3 text-left">Insurer</th>
-                  <th className="px-4 py-3 text-left">Coverage</th>
-                  <th className="px-4 py-3 text-right">Premium</th>
-                  <th className="px-4 py-3 text-left">Start</th>
-                  <th className="px-4 py-3 text-left">Expiry</th>
-                  <th className="px-4 py-3 text-center">Days</th>
-                  <th className="px-4 py-3 text-left">Status</th>
-                  <th className="px-4 py-3 text-center">Claims</th>
-                  <th className="px-4 py-3 text-center">Actions</th>
-                </tr>
-              </thead>
+              <SmartDataGridHeader
+                sortKey={sortKey}
+                sortDirection={sortDirection}
+                onSort={(key) => {
+                  const nextKey = key as InsuranceSortKey;
+                  if (sortKey === nextKey) {
+                    setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+                    return;
+                  }
+                  setSortKey(nextKey);
+                  setSortDirection('asc');
+                }}
+                columnResizeStorageKey="leasing-insurance-column-widths"
+                columns={[
+                  {
+                    key: 'policyNo',
+                    label: 'Policy No',
+                    sortable: true,
+                    filter: (
+                      <input
+                        value={columnFilters.policyNo}
+                        onChange={(e) => updateColumnFilter('policyNo', e.target.value)}
+                        placeholder="Search..."
+                        className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none"
+                      />
+                    ),
+                  },
+                  {
+                    key: 'lessee',
+                    label: 'Customer / Lessee',
+                    sortable: true,
+                    filter: (
+                      <input
+                        value={columnFilters.lessee}
+                        onChange={(e) => updateColumnFilter('lessee', e.target.value)}
+                        placeholder="Search..."
+                        className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none"
+                      />
+                    ),
+                  },
+                  {
+                    key: 'contract',
+                    label: 'Contract',
+                    sortable: true,
+                    filter: (
+                      <input
+                        value={columnFilters.contract}
+                        onChange={(e) => updateColumnFilter('contract', e.target.value)}
+                        placeholder="Search..."
+                        className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none"
+                      />
+                    ),
+                  },
+                  {
+                    key: 'insurer',
+                    label: 'Insurer',
+                    sortable: true,
+                    filter: (
+                      <input
+                        value={columnFilters.insurer}
+                        onChange={(e) => updateColumnFilter('insurer', e.target.value)}
+                        placeholder="Search..."
+                        className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none"
+                      />
+                    ),
+                  },
+                  {
+                    key: 'coverageType',
+                    label: 'Coverage',
+                    sortable: true,
+                    filter: (
+                      <select
+                        value={columnFilters.coverageType}
+                        onChange={(e) => updateColumnFilter('coverageType', e.target.value)}
+                        className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                      >
+                        <option value="">All</option>
+                        <option value="COMPREHENSIVE">Comprehensive</option>
+                        <option value="THIRD_PARTY">Third Party</option>
+                        <option value="FLEET">Fleet</option>
+                        <option value="TPL">TPL</option>
+                      </select>
+                    ),
+                  },
+                  {
+                    key: 'premium',
+                    label: 'Premium',
+                    sortable: true,
+                    headerClassName: 'text-right',
+                    filterClassName: 'text-right',
+                    filter: (
+                      <input
+                        value={columnFilters.premium}
+                        onChange={(e) => updateColumnFilter('premium', e.target.value)}
+                        placeholder="AED..."
+                        className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-right text-sm text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none"
+                      />
+                    ),
+                  },
+                  {
+                    key: 'expiryDate',
+                    label: 'Expiry',
+                    sortable: true,
+                    filter: (
+                      <input
+                        value={columnFilters.expiryDate}
+                        onChange={(e) => updateColumnFilter('expiryDate', e.target.value)}
+                        placeholder="YYYY-MM-DD"
+                        className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none"
+                      />
+                    ),
+                  },
+                  {
+                    key: 'daysToExpiry',
+                    label: 'Days',
+                    sortable: true,
+                    headerClassName: 'text-center',
+                    filterClassName: 'text-center',
+                    filter: (
+                      <input
+                        value={columnFilters.daysToExpiry}
+                        onChange={(e) => updateColumnFilter('daysToExpiry', e.target.value)}
+                        placeholder="Days..."
+                        className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-center text-sm text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none"
+                      />
+                    ),
+                  },
+                  {
+                    key: 'claims',
+                    label: 'Claims',
+                    sortable: true,
+                    headerClassName: 'text-center',
+                    filterClassName: 'text-center',
+                    filter: (
+                      <input
+                        value={columnFilters.claims}
+                        onChange={(e) => updateColumnFilter('claims', e.target.value)}
+                        placeholder="Count..."
+                        className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-center text-sm text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none"
+                      />
+                    ),
+                  },
+                  {
+                    key: 'status',
+                    label: 'Status',
+                    sortable: true,
+                    filter: (
+                      <select
+                        value={columnFilters.status}
+                        onChange={(e) => updateColumnFilter('status', e.target.value)}
+                        className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                      >
+                        <option value="">All</option>
+                        <option value="ACTIVE">Active</option>
+                        <option value="EXPIRING_SOON">Expiring Soon</option>
+                        <option value="EXPIRED">Expired</option>
+                        <option value="CANCELLED">Cancelled</option>
+                      </select>
+                    ),
+                  },
+                ]}
+                actionHeader="Action"
+              />
               <tbody>
-                {filteredPolicies.map(policy => (
-                  <tr key={policy.id} className="border-b border-slate-700 hover:bg-slate-750">
-                    <td className="px-4 py-3">{policy.policyNo}</td>
-                    <td className="px-4 py-3">{policy.contract}</td>
-                    <td className="px-4 py-3">{policy.insurer}</td>
-                    <td className="px-4 py-3">{policy.coverageType}</td>
-                    <td className="px-4 py-3 text-right">{policy.premium.toFixed(2)} AED</td>
-                    <td className="px-4 py-3 text-sm">{policy.startDate}</td>
-                    <td className="px-4 py-3 text-sm">{policy.expiryDate}</td>
-                    <td className={`px-4 py-3 text-center font-semibold ${getExpiryColor(policy.daysToExpiry)}`}>
-                      {policy.daysToExpiry}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 text-xs rounded border ${getStatusBadgeColor(policy.status)}`}>
-                        {policy.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">{policy.claims.length}</td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => openEditModal(policy)}
-                          className="text-blue-400 hover:text-blue-300 transition"
-                          title="Edit policy"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedPolicy(policy);
-                            setShowClaimModal(true);
-                          }}
-                          className="text-emerald-400 hover:text-emerald-300 transition"
-                          title="Add claim"
-                        >
-                          <FileText size={16} />
-                        </button>
-                      </div>
+                {filteredPolicies.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="px-4 py-12 text-center text-slate-500">
+                      No lease-linked insurance policies found for the selected filters.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredPolicies.map((policy) => {
+                    const linkedContract = contractById.get(policy.contractId);
+                    return (
+                      <tr key={policy.id} className="border-b border-slate-700 hover:bg-slate-750">
+                        <td className="px-4 py-3">{policy.policyNo}</td>
+                        <td className="px-4 py-3">{linkedContract?.lessee ?? '-'}</td>
+                        <td className="px-4 py-3">{policy.contract}</td>
+                        <td className="px-4 py-3">{policy.insurer}</td>
+                        <td className="px-4 py-3">{policy.coverageType}</td>
+                        <td className="px-4 py-3 text-right">{policy.premium.toFixed(2)} AED</td>
+                        <td className="px-4 py-3 text-sm">{policy.expiryDate}</td>
+                        <td className={`px-4 py-3 text-center font-semibold ${getExpiryColor(policy.daysToExpiry)}`}>
+                          {policy.daysToExpiry}
+                        </td>
+                        <td className="px-4 py-3 text-center">{policy.claims.length}</td>
+                        <td className="px-4 py-3">
+                          <span className={`rounded border px-2 py-1 text-xs ${getStatusBadgeColor(policy.status)}`}>
+                            {policy.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Link
+                            href="/fleet/insurance"
+                            className="text-sm text-blue-300 transition hover:text-blue-200"
+                          >
+                            Manage in Fleet
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
-          </div>
-        )}
-
-        {/* New Policy Modal */}
-        {showNewModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 border border-slate-700 rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between p-6 border-b border-slate-700">
-                <h2 className="text-xl font-bold">New Insurance Policy</h2>
-                <button
-                  onClick={() => setShowNewModal(false)}
-                  className="text-slate-400 hover:text-slate-200 transition"
-                >
-                  X
-                </button>
-              </div>
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Insurer</label>
-                  <input
-                    type="text"
-                    value={formData.insurer}
-                    onChange={e => setFormData({...formData, insurer: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Coverage Type</label>
-                  <select
-                    value={formData.coverageType}
-                    onChange={e => setFormData({...formData, coverageType: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  >
-                    <option>COMPREHENSIVE</option>
-                    <option>THIRD_PARTY</option>
-                    <option>FLEET</option>
-                    <option>TPL</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Premium (AED)</label>
-                  <input
-                    type="number"
-                    value={formData.premium}
-                    onChange={e => setFormData({...formData, premium: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Start Date</label>
-                  <input
-                    type="date"
-                    value={formData.startDate}
-                    onChange={e => setFormData({...formData, startDate: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Expiry Date</label>
-                  <input
-                    type="date"
-                    value={formData.expiryDate}
-                    onChange={e => setFormData({...formData, expiryDate: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Deductible (AED)</label>
-                  <input
-                    type="number"
-                    value={formData.deductible}
-                    onChange={e => setFormData({...formData, deductible: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Renewal Reminder (days)</label>
-                  <input
-                    type="number"
-                    value={formData.renewalReminderDays}
-                    onChange={e => setFormData({...formData, renewalReminderDays: parseInt(e.target.value)})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Contract</label>
-                  <select
-                    value={formData.contractId}
-                    onChange={e => setFormData({...formData, contractId: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  >
-                    <option value="">Select contract</option>
-                    {contracts.map(c => (
-                      <option key={c.id} value={c.id}>{c.contractNo}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Notes</label>
-                  <textarea
-                    value={formData.notes}
-                    onChange={e => setFormData({...formData, notes: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100 h-20"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-3 p-6 border-t border-slate-700">
-                <button
-                  onClick={() => setShowNewModal(false)}
-                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleNewPolicy}
-                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition"
-                >
-                  Create
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Edit Policy Modal */}
-        {showEditModal && selectedPolicy && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 border border-slate-700 rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between p-6 border-b border-slate-700">
-                <h2 className="text-xl font-bold">Edit Policy: {selectedPolicy.policyNo}</h2>
-                <button
-                  onClick={() => setShowEditModal(false)}
-                  className="text-slate-400 hover:text-slate-200 transition"
-                >
-                  X
-                </button>
-              </div>
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Insurer</label>
-                  <input
-                    type="text"
-                    value={formData.insurer}
-                    onChange={e => setFormData({...formData, insurer: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Coverage Type</label>
-                  <select
-                    value={formData.coverageType}
-                    onChange={e => setFormData({...formData, coverageType: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  >
-                    <option>COMPREHENSIVE</option>
-                    <option>THIRD_PARTY</option>
-                    <option>FLEET</option>
-                    <option>TPL</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Premium (AED)</label>
-                  <input
-                    type="number"
-                    value={formData.premium}
-                    onChange={e => setFormData({...formData, premium: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Start Date</label>
-                  <input
-                    type="date"
-                    value={formData.startDate}
-                    onChange={e => setFormData({...formData, startDate: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Expiry Date</label>
-                  <input
-                    type="date"
-                    value={formData.expiryDate}
-                    onChange={e => setFormData({...formData, expiryDate: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Deductible (AED)</label>
-                  <input
-                    type="number"
-                    value={formData.deductible}
-                    onChange={e => setFormData({...formData, deductible: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Renewal Reminder (days)</label>
-                  <input
-                    type="number"
-                    value={formData.renewalReminderDays}
-                    onChange={e => setFormData({...formData, renewalReminderDays: parseInt(e.target.value)})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Notes</label>
-                  <textarea
-                    value={formData.notes}
-                    onChange={e => setFormData({...formData, notes: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100 h-20"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-3 p-6 border-t border-slate-700">
-                <button
-                  onClick={() => setShowEditModal(false)}
-                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleEditPolicy}
-                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Add Claim Modal */}
-        {showClaimModal && selectedPolicy && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 border border-slate-700 rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between p-6 border-b border-slate-700">
-                <h2 className="text-xl font-bold">Add Claim</h2>
-                <button
-                  onClick={() => setShowClaimModal(false)}
-                  className="text-slate-400 hover:text-slate-200 transition"
-                >
-                  X
-                </button>
-              </div>
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Claim Type</label>
-                  <select
-                    value={claimData.claimType}
-                    onChange={e => setClaimData({...claimData, claimType: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  >
-                    <option>ACCIDENT</option>
-                    <option>THEFT</option>
-                    <option>FIRE</option>
-                    <option>NATURAL</option>
-                    <option>OTHER</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Claim Date</label>
-                  <input
-                    type="date"
-                    value={claimData.claimDate}
-                    onChange={e => setClaimData({...claimData, claimDate: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Incident Date</label>
-                  <input
-                    type="date"
-                    value={claimData.incidentDate}
-                    onChange={e => setClaimData({...claimData, incidentDate: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Description</label>
-                  <textarea
-                    value={claimData.description}
-                    onChange={e => setClaimData({...claimData, description: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100 h-20"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Claim Amount (AED)</label>
-                  <input
-                    type="number"
-                    value={claimData.claimAmount}
-                    onChange={e => setClaimData({...claimData, claimAmount: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Deductible (AED)</label>
-                  <input
-                    type="number"
-                    value={claimData.deductible}
-                    onChange={e => setClaimData({...claimData, deductible: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-3 p-6 border-t border-slate-700">
-                <button
-                  onClick={() => setShowClaimModal(false)}
-                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleAddClaim}
-                  className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg transition"
-                >
-                  Add Claim
-                </button>
-              </div>
-            </div>
           </div>
         )}
       </div>

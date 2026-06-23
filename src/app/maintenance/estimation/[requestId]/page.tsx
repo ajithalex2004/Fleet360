@@ -198,6 +198,8 @@ export default function EstimationPage() {
     };
 
     const handleSubmitForApproval = async () => {
+        if (!request) return;
+
         if (quotations.length === 0) {
             alert('Please enter at least one quotation before submitting for approval');
             return;

@@ -1,4 +1,5 @@
 'use client';
+import { useRentalMasterData } from '@/hooks/useRentalMasterData';
 import React, { useState, useEffect, useCallback } from 'react';
 
 /* ─── Types ─── */
@@ -64,7 +65,7 @@ const LABEL_CLS = 'block text-sm font-medium text-slate-300 mb-1.5';
 const SECTION_CLS = 'bg-slate-800/60 border border-white/10 rounded-xl p-5 space-y-4';
 
 /* ─── Sub-components ─── */
-function FuelGauge({ level }: { level: number }) {
+function FuelGauge({ level, labels = FUEL_LABELS }: { level: number; labels?: string[] }) {
   return (
     <div className="flex items-center gap-2">
       <div className="flex gap-0.5">
@@ -78,7 +79,7 @@ function FuelGauge({ level }: { level: number }) {
         ))}
       </div>
       <span className="text-xs text-slate-400 whitespace-nowrap">
-        {FUEL_LABELS[level] ?? `${level}/8`}
+        {labels[level] ?? `${level}/8`}
       </span>
     </div>
   );
@@ -176,6 +177,7 @@ const DEFAULT_FORM = {
 
 /* ═══════════════════════════════════════════════════════════ */
 export default function HandoverPage() {
+  const { masterData } = useRentalMasterData();
   const [handovers, setHandovers]     = useState<Handover[]>([]);
   const [kpis, setKpis]               = useState<KPIs>({ pendingPickups: 0, pendingReturns: 0, completedToday: 0, avgConditionScore: 0 });
   const [activeTab, setActiveTab]     = useState<'PICKUP' | 'RETURN'>('PICKUP');
@@ -188,6 +190,7 @@ export default function HandoverPage() {
   const [signOffId, setSignOffId]     = useState<string | null>(null);
   const [signedBy, setSignedByInput]  = useState('');
   const [pickupRef, setPickupRef]     = useState<Handover | null>(null);
+  const fuelLabels = masterData.fuelLabels.length ? masterData.fuelLabels : FUEL_LABELS;
 
   /* ── load ── */
   const load = useCallback(async () => {
@@ -456,7 +459,7 @@ export default function HandoverPage() {
                       : '—'}
                   </td>
                   <td className="px-4 py-3.5">
-                    <FuelGauge level={h.fuel_level ?? 0} />
+                    <FuelGauge level={h.fuel_level ?? 0} labels={fuelLabels} />
                   </td>
                   <td className="px-4 py-3.5 text-sm text-slate-300 whitespace-nowrap">
                     {h.odometer_reading != null ? h.odometer_reading.toLocaleString() + ' km' : '—'}
@@ -636,7 +639,7 @@ export default function HandoverPage() {
                   <div className="grid grid-cols-4 gap-3 text-sm">
                     <div>
                       <div className="text-slate-400 text-xs mb-1">Fuel</div>
-                      <FuelGauge level={pickupRef.fuel_level ?? 0} />
+                      <FuelGauge level={pickupRef.fuel_level ?? 0} labels={fuelLabels} />
                     </div>
                     <div>
                       <div className="text-slate-400 text-xs mb-1">Odometer</div>
@@ -663,7 +666,7 @@ export default function HandoverPage() {
                 {/* Fuel Level Slider */}
                 <div>
                   <label className={LABEL_CLS}>
-                    Fuel Level — {FUEL_LABELS[form.fuelLevel] ?? `${form.fuelLevel}/8`}
+                    Fuel Level — {fuelLabels[form.fuelLevel] ?? `${form.fuelLevel}/8`}
                   </label>
                   <div className="space-y-3">
                     <input
@@ -676,7 +679,7 @@ export default function HandoverPage() {
                       className="w-full accent-teal-500 cursor-pointer"
                     />
                     <div className="flex justify-between">
-                      {FUEL_LABELS.map((l, i) => (
+                      {fuelLabels.map((l, i) => (
                         <span
                           key={i}
                           className={`text-xs ${i === form.fuelLevel ? 'text-teal-400 font-bold' : 'text-slate-600'}`}
@@ -710,7 +713,7 @@ export default function HandoverPage() {
                     type="number"
                     min={0}
                     value={form.odometerReading}
-                    onChange={(e) => set('odometerReading', e.target.value as any)}
+                    onChange={(e) => set('odometerReading', e.target.value)}
                     placeholder="e.g. 45000"
                     className={INPUT_CLS}
                   />

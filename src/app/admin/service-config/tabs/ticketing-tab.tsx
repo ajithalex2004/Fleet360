@@ -120,7 +120,7 @@ export function TicketingTab({ typeId, scopeId, scopeLookup }: RuleTabProps) {
           </div>
         ))}
         <button type="button" onClick={addEscalation}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-200 text-xs">
+          className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-100 px-3 py-1.5 text-xs text-violet-900 shadow-sm transition hover:bg-violet-200">
           <Plus className="w-3.5 h-3.5" /> Add step
         </button>
       </Section>

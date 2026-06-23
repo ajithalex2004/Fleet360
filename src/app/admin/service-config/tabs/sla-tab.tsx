@@ -99,7 +99,7 @@ export function SlaTab({ typeId, scopeId, scopeLookup }: RuleTabProps) {
               return (
                 <button key={d.n} type="button" onClick={() => toggleDay(d.n)}
                   className={`px-2.5 py-1 rounded-md text-[11px] border ${
-                    active ? 'bg-violet-500/20 text-violet-200 border-violet-500/40' : 'bg-slate-800/60 text-slate-400 border-white/10'
+                    active ? 'bg-violet-100 text-violet-900 border-violet-300 shadow-sm' : 'bg-slate-800/60 text-slate-400 border-white/10'
                   }`}>
                   {d.label}
                 </button>
@@ -143,7 +143,7 @@ export function SlaTab({ typeId, scopeId, scopeLookup }: RuleTabProps) {
             </div>
           ))}
           <button type="button" onClick={addLevel}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-200 text-xs">
+            className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-100 px-3 py-1.5 text-xs text-violet-900 shadow-sm transition hover:bg-violet-200">
             <Plus className="w-3.5 h-3.5" /> Add level
           </button>
         </div>

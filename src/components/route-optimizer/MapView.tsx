@@ -33,6 +33,7 @@ declare global {
       accessToken: string;
       Map: new (opts: object) => MapboxMap;
       Marker: new (opts?: object) => MapboxMarker;
+      NavigationControl: new (opts?: object) => object;
       LngLatBounds: new () => MapboxBounds;
       Popup: new (opts?: object) => MapboxPopup;
     };
@@ -41,6 +42,8 @@ declare global {
 
 interface MapboxMap {
   on(event: string, cb: () => void): void;
+  addControl(control: object, position?: string): void;
+  flyTo(opts: object): void;
   addSource(id: string, source: object): void;
   addLayer(layer: object): void;
   getSource(id: string): { setData: (data: object) => void } | undefined;
@@ -53,6 +56,7 @@ interface MapboxMap {
 interface MapboxMarker {
   setLngLat(coords: [number, number]): MapboxMarker;
   setPopup(popup: MapboxPopup): MapboxMarker;
+  togglePopup(): MapboxMarker;
   addTo(map: MapboxMap): MapboxMarker;
   remove(): void;
 }

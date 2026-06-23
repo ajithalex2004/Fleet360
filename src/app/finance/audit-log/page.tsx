@@ -151,7 +151,7 @@ function DetailDrawer({ entry, onClose }: { entry: AuditEntry; onClose: () => vo
               <p className="text-base font-bold text-white mt-0.5">AED {fmt(entry.amount)}</p>
             </div>
           )}
-          {entry.old_values && (
+          {entry.old_values != null && (
             <div>
               <p className="text-xs font-bold text-slate-400 uppercase mb-1">Before</p>
               <pre className="bg-slate-800 rounded-xl p-3 text-xs text-slate-300 overflow-x-auto">
@@ -159,7 +159,7 @@ function DetailDrawer({ entry, onClose }: { entry: AuditEntry; onClose: () => vo
               </pre>
             </div>
           )}
-          {entry.new_values && (
+          {entry.new_values != null && (
             <div>
               <p className="text-xs font-bold text-slate-400 uppercase mb-1">After</p>
               <pre className="bg-slate-800 rounded-xl p-3 text-xs text-emerald-300 overflow-x-auto">
@@ -167,7 +167,7 @@ function DetailDrawer({ entry, onClose }: { entry: AuditEntry; onClose: () => vo
               </pre>
             </div>
           )}
-          {entry.metadata && (
+          {entry.metadata != null && (
             <div>
               <p className="text-xs font-bold text-slate-400 uppercase mb-1">Metadata</p>
               <pre className="bg-slate-800 rounded-xl p-3 text-xs text-blue-300 overflow-x-auto">

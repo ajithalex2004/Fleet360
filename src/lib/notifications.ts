@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import nodemailer from 'nodemailer';
+import { randomUUID } from 'crypto';
 import { NotificationEvent, RecipientType } from '@prisma/client';
 
 // Global transporter cache to prevent re-instantiation
@@ -57,6 +58,7 @@ export const sendServerEmail = async (
         // 4. Log Success
         await prisma.notificationLog.create({
             data: {
+                id: randomUUID(),
                 recipient,
                 type: 'Email',
                 subject,
@@ -75,6 +77,7 @@ export const sendServerEmail = async (
         try {
             await prisma.notificationLog.create({
                 data: {
+                    id: randomUUID(),
                     recipient,
                     type: 'Email',
                     subject,

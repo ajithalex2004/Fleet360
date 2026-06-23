@@ -7,18 +7,44 @@ import {
   generateHandoverEmail 
 } from '@/services/email/leasingTemplates';
 import { quotationEmailHtml } from '@/lib/email-templates/quotation';
+import { requireOperationalContext, requireOperationalPermission, recordOperationalChange } from '@/lib/cross-module-governance';
+import { markLeasingRuntimeActionExecuted, requireLeasingRuntimeApproval } from '@/lib/leasing-runtime-approvals';
+import { creditGateResponse, evaluateLeasingCreditGate } from '@/lib/leasing-credit-policy';
+import { buildLesseeDisplayName } from '@/lib/leasing-lessee-display';
+
+const CREDIT_GATED_QUOTATION_STATUSES = new Set([
+  'CREDIT_APPROVED',
+]);
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const ctx = requireOperationalContext(req, 'leasing', { write: true });
+    if (ctx instanceof NextResponse) return ctx;
+    const permission = await requireOperationalPermission(ctx, [
+      { module: 'leasing', action: 'approve', resource: 'quotations' },
+      { module: 'leasing', action: 'edit', resource: 'quotations' },
+    ], { message: 'You do not have access to approve Leasing quotations' });
+    if (permission) return permission;
+
     const body = await req.json();
     const { action, approverName, comments, targetStatus: requestedTarget, recipientEmail: customRecipient } = body;
     // action: 'APPROVE' | 'REJECT'
 
     const quotation = await prisma.leaseQuotation.findFirst({
       where: { id: params.id, deletedAt: null },
-      include: { lessee: true }
+      include: { lessee: true, inquiry: true }
     });
     if (!quotation) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    const currentUser = await prisma.userTenant.findUnique({
+      where: { userId_tenantId: { userId: ctx.userId, tenantId: ctx.tenantId } },
+      include: { role: true, user: { select: { email: true, firstName: true, lastName: true } } },
+    });
+    const actorRole = currentUser?.role?.code ?? ctx.role;
+    const resolvedActorName = [currentUser?.user?.firstName, currentUser?.user?.lastName].filter(Boolean).join(' ').trim();
+    const actorName = approverName
+      ?? (resolvedActorName || currentUser?.user?.email || 'Workflow Manager');
+
     // Find the pending approval step for this quotation
     const pendingStep = await prisma.leaseApprovalStep.findFirst({
       where: { entityId: params.id, entityType: 'QUOTATION', status: 'PENDING' },
@@ -26,11 +52,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
 
     if (pendingStep) {
+      if (!ctx.isSuperAdmin && pendingStep.approverRole && pendingStep.approverRole !== actorRole) {
+        return NextResponse.json({
+          error: 'This approval step is assigned to a different approver role.',
+          requiredRole: pendingStep.approverRole,
+          actorRole,
+        }, { status: 403 });
+      }
+
       await prisma.leaseApprovalStep.update({
         where: { id: pendingStep.id },
         data: {
           status: action === 'APPROVE' ? 'APPROVED' : 'REJECTED',
-          approverName: approverName ?? pendingStep.approverName,
+          approverName: actorName || pendingStep.approverName,
           actionAt: new Date(),
           comments: comments ?? null,
         },
@@ -61,9 +95,62 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       nextStatus = 'REJECTED';
     }
 
-    const updated = await prisma.leaseQuotation.update({
+    if (action === 'APPROVE' && CREDIT_GATED_QUOTATION_STATUSES.has(nextStatus)) {
+      const proposedExposure = Number(quotation.totalContractValue ?? 0)
+        || Number(quotation.totalMonthlyRate ?? 0) * Number(quotation.durationMonths ?? 1);
+      const gate = await evaluateLeasingCreditGate({
+        lesseeId: quotation.lesseeId,
+        proposedExposure,
+        currency: quotation.currency,
+      });
+      const blocked = creditGateResponse(gate);
+      if (blocked) return blocked;
+
+      const isCompletingExistingCreditApproval =
+        quotation.status === 'PENDING_CREDIT_APPROVAL'
+        && nextStatus === 'CREDIT_APPROVED'
+        && pendingStep?.status === 'APPROVED';
+
+      if (isCompletingExistingCreditApproval) {
+        // Legacy approval-step rows do not store the runtime action id; the
+        // quotation status transition below completes the user-facing action.
+      } else {
+        const approvalGate = await requireLeasingRuntimeApproval(req, ctx, {
+          serviceTypeKey: 'LEASING_CREDIT_APPROVAL',
+          entityType: 'QUOTATION',
+          entityId: params.id,
+          actionKey: 'credit_approval',
+          referenceNumber: quotation.quotationNumber ?? params.id,
+          amount: proposedExposure,
+          currency: quotation.currency ?? 'AED',
+          summary: `Approve credit gate for quotation ${quotation.quotationNumber ?? params.id}`,
+          payload: {
+            before: { status: quotation.status ?? 'NEW' },
+            after: { status: nextStatus, totalContractValue: proposedExposure },
+            quotationId: quotation.id,
+            lesseeId: quotation.lesseeId,
+          },
+          quotationId: quotation.id,
+        });
+        if (!approvalGate.ok) return approvalGate.response;
+        await markLeasingRuntimeActionExecuted(approvalGate.actionId);
+      }
+    }
+
+    const updatedQuotation = await prisma.leaseQuotation.update({
       where: { id: params.id },
       data: { status: nextStatus, updatedAt: new Date() },
+    });
+    await recordOperationalChange({
+      req,
+      ctx,
+      entityType: 'LeaseQuotation',
+      entityId: quotation.id,
+      action: 'STATUS_CHANGE',
+      before: quotation,
+      after: updatedQuotation,
+      summary: `Updated quotation ${quotation.quotationNumber ?? quotation.id} to ${nextStatus}`,
+      riskSeverity: nextStatus === 'CREDIT_APPROVED' ? 'medium' : 'low',
     });
 
     // ── Side Effects & Notifications ──
@@ -90,7 +177,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       // lessee so we can read the customer name + email off the relation.
       const fullQuotation = await prisma.leaseQuotation.findUnique({
         where: { id: params.id },
-        include: { vehicles: true, lineItems: true, lessee: true }
+        include: { vehicles: true, lineItems: true, lessee: true, inquiry: true }
       });
 
       if (fullQuotation) {
@@ -101,7 +188,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         const html = quotationEmailHtml({
           quotationNumber: fqQuotationNo,
           lesseeName: fqLesseeName,
-          leaseType: fullQuotation.leaseType as any,
+          leaseType: fullQuotation.leaseType ?? 'LONG_TERM',
           durationMonths: fullQuotation.durationMonths ?? undefined,
           startDate: fullQuotation.startDate?.toISOString(),
           endDate: fullQuotation.endDate?.toISOString(),
@@ -162,7 +249,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       });
     }
 
-    return NextResponse.json(updated);
+    const updated = await prisma.leaseQuotation.findUnique({
+      where: { id: params.id },
+      include: { vehicles: true, lineItems: true, lessee: true, inquiry: true },
+    });
+    if (!updated) {
+      return NextResponse.json({ error: 'Quotation not found after update' }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      ...updated,
+      lesseeName: buildLesseeDisplayName(updated),
+    });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

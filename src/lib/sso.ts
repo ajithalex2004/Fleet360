@@ -13,6 +13,7 @@
 
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { resolveCorporateCustomerByEmail } from '@/lib/corporate-customer-identity';
 
 let _ensured = false;
 
@@ -90,6 +91,12 @@ export interface TenantSsoConfig {
   isActive: boolean;
 }
 
+export interface TenantSsoReadiness {
+  status: 'ready' | 'incomplete' | 'inactive';
+  issues: string[];
+  redirectUri: string;
+}
+
 interface SsoRow {
   id: string;
   tenant_id: string;
@@ -153,6 +160,23 @@ export async function findSsoConfigByEmail(email: string): Promise<TenantSsoConf
   return rows[0] ? rowToConfig(rows[0]) : null;
 }
 
+export function validateSsoConfigReadiness(
+  config: Pick<TenantSsoConfig, 'issuer' | 'clientId' | 'clientSecret' | 'allowedEmailDomains' | 'isActive'>,
+  appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+): TenantSsoReadiness {
+  const issues: string[] = [];
+  if (!config.isActive) issues.push('SSO configuration is inactive.');
+  if (!/^https:\/\//i.test(config.issuer)) issues.push('Issuer must be an HTTPS URL.');
+  if (!config.clientId.trim()) issues.push('Client ID is required.');
+  if (!config.clientSecret.trim()) issues.push('Client secret is required.');
+  if (!config.allowedEmailDomains.length) issues.push('At least one allowed email domain is required.');
+  return {
+    status: !config.isActive ? 'inactive' : issues.length ? 'incomplete' : 'ready',
+    issues,
+    redirectUri: `${appUrl.replace(/\/$/, '')}/api/auth/sso/callback`,
+  };
+}
+
 /**
  * Returns the redacted public-safe view of a config (for admin list UIs).
  * Never includes the decrypted secret.
@@ -180,5 +204,38 @@ export async function getSsoConfigPublic(tenantId: string): Promise<Omit<TenantS
     defaultRoleId: r.default_role_id,
     jitEnabled: r.jit_enabled,
     isActive: r.is_active,
+  };
+}
+
+export async function discoverSsoByEmail(email: string) {
+  const normalizedEmail = email.toLowerCase().trim();
+  const domain = normalizedEmail.split('@')[1]?.toLowerCase().trim() ?? '';
+  if (!domain || !/.+@.+\..+/.test(normalizedEmail)) {
+    return { found: false, reason: 'invalid-email' as const, email: normalizedEmail, domain };
+  }
+  const cfg = await findSsoConfigByEmail(normalizedEmail);
+  if (!cfg) {
+    return { found: false, reason: 'not-configured' as const, email: normalizedEmail, domain };
+  }
+  const readiness = validateSsoConfigReadiness(cfg);
+  const customer = await resolveCorporateCustomerByEmail(cfg.tenantId, normalizedEmail).catch(() => null);
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: cfg.tenantId },
+    select: { id: true, name: true, isActive: true },
+  }).catch(() => null);
+  if (!tenant?.isActive) {
+    return { found: true, ready: false, reason: 'tenant-inactive' as const, email: normalizedEmail, domain, tenant, customer, readiness };
+  }
+  return {
+    found: true,
+    ready: readiness.status === 'ready',
+    reason: readiness.status === 'ready' ? 'ready' as const : 'incomplete' as const,
+    email: normalizedEmail,
+    domain,
+    tenant,
+    customer,
+    provider: cfg.provider,
+    issuer: cfg.issuer,
+    readiness,
   };
 }

@@ -12,7 +12,7 @@ export default function DriverLayout({ children }: { children: React.ReactNode }
   const tabs = [
     { href: '/bus-ops/driver',         label: 'Today',     icon: '📋' },
     { href: '/bus-ops/driver/incident', label: 'Incident',  icon: '⚠️' },
-    { href: '/bus-ops/driver/profile',  label: 'Me',        icon: '🧑‍✈️' },
+    { href: '/bus-ops/driver/profile',  label: 'Me',        icon: '🤵' },
   ];
 
   return (

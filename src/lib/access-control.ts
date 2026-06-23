@@ -43,19 +43,19 @@ export function canWrite(plan: string, role: string, module: AppModule): boolean
 export function moduleFromPath(pathname: string): AppModule | null {
   if (pathname.startsWith('/api/vehicles') || pathname.startsWith('/api/fleet') || pathname.startsWith('/api/drivers'))
     return 'fleet';
-  if (pathname.startsWith('/api/rac'))        return 'rac';
+  if (pathname.startsWith('/api/rac') || pathname.startsWith('/api/rental')) return 'rac';
   if (pathname.startsWith('/api/leasing'))    return 'leasing';
   if (pathname.startsWith('/api/logistics') || pathname.startsWith('/api/trips'))
     return 'logistics';
   if (pathname.startsWith('/api/finance') || pathname.startsWith('/api/invoice'))
     return 'finance';
-  if (pathname.startsWith('/api/school-bus') || pathname.startsWith('/api/students') || pathname.startsWith('/api/routes'))
+  if (pathname.startsWith('/api/school-bus') || pathname.startsWith('/api/bus-ops') || pathname.startsWith('/api/students') || pathname.startsWith('/api/routes'))
     return 'school-bus';
   if (pathname.startsWith('/api/ambulance') || pathname.startsWith('/api/incidents'))
     return 'ambulance';
   if (pathname.startsWith('/api/dispatch'))   return 'dispatch';
   if (pathname.startsWith('/api/staff'))      return 'staff';
-  if (pathname.startsWith('/api/admin'))      return 'admin';
+  if (pathname.startsWith('/api/admin') || pathname.startsWith('/api/service-tickets') || pathname.startsWith('/api/reports')) return 'admin';
   return null;
 }
 

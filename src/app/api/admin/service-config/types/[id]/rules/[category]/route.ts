@@ -16,9 +16,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth';
+import { authorizeServiceConfig, recordServiceConfigChange, requireServiceConfigApproval, requireServiceConfigPermission } from '@/lib/service-config/auth';
 import {
-  loadRulesForChain, saveRules,
+  loadRulesForChain, loadRulesForScope, saveRules,
 } from '@/lib/service-config/rules-schema';
 import {
   ensureRootScope, getScope, loadScopeChain,
@@ -27,7 +27,6 @@ import {
   RULE_CATEGORIES, RULE_DEFAULTS,
   type RuleCategory,
 } from '@/types/service-rules';
-import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
 export const runtime = 'nodejs';
@@ -96,10 +95,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 }
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
-  const auth = authorizeServiceConfig(req);
+  const auth = await requireServiceConfigPermission(req, 'edit');
   if (!auth.ok) return auth.res;
-  const adminCheck = requireAdmin(auth);
-  if (!adminCheck.ok) return adminCheck.res;
 
   const { id, category } = await params;
   if (!isValidCategory(category)) {
@@ -120,20 +117,96 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     ...(RULE_DEFAULTS[category] as unknown as Record<string, unknown>),
     ...pickKnownKeys(category, body as Record<string, unknown>),
   };
+  if (category === 'approval' && typeof merged.workflowId === 'string' && merged.workflowId.trim()) {
+    merged.approvalLevels = 1;
+  }
 
   try {
+    const before = await loadRulesForScope(id, category, scopeId);
+    const approval = await requireServiceConfigApproval(req, auth, 'service_config.rules.update', {
+      targetType: 'ServiceRules',
+      targetId: id,
+      summary: `Update ${category} rules for ${owner.key} at scope ${scopeId.slice(0, 8)}.`,
+      payload: { category, scopeId, rules: merged },
+    });
+    if (approval) return approval;
+
     await saveRules(id, category, merged, auth.userId, scopeId);
 
-    void logAudit({
-      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
-      entityType: 'ServiceRules', entityId: id, entityName: `${owner.key}:${category}`,
+    await recordServiceConfigChange({
+      req,
+      auth,
+      entityType: 'ServiceRules',
+      entityId: id,
+      entityName: `${owner.key}:${category}`,
       action: 'UPDATE',
-      details: `Updated ${category} rules for service type ${owner.key} at scope ${scopeId.slice(0, 8)}`,
+      before,
+      after: merged,
+      summary: `Updated ${category} rules for service type ${owner.key} at scope ${scopeId.slice(0, 8)}.`,
     });
 
     return NextResponse.json({ ok: true, rules: merged, ownedScope: scopeId, activeScope: scopeId });
   } catch (err) {
     captureException(err, { context: 'service-config.rules.put', tags: { category } });
     return NextResponse.json({ ok: false, error: 'Save failed' }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest, { params }: RouteParams) {
+  const auth = await requireServiceConfigPermission(req, 'edit');
+  if (!auth.ok) return auth.res;
+
+  const { id, category } = await params;
+  if (!isValidCategory(category)) {
+    return NextResponse.json({ ok: false, error: `Unknown category "${category}"` }, { status: 400 });
+  }
+  const owner = await ownsType(auth.tenantId, id);
+  if (!owner.ok) return NextResponse.json({ ok: false, error: 'Service type not found' }, { status: 404 });
+  const scopeId = await resolveScopeId(auth.tenantId, req.nextUrl.searchParams.get('scopeId'));
+  if (!scopeId) return NextResponse.json({ ok: false, error: 'Scope not found' }, { status: 404 });
+
+  const before = await loadRulesForScope(id, category, scopeId);
+  if (!before) {
+    return NextResponse.json({ ok: false, error: 'No override exists at this scope.' }, { status: 404 });
+  }
+
+  const approval = await requireServiceConfigApproval(req, auth, 'service_config.rules.reset_override', {
+    targetType: 'ServiceRules',
+    targetId: id,
+    summary: `Reset ${category} override for ${owner.key} at scope ${scopeId.slice(0, 8)}.`,
+    payload: { category, scopeId },
+  });
+  if (approval) return approval;
+
+  try {
+    await prisma.$executeRawUnsafe(
+      `UPDATE service_rules
+          SET effective_to = NOW(), updated_at = NOW(), updated_by = $4
+        WHERE service_type_id = $1::uuid
+          AND category = $2
+          AND scope_id = $3::uuid
+          AND effective_to IS NULL`,
+      id,
+      category,
+      scopeId,
+      auth.userId,
+    );
+
+    await recordServiceConfigChange({
+      req,
+      auth,
+      entityType: 'ServiceRules',
+      entityId: id,
+      entityName: `${owner.key}:${category}`,
+      action: 'RESET_OVERRIDE',
+      before,
+      after: { inherited: true, scopeId },
+      summary: `Reset ${category} override for service type ${owner.key} at scope ${scopeId.slice(0, 8)}.`,
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    captureException(err, { context: 'service-config.rules.reset', tags: { category } });
+    return NextResponse.json({ ok: false, error: 'Reset failed' }, { status: 500 });
   }
 }

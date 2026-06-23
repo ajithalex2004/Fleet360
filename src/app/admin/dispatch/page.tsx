@@ -248,7 +248,7 @@ export default function AdminDispatchPage() {
         {/* Driver pool */}
         <div className="rounded-2xl bg-slate-900 border border-white/10 p-6">
           <div className="flex items-center justify-between mb-5">
-            <h2 className="text-white font-bold text-lg">👤 Driver Pool</h2>
+            <h2 className="text-white font-bold text-lg">🤵 Driver Pool</h2>
             <div className="flex items-center gap-2">
               <span className={`text-2xl font-bold ${
                 (d?.utilizationPct ?? 0) >= 90 ? 'text-red-400' :

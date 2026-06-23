@@ -70,6 +70,19 @@ export async function ensureServiceRulesTable(): Promise<void> {
       ON service_rules (scope_id) WHERE effective_to IS NULL
   `);
 
+  // Workflow-backed approval rules should now use a single vote/level by default.
+  // Backfill active approval rule rows so existing configured services stop
+  // requiring two approvals after the policy change.
+  await prisma.$executeRawUnsafe(`
+    UPDATE service_rules
+       SET rules = jsonb_set(rules, '{approvalLevels}', '1'::jsonb, true),
+           updated_at = NOW()
+     WHERE category = 'approval'
+       AND effective_to IS NULL
+       AND COALESCE(NULLIF(rules->>'workflowId', ''), '') <> ''
+       AND COALESCE((rules->>'approvalLevels')::int, 1) <> 1
+  `).catch(() => {});
+
   _ensured = true;
 }
 

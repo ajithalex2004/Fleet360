@@ -84,8 +84,11 @@ async function hmacVerify(data: string, hexSig: string): Promise<boolean> {
 // ── Token management ─────────────────────────────────────────────────────────
 
 export interface SessionPayload {
+  sessionId?: string;
   userId: string;
   tenantId: string;
+  customerId?: string;
+  customerRole?: string;
   plan: string;
   role: string; // e.g. 'SUPER_ADMIN' | 'TENANT_ADMIN'
   /** Set when a SUPER_ADMIN is impersonating this user — value is the
@@ -98,8 +101,11 @@ export interface SessionPayload {
  * Signs a session payload and returns an opaque token string.
  */
 export async function signSession(payload: {
+  sessionId?: string;
   userId: string;
   tenantId: string;
+  customerId?: string;
+  customerRole?: string;
   plan: string;
   role: string;
   impersonatedBy?: string;
@@ -122,7 +128,16 @@ export async function signSession(payload: {
  */
 export async function verifySession(
   token: string,
-): Promise<{ userId: string; tenantId: string; plan: string; role: string; impersonatedBy?: string } | null> {
+): Promise<{
+  sessionId?: string;
+  userId: string;
+  tenantId: string;
+  customerId?: string;
+  customerRole?: string;
+  plan: string;
+  role: string;
+  impersonatedBy?: string;
+} | null> {
   try {
     const dotIndex = token.lastIndexOf('.');
     if (dotIndex === -1) return null;
@@ -140,8 +155,11 @@ export async function verifySession(
     }
 
     return {
+      ...(payload.sessionId ? { sessionId: payload.sessionId } : {}),
       userId:         payload.userId,
       tenantId:       payload.tenantId,
+      ...(payload.customerId ? { customerId: payload.customerId } : {}),
+      ...(payload.customerRole ? { customerRole: payload.customerRole } : {}),
       plan:           payload.plan,
       role:           payload.role ?? 'TENANT_ADMIN',
       ...(payload.impersonatedBy ? { impersonatedBy: payload.impersonatedBy } : {}),

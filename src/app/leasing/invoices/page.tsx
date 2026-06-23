@@ -1,32 +1,56 @@
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
-import { Plus, Edit2, Send, Check, Trash2 } from 'lucide-react';
+import React, { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { usePathname } from 'next/navigation';
+import { Check, ChevronDown, ChevronRight, FileText, Plus, RefreshCw, Send, ShieldCheck, Trash2 } from 'lucide-react';
+import { LeasingBillingMigrationNotice } from '@/components/LeasingBillingMigrationNotice';
+import { usePermissions } from '@/contexts/PermissionContext';
+
+type LineType = 'RENT' | 'FUEL' | 'FINE' | 'OVERAGE' | 'MAINTENANCE' | 'INSURANCE' | 'DEPOSIT' | 'OTHER';
+
+interface ApprovalNotice {
+  action: string;
+  id: string;
+  status: string;
+  message: string;
+}
+
+interface ApprovalResponseBody {
+  action?: string;
+  message?: string;
+  approvalRequest?: { id?: string; status?: string };
+  error?: string;
+}
 
 interface InvoiceLine {
   id?: string;
   description: string;
-  lineType: 'RENT' | 'FUEL' | 'FINE' | 'OVERAGE' | 'MAINTENANCE' | 'INSURANCE' | 'DEPOSIT' | 'OTHER';
-  contractId: string;
-  vehicleRef: string;
-  quantity: number;
-  unitAmount: number;
-  totalAmount?: number;
+  lineType: LineType;
+  contractId?: string | null;
+  vehicleRef?: string | null;
+  quantity?: number | string | null;
+  unitAmount: number | string;
+  totalAmount?: number | string | null;
 }
 
 interface Invoice {
   id: string;
-  invoiceNo: string;
-  lessee: { name: string; id: string };
-  billingPeriod: string;
+  invoiceNo: string | null;
+  lessee?: { name?: string | null; id?: string | null };
+  lesseeId?: string;
+  billingPeriod?: string | null;
   issueDate: string;
   dueDate: string;
   lines: InvoiceLine[];
-  subtotal: number;
-  vatPct: number;
-  vat: number;
-  total: number;
+  subTotal?: number | string;
+  subtotal?: number | string;
+  vatAmount?: number | string | null;
+  vat?: number | string | null;
+  totalAmount?: number | string;
+  total?: number | string;
+  currency?: string | null;
   status: 'DRAFT' | 'SENT' | 'PAID' | 'OVERDUE' | 'CANCELLED';
+  notes?: string | null;
 }
 
 interface Lessee {
@@ -34,105 +58,142 @@ interface Lessee {
   name: string;
 }
 
-const getStatusBadgeColor = (status: string) => {
-  switch (status) {
-    case 'DRAFT':
-      return 'bg-slate-700/30 text-slate-300 border-slate-600';
-    case 'SENT':
-      return 'bg-blue-900/30 text-blue-200 border-blue-700';
-    case 'PAID':
-      return 'bg-emerald-900/30 text-emerald-200 border-emerald-700';
-    case 'OVERDUE':
-      return 'bg-red-900/30 text-red-200 border-red-700';
-    case 'CANCELLED':
-      return 'bg-slate-700/30 text-slate-300 border-slate-600';
-    default:
-      return 'bg-slate-700/30 text-slate-300 border-slate-600';
-  }
-};
+interface PreBillingStatement {
+  id: string;
+  statementNo?: string | null;
+  contractId: string;
+  lesseeId: string;
+  billingPeriod: string;
+  totalAmount: number | string;
+  currency?: string | null;
+  status?: string | null;
+  contract?: { contractNumber?: string | null } | null;
+}
+
+interface InvoiceFormData {
+  lesseeId: string;
+  billingPeriod: string;
+  issueDate: string;
+  dueDate: string;
+  vatPct: number;
+  lines: InvoiceLine[];
+}
+
+type RetryRequest = { url: string; method: string; payload: Record<string, unknown> };
+
+function money(value: unknown, currency = 'AED') {
+  return `${Number(value ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${currency}`;
+}
+
+function preBillingRef(statement: Pick<PreBillingStatement, 'statementNo' | 'id'>) {
+  return statement.statementNo ?? statement.id;
+}
+
+function approvalFromResponse(body: ApprovalResponseBody, fallback: string): ApprovalNotice | null {
+  if (!body?.approvalRequest?.id) return null;
+  return {
+    action: body.action ?? fallback,
+    id: body.approvalRequest.id,
+    status: body.approvalRequest.status ?? 'PENDING',
+    message: body.message ?? 'This action is queued for approval.',
+  };
+}
+
+const emptyLine = (): InvoiceLine => ({ description: '', lineType: 'RENT', contractId: '', vehicleRef: '', quantity: 1, unitAmount: 0 });
 
 export default function InvoicesPage() {
+  const pathname = usePathname();
+  const { can } = usePermissions();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [lessees, setLessees] = useState<Lessee[]>([]);
+  const [preBilling, setPreBilling] = useState<PreBillingStatement[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [error, setError] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
   const [showNewModal, setShowNewModal] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-
-  const [formData, setFormData] = useState({
+  const [busy, setBusy] = useState<string | null>(null);
+  const [notice, setNotice] = useState<ApprovalNotice | null>(null);
+  const [pendingRetry, setPendingRetry] = useState<RetryRequest | null>(null);
+  const [preBillingStatementIds, setPreBillingStatementIds] = useState<string[]>([]);
+  const [formData, setFormData] = useState<InvoiceFormData>({
     lesseeId: '',
     billingPeriod: '',
     issueDate: '',
     dueDate: '',
     vatPct: 5,
-    lines: [{ description: '', lineType: 'RENT' as const, contractId: '', vehicleRef: '', quantity: 1, unitAmount: 0 }],
+    lines: [emptyLine()],
   });
 
+  const canManageInvoices =
+    can('finance', 'create', 'leasing_billing') ||
+    can('finance', 'edit', 'leasing_billing') ||
+    can('leasing', 'create', 'invoices');
+  const canApproveInvoices =
+    can('finance', 'approve', 'leasing_billing') ||
+    can('leasing', 'approve', 'invoices');
+  const isLegacyPath = pathname.startsWith('/leasing/');
+  const apiBase = isLegacyPath ? '/api/leasing' : '/api/finance/leasing-billing';
+  const invoicePdfBase = `${apiBase}/invoices`;
+
   const fetchInvoices = useCallback(async () => {
+    setLoading(true);
+    setError('');
     try {
-      setLoading(true);
-      const response = await fetch('/api/leasing/invoices');
-      if (!response.ok) throw new Error('Failed to fetch invoices');
-      const data = await response.json();
-      setInvoices(data);
+      const response = await fetch(`${apiBase}/invoices`);
+      const data = await response.json().catch(() => []);
+      const errorBody = data as ApprovalResponseBody;
+      if (!response.ok) throw new Error(errorBody.error ?? 'Failed to fetch invoices');
+      setInvoices(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error fetching invoices');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiBase]);
 
-  const fetchLessees = useCallback(async () => {
-    try {
-      const response = await fetch('/api/leasing/lessees');
-      if (!response.ok) throw new Error('Failed to fetch lessees');
-      const data = await response.json();
-      setLessees(data);
-    } catch (err) {
-      console.error('Error fetching lessees:', err);
-    }
-  }, []);
+  const fetchLookups = useCallback(async () => {
+    const [lesseeRes, preBillingRes] = await Promise.all([
+      fetch('/api/leasing/lessees').catch(() => null),
+      fetch(`${apiBase}/pre-billing?status=CONFIRMED`).catch(() => null),
+    ]);
+    if (lesseeRes?.ok) setLessees(await lesseeRes.json());
+    if (preBillingRes?.ok) setPreBilling(await preBillingRes.json());
+  }, [apiBase]);
 
   useEffect(() => {
-    fetchInvoices();
-    fetchLessees();
-  }, [fetchInvoices, fetchLessees]);
+    void fetchInvoices();
+    void fetchLookups();
+  }, [fetchInvoices, fetchLookups]);
 
-  const handleAddLine = () => {
-    setFormData({
-      ...formData,
-      lines: [...formData.lines, { description: '', lineType: 'RENT', contractId: '', vehicleRef: '', quantity: 1, unitAmount: 0 }],
-    });
+  const setApproval = (body: ApprovalResponseBody, fallback: string, retry: RetryRequest) => {
+    const approval = approvalFromResponse(body, fallback);
+    if (!approval) return false;
+    setNotice(approval);
+    setPendingRetry(retry);
+    return true;
   };
 
-  const handleRemoveLine = (index: number) => {
-    setFormData({
-      ...formData,
-      lines: formData.lines.filter((_, i) => i !== index),
-    });
+  const executeWithApprovalHandling = async (retry: NonNullable<typeof pendingRetry>, fallbackAction = 'leasing.invoice.create') => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (notice?.status === 'APPROVED') headers['x-admin-approval-id'] = notice.id;
+    const response = await fetch(retry.url, { method: retry.method, headers, body: JSON.stringify(retry.payload) });
+    const body = await response.json().catch(() => ({})) as ApprovalResponseBody;
+    if (response.status === 428 && setApproval(body, fallbackAction, retry)) return false;
+    if (!response.ok) throw new Error(body.error ?? `Request failed with ${response.status}`);
+    setNotice(null);
+    setPendingRetry(null);
+    await fetchInvoices();
+    await fetchLookups();
+    return true;
   };
-
-  const handleLineChange = (index: number, field: string, value: any) => {
-    const newLines = [...formData.lines];
-    (newLines[index] as any)[field] = value;
-    setFormData({ ...formData, lines: newLines });
-  };
-
-  const calculateLineTotal = (line: InvoiceLine): number => {
-    return line.quantity * line.unitAmount;
-  };
-
-  const subtotal = formData.lines.reduce((sum, line) => sum + calculateLineTotal(line), 0);
-  const vat = subtotal * (formData.vatPct / 100);
-  const total = subtotal + vat;
 
   const handleCreateInvoice = async () => {
-    try {
-      const response = await fetch('/api/leasing/invoices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+    setBusy('create');
+    setError('');
+    const payload: Record<string, unknown> = preBillingStatementIds.length > 0
+      ? { preBillingStatementIds }
+      : {
           lesseeId: formData.lesseeId,
           billingPeriod: formData.billingPeriod,
           issueDate: formData.issueDate,
@@ -140,411 +201,361 @@ export default function InvoicesPage() {
           vatPct: formData.vatPct,
           lines: formData.lines.map(line => ({
             ...line,
-            quantity: parseInt(line.quantity.toString()),
-            unitAmount: parseFloat(line.unitAmount.toString()),
+            quantity: Number(line.quantity ?? 1),
+            unitAmount: Number(line.unitAmount ?? 0),
+            totalAmount: Number(line.quantity ?? 1) * Number(line.unitAmount ?? 0),
           })),
-        }),
-      });
-      if (!response.ok) throw new Error('Failed to create invoice');
-      setFormData({
-        lesseeId: '',
-        billingPeriod: '',
-        issueDate: '',
-        dueDate: '',
-        vatPct: 5,
-        lines: [{ description: '', lineType: 'RENT', contractId: '', vehicleRef: '', quantity: 1, unitAmount: 0 }],
-      });
-      setShowNewModal(false);
-      fetchInvoices();
+        };
+    try {
+      const ok = await executeWithApprovalHandling({ url: `${apiBase}/invoices`, method: 'POST', payload });
+      if (ok) {
+        setFormData({ lesseeId: '', billingPeriod: '', issueDate: '', dueDate: '', vatPct: 5, lines: [emptyLine()] });
+        setPreBillingStatementIds([]);
+        setShowNewModal(false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error creating invoice');
+    } finally {
+      setBusy(null);
     }
   };
 
-  const handleSendInvoice = async (invoiceId: string) => {
+  const handleRetryApproved = async () => {
+    if (!pendingRetry) return;
+    setBusy('retry');
+    setError('');
     try {
-      const response = await fetch(`/api/leasing/invoices/${invoiceId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'SENT' }),
-      });
-      if (!response.ok) throw new Error('Failed to send invoice');
-      fetchInvoices();
+      await executeWithApprovalHandling(pendingRetry, notice?.action ?? 'leasing.invoice.create');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error sending invoice');
+      setError(err instanceof Error ? err.message : 'Failed to execute approved invoice action');
+    } finally {
+      setBusy(null);
     }
   };
 
-  const handleMarkPaid = async (invoiceId: string) => {
+  const patchInvoiceStatus = async (invoiceId: string, status: string) => {
+    setBusy(invoiceId);
+    setError('');
+    const retry = { url: `${apiBase}/invoices/${invoiceId}`, method: 'PATCH', payload: { status } };
     try {
-      const response = await fetch(`/api/leasing/invoices/${invoiceId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'PAID' }),
-      });
-      if (!response.ok) throw new Error('Failed to mark invoice as paid');
-      fetchInvoices();
+      await executeWithApprovalHandling(retry, 'leasing.invoice.status_change');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error marking invoice as paid');
+      setError(err instanceof Error ? err.message : 'Failed to update invoice');
+    } finally {
+      setBusy(null);
     }
   };
 
-  const filteredInvoices = statusFilter === 'All'
-    ? invoices
-    : invoices.filter(i => i.status === statusFilter);
-
-  const toggleRowExpand = (invoiceId: string) => {
-    const newExpanded = new Set(expandedRows);
-    if (newExpanded.has(invoiceId)) {
-      newExpanded.delete(invoiceId);
-    } else {
-      newExpanded.add(invoiceId);
+  const filteredInvoices = statusFilter === 'All' ? invoices : invoices.filter(i => i.status === statusFilter);
+  const invoicedPreBillingRefs = useMemo(() => {
+    const refs = new Set<string>();
+    for (const invoice of invoices) {
+      for (const match of (invoice.notes ?? '').matchAll(/pre-billing:([^\s]+)/g)) {
+        refs.add(match[1]);
+      }
     }
-    setExpandedRows(newExpanded);
-  };
+    return refs;
+  }, [invoices]);
+  const availablePreBilling = useMemo(
+    () => preBilling.filter(statement => !invoicedPreBillingRefs.has(preBillingRef(statement))),
+    [invoicedPreBillingRefs, preBilling],
+  );
+  const selectedPreBilling = useMemo(
+    () => availablePreBilling.filter(statement => preBillingStatementIds.includes(statement.id)),
+    [availablePreBilling, preBillingStatementIds],
+  );
+  const firstSelectedPreBilling = selectedPreBilling[0] ?? null;
+  const canSelectPreBilling = useCallback((statement: PreBillingStatement) => {
+    if (!firstSelectedPreBilling || preBillingStatementIds.includes(statement.id)) return true;
+    return statement.lesseeId === firstSelectedPreBilling.lesseeId
+      && statement.billingPeriod === firstSelectedPreBilling.billingPeriod
+      && (statement.currency ?? 'AED') === (firstSelectedPreBilling.currency ?? 'AED');
+  }, [firstSelectedPreBilling, preBillingStatementIds]);
+  const selectedPreBillingTotal = selectedPreBilling.reduce((sum, statement) => sum + Number(statement.totalAmount ?? 0), 0);
+  const totals = useMemo(() => {
+    const mrr = invoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount ?? invoice.total ?? 0), 0);
+    return { count: invoices.length, total: mrr, pending: invoices.filter(i => ['DRAFT', 'SENT', 'OVERDUE'].includes(i.status)).length };
+  }, [invoices]);
+  const subtotal = formData.lines.reduce((sum, line) => sum + Number(line.quantity ?? 1) * Number(line.unitAmount ?? 0), 0);
+  const vat = subtotal * (formData.vatPct / 100);
+
+  if (isLegacyPath) {
+    return (
+      <LeasingBillingMigrationNotice
+        title="Leasing invoices"
+        financeHref="/finance/leasing-billing/invoices"
+        description="Invoice creation, status updates, approvals, and finance reconciliation now run from Finance & Billing."
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0c1a3e] text-slate-100 p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold">Invoice Management</h1>
-          <button
-            onClick={() => setShowNewModal(true)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition"
-          >
-            <Plus size={20} /> New Invoice
-          </button>
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">Invoice Management</h1>
+            <p className="mt-1 text-sm text-slate-400">Canonical leasing invoices reconciled against pre-billing, receivables, and approval execution.</p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={fetchInvoices} className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700">
+              <RefreshCw className="h-4 w-4" /> Refresh
+            </button>
+            <button onClick={() => setShowNewModal(true)} disabled={!canManageInvoices} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 hover:bg-blue-500 disabled:opacity-50">
+              <Plus size={18} /> New Invoice
+            </button>
+          </div>
         </div>
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-900/30 border border-red-700 rounded-lg">
-            <p className="text-red-200">{error}</p>
+        {error && <div className="rounded-lg border border-red-700 bg-red-900/30 p-4 text-red-200">{error}</div>}
+        {notice && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <ShieldCheck className="h-5 w-5 mt-0.5 text-amber-300" />
+                <div>
+                  <div className="font-semibold">Approval {notice.status.toLowerCase()}: {notice.id}</div>
+                  <div className="text-amber-100/80">{notice.message}</div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <a href="/admin/approvals" className="rounded-lg border border-amber-400/40 px-3 py-2 text-xs hover:bg-amber-400/10">Open approvals</a>
+                {notice.status === 'APPROVED' && pendingRetry && (
+                  <button onClick={handleRetryApproved} disabled={busy === 'retry'} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs text-white hover:bg-emerald-500 disabled:opacity-50">Execute approved action</button>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
-        <div className="mb-6 flex gap-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <Kpi label="Invoices" value={totals.count} />
+          <Kpi label="Open workflow" value={totals.pending} />
+          <Kpi label="Invoice value" value={money(totals.total)} />
+        </div>
+
+        <div className="flex flex-wrap gap-2">
           {['All', 'DRAFT', 'SENT', 'PAID', 'OVERDUE', 'CANCELLED'].map(status => (
-            <button
-              key={status}
-              onClick={() => setStatusFilter(status)}
-              className={`px-4 py-2 rounded-lg transition ${
-                statusFilter === status
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-              }`}
-            >
-              {status}
-            </button>
+            <button key={status} onClick={() => setStatusFilter(status)} className={`rounded-lg px-4 py-2 text-sm ${statusFilter === status ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>{status}</button>
           ))}
         </div>
 
         {loading ? (
-          <div className="text-center py-12">Loading invoices...</div>
+          <div className="py-12 text-center text-slate-400">Loading invoices...</div>
         ) : (
-          <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
+          <div className="overflow-hidden rounded-lg border border-slate-700 bg-slate-800">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-700 bg-slate-900">
-                  <th className="px-4 py-3 text-left w-8"></th>
-                  <th className="px-4 py-3 text-left">Invoice No</th>
+              <thead className="bg-slate-900 text-slate-300">
+                <tr>
+                  <th className="w-8 px-4 py-3"></th>
+                  <th className="px-4 py-3 text-left">Invoice</th>
                   <th className="px-4 py-3 text-left">Lessee</th>
-                  <th className="px-4 py-3 text-left">Billing Period</th>
-                  <th className="px-4 py-3 text-left">Issue Date</th>
-                  <th className="px-4 py-3 text-left">Due Date</th>
-                  <th className="px-4 py-3 text-center">Lines</th>
+                  <th className="px-4 py-3 text-left">Period</th>
                   <th className="px-4 py-3 text-right">Subtotal</th>
                   <th className="px-4 py-3 text-right">VAT</th>
                   <th className="px-4 py-3 text-right">Total</th>
                   <th className="px-4 py-3 text-left">Status</th>
-                  <th className="px-4 py-3 text-center">Actions</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredInvoices.map(invoice => (
-                  <React.Fragment key={invoice.id}>
-                    <tr className="border-b border-slate-700 hover:bg-slate-750">
-                      <td className="px-4 py-3">
-                        <button
-                          onClick={() => toggleRowExpand(invoice.id)}
-                          className="text-slate-200 hover:text-slate-200"
-                        >
-                          {expandedRows.has(invoice.id) ? 'v' : '>'}
-                        </button>
-                      </td>
-                      <td className="px-4 py-3 font-medium">{invoice.invoiceNo}</td>
-                      <td className="px-4 py-3">{invoice.lessee.name}</td>
-                      <td className="px-4 py-3 text-sm">{invoice.billingPeriod}</td>
-                      <td className="px-4 py-3 text-sm">{invoice.issueDate}</td>
-                      <td className="px-4 py-3 text-sm">{invoice.dueDate}</td>
-                      <td className="px-4 py-3 text-center text-sm">{invoice.lines.length}</td>
-                      <td className="px-4 py-3 text-right">{invoice.subtotal.toFixed(2)} AED</td>
-                      <td className="px-4 py-3 text-right">{invoice.vat.toFixed(2)} AED</td>
-                      <td className="px-4 py-3 text-right font-semibold">{invoice.total.toFixed(2)} AED</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 text-xs rounded border ${getStatusBadgeColor(invoice.status)}`}>
-                          {invoice.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-2 text-xs">
-                          <a
-                            href={`/api/leasing/invoices/${invoice.id}/pdf?lang=en&download=1`}
-                            className="text-emerald-400 hover:text-emerald-300"
-                            title="Download bilingual PDF (EN layout)"
-                          >
-                            PDF·EN
-                          </a>
-                          <a
-                            href={`/api/leasing/invoices/${invoice.id}/pdf?lang=ar&download=1`}
-                            className="text-emerald-400 hover:text-emerald-300"
-                            title="Download bilingual PDF (AR layout)"
-                          >
-                            PDF·AR
-                          </a>
-                          {invoice.status === 'DRAFT' && (
-                            <button
-                              onClick={() => handleSendInvoice(invoice.id)}
-                              className="text-blue-400 hover:text-blue-300 transition"
-                              title="Send invoice"
-                            >
-                              <Send size={16} />
-                            </button>
-                          )}
-                          {invoice.status !== 'PAID' && invoice.status !== 'CANCELLED' && (
-                            <button
-                              onClick={() => handleMarkPaid(invoice.id)}
-                              className="text-emerald-400 hover:text-emerald-300 transition"
-                              title="Mark as paid"
-                            >
-                              <Check size={16} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                    {expandedRows.has(invoice.id) && (
-                      <tr className="border-b border-slate-700 bg-slate-750/50">
-                        <td colSpan={12} className="px-4 py-4">
-                          <div className="ml-4">
-                            <h4 className="font-semibold text-sm mb-3">Invoice Line Items</h4>
+                {filteredInvoices.map(invoice => {
+                  const currency = invoice.currency ?? 'AED';
+                  const sub = invoice.subTotal ?? invoice.subtotal ?? 0;
+                  const tax = invoice.vatAmount ?? invoice.vat ?? 0;
+                  const total = invoice.totalAmount ?? invoice.total ?? 0;
+                  return (
+                    <Fragment key={invoice.id}>
+                      <tr className="border-t border-slate-700 hover:bg-slate-700/40">
+                        <td className="px-4 py-3">
+                          <button onClick={() => setExpandedRows(prev => toggleSet(prev, invoice.id))} className="text-slate-300 hover:text-white">
+                            {expandedRows.has(invoice.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3 font-medium">{invoice.invoiceNo ?? invoice.id.slice(0, 8)}</td>
+                        <td className="px-4 py-3">{invoice.lessee?.name ?? invoice.lesseeId ?? '-'}</td>
+                        <td className="px-4 py-3">{invoice.billingPeriod ?? '-'}</td>
+                        <td className="px-4 py-3 text-right">{money(sub, currency)}</td>
+                        <td className="px-4 py-3 text-right">{money(tax, currency)}</td>
+                        <td className="px-4 py-3 text-right font-semibold">{money(total, currency)}</td>
+                        <td className="px-4 py-3"><StatusBadge status={invoice.status} /></td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-2">
+                            <a href={`${invoicePdfBase}/${invoice.id}/pdf?lang=en&download=1`} className="text-emerald-300 hover:text-emerald-200" title="Download English PDF"><FileText className="h-4 w-4" /></a>
+                            {invoice.status === 'DRAFT' && canApproveInvoices && <button disabled={busy === invoice.id} onClick={() => patchInvoiceStatus(invoice.id, 'SENT')} className="text-blue-300 hover:text-blue-200" title="Send invoice"><Send className="h-4 w-4" /></button>}
+                            {invoice.status !== 'PAID' && invoice.status !== 'CANCELLED' && canApproveInvoices && <button disabled={busy === invoice.id} onClick={() => patchInvoiceStatus(invoice.id, 'PAID')} className="text-emerald-300 hover:text-emerald-200" title="Mark paid"><Check className="h-4 w-4" /></button>}
+                          </div>
+                        </td>
+                      </tr>
+                      {expandedRows.has(invoice.id) && (
+                        <tr className="border-t border-slate-700 bg-slate-900/60">
+                          <td colSpan={9} className="px-4 py-4">
                             <div className="overflow-x-auto">
                               <table className="w-full text-xs">
-                                <thead>
-                                  <tr className="border-b border-slate-600">
-                                    <th className="px-2 py-2 text-left">Description</th>
-                                    <th className="px-2 py-2 text-left">Type</th>
-                                    <th className="px-2 py-2 text-left">Contract</th>
-                                    <th className="px-2 py-2 text-left">Vehicle</th>
-                                    <th className="px-2 py-2 text-right">Qty</th>
-                                    <th className="px-2 py-2 text-right">Unit Amount</th>
-                                    <th className="px-2 py-2 text-right">Total</th>
+                                <thead className="text-slate-400">
+                                  <tr>
+                                    <th className="py-2 text-left">Description</th>
+                                    <th className="py-2 text-left">Source</th>
+                                    <th className="py-2 text-left">Contract</th>
+                                    <th className="py-2 text-right">Qty</th>
+                                    <th className="py-2 text-right">Unit</th>
+                                    <th className="py-2 text-right">Total</th>
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {invoice.lines.map((line, idx) => (
-                                    <tr key={idx} className="border-b border-slate-700">
-                                      <td className="px-2 py-2">{line.description}</td>
-                                      <td className="px-2 py-2">{line.lineType}</td>
-                                      <td className="px-2 py-2">{line.contractId}</td>
-                                      <td className="px-2 py-2">{line.vehicleRef}</td>
-                                      <td className="px-2 py-2 text-right">{line.quantity}</td>
-                                      <td className="px-2 py-2 text-right">{line.unitAmount.toFixed(2)}</td>
-                                      <td className="px-2 py-2 text-right font-medium">{(line.quantity * line.unitAmount).toFixed(2)}</td>
+                                    <tr key={line.id ?? idx} className="border-t border-slate-800">
+                                      <td className="py-2">{line.description}</td>
+                                      <td className="py-2"><SourceBadge type={line.lineType} /></td>
+                                      <td className="py-2">{line.contractId ?? '-'}</td>
+                                      <td className="py-2 text-right">{line.quantity ?? 1}</td>
+                                      <td className="py-2 text-right">{money(line.unitAmount, currency)}</td>
+                                      <td className="py-2 text-right font-medium">{money(line.totalAmount ?? Number(line.quantity ?? 1) * Number(line.unitAmount ?? 0), currency)}</td>
                                     </tr>
                                   ))}
                                 </tbody>
                               </table>
                             </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                ))}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+                {filteredInvoices.length === 0 && <tr><td colSpan={9} className="px-4 py-12 text-center text-slate-500">No invoices found.</td></tr>}
               </tbody>
             </table>
           </div>
         )}
 
-        {/* New Invoice Modal */}
         {showNewModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 border border-slate-700 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between p-6 border-b border-slate-700">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-slate-700 bg-slate-800">
+              <div className="flex items-center justify-between border-b border-slate-700 p-6">
                 <h2 className="text-xl font-bold">New Invoice</h2>
-                <button
-                  onClick={() => setShowNewModal(false)}
-                  className="text-slate-400 hover:text-slate-200 transition"
-                >
-                  X
-                </button>
+                <button onClick={() => setShowNewModal(false)} className="text-slate-400 hover:text-white">X</button>
               </div>
-              <div className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Lessee</label>
-                    <select
-                      value={formData.lesseeId}
-                      onChange={e => setFormData({...formData, lesseeId: e.target.value})}
-                      className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                    >
-                      <option value="">Select lessee</option>
-                      {lessees.map(l => (
-                        <option key={l.id} value={l.id}>{l.name}</option>
-                      ))}
-                    </select>
+              <div className="space-y-6 p-6">
+                <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-indigo-100">Create from confirmed pre-billing</label>
+                      <p className="mt-1 text-xs text-indigo-100/70">
+                        Select multiple statements for the same lessee, period, and currency to create one combined invoice.
+                      </p>
+                    </div>
+                    {preBillingStatementIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setPreBillingStatementIds([])}
+                        className="rounded-lg border border-indigo-300/30 px-3 py-1.5 text-xs font-semibold text-indigo-100 hover:bg-indigo-400/10"
+                      >
+                        Clear selection
+                      </button>
+                    )}
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Billing Period (YYYY-MM)</label>
-                    <input
-                      type="text"
-                      placeholder="2024-04"
-                      value={formData.billingPeriod}
-                      onChange={e => setFormData({...formData, billingPeriod: e.target.value})}
-                      className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Issue Date</label>
-                    <input
-                      type="date"
-                      value={formData.issueDate}
-                      onChange={e => setFormData({...formData, issueDate: e.target.value})}
-                      className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Due Date</label>
-                    <input
-                      type="date"
-                      value={formData.dueDate}
-                      onChange={e => setFormData({...formData, dueDate: e.target.value})}
-                      className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">VAT %</label>
-                    <input
-                      type="number"
-                      value={formData.vatPct}
-                      onChange={e => setFormData({...formData, vatPct: parseFloat(e.target.value)})}
-                      className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-6">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold">Line Items</h3>
-                    <button
-                      onClick={handleAddLine}
-                      className="text-blue-400 hover:text-blue-300 text-sm transition"
-                    >
-                      + Add Line
-                    </button>
-                  </div>
-                  <div className="space-y-3 max-h-48 overflow-y-auto">
-                    {formData.lines.map((line, idx) => (
-                      <div key={idx} className="bg-slate-900 p-3 rounded border border-slate-600">
-                        <div className="grid grid-cols-6 gap-2 mb-2">
-                          <input
-                            type="text"
-                            placeholder="Description"
-                            value={line.description}
-                            onChange={e => handleLineChange(idx, 'description', e.target.value)}
-                            className="col-span-2 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-slate-100 text-xs"
-                          />
-                          <select
-                            value={line.lineType}
-                            onChange={e => handleLineChange(idx, 'lineType', e.target.value)}
-                            className="col-span-1 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-slate-100 text-xs"
-                          >
-                            <option>RENT</option>
-                            <option>FUEL</option>
-                            <option>FINE</option>
-                            <option>OVERAGE</option>
-                            <option>MAINTENANCE</option>
-                            <option>INSURANCE</option>
-                            <option>DEPOSIT</option>
-                            <option>OTHER</option>
-                          </select>
-                          <input
-                            type="text"
-                            placeholder="Contract"
-                            value={line.contractId}
-                            onChange={e => handleLineChange(idx, 'contractId', e.target.value)}
-                            className="col-span-1 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-slate-100 text-xs"
-                          />
-                          <input
-                            type="text"
-                            placeholder="Vehicle"
-                            value={line.vehicleRef}
-                            onChange={e => handleLineChange(idx, 'vehicleRef', e.target.value)}
-                            className="col-span-1 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-slate-100 text-xs"
-                          />
-                        </div>
-                        <div className="grid grid-cols-6 gap-2">
-                          <input
-                            type="number"
-                            placeholder="Qty"
-                            value={line.quantity}
-                            onChange={e => handleLineChange(idx, 'quantity', parseInt(e.target.value) || 0)}
-                            className="col-span-1 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-slate-100 text-xs"
-                          />
-                          <input
-                            type="number"
-                            placeholder="Unit Amount"
-                            value={line.unitAmount}
-                            onChange={e => handleLineChange(idx, 'unitAmount', parseFloat(e.target.value) || 0)}
-                            className="col-span-2 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-slate-100 text-xs"
-                          />
-                          <div className="col-span-2 bg-slate-800 rounded px-2 py-1 text-slate-300 text-xs flex items-center">
-                            Total: {calculateLineTotal(line).toFixed(2)} AED
-                          </div>
-                          <button
-                            onClick={() => handleRemoveLine(idx)}
-                            className="col-span-1 text-red-400 hover:text-red-300 transition"
-                            title="Remove line"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
+                  <div className="mt-3 max-h-56 space-y-2 overflow-y-auto pr-1">
+                    {availablePreBilling.length === 0 ? (
+                      <div className="rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-4 text-center text-sm text-slate-400">
+                        No confirmed uninvoiced pre-billing statements available.
                       </div>
-                    ))}
+                    ) : availablePreBilling.map(statement => {
+                      const checked = preBillingStatementIds.includes(statement.id);
+                      const enabled = canSelectPreBilling(statement);
+                      return (
+                        <label
+                          key={statement.id}
+                          className={`flex items-start gap-3 rounded-lg border px-3 py-2 text-sm transition ${
+                            checked
+                              ? 'border-emerald-400/50 bg-emerald-500/10 text-emerald-50'
+                              : enabled
+                                ? 'border-slate-700 bg-slate-900/70 text-slate-100 hover:border-indigo-400/40'
+                                : 'border-slate-800 bg-slate-950/50 text-slate-500 opacity-60'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={!enabled}
+                            onChange={(event) => {
+                              setPreBillingStatementIds(prev => event.target.checked
+                                ? [...prev, statement.id]
+                                : prev.filter(id => id !== statement.id));
+                            }}
+                            className="mt-1 h-4 w-4 accent-emerald-500"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-semibold">
+                              {statement.statementNo ?? statement.id.slice(0, 8)} · {statement.billingPeriod}
+                            </span>
+                            <span className="mt-0.5 block text-xs text-slate-400">
+                              Contract {statement.contract?.contractNumber ?? statement.contractId} · Lessee {statement.lesseeId}
+                            </span>
+                          </span>
+                          <span className="shrink-0 text-right font-semibold">
+                            {money(statement.totalAmount, statement.currency ?? 'AED')}
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
+                  {selectedPreBilling.length > 0 && (
+                    <div className="mt-3 grid grid-cols-3 gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm">
+                      <Kpi label="Statements" value={selectedPreBilling.length} />
+                      <Kpi label="Billing Period" value={firstSelectedPreBilling?.billingPeriod ?? '-'} />
+                      <Kpi label="Combined Total" value={money(selectedPreBillingTotal, firstSelectedPreBilling?.currency ?? 'AED')} />
+                    </div>
+                  )}
                 </div>
 
-                {/* Summary */}
-                <div className="mt-6 pt-4 border-t border-slate-700 space-y-2">
-                  <div className="flex justify-end gap-8">
-                    <div>
-                      <p className="text-slate-400 text-sm">Subtotal:</p>
-                      <p className="font-semibold">{subtotal.toFixed(2)} AED</p>
+                {preBillingStatementIds.length === 0 && (
+                  <>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <Field label="Lessee">
+                        <select value={formData.lesseeId} onChange={e => setFormData({ ...formData, lesseeId: e.target.value })} className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2">
+                          <option value="">Select lessee</option>
+                          {lessees.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                        </select>
+                      </Field>
+                      <TextField label="Billing Period" value={formData.billingPeriod} onChange={value => setFormData({ ...formData, billingPeriod: value })} />
+                      <TextField label="Issue Date" type="date" value={formData.issueDate} onChange={value => setFormData({ ...formData, issueDate: value })} />
+                      <TextField label="Due Date" type="date" value={formData.dueDate} onChange={value => setFormData({ ...formData, dueDate: value })} />
                     </div>
+
                     <div>
-                      <p className="text-slate-400 text-sm">VAT ({formData.vatPct}%):</p>
-                      <p className="font-semibold">{vat.toFixed(2)} AED</p>
+                      <div className="mb-3 flex items-center justify-between">
+                        <h3 className="font-semibold">Line Items</h3>
+                        <button onClick={() => setFormData({ ...formData, lines: [...formData.lines, emptyLine()] })} className="text-sm text-blue-300 hover:text-blue-200">Add line</button>
+                      </div>
+                      <div className="space-y-3">
+                        {formData.lines.map((line, idx) => (
+                          <div key={idx} className="rounded-lg border border-slate-600 bg-slate-900 p-3">
+                            <div className="grid grid-cols-1 gap-2 md:grid-cols-6">
+                              <input value={line.description} onChange={e => updateLine(idx, 'description', e.target.value, setFormData)} placeholder="Description" className="rounded border border-slate-700 bg-slate-800 px-2 py-2 md:col-span-2" />
+                              <select value={line.lineType} onChange={e => updateLine(idx, 'lineType', e.target.value, setFormData)} className="rounded border border-slate-700 bg-slate-800 px-2 py-2">
+                                {['RENT', 'FUEL', 'FINE', 'OVERAGE', 'MAINTENANCE', 'INSURANCE', 'DEPOSIT', 'OTHER'].map(type => <option key={type}>{type}</option>)}
+                              </select>
+                              <input value={line.contractId ?? ''} onChange={e => updateLine(idx, 'contractId', e.target.value, setFormData)} placeholder="Contract" className="rounded border border-slate-700 bg-slate-800 px-2 py-2" />
+                              <input type="number" value={line.quantity ?? 1} onChange={e => updateLine(idx, 'quantity', Number(e.target.value || 0), setFormData)} placeholder="Qty" className="rounded border border-slate-700 bg-slate-800 px-2 py-2" />
+                              <input type="number" value={line.unitAmount} onChange={e => updateLine(idx, 'unitAmount', Number(e.target.value || 0), setFormData)} placeholder="Unit" className="rounded border border-slate-700 bg-slate-800 px-2 py-2" />
+                            </div>
+                            <button onClick={() => setFormData(prev => ({ ...prev, lines: prev.lines.filter((_, i) => i !== idx) }))} className="mt-2 inline-flex items-center gap-1 text-xs text-red-300 hover:text-red-200"><Trash2 className="h-3.5 w-3.5" /> Remove</button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-slate-400 text-sm">Total:</p>
-                      <p className="text-lg font-bold text-blue-400">{total.toFixed(2)} AED</p>
+
+                    <div className="grid grid-cols-3 gap-3 rounded-xl border border-slate-700 bg-slate-900 p-4">
+                      <Kpi label="Subtotal" value={money(subtotal)} />
+                      <Kpi label="VAT" value={money(vat)} />
+                      <Kpi label="Total" value={money(subtotal + vat)} />
                     </div>
-                  </div>
-                </div>
+                  </>
+                )}
               </div>
-              <div className="flex gap-3 p-6 border-t border-slate-700">
-                <button
-                  onClick={() => setShowNewModal(false)}
-                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleCreateInvoice}
-                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition"
-                >
-                  Create Invoice
-                </button>
+              <div className="flex gap-3 border-t border-slate-700 p-6">
+                <button onClick={() => setShowNewModal(false)} className="flex-1 rounded-lg bg-slate-700 px-4 py-2 hover:bg-slate-600">Cancel</button>
+                <button onClick={handleCreateInvoice} disabled={busy === 'create' || !canManageInvoices} className="flex-1 rounded-lg bg-blue-600 px-4 py-2 hover:bg-blue-500 disabled:opacity-50">Queue Invoice</button>
               </div>
             </div>
           </div>
@@ -552,4 +563,46 @@ export default function InvoicesPage() {
       </div>
     </div>
   );
+}
+
+function updateLine(index: number, field: keyof InvoiceLine, value: unknown, setFormData: React.Dispatch<React.SetStateAction<InvoiceFormData>>) {
+  setFormData((prev: InvoiceFormData) => {
+    const lines = [...prev.lines];
+    lines[index] = { ...lines[index], [field]: value };
+    return { ...prev, lines };
+  });
+}
+
+function toggleSet(set: Set<string>, id: string) {
+  const next = new Set(set);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  return next;
+}
+
+function Kpi({ label, value }: { label: string; value: string | number }) {
+  return <div className="rounded-lg border border-white/10 bg-slate-900/50 p-4"><div className="text-xs uppercase tracking-wide text-slate-500">{label}</div><div className="mt-1 text-xl font-bold text-white">{value}</div></div>;
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <label className="block text-sm"><span className="mb-1 block text-slate-300">{label}</span>{children}</label>;
+}
+
+function TextField({ label, value, onChange, type = 'text' }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
+  return <Field label={label}><input type={type} value={value} onChange={e => onChange(e.target.value)} className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2" /></Field>;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const cls = status === 'PAID' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+    : status === 'SENT' ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+      : status === 'OVERDUE' ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+        : 'bg-slate-500/15 text-slate-300 border-slate-500/30';
+  return <span className={`rounded-full border px-2.5 py-1 text-xs ${cls}`}>{status}</span>;
+}
+
+function SourceBadge({ type }: { type: string }) {
+  const cls = type === 'RENT' ? 'bg-blue-500/10 text-blue-200 border-blue-500/20'
+    : ['FUEL', 'FINE', 'OVERAGE'].includes(type) ? 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+      : 'bg-slate-500/10 text-slate-200 border-slate-500/20';
+  return <span className={`rounded-full border px-2 py-0.5 ${cls}`}>{type}</span>;
 }

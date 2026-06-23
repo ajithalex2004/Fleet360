@@ -5,7 +5,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { signSession } from '@/lib/tenant-session';
+import { signSession, verifySession } from '@/lib/tenant-session';
+import { newSessionId, registerSession, revokeSession } from '@/lib/session-registry';
+import { customerContextForUser } from '@/lib/corporate-customer-identity';
 
 // ── Cookie helpers ────────────────────────────────────────────────────────────
 
@@ -25,13 +27,38 @@ function sessionCookieOptions(maxAge: number) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const existingToken = request.cookies.get(COOKIE_NAME)?.value;
+    const existingSession = existingToken ? await verifySession(existingToken) : null;
+    if (!existingSession) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'Existing session required' },
+        { status: 401 }
+      );
+    }
+
+    const rawBody = await request.text();
+    if (!rawBody.trim()) {
+      return NextResponse.json(
+        { error: 'Bad Request', message: 'Request body is required' },
+        { status: 400 }
+      );
+    }
+
+    const body = JSON.parse(rawBody);
     const { userId, tenantId } = body as { userId?: string; tenantId?: string };
 
     if (!userId || !tenantId) {
       return NextResponse.json(
         { error: 'Bad Request', message: 'userId and tenantId are required' },
         { status: 400 }
+      );
+    }
+
+    const isSuperAdmin = existingSession.role === 'SUPER_ADMIN';
+    if (!isSuperAdmin && existingSession.userId !== userId) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Cannot create a session for another user' },
+        { status: 403 }
       );
     }
 
@@ -87,9 +114,32 @@ export async function POST(request: NextRequest) {
     }
 
     const plan = userTenant.tenant.plan ?? 'TRIAL';
+    const customerContext = await customerContextForUser(tenantId, userId).catch(() => null);
 
     // Sign the session token (include role)
-    const token = await signSession({ userId, tenantId, plan, role: userTenant.role.code });
+    const sessionId = newSessionId();
+    const expiresAt = new Date(Date.now() + 86_400_000);
+    const token = await signSession({
+      sessionId,
+      userId,
+      tenantId,
+      ...(customerContext ? { customerId: customerContext.customerId, customerRole: customerContext.role } : {}),
+      plan,
+      role: userTenant.role.code,
+    });
+    await registerSession({
+      id: sessionId,
+      userId,
+      tenantId,
+      plan,
+      role: userTenant.role.code,
+      expiresAt,
+      ipAddress: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? request.headers.get('x-real-ip'),
+      userAgent: request.headers.get('user-agent'),
+    });
+    if (existingSession.sessionId) {
+      await revokeSession(existingSession.sessionId, existingSession.userId, 'session-switched');
+    }
 
     // Build response payload
     const enabledModules = userTenant.tenant.modules
@@ -115,6 +165,7 @@ export async function POST(request: NextRequest) {
         domain: userTenant.tenant.domain,
         enabledModules,
       },
+      customer: customerContext,
     };
 
     const response = NextResponse.json(responseBody, { status: 200 });
@@ -123,8 +174,9 @@ export async function POST(request: NextRequest) {
     return response;
   } catch (err) {
     console.error('[auth/session POST]', err);
+    const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: 'Internal Server Error', message: 'Failed to create session' },
+      { error: 'Internal Server Error', message: 'Failed to create session', detail: msg },
       { status: 500 }
     );
   }
@@ -132,7 +184,12 @@ export async function POST(request: NextRequest) {
 
 // ── DELETE — Destroy session ──────────────────────────────────────────────────
 
-export async function DELETE(_request: NextRequest) {
+export async function DELETE(request: NextRequest) {
+  const token = request.cookies.get(COOKIE_NAME)?.value;
+  const session = token ? await verifySession(token) : null;
+  if (session?.sessionId) {
+    await revokeSession(session.sessionId, session.userId, 'logout');
+  }
   const response = NextResponse.json({ ok: true }, { status: 200 });
   response.cookies.set(COOKIE_NAME, '', sessionCookieOptions(0));
   return response;

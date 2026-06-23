@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { assertCanWrite } from '@/lib/access-control';
+import { requireOperationalContext } from '@/lib/cross-module-governance';
+import { createCashReceipt, ensureCashAllocationTables } from '@/lib/finance/cash-allocation';
 
 /**
  * GET  /api/finance/payments — list all payments with invoice reconciliation data
@@ -7,6 +10,7 @@ import { prisma } from '@/lib/prisma';
  */
 
 async function ensureTables() {
+  await ensureCashAllocationTables();
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS finance_payments (
       id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -16,8 +20,17 @@ async function ensureTables() {
       payment_method TEXT NOT NULL DEFAULT 'BANK_TRANSFER',
       reference      TEXT,
       notes          TEXT,
+      tenant_id      TEXT,
+      customer_name  TEXT,
+      customer_email TEXT,
       created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `).catch(() => {});
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE finance_payments ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+    ALTER TABLE finance_payments ADD COLUMN IF NOT EXISTS customer_name TEXT;
+    ALTER TABLE finance_payments ADD COLUMN IF NOT EXISTS customer_email TEXT;
   `).catch(() => {});
 
   await prisma.$executeRawUnsafe(`
@@ -44,20 +57,26 @@ async function ensureTables() {
       deleted_at       TIMESTAMPTZ
     )
   `).catch(() => {});
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS tenant_id TEXT
+  `).catch(() => {});
 }
 
 export async function GET(req: NextRequest) {
   await ensureTables();
-
   const { searchParams } = new URL(req.url);
+  const ctx = requireOperationalContext(req, 'finance', { requestedTenantId: searchParams.get('tenantId') });
+  if (ctx instanceof NextResponse) return ctx;
+
   const invoiceId = searchParams.get('invoiceId') ?? '';
   const q         = searchParams.get('q') ?? '';
   const page      = Math.max(1, parseInt(searchParams.get('page') ?? '1'));
   const limit     = Math.min(100, parseInt(searchParams.get('limit') ?? '25'));
   const offset    = (page - 1) * limit;
 
-  const conditions: string[] = [];
-  const values: unknown[] = [];
+  const conditions: string[] = [`p.tenant_id::text = $1`];
+  const values: unknown[] = [ctx.tenantId];
 
   if (invoiceId) {
     values.push(invoiceId);
@@ -105,7 +124,11 @@ export async function GET(req: NextRequest) {
   // Summary stats
   type SumRow = { total_paid: number | null; count: bigint };
   const [summary] = await prisma.$queryRawUnsafe<SumRow[]>(
-    `SELECT COALESCE(SUM(amount),0) as total_paid, COUNT(*) as count FROM finance_payments`
+    `SELECT COALESCE(SUM(p.amount),0) as total_paid, COUNT(*) as count
+       FROM finance_payments p
+       LEFT JOIN finance_invoices i ON i.id = p.invoice_id
+      WHERE p.tenant_id::text = $1`,
+    ctx.tenantId,
   ).catch(() => [{ total_paid: 0, count: BigInt(0) }]);
 
   return NextResponse.json({
@@ -119,46 +142,51 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = assertCanWrite(req, 'finance');
+  if (guard) return guard;
   await ensureTables();
 
   try {
+    const ctx = requireOperationalContext(req, 'finance', { write: true });
+    if (ctx instanceof NextResponse) return ctx;
     const body = await req.json();
     const {
-      invoiceId, amount, paymentDate, paymentMethod = 'BANK_TRANSFER', reference, notes,
+      invoiceId, amount, paymentDate, paymentMethod = 'BANK_TRANSFER', reference, notes, customerName, customerEmail,
     } = body;
 
     if (!amount || Number(amount) <= 0) return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
 
-    // Insert payment
-    type InsRow = { id: string };
-    const [row] = await prisma.$queryRawUnsafe<InsRow[]>(
-      `INSERT INTO finance_payments (invoice_id, amount, payment_date, payment_method, reference, notes)
-       VALUES ($1, $2, $3::date, $4, $5, $6) RETURNING id`,
-      invoiceId ?? null, Number(amount),
-      paymentDate ?? new Date().toISOString().split('T')[0],
-      paymentMethod, reference ?? null, notes ?? null
-    );
-
-    // Reconcile against invoice if provided
-    let newStatus = null;
+    let resolvedCustomerName: string | null = customerName ?? null;
+    let resolvedCustomerEmail: string | null = customerEmail ?? null;
     if (invoiceId) {
-      type InvRow = { total_amount: number; paid_amount: number };
-      const [inv] = await prisma.$queryRawUnsafe<InvRow[]>(
-        `SELECT total_amount, paid_amount FROM finance_invoices WHERE id = $1 AND deleted_at IS NULL`,
-        invoiceId
-      ).catch(() => [] as InvRow[]);
-
-      if (inv) {
-        const newPaid = Math.round((Number(inv.paid_amount) + Number(amount)) * 100) / 100;
-        newStatus = newPaid >= Number(inv.total_amount) ? 'PAID' : 'PARTIAL';
-        await prisma.$executeRawUnsafe(
-          `UPDATE finance_invoices SET paid_amount = $2, payment_status = $3, updated_at = NOW() WHERE id = $1`,
-          invoiceId, newPaid, newStatus
-        );
-      }
+      const [invoice] = await prisma.$queryRawUnsafe<{ client_name: string | null; client_email: string | null }[]>(
+        `SELECT client_name, client_email FROM finance_invoices WHERE id = $1 AND deleted_at IS NULL AND tenant_id::text = $2`,
+        invoiceId,
+        ctx.tenantId,
+      ).catch(() => []);
+      resolvedCustomerName = invoice?.client_name ?? resolvedCustomerName;
+      resolvedCustomerEmail = invoice?.client_email ?? resolvedCustomerEmail;
     }
+    const result = await createCashReceipt(req, ctx, {
+      customerName: resolvedCustomerName,
+      customerEmail: resolvedCustomerEmail,
+      amount: Number(amount),
+      receiptDate: paymentDate ?? new Date().toISOString().split('T')[0],
+      paymentMethod,
+      reference,
+      notes,
+      allocations: invoiceId ? [{ invoiceId, amount: Number(amount) }] : [],
+      source: 'PAYMENT_ENDPOINT',
+    });
 
-    return NextResponse.json({ success: true, id: row.id, newInvoiceStatus: newStatus }, { status: 201 });
+    const firstInvoice = result.allocations?.[0]?.after as { payment_status?: string } | undefined;
+    return NextResponse.json({
+      success: true,
+      id: result.receiptId,
+      receiptNo: result.receiptNo,
+      voucherNo: result.voucherNo,
+      newInvoiceStatus: firstInvoice?.payment_status ?? null,
+    }, { status: 201 });
   } catch (err) {
     console.error('[finance/payments POST]', err);
     return NextResponse.json({ error: 'Failed to create payment' }, { status: 500 });

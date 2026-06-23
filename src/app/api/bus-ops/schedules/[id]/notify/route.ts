@@ -25,6 +25,8 @@ import { sendWhatsApp } from '@/lib/whatsapp';
 import { sendEmail } from '@/lib/email';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { requireBusEntity, requireBusOpsContext } from '@/lib/bus-ops-route-guards';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
 
 export const runtime = 'nodejs';
 
@@ -79,8 +81,13 @@ function buildMessage(kind: Kind, ctx: {
   }
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   try {
+    const ctx = await requireBusOpsContext(req, { write: true });
+    if (ctx instanceof NextResponse) return ctx;
+    const boundary = await requireBusEntity(ctx, 'trip_schedules', id, 'Trip');
+    if (boundary) return boundary;
     const body = await req.json();
     const kind = String(body?.kind ?? '').toUpperCase() as Kind;
     if (!VALID_KINDS.includes(kind)) {
@@ -96,7 +103,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const dryRun = body.dryRun === true;
 
     const schedule = await prisma.tripSchedule.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: { route: true, passengers: true },
     });
     if (!schedule) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
@@ -113,7 +120,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     const { subject, body: messageBody } = buildMessage(kind, {
       routeName: schedule.route?.name ?? 'your route',
-      tripNumber: schedule.tripNumber ?? params.id.slice(0, 8),
+      tripNumber: schedule.tripNumber ?? id.slice(0, 8),
       originalDepart: schedule.departureTime.toISOString(),
       delayMinutes: typeof body.delayMinutes === 'number' ? body.delayMinutes : undefined,
       newDeparture: body.newDeparture,
@@ -179,23 +186,43 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       try {
         if (!['COMPLETED', 'CANCELLED'].includes(schedule.status ?? '')) {
           await prisma.tripSchedule.update({
-            where: { id: params.id },
+            where: { id },
             data: { status: 'CANCELLED', notes: [schedule.notes, body.reason ? `Cancelled via notify: ${body.reason}` : 'Cancelled via notify'].filter(Boolean).join('\n') },
           });
         }
       } catch (err) {
-        captureException(err, { context: 'bus-ops.notify.cancel-flip', tags: { scheduleId: params.id } });
+        captureException(err, { context: 'bus-ops.notify.cancel-flip', tags: { scheduleId: id } });
       }
     }
 
     void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
-      userId: req.headers.get('x-user-id') ?? 'system',
-      userRole: req.headers.get('x-user-role') ?? 'STAFF',
+      tenantId: ctx.tenantId,
+      userId: ctx.userId,
+      userRole: ctx.role,
       entityType: 'TripSchedule',
-      entityId: params.id,
+      entityId: id,
       action: kind === 'CANCELLED' ? 'UPDATE' : 'EXPORT',
       details: `Notify ${kind}: ${results.length} recipients via ${channels.join('+')}.${kind === 'DELAY' && body.delayMinutes ? ` Delay ${body.delayMinutes}m.` : ''}${body.reason ? ` Reason: ${body.reason}` : ''}`,
+    });
+
+    const workflow = await triggerServiceWorkflow({
+      req,
+      ctx,
+      serviceTypeKey: 'STAFF_ATTENDANCE_EXCEPTION',
+      referenceType: 'TripSchedule',
+      referenceId: id,
+      referenceNumber: schedule.tripNumber ?? id,
+      contextData: {
+        scheduleId: id,
+        tripNumber: schedule.tripNumber ?? null,
+        notificationKind: kind,
+        recipients: results.length,
+        channels,
+        delayMinutes: body.delayMinutes ?? null,
+        reason: body.reason ?? null,
+        dryRun,
+      },
+      force: kind === 'CANCELLED' || kind === 'ROUTE_CHANGE',
     });
 
     return NextResponse.json({
@@ -208,12 +235,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       noPhone:      results.filter(r => channels.includes('WHATSAPP') && r.whatsapp === null).length,
       noEmail:      results.filter(r => channels.includes('EMAIL')    && r.email    === null).length,
       results,
+      workflow,
       dispatcherEmail,
       dispatcherWhatsApp,
       preview: { subject, body: messageBody },
     });
   } catch (err) {
-    captureException(err, { context: 'bus-ops.notify', tags: { scheduleId: params.id } });
+    captureException(err, { context: 'bus-ops.notify', tags: { scheduleId: id } });
     return NextResponse.json({ error: 'Notify failed' }, { status: 500 });
   }
 }

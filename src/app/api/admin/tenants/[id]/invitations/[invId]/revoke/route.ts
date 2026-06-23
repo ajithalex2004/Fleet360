@@ -6,26 +6,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureInvitationTable } from '@/lib/invitations';
-import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { requireAdminPermission, resolveTenantBoundary } from '@/lib/admin-policy';
+import { recordAdminChange } from '@/lib/admin-change-history';
 
 export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string; invId: string }>; }
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
-  const { id: tenantId, invId } = await params;
-
-  const role     = req.headers.get('x-user-role')   ?? '';
-  const userId   = req.headers.get('x-user-id')     ?? '';
-  const ctxTenant = req.headers.get('x-tenant-id')  ?? '';
-  if (!userId) return NextResponse.json({ ok: false, error: 'Not authenticated' }, { status: 401 });
-  if (role !== 'SUPER_ADMIN' && ctxTenant !== tenantId) {
-    return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 });
-  }
+  const { id, invId } = await params;
+  const auth = await requireAdminPermission(req, 'delete', 'users');
+  if (auth instanceof NextResponse) return auth;
+  const tenantId = resolveTenantBoundary(auth.ctx, id);
+  if (tenantId instanceof NextResponse) return tenantId;
 
   try {
     await ensureInvitationTable();
+    const beforeRows = await prisma.$queryRawUnsafe<Array<{
+      id: string; tenant_id: string; email: string; role_id: string; revoked: boolean; used_at: string | null; expires_at: string;
+    }>>(
+      `SELECT id::text, tenant_id, email, role_id, revoked, used_at::text, expires_at::text
+         FROM tenant_invitations
+        WHERE id = $1::uuid AND tenant_id = $2
+        LIMIT 1`,
+      invId, tenantId,
+    ).catch(() => []);
+    const before = beforeRows[0] ?? null;
     const result = await prisma.$executeRawUnsafe(
       `UPDATE tenant_invitations
          SET revoked = TRUE
@@ -33,14 +40,27 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       invId, tenantId,
     );
 
-    void logAudit({
+    const afterRows = await prisma.$queryRawUnsafe<Array<{
+      id: string; tenant_id: string; email: string; role_id: string; revoked: boolean; used_at: string | null; expires_at: string;
+    }>>(
+      `SELECT id::text, tenant_id, email, role_id, revoked, used_at::text, expires_at::text
+         FROM tenant_invitations
+        WHERE id = $1::uuid AND tenant_id = $2
+        LIMIT 1`,
+      invId, tenantId,
+    ).catch(() => []);
+
+    await recordAdminChange({
+      req,
+      ctx: auth.ctx,
       tenantId,
-      userId,
-      userRole: 'TENANT_ADMIN',
       entityType: 'Invitation',
       entityId: invId,
+      entityName: before?.email,
       action: 'DELETE',
-      details: `Invitation revoked.`,
+      before,
+      after: afterRows[0] ?? null,
+      summary: `Invitation revoked.`,
     });
 
     return NextResponse.json({ ok: true, changed: result });

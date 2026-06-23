@@ -211,6 +211,33 @@ export function getModelsForMake(make: string): { model: string; groups: string[
   return VEHICLE_MAKES.find(m => m.make === make)?.models ?? [];
 }
 
+function getGroupCodesForVehicleType(vehicleType: string): string[] {
+  const normalized = String(vehicleType ?? '').trim().toUpperCase();
+  if (!normalized) return [];
+
+  const directGroups = VEHICLE_GROUPS
+    .filter(group => group.types.includes(normalized))
+    .map(group => group.code);
+  if (directGroups.length > 0) return directGroups;
+
+  const aliases: Record<string, string[]> = {
+    TRUCK: ['COMMERCIAL_VEHICLE'],
+    LUXURY: ['LUXURY_VEHICLE'],
+    OTHER: [],
+  };
+
+  return aliases[normalized] ?? [];
+}
+
+// Lookup: get models for a make filtered by selected vehicle type
+export function getModelsForMakeAndVehicleType(make: string, vehicleType?: string): { model: string; groups: string[] }[] {
+  const models = getModelsForMake(make);
+  const groupCodes = getGroupCodesForVehicleType(vehicleType ?? '');
+  if (groupCodes.length === 0) return models;
+
+  return models.filter(model => model.groups.some(group => groupCodes.includes(group)));
+}
+
 // Lookup: get group label
 export function getGroupLabel(code: string): string {
   return VEHICLE_GROUPS.find(g => g.code === code)?.label ?? code;

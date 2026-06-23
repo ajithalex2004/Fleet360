@@ -43,6 +43,7 @@ import {
 } from '@/lib/bus-gateway';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { ensureBusOpsDeviceInfra } from '@/lib/bus-ops-route-guards';
 
 export const runtime = 'nodejs';
 
@@ -59,6 +60,8 @@ interface IngestSummary {
 }
 
 export async function POST(req: NextRequest) {
+  await ensureBusOpsDeviceInfra();
+
   const rawBody = await req.text();
   const sig = req.headers.get('x-gateway-signature');
   if (!verifyGatewaySignature(rawBody, sig)) {

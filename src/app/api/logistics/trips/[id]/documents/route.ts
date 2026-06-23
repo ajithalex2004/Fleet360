@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import {
+  assertGovernedShipmentWrite,
+  ensureShipmentForLegacyBooking,
+  LogisticsValidationError,
+} from '@/lib/logistics/domain';
+import { logisticsErrorResponse } from '@/lib/logistics/api-context';
 
 /**
  * Trip Documents API
@@ -33,11 +39,91 @@ async function ensureTable() {
   ).catch(() => {});
 }
 
+async function assertTripDocumentWriteAllowed(
+  req: NextRequest,
+  bookingId: string,
+  bodyTenantId?: string | null,
+) {
+  const tenantId = req.headers.get('x-tenant-id') ?? bodyTenantId ?? req.nextUrl.searchParams.get('tenantId');
+  if (!tenantId) return;
+  const shipment = await ensureShipmentForLegacyBooking({
+    tenantId,
+    bookingId,
+    actorUserId: req.headers.get('x-user-id') ?? null,
+  });
+  if (!shipment) return;
+  await assertGovernedShipmentWrite({
+    tenantId,
+    shipmentOrderId: shipment.id,
+    action: 'Trip document mutation',
+  });
+}
+
+type TripDocumentPayload = {
+  docType: string;
+  docName: string;
+  fileUrl?: string;
+  fileData?: string;
+  mimeType?: string;
+  fileSize?: number;
+  uploadedBy?: string;
+  notes?: string;
+  tenantId?: string;
+  issueDate?: string;
+  expiryDate?: string;
+  validFrom?: string;
+  validTo?: string;
+};
+
+type TripRouteContext = { params: Promise<{ id: string }> };
+
+function parseOptionalDate(value: string | undefined, label: string, issues: string[]) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    issues.push(`${label} must be a valid date.`);
+    return null;
+  }
+  return date;
+}
+
+function assertTripDocumentPayload(body: Partial<TripDocumentPayload>) {
+  const issues: string[] = [];
+  if (!String(body.docType ?? '').trim()) issues.push('Document type is required.');
+  if (!String(body.docName ?? '').trim()) issues.push('Document name is required.');
+  if (body.fileSize != null && (!Number.isFinite(Number(body.fileSize)) || Number(body.fileSize) < 0)) {
+    issues.push('Document file size cannot be negative.');
+  }
+  if (body.fileData && body.fileSize && body.fileSize > 5 * 1024 * 1024) {
+    issues.push('File too large for inline storage (max 5 MB). Use fileUrl instead.');
+  }
+  if (!body.fileUrl && !body.fileData) {
+    issues.push('Attach a file or provide a file URL.');
+  }
+
+  const issueDate = parseOptionalDate(body.issueDate, 'Document issue date', issues);
+  const expiryDate = parseOptionalDate(body.expiryDate, 'Document expiry date', issues);
+  const validFrom = parseOptionalDate(body.validFrom, 'Document valid-from date', issues);
+  const validTo = parseOptionalDate(body.validTo, 'Document valid-to date', issues);
+  if (issueDate && expiryDate && expiryDate < issueDate) {
+    issues.push('Document expiry date cannot be before issue date.');
+  }
+  if (validFrom && validTo && validTo < validFrom) {
+    issues.push('Document valid-to date cannot be before valid-from date.');
+  }
+  if (String(body.notes ?? '').length > 2000) {
+    issues.push('Document notes cannot exceed 2000 characters.');
+  }
+
+  if (issues.length > 0) throw new LogisticsValidationError(issues);
+}
+
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: TripRouteContext
 ) {
   try {
+    const { id } = await params;
     await ensureTable();
     const docs = await prisma.$queryRawUnsafe<Array<{
       id: string; booking_id: string; doc_type: string; doc_name: string;
@@ -47,7 +133,7 @@ export async function GET(
       `SELECT id, booking_id, doc_type, doc_name, file_url, mime_type,
               file_size, uploaded_by, notes, uploaded_at
        FROM trip_documents WHERE booking_id = $1 ORDER BY uploaded_at DESC`,
-      params.id
+      id
     ).catch(() => [] as Array<{ id: string; booking_id: string; doc_type: string; doc_name: string; file_url: string | null; mime_type: string | null; file_size: bigint | null; uploaded_by: string | null; notes: string | null; uploaded_at: Date }>);
 
     return NextResponse.json(docs.map(d => ({
@@ -63,34 +149,19 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: TripRouteContext
 ) {
   try {
+    const { id } = await params;
+    const body = await req.json() as TripDocumentPayload;
+    assertTripDocumentPayload(body);
     await ensureTable();
-    const body = await req.json() as {
-      docType: string;
-      docName: string;
-      fileUrl?: string;
-      fileData?: string;   // base64 data URL
-      mimeType?: string;
-      fileSize?: number;
-      uploadedBy?: string;
-      notes?: string;
-    };
-
-    if (!body.docType || !body.docName) {
-      return NextResponse.json({ error: 'docType and docName are required' }, { status: 400 });
-    }
-
-    // Enforce 5 MB limit for inline storage
-    if (body.fileData && body.fileSize && body.fileSize > 5 * 1024 * 1024) {
-      return NextResponse.json({ error: 'File too large for inline storage (max 5 MB). Use fileUrl instead.' }, { status: 413 });
-    }
+    await assertTripDocumentWriteAllowed(req, id, body.tenantId ?? null);
 
     await prisma.$executeRawUnsafe(
       `INSERT INTO trip_documents (booking_id, doc_type, doc_name, file_url, file_data, mime_type, file_size, uploaded_by, notes)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      params.id,
+      id,
       body.docType,
       body.docName,
       body.fileUrl ?? null,
@@ -104,6 +175,6 @@ export async function POST(
     return NextResponse.json({ success: true }, { status: 201 });
   } catch (err) {
     console.error('[trip-docs POST]', err);
-    return NextResponse.json({ error: 'Failed to save document' }, { status: 500 });
+    return logisticsErrorResponse(err, 'Failed to save document');
   }
 }

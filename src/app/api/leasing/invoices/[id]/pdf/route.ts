@@ -1,10 +1,11 @@
 import { createElement } from 'react';
-import { NextRequest } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { NextRequest, NextResponse } from 'next/server';
 import { renderPdf } from '@/lib/pdf/render';
 import { InvoicePdf, type InvoicePdfData } from '@/lib/pdf/templates/invoice';
 import type { Lang } from '@/lib/pdf/theme';
 import { captureException } from '@/lib/sentry';
+import { requireOperationalContext } from '@/lib/cross-module-governance';
+import { leaseInvoiceInTenant } from '@/lib/leasing-billing-reconciliation';
 
 export const runtime = 'nodejs';
 
@@ -23,11 +24,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const download = req.nextUrl.searchParams.get('download') === '1';
 
   try {
-    const inv = await prisma.leaseInvoice.findUnique({
-      where: { id },
-      include: { lines: true, lessee: true },
-    });
-    if (!inv) return jsonErr('Invoice not found', 404);
+    const ctx = requireOperationalContext(req, 'leasing');
+    if (ctx instanceof NextResponse) return ctx;
+    const scoped = await leaseInvoiceInTenant(id, ctx);
+    if (scoped.error) return scoped.error;
+    const inv = scoped.invoice;
 
     const data: InvoicePdfData = {
       invoiceNo: inv.invoiceNo ?? `INV-${id.slice(0, 8)}`,

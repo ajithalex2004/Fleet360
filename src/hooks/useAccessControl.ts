@@ -19,6 +19,7 @@
 import { useEffect, useState } from 'react';
 import type { AppModule } from '@/lib/access-control';
 import { canWrite as canWriteUtil } from '@/lib/access-control';
+import { getClientMe } from '@/lib/client-session';
 
 export interface AccessState {
   plan:          string;
@@ -43,9 +44,8 @@ let _fetchPromise: Promise<void> | null = null;
 async function fetchSession(): Promise<{ plan: string; role: string }> {
   if (_cached) return _cached;
   if (!_fetchPromise) {
-    _fetchPromise = fetch('/api/auth/me')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) _cached = { plan: d.plan, role: d.role }; })
+    _fetchPromise = getClientMe()
+      .then(d => { if (d?.plan && d?.role) _cached = { plan: d.plan, role: d.role }; })
       .catch(() => {});
   }
   await _fetchPromise;

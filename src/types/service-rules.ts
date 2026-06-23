@@ -246,6 +246,17 @@ export interface AutomationRules {
   smsNotifications: boolean;
   aiClassification: boolean;
   aiRouting: boolean;
+  alertRules: ServiceAlertRule[];
+}
+export interface ServiceAlertRule {
+  key: string;
+  metric: 'varianceAmount' | 'variancePct' | 'approvalAgeHours' | 'projectedExposure';
+  operator: 'gt' | 'gte' | 'lt' | 'lte' | 'eq';
+  threshold: number;
+  severity: 'INFO' | 'WARNING' | 'ERROR';
+  title: string;
+  message: string | null;
+  blockAction: boolean;
 }
 export const DEFAULT_AUTOMATION_RULES: AutomationRules = {
   autoStatusUpdate: false,
@@ -258,6 +269,7 @@ export const DEFAULT_AUTOMATION_RULES: AutomationRules = {
   smsNotifications: false,
   aiClassification: false,
   aiRouting: false,
+  alertRules: [],
 };
 
 // ── 9. Form fields (per-service request form schema) ────────────────────────

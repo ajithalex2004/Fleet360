@@ -1,4 +1,6 @@
 'use client';
+import ActionDialog from '@/components/ui/ActionDialog';
+import { useRentalMasterData } from '@/hooks/useRentalMasterData';
 import React, { useState, useEffect, useCallback } from 'react';
 
 interface Policy {
@@ -38,9 +40,6 @@ const TABS = [
   { key: 'CANCELLED',     label: 'Cancelled' },
 ];
 
-const INSURERS = ['AXA', 'OMAN INSURANCE', 'RSA', 'ORIENT', 'DUBAI INSURANCE', 'OTHER'];
-const POLICY_TYPES = ['COMPREHENSIVE', 'THIRD_PARTY', 'TPL'];
-
 const POLICY_TYPE_COLORS: Record<string, string> = {
   COMPREHENSIVE: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
   THIRD_PARTY:   'bg-blue-500/20 text-blue-400 border-blue-500/30',
@@ -79,6 +78,7 @@ const emptyForm = {
 };
 
 export default function InsurancePage() {
+  const { masterData } = useRentalMasterData();
   const [policies, setPolicies]   = useState<Policy[]>([]);
   const [stats, setStats]         = useState<Stats | null>(null);
   const [tab, setTab]             = useState('ALL');
@@ -89,6 +89,8 @@ export default function InsurancePage() {
   const [editPolicy, setEditPolicy] = useState<Policy | null>(null);
   const [saving, setSaving]       = useState(false);
   const [formData, setFormData]   = useState(emptyForm);
+  const [pendingCancel, setPendingCancel] = useState<Policy | null>(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -176,15 +178,18 @@ export default function InsurancePage() {
   };
 
   const handleCancel = async (p: Policy) => {
-    if (!confirm(`Cancel policy ${p.policyNo}?`)) return;
+    setCancelBusy(true);
     try {
       await fetch('/api/rental/insurance', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: p.id, status: 'CANCELLED' }),
       });
+      setPendingCancel(null);
       load();
     } catch {
       setError('Failed to cancel policy');
+    } finally {
+      setCancelBusy(false);
     }
   };
 
@@ -346,7 +351,7 @@ export default function InsurancePage() {
                           </button>
                           {p.status !== 'CANCELLED' && p.status !== 'EXPIRED' && (
                             <button
-                              onClick={() => handleCancel(p)}
+                              onClick={() => setPendingCancel(p)}
                               className="text-xs px-2.5 py-1 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-rose-500/30"
                             >
                               Cancel
@@ -402,7 +407,7 @@ export default function InsurancePage() {
                     onChange={e => setFormData(p => ({ ...p, insurer: e.target.value }))}
                     className={inputCls}
                   >
-                    {INSURERS.map(i => <option key={i} value={i}>{i}</option>)}
+                    {masterData.insurers.map(i => <option key={i} value={i}>{i}</option>)}
                   </select>
                 </div>
                 <div>
@@ -412,7 +417,7 @@ export default function InsurancePage() {
                     onChange={e => setFormData(p => ({ ...p, policyType: e.target.value }))}
                     className={inputCls}
                   >
-                    {POLICY_TYPES.map(t => <option key={t} value={t}>{t.replace('_', ' ')}</option>)}
+                    {masterData.policyTypes.map(t => <option key={t} value={t}>{t.replace('_', ' ')}</option>)}
                   </select>
                 </div>
 
@@ -494,6 +499,21 @@ export default function InsurancePage() {
           </div>
         </div>
       )}
+      <ActionDialog
+        open={!!pendingCancel}
+        title="Cancel insurance policy"
+        description="Review this policy before marking it cancelled."
+        details={pendingCancel ? [
+          `Policy: ${pendingCancel.policyNo}`,
+          `Vehicle: ${pendingCancel.vehicleNo}`,
+          `Insurer: ${pendingCancel.insurer}`,
+        ] : undefined}
+        tone="danger"
+        confirmLabel="Cancel policy"
+        busy={cancelBusy}
+        onClose={() => !cancelBusy && setPendingCancel(null)}
+        onConfirm={pendingCancel ? () => handleCancel(pendingCancel) : undefined}
+      />
     </div>
   );
 }

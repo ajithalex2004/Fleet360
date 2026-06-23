@@ -73,7 +73,7 @@ test.beforeAll(async () => {
       data: {
         id:       roleId,
         tenantId: testTenantId,
-        name:     'Tenant Admin',
+        name:     'Tenant Administrator',
         code:     'TENANT_ADMIN',
       },
     });

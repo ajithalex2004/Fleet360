@@ -41,7 +41,7 @@ export default function DriverDocuments() {
       if (!res.ok) throw new Error('Failed to fetch documents');
       const data = await res.json();
       setDocuments(data);
-      const uniqueDrivers = [...new Set(data.map((d: DriverDocument) => d.driverName))];
+      const uniqueDrivers = [...new Set((data as DriverDocument[]).map(d => d.driverName))];
       setDrivers(uniqueDrivers);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load documents');

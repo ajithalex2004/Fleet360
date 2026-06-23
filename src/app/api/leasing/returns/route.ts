@@ -4,7 +4,6 @@ import { prisma } from '@/lib/prisma';
 export async function GET(req: NextRequest) {
   try {
     const returns = await prisma.leaseVehicleReturn.findMany({
-      where: { deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
     return NextResponse.json(returns);

@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth';
+import { recordServiceConfigChange, requireServiceConfigApproval, requireServiceConfigPermission } from '@/lib/service-config/auth';
 import { ensureServiceConfigTables } from '@/lib/service-config/schema';
 import { SERVICE_TONES } from '@/types/service-config';
 import { logAudit } from '@/lib/audit';
@@ -24,13 +24,20 @@ interface TypeRow {
 }
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
-  const auth = authorizeServiceConfig(req);
+  const auth = await requireServiceConfigPermission(req, 'edit');
   if (!auth.ok) return auth.res;
-  const adminCheck = requireAdmin(auth);
-  if (!adminCheck.ok) return adminCheck.res;
 
   const { id } = await params;
   await ensureServiceConfigTables();
+  const beforeRows = await prisma.$queryRawUnsafe<TypeRow[]>(
+    `SELECT id::text, tenant_id, category_id::text, key, name, description, icon, tone,
+            default_priority, sort_order, is_system, created_at::text, updated_at::text
+       FROM service_types
+      WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL
+      LIMIT 1`,
+    id, auth.tenantId,
+  ).catch(() => []);
+  const before = beforeRows[0] ?? null;
 
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
@@ -58,6 +65,13 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   if (sets.length === 0) {
     return NextResponse.json({ ok: false, error: 'No updatable fields in body' }, { status: 400 });
   }
+  const approval = await requireServiceConfigApproval(req, auth, 'service_config.type.update', {
+    targetType: 'ServiceType',
+    targetId: id,
+    summary: `Update service type ${id}.`,
+    payload: body,
+  });
+  if (approval) return approval;
   sets.push(`updated_at = NOW()`);
   args.push(id, auth.tenantId);
 
@@ -73,10 +87,16 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     const t = updated[0];
     if (!t) return NextResponse.json({ ok: false, error: 'Service type not found' }, { status: 404 });
 
-    void logAudit({
-      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
-      entityType: 'ServiceType', entityId: t.id, entityName: t.name,
-      action: 'UPDATE', details: `Updated service type ${t.name}`,
+    await recordServiceConfigChange({
+      req,
+      auth,
+      entityType: 'ServiceType',
+      entityId: t.id,
+      entityName: t.name,
+      action: 'UPDATE',
+      before,
+      after: t,
+      summary: `Updated service type ${t.name}.`,
     });
 
     return NextResponse.json({ ok: true, type: t });
@@ -87,16 +107,16 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 }
 
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
-  const auth = authorizeServiceConfig(req);
+  const auth = await requireServiceConfigPermission(req, 'delete');
   if (!auth.ok) return auth.res;
-  const adminCheck = requireAdmin(auth);
-  if (!adminCheck.ok) return adminCheck.res;
 
   const { id } = await params;
   await ensureServiceConfigTables();
 
-  const rows = await prisma.$queryRawUnsafe<Array<{ is_system: boolean; name: string }>>(
-    `SELECT is_system, name FROM service_types
+  const rows = await prisma.$queryRawUnsafe<TypeRow[]>(
+    `SELECT id::text, tenant_id, category_id::text, key, name, description, icon, tone,
+            default_priority, sort_order, is_system, created_at::text, updated_at::text
+     FROM service_types
      WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
     id, auth.tenantId,
   ).catch(() => []);
@@ -104,15 +124,28 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   if (!found) return NextResponse.json({ ok: false, error: 'Service type not found' }, { status: 404 });
   if (found.is_system) return NextResponse.json({ ok: false, error: 'Cannot delete a system service type.' }, { status: 400 });
 
+  const approval = await requireServiceConfigApproval(req, auth, 'service_config.type.delete', {
+    targetType: 'ServiceType',
+    targetId: id,
+    summary: `Delete service type ${found.name}.`,
+  });
+  if (approval) return approval;
+
   await prisma.$executeRawUnsafe(
     `UPDATE service_types SET deleted_at = NOW() WHERE id = $1::uuid AND tenant_id = $2`,
     id, auth.tenantId,
   );
 
-  void logAudit({
-    tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
-    entityType: 'ServiceType', entityId: id, entityName: found.name,
-    action: 'DELETE', details: `Soft-deleted service type ${found.name}`,
+  await recordServiceConfigChange({
+    req,
+    auth,
+    entityType: 'ServiceType',
+    entityId: id,
+    entityName: found.name,
+    action: 'DELETE',
+    before: found,
+    after: { ...found, deleted: true },
+    summary: `Soft-deleted service type ${found.name}.`,
   });
 
   return NextResponse.json({ ok: true });

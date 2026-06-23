@@ -1,4 +1,5 @@
 'use client';
+import { useRentalMasterData } from '@/hooks/useRentalMasterData';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -57,7 +58,6 @@ const STATUS_ACTION: Record<string, { next: string; label: string; color: string
   EXPIRED:  [],
 };
 
-const VEHICLE_TYPES = ['Economy', 'Sedan', 'SUV', 'Luxury', 'Van', 'Bus'];
 const VAT_RATE = 0.05;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -99,6 +99,7 @@ const emptyForm = {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function QuotationsPage() {
+  const { masterData } = useRentalMasterData();
   const [quotations, setQuotations]   = useState<Quotation[]>([]);
   const [summary, setSummary]         = useState<SummaryEntry[]>([]);
   const [activeTab, setActiveTab]     = useState('ALL');
@@ -480,7 +481,7 @@ export default function QuotationsPage() {
                   <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Vehicle Type</label>
                   <select className={inputCls} {...field('vehicleType')}>
                     <option value="">Select type</option>
-                    {VEHICLE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+                    {masterData.vehicleCategories.map(v => <option key={v} value={v}>{v}</option>)}
                   </select>
                 </div>
                 <div>

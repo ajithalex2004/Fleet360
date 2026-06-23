@@ -85,7 +85,7 @@ export default function TenantApiKeysPage() {
     try {
       const res = await fetch(`/api/admin/tenants/${tenantId}/api-keys`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-confirm-action': 'api-key.create' },
         body: JSON.stringify({ name: name.trim(), scopes }),
       });
       const data = await res.json();
@@ -102,7 +102,10 @@ export default function TenantApiKeysPage() {
 
   const revoke = async (k: ApiKey) => {
     if (!window.confirm(`Revoke key "${k.name}"?\n\nAny integration using this key will stop working immediately. This can't be undone.`)) return;
-    const res = await fetch(`/api/admin/tenants/${tenantId}/api-keys/${k.id}/revoke`, { method: 'POST' });
+    const res = await fetch(`/api/admin/tenants/${tenantId}/api-keys/${k.id}/revoke`, {
+      method: 'POST',
+      headers: { 'x-admin-confirm-action': 'api-key.revoke' },
+    });
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
       alert(d?.error ?? 'Revoke failed');

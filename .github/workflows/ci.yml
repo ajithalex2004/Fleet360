@@ -17,6 +17,8 @@ jobs:
       # Build-time env. CI uses dummies — real values come from prod secrets.
       DATABASE_URL: postgresql://user:pass@localhost:5432/ci_mock?sslmode=disable
       SESSION_SECRET: ci-session-secret-must-be-at-least-32-chars-long
+      SSO_ENCRYPTION_KEY: ci-sso-secret-must-be-at-least-32-chars-long
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
       THESYS_API_KEY: ci-dummy-thesys-key
       OPENAI_API_KEY: ci-dummy-openai-key
       NEXT_TELEMETRY_DISABLED: "1"
@@ -37,6 +39,10 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Production readiness script syntax
+        run: node scripts/check-production-readiness.mjs
+        continue-on-error: true   # CI uses a mock non-Neon DATABASE_URL; production env runs this as a gate.
+
       - name: Lint
         run: npm run lint
         continue-on-error: true   # TODO(KNOWN-TS-001): re-enforce after pre-existing
@@ -54,3 +60,6 @@ jobs:
 
       - name: Build (Next.js)
         run: npm run build
+
+      - name: Deploy readiness command shape
+        run: node --check scripts/check-deploy-readiness.mjs

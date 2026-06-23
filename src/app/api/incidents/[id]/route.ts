@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { maybeCreateIncidentWorkOrder } from '@/lib/incident-work-orders';
 
 /**
  * Full incident lifecycle: REPORTED → UNDER_INVESTIGATION → ESCALATED → RESOLVED → CLOSED
@@ -10,10 +11,33 @@ import { prisma } from '@/lib/prisma';
 
 const VALID_STATUS = ['REPORTED', 'OPEN', 'UNDER_INVESTIGATION', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED', 'CLOSED'];
 
+async function getIncidentForWorkOrder(id: string) {
+  const [incident] = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT id::text, incident_no, incident_type, severity, vehicle_id::text, description, location, action_taken
+       FROM trip_incidents
+      WHERE id::text = $1
+      LIMIT 1`,
+    id,
+  ).catch(() => [] as Array<Record<string, unknown>>);
+  return incident ?? null;
+}
+
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const body = await req.json();
     const { action } = body;
+
+    if (action === 'create_work_order') {
+      const incident = await getIncidentForWorkOrder(params.id);
+      if (!incident) return NextResponse.json({ error: 'Incident not found' }, { status: 404 });
+      const workOrder = await maybeCreateIncidentWorkOrder({
+        req,
+        incident,
+        createWorkOrder: true,
+        sourceModule: 'INCIDENT',
+      });
+      return NextResponse.json({ success: !workOrder.skipped, id: params.id, workOrder });
+    }
 
     if (action === 'transition' || (!action && body.status)) {
       const status          = body.status;
@@ -79,7 +103,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         resolvedBy || assignedTo || 'System'
       ).catch(() => {});
 
-      return NextResponse.json({ success: true, id: params.id, status });
+      const incident = await getIncidentForWorkOrder(params.id);
+      const workOrder = incident
+        ? await maybeCreateIncidentWorkOrder({
+            req,
+            incident,
+            createWorkOrder: typeof body.createWorkOrder === 'boolean' ? body.createWorkOrder : undefined,
+            sourceModule: 'INCIDENT',
+          })
+        : null;
+
+      return NextResponse.json({ success: true, id: params.id, status, workOrder });
     }
 
     if (action === 'update_details') {

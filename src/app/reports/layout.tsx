@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: '/reports/revenue',            label: 'Revenue Analysis' },
   { href: '/reports/maintenance',        label: 'Maintenance Cost' },
   { href: '/reports/driver-performance', label: 'Driver Performance' },
+  { href: '/reports/dynamic',            label: 'Dynamic Reports' },
   { href: '/reports/scheduled',          label: 'Scheduled Reports' },
 ];
 

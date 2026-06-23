@@ -48,8 +48,10 @@ function LiveTrackingMap({
   onSelect: (id: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef       = useRef<import('mapbox-gl').Map | null>(null);
-  const markersRef   = useRef<Map<string, import('mapbox-gl').Marker>>(new Map());
+  type MapboxMapInstance = InstanceType<Window['mapboxgl']['Map']>;
+  type MapboxMarkerInstance = InstanceType<Window['mapboxgl']['Marker']>;
+  const mapRef       = useRef<MapboxMapInstance | null>(null);
+  const markersRef   = useRef<Map<string, MapboxMarkerInstance>>(new Map());
 
   // Load Mapbox GL JS
   useEffect(() => {
@@ -134,7 +136,7 @@ function LiveTrackingMap({
             <p style="font-weight:bold;color:#f8fafc;margin:0 0 4px">${trip.bookingRef ?? trip.id.slice(0, 8)}</p>
             <p style="color:${color};margin:0 0 3px">● ${STATUS_LABEL[trip.status ?? ''] ?? trip.status}</p>
             ${trip.vehiclePlate ? `<p style="margin:0 0 2px">🚛 ${trip.vehiclePlate}</p>` : ''}
-            ${trip.driverName   ? `<p style="margin:0 0 2px">👤 ${trip.driverName}</p>` : ''}
+            ${trip.driverName   ? `<p style="margin:0 0 2px">🤵 ${trip.driverName}</p>` : ''}
             ${trip.origin       ? `<p style="color:#64748b;margin:0 0 2px">↑ ${trip.origin}</p>` : ''}
             ${trip.destination  ? `<p style="color:#64748b;margin:0">↓ ${trip.destination}</p>` : ''}
             ${isEstimated       ? `<p style="color:#f97316;font-size:10px;margin:4px 0 0">⚠️ Estimated position</p>` : ''}
@@ -215,7 +217,7 @@ function TripPanel({ trip, isSelected, onSelect }: {
             <span className="text-xs flex-shrink-0" style={{ color }}>{label}</span>
           </div>
           {trip.vehiclePlate && <p className="text-xs text-amber-400 mt-0.5">🚛 {trip.vehiclePlate}</p>}
-          {trip.driverName   && <p className="text-xs text-blue-400">👤 {trip.driverName}</p>}
+          {trip.driverName   && <p className="text-xs text-blue-400">🤵 {trip.driverName}</p>}
           {(trip.origin || trip.destination) && (
             <p className="text-xs text-slate-500 mt-0.5 truncate">
               {trip.origin} {trip.origin && trip.destination ? '→' : ''} {trip.destination}

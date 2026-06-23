@@ -7,7 +7,7 @@
 
 import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
 import type { Lang } from '../theme';
-import { colors, spacing, typography, fontFor, dirFor, formatDate } from '../theme';
+import { colors, spacing, typography, fontFor, formatDate } from '../theme';
 import { t } from '../i18n';
 
 export interface SchoolBusManifestStudent {
@@ -111,7 +111,6 @@ interface PageProps { data: SchoolBusManifestPdfData; lang: Lang; }
 
 function ManifestPage({ data, lang }: PageProps) {
   const font = fontFor(lang);
-  const dir = dirFor(lang);
 
   const totals = {
     total: data.students.length,
@@ -197,14 +196,16 @@ function ManifestPage({ data, lang }: PageProps) {
           <Text style={[s.th, s.c_med]}>{lang === 'ar' ? 'طبي' : 'Med'}</Text>
         </View>
         {data.students.map((p, i) => {
-          const rowStyles: object[] = [s.trow];
-          if (p.medicalAlert) rowStyles.push(s.trowMedical);
-          else if (i % 2 === 1) rowStyles.push(s.trowAlt);
+          const rowStyles = p.medicalAlert
+            ? [s.trow, s.trowMedical]
+            : i % 2 === 1
+              ? [s.trow, s.trowAlt]
+              : s.trow;
           return (
             <View key={i} style={rowStyles}>
               <Text style={[s.td, s.c_idx]}>{i + 1}</Text>
               <Text style={[s.td, s.c_code]}>{p.studentCode}</Text>
-              <Text style={[s.td, s.c_name, { writingDirection: dir }]}>{p.fullName}</Text>
+              <Text style={[s.td, s.c_name]}>{p.fullName}</Text>
               <Text style={[s.td, s.c_grade]}>{p.grade ?? ''}{p.section ? `-${p.section}` : ''}</Text>
               <Text style={[s.td, s.c_pickup]}>{p.pickupStop ?? '—'}</Text>
               <Text style={[s.td, s.c_drop]}>{p.dropoffStop ?? '—'}</Text>

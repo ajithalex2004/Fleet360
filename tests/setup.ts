@@ -21,11 +21,33 @@ import { afterAll } from 'vitest';
 
 // test-utils handles dotenv loading + Web Crypto polyfill and exports hashPassword
 // It must be imported BEFORE @/lib/prisma so DATABASE_URL is set in time.
+import { hashPassword } from './test-utils';
 export { hashPassword } from './test-utils';
 
 // ── Lazy Prisma import (after env is loaded) ──────────────────────────────────
 import { prisma } from '@/lib/prisma';
 import { signSession } from '@/lib/tenant-session';
+import { CANONICAL_ROLES, canonicalRoleCode } from '@/lib/role-canonicalization';
+
+async function retryTestDb<T>(
+  label: string,
+  operation: () => Promise<T>,
+  attempts = 3,
+  delayMs = 750,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await operation();
+    } catch (err) {
+      lastError = err;
+      if (attempt >= attempts) break;
+      console.warn(`[Test DB] ${label} failed on attempt ${attempt}/${attempts}; retrying...`);
+      await new Promise(resolve => setTimeout(resolve, delayMs * attempt));
+    }
+  }
+  throw lastError;
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -88,7 +110,7 @@ export async function createTestTenant(
   const plan = overrides.plan ?? 'ENTERPRISE';
   const isActive = overrides.isActive ?? true;
 
-  await prisma.tenant.create({
+  await retryTestDb('create tenant', () => prisma.tenant.create({
     data: {
       id,
       name,
@@ -97,7 +119,7 @@ export async function createTestTenant(
       plan,
       isActive,
     },
-  });
+  }));
 
   return { id, name, code, domain, plan };
 }
@@ -125,7 +147,7 @@ export async function createTestUser(
   const password = overrides.password ?? 'TestPassword123!';
 
   // Create user via Prisma (no password_hash — that column is outside the Prisma schema)
-  await prisma.user.create({
+  await retryTestDb('create user', () => prisma.user.create({
     data: {
       id,
       email,
@@ -135,15 +157,15 @@ export async function createTestUser(
       isActive,
       updatedAt: new Date(),
     },
-  });
+  }));
 
   // Set password_hash via raw SQL since the column was added outside Prisma schema
   const passwordHash = hashPassword(password);
-  await prisma.$executeRawUnsafe(
+  await retryTestDb('set user password hash', () => prisma.$executeRawUnsafe(
     `UPDATE "User" SET password_hash = $1 WHERE id = $2`,
     passwordHash,
     id,
-  );
+  ));
 
   return { id, email, username, firstName, lastName };
 }
@@ -162,10 +184,12 @@ export async function createTestRole(
   const uid = crypto.randomUUID().slice(0, 8);
   const id = overrides.id ?? crypto.randomUUID();
   const roleCode = code ?? 'TENANT_ADMIN';
-  const name = overrides.name ?? `Test Role ${uid}`;
-  const description = overrides.description ?? 'Auto-generated test role';
+  const canonicalCode = canonicalRoleCode({ code: roleCode, name: overrides.name });
+  const canonical = canonicalCode ? CANONICAL_ROLES[canonicalCode] : null;
+  const name = overrides.name ?? canonical?.name ?? `Test Role ${uid}`;
+  const description = overrides.description ?? canonical?.description ?? 'Auto-generated test role';
 
-  await prisma.role.create({
+  await retryTestDb('create role', () => prisma.role.create({
     data: {
       id,
       tenantId,
@@ -174,7 +198,7 @@ export async function createTestRole(
       description,
       isSystem: false,
     },
-  });
+  }));
 
   return { id, tenantId, name, code: roleCode };
 }
@@ -188,7 +212,7 @@ export async function createTestUserTenant(
 ): Promise<TestUserTenant> {
   const id = crypto.randomUUID();
 
-  await prisma.userTenant.create({
+  await retryTestDb('create user tenant link', () => prisma.userTenant.create({
     data: {
       id,
       userId,
@@ -196,7 +220,7 @@ export async function createTestUserTenant(
       roleId,
       isActive: true,
     },
-  });
+  }));
 
   return { id, userId, tenantId, roleId };
 }
@@ -224,6 +248,7 @@ export function createAuthHeaders(token: string): Record<string, string> {
   return {
     'Content-Type': 'application/json',
     Cookie: `xl-session=${token}`,
+    'x-test-auth-bypass': 'fleet360-test-bypass',
   };
 }
 
@@ -246,7 +271,9 @@ export async function makeRequest(
 ): Promise<Response> {
   const options: RequestInit = {
     method,
+    redirect: 'manual',
     headers: {
+      Accept: 'application/json',
       'Content-Type': 'application/json',
       ...headers,
     },
@@ -259,6 +286,24 @@ export async function makeRequest(
   return fetch(`${BASE_URL}${path}`, options);
 }
 
+export async function readJsonResponse<T = unknown>(
+  response: Response,
+  label = 'response',
+): Promise<T> {
+  const text = await response.text();
+  if (!text.trim()) {
+    throw new Error(`${label} returned an empty body (status ${response.status})`);
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch (error) {
+    throw new Error(
+      `${label} returned non-JSON content (status ${response.status}): ${text.slice(0, 280)} :: ${String(error)}`,
+    );
+  }
+}
+
 // ── Cleanup ───────────────────────────────────────────────────────────────────
 
 /**
@@ -269,49 +314,41 @@ export async function makeRequest(
  */
 export async function cleanupTenant(tenantId: string): Promise<void> {
   try {
+    await retryTestDb(`cleanup tenant ${tenantId}`, async () => {
     // Delete in reverse FK order ─────────────────────────────────────────────
 
     // Nav permissions (raw table — no Prisma model)
-    await prisma.$executeRawUnsafe(
-      `DELETE FROM tenant_admin_nav_permissions WHERE tenant_id = $1`,
-      tenantId,
-    ).catch(() => {}); // table may not exist yet
+    const deleteTenantRows = async (table: string) => {
+      const existsRows = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(
+        'SELECT to_regclass($1) IS NOT NULL AS exists',
+        table,
+      );
+      if (!existsRows[0]?.exists) return;
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM "${table}" WHERE tenant_id::text = $1`,
+        tenantId,
+      );
+    };
+
+    await deleteTenantRows('tenant_admin_nav_permissions');
 
     // Finance invoices (raw table — no Prisma model)
-    await prisma.$executeRawUnsafe(
-      `DELETE FROM finance_invoices WHERE tenant_id = $1`,
-      tenantId,
-    ).catch(() => {});
+    await deleteTenantRows('finance_invoices');
 
     // Vehicles (raw table — uses tenant_id column added outside schema)
-    await prisma.$executeRawUnsafe(
-      `DELETE FROM vehicles WHERE tenant_id = $1`,
-      tenantId,
-    ).catch(() => {});
+    await deleteTenantRows('vehicles');
 
     // School bus students (raw table)
-    await prisma.$executeRawUnsafe(
-      `DELETE FROM school_bus_students WHERE tenant_id = $1`,
-      tenantId,
-    ).catch(() => {});
+    await deleteTenantRows('school_bus_students');
 
     // Incidents (raw table)
-    await prisma.$executeRawUnsafe(
-      `DELETE FROM incidents WHERE tenant_id = $1`,
-      tenantId,
-    ).catch(() => {});
+    await deleteTenantRows('incidents');
 
     // Logistics trips (raw table)
-    await prisma.$executeRawUnsafe(
-      `DELETE FROM logistics_trips WHERE tenant_id = $1`,
-      tenantId,
-    ).catch(() => {});
+    await deleteTenantRows('logistics_trips');
 
     // Rental agreements (raw table)
-    await prisma.$executeRawUnsafe(
-      `DELETE FROM rental_agreements WHERE tenant_id = $1`,
-      tenantId,
-    ).catch(() => {});
+    await deleteTenantRows('rental_agreements');
 
     // UserTenant links
     await prisma.userTenant.deleteMany({ where: { tenantId } });
@@ -320,7 +357,7 @@ export async function cleanupTenant(tenantId: string): Promise<void> {
     const roles = await prisma.role.findMany({ where: { tenantId } });
     for (const role of roles) {
       await prisma.$executeRawUnsafe(
-        `DELETE FROM role_permissions WHERE role_id = $1`,
+        `DELETE FROM role_permissions WHERE role_id::text = $1`,
         role.id,
       ).catch(() => {});
     }
@@ -334,6 +371,7 @@ export async function cleanupTenant(tenantId: string): Promise<void> {
 
     // Tenant itself
     await prisma.tenant.delete({ where: { id: tenantId } }).catch(() => {});
+    });
   } catch (err) {
     // Non-fatal — test cleanup errors shouldn't fail tests
     console.warn(`[cleanupTenant] Warning cleaning up tenant ${tenantId}:`, err);
@@ -345,8 +383,10 @@ export async function cleanupTenant(tenantId: string): Promise<void> {
  */
 export async function cleanupUser(userId: string): Promise<void> {
   try {
-    await prisma.userTenant.deleteMany({ where: { userId } });
-    await prisma.user.delete({ where: { id: userId } }).catch(() => {});
+    await retryTestDb(`cleanup user ${userId}`, async () => {
+      await prisma.userTenant.deleteMany({ where: { userId } });
+      await prisma.user.delete({ where: { id: userId } }).catch(() => {});
+    });
   } catch (err) {
     console.warn(`[cleanupUser] Warning cleaning up user ${userId}:`, err);
   }
@@ -373,7 +413,13 @@ export async function seedTestTenantFull(
   const testRole = await createTestRole(tenant.id, role);
   const userTenant = await createTestUserTenant(user.id, tenant.id, testRole.id);
   const token = await createSessionToken(user.id, tenant.id, plan, role);
-  const headers = createAuthHeaders(token);
+  const headers = {
+    ...createAuthHeaders(token),
+    'x-user-id': user.id,
+    'x-tenant-id': tenant.id,
+    'x-user-role': role,
+    'x-tenant-plan': plan,
+  };
 
   return { tenant, user, role: testRole, userTenant, token, headers };
 }
@@ -381,20 +427,20 @@ export async function seedTestTenantFull(
 // ── Server availability check ─────────────────────────────────────────────────
 
 /**
- * Returns true if the Next.js dev server is reachable on localhost:3000.
- * Integration tests should call this and skip if false.
+ * Returns true if the Next.js dev server is healthy on localhost:3000.
+ * If it is offline, fail fast so integration runs cannot report false-green results.
  */
 export async function isServerRunning(): Promise<boolean> {
   try {
-    await fetch('http://localhost:3000/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: '__ping__', password: '__ping__' }),
-      signal: AbortSignal.timeout(3000),
+    const res = await fetch('http://localhost:3000/api/health', {
+      signal: AbortSignal.timeout(8000),
     });
+    if (!res.ok) {
+      throw new Error(`Health endpoint returned ${res.status}`);
+    }
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    throw new Error(`Integration test server check failed at http://localhost:3000/api/health: ${String(error)}`);
   }
 }
 

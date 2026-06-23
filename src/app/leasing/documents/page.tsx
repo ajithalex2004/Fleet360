@@ -1,37 +1,152 @@
 'use client';
-import React, { useState, useCallback, useEffect } from 'react';
 
-interface Document {
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  CheckSquare,
+  Download,
+  FileBadge,
+  FileImage,
+  FileSignature,
+  FileText,
+  Replace,
+  Search,
+  Shield,
+  Square,
+  Upload,
+} from 'lucide-react';
+import RowActionMenu from '@/components/ui/RowActionMenu';
+import SmartDataGridHeader from '@/components/ui/SmartDataGridHeader';
+
+type EntityType = 'CONTRACT' | 'LESSEE' | 'QUOTATION' | 'VEHICLE';
+
+type DocumentRecord = {
   id: string;
   docName: string;
-  type: string;
-  entityType: string;
+  type?: string;
+  docType?: string;
+  entityType: EntityType;
   entityId: string;
-  issueDate: string;
-  expiryDate: string;
-  status: string;
-  uploadedBy: string;
+  entityLabel?: string;
+  entitySecondaryLabel?: string | null;
+  issueDate?: string | null;
+  expiryDate?: string | null;
+  status?: string | null;
+  uploadedBy?: string | null;
   fileUrl: string;
-}
+  fileName?: string | null;
+  mimeType?: string | null;
+  notes?: string | null;
+};
 
-interface FormData {
-  entityType: string;
+type EntityOption = {
+  id: string;
+  label: string;
+  secondaryLabel?: string | null;
+  status?: string | null;
+};
+
+type EntityOptionsResponse = Record<EntityType, EntityOption[]>;
+
+type FormState = {
+  entityType: EntityType;
   entityId: string;
   docType: string;
   docName: string;
-  fileName: string;
-  fileUrl: string;
   issueDate: string;
   expiryDate: string;
-  uploadedBy: string;
   notes: string;
+};
+
+const defaultFormState: FormState = {
+  entityType: 'CONTRACT',
+  entityId: '',
+  docType: 'TRADE_LICENSE',
+  docName: '',
+  issueDate: '',
+  expiryDate: '',
+  notes: '',
+};
+
+const entityTypeOptions: EntityType[] = ['CONTRACT', 'LESSEE', 'QUOTATION', 'VEHICLE'];
+
+const documentTypeOptions = [
+  'TRADE_LICENSE',
+  'EMIRATES_ID',
+  'PASSPORT',
+  'MOA',
+  'SIGNED_AGREEMENT',
+  'INSURANCE',
+  'VEHICLE_PHOTO',
+  'OTHER',
+];
+
+function formatDate(value?: string | null) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('en-GB');
+}
+
+function getFilePresentation(doc: DocumentRecord) {
+  const mime = doc.mimeType ?? '';
+  const docType = doc.docType ?? doc.type ?? 'OTHER';
+  if (mime.startsWith('image/') || docType === 'VEHICLE_PHOTO') {
+    return { icon: FileImage, label: 'Image', color: 'text-sky-300' };
+  }
+  if (docType === 'SIGNED_AGREEMENT' || docType === 'MOA') {
+    return { icon: FileSignature, label: 'Signed Doc', color: 'text-violet-300' };
+  }
+  if (docType === 'INSURANCE' || docType === 'TRADE_LICENSE') {
+    return { icon: Shield, label: 'Compliance', color: 'text-emerald-300' };
+  }
+  if (docType === 'EMIRATES_ID' || docType === 'PASSPORT') {
+    return { icon: FileBadge, label: 'Identity', color: 'text-amber-300' };
+  }
+  return { icon: FileText, label: 'Document', color: 'text-slate-200' };
+}
+
+function getStatusColor(expiryDate?: string | null) {
+  if (!expiryDate) return 'bg-slate-700/50 text-slate-300 border-slate-600';
+  const today = new Date();
+  const expiry = new Date(expiryDate);
+  const daysUntilExpiry = Math.floor((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (daysUntilExpiry < 0) return 'bg-red-500/20 text-red-400 border-red-500/30';
+  if (daysUntilExpiry < 30) return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+  return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+}
+
+function getStatus(expiryDate?: string | null) {
+  if (!expiryDate) return 'NO_EXPIRY';
+  const today = new Date();
+  const expiry = new Date(expiryDate);
+  const daysUntilExpiry = Math.floor((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (daysUntilExpiry < 0) return 'EXPIRED';
+  if (daysUntilExpiry < 30) return 'EXPIRING_SOON';
+  return 'ACTIVE';
 }
 
 export default function DocumentsPage() {
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [filteredDocuments, setFilteredDocuments] = useState<Document[]>([]);
-  const [entityTypeFilter, setEntityTypeFilter] = useState('CONTRACT');
+  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [entityOptions, setEntityOptions] = useState<EntityOptionsResponse>({
+    CONTRACT: [],
+    LESSEE: [],
+    QUOTATION: [],
+    VEHICLE: [],
+  });
+  const [entityTypeFilter, setEntityTypeFilter] = useState<EntityType>('CONTRACT');
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortKey, setSortKey] = useState<'docName' | 'docType' | 'entity' | 'issueDate' | 'expiryDate' | 'status'>('docName');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [columnFilters, setColumnFilters] = useState({
+    docName: '',
+    docType: '',
+    entity: '',
+    issueDate: '',
+    expiryDate: '',
+    status: 'All',
+  });
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -40,18 +155,10 @@ export default function DocumentsPage() {
   const [sweepResult, setSweepResult] = useState<string | null>(null);
   const [classifyBusy, setClassifyBusy] = useState(false);
   const [classifyHint, setClassifyHint] = useState<string | null>(null);
-  const [formData, setFormData] = useState<FormData>({
-    entityType: 'CONTRACT',
-    entityId: '',
-    docType: 'TRADE_LICENSE',
-    docName: '',
-    fileName: '',
-    fileUrl: '',
-    issueDate: '',
-    expiryDate: '',
-    uploadedBy: '',
-    notes: '',
-  });
+  const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
+  const [bulkDownloading, setBulkDownloading] = useState(false);
+  const [replaceTarget, setReplaceTarget] = useState<DocumentRecord | null>(null);
+  const [formData, setFormData] = useState<FormState>(defaultFormState);
 
   const fetchDocuments = useCallback(async () => {
     try {
@@ -61,7 +168,7 @@ export default function DocumentsPage() {
       const response = await fetch(`/api/leasing/documents?${params.toString()}`);
       if (response.ok) {
         const data = await response.json();
-        setDocuments(data);
+        setDocuments(Array.isArray(data) ? data : []);
       }
     } catch (error) {
       console.error('Failed to fetch documents:', error);
@@ -70,34 +177,148 @@ export default function DocumentsPage() {
     }
   }, [entityTypeFilter]);
 
+  const fetchEntityOptions = useCallback(async () => {
+    try {
+      const response = await fetch('/api/leasing/documents/options');
+      if (!response.ok) return;
+      const data = await response.json();
+      setEntityOptions({
+        CONTRACT: Array.isArray(data.CONTRACT) ? data.CONTRACT : [],
+        LESSEE: Array.isArray(data.LESSEE) ? data.LESSEE : [],
+        QUOTATION: Array.isArray(data.QUOTATION) ? data.QUOTATION : [],
+        VEHICLE: Array.isArray(data.VEHICLE) ? data.VEHICLE : [],
+      });
+    } catch (error) {
+      console.error('Failed to fetch document entity options:', error);
+    }
+  }, []);
+
   useEffect(() => {
-    fetchDocuments();
+    void fetchDocuments();
   }, [fetchDocuments]);
 
   useEffect(() => {
-    let filtered = documents;
+    void fetchEntityOptions();
+  }, [fetchEntityOptions]);
 
-    if (searchQuery) {
-      filtered = filtered.filter((doc) =>
-        doc.docName.toLowerCase().includes(searchQuery.toLowerCase())
+  useEffect(() => {
+    setSelectedDocIds([]);
+  }, [entityTypeFilter, searchQuery, documents]);
+
+  const filteredDocuments = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return documents;
+    return documents.filter((doc) => {
+      const haystack = [
+        doc.docName,
+        doc.fileName,
+        doc.docType,
+        doc.type,
+        doc.entityLabel,
+        doc.entitySecondaryLabel,
+        doc.entityType,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [documents, searchQuery]);
+
+  const displayedDocuments = useMemo(() => {
+    const filtered = filteredDocuments.filter((doc) => {
+      const status = getStatus(doc.expiryDate);
+      return (
+        (!columnFilters.docName || doc.docName.toLowerCase().includes(columnFilters.docName.toLowerCase())) &&
+        (!columnFilters.docType || String(doc.docType ?? doc.type ?? '').toLowerCase().includes(columnFilters.docType.toLowerCase())) &&
+        (!columnFilters.entity || `${doc.entityLabel || doc.entityId} ${doc.entitySecondaryLabel || ''}`.toLowerCase().includes(columnFilters.entity.toLowerCase())) &&
+        (!columnFilters.issueDate || String(doc.issueDate ?? '').includes(columnFilters.issueDate)) &&
+        (!columnFilters.expiryDate || String(doc.expiryDate ?? '').includes(columnFilters.expiryDate)) &&
+        (columnFilters.status === 'All' || status === columnFilters.status)
       );
-    }
+    });
 
-    setFilteredDocuments(filtered);
-  }, [searchQuery, documents]);
+    filtered.sort((left, right) => {
+      const leftValue = ({
+        docName: left.docName,
+        docType: left.docType ?? left.type ?? '',
+        entity: left.entityLabel || left.entityId,
+        issueDate: left.issueDate ?? '',
+        expiryDate: left.expiryDate ?? '',
+        status: getStatus(left.expiryDate),
+      })[sortKey];
+      const rightValue = ({
+        docName: right.docName,
+        docType: right.docType ?? right.type ?? '',
+        entity: right.entityLabel || right.entityId,
+        issueDate: right.issueDate ?? '',
+        expiryDate: right.expiryDate ?? '',
+        status: getStatus(right.expiryDate),
+      })[sortKey];
+      const comparison = String(leftValue).localeCompare(String(rightValue));
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+
+    return filtered;
+  }, [columnFilters, filteredDocuments, sortDirection, sortKey]);
+
+  const toggleSort = (key: typeof sortKey) => {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection('asc');
+  };
+
+  const currentEntityOptions = entityOptions[formData.entityType] ?? [];
+
+  const openUploadModal = () => {
+    setReplaceTarget(null);
+    setSelectedFile(null);
+    setClassifyHint(null);
+    setFormData(defaultFormState);
+    setShowModal(true);
+  };
+
+  const openReplaceModal = (doc: DocumentRecord) => {
+    setReplaceTarget(doc);
+    setSelectedFile(null);
+    setClassifyHint(null);
+    setFormData({
+      entityType: doc.entityType,
+      entityId: doc.entityId,
+      docType: doc.docType ?? doc.type ?? 'OTHER',
+      docName: doc.docName,
+      issueDate: doc.issueDate ? new Date(doc.issueDate).toISOString().slice(0, 10) : '',
+      expiryDate: doc.expiryDate ? new Date(doc.expiryDate).toISOString().slice(0, 10) : '',
+      notes: doc.notes ?? '',
+    });
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setReplaceTarget(null);
+    setSelectedFile(null);
+    setClassifyHint(null);
+    setFormData(defaultFormState);
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData((prev) => {
+      if (name === 'entityType') {
+        return { ...prev, entityType: value as EntityType, entityId: '' };
+      }
+      return { ...prev, [name]: value };
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFile) {
-      alert('Pick a file to upload.');
+      alert(replaceTarget ? 'Pick a replacement file first.' : 'Pick a file to upload.');
       return;
     }
     setUploading(true);
@@ -111,6 +332,7 @@ export default function DocumentsPage() {
       if (formData.issueDate) fd.append('issueDate', formData.issueDate);
       if (formData.expiryDate) fd.append('expiryDate', formData.expiryDate);
       if (formData.notes) fd.append('notes', formData.notes);
+      if (replaceTarget) fd.append('replaceDocumentId', replaceTarget.id);
 
       const response = await fetch('/api/leasing/documents/upload', {
         method: 'POST',
@@ -121,21 +343,9 @@ export default function DocumentsPage() {
         alert(json.error ?? `Upload failed (${response.status})`);
         return;
       }
-      setFormData({
-        entityType: 'CONTRACT',
-        entityId: '',
-        docType: 'TRADE_LICENSE',
-        docName: '',
-        fileName: '',
-        fileUrl: '',
-        issueDate: '',
-        expiryDate: '',
-        uploadedBy: '',
-        notes: '',
-      });
-      setSelectedFile(null);
-      setShowModal(false);
-      fetchDocuments();
+
+      closeModal();
+      await Promise.all([fetchDocuments(), fetchEntityOptions()]);
     } catch (error) {
       console.error('Failed to upload document:', error);
       alert(error instanceof Error ? error.message : 'Upload failed');
@@ -150,7 +360,7 @@ export default function DocumentsPage() {
       return;
     }
     if (!selectedFile.type.startsWith('image/')) {
-      setClassifyHint('AI classification only works on images (PNG/JPEG/WebP) in v1.0. PDF support coming in v1.1.');
+      setClassifyHint('AI classification currently works on images only.');
       return;
     }
     setClassifyBusy(true);
@@ -165,7 +375,7 @@ export default function DocumentsPage() {
         setClassifyHint(json.error ?? `Classifier returned ${res.status}`);
         return;
       }
-      const c = json.classification as {
+      const classification = json.classification as {
         docType: string;
         suggestedName: string;
         expiryDate: string | null;
@@ -174,21 +384,22 @@ export default function DocumentsPage() {
         warnings: string[];
       };
 
-      // Map classifier types that aren't in LeaseDocument enum to OTHER (until v1.1).
-      const allowed = new Set(['TRADE_LICENSE', 'EMIRATES_ID', 'PASSPORT', 'MOA', 'SIGNED_AGREEMENT', 'INSURANCE', 'VEHICLE_PHOTO', 'OTHER']);
-      const mappedType = allowed.has(c.docType) ? c.docType : 'OTHER';
+      const allowed = new Set(documentTypeOptions);
+      const mappedType = allowed.has(classification.docType) ? classification.docType : 'OTHER';
 
       setFormData((prev) => ({
         ...prev,
         docType: mappedType,
-        docName: c.suggestedName || prev.docName,
-        issueDate: c.issueDate ?? prev.issueDate,
-        expiryDate: c.expiryDate ?? prev.expiryDate,
+        docName: classification.suggestedName || prev.docName,
+        issueDate: classification.issueDate ?? prev.issueDate,
+        expiryDate: classification.expiryDate ?? prev.expiryDate,
       }));
-      const warnSuffix = c.warnings.length > 0 ? ` · ${c.warnings.length} warning${c.warnings.length === 1 ? '' : 's'}` : '';
-      setClassifyHint(`AI: ${c.docType} (${c.confidence})${warnSuffix} — review and submit.`);
-    } catch (err) {
-      setClassifyHint(err instanceof Error ? err.message : 'Classification failed');
+      setClassifyHint(
+        `AI: ${classification.docType} (${classification.confidence})` +
+          (classification.warnings.length ? ` • ${classification.warnings.length} warning(s)` : ''),
+      );
+    } catch (error) {
+      setClassifyHint(error instanceof Error ? error.message : 'Classification failed');
     } finally {
       setClassifyBusy(false);
     }
@@ -205,9 +416,9 @@ export default function DocumentsPage() {
         return;
       }
       setSweepResult(
-        `Scanned ${json.scanned} · ${json.hits.length} hits · ${json.alertsCreated} new alerts · ${json.statusUpdates} status updates.`,
+        `Scanned ${json.scanned} • ${json.hits.length} hits • ${json.alertsCreated} new alerts • ${json.statusUpdates} status updates.`,
       );
-      fetchDocuments();
+      await fetchDocuments();
     } catch (error) {
       setSweepResult(error instanceof Error ? error.message : 'Sweep failed');
     } finally {
@@ -216,76 +427,84 @@ export default function DocumentsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this document?')) {
-      try {
-        const response = await fetch(`/api/leasing/documents/${id}`, {
-          method: 'DELETE',
-        });
-        if (response.ok) {
-          setDocuments(documents.filter((doc) => doc.id !== id));
-        }
-      } catch (error) {
-        console.error('Failed to delete document:', error);
+    if (!confirm('Delete this document? This also removes the stored file.')) return;
+    try {
+      const response = await fetch(`/api/leasing/documents/${id}`, { method: 'DELETE' });
+      if (response.ok) {
+        setDocuments((prev) => prev.filter((doc) => doc.id !== id));
+        setSelectedDocIds((prev) => prev.filter((docId) => docId !== id));
       }
+    } catch (error) {
+      console.error('Failed to delete document:', error);
     }
   };
 
-  const getStatusColor = (expiryDate: string) => {
-    const today = new Date();
-    const expiry = new Date(expiryDate);
-    const daysUntilExpiry = Math.floor((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  const handleDownload = (doc: DocumentRecord) => {
+    const link = document.createElement('a');
+    link.href = `/api/leasing/documents/${doc.id}/download`;
+    link.download = doc.fileName || doc.docName || 'document';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
-    if (daysUntilExpiry < 0) {
-      return 'bg-red-500/20 text-red-400 border-red-500/30';
-    } else if (daysUntilExpiry < 30) {
-      return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
-    } else {
-      return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+  const handleBulkDownload = async () => {
+    const selectedDocs = displayedDocuments.filter((doc) => selectedDocIds.includes(doc.id));
+    if (selectedDocs.length === 0) return;
+    setBulkDownloading(true);
+    try {
+      for (const doc of selectedDocs) {
+        handleDownload(doc);
+        await new Promise((resolve) => setTimeout(resolve, 180));
+      }
+    } finally {
+      setBulkDownloading(false);
     }
   };
 
-  const getStatus = (expiryDate: string) => {
-    const today = new Date();
-    const expiry = new Date(expiryDate);
-    const daysUntilExpiry = Math.floor((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  const allVisibleSelected =
+    displayedDocuments.length > 0 && displayedDocuments.every((doc) => selectedDocIds.includes(doc.id));
 
-    if (daysUntilExpiry < 0) {
-      return 'EXPIRED';
-    } else if (daysUntilExpiry < 30) {
-      return 'EXPIRING_SOON';
-    } else {
-      return 'ACTIVE';
+  const toggleSelectAllVisible = () => {
+    if (allVisibleSelected) {
+      setSelectedDocIds([]);
+      return;
     }
+    setSelectedDocIds(displayedDocuments.map((doc) => doc.id));
+  };
+
+  const toggleSelectedDoc = (docId: string) => {
+    setSelectedDocIds((prev) =>
+      prev.includes(docId) ? prev.filter((id) => id !== docId) : [...prev, docId],
+    );
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-slate-400">Loading...</div>
+      <div className="flex h-full items-center justify-center">
+        <div className="text-slate-400">Loading documents…</div>
       </div>
     );
   }
 
   return (
     <div className="space-y-8">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Documents</h1>
-          <p className="text-slate-400">Manage contracts, licenses, and related documents</p>
+          <h1 className="mb-2 text-4xl font-bold text-white">Documents</h1>
+          <p className="text-slate-400">Manage lease files with better targeting, replacement, and download flows.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <button
             onClick={handleRunSweep}
             disabled={sweepBusy}
-            className="rounded-xl bg-amber-700/40 border border-amber-500/40 px-4 py-3 text-sm font-medium text-amber-100 hover:bg-amber-600/40 disabled:opacity-50 transition-all"
-            title="Scan all documents for expiring/expired status, create alerts"
+            className="rounded-xl border border-amber-500/40 bg-amber-700/40 px-4 py-3 text-sm font-medium text-amber-100 transition-all hover:bg-amber-600/40 disabled:opacity-50"
           >
             {sweepBusy ? 'Sweeping…' : 'Run Expiry Sweep'}
           </button>
           <button
-            onClick={() => setShowModal(true)}
-            className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90 transition-all"
+            onClick={openUploadModal}
+            className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-medium text-white transition-all hover:opacity-90"
           >
             + Upload Document
           </button>
@@ -293,97 +512,168 @@ export default function DocumentsPage() {
       </div>
 
       {sweepResult && (
-        <div className="rounded-lg bg-slate-800/60 border border-slate-700 px-4 py-2 text-sm text-slate-200">
+        <div className="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm text-slate-200">
           {sweepResult}
         </div>
       )}
 
-      {/* Filter Bar */}
-      <div className="flex gap-4 flex-wrap">
-        <div className="flex-1 min-w-64">
+      <div className="flex flex-wrap gap-4 rounded-2xl border border-white/10 bg-slate-800/50 p-4">
+        <div className="relative min-w-[260px] flex-1">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
           <input
             type="text"
-            placeholder="Search documents..."
+            placeholder="Search by document, entity, file name, or type…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none transition-all"
+            className="w-full rounded-lg border border-white/10 bg-slate-900/70 py-2 pl-10 pr-4 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none"
           />
         </div>
+
         <select
           value={entityTypeFilter}
-          onChange={(e) => setEntityTypeFilter(e.target.value)}
-          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-blue-500 focus:outline-none transition-all"
+          onChange={(e) => setEntityTypeFilter(e.target.value as EntityType)}
+          className="rounded-lg border border-white/10 bg-slate-900/70 px-4 py-2 text-white focus:border-blue-500 focus:outline-none"
         >
-          <option>CONTRACT</option>
-          <option>LESSEE</option>
-          <option>QUOTATION</option>
-          <option>VEHICLE</option>
+          {entityTypeOptions.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
         </select>
+
+        <button
+          onClick={toggleSelectAllVisible}
+          className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-slate-900/70 px-4 py-2 text-sm text-white hover:bg-slate-800"
+        >
+          {allVisibleSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+          {allVisibleSelected ? 'Clear selection' : 'Select visible'}
+        </button>
+
+        <button
+          onClick={handleBulkDownload}
+          disabled={selectedDocIds.length === 0 || bulkDownloading}
+          className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-600/20 px-4 py-2 text-sm text-emerald-100 disabled:opacity-50"
+        >
+          <Download className="h-4 w-4" />
+          {bulkDownloading ? 'Downloading…' : `Download selected (${selectedDocIds.length})`}
+        </button>
       </div>
 
-      {/* Documents Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-slate-800/50">
-            <tr className="border-b border-white/5">
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Doc Name</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Type</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Entity</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Issue Date</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Expiry Date</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Status</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Uploaded By</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Actions</th>
-            </tr>
-          </thead>
+      <div className="smart-data-grid-surface p-6 backdrop-blur-sm">
+        <table className="w-full min-w-[1180px]">
+          <SmartDataGridHeader
+            sortKey={sortKey}
+            sortDirection={sortDirection}
+            onSort={(key) => toggleSort(key as typeof sortKey)}
+            columnResizeStorageKey="leasing-documents-column-widths"
+            columns={[
+              { key: 'select', label: 'Select', sortable: false, filter: <button type="button" onClick={toggleSelectAllVisible} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800">{allVisibleSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}{allVisibleSelected ? 'Clear' : 'Select'}</button>, headerClassName: 'w-[120px]' },
+              { key: 'docName', label: 'Document', sortable: true, filter: <input value={columnFilters.docName} onChange={(e) => setColumnFilters((prev) => ({ ...prev, docName: e.target.value }))} placeholder="Search..." className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" /> },
+              { key: 'docType', label: 'Type', sortable: true, filter: <input value={columnFilters.docType} onChange={(e) => setColumnFilters((prev) => ({ ...prev, docType: e.target.value }))} placeholder="Search..." className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" /> },
+              { key: 'entity', label: 'Entity', sortable: true, filter: <input value={columnFilters.entity} onChange={(e) => setColumnFilters((prev) => ({ ...prev, entity: e.target.value }))} placeholder="Search..." className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" /> },
+              { key: 'issueDate', label: 'Issue', sortable: true, filter: <input value={columnFilters.issueDate} onChange={(e) => setColumnFilters((prev) => ({ ...prev, issueDate: e.target.value }))} placeholder="YYYY-MM-DD" className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" /> },
+              { key: 'expiryDate', label: 'Expiry', sortable: true, filter: <input value={columnFilters.expiryDate} onChange={(e) => setColumnFilters((prev) => ({ ...prev, expiryDate: e.target.value }))} placeholder="YYYY-MM-DD" className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" /> },
+              { key: 'status', label: 'Status', sortable: true, filter: <select value={columnFilters.status} onChange={(e) => setColumnFilters((prev) => ({ ...prev, status: e.target.value }))} className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white focus:border-blue-500 focus:outline-none"><option>All</option><option>ACTIVE</option><option>EXPIRING_SOON</option><option>EXPIRED</option><option>NO_EXPIRY</option></select> },
+            ]}
+            actionHeader="Actions"
+          />
           <tbody>
-            {filteredDocuments.map((doc) => (
-              <tr key={doc.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                <td className="px-6 py-4 text-sm font-medium text-white">{doc.docName}</td>
-                <td className="px-6 py-4 text-sm text-white">{doc.type}</td>
-                <td className="px-6 py-4 text-sm text-white">
-                  {doc.entityType} - {doc.entityId}
-                </td>
-                <td className="px-6 py-4 text-sm text-slate-200">{doc.issueDate}</td>
-                <td className="px-6 py-4 text-sm text-slate-200">{doc.expiryDate}</td>
-                <td className="px-6 py-4 text-sm">
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(doc.expiryDate)}`}>
-                    {getStatus(doc.expiryDate)}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-sm text-white">{doc.uploadedBy}</td>
-                <td className="px-6 py-4 text-sm space-x-2">
-                  <a
-                    href={doc.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-400 hover:text-blue-300 transition-colors"
-                  >
-                    View
-                  </a>
-                  <button
-                    onClick={() => handleDelete(doc.id)}
-                    className="text-red-400 hover:text-red-300 transition-colors"
-                  >
-                    Delete
-                  </button>
+            {displayedDocuments.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-6 py-10 text-center text-slate-400">
+                  No documents found for this filter.
                 </td>
               </tr>
-            ))}
+            )}
+            {displayedDocuments.map((doc) => {
+              const file = getFilePresentation(doc);
+              const FileIcon = file.icon;
+              const selected = selectedDocIds.includes(doc.id);
+              return (
+                <tr key={doc.id} className="border-b border-white/5 transition-colors hover:bg-white/5">
+                  <td className="px-4 py-4">
+                    <button
+                      type="button"
+                      onClick={() => toggleSelectedDoc(doc.id)}
+                      className="text-slate-300 hover:text-white"
+                    >
+                      {selected ? <CheckSquare className="h-5 w-5" /> : <Square className="h-5 w-5" />}
+                    </button>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-start gap-3">
+                      <div className={`mt-0.5 rounded-lg border border-white/10 bg-slate-900/70 p-2 ${file.color}`}>
+                        <FileIcon className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-white">{doc.docName}</div>
+                        <div className="text-xs text-slate-400">{doc.fileName || 'Stored file'}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-white">
+                    <div>{doc.docType || doc.type}</div>
+                    <div className="text-xs text-slate-500">{file.label}</div>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-white">
+                    <div>{doc.entityLabel || doc.entityId}</div>
+                    <div className="text-xs text-slate-500">
+                      {doc.entityType}
+                      {doc.entitySecondaryLabel ? ` • ${doc.entitySecondaryLabel}` : ''}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-200">{formatDate(doc.issueDate)}</td>
+                  <td className="px-6 py-4 text-sm text-slate-200">{formatDate(doc.expiryDate)}</td>
+                  <td className="px-6 py-4 text-sm">
+                    <span className={`rounded-full border px-3 py-1 text-xs font-medium ${getStatusColor(doc.expiryDate)}`}>
+                      {getStatus(doc.expiryDate)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm">
+                    <RowActionMenu
+                      actions={[
+                        {
+                          label: 'View',
+                          onSelect: () => window.open(doc.fileUrl, '_blank', 'noopener,noreferrer'),
+                        },
+                        {
+                          label: 'Download',
+                          onSelect: () => handleDownload(doc),
+                        },
+                        {
+                          label: 'Replace',
+                          onSelect: () => openReplaceModal(doc),
+                        },
+                        {
+                          label: 'Delete',
+                          onSelect: () => handleDelete(doc.id),
+                          tone: 'danger',
+                        },
+                      ]}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
-      {/* Upload Document Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-800/95 border border-white/10 rounded-2xl p-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">Upload Document</h2>
-              <button
-                onClick={() => setShowModal(false)}
-                className="text-slate-400 hover:text-white transition-colors"
-              >
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-white/10 bg-slate-800/95 p-8">
+            <div className="mb-6 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-white">
+                  {replaceTarget ? 'Replace / Update Document' : 'Upload Document'}
+                </h2>
+                {replaceTarget && (
+                  <p className="mt-1 text-sm text-slate-400">
+                    Replacing {replaceTarget.docName} for {replaceTarget.entityLabel || replaceTarget.entityId}
+                  </p>
+                )}
+              </div>
+              <button onClick={closeModal} className="text-slate-400 transition-colors hover:text-white">
                 X
               </button>
             </div>
@@ -391,78 +681,85 @@ export default function DocumentsPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Entity Type</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-300">Entity Type</label>
                   <select
                     name="entityType"
                     value={formData.entityType}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                    className="w-full rounded-lg border border-white/10 bg-slate-700 px-4 py-2 text-white focus:border-blue-500 focus:outline-none"
                   >
-                    <option>CONTRACT</option>
-                    <option>LESSEE</option>
-                    <option>QUOTATION</option>
-                    <option>VEHICLE</option>
+                    {entityTypeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Entity ID</label>
-                  <input
-                    type="text"
+                  <label className="mb-2 block text-sm font-medium text-slate-300">Linked Record</label>
+                  <select
                     name="entityId"
                     value={formData.entityId}
                     onChange={handleInputChange}
                     required
-                    placeholder="LC-001"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Document Type</label>
-                  <select
-                    name="docType"
-                    value={formData.docType}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                    className="w-full rounded-lg border border-white/10 bg-slate-700 px-4 py-2 text-white focus:border-blue-500 focus:outline-none"
                   >
-                    <option>TRADE_LICENSE</option>
-                    <option>EMIRATES_ID</option>
-                    <option>PASSPORT</option>
-                    <option>MOA</option>
-                    <option>SIGNED_AGREEMENT</option>
-                    <option>INSURANCE</option>
-                    <option>VEHICLE_PHOTO</option>
-                    <option>OTHER</option>
+                    <option value="">Select {formData.entityType.toLowerCase()}…</option>
+                    {currentEntityOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                        {option.secondaryLabel ? ` — ${option.secondaryLabel}` : ''}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Document Name</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-300">Document Type</label>
+                  <select
+                    name="docType"
+                    value={formData.docType}
+                    onChange={handleInputChange}
+                    className="w-full rounded-lg border border-white/10 bg-slate-700 px-4 py-2 text-white focus:border-blue-500 focus:outline-none"
+                  >
+                    {documentTypeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-300">Document Name</label>
                   <input
                     type="text"
                     name="docName"
                     value={formData.docName}
                     onChange={handleInputChange}
                     required
-                    placeholder="Trade License - ABC Corp"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    placeholder="Signed agreement - Safeway"
+                    className="w-full rounded-lg border border-white/10 bg-slate-700 px-4 py-2 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    File <span className="text-slate-500 text-xs">(PDF, image, Office doc — max 25 MB)</span>
+                  <label className="mb-2 block text-sm font-medium text-slate-300">
+                    File <span className="text-xs text-slate-500">(PDF, image, Office doc — max 25 MB)</span>
                   </label>
                   <input
                     type="file"
                     accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.txt"
-                    onChange={(e) => { setSelectedFile(e.target.files?.[0] ?? null); setClassifyHint(null); }}
+                    onChange={(e) => {
+                      setSelectedFile(e.target.files?.[0] ?? null);
+                      setClassifyHint(null);
+                    }}
                     required
-                    className="w-full text-sm text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-slate-600 file:text-white hover:file:bg-slate-500"
+                    className="w-full text-sm text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-600 file:px-4 file:py-2 file:text-white hover:file:bg-slate-500"
                   />
                   {selectedFile && (
-                    <div className="mt-2 flex items-center justify-between gap-3 flex-wrap">
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
                       <p className="text-xs text-slate-400">
                         {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
                       </p>
@@ -470,82 +767,67 @@ export default function DocumentsPage() {
                         type="button"
                         onClick={handleClassify}
                         disabled={classifyBusy || !selectedFile.type.startsWith('image/')}
-                        className="text-xs px-3 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white font-medium hover:opacity-90 disabled:opacity-40"
-                        title={selectedFile.type.startsWith('image/') ? 'Auto-fill type, name, and expiry from the image' : 'AI classify works on images only (v1.0)'}
+                        className="rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40"
                       >
-                        ✨ {classifyBusy ? 'Classifying…' : 'Auto-classify with AI'}
+                        {classifyBusy ? 'Classifying…' : 'Auto-classify with AI'}
                       </button>
                     </div>
                   )}
                   {classifyHint && (
-                    <p className="mt-2 text-xs text-violet-300 bg-violet-900/20 border border-violet-500/30 rounded px-2 py-1">
+                    <p className="mt-2 rounded border border-violet-500/30 bg-violet-900/20 px-2 py-1 text-xs text-violet-300">
                       {classifyHint}
                     </p>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Issue Date</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-300">Issue Date</label>
                   <input
                     type="date"
                     name="issueDate"
                     value={formData.issueDate}
                     onChange={handleInputChange}
-                    required
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                    className="w-full rounded-lg border border-white/10 bg-slate-700 px-4 py-2 text-white focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Expiry Date</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-300">Expiry Date</label>
                   <input
                     type="date"
                     name="expiryDate"
                     value={formData.expiryDate}
                     onChange={handleInputChange}
-                    required
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Uploaded By</label>
-                  <input
-                    type="text"
-                    name="uploadedBy"
-                    value={formData.uploadedBy}
-                    onChange={handleInputChange}
-                    required
-                    placeholder="John Doe"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full rounded-lg border border-white/10 bg-slate-700 px-4 py-2 text-white focus:border-blue-500 focus:outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Notes</label>
+                <label className="mb-2 block text-sm font-medium text-slate-300">Notes</label>
                 <textarea
                   name="notes"
                   value={formData.notes}
                   onChange={handleInputChange}
-                  placeholder="Additional notes..."
                   rows={3}
-                  className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                  placeholder="Optional context for this document…"
+                  className="w-full rounded-lg border border-white/10 bg-slate-700 px-4 py-2 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
                 />
               </div>
 
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
-                  disabled={uploading || !selectedFile}
-                  className="flex-1 rounded-lg bg-blue-600 text-white font-medium py-2 hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  disabled={uploading || !selectedFile || !formData.entityId}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 py-2 font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {uploading ? 'Uploading…' : 'Upload'}
+                  {replaceTarget ? <Replace className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
+                  {uploading ? 'Saving…' : replaceTarget ? 'Replace & Save' : 'Upload Document'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setShowModal(false); setSelectedFile(null); }}
-                  className="flex-1 rounded-lg bg-slate-700 text-white font-medium py-2 hover:bg-slate-600 transition-colors"
+                  onClick={closeModal}
+                  className="flex-1 rounded-lg bg-slate-700 py-2 font-medium text-white transition-colors hover:bg-slate-600"
                 >
                   Cancel
                 </button>

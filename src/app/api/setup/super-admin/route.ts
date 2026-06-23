@@ -106,11 +106,11 @@ export async function POST(request: NextRequest) {
       role = await prisma.role.create({
         data: {
           id:          crypto.randomUUID(),
-          name:        'Super Admin',
+          name:        'Super Administrator',
           code:        'SUPER_ADMIN',
           tenantId:    tenant.id,
           isSystem:    true,
-          description: 'Full platform-wide administrative access',
+          description: 'Full platform access - all tenants, all modules, all actions',
         },
       });
     }

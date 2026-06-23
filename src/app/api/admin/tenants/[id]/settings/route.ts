@@ -1,33 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { randomUUID } from 'crypto';
+import { requireAdminPermission, resolveTenantBoundary } from '@/lib/admin-policy';
+import { recordAdminChange } from '@/lib/admin-change-history';
+import type { Prisma } from '@prisma/client';
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+type Params = { params: Promise<{ id: string }> };
+type TenantSettingsRow = NonNullable<Awaited<ReturnType<typeof prisma.tenantSettings.findUnique>>>;
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
+export async function GET(req: NextRequest, { params }: Params) {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let settings = await (prisma as any).tenantSettings.findUnique({ where: { tenantId: params.id } });
+    const auth = await requireAdminPermission(req, 'view', 'tenants');
+    if (auth instanceof NextResponse) return auth;
+    const { id } = await params;
+    const tenantId = resolveTenantBoundary(auth.ctx, id);
+    if (tenantId instanceof NextResponse) return tenantId;
+
+    let settings: TenantSettingsRow | Record<string, unknown> | null = await prisma.tenantSettings.findUnique({ where: { tenantId } });
     if (!settings) {
       // Return defaults without creating record yet
       settings = {
-        id: '', createdAt: null, updatedAt: null, tenantId: params.id,
+        id: '', createdAt: null, updatedAt: null, tenantId,
         tripMergingEnabled: false, pickupMatchType: 'DISTANCE',
-        pickupDistanceKm: 7 as any, pickupTimeWindowMin: 30,
+        pickupDistanceKm: 7, pickupTimeWindowMin: 30,
         requireDropoffMatch: true, dropoffMatchType: 'DISTANCE',
-        dropoffDistanceKm: 25 as any, dropoffTimeWindowMin: 30,
-        maxPassengers: 5, travelSpeedKmh: 40 as any,
+        dropoffDistanceKm: 25, dropoffTimeWindowMin: 30,
+        maxPassengers: 5, travelSpeedKmh: 40,
         stopDurationMin: 10, maxPickupDelayMin: 30,
         autoMergeEnabled: false, triggerBeforePickupMin: 30, lookAheadHours: 24,
         autoDispatchEnabled: false, maxDriverAttempts: 3,
-        driverResponseTimeoutMin: 6, dispatchRadius: 10 as any,
+        driverResponseTimeoutMin: 6, dispatchRadius: 10,
         preferNearestDriver: true,
         routeOptimizationEnabled: false, routingEngine: 'GOOGLE_MAPS',
         googleMapsApiKey: null, maxApiCallsPerHour: 500, maxApiCallsPerDay: 5000,
-        roadDistanceMultiplier: 1.5 as any, fallbackToStraightLine: true,
+        roadDistanceMultiplier: 1.5, fallbackToStraightLine: true,
         emailNotificationsEnabled: false, smtpHost: null, smtpPort: '587',
         smtpUser: null, smtpPass: null, smtpFromEmail: null, smtpFromName: null,
         smsNotificationsEnabled: false, smsProvider: null, smsApiKey: null, smsFromNumber: null,
         pushNotificationsEnabled: true, notificationPreferences: null, tripReminderTimingMin: 60,
-      } as any;
+      };
     }
     return NextResponse.json(settings, {
       headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' },
@@ -38,20 +53,42 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   }
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: Params) {
   try {
-    const body = await req.json();
-    const { id: _id, createdAt: _c, tenantId: _t, ...data } = body;
+    const auth = await requireAdminPermission(req, 'edit', 'tenants');
+    if (auth instanceof NextResponse) return auth;
+    const { id } = await params;
+    const tenantId = resolveTenantBoundary(auth.ctx, id);
+    if (tenantId instanceof NextResponse) return tenantId;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const settings = await (prisma as any).tenantSettings.upsert({
-      where:  { tenantId: params.id },
-      create: { id: randomUUID(), tenantId: params.id, ...data },
-      update: { ...data, updatedAt: new Date() },
+    const before = await prisma.tenantSettings.findUnique({ where: { tenantId } });
+    const body = await req.json() as Record<string, unknown>;
+    const data = { ...body };
+    delete data.id;
+    delete data.createdAt;
+    delete data.tenantId;
+
+    const createData = { id: randomUUID(), tenantId, ...data } as Prisma.TenantSettingsUncheckedCreateInput;
+    const updateData = { ...data, updatedAt: new Date() } as Prisma.TenantSettingsUncheckedUpdateInput;
+    const settings = await prisma.tenantSettings.upsert({
+      where:  { tenantId },
+      create: createData,
+      update: updateData,
+    });
+    await recordAdminChange({
+      req,
+      ctx: auth.ctx,
+      tenantId,
+      entityType: 'TenantSettings',
+      entityId: tenantId,
+      action: 'UPDATE',
+      before,
+      after: settings,
+      summary: `Updated tenant settings for ${tenantId}.`,
     });
     return NextResponse.json(settings);
-  } catch (e: any) {
+  } catch (e) {
     console.error('PUT tenant settings error:', e);
-    return NextResponse.json({ error: e?.message ?? 'Failed to save settings' }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(e, 'Failed to save settings') }, { status: 500 });
   }
 }

@@ -363,6 +363,7 @@ export default function PlatformSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showPwModal, setShowPwModal] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
@@ -389,10 +390,15 @@ export default function PlatformSettingsPage() {
     setSaving(true); setError('');
     try {
       const res = await fetch('/api/admin/platform-settings', {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-admin-confirm-action': 'platform-settings.update' },
         body: JSON.stringify(dirty),
       });
-      if (!res.ok) throw new Error('Save failed');
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 428) {
+        setError(`Settings update queued for approval: ${data.approvalRequest?.id ?? 'pending request'}.`);
+        return;
+      }
+      if (!res.ok) throw new Error(data.error ?? 'Save failed');
       setDirty({}); setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch { setError('Failed to save settings'); }
@@ -489,7 +495,7 @@ export default function PlatformSettingsPage() {
                     <p className="text-sm font-medium text-white">Reset All Settings</p>
                     <p className="text-xs text-slate-400 mt-0.5">Restore all platform settings to defaults</p>
                   </div>
-                  <button onClick={() => { if (confirm('Reset all settings to defaults? This cannot be undone.')) load(); }}
+                  <button onClick={() => setShowResetConfirm(true)}
                     className="px-4 py-2 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 text-sm hover:bg-red-500/30 transition-colors">
                     ↺ Reset Defaults
                   </button>
@@ -507,6 +513,20 @@ export default function PlatformSettingsPage() {
       </div>
 
       {showPwModal && <ChangePasswordModal onClose={() => setShowPwModal(false)} />}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-red-500/30 bg-slate-900 shadow-2xl">
+            <div className="px-6 py-5 border-b border-white/10">
+              <h2 className="text-lg font-bold text-white">Reset settings view?</h2>
+              <p className="text-sm text-slate-400 mt-1">This discards unsaved local edits and reloads the current platform settings.</p>
+            </div>
+            <div className="px-6 py-4 flex justify-end gap-2">
+              <button onClick={() => setShowResetConfirm(false)} className="px-4 py-2 rounded-xl text-sm text-slate-300 hover:bg-white/5">Cancel</button>
+              <button onClick={() => { setShowResetConfirm(false); load(); }} className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-sm font-semibold text-white">Reload settings</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

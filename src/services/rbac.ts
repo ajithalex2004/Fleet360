@@ -1,4 +1,5 @@
 import { UserRole } from '@/types/maintenance';
+export { UserRole } from '@/types/maintenance';
 
 // Permission definitions
 export enum Permission {

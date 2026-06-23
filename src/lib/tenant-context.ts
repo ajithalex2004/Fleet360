@@ -3,6 +3,8 @@
  * Provides tenant scoping helpers for multi-tenant SQL queries.
  */
 
+import { normalizeModuleKey } from './module-access-presets';
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface TenantContext {
@@ -93,7 +95,7 @@ export function moduleAccountFilter(modules: string[]): {
   ambulanceEnabled: boolean;
   allModules: boolean;
 } {
-  const set = new Set(modules.map(m => m.toUpperCase()));
+  const set = new Set(modules.map(m => normalizeModuleKey(m).toUpperCase()));
   const allModules = set.size === 0; // empty = no filter = all modules
 
   return {
@@ -101,7 +103,7 @@ export function moduleAccountFilter(modules: string[]): {
     schoolBusEnabled:     allModules || set.has('SCHOOL_BUS'),
     logisticsEnabled:     allModules || set.has('LOGISTICS'),
     leasingEnabled:       allModules || set.has('LEASING'),
-    staffTransportEnabled: allModules || set.has('STAFF_TRANSPORT'),
+    staffTransportEnabled: allModules || set.has('BUS_OPS') || set.has('STAFF_TRANSPORT'),
     ambulanceEnabled:     allModules || set.has('AMBULANCE'),
     allModules,
   };
@@ -115,14 +117,14 @@ export function moduleAccountFilter(modules: string[]): {
  */
 export async function getTenantActiveModules(
   tenantId: string,
-  prisma: { $queryRawUnsafe: (...args: unknown[]) => Promise<unknown[]> }
+  prisma: { $queryRawUnsafe: (query: string, ...values: unknown[]) => unknown }
 ): Promise<string[]> {
-  const rows = await (prisma.$queryRawUnsafe as (sql: string, ...params: unknown[]) => Promise<{ module_code: string }[]>)(
-    `SELECT module_code FROM tenant_modules WHERE tenant_id = $1 AND status = 'ACTIVE'`,
+  const rows = await (prisma.$queryRawUnsafe as (sql: string, ...params: unknown[]) => Promise<{ module: string }[]>)(
+    `SELECT module FROM tenant_modules WHERE tenant_id = $1 AND COALESCE(is_enabled, true) = true`,
     sanitizeTenantId(tenantId)
-  ).catch(() => [] as { module_code: string }[]);
+  ).catch(() => [] as { module: string }[]);
 
-  return rows.map(r => r.module_code);
+  return rows.map(r => normalizeModuleKey(r.module));
 }
 
 // ── Build Full TenantContext ──────────────────────────────────────────────────

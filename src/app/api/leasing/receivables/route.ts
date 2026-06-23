@@ -1,24 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireOperationalContext, requireOperationalPermission } from '@/lib/cross-module-governance';
+import { scopedLeaseContractIds } from '@/lib/leasing-billing-reconciliation';
 
 export async function GET(req: NextRequest) {
   try {
+    const ctx = requireOperationalContext(req, 'leasing', { requestedTenantId: req.nextUrl.searchParams.get('tenantId') });
+    if (ctx instanceof NextResponse) return ctx;
+    const permission = await requireOperationalPermission(ctx, [
+      { module: 'finance', action: 'view', resource: 'leasing_billing' },
+      { module: 'leasing', action: 'view', resource: 'receivables' },
+      { module: 'leasing', action: 'view', resource: '*' },
+    ], { message: 'You do not have access to view Leasing receivables' });
+    if (permission) return permission;
     const { searchParams } = new URL(req.url);
     const lesseeId = searchParams.get('lesseeId');
     const now = new Date();
+    const contractIds = await scopedLeaseContractIds(ctx);
 
     // Get all overdue / pending payments with contract + lessee info
     const payments = await prisma.leasePayment2.findMany({
       where: {
+        contractId: { in: contractIds },
         status: { in: ['PENDING', 'OVERDUE'] },
       },
       include: {
-        contract: {
-          include: {
-            // We join to lessees via a sub-select below
-          },
-          select: { contractNumber: true, lesseeId: true, monthlyRate: true },
-        },
+        contract: { select: { contractNumber: true, lesseeId: true, monthlyRate: true } },
       },
       orderBy: { dueDate: 'asc' },
     });

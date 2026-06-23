@@ -1,11 +1,19 @@
 'use client';
-import { contractToRenewal, toDateInput } from '@/lib/autoFill';
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { BadgeCheck, Clock3, Send, XCircle, TimerReset } from 'lucide-react';
+import RowActionMenu from '@/components/ui/RowActionMenu';
+import SmartDataGridHeader from '@/components/ui/SmartDataGridHeader';
+import { KpiCard, KpiGrid, PageHeader } from '@/components/ui/page-theme';
 
 interface Renewal {
   id: string;
   renewalNo: string;
   originalContractId: string;
+  originalContract?: {
+    contractNumber?: string;
+    endDate?: string;
+    monthlyRate?: number;
+  };
   newStartDate: string;
   newEndDate: string;
   proposedRate: number;
@@ -16,7 +24,14 @@ interface Renewal {
 
 interface Contract {
   id: string;
+  contractNumber: string;
   lessee: string;
+  lesseeId?: string | null;
+}
+
+interface Lessee {
+  id: string;
+  name: string;
 }
 
 interface FormData {
@@ -31,9 +46,22 @@ interface FormData {
 
 export default function RenewalsPage() {
   const [renewals, setRenewals] = useState<Renewal[]>([]);
-  const [filteredRenewals, setFilteredRenewals] = useState<Renewal[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
+  const [lessees, setLessees] = useState<Lessee[]>([]);
   const [statusFilter, setStatusFilter] = useState('All');
+  const [selectedLesseeId, setSelectedLesseeId] = useState('');
+  const [sortKey, setSortKey] = useState<'renewalNo' | 'contract' | 'newStartDate' | 'newEndDate' | 'proposedRate' | 'renewalType' | 'status' | 'customerResponseDate'>('renewalNo');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [columnFilters, setColumnFilters] = useState({
+    renewalNo: '',
+    contract: '',
+    newStartDate: '',
+    newEndDate: '',
+    proposedRate: '',
+    renewalType: 'All',
+    status: 'All',
+    customerResponseDate: '',
+  });
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState<FormData>({
@@ -61,32 +89,92 @@ export default function RenewalsPage() {
     }
   }, []);
 
-  const fetchContracts = useCallback(async () => {
+  const fetchContractsAndLessees = useCallback(async () => {
     try {
-      const response = await fetch('/api/leasing/contracts-v2');
-      if (response.ok) {
-        const data = await response.json();
-        setContracts(data);
+      const [contractsRes, lesseesRes] = await Promise.all([
+        fetch('/api/leasing/contracts-v2'),
+        fetch('/api/leasing/lessees'),
+      ]);
+      if (contractsRes.ok) {
+        const data = await contractsRes.json();
+        setContracts(Array.isArray(data) ? data : []);
+      }
+      if (lesseesRes.ok) {
+        const data = await lesseesRes.json();
+        setLessees(Array.isArray(data) ? data : data.lessees ?? []);
       }
     } catch (error) {
-      console.error('Failed to fetch contracts:', error);
+      console.error('Failed to fetch contracts / lessees:', error);
     }
   }, []);
 
   useEffect(() => {
     fetchRenewals();
-    fetchContracts();
-  }, [fetchRenewals, fetchContracts]);
+    fetchContractsAndLessees();
+  }, [fetchRenewals, fetchContractsAndLessees]);
 
-  useEffect(() => {
-    let filtered = renewals;
+  const displayedRenewals = useMemo(() => {
+    const filtered = renewals.filter((renewal) => {
+      const contractLabel = renewal.originalContract?.contractNumber || renewal.originalContractId;
+      const statusMatch = statusFilter === 'All' || renewal.status === statusFilter;
+      const renewalNoMatch = !columnFilters.renewalNo || renewal.renewalNo.toLowerCase().includes(columnFilters.renewalNo.toLowerCase());
+      const contractMatch = !columnFilters.contract || contractLabel.toLowerCase().includes(columnFilters.contract.toLowerCase());
+      const startMatch = !columnFilters.newStartDate || renewal.newStartDate.includes(columnFilters.newStartDate);
+      const endMatch = !columnFilters.newEndDate || renewal.newEndDate.includes(columnFilters.newEndDate);
+      const rateMatch = !columnFilters.proposedRate || String(renewal.proposedRate).includes(columnFilters.proposedRate);
+      const typeMatch = columnFilters.renewalType === 'All' || renewal.renewalType === columnFilters.renewalType;
+      const inlineStatusMatch = columnFilters.status === 'All' || renewal.status === columnFilters.status;
+      const responseMatch = !columnFilters.customerResponseDate || (renewal.customerResponseDate ?? '').includes(columnFilters.customerResponseDate);
+      return statusMatch && renewalNoMatch && contractMatch && startMatch && endMatch && rateMatch && typeMatch && inlineStatusMatch && responseMatch;
+    });
 
-    if (statusFilter !== 'All') {
-      filtered = filtered.filter((r) => r.status === statusFilter);
+    filtered.sort((left, right) => {
+      const leftContract = left.originalContract?.contractNumber || left.originalContractId;
+      const rightContract = right.originalContract?.contractNumber || right.originalContractId;
+      const leftValue = ({
+        renewalNo: left.renewalNo,
+        contract: leftContract,
+        newStartDate: left.newStartDate,
+        newEndDate: left.newEndDate,
+        proposedRate: left.proposedRate,
+        renewalType: left.renewalType,
+        status: left.status,
+        customerResponseDate: left.customerResponseDate ?? '',
+      })[sortKey];
+      const rightValue = ({
+        renewalNo: right.renewalNo,
+        contract: rightContract,
+        newStartDate: right.newStartDate,
+        newEndDate: right.newEndDate,
+        proposedRate: right.proposedRate,
+        renewalType: right.renewalType,
+        status: right.status,
+        customerResponseDate: right.customerResponseDate ?? '',
+      })[sortKey];
+
+      const comparison =
+        typeof leftValue === 'number' && typeof rightValue === 'number'
+          ? leftValue - rightValue
+          : String(leftValue).localeCompare(String(rightValue));
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+
+    return filtered;
+  }, [columnFilters, renewals, sortDirection, sortKey, statusFilter]);
+
+  const toggleSort = (key: typeof sortKey) => {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+      return;
     }
+    setSortKey(key);
+    setSortDirection('asc');
+  };
 
-    setFilteredRenewals(filtered);
-  }, [statusFilter, renewals]);
+  const filteredContracts = selectedLesseeId
+    ? contracts.filter((contract) => contract.lesseeId === selectedLesseeId)
+    : contracts;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -114,6 +202,7 @@ export default function RenewalsPage() {
           initiatedBy: '',
           notes: '',
         });
+        setSelectedLesseeId('');
         setShowModal(false);
         fetchRenewals();
       }
@@ -136,6 +225,12 @@ export default function RenewalsPage() {
       console.error('Failed to update renewal:', error);
     }
   };
+
+  useEffect(() => {
+    if (formData.originalContractId && !filteredContracts.some((contract) => contract.id === formData.originalContractId)) {
+      setFormData((prev) => ({ ...prev, originalContractId: '' }));
+    }
+  }, [filteredContracts, formData.originalContractId]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -173,42 +268,28 @@ export default function RenewalsPage() {
   return (
     <div className="space-y-8">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Renewals</h1>
-          <p className="text-slate-400">Manage contract renewals and extensions</p>
-        </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90 transition-all"
-        >
-          + Propose Renewal
-        </button>
-      </div>
+      <PageHeader
+        title="Renewals"
+        subtitle="Manage contract renewals and extensions"
+        accent="blue"
+        actions={(
+          <button
+            onClick={() => setShowModal(true)}
+            className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90 transition-all"
+          >
+            + Propose Renewal
+          </button>
+        )}
+      />
 
       {/* Status Pipeline */}
-      <div className="grid grid-cols-5 gap-4">
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm text-center">
-          <div className="text-2xl font-bold text-white">{statusCounts.PROPOSED}</div>
-          <div className="text-xs text-slate-400 mt-2">PROPOSED</div>
-        </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm text-center">
-          <div className="text-2xl font-bold text-blue-400">{statusCounts.SENT_TO_CUSTOMER}</div>
-          <div className="text-xs text-slate-400 mt-2">SENT TO CUSTOMER</div>
-        </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm text-center">
-          <div className="text-2xl font-bold text-emerald-400">{statusCounts.ACCEPTED}</div>
-          <div className="text-xs text-slate-400 mt-2">ACCEPTED</div>
-        </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm text-center">
-          <div className="text-2xl font-bold text-rose-400">{statusCounts.REJECTED}</div>
-          <div className="text-xs text-slate-400 mt-2">REJECTED</div>
-        </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm text-center">
-          <div className="text-2xl font-bold text-amber-400">{statusCounts.EXPIRED}</div>
-          <div className="text-xs text-slate-400 mt-2">EXPIRED</div>
-        </div>
-      </div>
+      <KpiGrid>
+        <KpiCard label="Proposed" value={statusCounts.PROPOSED} accent="slate" icon={Clock3} sub="Draft offers" />
+        <KpiCard label="Sent to Customer" value={statusCounts.SENT_TO_CUSTOMER} accent="blue" icon={Send} sub="Awaiting reply" />
+        <KpiCard label="Accepted" value={statusCounts.ACCEPTED} accent="emerald" icon={BadgeCheck} sub="Ready to execute" />
+        <KpiCard label="Rejected" value={statusCounts.REJECTED} accent="rose" icon={XCircle} sub="Declined offers" />
+        <KpiCard label="Expired" value={statusCounts.EXPIRED} accent="amber" icon={TimerReset} sub="Response window closed" />
+      </KpiGrid>
 
       {/* Filter Bar */}
       <div className="flex gap-4 flex-wrap">
@@ -227,26 +308,70 @@ export default function RenewalsPage() {
       </div>
 
       {/* Renewals Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+      <div className="smart-data-grid-surface p-6 backdrop-blur-sm">
         <table className="w-full">
-          <thead className="bg-slate-800/50">
-            <tr className="border-b border-white/5">
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Renewal No</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Original Contract</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">New Start</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">New End</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Proposed Rate</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Renewal Type</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Status</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Customer Response Date</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Actions</th>
-            </tr>
-          </thead>
+          <SmartDataGridHeader
+            sortKey={sortKey}
+            sortDirection={sortDirection}
+            onSort={(key) => toggleSort(key as typeof sortKey)}
+            columnResizeStorageKey="leasing-renewals-column-widths"
+            columns={[
+              {
+                key: 'renewalNo',
+                label: 'Renewal No',
+                sortable: true,
+                filter: <input value={columnFilters.renewalNo} onChange={(e) => setColumnFilters((prev) => ({ ...prev, renewalNo: e.target.value }))} placeholder="Search..." className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" />,
+              },
+              {
+                key: 'contract',
+                label: 'Original Contract',
+                sortable: true,
+                filter: <input value={columnFilters.contract} onChange={(e) => setColumnFilters((prev) => ({ ...prev, contract: e.target.value }))} placeholder="Search..." className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" />,
+              },
+              {
+                key: 'newStartDate',
+                label: 'New Start',
+                sortable: true,
+                filter: <input value={columnFilters.newStartDate} onChange={(e) => setColumnFilters((prev) => ({ ...prev, newStartDate: e.target.value }))} placeholder="YYYY-MM-DD" className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" />,
+              },
+              {
+                key: 'newEndDate',
+                label: 'New End',
+                sortable: true,
+                filter: <input value={columnFilters.newEndDate} onChange={(e) => setColumnFilters((prev) => ({ ...prev, newEndDate: e.target.value }))} placeholder="YYYY-MM-DD" className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" />,
+              },
+              {
+                key: 'proposedRate',
+                label: 'Proposed Rate',
+                sortable: true,
+                filter: <input value={columnFilters.proposedRate} onChange={(e) => setColumnFilters((prev) => ({ ...prev, proposedRate: e.target.value }))} placeholder="Amount..." className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" />,
+              },
+              {
+                key: 'renewalType',
+                label: 'Renewal Type',
+                sortable: true,
+                filter: <select value={columnFilters.renewalType} onChange={(e) => setColumnFilters((prev) => ({ ...prev, renewalType: e.target.value }))} className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white focus:border-blue-500 focus:outline-none"><option>All</option><option>SAME_TERMS</option><option>REVISED_TERMS</option><option>UPGRADE</option><option>DOWNGRADE</option></select>,
+              },
+              {
+                key: 'status',
+                label: 'Status',
+                sortable: true,
+                filter: <select value={columnFilters.status} onChange={(e) => setColumnFilters((prev) => ({ ...prev, status: e.target.value }))} className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white focus:border-blue-500 focus:outline-none"><option>All</option><option>PROPOSED</option><option>SENT_TO_CUSTOMER</option><option>ACCEPTED</option><option>REJECTED</option><option>EXPIRED</option></select>,
+              },
+              {
+                key: 'customerResponseDate',
+                label: 'Customer Response Date',
+                sortable: true,
+                filter: <input value={columnFilters.customerResponseDate} onChange={(e) => setColumnFilters((prev) => ({ ...prev, customerResponseDate: e.target.value }))} placeholder="YYYY-MM-DD" className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2 text-white placeholder:text-slate-500 focus:border-blue-500 focus:outline-none" />,
+              },
+            ]}
+            actionHeader="Actions"
+          />
           <tbody>
-            {filteredRenewals.map((renewal) => (
+            {displayedRenewals.map((renewal) => (
               <tr key={renewal.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                 <td className="px-6 py-4 text-sm font-medium text-white">{renewal.renewalNo}</td>
-                <td className="px-6 py-4 text-sm text-white">{renewal.originalContractId}</td>
+                <td className="px-6 py-4 text-sm text-white">{renewal.originalContract?.contractNumber || renewal.originalContractId}</td>
                 <td className="px-6 py-4 text-sm text-slate-200">{renewal.newStartDate}</td>
                 <td className="px-6 py-4 text-sm text-slate-200">{renewal.newEndDate}</td>
                 <td className="px-6 py-4 text-sm font-medium text-white">AED {renewal.proposedRate.toLocaleString()}</td>
@@ -259,31 +384,32 @@ export default function RenewalsPage() {
                 <td className="px-6 py-4 text-sm text-slate-200">
                   {renewal.customerResponseDate || '-'}
                 </td>
-                <td className="px-6 py-4 text-sm space-x-2">
-                  {renewal.status === 'PROPOSED' && (
-                    <button
-                      onClick={() => handleStatusChange(renewal.id, 'SENT_TO_CUSTOMER')}
-                      className="text-blue-400 hover:text-blue-300 transition-colors text-xs"
-                    >
-                      Send
-                    </button>
-                  )}
-                  {renewal.status === 'SENT_TO_CUSTOMER' && (
-                    <>
-                      <button
-                        onClick={() => handleStatusChange(renewal.id, 'ACCEPTED')}
-                        className="text-emerald-400 hover:text-emerald-300 transition-colors text-xs"
-                      >
-                        Accept
-                      </button>
-                      <button
-                        onClick={() => handleStatusChange(renewal.id, 'REJECTED')}
-                        className="text-rose-400 hover:text-rose-300 transition-colors text-xs"
-                      >
-                        Reject
-                      </button>
-                    </>
-                  )}
+                <td className="px-6 py-4 text-sm">
+                  <RowActionMenu
+                    actions={[
+                      ...(renewal.status === 'PROPOSED'
+                        ? [
+                            {
+                              label: 'Send to customer',
+                              onSelect: () => handleStatusChange(renewal.id, 'SENT_TO_CUSTOMER'),
+                            },
+                          ]
+                        : []),
+                      ...(renewal.status === 'SENT_TO_CUSTOMER'
+                        ? [
+                            {
+                              label: 'Accept',
+                              onSelect: () => handleStatusChange(renewal.id, 'ACCEPTED'),
+                            },
+                            {
+                              label: 'Reject',
+                              onSelect: () => handleStatusChange(renewal.id, 'REJECTED'),
+                              tone: 'danger' as const,
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
                 </td>
               </tr>
             ))}
@@ -308,6 +434,21 @@ export default function RenewalsPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Customer / Lessee</label>
+                  <select
+                    value={selectedLesseeId}
+                    onChange={(e) => setSelectedLesseeId(e.target.value)}
+                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="">All lessees</option>
+                    {lessees.map((lessee) => (
+                      <option key={lessee.id} value={lessee.id}>
+                        {lessee.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Original Contract</label>
                   <select
                     name="originalContractId"
@@ -317,9 +458,9 @@ export default function RenewalsPage() {
                     className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
                   >
                     <option value="">Select a contract</option>
-                    {contracts.map((contract) => (
+                    {filteredContracts.map((contract) => (
                       <option key={contract.id} value={contract.id}>
-                        {contract.id} - {contract.lessee}
+                        {contract.contractNumber} - {contract.lessee}
                       </option>
                     ))}
                   </select>

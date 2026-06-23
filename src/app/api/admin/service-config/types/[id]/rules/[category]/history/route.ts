@@ -12,9 +12,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth';
+import { authorizeServiceConfig, recordServiceConfigChange, requireServiceConfigApproval, requireServiceConfigPermission } from '@/lib/service-config/auth';
 import {
-  loadRulesHistory, rollbackToVersion,
+  loadRulesForScope, loadRulesHistory, rollbackToVersion,
 } from '@/lib/service-config/rules-schema';
 import { ensureRootScope, getScope } from '@/lib/service-config/scopes-schema';
 import { RULE_CATEGORIES, type RuleCategory } from '@/types/service-rules';
@@ -62,10 +62,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 }
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
-  const auth = authorizeServiceConfig(req);
+  const auth = await requireServiceConfigPermission(req, 'edit');
   if (!auth.ok) return auth.res;
-  const adminCheck = requireAdmin(auth);
-  if (!adminCheck.ok) return adminCheck.res;
   const { id, category } = await params;
   if (!isValidCategory(category)) {
     return NextResponse.json({ ok: false, error: `Unknown category "${category}"` }, { status: 400 });
@@ -81,14 +79,28 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   if (!body.versionId) return NextResponse.json({ ok: false, error: 'versionId is required' }, { status: 400 });
 
   try {
+    const before = await loadRulesForScope(id, category, scopeId);
+    const approval = await requireServiceConfigApproval(req, auth, 'service_config.rules.rollback', {
+      targetType: 'ServiceRules',
+      targetId: id,
+      summary: `Rollback ${category} rules for ${owner.key} at scope ${scopeId.slice(0, 8)} to version ${body.versionId.slice(0, 8)}.`,
+      payload: { category, scopeId, versionId: body.versionId },
+    });
+    if (approval) return approval;
+
     const result = await rollbackToVersion(id, category, scopeId, body.versionId, auth.userId);
     if (!result.ok) return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
 
-    void logAudit({
-      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
-      entityType: 'ServiceRules', entityId: id, entityName: `${owner.key}:${category}`,
-      action: 'UPDATE',
-      details: `Rolled back ${category} rules for ${owner.key} (scope ${scopeId.slice(0, 8)}) to version ${body.versionId.slice(0, 8)}`,
+    await recordServiceConfigChange({
+      req,
+      auth,
+      entityType: 'ServiceRules',
+      entityId: id,
+      entityName: `${owner.key}:${category}`,
+      action: 'ROLLBACK',
+      before,
+      after: result.rules,
+      summary: `Rolled back ${category} rules for ${owner.key} (scope ${scopeId.slice(0, 8)}) to version ${body.versionId.slice(0, 8)}.`,
     });
 
     return NextResponse.json({ ok: true, rules: result.rules });

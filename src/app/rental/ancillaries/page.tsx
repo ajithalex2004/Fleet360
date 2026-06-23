@@ -10,6 +10,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, Plus, Trash2 } from 'lucide-react';
+import ActionDialog from '@/components/ui/ActionDialog';
+import { useRentalMasterData } from '@/hooks/useRentalMasterData';
 
 interface Ancillary {
   id: string;
@@ -64,6 +66,7 @@ const blank = {
 };
 
 export default function AncillariesPage() {
+  const { masterData } = useRentalMasterData();
   const [items, setItems] = useState<Ancillary[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -71,6 +74,11 @@ export default function AncillariesPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [seedBusy, setSeedBusy] = useState(false);
+  const [confirmState, setConfirmState] = useState<null | {
+    mode: 'delete' | 'seed';
+    ancillary?: Ancillary;
+  }>(null);
+  const presets = masterData.ancillaryPresets.length ? masterData.ancillaryPresets : PRESETS;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -110,22 +118,24 @@ export default function AncillariesPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm('Soft-delete this ancillary?')) return;
     const res = await fetch(`/api/rental/ancillaries/${id}`, { method: 'DELETE' });
-    if (res.ok) load();
+    if (res.ok) {
+      setConfirmState(null);
+      load();
+    }
   }
 
   async function seedAll() {
-    if (!confirm(`Seed ${PRESETS.length} standard ancillaries (UAE market)?`)) return;
     setSeedBusy(true);
     try {
-      for (const p of PRESETS) {
+      for (const p of presets) {
         await fetch('/api/rental/ancillaries', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(p),
         });
       }
+      setConfirmState(null);
       load();
     } finally {
       setSeedBusy(false);
@@ -148,7 +158,7 @@ export default function AncillariesPage() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={seedAll}
+            onClick={() => setConfirmState({ mode: 'seed' })}
             disabled={seedBusy || items.length > 0}
             className="px-4 py-2 rounded-xl bg-slate-700 border border-slate-600 text-slate-200 text-sm hover:bg-slate-600 disabled:opacity-40"
             title={items.length > 0 ? 'Catalogue already populated' : 'One-click seed UAE-standard ancillaries'}
@@ -217,7 +227,7 @@ export default function AncillariesPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button onClick={() => remove(a.id)} className="text-rose-400 hover:text-rose-300" title="Soft-delete">
+                    <button onClick={() => setConfirmState({ mode: 'delete', ancillary: a })} className="text-rose-400 hover:text-rose-300" title="Soft-delete">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </td>
@@ -268,6 +278,36 @@ export default function AncillariesPage() {
           </div>
         </div>
       )}
+
+      <ActionDialog
+        open={!!confirmState}
+        title={confirmState?.mode === 'seed' ? 'Seed UAE ancillary standards' : 'Soft-delete ancillary'}
+        description={
+          confirmState?.mode === 'seed'
+            ? 'This will add the standard UAE ancillary catalogue to the current tenant.'
+            : 'This ancillary will be soft-deleted and removed from active booking recommendations.'
+        }
+        details={confirmState?.mode === 'seed'
+          ? [`${presets.length} standard ancillary templates will be created.`]
+          : confirmState?.ancillary
+            ? [
+                `Code: ${confirmState.ancillary.code}`,
+                `Name: ${confirmState.ancillary.nameEn}`,
+                `Pricing: ${confirmState.ancillary.currency} ${Number(confirmState.ancillary.unitPrice).toFixed(2)}`,
+              ]
+            : undefined}
+        tone={confirmState?.mode === 'seed' ? 'warning' : 'danger'}
+        confirmLabel={confirmState?.mode === 'seed' ? 'Seed catalogue' : 'Delete ancillary'}
+        busy={confirmState?.mode === 'seed' ? seedBusy : false}
+        onClose={() => !(confirmState?.mode === 'seed' && seedBusy) && setConfirmState(null)}
+        onConfirm={confirmState
+          ? () => confirmState.mode === 'seed'
+            ? seedAll()
+            : confirmState.ancillary
+              ? remove(confirmState.ancillary.id)
+              : undefined
+          : undefined}
+      />
     </div>
   );
 }

@@ -8,6 +8,13 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import {
+  assertStatusTransition,
+  ensureOperationalTenantColumn,
+  recordOperationalChange,
+  requireOperationalContext,
+} from '@/lib/cross-module-governance';
+import { triggerServiceWorkflow } from '@/lib/runtime-workflows';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -58,9 +65,24 @@ function complianceFlags(d: {
   };
 }
 
-export async function GET(_req: NextRequest, { params }: Params) {
+async function driverBelongsToTenant(id: string, tenantId: string) {
+  await ensureOperationalTenantColumn('drivers');
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT id::text AS id FROM drivers WHERE id::text = $1 AND tenant_id::text = $2 AND deleted_at IS NULL LIMIT 1`,
+    id,
+    tenantId,
+  );
+  return rows.length > 0;
+}
+
+export async function GET(req: NextRequest, { params }: Params) {
   try {
+    const ctx = requireOperationalContext(req, 'drivers');
+    if (ctx instanceof NextResponse) return ctx;
     const { id } = await params;
+    if (!(await driverBelongsToTenant(id, ctx.tenantId))) {
+      return NextResponse.json({ error: 'Driver not found' }, { status: 404 });
+    }
     const driver = await prisma.driver.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -81,8 +103,17 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
+    const ctx = requireOperationalContext(req, 'drivers', { write: true });
+    if (ctx instanceof NextResponse) return ctx;
     const { id } = await params;
     const body   = await req.json();
+    if (!(await driverBelongsToTenant(id, ctx.tenantId))) {
+      return NextResponse.json({ error: 'Driver not found' }, { status: 404 });
+    }
+    const before = await prisma.driver.findUnique({ where: { id } });
+    if (!before) {
+      return NextResponse.json({ error: 'Driver not found' }, { status: 404 });
+    }
 
     // Separate hub fields from operational assignment fields
     // Modules are allowed to update assignedVehicleId (operational assignment)
@@ -128,20 +159,100 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (garageId        !== undefined) data.garageId        = garageId;
     if (assignedVehicleId !== undefined) data.assignedVehicleId = assignedVehicleId;
 
+    const transition = assertStatusTransition('driver', before.status, data.status);
+    if (transition) return transition;
+
     const updated = await prisma.driver.update({ where: { id }, data });
-    return NextResponse.json(serialize({ ...updated, compliance: complianceFlags(updated) }));
+    await recordOperationalChange({
+      req,
+      ctx,
+      entityType: 'Driver',
+      entityId: id,
+      action: data.status !== undefined && data.status !== before.status ? 'STATUS_CHANGE' : 'UPDATE',
+      before,
+      after: updated,
+      summary: `Updated driver ${updated.name ?? updated.licenseNumber ?? id}`,
+    });
+
+    const workflowEvents = [];
+    if (assignedVehicleId !== undefined && assignedVehicleId !== before.assignedVehicleId) {
+      workflowEvents.push(await triggerServiceWorkflow({
+        req,
+        ctx,
+        serviceTypeKey: 'DRIVER_ASSIGNMENT',
+        referenceType: 'Driver',
+        referenceId: id,
+        referenceNumber: updated.licenseNumber ?? id,
+        contextData: {
+          driverId: id,
+          assignedVehicleId: updated.assignedVehicleId,
+          previousAssignedVehicleId: before.assignedVehicleId,
+          status: updated.status,
+        },
+      }));
+    }
+
+    const complianceFieldsTouched = [
+      licenseNumber,
+      licenseExpiry,
+      emiratesId,
+      emiratesIdExpiry,
+      passportNumber,
+      passportExpiry,
+      visaExpiry,
+    ].some(value => value !== undefined);
+
+    if (complianceFieldsTouched) {
+      workflowEvents.push(await triggerServiceWorkflow({
+        req,
+        ctx,
+        serviceTypeKey: 'DRIVER_LICENSE_RENEWAL',
+        referenceType: 'Driver',
+        referenceId: id,
+        referenceNumber: updated.licenseNumber ?? id,
+        contextData: {
+          driverId: id,
+          licenseExpiry: updated.licenseExpiry,
+          emiratesIdExpiry: updated.emiratesIdExpiry,
+          passportExpiry: updated.passportExpiry,
+          visaExpiry: updated.visaExpiry,
+        },
+      }));
+    }
+
+    return NextResponse.json(serialize({
+      ...updated,
+      compliance: complianceFlags(updated),
+      workflowEvents,
+    }));
   } catch (error) {
     console.error('[Driver Hub] PATCH /api/drivers/[id]:', error);
     return NextResponse.json({ error: 'Failed to update driver' }, { status: 500 });
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, { params }: Params) {
   try {
+    const ctx = requireOperationalContext(req, 'drivers', { write: true });
+    if (ctx instanceof NextResponse) return ctx;
     const { id } = await params;
-    await prisma.driver.update({
+    if (!(await driverBelongsToTenant(id, ctx.tenantId))) {
+      return NextResponse.json({ error: 'Driver not found' }, { status: 404 });
+    }
+    const before = await prisma.driver.findUnique({ where: { id } });
+    const updated = await prisma.driver.update({
       where: { id },
       data:  { deletedAt: new Date() },
+    });
+    await recordOperationalChange({
+      req,
+      ctx,
+      entityType: 'Driver',
+      entityId: id,
+      action: 'DELETE',
+      before,
+      after: updated,
+      summary: `Deactivated driver ${updated.name ?? updated.licenseNumber ?? id}`,
     });
     return NextResponse.json({ success: true, message: 'Driver deactivated' });
   } catch (error) {
