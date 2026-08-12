@@ -2339,9 +2339,14 @@ model TripIncident {
   status           String?   @default("OPEN") // OPEN|INVESTIGATING|RESOLVED|CLOSED
   resolvedAt       DateTime? @map("resolved_at") @db.Timestamptz(6)
   resolvedBy       String?   @map("resolved_by")
+  /// Discriminator so this same table can carry incidents from every
+  /// module (bus-ops today; school-bus, fleet, leasing later). Defaults
+  /// to BUS_OPS for the historical trip_incidents rows.
+  moduleSource     String    @default("BUS_OPS") @map("module_source")
 
-  @@map("trip_incidents")
-  @@schema("public")
+  @@index([moduleSource], map: "idx_operations_incidents_module_source")
+  @@map("incidents")
+  @@schema("operations")
 }
 
 /// Operator-defined named zones used by the bus-ops module. First-class

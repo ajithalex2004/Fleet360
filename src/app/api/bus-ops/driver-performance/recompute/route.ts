@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     // Incidents per driver in period.
     const incidentAgg = await prisma.$queryRawUnsafe<Array<{ driver_id: string; incidents: bigint }>>(
       `SELECT driver_id, COUNT(*) AS incidents
-       FROM trip_incidents
+       FROM operations.incidents
        WHERE driver_id IS NOT NULL
          AND incident_date >= $1 AND incident_date <= $2
        GROUP BY driver_id`,

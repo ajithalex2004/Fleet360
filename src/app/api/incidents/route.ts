@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     const incidentNo = `INC-${dateStr}-${rand}`;
 
     const incident = await prisma.$executeRawUnsafe(
-      `INSERT INTO trip_incidents
+      `INSERT INTO operations.incidents
          (id, incident_no, incident_type, severity, status, description, location,
           vehicle_id, driver_id, incident_date, created_at, updated_at)
        VALUES
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     ).catch(async () => {
       // Fallback: try without optional foreign key columns (in case they don't exist)
       return prisma.$executeRawUnsafe(
-        `INSERT INTO trip_incidents
+        `INSERT INTO operations.incidents
            (id, incident_no, incident_type, severity, status, description, location, incident_date, created_at, updated_at)
          VALUES
            (gen_random_uuid(), $1, $2, $3, 'OPEN', $4, $5, $6, NOW(), NOW())`,
@@ -70,17 +70,17 @@ export async function GET() {
       ambulanceAvailable,
       criticalAlerts,
     ] = await Promise.all([
-      // Use trip_incidents table if it exists; fall back gracefully
+      // Use operations.incidents table if it exists; fall back gracefully
       prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
-        `SELECT COUNT(*) as count FROM trip_incidents`,
+        `SELECT COUNT(*) as count FROM operations.incidents`,
       ).catch(zero),
 
       prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
-        `SELECT COUNT(*) as count FROM trip_incidents WHERE status = 'OPEN'`,
+        `SELECT COUNT(*) as count FROM operations.incidents WHERE status = 'OPEN'`,
       ).catch(zero),
 
       prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
-        `SELECT COUNT(*) as count FROM trip_incidents WHERE status = 'RESOLVED' AND DATE(updated_at) = CURRENT_DATE`,
+        `SELECT COUNT(*) as count FROM operations.incidents WHERE status = 'RESOLVED' AND DATE(updated_at) = CURRENT_DATE`,
       ).catch(zero),
 
       prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
@@ -104,7 +104,7 @@ export async function GET() {
     }>>(
       `SELECT id, incident_no, incident_type, severity, status, description,
               incident_date, location, created_at
-       FROM trip_incidents
+       FROM operations.incidents
        ORDER BY incident_date DESC
        LIMIT 20`,
     ).catch(() => [] as Array<{

@@ -45,7 +45,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
       // Try with extended columns, fall back to minimal
       await prisma.$executeRawUnsafe(
-        `UPDATE trip_incidents SET ${setClauses.join(', ')} WHERE id = $1`,
+        `UPDATE operations.incidents SET ${setClauses.join(', ')} WHERE id = $1`,
         ...values
       ).catch(async () => {
         // Minimal columns only
@@ -53,7 +53,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         const minVals: unknown[] = [params.id, status];
         if (status === 'RESOLVED' || status === 'CLOSED') minSet.push('resolved_at = NOW()');
         if (resolutionNotes) { minVals.push(resolutionNotes); minSet.push(`resolution_notes = $${minVals.length}`); }
-        await prisma.$executeRawUnsafe(`UPDATE trip_incidents SET ${minSet.join(', ')} WHERE id = $1`, ...minVals);
+        await prisma.$executeRawUnsafe(`UPDATE operations.incidents SET ${minSet.join(', ')} WHERE id = $1`, ...minVals);
       });
 
       // Auto-add status change note
@@ -89,7 +89,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       if (severity)    { values.push(severity);    setClauses.push(`severity = $${values.length}`); }
       if (description) { values.push(description); setClauses.push(`description = $${values.length}`); }
       if (location)    { values.push(location);    setClauses.push(`location = $${values.length}`); }
-      await prisma.$executeRawUnsafe(`UPDATE trip_incidents SET ${setClauses.join(', ')} WHERE id = $1`, ...values);
+      await prisma.$executeRawUnsafe(`UPDATE operations.incidents SET ${setClauses.join(', ')} WHERE id = $1`, ...values);
       return NextResponse.json({ success: true });
     }
 
@@ -107,7 +107,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
       `SELECT i.*,
               v.plate_number AS vehicle_plate,
               CONCAT(d.first_name, ' ', d.last_name) AS driver_name
-         FROM trip_incidents i
+         FROM operations.incidents i
          LEFT JOIN vehicles v ON v.id = i.vehicle_id
          LEFT JOIN drivers d  ON d.id = i.driver_id
         WHERE i.id = $1 LIMIT 1`,
