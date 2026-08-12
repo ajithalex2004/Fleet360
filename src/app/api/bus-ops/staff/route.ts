@@ -11,13 +11,30 @@ const getStaff = cacheRead(
     routeId: string | null,
     active: string | null,
   ) => {
+    // Post-Task-3: routeId + shiftType live on TransportEnrollment now
+    // (child of the employee). Filter through the relation instead of
+    // the deprecated defaultRouteId column on the parent. `active` gates
+    // on person-level isActive plus, when routeId is provided, on the
+    // enrollment's isActive too.
     return prisma.staffMember.findMany({
       where: {
         deletedAt: null,
-        ...(tenantId   ? { tenantId }             : {}),
+        ...(tenantId   ? { tenantId }              : {}),
         ...(department ? { department }            : {}),
-        ...(routeId    ? { defaultRouteId: routeId } : {}),
         ...(active === 'true' ? { isActive: true } : {}),
+        ...(routeId ? {
+          transportEnrollments: {
+            some: { defaultRouteId: routeId, deletedAt: null,
+                    ...(active === 'true' ? { isActive: true } : {}) },
+          },
+        } : {}),
+      },
+      include: {
+        transportEnrollments: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+          take: 1,   // one active enrollment per employee (partial unique)
+        },
       },
       orderBy: { name: 'asc' },
     });
