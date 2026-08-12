@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
-import { ensureFinanceSourceLedger } from '@/lib/finance-source-ledger';
 import { logAudit } from '@/lib/audit';
+import { upsertFinanceInvoice } from '@/lib/finance/module-ledger';
+import { createDraftJournalEntry } from '@/lib/finance/journal-service';
 import { createHash, randomBytes } from 'crypto';
 
 type JsonRecord = Record<string, unknown>;
@@ -5396,59 +5397,13 @@ export async function prepareFreightFinancialSettlement(args: {
   };
 }
 
+/**
+ * @deprecated No-op. finance_journal_entries and finance_journal_lines are now
+ * managed by Prisma migration 20260809000000_adopt_finance_tables_with_rls.
+ * The tables exist and have RLS applied before the application starts.
+ */
 async function ensureFinanceJournalPostingTables() {
-  await ensureFinanceSourceLedger();
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS finance_journal_entries (
-      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      created_at      TIMESTAMPTZ DEFAULT NOW(),
-      updated_at      TIMESTAMPTZ DEFAULT NOW(),
-      deleted_at      TIMESTAMPTZ,
-      je_number       TEXT UNIQUE NOT NULL,
-      entry_date      DATE NOT NULL,
-      period_year     INTEGER NOT NULL,
-      period_month    INTEGER NOT NULL,
-      narration       TEXT NOT NULL,
-      reference       TEXT,
-      source_type     TEXT DEFAULT 'MANUAL',
-      source_id       TEXT,
-      status          TEXT DEFAULT 'DRAFT',
-      total_debit     NUMERIC(15,2) DEFAULT 0,
-      total_credit    NUMERIC(15,2) DEFAULT 0,
-      is_balanced     BOOLEAN DEFAULT FALSE,
-      reversed_je_id  TEXT,
-      reversal_je_id  TEXT,
-      prepared_by     TEXT,
-      approved_by     TEXT,
-      posted_by       TEXT,
-      approved_at     TIMESTAMPTZ,
-      posted_at       TIMESTAMPTZ,
-      notes           TEXT,
-      currency        TEXT DEFAULT 'AED',
-      tenant_id       TEXT
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS finance_journal_lines (
-      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      created_at      TIMESTAMPTZ DEFAULT NOW(),
-      journal_entry_id TEXT NOT NULL,
-      line_number     INTEGER NOT NULL,
-      account_code    TEXT NOT NULL,
-      account_name    TEXT,
-      description     TEXT,
-      debit_amount    NUMERIC(15,2) DEFAULT 0,
-      credit_amount   NUMERIC(15,2) DEFAULT 0,
-      normal_balance  TEXT DEFAULT 'DEBIT',
-      cost_centre     TEXT,
-      currency        TEXT DEFAULT 'AED'
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_finance_journal_entries_logistics_source
-      ON finance_journal_entries(tenant_id, source_type, source_id)
-      WHERE deleted_at IS NULL
-  `).catch(() => {});
+  // Tables are migration-managed. Nothing to do at runtime.
 }
 
 async function nextFinanceInvoiceNo(tenantId: string, date = new Date()) {
@@ -5467,18 +5422,7 @@ async function nextFinanceInvoiceNo(tenantId: string, date = new Date()) {
   return `${prefix}${String(seq).padStart(5, '0')}-${suffix}`;
 }
 
-async function nextFinanceJournalNo(tenantId: string, date = new Date()) {
-  const ym = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}`;
-  const rows = await prisma.$queryRawUnsafe<Array<{ count: bigint | number | string }>>(
-    `SELECT COUNT(*) AS count
-       FROM finance_journal_entries
-      WHERE tenant_id::text = $1
-        AND je_number LIKE $2`,
-    tenantId,
-    `JE-${ym}-%`,
-  ).catch(() => [{ count: 0 }]);
-  return `JE-${ym}-${String(Number(rows[0]?.count ?? 0) + 1).padStart(5, '0')}`;
-}
+// nextFinanceJournalNo removed — journal-service.ts handles sequencing internally.
 
 function mapFinancePosting(row: LogisticsFinancePostingRow) {
   return {
@@ -5560,66 +5504,9 @@ async function insertFinancePosting(args: {
   return rows[0] ? mapFinancePosting(rows[0]) : null;
 }
 
-async function createFinanceJournalEntry(args: {
-  tenantId: string;
-  narration: string;
-  reference: string;
-  sourceId: string;
-  amount: number;
-  currency: string;
-  preparedBy?: string | null;
-  notes?: string | null;
-  debit: { code: string; name: string; description: string };
-  credit: { code: string; name: string; description: string };
-}) {
-  const entryDate = new Date();
-  const jeNumber = await nextFinanceJournalNo(args.tenantId, entryDate);
-  const [je] = await prisma.$queryRawUnsafe<Array<{ id: string; je_number: string }>>(
-    `INSERT INTO finance_journal_entries (
-       je_number, entry_date, period_year, period_month, narration, reference,
-       source_type, source_id, status, total_debit, total_credit, is_balanced,
-       prepared_by, approved_by, posted_by, approved_at, posted_at, notes, currency, tenant_id
-     ) VALUES (
-       $1,$2::date,$3,$4,$5,$6,
-       'LOGISTICS_SETTLEMENT',$7,'POSTED',$8,$8,true,
-       $9,$9,$9,NOW(),NOW(),$10,$11,$12
-     )
-     RETURNING id::text, je_number`,
-    jeNumber,
-    entryDate.toISOString().slice(0, 10),
-    entryDate.getFullYear(),
-    entryDate.getMonth() + 1,
-    args.narration,
-    args.reference,
-    args.sourceId,
-    args.amount,
-    args.preparedBy ?? 'logistics-settlement-posting',
-    args.notes ?? null,
-    args.currency,
-    args.tenantId,
-  );
-  if (!je) throw new Error(`Failed to create finance journal entry for ${args.reference}`);
-
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO finance_journal_lines
-       (journal_entry_id, line_number, account_code, account_name, description,
-        debit_amount, credit_amount, normal_balance, cost_centre, currency)
-     VALUES
-       ($1,1,$2,$3,$4,$5,0,'DEBIT','LOGISTICS',$6),
-       ($1,2,$7,$8,$9,0,$5,'CREDIT','LOGISTICS',$6)`,
-    je.id,
-    args.debit.code,
-    args.debit.name,
-    args.debit.description,
-    args.amount,
-    args.currency,
-    args.credit.code,
-    args.credit.name,
-    args.credit.description,
-  );
-
-  return { id: je.id, number: je.je_number };
-}
+// createFinanceJournalEntry removed — callers now use createDraftJournalEntry()
+// from @/lib/finance/journal-service, which inserts with status='DRAFT' and
+// delegates approval/posting to PATCH /api/finance/journal-entries/[id].
 
 export async function listLogisticsFinancePostings(args: {
   tenantId: string;
@@ -5770,6 +5657,74 @@ export async function reverseLogisticsFinancePosting(args: {
   return mapFinancePosting(posting);
 }
 
+/**
+ * Aggregate the freight-settlement summary for a tenant.
+ * Returns the most-recent N shipments (by latest posting) with rolling totals:
+ *   - posted count / amount, reversed count, pending count
+ *   Used by /api/logistics/settlements to power the operations finance dashboard.
+ */
+export interface ShipmentFinanceSummaryRow {
+  shipmentOrderId: string;
+  postedCount: number;
+  reversedCount: number;
+  pendingCount: number;
+  postedTotal: number;
+  reversedTotal: number;
+  pendingTotal: number;
+  currency: string;
+  lastPostedAt: string | null;
+}
+
+export async function getShipmentFinanceSummary(args: {
+  tenantId: string;
+  limit: number;
+}): Promise<{ summaries: ShipmentFinanceSummaryRow[] }> {
+  await ensureLogisticsDomainTables();
+  const limit = Math.max(1, Math.min(500, Math.floor(args.limit)));
+  const rows = await prisma.$queryRawUnsafe<
+    Array<{
+      shipment_order_id: string;
+      posted_count: string;
+      reversed_count: string;
+      pending_count: string;
+      posted_total: string;
+      reversed_total: string;
+      pending_total: string;
+      currency: string;
+      last_posted_at: Date | null;
+    }>
+  >(
+    `SELECT shipment_order_id,
+            COUNT(*) FILTER (WHERE status = 'POSTED')   AS posted_count,
+            COUNT(*) FILTER (WHERE status = 'REVERSED') AS reversed_count,
+            COUNT(*) FILTER (WHERE status = 'PENDING')  AS pending_count,
+            COALESCE(SUM(amount) FILTER (WHERE status = 'POSTED'),   0) AS posted_total,
+            COALESCE(SUM(amount) FILTER (WHERE status = 'REVERSED'), 0) AS reversed_total,
+            COALESCE(SUM(amount) FILTER (WHERE status = 'PENDING'),  0) AS pending_total,
+            MAX(currency)                                  AS currency,
+            MAX(created_at)                                AS last_posted_at
+       FROM logistics_finance_postings
+      WHERE tenant_id = $1
+      GROUP BY shipment_order_id
+      ORDER BY MAX(created_at) DESC
+      LIMIT $2`,
+    args.tenantId,
+    limit,
+  );
+  const summaries: ShipmentFinanceSummaryRow[] = rows.map(r => ({
+    shipmentOrderId: r.shipment_order_id,
+    postedCount: Number(r.posted_count),
+    reversedCount: Number(r.reversed_count),
+    pendingCount: Number(r.pending_count),
+    postedTotal: Number(r.posted_total),
+    reversedTotal: Number(r.reversed_total),
+    pendingTotal: Number(r.pending_total),
+    currency: r.currency || 'AED',
+    lastPostedAt: r.last_posted_at ? r.last_posted_at.toISOString() : null,
+  }));
+  return { summaries };
+}
+
 export async function postFreightSettlementToFinance(args: {
   tenantId: string;
   shipmentOrderId: string;
@@ -5898,50 +5853,42 @@ export async function postFreightSettlementToFinance(args: {
         sourceModule: 'LOGISTICS',
         shipmentOrderId: shipment.id,
       }];
-      const [invoice] = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-        `INSERT INTO finance_invoices (
-           invoice_number, client_name, client_email, client_phone,
-           service_type, module, module_source, description,
-           line_items, line_items_json, subtotal, discount_amount, vat_rate,
-           vat_amount, total_amount, paid_amount, currency, issue_date, due_date,
-           payment_status, notes, reference_id, reference_type, created_by, tenant_id,
-           source_entity_type, source_entity_id, source_entity_no,
-           source_customer_id, source_customer_name, source_payload
-         ) VALUES (
-           $1,$2,$3,$4,
-           'LOGISTICS','LOGISTICS','LOGISTICS',$5,
-           $6::jsonb,$6::jsonb,$7,0,0,
-           0,$7,0,$8,CURRENT_DATE,NULL,
-           'SENT',$9,$10::uuid,'LOGISTICS_SHIPMENT',$11,$12,
-           'LOGISTICS_SHIPMENT',$10,$13,
-           $14,$2,$15::jsonb
-         )
-         RETURNING id::text`,
-        invoiceNo,
-        shipment.cargo_owner_name ?? 'Cargo Owner',
-        shipment.cargo_owner_email ?? null,
-        shipment.cargo_owner_phone ?? null,
-        `Logistics freight invoice for ${shipment.shipment_no}`,
-        JSON.stringify(lineItems),
-        amount,
+      // Use the canonical ledger upsert — idempotent on (module_source, reference_type, reference_id).
+      const { financeInvoiceId } = await upsertFinanceInvoice({
+        tenantId:      args.tenantId,
+        moduleSource:  'LOGISTICS',
+        referenceType: 'LOGISTICS_SHIPMENT',
+        referenceId:   shipment.id,
+        invoiceNumber: invoiceNo,
+        clientName:    shipment.cargo_owner_name ?? 'Cargo Owner',
+        clientEmail:   shipment.cargo_owner_email ?? null,
+        clientPhone:   shipment.cargo_owner_phone ?? null,
+        serviceType:   'LOGISTICS',
+        description:   `Logistics freight invoice for ${shipment.shipment_no}`,
+        lineItems,
+        subtotal:      amount,
+        vatAmount:     0,
+        totalAmount:   amount,
         currency,
-        `Created from logistics shipment ${shipment.shipment_no}`,
-        shipment.id,
-        args.actorUserId ?? 'logistics-finance-posting',
-        args.tenantId,
-        shipment.shipment_no,
-        shipment.cargo_owner_customer_id ?? null,
-        jsonParam({
-          source: 'logistics-settlement',
+        paymentStatus: 'SENT',
+        notes:         `Created from logistics shipment ${shipment.shipment_no}`,
+        actor:         args.actorUserId ?? 'logistics-finance-posting',
+        sourceEntityType:   'LOGISTICS_SHIPMENT',
+        sourceEntityId:     shipment.id,
+        sourceEntityNo:     shipment.shipment_no,
+        sourceCustomerId:   shipment.cargo_owner_customer_id ?? null,
+        sourceCustomerName: shipment.cargo_owner_name ?? null,
+        sourcePayload: {
+          source:         'logistics-settlement',
           shipmentOrderId: shipment.id,
-          shipmentNo: shipment.shipment_no,
-          chargeId: customerCharge.id,
+          shipmentNo:      shipment.shipment_no,
+          chargeId:        customerCharge.id,
           route: {
-            origin: shipment.origin_name ?? shipment.origin_address ?? null,
-            destination: shipment.destination_name ?? shipment.destination_address ?? null,
+            origin:      (shipment as any).origin_name      ?? (shipment as any).origin_address      ?? null,
+            destination: (shipment as any).destination_name ?? (shipment as any).destination_address ?? null,
           },
-        }),
-      );
+        },
+      });
       await prisma.$executeRawUnsafe(
         `UPDATE logistics_freight_charges
             SET billing_status = 'POSTED',
@@ -5949,21 +5896,21 @@ export async function postFreightSettlementToFinance(args: {
                 updated_at = NOW()
           WHERE tenant_id = $2
             AND id = $3`,
-        invoice.id,
+        financeInvoiceId,
         args.tenantId,
         customerCharge.id,
       );
       const posting = await insertFinancePosting({
-        tenantId: args.tenantId,
+        tenantId:        args.tenantId,
         shipmentOrderId: args.shipmentOrderId,
-        postingType: 'CUSTOMER_INVOICE',
-        sourceRecordId: customerCharge.id,
-        financeInvoiceId: invoice.id,
+        postingType:     'CUSTOMER_INVOICE',
+        sourceRecordId:  customerCharge.id,
+        financeInvoiceId,
         amount,
         currency,
         metadata: { invoiceNo, shipmentNo: shipment.shipment_no },
       });
-      results.push({ postingType: 'CUSTOMER_INVOICE', mode: 'created', financeInvoiceId: invoice.id, posting });
+      results.push({ postingType: 'CUSTOMER_INVOICE', mode: 'created', financeInvoiceId, posting });
     }
   }
 
@@ -5978,23 +5925,24 @@ export async function postFreightSettlementToFinance(args: {
       results.push({ postingType: 'CARRIER_PAYABLE', mode: 'existing', financeJournalEntryId: existing.financeJournalEntryId });
     } else {
       const amount = numberOrNull(settlement.net_payable_amount) ?? numberOrNull(carrierCharge.total_amount) ?? 0;
-      const je = await createFinanceJournalEntry({
-        tenantId: args.tenantId,
-        narration: `Carrier payable for ${shipment.shipment_no}`,
-        reference: settlement.settlement_no,
-        sourceId: settlement.id,
+      const je = await createDraftJournalEntry({
+        tenantId:   args.tenantId,
+        narration:  `Carrier payable for ${shipment.shipment_no}`,
+        reference:  settlement.settlement_no,
+        sourceType: 'LOGISTICS_SETTLEMENT',
+        sourceId:   settlement.id,
         amount,
-        currency: settlement.currency ?? currency,
+        currency:   settlement.currency ?? currency,
         preparedBy: args.actorUserId,
-        notes: `Carrier settlement ${settlement.settlement_no} for ${settlement.carrier_name ?? settlement.carrier_id}`,
+        notes:      `Carrier settlement ${settlement.settlement_no} for ${settlement.carrier_name ?? settlement.carrier_id}`,
         debit: {
-          code: '5200-LOG',
-          name: 'Logistics Carrier Freight Cost',
+          code:        '5200-LOG',
+          name:        'Logistics Carrier Freight Cost',
           description: `Freight cost for ${shipment.shipment_no}`,
         },
         credit: {
-          code: '2200-LOG',
-          name: 'Carrier Payables',
+          code:        '2200-LOG',
+          name:        'Carrier Payables',
           description: `Carrier payable ${settlement.settlement_no}`,
         },
       });
@@ -6045,23 +5993,24 @@ export async function postFreightSettlementToFinance(args: {
       results.push({ postingType: 'DRIVER_PAYOUT', mode: 'existing', financeJournalEntryId: existing.financeJournalEntryId });
     } else {
       const amount = numberOrNull(driverPayout.net_payable_amount) ?? 0;
-      const je = await createFinanceJournalEntry({
-        tenantId: args.tenantId,
-        narration: `Driver payout for ${shipment.shipment_no}`,
-        reference: driverPayout.payout_no,
-        sourceId: driverPayout.id,
+      const je = await createDraftJournalEntry({
+        tenantId:   args.tenantId,
+        narration:  `Driver payout for ${shipment.shipment_no}`,
+        reference:  driverPayout.payout_no,
+        sourceType: 'LOGISTICS_DRIVER_PAYOUT',
+        sourceId:   driverPayout.id,
         amount,
-        currency: driverPayout.currency ?? currency,
+        currency:   driverPayout.currency ?? currency,
         preparedBy: args.actorUserId,
-        notes: `Driver payout ${driverPayout.payout_no}`,
+        notes:      `Driver payout ${driverPayout.payout_no}`,
         debit: {
-          code: '5250-LOG',
-          name: 'Logistics Driver Payout Cost',
+          code:        '5250-LOG',
+          name:        'Logistics Driver Payout Cost',
           description: `Driver payout cost for ${shipment.shipment_no}`,
         },
         credit: {
-          code: '2210-LOG',
-          name: 'Driver Payables',
+          code:        '2210-LOG',
+          name:        'Driver Payables',
           description: `Driver payout payable ${driverPayout.payout_no}`,
         },
       });
@@ -8164,6 +8113,7 @@ export async function awardCarrierBid(args: {
   actorRole?: string | null;
   actorUserId?: string | null;
   notes?: string | null;
+  dryRun?: boolean;
 }) {
   await ensureLogisticsDomainTables();
   const bidRows = await prisma.$queryRawUnsafe<LogisticsCarrierBidRow[]>(
@@ -8389,4 +8339,321 @@ export async function awardCarrierBid(args: {
     shipment: refreshedShipment,
     settlement,
   };
+}
+
+// ============================================
+// CARRIER APP DEVICE / BROADCAST / SHIPPER / SHIPPING REQUEST STUBS
+// ============================================
+// The endpoints under /api/carrier-portal, /api/driver-app, /api/logistics/carriers,
+// /api/logistics/rfqs/*, /api/logistics/shippers and /api/logistics/shipping-requests
+// were imported by their handlers during this cleanup pass. The full domain
+// implementations live in a follow-up sprint — the API surface is wired and the
+// type-check passes via stub exports below. Each stub throws a clear
+// "not implemented" error at runtime so no caller is silently broken.
+//
+// `LogisticsValidationError` is defined earlier in this file; we re-use it
+// rather than introduce an import-cycle through lib/logistics/errors.
+
+interface CarrierAppDeviceRecord {
+  id: string;
+  deviceId?: string;
+  tenantId: string;
+  carrierId: string;
+  driverId?: string | null;
+  tokenHash: string;
+  expiresAt: string;
+  revokedAt?: string | null;
+}
+
+export async function issueCarrierAppDevice(_input: {
+  tenantId: string;
+  carrierId: string;
+  driverId?: string | null;
+  driverIdValue?: string | null;
+  ttlHours?: number;
+  platform?: string | null;
+  pushToken?: string | null;
+  createdBy?: string | null;
+  metadata?: JsonRecord | null;
+  actorUserId?: string | null;
+}): Promise<{ id: string; token: string; expiresAt: string }> {
+  throw new LogisticsValidationError(['issueCarrierAppDevice is not yet implemented — track Layer 2.5 follow-up.']);
+}
+
+export async function resolveCarrierAppDevice(token: string): Promise<CarrierAppDeviceRecord | null> {
+  // Stub: real implementation verifies the hashed token, returns the device
+  // record (or null if expired/revoked), and runs the TTL check.
+  void token;
+  throw new LogisticsValidationError(['resolveCarrierAppDevice is not yet implemented — track Layer 2.5 follow-up.']);
+}
+
+export interface CarrierPresenceInput {
+  tenantId: string;
+  carrierId: string;
+  driverId?: string | null;
+  online?: boolean;
+  lastSeenAt?: string | null;
+  vehicleId?: string | null;
+  vehicleType?: string | null;
+  availability?: 'AVAILABLE' | 'BUSY' | 'BREAK' | 'OFF_DUTY' | string;
+  lat?: number | null;
+  lng?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  heading?: number | null;
+  speedMps?: number | null;
+  speedKph?: number | null;
+  accuracyM?: number | null;
+  batteryPct?: number | null;
+  metadata?: JsonRecord | null;
+}
+
+export async function upsertCarrierPresence(_input: CarrierPresenceInput): Promise<{ ok: true }> {
+  throw new LogisticsValidationError(['upsertCarrierPresence is not yet implemented — track Layer 2.5 follow-up.']);
+}
+
+interface LoadBroadcastInput {
+  tenantId: string;
+  shipmentOrderId: string;
+  rfqId?: string | null;
+  pickupWindowFrom?: string | null;
+  pickupWindowTo?: string | null;
+  originLat?: number | null;
+  originLng?: number | null;
+  pickupLat?: number | null;
+  pickupLng?: number | null;
+  deliveryLat?: number | null;
+  deliveryLng?: number | null;
+  lat?: number | null;
+  lng?: number | null;
+  radiusKm?: number | null;
+  vehicleTypeRequired?: string | null;
+  vehicleType?: string | null;
+  carrierIds?: string[] | null;
+  amount?: number | null;
+  currency?: string | null;
+  offerId?: string | null;
+  expiresAt?: string | null;
+  createdBy?: string | null;
+  responseDeadlineMin?: number | null;
+  autoAssign?: boolean;
+  baseUrl?: string | null;
+  actorUserId?: string | null;
+  actorRole?: string | null;
+  notes?: string | null;
+}
+
+export async function createLoadBroadcast(_input: LoadBroadcastInput): Promise<{ id: string }> {
+  throw new LogisticsValidationError(['createLoadBroadcast is not yet implemented — track Layer 2.5 follow-up.']);
+}
+
+export async function getActiveLoadBroadcast(
+  _tenantId: string,
+  _shipmentOrderId: string,
+): Promise<{ id: string } | null> {
+  throw new LogisticsValidationError(['getActiveLoadBroadcast is not yet implemented — track Layer 2.5 follow-up.']);
+}
+
+export interface BroadcastAssignInput {
+  tenantId: string;
+  broadcastId?: string | null;
+  offerId?: string | null;
+  shipmentOrderId?: string;
+  carrierId?: string;
+  vehicleId?: string | null;
+  driverId?: string | null;
+  expectedRate?: number | null;
+  currency?: string | null;
+  overrideCompliance?: boolean;
+  overrideReason?: string | null;
+  actorUserId?: string | null;
+  actorRole?: string | null;
+}
+
+export async function assignBroadcast(_input: BroadcastAssignInput): Promise<{ assignmentId: string }> {
+  throw new LogisticsValidationError(['assignBroadcast is not yet implemented — track Layer 2.5 follow-up.']);
+}
+
+export async function findNearestIdleCarriers(_args: {
+  tenantId: string;
+  shipmentOrderId?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  vehicleType?: string | null;
+  limit?: number | null;
+  radiusKm?: number | null;
+  maxStaleSeconds?: number | null;
+  enableComplianceFilter?: boolean;
+}): Promise<Array<{ carrierId: string; carrierName?: string; distanceKm: number; effectiveDistanceKm?: number | null }>> {
+  throw new LogisticsValidationError(['findNearestIdleCarriers is not yet implemented — track Layer 2.5 follow-up.']);
+}
+
+export async function resolveBroadcastOffer(token: string): Promise<{ valid: boolean; offer?: JsonRecord }> {
+  void token;
+  throw new LogisticsValidationError(['resolveBroadcastOffer is not yet implemented — track Layer 2.5 follow-up.']);
+}
+
+export async function respondToBroadcastOffer(
+  _token: string,
+  _action: 'accept' | 'decline',
+): Promise<{ ok: true }> {
+  throw new LogisticsValidationError(['respondToBroadcastOffer is not yet implemented — track Layer 2.5 follow-up.']);
+}
+
+export async function resolveShipmentPickupGeo(
+  _tenantId: string,
+  _shipmentOrderId: string,
+): Promise<{ lat: number; lng: number } | null> {
+  throw new LogisticsValidationError(['resolveShipmentPickupGeo is not yet implemented — track Layer 2.5 follow-up.']);
+}
+
+export interface ShipperOnboardingListFilter {
+  tenantId: string;
+  onboardingStatus?: string | null;
+  complianceStatus?: string | null;
+  search?: string | null;
+  limit: number;
+}
+
+export async function listShipperOnboarding(
+  _filter: ShipperOnboardingListFilter,
+): Promise<{ data: unknown[] }> {
+  throw new LogisticsValidationError(['listShipperOnboarding is not yet implemented — track Layer 2.5 follow-up.']);
+}
+
+export async function getShipperOnboarding(
+  _args: { tenantId: string; customerId: string },
+): Promise<JsonRecord | null> {
+  throw new LogisticsValidationError(['getShipperOnboarding is not yet implemented — track Layer 2.5 follow-up.']);
+}
+
+export async function onboardShipperCustomer(_input: {
+  tenantId: string;
+  nameEn?: string;
+  name?: string;
+  email?: string | null;
+  mobileNumber?: string | null;
+  phone?: string | null;
+  tradeLicense?: string | null;
+  taxRegistrationNumber?: string | null;
+  onboardingStatus?: string | null;
+  complianceStatus?: string | null;
+  creditLimit?: number | null;
+  billingCycle?: string | null;
+  metadata?: JsonRecord | null;
+  actorUserId?: string | null;
+}): Promise<{ customerId: string }> {
+  throw new LogisticsValidationError(['onboardShipperCustomer is not yet implemented — track Layer 2.5 follow-up.']);
+}
+
+export async function updateShipperOnboarding(_args: {
+  tenantId: string;
+  customerId: string;
+  onboardingStatus?: string | null;
+  complianceStatus?: string | null;
+  tradeLicense?: string | null;
+  taxRegistrationNumber?: string | null;
+  creditLimit?: number | null;
+  billingCycle?: string | null;
+  metadata?: JsonRecord | null;
+  actorUserId?: string | null;
+}): Promise<{ ok: true }> {
+  throw new LogisticsValidationError(['updateShipperOnboarding is not yet implemented — track Layer 2.5 follow-up.']);
+}
+
+// ── Shipping requests (demand intake) ───────────────────────────────────────
+export interface ShippingRequestRow {
+  id: string;
+  requestNo?: string;
+  tenantId: string;
+  shipperId: string;
+  shipmentType: string | null;
+  originName: string | null;
+  originAddress: string | null;
+  destinationName: string | null;
+  destinationAddress: string | null;
+  pickupWindowFrom: string | null;
+  pickupWindowTo: string | null;
+  deliveryWindowFrom: string | null;
+  deliveryWindowTo: string | null;
+  requestedVehicleType: string | null;
+  cargoDescription: string | null;
+  cargoWeightKg: number | null;
+  totalWeightKg?: number | null;
+  estimatedStops: number;
+  source?: string | null;
+  notes: string | null;
+  status: string;
+  convertedShipmentOrderId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function listShippingRequests(_args: {
+  tenantId: string;
+  status?: string | null;
+  shipperId?: string | null;
+  search?: string | null;
+  limit: number;
+}): Promise<{ data: ShippingRequestRow[] }> {
+  throw new LogisticsValidationError(['listShippingRequests is not yet implemented — track Layer 2.5 follow-up.']);
+}
+
+export async function getShippingRequest(
+  _args: { tenantId: string; requestId: string },
+): Promise<ShippingRequestRow | null> {
+  throw new LogisticsValidationError(['getShippingRequest is not yet implemented — track Layer 2.5 follow-up.']);
+}
+
+export async function createShippingRequest(_input: {
+  tenantId: string;
+  shipperId: string;
+  createdBy?: string | null;
+  shipmentType?: string | null;
+  originName?: string | null;
+  originAddress?: string | null;
+  destinationName?: string | null;
+  destinationAddress?: string | null;
+  pickupWindowFrom?: string | null;
+  pickupWindowTo?: string | null;
+  deliveryWindowFrom?: string | null;
+  deliveryWindowTo?: string | null;
+  requestedVehicleType?: string | null;
+  cargoDescription?: string | null;
+  goodsDescription?: string | null;
+  cargoWeightKg?: number | null;
+  cargoValueAmount?: number | null;
+  cargoValueCurrency?: string | null;
+  totalWeightKg?: number | null;
+  totalVolumeCbm?: number | null;
+  currency?: string | null;
+  estimatedStops?: number;
+  source?: string | null;
+  notes?: string | null;
+  specialInstructions?: string | null;
+  referenceNo?: string | null;
+  metadata?: JsonRecord | null;
+  actorUserId?: string | null;
+}): Promise<ShippingRequestRow> {
+  throw new LogisticsValidationError(['createShippingRequest is not yet implemented — track Layer 2.5 follow-up.']);
+}
+
+export async function updateShippingRequestStatus(_args: {
+  tenantId: string;
+  requestId: string;
+  status: string;
+  notes?: string | null;
+  reviewNotes?: string | null;
+  actorUserId?: string | null;
+}): Promise<ShippingRequestRow> {
+  throw new LogisticsValidationError(['updateShippingRequestStatus is not yet implemented — track Layer 2.5 follow-up.']);
+}
+
+export async function convertShippingRequest(_args: {
+  tenantId: string;
+  requestId: string;
+  shipmentInput?: JsonRecord;
+  actorUserId?: string | null;
+}): Promise<{ shipmentOrderId: string }> {
+  throw new LogisticsValidationError(['convertShippingRequest is not yet implemented — track Layer 2.5 follow-up.']);
 }

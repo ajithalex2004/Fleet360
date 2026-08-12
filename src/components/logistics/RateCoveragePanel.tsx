@@ -19,6 +19,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { TrendingUp, FileText, AlertTriangle } from 'lucide-react';
 import { Panel } from '@/components/ui/page-theme';
+import { fetchCached } from '@/lib/fetch-cache';
 
 interface CoverageResponse {
   period: { days: number; from: string; to: string };
@@ -36,9 +37,11 @@ export default function RateCoveragePanel() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/logistics/rates/coverage?period=30', { cache: 'no-store' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json() as CoverageResponse;
+        // fetchCached dedupes — if LaneProfitabilityPanel or any sibling
+        // happens to fetch the same URL, they share one network round-trip.
+        const json = await fetchCached<CoverageResponse>(
+          '/api/logistics/rates/coverage?period=30',
+        );
         if (!cancelled) { setData(json); setError(null); }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'fetch failed');

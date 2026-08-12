@@ -66,7 +66,7 @@ export const POST = withAudit(
     // ... validation, mutation, return NextResponse.json(...)
   },
   {
-    entityType: 'LeaseContract',
+    entityType: 'LeaseContract2',
     action: 'CREATE',
     extractEntity: (body) => ({ id: body?.id, name: body?.contractNumber }),
     describe: (_req, body) => `Created contract ${body?.contractNumber}`,

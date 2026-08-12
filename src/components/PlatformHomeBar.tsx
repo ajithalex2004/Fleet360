@@ -1,10 +1,12 @@
 'use client';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { usePermissions } from '@/contexts/PermissionContext';
 import UserSwitcher from '@/components/UserSwitcher';
 import BranchSelector from '@/components/BranchSelector';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import ThemeToggle from '@/components/ThemeToggle';
 
 interface Props {
   moduleName: string;
@@ -12,12 +14,38 @@ interface Props {
   accentColor?: string;
 }
 
+/**
+ * Same hydration-safety trick as PlatformSessionSlot: render a stable
+ * placeholder on SSR + first client render, then swap to UserSwitcher /
+ * "Not signed in" once PermissionProvider has read localStorage.
+ */
+function SessionSlotPlaceholder() {
+  return <div className="w-32 h-9 rounded-full bg-slate-800/60 border border-white/10 animate-pulse" />;
+}
+
+function AuthSlot() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  const { isAuthenticated } = usePermissions();
+
+  if (!mounted) return <SessionSlotPlaceholder />;
+  if (isAuthenticated) return <UserSwitcher />;
+  return (
+    <Link
+      href="/platform"
+      className="text-xs px-3 py-1.5 rounded-full bg-slate-800 border border-white/10 text-slate-400 hover:text-white transition-colors"
+    >
+      Not signed in
+    </Link>
+  );
+}
+
 export default function PlatformHomeBar({
   moduleName,
   moduleIcon = 'M',
   accentColor = 'from-blue-500 to-indigo-600',
 }: Props) {
-  const { user, tenant, isAuthenticated } = usePermissions();
+  const { tenant } = usePermissions();
   const pathname = usePathname();
   const isAgentsPage = pathname?.startsWith('/agents');
 
@@ -62,20 +90,12 @@ export default function PlatformHomeBar({
         )}
       </div>
 
-      {/* Right: language switcher + branch selector + user switcher */}
+      {/* Right: theme + language switcher + branch selector + user switcher */}
       <div className="flex items-center gap-2 flex-shrink-0">
+        <ThemeToggle />
         <LanguageSwitcher />
         <BranchSelector compact />
-        {isAuthenticated ? (
-          <UserSwitcher />
-        ) : (
-          <Link
-            href="/platform"
-            className="text-xs px-3 py-1.5 rounded-full bg-slate-800 border border-white/10 text-slate-400 hover:text-white transition-colors"
-          >
-            Not signed in
-          </Link>
-        )}
+        <AuthSlot />
       </div>
     </div>
   );

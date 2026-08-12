@@ -2,6 +2,12 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+// Default tenant for local dev/test seeds. The multi-tenant layer requires
+// tenantId on every row; this is the placeholder used when no real tenant
+// exists. Production seed flows should resolve a real tenant id from
+// environment or a CLI argument instead.
+const DEFAULT_TENANT_ID = process.env.SEED_TENANT_ID ?? 'dev-tenant';
+
 // Status fields are plain strings in the current schema (not Prisma enums).
 // Mirror the values that src/types/maintenance.ts uses so the seed matches
 // what the rest of the app expects to see.
@@ -19,6 +25,7 @@ async function main() {
         update: {},
         create: {
             id: 'v1',
+            tenantId: DEFAULT_TENANT_ID,
             make: 'Toyota',
             model: 'Hilux',
             type: 'Pickup Truck',
@@ -37,6 +44,7 @@ async function main() {
         update: {},
         create: {
             id: 'v2',
+            tenantId: DEFAULT_TENANT_ID,
             make: 'Nissan',
             model: 'Urvan',
             type: 'Van',
@@ -55,6 +63,7 @@ async function main() {
         update: {},
         create: {
             id: 'v3',
+            tenantId: DEFAULT_TENANT_ID,
             make: 'Ford',
             model: 'Transit',
             type: 'Van',
@@ -74,6 +83,7 @@ async function main() {
         update: {},
         create: {
             id: 'd1',
+            tenantId: DEFAULT_TENANT_ID,
             name: 'Ahmed Al-Farsi',
             licenseNumber: 'UAE-1234567',
             licenseExpiry: new Date('2026-05-10'),
@@ -87,6 +97,7 @@ async function main() {
         update: {},
         create: {
             id: 'd2',
+            tenantId: DEFAULT_TENANT_ID,
             name: 'John Smith',
             licenseNumber: 'UAE-7654321',
             licenseExpiry: new Date('2024-08-22'),
@@ -99,6 +110,7 @@ async function main() {
     const g1 = await prisma.garage.create({
         data: {
             id: 'g1',
+            tenantId: DEFAULT_TENANT_ID,
             name: 'AutoPro Service Center',
             location: 'Al Quoz, Dubai',
             contactPerson: 'Mohammed Ali',
@@ -113,6 +125,7 @@ async function main() {
     const g2 = await prisma.garage.create({
         data: {
             id: 'g2',
+            tenantId: DEFAULT_TENANT_ID,
             name: 'Dynatrade',
             location: 'Nadd Al Hamar, Dubai',
             contactPerson: 'Suresh Kumar',
@@ -128,6 +141,7 @@ async function main() {
     await prisma.maintenanceRequest.create({
         data: {
             id: 'MR#241001',
+            tenantId: DEFAULT_TENANT_ID,
             vehicleId: 'v2',
             driverId: 'd2',
             requestDate: new Date('2024-05-20T09:00:00Z'),
@@ -137,13 +151,13 @@ async function main() {
             estimatedCost: 1500,
             histories: {
                 create: [
-                    { status: STATUS.REQUESTED, date: new Date('2024-05-20T09:00:00Z'), note: 'Request created', actor: 'John Doe (Driver)' },
-                    { status: STATUS.ACCEPTED,  date: new Date('2024-05-20T10:30:00Z'), note: 'Request Accepted', actor: 'Sarah Connor (Fleet Manager)' },
+                    { tenantId: DEFAULT_TENANT_ID, status: STATUS.REQUESTED, date: new Date('2024-05-20T09:00:00Z'), note: 'Request created', actor: 'John Doe (Driver)' },
+                    { tenantId: DEFAULT_TENANT_ID, status: STATUS.ACCEPTED,  date: new Date('2024-05-20T10:30:00Z'), note: 'Request Accepted', actor: 'Sarah Connor (Fleet Manager)' },
                 ],
             },
             comments: {
                 create: [
-                    { author: 'John Smith', text: 'Noise started this morning.' },
+                    { tenantId: DEFAULT_TENANT_ID, author: 'John Smith', text: 'Noise started this morning.' },
                 ],
             },
         },
@@ -152,6 +166,7 @@ async function main() {
     await prisma.maintenanceRequest.create({
         data: {
             id: 'MR#241002',
+            tenantId: DEFAULT_TENANT_ID,
             vehicleId: 'v1',
             driverId: 'd1',
             requestDate: new Date('2024-05-24T14:30:00Z'),

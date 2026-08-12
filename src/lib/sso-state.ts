@@ -29,7 +29,8 @@ function hmac(data: string): string {
 }
 
 function b64url(input: string | Buffer): string {
-  return Buffer.from(input).toString('base64')
+  const buf = typeof input === 'string' ? Buffer.from(input) : input;
+  return buf.toString('base64')
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 

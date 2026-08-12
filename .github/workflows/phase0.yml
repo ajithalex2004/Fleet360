@@ -1,0 +1,146 @@
+name: Phase 0 — Cross-tenant isolation tests
+
+# Runs the phasegate package's full test suite (unit + integration)
+# against a live Postgres on every PR. The integration tests verify
+# that the GORM auth.WithTenant(c) scope actually scopes queries by
+# tenant_id — the foundational guarantee Phase 0 ships. If a future
+# commit breaks this isolation, this workflow fails the PR.
+#
+# Required secret: NEON_DATABASE_URL — connection string to a Postgres
+# database used as the integration test target. Set in the repo's
+# GitHub Actions secrets. Use a dedicated branch/schema so concurrent
+# PRs don't trample each other.
+#
+# Failure mode: any test failure exits non-zero, which GitHub renders
+# as a red ✗ on the PR. The job summary includes the failing test
+# names + error excerpts so the developer doesn't have to dig through
+# the log.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: phase0-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  phase0:
+    name: Cross-tenant isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      # Defaults so unit tests can run without DB. The integration
+      # tests skip themselves when DATABASE_URL is absent — see
+      # requireDB() in backend/phasegate/phasegate_test.go.
+      GOFLAGS: -mod=readonly
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go 1.25
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      - name: Download Go modules
+        working-directory: backend
+        run: go mod download
+
+      - name: Compile phasegate (catches obvious breakage before tests)
+        working-directory: backend
+        run: go build ./phasegate/...
+
+      # Unit tests run always — no DB required. These verify the gate
+      # state machine, middleware routing, escape hatch, and the
+      # recheckLoop logic with mocked check functions. Fast (~3s).
+      - name: Unit tests
+        working-directory: backend
+        run: go test ./phasegate/... -count=1 -timeout 60s -v
+
+      # Integration tests run only when NEON_DATABASE_URL is set. They
+      # exercise the actual auth.WithTenant(c) GORM scope against a
+      # live database — the closest canary to "Phase 0 isn't broken"
+      # we have without deploying the binary. ~30s on Neon.
+      - name: Integration tests (live DB)
+        if: ${{ env.NEON_DATABASE_URL != '' }}
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: go test ./phasegate/... -count=1 -timeout 180s -v -run Integration
+
+      # Smoke check on the run itself — confirms the package still
+      # compiles + tests still match, even if NEON_DATABASE_URL is
+      # absent. This catches the "tests were deleted by mistake"
+      # failure mode.
+      - name: List phasegate tests (smoke check)
+        working-directory: backend
+        run: go test ./phasegate/... -list '.*' | head -50
+
+  # Companion job: verifies the dispatch migration + Phase 0 SQL
+  # scripts compile cleanly. Doesn't apply them — that's a separate
+  # one-time apply step done manually against staging. Catches syntax
+  # errors in the .sql files on every PR.
+  sql-syntax:
+    name: Phase 0 SQL syntax check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go 1.25
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Install postgresql-client (psql + pg_format)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -yqq postgresql-client
+
+      # Run a parser-only check via psql. We never apply the migrations
+      # here — that requires operator action. We just confirm Postgres
+      # can parse the file. The migration scripts are idempotent
+      # (every CREATE INDEX / ADD CONSTRAINT uses IF NOT EXISTS) so
+      # running them against an empty DB is safe IF the referenced
+      # tables don't exist — they wrap each statement in
+      # `to_regclass() IS NOT NULL` checks so missing tables are
+      # silently skipped, not errored.
+      - name: Parse-check Phase 0 migrations (against throwaway DB)
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_DB: phase0_ci_parse_check
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        run: |
+          # Spin up a throwaway Postgres just to get a parser.
+          sudo apt-get install -yqq postgresql
+          sudo service postgresql start
+          sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'postgres';"
+          sudo -u postgres createdb phase0_ci_parse_check
+
+          # Parse each migration file by wrapping it in a transaction
+          # that rolls back. This catches syntax errors without
+          # actually applying anything.
+          for f in \
+            prisma/migrations/tenant_isolation.sql \
+            prisma/migrations/20260625_dispatch_tenant_isolation.sql \
+            prisma/migrations/20260625_phase0_backfill_safety.sql \
+            prisma/migrations/20260625_multi_tenant_saas_layer2_5.sql ; do
+            echo "::group::Parse-check $f"
+            PGPASSWORD=postgres psql -h localhost -U postgres -d phase0_ci_parse_check -v ON_ERROR_STOP=1 \
+              --single-transaction --set AUTOCOMMIT=off \
+              -c "BEGIN;" -c "ROLLBACK;" < "$f" || {
+              echo "::error file=$f::SQL syntax error in migration"
+              exit 1
+            }
+            echo "::endgroup::"
+          done

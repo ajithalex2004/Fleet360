@@ -26,7 +26,9 @@ import Link from 'next/link';
 
 interface QuoteResult {
   matched: boolean;
-  reason: 'matched' | 'no-lane-match' | 'no-active-contract' | 'no-vehicle-match';
+  reason: 'matched' | 'no-lane-match' | 'no-active-contract' | 'no-vehicle-match' | 'spot-estimate' | string;
+  /** True only for a non-contracted spot estimate (distance × rate). */
+  estimate?: boolean;
   contractId: string | null;
   contractNo: string | null;
   currency: string;
@@ -48,18 +50,26 @@ export interface ContractedRateLookupProps {
   customerId?: string | null;
   carrierId?: string | null;
   shipmentDate?: string | null;
+  /** Lane distance in km. When provided, an uncontracted lane gets a non-contracted
+   *  spot estimate (distance × rate) instead of a bare "no contract" message. */
+  distanceKm?: number | null;
   /** Called when the operator clicks "Use this rate". Receives the total + currency. */
   onApply?: (args: { total: number; currency: string; contractId: string; contractNo: string }) => void;
   /** Optional fetch override — defaults to global fetch. Useful for tests. */
   fetchImpl?: typeof fetch;
 }
 
-const REASON_COPY: Record<QuoteResult['reason'], { title: string; detail: string }> = {
+const REASON_COPY: Record<string, { title: string; detail: string }> = {
   'matched':             { title: '',                          detail: '' },
   'no-lane-match':       { title: 'No contract for this lane', detail: 'Add a rate contract or quote manually.' },
   'no-active-contract':  { title: 'No active contract',         detail: 'A contract exists for this lane but is outside its effective window.' },
   'no-vehicle-match':    { title: 'Vehicle type not covered',   detail: 'The lane has a contract but not for this vehicle type.' },
+  'spot-estimate':       { title: 'No contract for this lane', detail: 'Showing an indicative estimate below.' },
 };
+
+// Fallback for any reason the API adds that the UI hasn't catalogued yet — keeps
+// the lookup from throwing on an unknown reason string.
+const REASON_FALLBACK = { title: 'No contracted rate', detail: 'Add a rate contract or quote manually.' };
 
 function fmt(amount: number, currency: string) {
   return `${currency} ${amount.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -97,6 +107,7 @@ export default function ContractedRateLookup(props: ContractedRateLookupProps) {
             customerId: props.customerId ?? null,
             carrierId: props.carrierId ?? null,
             shipmentDate: props.shipmentDate ?? null,
+            distanceKm: props.distanceKm ?? null,
           }),
         });
         if (!res.ok) {
@@ -115,7 +126,7 @@ export default function ContractedRateLookup(props: ContractedRateLookupProps) {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [
     props.origin, props.destination, props.vehicleType, props.serviceLevel,
-    props.customerId, props.carrierId, props.shipmentDate, props.fetchImpl,
+    props.customerId, props.carrierId, props.shipmentDate, props.distanceKm, props.fetchImpl,
   ]);
 
   if (!props.origin?.trim() || !props.destination?.trim()) {
@@ -144,8 +155,34 @@ export default function ContractedRateLookup(props: ContractedRateLookupProps) {
 
   if (!result) return null;
 
+  // Non-contracted spot estimate (distance × rate): show the indicative price,
+  // clearly labelled as NOT a contract, so the operator sees a number without
+  // mistaking it for a managed rate. The "no contract" gap stays visible.
+  if (result.estimate) {
+    return (
+      <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-5 py-4 text-sm">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-sky-300/70">Indicative estimate · no contract</div>
+            <div className="text-sky-200/80 mt-0.5">Distance-based estimate — not a contracted rate.</div>
+          </div>
+          <Link
+            href="/logistics/rate-contracts"
+            className="text-xs font-medium text-sky-300 hover:text-sky-200 whitespace-nowrap"
+          >
+            Add a contract →
+          </Link>
+        </div>
+        <div className="flex justify-between pt-2 border-t border-sky-500/20 font-semibold text-sky-100">
+          <span>Estimated total</span>
+          <span className="font-mono">{fmt(result.total, result.currency)}</span>
+        </div>
+      </div>
+    );
+  }
+
   if (!result.matched) {
-    const copy = REASON_COPY[result.reason];
+    const copy = REASON_COPY[result.reason] ?? REASON_FALLBACK;
     return (
       <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm">
         <div className="flex items-start justify-between gap-3">

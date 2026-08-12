@@ -45,10 +45,40 @@ export default function ModuleGuard({ moduleId, moduleName, moduleIcon = '🔒',
   const isSuperAdmin = user?.roleCode === 'SUPER_ADMIN';
 
   // While loading — show a neutral spinner so nothing flashes
-  if (isLoading || !isAuthenticated) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center px-6">
+        <div className="max-w-md w-full text-center">
+          <div className="w-16 h-16 rounded-2xl bg-slate-800 border border-white/10 flex items-center justify-center text-3xl mx-auto mb-5">
+            {moduleIcon}
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-3">Session required</h1>
+          <p className="text-slate-400 text-sm leading-relaxed mb-7">
+            We could not restore your tenant session for {moduleName ?? moduleId}. Please sign in again or return to the platform home.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link
+              href="/login"
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-medium hover:opacity-90 transition-all"
+            >
+              Sign in
+            </Link>
+            <Link
+              href="/platform"
+              className="px-6 py-2.5 rounded-xl border border-white/10 bg-slate-800/60 text-slate-300 text-sm font-medium hover:border-white/20 hover:text-white transition-all"
+            >
+              Back to Platform
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }

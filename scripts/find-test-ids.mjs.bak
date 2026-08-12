@@ -1,0 +1,9 @@
+// Find an existing vehicle and driver to use in the test
+import pg from 'pg';
+const c = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+await c.connect();
+const v = await c.query(`SELECT id, registration_number FROM vehicles LIMIT 3`);
+const d = await c.query(`SELECT id, name FROM drivers LIMIT 3`);
+console.log('vehicles:', v.rows);
+console.log('drivers:', d.rows);
+await c.end();

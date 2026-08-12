@@ -11,80 +11,56 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { RateLimiter } from '@/lib/rate-limiter';
 import { verifySession } from '@/lib/tenant-session';
+import { proxyToGoBackend } from '@/lib/api-shim';
+import { API_VERSION_HEADER, CURRENT_API_VERSION } from '@/lib/api-version';
+import {
+  PUBLIC_EXACT,
+  PUBLIC_PREFIXES,
+  PROTECTED_UI_PREFIXES,
+} from '@/lib/auth-route-policies';
 
 // ── Rate limiter singleton (module scope = shared across requests) ────────────
 const rateLimiter = new RateLimiter({ windowMs: 60_000, maxRequests: 1_000 });
 
-// Cleanup every 5 minutes to prevent unbounded memory growth
+// Cleanup every 5 minutes to prevent unbounded memory growth.
+//
+// Why the .unref() guard: module-scope setInterval in Next.js Edge middleware
+// keeps a strong reference to the timer, which prevents the Node event loop
+// from exiting cleanly in tests and on hot-reload. Edge runtime doesn't have
+// process.unref, but the Node runtime (used in tests / dev) does. Calling
+// `interval.unref?.()` opts out of keeping the loop alive, so the cleanup
+// tick runs but doesn't pin the process open.
 if (typeof setInterval !== 'undefined') {
-  setInterval(() => rateLimiter.cleanup(), 5 * 60 * 1000);
+  const cleanupInterval = setInterval(() => rateLimiter.cleanup(), 5 * 60 * 1000);
+  // Edge runtime's setInterval doesn't return an object with .unref(); guard
+  // so this stays portable across runtimes.
+  const maybeUnrefable = cleanupInterval as { unref?: () => void };
+  maybeUnrefable.unref?.();
 }
 
 // ── Public routes — bypass auth entirely ─────────────────────────────────────
-const PUBLIC_EXACT: Set<string> = new Set([
-  '/',
-  '/login',
-  '/onboarding',
-  '/api/auth/session',
-  '/api/auth/login',
-  '/api/auth/logout',
-  '/api/auth/forgot-password',
-  '/api/auth/reset-password',
-  '/api/auth/invitation/accept',
-  '/api/auth/sso/initiate',
-  '/api/auth/sso/callback',
-  '/api/branding',
-  '/api/stripe/webhook',
-  '/forgot-password',
-  '/reset-password',
-  '/api/tenants/provision',
-  '/api/tenants/verify-domain',
-  '/api/admin/session',
-  '/api/health',             // DB warm-up probe — no auth needed
-  // /api/auth/me is NOT public — it must receive the injected headers
-]);
-
-const PUBLIC_PREFIXES: string[] = [
-  '/login',
-  '/onboarding/',
-  '/track/',
-  '/api/admin/session',
-  '/api/setup/',      // one-time setup endpoints — protected by SETUP_SECRET, not session
-  '/api/auth/invitation/',  // public lookup by token
-  '/invitation/',           // accept-invitation page
-  // Shipper portal — separate auth domain (shipper-portal-session cookie).
-  // The portal's own requireShipperPortal() guards every protected endpoint;
-  // the middleware just lets traffic through so it can reach them.
-  '/shipper-portal',         // covers /shipper-portal, /shipper-portal/login, /shipper-portal/setup, etc.
-  '/api/shipper-portal/',    // every portal API endpoint enforces its own session
-];
+// Lists imported from src/lib/auth-route-policies.ts. Adding a route?
+// Update the lists there so the architectural test stays in sync.
 
 function isPublicRoute(pathname: string): boolean {
-  if (PUBLIC_EXACT.has(pathname)) return true;
+  if (PUBLIC_EXACT.includes(pathname)) return true;
   return PUBLIC_PREFIXES.some(prefix => pathname.startsWith(prefix));
 }
 
-// ── UI routes that require auth (redirect on failure) ────────────────────────
-const PROTECTED_UI_PREFIXES: string[] = [
-  '/platform',
-  '/fleet',
-  '/rac',
-  '/rental',
-  '/leasing',
-  '/logistics',
-  '/staff-transport',
-  '/school-bus',
-  '/ambulance',
-  '/finance',
-  '/dispatch',
-  '/incidents',
-  '/compliance',
-  '/agents',
-  '/admin',
-];
-
 function isProtectedUiRoute(pathname: string): boolean {
   return PROTECTED_UI_PREFIXES.some(prefix => pathname.startsWith(prefix));
+}
+
+/**
+ * Fail closed for browser document navigations. This protects a newly added
+ * UI page even if its prefix was accidentally omitted from the explicit route
+ * policy. Public pages return before this check; APIs, RSC requests and static
+ * assets retain their existing handling below.
+ */
+function isDocumentNavigation(request: NextRequest): boolean {
+  if (request.headers.get('sec-fetch-dest') === 'document') return true;
+  const accept = request.headers.get('accept') ?? '';
+  return accept.includes('text/html') && !accept.includes('text/x-component');
 }
 
 // ── Middleware ────────────────────────────────────────────────────────────────
@@ -112,7 +88,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     }
 
     // Protected UI routes → redirect to /login
-    if (isProtectedUiRoute(pathname)) {
+    if (isProtectedUiRoute(pathname) || isDocumentNavigation(request)) {
       const url = request.nextUrl.clone();
       url.pathname = '/login';
       url.search = '';
@@ -126,7 +102,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // 4. Rate limiting — per-tenant + per-path
   const rateLimitKey = `${session.tenantId}:${pathname}`;
   const planLimit = RateLimiter.getLimitForPlan(session.plan);
-  const { allowed, remaining, resetMs } = rateLimiter.check(rateLimitKey, planLimit);
+  const { allowed, remaining, resetMs } = await rateLimiter.check(rateLimitKey, planLimit);
 
   if (!allowed) {
     const retryAfterSec = Math.ceil((resetMs - Date.now()) / 1000);
@@ -157,13 +133,35 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   if (session.impersonatedBy) {
     requestHeaders.set('x-impersonated-by', session.impersonatedBy);
   }
+  // ENTERPRISE data residency — propagate to route handlers so they can
+  // call getPrismaForTenant() without an extra DB lookup per request.
+  if (session.dataResidency) {
+    requestHeaders.set('x-data-residency', session.dataResidency);
+  }
 
+  // 5b. Backwards-compat shim — proxy /api/<migrated-module>/* to the
+  // Go backend (/api/v1/<migrated-module>/*). See src/lib/api-shim.ts
+  // for the matching rules. Runs AFTER auth so unauthenticated shim
+  // requests 401 here without a wasted upstream hop.
+  //
+  // Pass the rewritten headers so the upstream gets x-tenant-id / etc.
+  const shim = await proxyToGoBackend(request, requestHeaders);
+  if (shim.proxied && shim.response) {
+    // Surface shim identity + rate-limit info on the response too.
+    shim.response.headers.set('X-RateLimit-Limit',     String(planLimit));
+    shim.response.headers.set('X-RateLimit-Remaining', String(remaining));
+    shim.response.headers.set('X-RateLimit-Reset',     String(Math.ceil(resetMs / 1000)));
+    return shim.response;
+  }
+
+  // 6. Not shimmed — fall through to the Next.js route handler.
   const response = NextResponse.next({ request: { headers: requestHeaders } });
 
-  // Expose rate limit info in response headers
+  // Expose rate limit + API version info in response headers
   response.headers.set('X-RateLimit-Limit',     String(planLimit));
   response.headers.set('X-RateLimit-Remaining', String(remaining));
   response.headers.set('X-RateLimit-Reset',     String(Math.ceil(resetMs / 1000)));
+  response.headers.set(API_VERSION_HEADER,       String(CURRENT_API_VERSION));
 
   return response;
 }

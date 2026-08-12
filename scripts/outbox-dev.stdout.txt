@@ -1,0 +1,3 @@
+[outbox-dev] starting (poll every 2000ms)
+[outbox-dev] DATABASE_URL: set
+[outbox] publisher started, polling every 2000ms

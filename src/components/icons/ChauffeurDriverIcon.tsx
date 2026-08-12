@@ -5,6 +5,10 @@
  * neutral driver-shaped icon so the page (and therefore the production
  * Next.js build) compiles.
  *
+ * Wrapped with React.forwardRef so it satisfies the LucideIcon
+ * (`ForwardRefExoticComponent`) type expected by KpiCard / IconProps
+ * typing in page-theme.
+ *
  * Replace with the real implementation when the design system file is
  * restored.
  */
@@ -14,9 +18,10 @@ interface IconProps extends React.SVGProps<SVGSVGElement> {
   className?: string;
 }
 
-export default function ChauffeurDriverIcon({ className, ...rest }: IconProps) {
-  return (
+const ChauffeurDriverIcon = React.forwardRef<SVGSVGElement, IconProps>(
+  ({ className, ...rest }, ref) => (
     <svg
+      ref={ref}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -35,5 +40,9 @@ export default function ChauffeurDriverIcon({ className, ...rest }: IconProps) {
       <path d="M12 13v8" />
       <path d="M8 17h8" />
     </svg>
-  );
-}
+  ),
+);
+
+ChauffeurDriverIcon.displayName = 'ChauffeurDriverIcon';
+
+export default ChauffeurDriverIcon;

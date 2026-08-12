@@ -1,0 +1,56 @@
+{
+  // Isolated typecheck for the Finance domain.
+  // Run: npm run typecheck:finance
+  //
+  // Covers every file that owns or depends on Finance business logic:
+  //   • Finance API routes            src/app/api/finance/**
+  //   • Billing API routes            src/app/api/billing/**
+  //   • Tenant-branches API routes    src/app/api/tenant-branches/**
+  //   • Finance UI pages              src/app/(dashboard)/finance/**
+  //   • Domain-level lib helpers      src/lib/finance*.ts  (if added later)
+  //
+  // Files outside this list are excluded so Finance type errors are not
+  // hidden by unrelated type noise from other modules.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Override incremental so this config gets its own tsbuildinfo file
+    // and doesn't corrupt the main build cache.
+    "tsBuildInfoFile": ".tsbuildinfo.finance",
+    "noEmit": true
+  },
+  "include": [
+    // Next.js type shims — required for NextRequest / NextResponse etc.
+    "next-env.d.ts",
+    ".next/types/**/*.ts",
+
+    // Finance API routes
+    "src/app/api/finance/**/*.ts",
+    "src/app/api/finance/**/*.tsx",
+
+    // Billing routes (Finance sub-domain)
+    "src/app/api/billing/**/*.ts",
+    "src/app/api/billing/**/*.tsx",
+
+    // Tenant branches (Finance-owned reference data)
+    "src/app/api/tenant-branches/**/*.ts",
+    "src/app/api/tenant-branches/**/*.tsx",
+
+    // Finance UI pages
+    "src/app/(dashboard)/finance/**/*.ts",
+    "src/app/(dashboard)/finance/**/*.tsx",
+
+    // Shared lib files pulled in by Finance routes
+    // (prisma client, rls helpers, audit, redis — needed for type resolution)
+    "src/lib/prisma.ts",
+    "src/lib/rls.ts",
+    "src/lib/audit.ts",
+    "src/lib/redis.ts",
+    "src/lib/finance*.ts",
+    "src/lib/finance*.tsx",
+    "src/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next"
+  ]
+}

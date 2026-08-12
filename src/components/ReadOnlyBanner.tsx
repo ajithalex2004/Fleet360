@@ -3,8 +3,8 @@
  *
  * Usage:
  *   import ReadOnlyBanner from '@/components/ReadOnlyBanner';
- *   const { isReadOnly } = useAccessControl('rac');
- *   {isReadOnly && <ReadOnlyBanner module="rac" />}
+ *   const { isReadOnly } = useAccessControl('rental');
+ *   {isReadOnly && <ReadOnlyBanner module="rental" />}
  */
 
 'use client';

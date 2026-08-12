@@ -31,6 +31,20 @@ const serverSchema = z.object({
 
   SETUP_SECRET: z.string().optional(),
 
+  // Upstash Redis — used for distributed rate limiting and session revocation.
+  // Optional: when absent the app falls back to in-process rate limiting and
+  // logout-only session invalidation (safe for dev, not recommended in prod).
+  UPSTASH_REDIS_REST_URL:   z.string().url().optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
+
+  // Enterprise data-residency regional databases.
+  // Each var points to a separate Neon project for that region.
+  // When absent the app falls back to DATABASE_URL for that region.
+  // Only required if you have ENTERPRISE tenants with that residency set.
+  DATABASE_URL_EU:  z.string().url().optional(),
+  DATABASE_URL_UAE: z.string().url().optional(),
+  DATABASE_URL_US:  z.string().url().optional(),
+
   // Email — at least SMTP_HOST OR SENDGRID_API_KEY required for prod email.
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.string().optional(),

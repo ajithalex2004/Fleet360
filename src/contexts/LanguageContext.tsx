@@ -98,7 +98,6 @@ const translations: Record<string, Record<Language, string>> = {
   'module.reports':      { en: 'Reports',              ar: 'التقارير' },
   'module.approvals':    { en: 'Approvals',            ar: 'الموافقات' },
   'module.bus_ops':      { en: 'Staff Transport',      ar: 'نقل الموظفين' },
-  'module.school_bus':   { en: 'School Bus',           ar: 'حافلة مدرسية' },
   'module.sustainability':{ en: 'Sustainability & ESG', ar: 'الاستدامة والحوكمة' },
 };
 
@@ -181,7 +180,6 @@ const arabicLabels: Record<string, string> = {
   'Vehicle Exchange':       'استبدال المركبة',
   'Vehicle Transfers':      'نقل المركبات',
   'Vehicle Returns':        'إرجاع المركبات',
-  'Remarketing':            'إعادة التسويق',
   'Lessees':                'المستأجرون',
   'Credit Assessment':      'تقييم الائتمان',
   'Workflow & Approvals':   'سير العمل والموافقات',

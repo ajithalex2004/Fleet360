@@ -2,7 +2,7 @@
 // counter shell. Lets the page open even on a flaky cellular connection.
 // API calls are NOT cached — they always go through to the network.
 
-const CACHE_NAME = 'counter-v1';
+const CACHE_NAME = 'counter-v2';
 const SHELL = ['/rental/counter', '/manifest.json'];
 
 self.addEventListener('install', (event) => {
@@ -25,6 +25,10 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   // Never cache API or upload calls.
   if (url.pathname.startsWith('/api/')) return;
+  // Never cache Next.js build assets. Dev chunk URLs are path-stable (not
+  // content-hashed), so a cache-first SW would serve a stale chunk forever —
+  // the "X is not defined" ghost that survives server restarts and hard reloads.
+  if (url.pathname.startsWith('/_next/')) return;
   // Cache shell + same-origin navigations only.
   if (event.request.method !== 'GET') return;
   if (url.origin !== self.location.origin) return;

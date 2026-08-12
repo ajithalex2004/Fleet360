@@ -14,7 +14,7 @@
  * Usage:
  *   export const POST = withAudit(
  *     async (req: NextRequest) => { ... return NextResponse.json(created); },
- *     { entityType: 'LeaseContract', action: 'CREATE',
+ *     { entityType: 'LeaseContract2', action: 'CREATE',
  *       describe: (req, res) => `Created contract ${res?.contractNumber}` },
  *   );
  *

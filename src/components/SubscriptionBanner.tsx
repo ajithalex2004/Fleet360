@@ -1,19 +1,6 @@
 'use client';
 
-/**
- * Sticky banner that surfaces subscription state to tenant admins:
- *
- *  - trialing & ends within 5 days → amber "Trial ends in N days"
- *  - past_due / unpaid              → amber "Payment failed"
- *  - canceled                       → rose  "Subscription canceled — upgrade to continue"
- *
- * No-ops in any other state. Mounted in the root layout. Polls
- * /api/admin/billing on first mount only — webhook updates flow on next
- * navigation.
- */
-
 import { useEffect, useState } from 'react';
-import { Sparkles, AlertTriangle, X } from 'lucide-react';
 
 interface BillingResp {
   billing?: {
@@ -24,7 +11,16 @@ interface BillingResp {
   };
 }
 
+interface Banner {
+  tone: 'amber' | 'rose';
+  title: string;
+  message: string;
+  cta: string;
+}
+
 const DISMISS_KEY = 'xl-sub-banner-dismissed-until';
+const BILLING_CACHE_KEY = 'fleet360-billing-banner-cache-v1';
+const BILLING_CACHE_TTL = 10 * 60 * 1000;
 
 export default function SubscriptionBanner() {
   const [info, setInfo] = useState<BillingResp['billing'] | null>(null);
@@ -37,10 +33,25 @@ export default function SubscriptionBanner() {
       setDismissed(true);
       return;
     }
-    fetch('/api/admin/billing', { cache: 'no-store' })
-      .then(r => r.ok ? r.json() : null)
-      .then((d: BillingResp) => { if (d?.billing) setInfo(d.billing); })
-      .catch(() => {});
+
+    const cached = readCachedBilling();
+    if (cached) setInfo(cached);
+
+    const load = async () => {
+      try {
+        const r = await fetch('/api/admin/billing', { cache: 'force-cache' });
+        if (!r.ok) return;
+        const d = (await r.json()) as BillingResp;
+        if (d?.billing) {
+          writeCachedBilling(d.billing);
+          setInfo(d.billing);
+        }
+      } catch {
+        // Billing banner is advisory; never block page rendering.
+      }
+    };
+
+    return runWhenIdle(load);
   }, []);
 
   if (dismissed || !info) return null;
@@ -48,7 +59,7 @@ export default function SubscriptionBanner() {
   if (!banner) return null;
 
   const dismiss = () => {
-    window.localStorage.setItem(DISMISS_KEY, String(Date.now() + 4 * 60 * 60 * 1000)); // 4 hours
+    window.localStorage.setItem(DISMISS_KEY, String(Date.now() + 4 * 60 * 60 * 1000));
     setDismissed(true);
   };
 
@@ -59,25 +70,61 @@ export default function SubscriptionBanner() {
   return (
     <div className={`sticky top-0 z-[99] w-full ${tone} shadow-lg`}>
       <div className="max-w-7xl mx-auto px-4 py-2 flex items-center gap-3 text-sm">
-        {banner.tone === 'rose'
-          ? <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          : <Sparkles      className="w-4 h-4 flex-shrink-0" />}
+        <span className="inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-black/15 text-[10px] font-bold">
+          {banner.tone === 'rose' ? '!' : '*'}
+        </span>
         <span className="font-semibold">{banner.title}</span>
         <span className="opacity-80 hidden sm:inline">{banner.message}</span>
         <span className="ml-auto" />
-        <a href="/admin/subscription/upgrade"
-          className="bg-black/20 hover:bg-black/30 font-semibold rounded-md px-3 py-1 text-xs">
+        <a
+          href="/admin/subscription/upgrade"
+          className="bg-black/20 hover:bg-black/30 font-semibold rounded-md px-3 py-1 text-xs"
+        >
           {banner.cta}
         </a>
         <button onClick={dismiss} className="hover:bg-black/10 rounded p-1" aria-label="Dismiss">
-          <X className="w-4 h-4" />
+          <span className="inline-flex h-4 w-4 items-center justify-center text-xs font-bold leading-none">x</span>
         </button>
       </div>
     </div>
   );
 }
 
-interface Banner { tone: 'amber' | 'rose'; title: string; message: string; cta: string; }
+function runWhenIdle(fn: () => void) {
+  if (typeof window === 'undefined') return () => {};
+  const idleGlobal = globalThis as IdleGlobals;
+  if (typeof idleGlobal.requestIdleCallback === 'function') {
+    const id = idleGlobal.requestIdleCallback(fn, { timeout: 4000 });
+    return () => idleGlobal.cancelIdleCallback?.(id);
+  }
+  const id = globalThis.setTimeout(fn, 1800);
+  return () => globalThis.clearTimeout(id);
+}
+
+type IdleGlobals = typeof globalThis & {
+  requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
+  cancelIdleCallback?: (handle: number) => void;
+};
+
+function readCachedBilling(): BillingResp['billing'] | null {
+  try {
+    const raw = window.sessionStorage.getItem(BILLING_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { ts?: number; billing?: BillingResp['billing'] | null };
+    if (!parsed.ts || Date.now() - parsed.ts > BILLING_CACHE_TTL) return null;
+    return parsed.billing ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedBilling(billing: BillingResp['billing']) {
+  try {
+    window.sessionStorage.setItem(BILLING_CACHE_KEY, JSON.stringify({ ts: Date.now(), billing }));
+  } catch {
+    // Best-effort cache only.
+  }
+}
 
 function computeBanner(b: NonNullable<BillingResp['billing']>): Banner | null {
   const status = b.subscriptionStatus;
@@ -96,7 +143,7 @@ function computeBanner(b: NonNullable<BillingResp['billing']>): Banner | null {
     return {
       tone: 'rose',
       title: 'Payment failed',
-      message: 'We couldn’t charge your card. Update payment method to keep your subscription active.',
+      message: "We couldn't charge your card. Update payment method to keep your subscription active.",
       cta: 'Update payment',
     };
   }

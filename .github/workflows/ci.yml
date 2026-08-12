@@ -44,6 +44,41 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      # ── Schema-drift guard ────────────────────────────────────────────────
+      # Fails the build if the actual database schema and schema.prisma diverge.
+      #
+      # `prisma migrate diff` compares the schema.prisma data model against the
+      # migrations that would be applied to a fresh database. A non-empty diff
+      # means someone added a column (or table) in a migration file without
+      # updating schema.prisma — exactly the FinanceInvoice / FinancePayment
+      # orphan-column anti-pattern we eliminated in this session.
+      #
+      # --from-migrations: baseline is the full migration history
+      # --to-schema-datamodel: target is the current schema.prisma
+      # --exit-code: exits with code 2 if the diff is non-empty (CI fails)
+      #
+      # This step does NOT need a live database; it compares the migration SQL
+      # history against schema.prisma in-memory using the shadow database logic.
+      # ── Runtime-DDL ratchet ───────────────────────────────────────────────
+      # Blocks any new ensureTable / ensureTables / ensureTableAndSeed /
+      # bootstrap function from entering the codebase.  The 36 pre-existing
+      # violations are in an allowlist inside the script; they fail only if
+      # the count *increases*.  Remove entries from the allowlist as each
+      # file is migrated to a proper Prisma migration.
+      - name: Runtime-DDL guard
+        run: node scripts/check-no-runtime-ddl.mjs
+
+      - name: Schema drift check
+        run: |
+          npx prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema-datamodel prisma/schema.prisma \
+            --shadow-database-url "$DATABASE_URL" \
+            --exit-code
+        # A non-zero exit here means schema.prisma is missing something that
+        # exists in a migration (or vice-versa). The diff is printed to stdout
+        # so the PR author can see exactly what diverged.
+
       - name: Lint
         run: npm run lint
         continue-on-error: true   # TODO(KNOWN-TS-001): re-enforce after pre-existing

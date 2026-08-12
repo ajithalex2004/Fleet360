@@ -99,4 +99,14 @@ next-env.d.ts
 /p.$disconnect())
 /template-c1@0.1.0
 /playwright
+/npx
+/$p
+
+# Local dev / diagnostics scratch (never commit)
+/jdk*.zip
+/netstat.txt
+/final-prebuild.txt
+/prebuild-fail.txt
+/scripts/screen-*.png
+/scripts/sdk-installed.txt
 
