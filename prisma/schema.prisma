@@ -2524,7 +2524,7 @@ model DriverPerformance {
   score          Float?
 
   @@map("driver_performance")
-  @@schema("public")
+  @@schema("workforce")
 }
 
 // ============================================================

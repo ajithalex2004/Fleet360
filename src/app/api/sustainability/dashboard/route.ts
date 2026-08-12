@@ -264,7 +264,7 @@ export async function GET(req: NextRequest) {
   type DpRow = { total_km: string };
   const [dpRow] = await prisma.$queryRawUnsafe<DpRow[]>(
     `SELECT COALESCE(SUM(dp.total_km), 0) AS total_km
-     FROM driver_performance dp
+     FROM workforce.driver_performance dp
      WHERE (dp.period_year * 100 + dp.period_month) >= $1
        AND (dp.period_year * 100 + dp.period_month) <  $2`,
     parseInt(startDate.slice(0, 7).replace('-', '')),
