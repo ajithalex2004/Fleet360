@@ -2098,10 +2098,51 @@ model StaffMember {
   shiftType         String?                 @map("shift_type") // MORNING|EVENING|BOTH
   transportType     String?                 @default("BUS") @map("transport_type") // BUS|TAXI|SELF
   isActive          Boolean?                @default(true) @map("is_active")
-  transportRequests StaffTransportRequest[]
-  pushSubscriptions PushSubscription[]
+  transportRequests    StaffTransportRequest[]
+  pushSubscriptions    PushSubscription[]
+  transportEnrollments TransportEnrollment[]
 
-  @@map("staff_members")
+  // Task 3: moved from public.staff_members → workforce.employees to
+  // separate canonical employee identity (workforce domain) from
+  // transport-specific per-employee prefs (public.transport_enrollments).
+  // Model name kept as StaffMember for backwards compat with existing
+  // code paths that call prisma.staffMember — model-name rename to
+  // Employee is a mechanical follow-up. The transport-specific columns
+  // (defaultRouteId, defaultStopId, shiftType, transportType) remain on
+  // this row for now (deprecated) so existing readers keep working
+  // during the migration window; new code should read them off the
+  // TransportEnrollment child.
+  @@map("employees")
+  @@schema("workforce")
+}
+
+/// TransportEnrollment — per-employee transport-module enrolment.
+/// Splits bus-ops-specific fields off the canonical employee record so
+/// non-transport modules (leasing, fleet, etc.) don't drag around unused
+/// columns. Backfilled from staff_members columns in Task 3 migration.
+model TransportEnrollment {
+  id              String    @id @default(uuid())
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId        String    @map("tenant_id")
+  employeeId      String    @map("employee_id")
+  defaultRouteId  String?   @map("default_route_id")
+  defaultStopId   String?   @map("default_stop_id")
+  defaultStopName String?   @map("default_stop_name")
+  shiftType       String?   @map("shift_type") // MORNING | EVENING | BOTH
+  transportType   String?   @default("BUS") @map("transport_type") // BUS | TAXI | SELF
+  isActive        Boolean   @default(true) @map("is_active")
+  employee        StaffMember @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  // DB has a partial unique WHERE deleted_at IS NULL — declared as index
+  // in Prisma to avoid full-uniqueness conflicts during introspection
+  // (Prisma doesn't yet support WHERE clauses on @@unique).
+  @@index([employeeId], map: "uniq_transport_enrollments_employee")
+  @@index([tenantId],   map: "idx_transport_enrollments_tenant")
+  @@index([defaultRouteId], map: "idx_transport_enrollments_route")
+  @@index([isActive],   map: "idx_transport_enrollments_active")
+  @@map("transport_enrollments")
   @@schema("public")
 }
 

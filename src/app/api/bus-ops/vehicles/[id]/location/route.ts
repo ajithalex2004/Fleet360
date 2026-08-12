@@ -285,7 +285,7 @@ async function notifyApproachingPassengers(scheduleId: string, stopId: string, s
   const passengers = await prisma.$queryRawUnsafe<PassengerRow[]>(
     `SELECT tp.id, tp.employee_name, sm.contact_number, sm.email
        FROM trip_passengers tp
-       LEFT JOIN staff_members sm ON sm.id = tp.staff_member_id
+       LEFT JOIN workforce.employees sm ON sm.id = tp.staff_member_id
       WHERE tp.trip_id = $1
         AND tp.boarding_stop_id = $2
         AND tp.status = 'CONFIRMED'
