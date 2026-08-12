@@ -13,9 +13,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Satellite, RefreshCw } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
-import type { VehiclePosition as MapVehiclePosition } from '@/components/bus-ops/FleetLiveMap';
+import type { VehiclePosition as MapVehiclePosition } from '@/components/shared/FleetLiveMap';
 
-const FleetLiveMap = dynamic(() => import('@/components/bus-ops/FleetLiveMap'), { ssr: false });
+const FleetLiveMap = dynamic(() => import('@/components/shared/FleetLiveMap'), { ssr: false });
 
 interface FleetSummary {
   total: number; online: number; enRoute: number; atStop: number;
