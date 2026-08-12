@@ -2,14 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma }          from '@/lib/prisma';
 import { getEventBus }     from '@/events/event-bus';
 import { TRIP_COMPLETED }  from '@/events/registry';
+import { assertTripTransition, TripTransitionError, type TripScheduleStatus } from '@/lib/bus-ops/state-machines';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const body = await req.json();
     const schedule = await prisma.tripSchedule.findUnique({ where: { id: params.id } });
     if (!schedule) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    if (!['DEPARTED', 'IN_TRANSIT', 'SCHEDULED'].includes(schedule.status ?? '')) {
-      return NextResponse.json({ error: `Cannot complete from status: ${schedule.status}` }, { status: 400 });
+    try {
+      // State machine: only DEPARTED / IN_TRANSIT can COMPLETE. Previously
+      // allowed SCHEDULED too — that skipped no-show marking and audit
+      // trail; blocked now (audit risk closed).
+      assertTripTransition((schedule.status ?? 'SCHEDULED') as TripScheduleStatus, 'COMPLETED');
+    } catch (e) {
+      if (e instanceof TripTransitionError) return NextResponse.json({ error: e.message }, { status: 409 });
+      throw e;
     }
 
     // Find the latest trip log and update it

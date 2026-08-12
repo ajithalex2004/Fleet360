@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma }         from '@/lib/prisma';
 import { getEventBus }    from '@/events/event-bus';
 import { TRIP_DEPARTED }  from '@/events/registry';
+import { assertTripTransition, TripTransitionError, type TripScheduleStatus } from '@/lib/bus-ops/state-machines';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const tenantId = req.headers.get('x-tenant-id');
@@ -10,8 +11,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const body = await req.json();
     const schedule = await prisma.tripSchedule.findFirst({ where: { id: params.id, tenantId } });
     if (!schedule) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    if (!['SCHEDULED'].includes(schedule.status ?? '')) {
-      return NextResponse.json({ error: `Cannot depart from status: ${schedule.status}` }, { status: 400 });
+    try {
+      assertTripTransition((schedule.status ?? 'SCHEDULED') as TripScheduleStatus, 'DEPARTED');
+    } catch (e) {
+      if (e instanceof TripTransitionError) return NextResponse.json({ error: e.message }, { status: 409 });
+      throw e;
     }
 
     // Pre-trip safety check enforcement: a passing check must exist for THIS
