@@ -5153,16 +5153,6 @@ enum TransportRequestStatus {
   @@schema("public")
 }
 
-enum TransportDayType {
-  NORMAL
-  PUBLIC_HOLIDAY
-  COMPANY_HOLIDAY
-  RAMADAN
-  WEEKEND
-  EMERGENCY
-  @@schema("public")
-}
-
 enum BoardingEventType {
   BOARDED
   ALIGHTED
@@ -5238,27 +5228,3 @@ model TransportRequest {
   @@schema("public")
 }
 
-// ── TransportCalendar ─────────────────────────────────────────
-//
-// Tenant-scoped calendar that marks non-standard operating days.
-// The trip generator and scheduler read this table to skip
-// company holidays, adjust Ramadan timings, and flag emergency
-// shutdowns. One row per (tenant, date) — overlapping rules for
-// the same date are not allowed; the caller must resolve
-// conflicts before writing.
-
-model TransportCalendar {
-  id        String           @id @default(uuid())
-  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
-  tenantId  String           @map("tenant_id")
-  date      DateTime         @db.Date
-  type      TransportDayType
-  name      String?
-  notes     String?
-
-  @@unique([tenantId, date], map: "uniq_transport_calendar_tenant_date")
-  @@index([tenantId, date], map: "idx_transport_calendar_tenant_date")
-  @@index([tenantId, type], map: "idx_transport_calendar_tenant_type")
-  @@map("transport_calendar")
-  @@schema("public")
-}
