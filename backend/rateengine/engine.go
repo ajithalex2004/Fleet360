@@ -34,6 +34,11 @@ type Candidate struct {
 	FuelSurchargePct *float64
 	MinCharge        *float64
 
+	// RateBasis is the optional quantity-based pricing rule (per-km / per-kg /
+	// breakpoints), parsed from the contract's metadata JSONB. nil → the
+	// contract prices flat off BaseRate (the default, and back-compatible).
+	RateBasis *RateBasis
+
 	EffectiveFrom *time.Time
 	EffectiveTo   *time.Time
 	Status        string
@@ -50,9 +55,19 @@ type Request struct {
 	VehicleType  *string
 	ServiceLevel *string
 	ShipmentDate time.Time
+
+	// DistanceKm / WeightKg are the shipment quantities a per-km / per-kg basis
+	// prices against. nil when unknown at quote time — a quantity-based contract
+	// then falls back to its flat base_rate (see ComputePrice).
+	DistanceKm *float64
+	WeightKg   *float64
 }
 
-// PricedQuote is the price breakdown for a single contract.
+// PricedQuote is the price breakdown for a single contract. BaseRate is the
+// EFFECTIVE line-haul base actually used — the flat base_rate, or the amount a
+// per-km/per-kg/breakpoint basis computed — so the downstream subtotal/margin
+// math stays a single number regardless of how it was derived. The Rate* fields
+// expose how that base came to be, for the operator's audit trail.
 type PricedQuote struct {
 	BaseRate            float64 `json:"baseRate"`
 	FuelSurchargePct    float64 `json:"fuelSurchargePct"`
@@ -61,6 +76,13 @@ type PricedQuote struct {
 	MinChargeApplied    bool    `json:"minChargeApplied"`
 	Subtotal            float64 `json:"subtotal"`
 	Total               float64 `json:"total"`
+
+	// Rate-basis audit: how BaseRate was derived.
+	RateMode         string  `json:"rateMode"`         // flat | per_km | per_kg
+	RateBasisApplied bool    `json:"rateBasisApplied"` // true when a quantity-based calc set BaseRate
+	RateQuantity     float64 `json:"rateQuantity"`     // distance km or weight kg used (0 for flat)
+	RatePerUnit      float64 `json:"ratePerUnit"`      // effective per-unit rate (0 for flat / flat-tier)
+	RateBasisNote    string  `json:"rateBasisNote,omitempty"`
 }
 
 // Alternate is a runner-up contract surfaced for the operator's audit trail.
@@ -78,6 +100,10 @@ const (
 	ReasonMatched          Reason = "matched"
 	ReasonNoLaneMatch      Reason = "no-lane-match"
 	ReasonNoActiveContract Reason = "no-active-contract"
+	// ReasonSpotEstimate marks a NON-contracted indicative quote produced by
+	// SpotEstimate when no contract matched the lane. Matched stays false so the
+	// shipment still counts as uncontracted in rate-coverage analytics.
+	ReasonSpotEstimate Reason = "spot-estimate"
 )
 
 // DefaultCurrency mirrors the TS DEFAULT_CURRENCY.
@@ -87,6 +113,10 @@ const DefaultCurrency = "AED"
 type Result struct {
 	Matched bool   `json:"matched"`
 	Reason  Reason `json:"reason"`
+	// Estimate is true ONLY for a SpotEstimate result — a non-contracted,
+	// distance×rate indicative price. Consumers should label it as an estimate
+	// and must NOT treat it as a contracted rate (no quotedContractId is set).
+	Estimate bool `json:"estimate"`
 
 	ContractID *string `json:"contractId"`
 	ContractNo *string `json:"contractNo"`
@@ -164,19 +194,56 @@ func IsActiveOn(c Candidate, date time.Time) bool {
 	return true
 }
 
-// ComputePrice applies the base + fuel-surcharge + min-charge-floor formula,
-// rounding money to 2 dp. Mirrors computePrice in the TS.
-func ComputePrice(baseRate float64, fuelPct, minCharge *float64) PricedQuote {
-	base := max0(baseRate)
+// PriceInput bundles everything ComputePrice needs: the contract's flat
+// base_rate (also the fallback when a quantity-based basis can't price), an
+// optional RateBasis (per-km / per-kg / breakpoints), the fuel-surcharge and
+// min-charge terms, and the shipment quantities a basis prices against.
+type PriceInput struct {
+	BaseRate   float64
+	RateBasis  *RateBasis
+	FuelPct    *float64
+	MinCharge  *float64
+	DistanceKm *float64
+	WeightKg   *float64
+}
+
+// ComputePrice derives the line-haul base — flat, or via the rate basis — then
+// applies the fuel surcharge and the min-charge floor, rounding money to 2 dp.
+// Mirrors computePrice in the TS, extended with the rate-basis dimension.
+//
+// When a per-km/per-kg basis can't price (missing or zero quantity), it falls
+// back to the flat base_rate and records that in RateBasisNote, so the miss is
+// visible in the quote audit rather than silently producing a 0 base.
+func ComputePrice(in PriceInput) PricedQuote {
+	base := max0(in.BaseRate)
+	rateMode := string(RateFlat)
+	basisApplied := false
+	var rateQty, ratePerUnit float64
+	rateNote := ""
+
+	if in.RateBasis != nil && in.RateBasis.Mode != "" && in.RateBasis.Mode != RateFlat {
+		rateMode = string(in.RateBasis.Mode)
+		res := in.RateBasis.Evaluate(in.DistanceKm, in.WeightKg)
+		if res.Applied {
+			base = res.Base
+			basisApplied = true
+			rateQty = res.Quantity
+			ratePerUnit = res.RatePerUnit
+			rateNote = res.Note
+		} else {
+			rateNote = res.Note + " → using flat base_rate " + numStr(base)
+		}
+	}
+
 	pct := 0.0
-	if fuelPct != nil {
-		pct = max0(*fuelPct)
+	if in.FuelPct != nil {
+		pct = max0(*in.FuelPct)
 	}
 	fuelAmt := round2(base * pct / 100)
 	subtotal := round2(base + fuelAmt)
 	mc := 0.0
-	if minCharge != nil {
-		mc = max0(*minCharge)
+	if in.MinCharge != nil {
+		mc = max0(*in.MinCharge)
 	}
 	total := subtotal
 	if mc > total {
@@ -190,6 +257,11 @@ func ComputePrice(baseRate float64, fuelPct, minCharge *float64) PricedQuote {
 		MinChargeApplied:    total > subtotal,
 		Subtotal:            subtotal,
 		Total:               round2(total),
+		RateMode:            rateMode,
+		RateBasisApplied:    basisApplied,
+		RateQuantity:        rateQty,
+		RatePerUnit:         ratePerUnit,
+		RateBasisNote:       rateNote,
 	}
 }
 
@@ -245,7 +317,14 @@ func Quote(candidates []Candidate, r Request) Result {
 	})
 
 	win := ranked[0]
-	price := ComputePrice(win.c.BaseRate, win.c.FuelSurchargePct, win.c.MinCharge)
+	price := ComputePrice(PriceInput{
+		BaseRate:   win.c.BaseRate,
+		RateBasis:  win.c.RateBasis,
+		FuelPct:    win.c.FuelSurchargePct,
+		MinCharge:  win.c.MinCharge,
+		DistanceKm: r.DistanceKm,
+		WeightKg:   r.WeightKg,
+	})
 
 	currency := win.c.Currency
 	if currency == "" {
@@ -275,6 +354,45 @@ func Quote(candidates []Candidate, r Request) Result {
 		AccessorialRules: win.c.AccessorialRules,
 		Alternates:       alts,
 	}
+}
+
+// SpotEstimate produces a NON-contracted indicative quote — perKmRate ×
+// DistanceKm, with the optional min-charge floor — for a lane that Quote could
+// not price from any contract. It is the graceful alternative to dead-ending on
+// ReasonNoLaneMatch / ReasonNoActiveContract: the operator always sees a number.
+//
+// Crucially it is NOT a contract match: Matched is false, ContractID/No are nil,
+// Estimate is true, and Reason is ReasonSpotEstimate. Keeping Matched false means
+// rate-coverage analytics still count the shipment as uncontracted, so the gap
+// the rate team needs to close stays visible — the estimate informs the operator
+// without masking the missing contract.
+//
+// Returns ok=false (and a zero Result) when it can't price — a non-positive
+// perKmRate or a missing/non-positive DistanceKm — so the caller can fall back
+// to the original no-match result unchanged.
+func SpotEstimate(r Request, perKmRate float64, minCharge *float64) (Result, bool) {
+	if perKmRate <= 0 || r.DistanceKm == nil || *r.DistanceKm <= 0 {
+		return Result{}, false
+	}
+	// Reuse the per-km rate basis so the spot math is identical to a per_km
+	// contract — distance×rate, then the shared fuel/min-charge pipeline.
+	price := ComputePrice(PriceInput{
+		RateBasis:  &RateBasis{Mode: RatePerKm, RatePerUnit: perKmRate},
+		MinCharge:  minCharge,
+		DistanceKm: r.DistanceKm,
+	})
+	if !price.RateBasisApplied {
+		// Defensive: the basis didn't price (shouldn't happen given the guards).
+		return Result{}, false
+	}
+	return Result{
+		Matched:     false,
+		Reason:      ReasonSpotEstimate,
+		Estimate:    true,
+		Currency:    DefaultCurrency,
+		PricedQuote: price,
+		Alternates:  []Alternate{},
+	}, true
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────

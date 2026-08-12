@@ -15,18 +15,23 @@ package handlers
 //   - src/lib/logistics/eta-notifier.ts                        (recompute + notify)
 //   - src/lib/logistics/geofence-service.ts                    (geofence raise)
 //
-// DEFERRED — notification sends. The Next.js services send SMS/email (Twilio +
-// SMTP) on a material ETA shift and on route DEVIATION. The Go backend has no
-// SMS/email port yet, so this handler computes the notify DECISION and raises
-// the exception row, but does NOT send. The response carries the decision and a
-// `notificationsDeferred: true` flag so callers (and the eventual cutover) can
-// see exactly what would have been sent. This is intentional for the
-// strangler/dual-run window: the old route still owns the actual sends until an
-// SMS/email port lands in a later increment.
+// NOTIFICATIONS (L4d). On a material ETA shift this handler now SENDS the
+// customer SMS/email via the Go notify package (Twilio + SendGrid, port of
+// src/lib/{sms,email}.ts), deduped by lastNotifiedEtaAt exactly as the TS
+// eta-notifier — so it fires on a genuine ETA move, not on every GPS tick. The
+// send is best-effort (a provider error never fails the ingest) and a no-op when
+// the provider env isn't configured. Set LOGISTICS_NOTIFICATIONS_DISABLED=1 to
+// compute the decision but suppress all sends. The response reports the decision
+// plus which channels delivered (notificationsDeferred is now always false).
+//
+// Route-DEVIATION SMS/email is still NOT sent (the geofence path only raises an
+// exception row); wiring a deviation alert is a follow-up.
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -37,6 +42,7 @@ import (
 	"fleet360-backend/geo"
 	"fleet360-backend/geofence"
 	"fleet360-backend/models"
+	"fleet360-backend/notify"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -478,10 +484,10 @@ type trackingIngestRequest struct {
 // best-effort, recomputes the ETA and evaluates geofences. Port of
 // src/app/api/logistics/shipments/[id]/tracking/route.ts.
 //
-// The ETA/geofence steps never fail the ingest: a flaky predictor or a slow
-// exception insert can't lose a GPS point. SMS/email sends are deferred (see
-// the file header) — the response reports the notify decision and how many
-// exception rows were raised, with notificationsDeferred=true.
+// The ETA/geofence steps never fail the ingest: a flaky predictor, a slow
+// notification send, or a slow exception insert can't lose a GPS point — every
+// side effect is best-effort. The response reports the notify decision, which
+// channels delivered, and how many exception rows were raised.
 func IngestLogisticsTracking(c *gin.Context) {
 	tid := requireTenant(c)
 	if tid == "" {
@@ -540,8 +546,8 @@ func IngestLogisticsTracking(c *gin.Context) {
 		return
 	}
 
-	// 2) Recompute ETA (best-effort).
-	prediction, decision := recomputeShipmentEta(c, tid, shipmentID, &ship)
+	// 2) Recompute ETA + notify the customer when it shifts (best-effort).
+	prediction, decision, notified := recomputeShipmentEta(c, tid, shipmentID, &ship)
 
 	// 3) Evaluate geofences (best-effort).
 	events, raised := evaluateShipmentGeofences(c, tid, shipmentID, &ship)
@@ -551,9 +557,10 @@ func IngestLogisticsTracking(c *gin.Context) {
 		"trackingEventId":       ev.ID,
 		"eta":                   prediction,
 		"notifyDecision":        decision,
-		"notified":              false, // sends deferred to a later increment
+		"notified":              notified.Notified,
 		"notifyReason":          decision.Reason,
-		"notificationsDeferred": true,
+		"channels":              gin.H{"email": notified.Channels.Email, "sms": notified.Channels.SMS},
+		"notificationsDeferred": false,
 		"geofenceEvents":        events,
 		"alertsRaised":          raised,
 	})
@@ -565,7 +572,7 @@ func IngestLogisticsTracking(c *gin.Context) {
 // prediction plus the notify decision. Port of recomputeShipmentEta in
 // eta-notifier.ts. Best-effort: any DB error is swallowed (the ingest already
 // succeeded), but the prediction is still returned for the response.
-func recomputeShipmentEta(c *gin.Context, tid, shipmentID string, ship *models.LogisticsShipmentOrder) (etapredict.Prediction, etapredict.NotifyDecision) {
+func recomputeShipmentEta(c *gin.Context, tid, shipmentID string, ship *models.LogisticsShipmentOrder) (etapredict.Prediction, etapredict.NotifyDecision, etaNotifyOutcome) {
 	now := time.Now()
 
 	// Destination = coords of the last DELIVERY stop (by sequence_no).
@@ -642,11 +649,67 @@ func recomputeShipmentEta(c *gin.Context, tid, shipmentID string, ship *models.L
 		}
 	}
 
-	// Decide (but don't send — deferred). lastNotifiedEtaAt comes from shipment
-	// metadata; since we don't send, we don't update it either, so the decision
-	// reflects what a notifier WOULD do.
+	// Decide, then send (best-effort). lastNotifiedEtaAt comes from shipment
+	// metadata; we update it only when we actually notify, so the next recompute
+	// compares against what the customer was last told. Port of the decide+send
+	// tail of recomputeShipmentEta in eta-notifier.ts.
 	decision := etapredict.DecideNotify(prediction, metaTimePtr(ship.Metadata, "lastNotifiedEtaAt"), 0)
-	return prediction, decision
+
+	var outcome etaNotifyOutcome
+	if decision.Notify && prediction.EtaAt != nil && !notificationsDisabled() {
+		outcome.Notified = true
+		shipNo := ship.ShipmentNo
+		if shipNo == "" {
+			shipNo = shipmentID
+			if len(shipmentID) >= 8 {
+				shipNo = shipmentID[:8]
+			}
+		}
+		// Decouple the external send from the client request so a disconnect
+		// can't cancel an in-flight notification mid-send.
+		sendCtx := context.Background()
+
+		if ship.CargoOwnerEmail != nil && *ship.CargoOwnerEmail != "" {
+			subject, text, html := etapredict.FormatEtaEmail(shipNo, ship.CargoOwnerName, ship.DestinationName, *prediction.EtaAt, decision.DeltaMinutes)
+			outcome.Channels.Email = notify.SendEmail(sendCtx, *ship.CargoOwnerEmail, subject, text, html).Sent
+		}
+		if ship.CargoOwnerPhone != nil && *ship.CargoOwnerPhone != "" {
+			body := etapredict.FormatEtaSMS(shipNo, ship.DestinationName, *prediction.EtaAt, decision.DeltaMinutes)
+			outcome.Channels.SMS = notify.SendSMS(sendCtx, *ship.CargoOwnerPhone, body).Sent
+		}
+
+		// Record what we told the customer (best-effort) so the next recompute
+		// compares against it — mirrors the TS metadata jsonb merge.
+		if ship.Metadata == nil {
+			ship.Metadata = map[string]any{}
+		}
+		ship.Metadata["lastNotifiedEtaAt"] = prediction.EtaAt.UTC().Format(time.RFC3339)
+		ship.Metadata["lastNotifiedAt"] = now.UTC().Format(time.RFC3339)
+		database.DB.Scopes(auth.WithTenant(c)).Model(ship).Select("metadata").Updates(ship)
+	}
+
+	return prediction, decision, outcome
+}
+
+// etaNotifyOutcome captures whether the ingest decided to notify the customer
+// and which channels actually delivered.
+type etaNotifyOutcome struct {
+	Notified bool
+	Channels struct {
+		Email bool
+		SMS   bool
+	}
+}
+
+// notificationsDisabled is the ops kill-switch: set LOGISTICS_NOTIFICATIONS_DISABLED
+// to 1/true/yes to compute the notify decision but suppress all sends (the global
+// equivalent of the TS suppressNotifications flag).
+func notificationsDisabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("LOGISTICS_NOTIFICATIONS_DISABLED"))) {
+	case "1", "true", "yes":
+		return true
+	}
+	return false
 }
 
 // evaluateShipmentGeofences loads the shipment's stop fences + route corridor +
@@ -748,7 +811,9 @@ func evaluateShipmentGeofences(c *gin.Context, tid, shipmentID string, ship *mod
 		if err := database.DB.Create(&ex).Error; err == nil {
 			raised++
 		}
-		// Note: SMS/email on DEVIATION is deferred (no sender port yet).
+		// Note: a route-DEVIATION SMS/email is not wired here yet — the notify
+		// package exists (used by the ETA path), but raising a deviation alert is
+		// a follow-up. Geofence transitions only persist an exception row for now.
 	}
 	return events, raised
 }

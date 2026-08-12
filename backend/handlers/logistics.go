@@ -168,68 +168,21 @@ func CreateLogisticsShipment(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Auto-apply the tenant's accessorial catalog (fuel, customs, multi-drop,
+	// weight handling, …) as READY freight_charges rows. Mirrors the Next.js
+	// shipper-portal create path. Best-effort and non-fatal: the shipment is
+	// already persisted, so a catalog error never turns a successful booking
+	// into a 500. A no-op for tenants with no ACTIVE catalog rules.
+	applyAutoAccessorials(c, &input)
+
 	c.JSON(http.StatusCreated, input)
 }
 
-// LogisticsStats is the tenant-scoped dashboard summary. It replaces the
-// Next.js /api/logistics/stats + /analytics count block, which queries the
-// `bookings` table with `service_type = 'LOGISTICS'` and — critically — NO
-// tenant_id filter, so every tenant currently sees platform-wide totals.
-// Here the same counts run through auth.WithTenant against the real
-// logistics_shipment_orders table, so each tenant sees only its own.
-type LogisticsStats struct {
-	Total     int64 `json:"total"`
-	Draft     int64 `json:"draft"`
-	Active    int64 `json:"active"`
-	Delivered int64 `json:"delivered"`
-	Cancelled int64 `json:"cancelled"`
-}
-
-// GetLogisticsStats returns the per-tenant shipment counters.
-func GetLogisticsStats(c *gin.Context) {
-	if requireTenant(c) == "" {
-		return
-	}
-
-	base := func() *gorm.DB {
-		return database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentOrder{})
-	}
-
-	var stats LogisticsStats
-	count := func(dst *int64, statuses ...string) error {
-		q := base()
-		if len(statuses) > 0 {
-			q = q.Where("status IN ?", statuses)
-		}
-		return q.Count(dst).Error
-	}
-
-	// Status buckets mirror the lifecycle the Next.js dashboard groups on.
-	// Any error short-circuits to a 500 — a partial stats block is worse
-	// than a clear failure for a numbers-driven dashboard.
-	if err := count(&stats.Total); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	if err := count(&stats.Draft, "DRAFT"); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	if err := count(&stats.Active, "DISPATCHED", "ENROUTE_PICKUP", "LOADED", "ENROUTE_DELIVERY", "ACTIVE"); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	if err := count(&stats.Delivered, "DELIVERED", "POD_SUBMITTED", "COMPLETED", "CLOSED"); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	if err := count(&stats.Cancelled, "CANCELLED"); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, stats)
-}
+// GetLogisticsStats (the logistics home-dashboard KPI endpoint) lives in
+// logistics_stats.go — Phase L4d rewrote it to return the dashboard's full
+// contract (vehicles / trips / drivers / recentTrips) instead of the minimal
+// shipment-status summary this file originally held.
 
 // splitCSV turns "DRAFT, DISPATCHED ,ACTIVE" into ["DRAFT","DISPATCHED",
 // "ACTIVE"], trimming spaces and dropping empties. Used for the ?status=

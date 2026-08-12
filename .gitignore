@@ -44,6 +44,9 @@ backend/response_*.json
 # Go build artifacts
 backend/*.exe
 backend/cmd/*/*.exe
+# Also catch scripts/, tools/, etc. under backend/ — any compiled Go
+# binary anywhere in the backend tree is a build artefact.
+backend/**/*.exe
 
 # Go build cache (huge, regenerates on every build)
 /.cache/

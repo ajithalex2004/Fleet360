@@ -14,6 +14,7 @@ package handlers
 
 import (
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -239,6 +240,13 @@ type rateQuoteRequest struct {
 	// ShipmentDate is an ISO date (YYYY-MM-DD or full RFC3339). Defaults to
 	// today when omitted, matching quoteShipment's `?? new Date()`.
 	ShipmentDate *string `json:"shipmentDate"`
+	// DistanceKm / WeightKg drive per-km / per-kg / breakpoint pricing. Omitted
+	// → a quantity-based contract falls back to its flat base_rate.
+	DistanceKm *float64 `json:"distanceKm"`
+	WeightKg   *float64 `json:"weightKg"`
+	// SpotPerKmRate, when set, overrides the configured default for the
+	// no-contract spot-estimate fallback (operator-supplied indicative rate).
+	SpotPerKmRate *float64 `json:"spotPerKmRate"`
 }
 
 // PostLogisticsRateQuote computes a freight quote for a lane. It loads the
@@ -301,15 +309,94 @@ func PostLogisticsRateQuote(c *gin.Context) {
 		candidates = append(candidates, toCandidate(r))
 	}
 
-	result := rateengine.Quote(candidates, rateengine.Request{
+	engineReq := rateengine.Request{
 		CustomerID:   req.CustomerID,
 		CarrierID:    req.CarrierID,
 		VehicleType:  req.VehicleType,
 		ServiceLevel: req.ServiceLevel,
 		ShipmentDate: shipDate,
-	})
+		DistanceKm:   req.DistanceKm,
+		WeightKg:     req.WeightKg,
+	}
+	result := rateengine.Quote(candidates, engineReq)
+
+	// Spot-market fallback: when no contract priced the lane, give the operator
+	// an indicative distance×rate estimate rather than a dead end — but ONLY a
+	// labelled, non-contracted one (Matched stays false), so rate-coverage
+	// analytics still flag the lane as uncontracted. No-op unless a default per-km
+	// rate is configured AND a distance was supplied.
+	if !result.Matched &&
+		(result.Reason == rateengine.ReasonNoLaneMatch || result.Reason == rateengine.ReasonNoActiveContract) {
+		if rate := resolveSpotPerKmRate(req.SpotPerKmRate, req.VehicleType); rate > 0 {
+			if est, ok := rateengine.SpotEstimate(engineReq, rate, spotMinCharge()); ok {
+				result = est
+			}
+		}
+	}
 
 	c.JSON(http.StatusOK, result)
+}
+
+// resolveSpotPerKmRate picks the default per-km rate for the spot-estimate
+// fallback, first hit wins: (1) a rate the caller supplied on the request
+// (operator override), (2) a per-vehicle-type env override
+// LOGISTICS_SPOT_PER_KM_RATE_<TYPE> (type upper-cased, non-alphanumerics → _),
+// (3) the global env LOGISTICS_SPOT_PER_KM_RATE. Returns 0 when none is set, so
+// the fallback stays inert (and the quote keeps its honest no-match) until a
+// tenant/deployment opts in. Per-tenant config is a future enhancement (no
+// tenant_settings column exists for it yet).
+func resolveSpotPerKmRate(override *float64, vehicleType *string) float64 {
+	if override != nil && *override > 0 {
+		return *override
+	}
+	if vehicleType != nil {
+		key := spotEnvKey(*vehicleType)
+		if key != "" {
+			if v := envFloat("LOGISTICS_SPOT_PER_KM_RATE_" + key); v > 0 {
+				return v
+			}
+		}
+	}
+	return envFloat("LOGISTICS_SPOT_PER_KM_RATE")
+}
+
+// spotMinCharge is the optional floor applied to a spot estimate (e.g. so a
+// 5km move doesn't quote a few dirhams). 0/unset → no floor.
+func spotMinCharge() *float64 {
+	if v := envFloat("LOGISTICS_SPOT_MIN_CHARGE"); v > 0 {
+		return &v
+	}
+	return nil
+}
+
+// spotEnvKey upper-cases a vehicle type and replaces any non-alphanumeric run
+// with a single underscore so it forms a valid env-var suffix ("3-Ton" → "3_TON").
+func spotEnvKey(vehicleType string) string {
+	var b strings.Builder
+	prevUnderscore := false
+	for _, r := range strings.ToUpper(strings.TrimSpace(vehicleType)) {
+		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			prevUnderscore = false
+		} else if !prevUnderscore {
+			b.WriteByte('_')
+			prevUnderscore = true
+		}
+	}
+	return strings.Trim(b.String(), "_")
+}
+
+// envFloat reads a non-negative float from an env var, or 0 when unset/invalid.
+func envFloat(name string) float64 {
+	v := strings.TrimSpace(os.Getenv(name))
+	if v == "" {
+		return 0
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil || f < 0 {
+		return 0
+	}
+	return f
 }
 
 // toCandidate flattens a rate-contract row into the engine's input shape.
@@ -324,6 +411,10 @@ func toCandidate(r *models.LogisticsRateContract) rateengine.Candidate {
 		BaseRate:         r.BaseRate,
 		FuelSurchargePct: r.FuelSurchargePct,
 		MinCharge:        r.MinCharge,
+		// Rate basis (per-km / per-kg / breakpoints) rides in metadata JSONB —
+		// no rate_basis column exists and Go doesn't own the schema. nil for
+		// contracts that price flat off base_rate.
+		RateBasis:        rateengine.ParseRateBasis(r.Metadata),
 		EffectiveFrom:    r.EffectiveFrom,
 		EffectiveTo:      r.EffectiveTo,
 		Status:           r.Status,
@@ -371,7 +462,36 @@ func GetLogisticsRFQs(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": rfqs, "total": total, "limit": limit, "offset": offset})
+
+	shipmentIDs := make([]string, 0, len(rfqs))
+	for _, rfq := range rfqs {
+		if strings.TrimSpace(rfq.ShipmentOrderID) != "" {
+			shipmentIDs = append(shipmentIDs, rfq.ShipmentOrderID)
+		}
+	}
+	shipments := loadRFQShipmentSummaries(c, shipmentIDs)
+	bidCounts := loadRFQBidCounts(c, rfqs)
+
+	data := make([]gin.H, 0, len(rfqs))
+	for _, rfq := range rfqs {
+		data = append(data, gin.H{
+			"id":               rfq.ID,
+			"createdAt":        rfq.CreatedAt,
+			"updatedAt":        rfq.UpdatedAt,
+			"tenantId":         rfq.TenantID,
+			"shipmentOrderId":  rfq.ShipmentOrderID,
+			"rfqNo":            rfq.RFQNo,
+			"status":           rfq.Status,
+			"inviteScope":      rfq.InviteScope,
+			"bidDeadlineAt":    rfq.BidDeadlineAt,
+			"negotiationRound": rfq.NegotiationRound,
+			"awardedBidId":     rfq.AwardedBidID,
+			"metadata":         rfq.Metadata,
+			"bidCount":         bidCounts[rfq.ID],
+			"shipment":         shipments[rfq.ShipmentOrderID],
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"data": data, "total": total, "limit": limit, "offset": offset})
 }
 
 // CreateLogisticsRFQ posts an RFQ against a shipment order. rfq_no is generated
@@ -382,7 +502,10 @@ func CreateLogisticsRFQ(c *gin.Context) {
 		return
 	}
 
-	var input models.LogisticsFreightRFQ
+	var input struct {
+		models.LogisticsFreightRFQ
+		InvitedCarrierIDs []string `json:"invitedCarrierIds"`
+	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -395,20 +518,35 @@ func CreateLogisticsRFQ(c *gin.Context) {
 	input.ID = ""
 	input.TenantID = tid
 	if input.Status == "" {
-		input.Status = "DRAFT"
+		input.Status = "OPEN"
 	}
 	if input.InviteScope == "" {
 		input.InviteScope = "SELECTED_CARRIERS"
 	}
+	if input.InviteScope == "SELECTED_CARRIERS" && len(input.InvitedCarrierIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invitedCarrierIds is required for SELECTED_CARRIERS"})
+		return
+	}
 	if input.NegotiationRound == 0 {
 		input.NegotiationRound = 1
 	}
+	if input.Metadata == nil {
+		input.Metadata = map[string]any{}
+	}
+	if len(input.InvitedCarrierIDs) > 0 {
+		input.Metadata["invitedCarrierIds"] = input.InvitedCarrierIDs
+	}
 
-	if err := database.DB.Create(&input).Error; err != nil {
+	if err := database.DB.Create(&input.LogisticsFreightRFQ).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusCreated, input)
+	_ = database.DB.Scopes(auth.WithTenant(c)).
+		Model(&models.LogisticsShipmentOrder{}).
+		Where("id = ?", input.ShipmentOrderID).
+		Updates(map[string]any{"marketplace_status": "OPEN", "updated_at": time.Now()}).
+		Error
+	c.JSON(http.StatusCreated, input.LogisticsFreightRFQ)
 }
 
 // ── Carrier bids ─────────────────────────────────────────────────────────────
@@ -418,6 +556,17 @@ func CreateLogisticsRFQ(c *gin.Context) {
 //	?shipmentOrderId=  ?rfqId=  ?carrierId=  ?status=
 //	?limit=  ?offset=
 func GetLogisticsBids(c *gin.Context) {
+	getLogisticsBids(c, "")
+}
+
+// GetLogisticsRFQBids keeps the existing UI path
+// /api/logistics/rfqs/:id/bids working when the compatibility shim forwards to
+// Go's /api/v1 surface.
+func GetLogisticsRFQBids(c *gin.Context) {
+	getLogisticsBids(c, c.Param("id"))
+}
+
+func getLogisticsBids(c *gin.Context, forcedRFQID string) {
 	if requireTenant(c) == "" {
 		return
 	}
@@ -428,7 +577,9 @@ func GetLogisticsBids(c *gin.Context) {
 	if v := strings.TrimSpace(c.Query("shipmentOrderId")); v != "" {
 		q = q.Where("shipment_order_id = ?", v)
 	}
-	if v := strings.TrimSpace(c.Query("rfqId")); v != "" {
+	if forcedRFQID != "" {
+		q = q.Where("rfq_id = ?", forcedRFQID)
+	} else if v := strings.TrimSpace(c.Query("rfqId")); v != "" {
 		q = q.Where("rfq_id = ?", v)
 	}
 	if v := strings.TrimSpace(c.Query("carrierId")); v != "" {
@@ -452,7 +603,34 @@ func GetLogisticsBids(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": bids, "total": total, "limit": limit, "offset": offset})
+
+	carrierIDs := make([]string, 0, len(bids))
+	for _, bid := range bids {
+		carrierIDs = append(carrierIDs, bid.CarrierID)
+	}
+	carriers := loadCarrierNames(c, carrierIDs)
+	data := make([]gin.H, 0, len(bids))
+	for _, bid := range bids {
+		data = append(data, gin.H{
+			"id":               bid.ID,
+			"createdAt":        bid.CreatedAt,
+			"updatedAt":        bid.UpdatedAt,
+			"tenantId":         bid.TenantID,
+			"shipmentOrderId":  bid.ShipmentOrderID,
+			"rfqId":            bid.RFQID,
+			"carrierId":        bid.CarrierID,
+			"carrierName":      carriers[bid.CarrierID],
+			"bidNo":            bid.BidNo,
+			"amount":           bid.Amount,
+			"currency":         bid.Currency,
+			"transitTimeHours": bid.TransitTimeHours,
+			"validityUntil":    bid.ValidityUntil,
+			"status":           bid.Status,
+			"chargeBreakdown":  bid.ChargeBreakdown,
+			"notes":            bid.Notes,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"data": data, "total": total, "limit": limit, "offset": offset})
 }
 
 // CreateLogisticsBid records a carrier's offer on a shipment. bid_no is
@@ -495,6 +673,99 @@ func CreateLogisticsBid(c *gin.Context) {
 }
 
 // ── Carrier scorecards ───────────────────────────────────────────────────────
+
+type rfqShipmentSummary struct {
+	Origin       *string `json:"origin"`
+	Destination  *string `json:"destination"`
+	CustomerName *string `json:"customerName"`
+	VehicleType  *string `json:"vehicleType"`
+}
+
+func loadRFQShipmentSummaries(c *gin.Context, shipmentIDs []string) map[string]rfqShipmentSummary {
+	out := map[string]rfqShipmentSummary{}
+	if len(shipmentIDs) == 0 {
+		return out
+	}
+
+	var rows []struct {
+		ID          string
+		Origin      *string
+		Destination *string
+		Customer    *string
+		VehicleType *string
+	}
+	err := database.DB.Scopes(auth.WithTenant(c)).
+		Table("logistics_shipment_orders").
+		Select("id, COALESCE(origin_name, origin_address) AS origin, COALESCE(destination_name, destination_address) AS destination, cargo_owner_name AS customer, requested_vehicle_type AS vehicle_type").
+		Where("id IN ?", shipmentIDs).
+		Scan(&rows).Error
+	if err != nil {
+		return out
+	}
+	for _, row := range rows {
+		out[row.ID] = rfqShipmentSummary{
+			Origin:       row.Origin,
+			Destination:  row.Destination,
+			CustomerName: row.Customer,
+			VehicleType:  row.VehicleType,
+		}
+	}
+	return out
+}
+
+func loadRFQBidCounts(c *gin.Context, rfqs []models.LogisticsFreightRFQ) map[string]int64 {
+	out := map[string]int64{}
+	ids := make([]string, 0, len(rfqs))
+	for _, rfq := range rfqs {
+		ids = append(ids, rfq.ID)
+		out[rfq.ID] = 0
+	}
+	if len(ids) == 0 {
+		return out
+	}
+
+	var rows []struct {
+		RFQID string
+		Total int64
+	}
+	err := database.DB.Scopes(auth.WithTenant(c)).
+		Table("logistics_carrier_bids").
+		Select("rfq_id, COUNT(*) AS total").
+		Where("rfq_id IN ?", ids).
+		Group("rfq_id").
+		Scan(&rows).Error
+	if err != nil {
+		return out
+	}
+	for _, row := range rows {
+		out[row.RFQID] = row.Total
+	}
+	return out
+}
+
+func loadCarrierNames(c *gin.Context, carrierIDs []string) map[string]*string {
+	out := map[string]*string{}
+	if len(carrierIDs) == 0 {
+		return out
+	}
+
+	var rows []struct {
+		ID   string
+		Name *string
+	}
+	err := database.DB.Scopes(auth.WithTenant(c)).
+		Table("logistics_carriers").
+		Select("id, name").
+		Where("id IN ?", carrierIDs).
+		Scan(&rows).Error
+	if err != nil {
+		return out
+	}
+	for _, row := range rows {
+		out[row.ID] = row.Name
+	}
+	return out
+}
 
 // GetLogisticsCarrierScorecards lists scorecards for the tenant.
 //
