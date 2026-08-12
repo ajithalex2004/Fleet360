@@ -2227,7 +2227,7 @@ model BoardingEvent {
   scheduleId    String    @map("schedule_id")
   passengerId   String?   @map("passenger_id")
   staffMemberId String?   @map("staff_member_id")
-  method        String // QR|NFC|BLE|MANUAL
+  method        BoardingEventSource // enforced enum (BLE|QR|NFC|MANUAL|DRIVER_APP|GEOFENCE)
   direction     String    @default("BOARD") // BOARD|ALIGHT
   identifier    String?
   stopId        String?   @map("stop_id")
@@ -5131,6 +5131,22 @@ enum BoardingSource {
   DRIVER
   MANUAL
   DISPATCHER
+  @@schema("public")
+}
+
+/// Source of a BoardingEvent (Task 6). Enforced at the DB layer via the
+/// `boarding_event_source` Postgres enum. BLE = in-bus BLE gateway
+/// hysteresis; QR = QR code scan; NFC = tap-on; MANUAL = ops entry;
+/// DRIVER_APP = driver checked off; GEOFENCE = derived from stop-arrival
+/// geofence transition on a matched staff member.
+enum BoardingEventSource {
+  BLE
+  QR
+  NFC
+  MANUAL
+  DRIVER_APP
+  GEOFENCE
+  @@map("boarding_event_source")
   @@schema("public")
 }
 
