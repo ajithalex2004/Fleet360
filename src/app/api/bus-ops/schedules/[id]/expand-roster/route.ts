@@ -1,0 +1,47 @@
+/**
+ * POST /api/bus-ops/schedules/[id]/expand-roster
+ *
+ * Re-run the roster→TripPassenger expansion for a schedule that was
+ * created BEFORE a roster entry was added, or when ops added a new
+ * passenger to the standing roster and needs the change reflected on an
+ * already-scheduled trip.
+ *
+ * Idempotent — see expandRosterToTrip's contract: existing TripPassenger
+ * rows for (tripId × staffMemberId) are skipped. Returns the counts so ops
+ * can see whether the run actually did anything.
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { expandRosterToTrip } from '@/lib/bus-ops/expand-roster';
+
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const { id } = await ctx.params;
+
+  const schedule = await prisma.tripSchedule.findFirst({
+    where: { id, deletedAt: null },
+    select: { id: true, routeId: true, departureTime: true, tenantId: true },
+  });
+  if (!schedule) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // Extra tenant guard: TripSchedule.tenantId is nullable in schema so we
+  // accept a match OR a null value (legacy rows) — never a foreign tenant.
+  if (schedule.tenantId && schedule.tenantId !== tenantId) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  try {
+    const result = await expandRosterToTrip(
+      tenantId,
+      schedule.id,
+      schedule.routeId,
+      new Date(schedule.departureTime),
+    );
+    return NextResponse.json({ ok: true, ...result });
+  } catch (e) {
+    console.error('[schedules/expand-roster.POST]', e);
+    return NextResponse.json({ error: 'Failed to expand roster' }, { status: 500 });
+  }
+}
