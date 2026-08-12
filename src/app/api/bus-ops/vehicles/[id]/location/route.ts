@@ -29,7 +29,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { randomUUID } from 'crypto';
 import {
-  ensureBusGpsTables,
+  // ensureBusGpsTables — removed; tables in prisma/raw/*.sql migrations
   evaluateStopTransitions,
   type BusPing,
   type StopWithGeo,
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   try {
-    await ensureBusGpsTables();
+    // ensureBusGpsTables() removed — tables live in fleet schema now
 
     // Persist every ping. Batched insert would be cleaner but N pings per call
     // is tiny in practice (driver app sends 1; tracker sends ~10-30 per batch).

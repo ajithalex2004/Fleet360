@@ -26,7 +26,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { predictEta, type TrackingPoint } from '@/lib/logistics/eta-predictor';
-import { ensureBusGpsTables } from '@/lib/bus-gps';
+// ensureBusGpsTables import removed — DDL in prisma/raw/*.sql migrations
 
 export const runtime = 'nodejs';
 
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   try {
-    await ensureBusGpsTables();
+    // ensureBusGpsTables() removed — tables live in fleet schema now
 
     const schedule = await prisma.tripSchedule.findFirst({
       where: { id: scheduleId, tenantId },

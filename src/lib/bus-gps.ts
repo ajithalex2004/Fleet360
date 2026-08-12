@@ -15,8 +15,12 @@
  *      ensureLogisticsDomainTables so the endpoints can be dropped in on a
  *      dev/staging DB without a manual migration step.
  *
- * The endpoint layer calls ensureBusGpsTables() once (memoised) then hands
- * every ping to evaluateStopTransitions() to derive what changed.
+ * NOTE (2026-08-13): the ensureBusGpsTables() lazy DDL helper was
+ * removed. Table shapes now live in prisma/raw/*.sql migrations
+ * (`move_bus_gps_pings_to_fleet.sql`,
+ *  `add_trip_stop_visits_and_bus_gps_deps.sql`) that any env is
+ * expected to apply out-of-band. Endpoints call evaluateStopTransitions
+ * directly against tables that already exist.
  */
 
 import { prisma } from './prisma';
@@ -158,65 +162,7 @@ export function evaluateStopTransitions(
   return { transitions, visitPatches };
 }
 
-// ── Table-ensure helper (raw SQL init) ───────────────────────────────────────
-
-let ensured = false;
-
-/**
- * Create the two new tables + the RouteStop column addition if a Prisma
- * migration hasn't run yet. Memoised so subsequent hits are free. Matches the
- * ensureLogisticsDomainTables pattern already used elsewhere; a proper
- * `prisma migrate deploy` still supersedes this for production.
- */
-export async function ensureBusGpsTables(): Promise<void> {
-  if (ensured) return;
-  // bus_gps_pings lives in the `fleet` domain schema (see
-  // prisma/raw/add_domain_schemas_workforce_fleet_operations.sql and the
-  // BusGpsPing model in schema.prisma with @@schema("fleet")).
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS fleet.bus_gps_pings (
-      id            TEXT PRIMARY KEY,
-      created_at    TIMESTAMPTZ DEFAULT NOW(),
-      tenant_id     TEXT,
-      vehicle_id    TEXT NOT NULL,
-      schedule_id   TEXT,
-      latitude      DOUBLE PRECISION NOT NULL,
-      longitude     DOUBLE PRECISION NOT NULL,
-      speed_kmh     DOUBLE PRECISION,
-      heading_deg   DOUBLE PRECISION,
-      accuracy_m    DOUBLE PRECISION,
-      occurred_at   TIMESTAMPTZ NOT NULL,
-      source        TEXT
-    )
-  `);
-  await prisma.$executeRawUnsafe(
-    `CREATE INDEX IF NOT EXISTS idx_bus_gps_pings_schedule_occurred ON fleet.bus_gps_pings (schedule_id, occurred_at)`,
-  );
-  await prisma.$executeRawUnsafe(
-    `CREATE INDEX IF NOT EXISTS idx_bus_gps_pings_vehicle_occurred ON fleet.bus_gps_pings (vehicle_id, occurred_at)`,
-  );
-
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS trip_stop_visits (
-      id                    TEXT PRIMARY KEY,
-      created_at            TIMESTAMPTZ DEFAULT NOW(),
-      updated_at            TIMESTAMPTZ,
-      tenant_id             TEXT,
-      schedule_id           TEXT NOT NULL,
-      stop_id               TEXT NOT NULL,
-      approached_at         TIMESTAMPTZ,
-      entered_at            TIMESTAMPTZ,
-      left_at               TIMESTAMPTZ,
-      approach_notified_at  TIMESTAMPTZ
-    )
-  `);
-  await prisma.$executeRawUnsafe(
-    `CREATE UNIQUE INDEX IF NOT EXISTS uniq_trip_stop_visit ON trip_stop_visits (schedule_id, stop_id)`,
-  );
-
-  await prisma.$executeRawUnsafe(
-    `ALTER TABLE route_stops ADD COLUMN IF NOT EXISTS geofence_radius_m INTEGER`,
-  );
-
-  ensured = true;
-}
+// ensureBusGpsTables() removed 2026-08-13 — DDL now lives in
+// prisma/raw/*.sql migrations (see file header). Endpoints assume the
+// tables exist. If you're bootstrapping a fresh env, apply the raw
+// SQL files in commit order before starting the server.
