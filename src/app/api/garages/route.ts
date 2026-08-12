@@ -20,6 +20,8 @@ export async function POST(request: Request) {
 
         const garage = await prisma.garage.create({
             data: {
+                // TODO: read tenantId from request headers via getTenantContext()
+                tenantId: '',
                 name: body.name,
                 location: body.location,
                 contactPerson: body.contactPerson || body.contact_person,

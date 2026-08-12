@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { prisma }         from '@/lib/prisma';
 import { paginate, paginatedResponse } from '@/lib/pagination';
+import { getEventBus }    from '@/events/event-bus';
+import { FUEL_FILLED }    from '@/events/registry';
 
 export async function GET(req: NextRequest) {
   try {
@@ -29,6 +31,27 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const fuelLog = await prisma.fuelLog.create({ data: body });
+
+    // Publish via outbox — Finance consumer picks this up asynchronously
+    const tenantId = body.tenantId ?? fuelLog.vehicleId ?? 'default';
+    getEventBus().publish({
+      eventType:     FUEL_FILLED,
+      aggregateType: 'FuelLog',
+      aggregateId:   fuelLog.id,
+      sourceModule:  'fleet',
+      tenantId,
+      payload: {
+        fuelLogId:    fuelLog.id,
+        vehicleId:    fuelLog.vehicleId,
+        driverId:     fuelLog.driverId   ?? null,
+        fuelDate:     fuelLog.fuelDate.toISOString().split('T')[0],
+        liters:       fuelLog.liters,
+        costPerLiter: fuelLog.costPerLiter ?? null,
+        totalCost:    fuelLog.totalCost    ?? null,
+        station:      fuelLog.station      ?? null,
+      },
+    }).catch(err => console.warn('[fuel-logs] outbox publish failed:', err));
+
     return NextResponse.json(fuelLog, { status: 201 });
   } catch (error) {
     console.error('Error creating fuel log:', error);

@@ -64,9 +64,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    await prisma.booking.update({
+    // Hard delete — the Booking model no longer carries `deletedAt` (Layer 2.6
+    // schema cleanup removed soft-delete across the platform). If foreign-key
+    // references prevent the delete, Prisma will throw and the API returns 500
+    // with the FK detail so the caller can clean up child rows first.
+    await prisma.booking.delete({
       where: { id: params.id },
-      data: { deletedAt: new Date() },
     });
     return NextResponse.json({ success: true });
   } catch (error) {

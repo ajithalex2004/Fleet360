@@ -1,3 +1,10 @@
+/**
+ * GET /api/leasing/invoices/[id]/pdf?lang=en|ar&download=0|1
+ *
+ * Tenant scoping: requires x-tenant-id. The invoice must belong to the
+ * caller's tenant before the PDF is generated.
+ */
+
 import { createElement } from 'react';
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -19,12 +26,16 @@ const VENDOR = {
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return jsonErr('Not authenticated', 401);
+  }
   const lang: Lang = req.nextUrl.searchParams.get('lang') === 'ar' ? 'ar' : 'en';
   const download = req.nextUrl.searchParams.get('download') === '1';
 
   try {
-    const inv = await prisma.leaseInvoice.findUnique({
-      where: { id },
+    const inv = await prisma.leaseInvoice.findFirst({
+      where: { id, tenantId },
       include: { lines: true, lessee: true },
     });
     if (!inv) return jsonErr('Invoice not found', 404);

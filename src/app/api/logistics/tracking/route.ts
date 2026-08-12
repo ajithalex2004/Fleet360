@@ -1,129 +1,114 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-/**
- * GET /api/logistics/tracking
- * Returns active logistics trips with their last known GPS positions.
- * GPS is sourced from:
- *   1. trip_status_history note field (if driver posts JSON: {"lat":..,"lng":..})
- *   2. ePOD submission GPS
- *   3. Vehicle device GPS (device_id field, future integration point)
- *   4. Geocoded origin/destination as fallback estimate
- */
+export const runtime = 'nodejs';
 
-export async function GET() {
+const toNumber = (value: unknown): number | null => {
+  if (value == null) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+export async function GET(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id') ?? req.nextUrl.searchParams.get('tenantId');
+  const tenantWhere = tenantId ? ' AND so.tenant_id = $1' : '';
+  const params = tenantId ? [tenantId] : [];
+
   try {
-    // Fetch active/in-transit trips
-    const trips = await prisma.$queryRawUnsafe<Array<{
+    const rows = await prisma.$queryRawUnsafe<Array<{
       id: string;
       booking_ref: string | null;
       status: string | null;
       requestor_name: string | null;
+      origin: string | null;
+      destination: string | null;
+      driver_name: string | null;
+      vehicle_plate: string | null;
+      shipment_type: string | null;
       start_date: Date | null;
       end_date: Date | null;
-      notes: string | null;
-      vehicle_id: string | null;
-      created_at: Date | null;
+      latitude: string | number | null;
+      longitude: string | number | null;
+      position_ts: Date | null;
+      position_source: string | null;
     }>>(
-      `SELECT id, booking_ref, status, requestor_name, start_date, end_date, notes, vehicle_id, created_at
-       FROM bookings
-       WHERE deleted_at IS NULL
-         AND service_type = 'LOGISTICS'
-         AND status IN ('DISPATCHED','ENROUTE_PICKUP','LOADED','ENROUTE_DELIVERY','ACTIVE','DELIVERED')
-       ORDER BY start_date DESC
-       LIMIT 50`
-    ).catch(() => [] as Array<{ id: string; booking_ref: string | null; status: string | null; requestor_name: string | null; start_date: Date | null; end_date: Date | null; notes: string | null; vehicle_id: string | null; created_at: Date | null; }>);
+      `WITH latest_tracking AS (
+          SELECT DISTINCT ON (shipment_order_id)
+                 shipment_order_id, latitude, longitude, source, occurred_at
+            FROM logistics_tracking_events
+           WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+           ORDER BY shipment_order_id, occurred_at DESC, created_at DESC
+        ),
+        latest_pod AS (
+          SELECT DISTINCT ON (shipment_order_id)
+                 shipment_order_id,
+                 NULLIF(gps->>'lat', '')::numeric AS latitude,
+                 NULLIF(gps->>'lng', '')::numeric AS longitude,
+                 delivered_at
+            FROM logistics_pod_events
+           WHERE gps IS NOT NULL
+           ORDER BY shipment_order_id, created_at DESC
+        ),
+        origin_stop AS (
+          SELECT DISTINCT ON (shipment_order_id)
+                 shipment_order_id, latitude, longitude
+            FROM logistics_shipment_stops
+           WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+           ORDER BY shipment_order_id, sequence_no ASC
+        )
+        SELECT so.id,
+               so.shipment_no AS booking_ref,
+               so.status,
+               so.cargo_owner_name AS requestor_name,
+               COALESCE(so.origin_name, so.origin_address) AS origin,
+               COALESCE(so.destination_name, so.destination_address) AS destination,
+               NULL::text AS driver_name,
+               NULL::text AS vehicle_plate,
+               so.shipment_type,
+               so.pickup_window_from AS start_date,
+               so.delivery_window_to AS end_date,
+               COALESCE(lt.latitude, lp.latitude, os.latitude, 25.2048) AS latitude,
+               COALESCE(lt.longitude, lp.longitude, os.longitude, 55.2708) AS longitude,
+               COALESCE(lt.occurred_at, lp.delivered_at, so.updated_at, so.created_at) AS position_ts,
+               CASE
+                 WHEN lt.latitude IS NOT NULL THEN 'driver_update'
+                 WHEN lp.latitude IS NOT NULL THEN 'epod'
+                 ELSE 'estimated'
+               END AS position_source
+          FROM logistics_shipment_orders so
+          LEFT JOIN latest_tracking lt ON lt.shipment_order_id = so.id
+          LEFT JOIN latest_pod lp ON lp.shipment_order_id = so.id
+          LEFT JOIN origin_stop os ON os.shipment_order_id = so.id
+         WHERE so.deleted_at IS NULL
+           AND so.status IN ('ASSIGNED','DISPATCHED','ENROUTE_PICKUP','LOADED','ENROUTE_DELIVERY','DELIVERED')${tenantWhere}
+         ORDER BY so.updated_at DESC, so.created_at DESC
+         LIMIT 200`,
+      ...params,
+    );
 
-    // For each trip, try to get last GPS from status history notes
-    const tripIds = trips.map(t => t.id);
-    let lastPositions: Record<string, { lat: number; lng: number; ts: string; source: string }> = {};
-
-    if (tripIds.length > 0) {
-      const placeholders = tripIds.map((_, i) => `$${i + 1}`).join(',');
-      const historyRows = await prisma.$queryRawUnsafe<Array<{
-        booking_id: string; note: string | null; changed_at: Date; to_status: string;
-      }>>(
-        `SELECT booking_id, note, changed_at, to_status
-         FROM trip_status_history
-         WHERE booking_id IN (${placeholders})
-           AND note IS NOT NULL
-         ORDER BY changed_at DESC`,
-        ...tripIds
-      ).catch(() => [] as Array<{ booking_id: string; note: string | null; changed_at: Date; to_status: string; }>);
-
-      // Parse JSON notes for GPS coordinates
-      for (const row of historyRows) {
-        if (lastPositions[row.booking_id]) continue; // already have a position
-        try {
-          const n = JSON.parse(row.note ?? '{}') as Record<string, unknown>;
-          if (typeof n.lat === 'number' && typeof n.lng === 'number') {
-            lastPositions[row.booking_id] = {
-              lat: n.lat, lng: n.lng,
-              ts: row.changed_at instanceof Date ? row.changed_at.toISOString() : String(row.changed_at),
-              source: 'driver_update',
-            };
-          }
-        } catch { /* not JSON GPS */ }
-      }
-    }
-
-    // Enrich each trip with position + vehicle plate
-    const vehicles = trips.filter(t => t.vehicle_id).map(t => t.vehicle_id!);
-    let vehicleMap: Record<string, string> = {};
-    if (vehicles.length > 0) {
-      const phs = vehicles.map((_, i) => `$${i + 1}`).join(',');
-      const vRows = await prisma.$queryRawUnsafe<Array<{ id: string; plate_number: string | null }>>(
-        `SELECT id, COALESCE(plate_number, license_plate) as plate_number FROM vehicles WHERE id IN (${phs})`,
-        ...vehicles
-      ).catch(() => [] as Array<{ id: string; plate_number: string | null }>);
-      vehicleMap = Object.fromEntries(vRows.map(v => [v.id, v.plate_number ?? '']));
-    }
-
-    const result = trips.map(trip => {
-      let parsedNotes: Record<string, unknown> = {};
-      try { parsedNotes = JSON.parse(trip.notes ?? '{}') as Record<string, unknown>; } catch { /* */ }
-
-      let position = lastPositions[trip.id] ?? null;
-
-      // Fallback: use ePOD GPS if available
-      if (!position && parsedNotes.pod) {
-        const pod = parsedNotes.pod as Record<string, unknown>;
-        if (pod.gps) {
-          const gps = pod.gps as { lat: number; lng: number; accuracy?: number };
-          position = { lat: gps.lat, lng: gps.lng, ts: String(parsedNotes.submittedAt ?? ''), source: 'epod' };
-        }
-      }
-
-      // Fallback: encode Dubai as default with jitter (simulated)
-      if (!position) {
-        const seed = trip.id.charCodeAt(0) + trip.id.charCodeAt(1);
-        position = {
-          lat: 25.1972 + (seed % 100) * 0.002 - 0.1,
-          lng: 55.2797 + (seed % 50)  * 0.003 - 0.075,
-          ts: trip.start_date instanceof Date ? trip.start_date.toISOString() : '',
-          source: 'estimated',
-        };
-      }
-
-      return {
-        id:            trip.id,
-        bookingRef:    trip.booking_ref,
-        status:        trip.status,
-        requestorName: trip.requestor_name,
-        origin:        parsedNotes.origin    as string | undefined ?? null,
-        destination:   parsedNotes.destination as string | undefined ?? null,
-        driverName:    parsedNotes.driverName  as string | undefined ?? null,
-        vehiclePlate:  trip.vehicle_id ? (vehicleMap[trip.vehicle_id] ?? parsedNotes.vehiclePlate as string | undefined ?? null) : (parsedNotes.vehiclePlate as string | undefined ?? null),
-        shipmentType:  parsedNotes.shipmentType as string | undefined ?? null,
-        startDate:     trip.start_date instanceof Date ? trip.start_date.toISOString() : null,
-        endDate:       trip.end_date   instanceof Date ? trip.end_date.toISOString()   : null,
-        position,
-      };
-    });
-
-    return NextResponse.json(result);
-  } catch (err) {
-    console.error('[tracking GET]', err);
-    return NextResponse.json([]);
+    return NextResponse.json(rows.map(row => ({
+      id: row.id,
+      bookingRef: row.booking_ref,
+      status: row.status,
+      requestorName: row.requestor_name,
+      origin: row.origin,
+      destination: row.destination,
+      driverName: row.driver_name,
+      vehiclePlate: row.vehicle_plate,
+      shipmentType: row.shipment_type,
+      startDate: row.start_date?.toISOString() ?? null,
+      endDate: row.end_date?.toISOString() ?? null,
+      position: {
+        lat: toNumber(row.latitude) ?? 25.2048,
+        lng: toNumber(row.longitude) ?? 55.2708,
+        ts: row.position_ts?.toISOString() ?? new Date().toISOString(),
+        source: row.position_source === 'driver_update' || row.position_source === 'epod'
+          ? row.position_source
+          : 'estimated',
+      },
+    })));
+  } catch (error) {
+    console.error('[logistics/tracking GET]', error);
+    return NextResponse.json({ error: 'Unable to load live shipment tracking' }, { status: 500 });
   }
 }

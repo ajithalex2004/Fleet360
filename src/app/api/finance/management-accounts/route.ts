@@ -91,7 +91,7 @@ async function getRevenue(
       ? q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM lease_invoices WHERE deleted_at IS NULL AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to]))
       : Promise.resolve(0),
     enabled('LOGISTICS')
-      ? q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM logistics_bookings WHERE deleted_at IS NULL AND status IN ('DELIVERED','CLOSED') AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to]))
+      ? q(`SELECT COALESCE(SUM(customer_rate_amount),0)::text AS t FROM logistics_shipment_orders WHERE deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED') AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to]))
       : Promise.resolve(0),
     q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND invoice_number NOT LIKE 'SUB-%' AND issue_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
   ]);
@@ -232,7 +232,7 @@ export async function GET(req: NextRequest) {
     const [racAmt, lsAmt, lgAmt, fiAmt, schoolAmt] = await Promise.all([
       q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM rental_invoices WHERE deleted_at IS NULL AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
       q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM lease_invoices WHERE deleted_at IS NULL AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
-      q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM logistics_bookings WHERE deleted_at IS NULL AND status IN ('DELIVERED','CLOSED') AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
+      q(`SELECT COALESCE(SUM(customer_rate_amount),0)::text AS t FROM logistics_shipment_orders WHERE deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED') AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
       q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND invoice_number NOT LIKE 'SUB-%' AND module NOT IN ('RAC','LEASING','LOGISTICS','SCHOOL_BUS') AND issue_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
       q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND module = 'SCHOOL_BUS' AND issue_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
     ]);

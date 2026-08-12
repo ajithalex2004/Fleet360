@@ -1,23 +1,54 @@
+/**
+ * /api/leasing/early-terminations — list + create LeaseEarlyTermination.
+ *
+ * Tenant scoping: requires x-tenant-id. Reads filter by tenant; creates
+ * verify the source contract belongs to the caller's tenant and stamp the
+ * new termination with the same tenantId.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+
 export async function GET(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const { searchParams } = new URL(req.url);
     const contractId = searchParams.get('contractId');
     const items = await prisma.leaseEarlyTermination.findMany({
-      where: contractId ? { contractId } : {},
+      where: {
+        tenantId,
+        ...(contractId
+          ? { contract: { id: contractId, tenantId } }
+          : {}),
+      },
       include: { contract: { select: { contractNumber: true, monthlyRate: true, endDate: true } } },
       orderBy: { createdAt: 'desc' },
     });
     return NextResponse.json(items);
-  } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+  } catch (e) {
+    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+  }
 }
+
 export async function POST(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const body = await req.json();
-    const count = await prisma.leaseEarlyTermination.count();
+    const contract = await prisma.leaseContract2.findFirst({
+      where: { id: body.contractId, tenantId },
+      select: { id: true },
+    });
+    if (!contract) {
+      return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
+    }
+    const count = await prisma.leaseEarlyTermination.count({ where: { tenantId } });
     const terminationNo = `ET-${String(count + 1).padStart(5, '0')}`;
-    // Auto-calculate penalty and settlement
     const penaltyPct = parseFloat(body.penaltyPct || '20');
     const monthlyRate = parseFloat(body.monthlyRate || '0');
     const remainingMonths = parseInt(body.remainingMonths || '0');
@@ -26,8 +57,10 @@ export async function POST(req: NextRequest) {
     const depositRefund = parseFloat(body.depositRefund || '0');
     const totalSettlement = penaltyAmount + outstanding - depositRefund;
     const et = await prisma.leaseEarlyTermination.create({
-      data: { ...body, terminationNo, penaltyAmount, totalSettlement },
+      data: { ...body, terminationNo, penaltyAmount, totalSettlement, tenantId },
     });
     return NextResponse.json(et, { status: 201 });
-  } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+  } catch (e) {
+    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+  }
 }

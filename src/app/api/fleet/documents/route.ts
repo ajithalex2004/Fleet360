@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { paginate, paginatedResponse } from '@/lib/pagination';
+import { revalidateCache } from '@/lib/server-cache';
+
+const CACHE_TAGS = ['fleet:stats', 'fleet:documents-expiring'];
 
 export async function GET(req: NextRequest) {
   try {
@@ -29,6 +32,10 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const document = await prisma.vehicleDocument.create({ data: body });
+    // A new document can shift the expiring-docs list and the fleet-stats
+    // counters. Bust the cache so the dashboard and document widgets
+    // pick up the change on the next render.
+    revalidateCache(CACHE_TAGS);
     return NextResponse.json(document, { status: 201 });
   } catch (error) {
     console.error('Error creating document:', error);

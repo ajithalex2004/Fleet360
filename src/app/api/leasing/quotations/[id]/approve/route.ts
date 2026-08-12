@@ -1,27 +1,45 @@
+/**
+ * POST /api/leasing/quotations/[id]/approve
+ *
+ * Approves (or rejects) a LeaseQuotation. Tenant scoping: the quotation and
+ * its pending approval step must belong to the caller's tenant; updates are
+ * refused otherwise.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendEmail } from '@/services/email/emailService';
-import { 
-  generateInternalApprovalEmail, 
-  generateCreditReviewEmail, 
-  generateHandoverEmail 
+import {
+  generateInternalApprovalEmail,
+  generateCreditReviewEmail,
+  generateHandoverEmail
 } from '@/services/email/leasingTemplates';
 import { quotationEmailHtml } from '@/lib/email-templates/quotation';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const body = await req.json();
     const { action, approverName, comments, targetStatus: requestedTarget, recipientEmail: customRecipient } = body;
     // action: 'APPROVE' | 'REJECT'
 
     const quotation = await prisma.leaseQuotation.findFirst({
-      where: { id: params.id, deletedAt: null },
+      where: { id: params.id, tenantId, deletedAt: null },
       include: { lessee: true }
     });
     if (!quotation) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    // Find the pending approval step for this quotation
+
+    // Find the pending approval step for this quotation — scoped by tenant.
     const pendingStep = await prisma.leaseApprovalStep.findFirst({
-      where: { entityId: params.id, entityType: 'QUOTATION', status: 'PENDING' },
+      where: {
+        entityId: params.id,
+        entityType: 'QUOTATION',
+        status: 'PENDING',
+        tenantId,
+      },
       orderBy: { stepOrder: 'asc' },
     });
 
@@ -67,9 +85,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
 
     // ── Side Effects & Notifications ──
-    // Customer name is now a relation field; the schema dropped the
-    // denormalized 'lesseeName' column. Read through the loaded lessee
-    // relation with a sensible fallback for any orphan rows.
     const lesseeName    = quotation.lessee?.name ?? 'Customer';
     const lesseeEmail   = quotation.lessee?.email ?? 'customer@example.com';
     const quotationNo   = quotation.quotationNumber ?? '(unnumbered)';
@@ -86,8 +101,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     if (nextStatus === 'SENT_TO_CUSTOMER') {
-      // Fetch full details for the enterprise-grade template. Include
-      // lessee so we can read the customer name + email off the relation.
       const fullQuotation = await prisma.leaseQuotation.findUnique({
         where: { id: params.id },
         include: { vehicles: true, lineItems: true, lessee: true }
@@ -121,7 +134,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           notes: fullQuotation.notes || undefined
         });
 
-        // Handle multiple recipients
         const toRecipients = customRecipient
           ? customRecipient.split(/[,;]/).map((email: string) => ({ email: email.trim(), name: fqLesseeName }))
           : [{ email: fqLesseeEmail, name: fqLesseeName }];
@@ -133,11 +145,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         });
       }
 
-      // Update inquiry status
+      // Update inquiry status (also tenant-scoped — refuse to touch inquiries
+      // that don't belong to the caller's tenant).
       if (quotation.inquiryId) {
-        await prisma.leaseInquiry.update({
-          where: { id: quotation.inquiryId },
-          data: { status: 'QUOTATION_SENT' }
+        await prisma.leaseInquiry.updateMany({
+          where: { id: quotation.inquiryId, tenantId },
+          data: { status: 'QUOTATION_SENT' },
         }).catch(err => console.error('Failed to sync Inquiry status:', err));
       }
     }

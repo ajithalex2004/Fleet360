@@ -4,9 +4,11 @@
  * Channel registry annotated with per-channel inbound counts (LeaseInquiry
  * rows whose inquiryNumber starts with the channel prefix) and a configured
  * flag (shared secret present in env). Powers the admin page.
+ *
+ * Tenant scoping: requires x-tenant-id. Inbound counts are per tenant.
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { LEAD_CHANNELS } from '@/lib/leasing-lead-channels';
 
@@ -22,9 +24,13 @@ const PREFIX_BY_KEY: Record<string, string> = {
   PROPERTY_FINDER:  'PF-',
 };
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   const inquiries = await prisma.leaseInquiry.findMany({
-    where: { deletedAt: null, inquiryNumber: { not: null } },
+    where: { tenantId, deletedAt: null, inquiryNumber: { not: null } },
     select: { inquiryNumber: true, createdAt: true },
   });
 

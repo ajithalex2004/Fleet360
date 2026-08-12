@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 /**
@@ -8,7 +8,10 @@ import { prisma } from '@/lib/prisma';
 
 const zero = () => Promise.resolve([{ count: BigInt(0) }]);
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const sevenDaysAgo  = new Date(Date.now() - 7  * 24 * 60 * 60 * 1000);
@@ -22,13 +25,13 @@ export async function GET() {
       totalRoutes,
       totalStaff,
     ] = await Promise.all([
-      prisma.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_schedules WHERE deleted_at IS NULL AND departure_time >= $1`, thirtyDaysAgo).catch(zero),
-      prisma.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_schedules WHERE deleted_at IS NULL AND status = 'COMPLETED' AND departure_time >= $1`, thirtyDaysAgo).catch(zero),
-      prisma.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_schedules WHERE deleted_at IS NULL AND status = 'CANCELLED' AND departure_time >= $1`, thirtyDaysAgo).catch(zero),
-      prisma.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_schedules WHERE deleted_at IS NULL AND status IN ('DEPARTED','IN_TRANSIT')`).catch(zero),
-      prisma.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_passengers tp JOIN trip_schedules ts ON ts.id = tp.trip_id WHERE ts.departure_time >= $1 AND ts.deleted_at IS NULL`, thirtyDaysAgo).catch(zero),
-      prisma.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM bus_routes WHERE deleted_at IS NULL AND is_active = true`).catch(zero),
-      prisma.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM staff_members WHERE deleted_at IS NULL AND is_active = true`).catch(zero),
+      prisma.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_schedules WHERE deleted_at IS NULL AND departure_time >= $1 AND tenant_id = $2`, thirtyDaysAgo, tenantId).catch(zero),
+      prisma.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_schedules WHERE deleted_at IS NULL AND status = 'COMPLETED' AND departure_time >= $1 AND tenant_id = $2`, thirtyDaysAgo, tenantId).catch(zero),
+      prisma.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_schedules WHERE deleted_at IS NULL AND status = 'CANCELLED' AND departure_time >= $1 AND tenant_id = $2`, thirtyDaysAgo, tenantId).catch(zero),
+      prisma.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_schedules WHERE deleted_at IS NULL AND status IN ('DEPARTED','IN_TRANSIT') AND tenant_id = $1`, tenantId).catch(zero),
+      prisma.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_passengers tp JOIN trip_schedules ts ON ts.id = tp.trip_id WHERE ts.departure_time >= $1 AND ts.deleted_at IS NULL AND ts.tenant_id = $2`, thirtyDaysAgo, tenantId).catch(zero),
+      prisma.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM bus_routes WHERE deleted_at IS NULL AND is_active = true AND tenant_id = $1`, tenantId).catch(zero),
+      prisma.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM staff_members WHERE deleted_at IS NULL AND is_active = true AND tenant_id = $1`, tenantId).catch(zero),
     ]);
 
     const total     = Number(totalTrips[0]?.count     ?? 0);
@@ -49,8 +52,10 @@ export async function GET() {
        FROM trip_schedules
        WHERE deleted_at IS NULL
          AND departure_time >= NOW() - INTERVAL '14 days'
+         AND tenant_id = $1
        GROUP BY DATE(departure_time)
-       ORDER BY day ASC`
+       ORDER BY day ASC`,
+      tenantId
     ).catch(() => []);
 
     const dailyChart = daily.map(d => ({
@@ -63,9 +68,9 @@ export async function GET() {
     const byShift = await prisma.$queryRawUnsafe<Array<{ shift_type: string | null; count: bigint }>>(
       `SELECT shift_type, COUNT(*) as count
        FROM trip_schedules
-       WHERE deleted_at IS NULL AND departure_time >= $1
+       WHERE deleted_at IS NULL AND departure_time >= $1 AND tenant_id = $2
        GROUP BY shift_type ORDER BY count DESC`,
-      thirtyDaysAgo
+      thirtyDaysAgo, tenantId
     ).catch(() => []);
 
     // Trips by route
@@ -73,28 +78,28 @@ export async function GET() {
       `SELECT r.name, COUNT(ts.id) AS count, COALESCE(SUM(ts.confirmed_count), 0) AS passengers
        FROM trip_schedules ts
        JOIN bus_routes r ON r.id = ts.route_id
-       WHERE ts.deleted_at IS NULL AND ts.departure_time >= $1
+       WHERE ts.deleted_at IS NULL AND ts.departure_time >= $1 AND ts.tenant_id = $2
        GROUP BY r.name
        ORDER BY count DESC
        LIMIT 8`,
-      thirtyDaysAgo
+      thirtyDaysAgo, tenantId
     ).catch(() => []);
 
     // Average occupancy rate
     const occupancy = await prisma.$queryRawUnsafe<Array<{ avg_rate: number }>>(
       `SELECT AVG(CASE WHEN capacity > 0 THEN confirmed_count::float / capacity * 100 ELSE 0 END) AS avg_rate
        FROM trip_schedules
-       WHERE deleted_at IS NULL AND departure_time >= $1 AND capacity > 0`,
-      thirtyDaysAgo
+       WHERE deleted_at IS NULL AND departure_time >= $1 AND capacity > 0 AND tenant_id = $2`,
+      thirtyDaysAgo, tenantId
     ).catch(() => [{ avg_rate: 0 }]);
 
     // Peak hours (trips by hour)
     const byHour = await prisma.$queryRawUnsafe<Array<{ hour: number; count: bigint }>>(
       `SELECT EXTRACT(HOUR FROM departure_time)::int AS hour, COUNT(*) as count
        FROM trip_schedules
-       WHERE deleted_at IS NULL AND departure_time >= $1
+       WHERE deleted_at IS NULL AND departure_time >= $1 AND tenant_id = $2
        GROUP BY hour ORDER BY hour ASC`,
-      thirtyDaysAgo
+      thirtyDaysAgo, tenantId
     ).catch(() => []);
 
     // ── On-time SLA ──────────────────────────────────────────────────────
@@ -123,8 +128,9 @@ export async function GET() {
            THEN EXTRACT(EPOCH FROM (tl.actual_arrival_time - ts.arrival_time))/60 END) AS avg_arrival_delay_min
        FROM trip_schedules ts
        LEFT JOIN trip_logs tl ON tl.schedule_id = ts.id
-       WHERE ts.deleted_at IS NULL AND ts.departure_time >= $1 AND ts.status = 'COMPLETED'`,
-      thirtyDaysAgo, ON_TIME_DEPART_TOLERANCE_MIN, ON_TIME_ARRIVE_TOLERANCE_MIN,
+       WHERE ts.deleted_at IS NULL AND ts.departure_time >= $1 AND ts.status = 'COMPLETED'
+         AND ts.tenant_id = $4`,
+      thirtyDaysAgo, ON_TIME_DEPART_TOLERANCE_MIN, ON_TIME_ARRIVE_TOLERANCE_MIN, tenantId,
     ).catch(() => [{ total: BigInt(0), depart_ontime: BigInt(0), arrive_ontime: BigInt(0), avg_departure_delay_min: null, avg_arrival_delay_min: null }]);
 
     const slaRow = slaTotals[0];
@@ -147,11 +153,12 @@ export async function GET() {
        JOIN bus_routes r ON r.id = ts.route_id
        LEFT JOIN trip_logs tl ON tl.schedule_id = ts.id
        WHERE ts.deleted_at IS NULL AND ts.departure_time >= $1 AND ts.status = 'COMPLETED'
+         AND ts.tenant_id = $3
        GROUP BY r.name
        HAVING COUNT(ts.id) >= 3
        ORDER BY avg_delay_min DESC NULLS LAST
        LIMIT 5`,
-      thirtyDaysAgo, ON_TIME_DEPART_TOLERANCE_MIN,
+      thirtyDaysAgo, ON_TIME_DEPART_TOLERANCE_MIN, tenantId,
     ).catch(() => []);
 
     // ── Cost per trip / per passenger ────────────────────────────────────
@@ -176,8 +183,9 @@ export async function GET() {
        WHERE ts.deleted_at IS NULL AND ts.departure_time >= $1
          AND ts.status = 'COMPLETED'
          AND tl.actual_departure_time IS NOT NULL
-         AND tl.actual_arrival_time IS NOT NULL`,
-      thirtyDaysAgo,
+         AND tl.actual_arrival_time IS NOT NULL
+         AND ts.tenant_id = $2`,
+      thirtyDaysAgo, tenantId,
     ).catch(() => [{ trips: BigInt(0), total_pax: BigInt(0), total_fuel_l: 0, total_km: 0, total_minutes: 0 }]);
 
     const costRow = costAggregate[0];
@@ -195,9 +203,9 @@ export async function GET() {
     const methodMix = await prisma.$queryRawUnsafe<Array<{ method: string; count: bigint }>>(
       `SELECT method, COUNT(*) AS count
        FROM boarding_events
-       WHERE created_at >= $1 AND direction = 'BOARD'
+       WHERE created_at >= $1 AND direction = 'BOARD' AND tenant_id = $2
        GROUP BY method ORDER BY count DESC`,
-      thirtyDaysAgo,
+      thirtyDaysAgo, tenantId,
     ).catch(() => []);
 
     return NextResponse.json({

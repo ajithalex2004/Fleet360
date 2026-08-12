@@ -24,6 +24,16 @@ interface ShipmentSummary {
   currency: string | null;
 }
 
+interface PendingRequest {
+  id: string;
+  requestNo: string;
+  status: string;
+  origin: { name: string | null };
+  destination: { name: string | null };
+  pickupWindowFrom: string | null;
+  submittedAt: string;
+}
+
 const STATUS_TONE: Record<string, string> = {
   DRAFT:            'bg-slate-500/15 text-slate-300 border-slate-500/30',
   PENDING:          'bg-amber-500/15 text-amber-300 border-amber-500/30',
@@ -50,6 +60,7 @@ const FILTER_TABS = [
 
 export default function ShipmentsListPage() {
   const [shipments, setShipments] = useState<ShipmentSummary[]>([]);
+  const [requests, setRequests]   = useState<PendingRequest[]>([]);
   const [loading, setLoading]     = useState(true);
   const [filter, setFilter]       = useState<'ALL' | 'ACTIVE' | 'PENDING' | 'DONE'>('ALL');
   const [search, setSearch]       = useState('');
@@ -63,6 +74,7 @@ export default function ShipmentsListPage() {
         if (!cancelled && res.ok) {
           const data = await res.json();
           setShipments(data.shipments ?? []);
+          setRequests(data.requests ?? []);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -130,6 +142,32 @@ export default function ShipmentsListPage() {
         </div>
       </div>
 
+      {/* Pending requests — submitted, awaiting operator review (no detail page yet) */}
+      {!loading && requests.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Pending review</h2>
+          {requests.map(r => (
+            <div key={r.id} className="block bg-slate-900/70 border border-amber-500/20 rounded-xl p-4">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className="text-sm font-mono text-white">{r.requestNo}</span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-amber-500/15 text-amber-300 border-amber-500/30">
+                  {r.status.replace(/_/g, ' ')}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-slate-300 mt-1.5">
+                <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                <span className="truncate">{r.origin.name ?? '—'}</span>
+                <ArrowRight className="w-3 h-3 text-slate-600 shrink-0" />
+                <span className="truncate">{r.destination.name ?? '—'}</span>
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1.5 inline-flex items-center gap-1">
+                <Clock className="w-3 h-3" /> Submitted {formatDate(r.submittedAt)} · awaiting operator review
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* List */}
       {loading ? (
         <div className="space-y-2">
@@ -138,6 +176,7 @@ export default function ShipmentsListPage() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
+        (shipments.length === 0 && requests.length > 0) ? null : (
         <div className="bg-slate-900 border border-dashed border-white/10 rounded-2xl p-10 text-center">
           <Package className="w-10 h-10 mx-auto mb-3 text-slate-600" />
           <h2 className="text-base font-bold text-white">
@@ -155,6 +194,7 @@ export default function ShipmentsListPage() {
             </Link>
           )}
         </div>
+        )
       ) : (
         <div className="space-y-2">
           {filtered.map(s => (

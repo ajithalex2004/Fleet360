@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useCallback, useEffect } from 'react';
+import Link from 'next/link';
 
 interface Document {
   id: string;
@@ -268,6 +269,16 @@ export default function DocumentsPage() {
 
   return (
     <div className="space-y-8">
+      <div className="rounded-2xl border border-cyan-500/30 bg-cyan-950/30 px-5 py-4 text-sm text-cyan-100">
+        <div className="font-semibold text-white">Compatibility workspace</div>
+        <p className="mt-1 text-cyan-100/80">
+          Fleet documents are now managed from the Fleet module. Leasing contract and lessee document context remains here temporarily until the shared document vault migration is complete.
+        </p>
+        <Link href="/fleet/documents" className="mt-3 inline-flex rounded-lg border border-cyan-400/40 px-3 py-2 text-xs font-semibold text-cyan-50 hover:bg-cyan-900/40">
+          Open Fleet Documents
+        </Link>
+      </div>
+
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>

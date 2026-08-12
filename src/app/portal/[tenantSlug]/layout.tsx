@@ -85,7 +85,7 @@ const PLAN_COLORS: Record<string, string> = {
 
 /* ─────────────────────────── Sidebar ─────────────────────────── */
 function Sidebar({ tenant, slug }: { tenant: TenantData | null; slug: string }) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
   const base = `/portal/${slug}`;
 
   const hasRAC = tenant?.modules.some(m => m.module === 'RAC' && m.isEnabled) ?? false;
@@ -204,7 +204,7 @@ function Sidebar({ tenant, slug }: { tenant: TenantData | null; slug: string }) 
 
 /* ─────────────────────────── Layout ─────────────────────────── */
 export default function TenantPortalLayout({ children }: { children: React.ReactNode }) {
-  const params = useParams();
+  const params = useParams() ?? {};
   const tenantSlug = (params?.tenantSlug as string) ?? '';
 
   const [tenant, setTenant] = useState<TenantData | null>(null);

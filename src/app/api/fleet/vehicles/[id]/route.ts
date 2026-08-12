@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
+import { revalidateCache } from '@/lib/server-cache';
+
+const FLEET_STATS_TAG = 'fleet:stats';
 
 const toCamel = (s: string) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 const rowToCamel = (r: Record<string, unknown>) =>
@@ -124,6 +127,9 @@ export async function DELETE(
       `UPDATE vehicles SET deleted_at = NOW() WHERE id = $1`,
       id,
     );
+    // Soft-delete a vehicle: shifts fleet-stats counters and
+    // lifecycle/usage group-bys.
+    revalidateCache([FLEET_STATS_TAG]);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting vehicle:', error);

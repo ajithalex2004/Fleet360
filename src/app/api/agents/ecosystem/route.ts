@@ -154,7 +154,7 @@ async function commandStripKPIs(
        WHERE created_at >= NOW() - INTERVAL '7 days'`,
     ).catch(() => [{ km: 0 }]),
     prisma.$queryRawUnsafe<{ cnt: number }[]>(
-      `SELECT COUNT(*)::int AS cnt FROM finance_anomaly_flags
+      `SELECT COUNT(*)::int AS cnt FROM ai.agent_anomaly_flags
        WHERE created_at >= NOW() - INTERVAL '7 days'`,
     ).catch(() => [{ cnt: 0 }]),
   ]);

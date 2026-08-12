@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 import { ensureAuditTable, logAudit, AuditPayload } from '@/lib/audit';
 
 // ---------------------------------------------------------------------------
@@ -8,73 +9,81 @@ import { ensureAuditTable, logAudit, AuditPayload } from '@/lib/audit';
 //   tenantId, entityType, userId, action, search
 //   dateFrom, dateTo   (ISO date strings)
 //   page (1-based), limit
+//
+// RLS: wrapped in withPlatformAdmin so the cross-tenant audit_logs read
+// works. The audit_logs table is not currently covered by RLS (it's
+// appended-to-raw-SQL, no Prisma model), so the wrap is belt-and-braces.
+// When RLS is added to audit_logs the platform-admin wildcard still
+// allows the cross-tenant read.
 // ---------------------------------------------------------------------------
 export async function GET(req: NextRequest) {
   try {
     await ensureAuditTable();
 
-    const sp        = new URL(req.url).searchParams;
-    const tenantId  = sp.get('tenantId')  ?? '';
-    const branchId  = sp.get('branchId')  ?? '';
-    const entityType= sp.get('entityType')?? '';
-    const userId    = sp.get('userId')    ?? '';
-    const action    = sp.get('action')    ?? '';
-    const search    = sp.get('search')    ?? '';
-    const dateFrom  = sp.get('dateFrom')  ?? '';
-    const dateTo    = sp.get('dateTo')    ?? '';
-    const page      = Math.max(1, parseInt(sp.get('page')  ?? '1'));
-    const limit     = Math.min(100, parseInt(sp.get('limit') ?? '50'));
-    const offset    = (page - 1) * limit;
+    return await withPlatformAdmin(prisma, async (tx) => {
+      const sp        = new URL(req.url).searchParams;
+      const tenantId  = sp.get('tenantId')  ?? '';
+      const branchId  = sp.get('branchId')  ?? '';
+      const entityType= sp.get('entityType')?? '';
+      const userId    = sp.get('userId')    ?? '';
+      const action    = sp.get('action')    ?? '';
+      const search    = sp.get('search')    ?? '';
+      const dateFrom  = sp.get('dateFrom')  ?? '';
+      const dateTo    = sp.get('dateTo')    ?? '';
+      const page      = Math.max(1, parseInt(sp.get('page')  ?? '1'));
+      const limit     = Math.min(100, parseInt(sp.get('limit') ?? '50'));
+      const offset    = (page - 1) * limit;
 
-    const conditions: string[] = [];
-    const values: unknown[]    = [];
+      const conditions: string[] = [];
+      const values: unknown[]    = [];
 
-    if (tenantId)   { values.push(tenantId);   conditions.push(`tenant_id   = $${values.length}`); }
-    if (branchId)   { values.push(branchId);   conditions.push(`branch_id   = $${values.length}`); }
-    if (entityType) { values.push(entityType); conditions.push(`entity_type = $${values.length}`); }
-    if (userId)     { values.push(userId);     conditions.push(`user_id     = $${values.length}`); }
-    if (action)     { values.push(action);     conditions.push(`action      = $${values.length}`); }
-    if (dateFrom)   { values.push(dateFrom);   conditions.push(`created_at >= $${values.length}::date`); }
-    if (dateTo)     { values.push(dateTo);     conditions.push(`created_at <  ($${values.length}::date + interval '1 day')`); }
-    if (search) {
-      values.push(`%${search}%`);
-      const n = values.length;
-      conditions.push(
-        `(tenant_name ILIKE $${n} OR user_name ILIKE $${n} OR user_email ILIKE $${n}` +
-        ` OR entity_name ILIKE $${n} OR details ILIKE $${n} OR action ILIKE $${n})`
-      );
-    }
-
-    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    type Row = Record<string, unknown>;
-
-    const [rows, countRows] = await Promise.all([
-      prisma.$queryRawUnsafe<Row[]>(
-        `SELECT * FROM audit_logs ${where}
-         ORDER BY created_at DESC
-         LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
-        ...values, limit, offset
-      ),
-      prisma.$queryRawUnsafe<{ count: bigint }[]>(
-        `SELECT COUNT(*) AS count FROM audit_logs ${where}`,
-        ...values
-      ),
-    ]);
-
-    const total = Number(countRows[0]?.count ?? 0);
-
-    const data = rows.map(r => {
-      const out: Row = {};
-      for (const [k, v] of Object.entries(r)) {
-        if (v instanceof Date)     { out[k] = v.toISOString(); continue; }
-        if (typeof v === 'bigint') { out[k] = Number(v);       continue; }
-        out[k] = v;
+      if (tenantId)   { values.push(tenantId);   conditions.push(`tenant_id   = $${values.length}`); }
+      if (branchId)   { values.push(branchId);   conditions.push(`branch_id   = $${values.length}`); }
+      if (entityType) { values.push(entityType); conditions.push(`entity_type = $${values.length}`); }
+      if (userId)     { values.push(userId);     conditions.push(`user_id     = $${values.length}`); }
+      if (action)     { values.push(action);     conditions.push(`action      = $${values.length}`); }
+      if (dateFrom)   { values.push(dateFrom);   conditions.push(`created_at >= $${values.length}::date`); }
+      if (dateTo)     { values.push(dateTo);     conditions.push(`created_at <  ($${values.length}::date + interval '1 day')`); }
+      if (search) {
+        values.push(`%${search}%`);
+        const n = values.length;
+        conditions.push(
+          `(tenant_name ILIKE $${n} OR user_name ILIKE $${n} OR user_email ILIKE $${n}` +
+          ` OR entity_name ILIKE $${n} OR details ILIKE $${n} OR action ILIKE $${n})`
+        );
       }
-      return out;
-    });
 
-    return NextResponse.json({ data, total, page, limit, pages: Math.ceil(total / limit) });
+      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      type Row = Record<string, unknown>;
+
+      const [rows, countRows] = await Promise.all([
+        tx.$queryRawUnsafe<Row[]>(
+          `SELECT * FROM audit_logs ${where}
+           ORDER BY created_at DESC
+           LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+          ...values, limit, offset
+        ),
+        tx.$queryRawUnsafe<{ count: bigint }[]>(
+          `SELECT COUNT(*) AS count FROM audit_logs ${where}`,
+          ...values
+        ),
+      ]);
+
+      const total = Number(countRows[0]?.count ?? 0);
+
+      const data = rows.map(r => {
+        const out: Row = {};
+        for (const [k, v] of Object.entries(r)) {
+          if (v instanceof Date)     { out[k] = v.toISOString(); continue; }
+          if (typeof v === 'bigint') { out[k] = Number(v);       continue; }
+          out[k] = v;
+        }
+        return out;
+      });
+
+      return NextResponse.json({ data, total, page, limit, pages: Math.ceil(total / limit) });
+    });
   } catch (err) {
     console.error('[audit-logs GET]', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
@@ -83,6 +92,11 @@ export async function GET(req: NextRequest) {
 
 // ---------------------------------------------------------------------------
 // POST /api/admin/audit-logs  — manually log an event
+//
+// POST doesn't need a wrap because logAudit() opens its own connection
+// and writes to audit_logs directly via raw SQL — the table has no
+// RLS policy yet (it should get one when the audit_logs table gets a
+// Prisma model).
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
   try {

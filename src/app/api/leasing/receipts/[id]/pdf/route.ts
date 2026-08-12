@@ -1,3 +1,15 @@
+/**
+ * GET /api/leasing/receipts/[id]/pdf?lang=en|ar&download=0|1
+ *
+ * Tenant scoping: requires x-tenant-id. The receipt (verified directly on
+ * its tenantId) and its associated contract + lessee (verified via the
+ * contract's tenantId) must all belong to the caller's tenant.
+ *
+ * Note: the Prisma `LeaseReceipt` model has no `contract` relation field
+ * (only the contractId foreign key). We do a separate lookup for the
+ * contract + lessee so we can render the receipt header.
+ */
+
 import { createElement } from 'react';
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -18,17 +30,30 @@ const VENDOR = {
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return jsonErr('Not authenticated', 401);
+  }
   const lang: Lang = req.nextUrl.searchParams.get('lang') === 'ar' ? 'ar' : 'en';
   const download = req.nextUrl.searchParams.get('download') === '1';
 
   try {
-    const r = await prisma.leaseReceipt.findUnique({
-      where: { id },
-      include: { contract: { include: { lessee: true } } },
-    });
+    const r = await prisma.leaseReceipt.findFirst({ where: { id, tenantId } });
     if (!r) return jsonErr('Receipt not found', 404);
 
-    const lessee = r.contract.lessee;
+    // Look up contract + lessee separately since LeaseReceipt has no
+    // `contract` relation in the Prisma schema.
+    const contract = await prisma.leaseContract2.findFirst({
+      where: { id: r.contractId, tenantId },
+      select: { contractNumber: true, lesseeId: true },
+    });
+
+    const lessee = contract
+      ? await prisma.lessee.findFirst({
+          where: { id: contract.lesseeId, tenantId },
+        })
+      : null;
+
     const data: ReceiptPdfData = {
       receiptNumber: r.receiptNumber ?? `RCP-${id.slice(0, 8)}`,
       receivedDate: r.receivedDate,
@@ -50,7 +75,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             phone: lessee.phone,
           }
         : { name: '—', type: 'individual' },
-      contractRef: r.contract?.contractNumber ?? null,
+      contractRef: contract?.contractNumber ?? null,
       notes: r.notes,
     };
 

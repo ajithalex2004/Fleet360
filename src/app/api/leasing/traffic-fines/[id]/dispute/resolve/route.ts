@@ -7,6 +7,9 @@
  * - UPHELD     → flip back to PENDING (sweep-bill will re-pick it up)
  * - OVERTURNED → flip to ABSORBED (we eat the cost; lessee won't be billed)
  * - PARTIAL    → set finalAmount = adjustedAmount, flip to PENDING for re-billing
+ *
+ * Tenant scoping: requires x-tenant-id. Refuses to touch fines from another
+ * tenant.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -20,6 +23,10 @@ const RESOLUTIONS = ['UPHELD', 'OVERTURNED', 'PARTIAL'] as const;
 type Resolution = typeof RESOLUTIONS[number];
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const body = await req.json();
     const resolution = String(body?.resolution ?? '').toUpperCase() as Resolution;
@@ -27,7 +34,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: `resolution must be one of: ${RESOLUTIONS.join(', ')}` }, { status: 400 });
     }
 
-    const fine = await prisma.leaseTrafficFine.findUnique({ where: { id: params.id } });
+    const fine = await prisma.leaseTrafficFine.findFirst({
+      where: { id: params.id, tenantId },
+    });
     if (!fine) return NextResponse.json({ error: 'Fine not found' }, { status: 404 });
     if (fine.billingStatus !== 'DISPUTED') {
       return NextResponse.json({ error: `Fine is ${fine.billingStatus}, not DISPUTED` }, { status: 409 });
@@ -68,7 +77,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
 
     void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
+      tenantId,
       userId: req.headers.get('x-user-id') ?? 'system',
       userRole: req.headers.get('x-user-role') ?? 'STAFF',
       entityType: 'LeaseTrafficFine',

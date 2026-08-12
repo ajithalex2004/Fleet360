@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth';
 import { ensureServiceConfigTables } from '@/lib/service-config/schema';
 import { SERVICE_TONES } from '@/types/service-config';
@@ -57,13 +58,15 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   args.push(id, auth.tenantId);
 
   try {
-    const updated = await prisma.$queryRawUnsafe<CategoryRow[]>(
-      `UPDATE service_categories
-         SET ${sets.join(', ')}
-       WHERE id = $${p}::uuid AND tenant_id = $${p + 1} AND deleted_at IS NULL
-       RETURNING id::text, tenant_id, key, name, description, icon, tone,
-                 sort_order, is_system, created_at::text, updated_at::text`,
-      ...args,
+    const updated = await withTenantRls(prisma, auth.tenantId, (tx) =>
+      tx.$queryRawUnsafe<CategoryRow[]>(
+        `UPDATE service_categories
+           SET ${sets.join(', ')}
+         WHERE id = $${p}::uuid AND tenant_id = $${p + 1} AND deleted_at IS NULL
+         RETURNING id::text, tenant_id, key, name, description, icon, tone,
+                   sort_order, is_system, created_at::text, updated_at::text`,
+        ...args,
+      )
     );
     const cat = updated[0];
     if (!cat) return NextResponse.json({ ok: false, error: 'Category not found' }, { status: 404 });
@@ -91,14 +94,16 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   await ensureServiceConfigTables();
 
   // Block delete of system rows or rows with non-deleted child types.
-  const rows = await prisma.$queryRawUnsafe<Array<{ is_system: boolean; type_count: bigint }>>(
-    `SELECT c.is_system,
-            (SELECT COUNT(*) FROM service_types t
-              WHERE t.category_id = c.id AND t.deleted_at IS NULL)::bigint AS type_count
-     FROM service_categories c
-     WHERE c.id = $1::uuid AND c.tenant_id = $2 AND c.deleted_at IS NULL`,
-    id, auth.tenantId,
-  ).catch(() => []);
+  const rows = await withTenantRls(prisma, auth.tenantId, (tx) =>
+    tx.$queryRawUnsafe<Array<{ is_system: boolean; type_count: bigint }>>(
+      `SELECT c.is_system,
+              (SELECT COUNT(*) FROM service_types t
+                WHERE t.category_id = c.id AND t.deleted_at IS NULL)::bigint AS type_count
+       FROM service_categories c
+       WHERE c.id = $1::uuid AND c.tenant_id = $2 AND c.deleted_at IS NULL`,
+      id, auth.tenantId,
+    ).catch(() => [] as Array<{ is_system: boolean; type_count: bigint }>)
+  );
   const found = rows[0];
   if (!found) return NextResponse.json({ ok: false, error: 'Category not found' }, { status: 404 });
   if (found.is_system) return NextResponse.json({ ok: false, error: 'Cannot delete a system category.' }, { status: 400 });
@@ -106,9 +111,11 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ ok: false, error: 'Cannot delete — category still has service types.' }, { status: 400 });
   }
 
-  await prisma.$executeRawUnsafe(
-    `UPDATE service_categories SET deleted_at = NOW() WHERE id = $1::uuid AND tenant_id = $2`,
-    id, auth.tenantId,
+  await withTenantRls(prisma, auth.tenantId, (tx) =>
+    tx.$executeRawUnsafe(
+      `UPDATE service_categories SET deleted_at = NOW() WHERE id = $1::uuid AND tenant_id = $2`,
+      id, auth.tenantId,
+    )
   );
 
   void logAudit({

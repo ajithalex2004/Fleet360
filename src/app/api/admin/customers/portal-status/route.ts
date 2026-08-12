@@ -13,6 +13,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { ensureShipperPortalTables } from '@/lib/shipper-portal/schema';
 import { DEFAULT_TRACKING_LEVEL } from '@/lib/shipper-portal/visibility';
 
@@ -40,39 +41,43 @@ export async function GET(req: NextRequest) {
 
     // One query, LEFT JOINs to the portal-user and invitation tables.
     // Aggregates keep the result one row per customer.
-    const rows = await prisma.$queryRawUnsafe<CustomerRow[]>(
-      `SELECT
-         c.id,
-         c.name_en,
-         c.email,
-         c.portal_tracking_level,
-         (
-           SELECT COUNT(*)::bigint FROM customer_portal_users u
-            WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id
-              AND u.deleted_at IS NULL AND u.is_active = TRUE
-              AND u.password_hash IS NOT NULL
-         ) AS active_users,
-         (
-           SELECT COUNT(*)::bigint FROM customer_portal_users u
-            WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id
-              AND u.deleted_at IS NULL AND u.password_hash IS NULL
-         ) AS pending_users,
-         (
-           SELECT COUNT(*)::bigint FROM customer_portal_invitations i
-            JOIN customer_portal_users u ON u.id = i.portal_user_id
-            WHERE i.tenant_id = c.tenant_id AND u.customer_id = c.id
-              AND i.accepted_at IS NULL AND i.expires_at > NOW()
-         ) AS pending_invitations,
-         (
-           SELECT MAX(u.last_login_at)::text FROM customer_portal_users u
-            WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id
-              AND u.deleted_at IS NULL
-         ) AS last_login_at
-       FROM customers c
-       WHERE c.tenant_id = $1 AND c.deleted_at IS NULL
-       ORDER BY c.name_en ASC
-       LIMIT 500`,
-      tenantId,
+    // customer / customer_portal_users / customer_portal_invitations all
+    // have tenant_id with RLS, so wrap with withTenantRls.
+    const rows = await withTenantRls(prisma, tenantId, (tx) =>
+      tx.$queryRawUnsafe<CustomerRow[]>(
+        `SELECT
+           c.id,
+           c.name_en,
+           c.email,
+           c.portal_tracking_level,
+           (
+             SELECT COUNT(*)::bigint FROM customer_portal_users u
+              WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id
+                AND u.deleted_at IS NULL AND u.is_active = TRUE
+                AND u.password_hash IS NOT NULL
+           ) AS active_users,
+           (
+             SELECT COUNT(*)::bigint FROM customer_portal_users u
+              WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id
+                AND u.deleted_at IS NULL AND u.password_hash IS NULL
+           ) AS pending_users,
+           (
+             SELECT COUNT(*)::bigint FROM customer_portal_invitations i
+              JOIN customer_portal_users u ON u.id = i.portal_user_id
+              WHERE i.tenant_id = c.tenant_id AND u.customer_id = c.id
+                AND i.accepted_at IS NULL AND i.expires_at > NOW()
+           ) AS pending_invitations,
+           (
+             SELECT MAX(u.last_login_at)::text FROM customer_portal_users u
+              WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id
+                AND u.deleted_at IS NULL
+           ) AS last_login_at
+         FROM customers c
+         WHERE c.tenant_id = $1 AND c.deleted_at IS NULL
+         ORDER BY c.name_en ASC
+         LIMIT 500`,
+        tenantId,
+      )
     );
 
     return NextResponse.json({

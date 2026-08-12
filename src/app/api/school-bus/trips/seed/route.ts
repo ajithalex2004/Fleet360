@@ -109,6 +109,7 @@ interface TripPlan {
   startTime: string; endTime: string | null;
   speed: number | null; maxSpeed: number | null; distKm: number | null;
   speeding: number; braking: number; geofence: number; notes?: string;
+  session?: 'MORNING' | 'AFTERNOON' | 'EVENING';
 }
 
 const TRIP_PLANS: TripPlan[] = [

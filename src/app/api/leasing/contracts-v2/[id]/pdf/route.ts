@@ -1,3 +1,10 @@
+/**
+ * GET /api/leasing/contracts-v2/[id]/pdf?lang=en|ar
+ *
+ * Tenant scoping: requires x-tenant-id. The contract must belong to the
+ * caller's tenant before the PDF is generated.
+ */
+
 import { createElement } from 'react';
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -18,12 +25,16 @@ const VENDOR = {
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return jsonErr('Not authenticated', 401);
+  }
   const lang: Lang = req.nextUrl.searchParams.get('lang') === 'ar' ? 'ar' : 'en';
   const download = req.nextUrl.searchParams.get('download') === '1';
 
   try {
-    const c = await prisma.leaseContract2.findUnique({
-      where: { id },
+    const c = await prisma.leaseContract2.findFirst({
+      where: { id, tenantId },
       include: { vehicles: true, lessee: true },
     });
     if (!c) return jsonErr('Contract not found', 404);

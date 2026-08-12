@@ -1,14 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+
+/**
+ * Insurance policies list (GET) + new policy (POST).
+ *
+ * Multi-tenant: every operation is scoped by x-tenant-id from the
+ * middleware. Layer 2.5 fix that closes TENANT-001 for the insurance
+ * surface.
+ */
 export async function GET(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const { searchParams } = new URL(req.url);
     const contractId = searchParams.get('contractId');
     const status     = searchParams.get('status');
     const now = new Date();
-    // Auto-update expiring soon status
     const policies = await prisma.leaseInsurancePolicy.findMany({
       where: {
+        tenantId,
         deletedAt: null,
         ...(contractId ? { contractId } : {}),
         ...(status ? { status } : {}),
@@ -22,14 +34,36 @@ export async function GET(req: NextRequest) {
       daysToExpiry: Math.ceil((new Date(p.expiryDate).getTime() - now.getTime()) / 86400000),
     }));
     return NextResponse.json(result);
-  } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+  } catch (e) {
+    console.error('GET /api/leasing/insurance error:', e);
+    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+  }
 }
+
 export async function POST(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const body = await req.json();
-    const count = await prisma.leaseInsurancePolicy.count();
+    if (body.contractId) {
+      const contract = await prisma.leaseContract2.findFirst({
+        where: { id: body.contractId, tenantId },
+        select: { id: true },
+      });
+      if (!contract) {
+        return NextResponse.json({ error: 'Contract not found in this tenant' }, { status: 404 });
+      }
+    }
+    const count = await prisma.leaseInsurancePolicy.count({ where: { tenantId } });
     const policyNo = body.policyNo ?? `INS-${String(count + 1).padStart(5, '0')}`;
-    const policy = await prisma.leaseInsurancePolicy.create({ data: { ...body, policyNo } });
+    const policy = await prisma.leaseInsurancePolicy.create({
+      data: { ...body, tenantId, policyNo },
+    });
     return NextResponse.json(policy, { status: 201 });
-  } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+  } catch (e) {
+    console.error('POST /api/leasing/insurance error:', e);
+    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+  }
 }

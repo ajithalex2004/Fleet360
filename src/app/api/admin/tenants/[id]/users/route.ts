@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls, withPlatformAdmin } from '@/lib/rls';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     // Single joined query — avoids 2 sequential DB round-trips
-    const userTenants = await prisma.userTenant.findMany({
-      where: { tenantId: params.id },
-      include: {
-        role: true,
-        user: true,   // join user in same query instead of a second findMany
-      },
-    });
+    // UserTenant has RLS, Role has RLS, User is global. We use withTenantRls
+    // so the join is constrained to the target tenant's memberships.
+    const userTenants = await withTenantRls(prisma, params.id, (tx) =>
+      tx.userTenant.findMany({
+        where: { tenantId: params.id },
+        include: {
+          role: true,
+          user: true,   // join user in same query instead of a second findMany
+        },
+      })
+    );
 
     // Return flat structure so the UI can access u.firstName, u.username,
     // u.roleName, u.roleCode directly without nested drilling
@@ -43,31 +48,40 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!userId) return NextResponse.json({ error: 'userId is required' }, { status: 400 });
     if (!roleId)  return NextResponse.json({ error: 'roleId is required' },  { status: 400 });
 
-    // Validate all referenced records exist
-    const user   = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user)   return NextResponse.json({ error: `User not found: ${userId}` }, { status: 404 });
-
-    const tenant = await prisma.tenant.findUnique({ where: { id: params.id } });
-    if (!tenant) return NextResponse.json({ error: `Tenant not found: ${params.id}` }, { status: 404 });
-
-    const role   = await prisma.role.findUnique({ where: { id: roleId } });
-    if (!role)   return NextResponse.json({ error: `Role not found: ${roleId}` }, { status: 404 });
-
-    // Upsert: update role if assignment already exists
-    const existing = await prisma.userTenant.findUnique({
-      where: { userId_tenantId: { userId, tenantId: params.id } },
+    // User is global (no RLS), but Role has RLS. We need to look up the
+    // User (no RLS issue) and the Role (need to see this tenant's roles
+    // plus system roles) — so use withPlatformAdmin for the validation
+    // step. The actual UserTenant write happens inside withTenantRls.
+    const validations = await withPlatformAdmin(prisma, async (tx) => {
+      const user   = await tx.user.findUnique({ where: { id: userId } });
+      if (!user)   return { error: `User not found: ${userId}`, status: 404 as const };
+      const tenant = await tx.tenant.findUnique({ where: { id: params.id } });
+      if (!tenant) return { error: `Tenant not found: ${params.id}`, status: 404 as const };
+      const role   = await tx.role.findUnique({ where: { id: roleId } });
+      if (!role)   return { error: `Role not found: ${roleId}`, status: 404 as const };
+      return { ok: true as const };
     });
+    if ('error' in validations) {
+      return NextResponse.json({ error: validations.error }, { status: validations.status });
+    }
 
-    const ut = existing
-      ? await prisma.userTenant.update({
-          where: { id: existing.id },
-          data: { roleId, isActive: true },
-        })
-      : await prisma.userTenant.create({
-          data: { userId, tenantId: params.id, roleId },
-        });
+    // Upsert membership inside the tenant-scoped transaction.
+    return await withTenantRls(prisma, params.id, async (tx) => {
+      const existing = await tx.userTenant.findUnique({
+        where: { userId_tenantId: { userId, tenantId: params.id } },
+      });
 
-    return NextResponse.json(ut, { status: 201 });
+      const ut = existing
+        ? await tx.userTenant.update({
+            where: { id: existing.id },
+            data: { roleId, isActive: true },
+          })
+        : await tx.userTenant.create({
+            data: { userId, tenantId: params.id, roleId },
+          });
+
+      return NextResponse.json(ut, { status: 201 });
+    });
   } catch (e: any) {
     console.error('POST /api/admin/tenants/[id]/users error:', e);
     if (e?.code === 'P2002') {
@@ -86,7 +100,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     const userId = searchParams.get('userId');
     if (!userId) return NextResponse.json({ error: 'userId is required' }, { status: 400 });
 
-    await prisma.userTenant.deleteMany({ where: { tenantId: params.id, userId } });
+    await withTenantRls(prisma, params.id, (tx) =>
+      tx.userTenant.deleteMany({ where: { tenantId: params.id, userId } })
+    );
     return NextResponse.json({ success: true });
   } catch (e: any) {
     console.error('DELETE /api/admin/tenants/[id]/users error:', e);

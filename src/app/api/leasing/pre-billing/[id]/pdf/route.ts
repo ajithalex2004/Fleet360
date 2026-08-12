@@ -2,6 +2,9 @@
  * GET /api/leasing/pre-billing/[id]/pdf?lang=en|ar&download=0|1
  *
  * Bilingual pre-billing statement PDF.
+ *
+ * Tenant scoping: requires x-tenant-id. The statement must belong to the
+ * caller's tenant.
  */
 
 import { createElement } from 'react';
@@ -23,38 +26,39 @@ const VENDOR_DEFAULT = {
   trn: '',
 };
 
+function jsonErr(error: string, status: number) {
+  return new Response(JSON.stringify({ error }), { status, headers: { 'Content-Type': 'application/json' } });
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const tenantId = request.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return jsonErr('Not authenticated', 401);
+  }
   const langParam = request.nextUrl.searchParams.get('lang');
   const lang: Lang = langParam === 'ar' ? 'ar' : 'en';
   const download = request.nextUrl.searchParams.get('download') === '1';
 
   try {
-    const stmt = await prisma.leasePreBillingStatement.findUnique({
-      where: { id },
+    const stmt = await prisma.leasePreBillingStatement.findFirst({
+      where: { id, tenantId },
       include: { contract: true },
     });
     if (!stmt) {
-      return new Response(JSON.stringify({ error: 'Statement not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return jsonErr('Statement not found', 404);
     }
 
-    const lessee = await prisma.lessee.findUnique({ where: { id: stmt.lesseeId } });
+    const lessee = await prisma.lessee.findFirst({
+      where: { id: stmt.lesseeId, tenantId },
+    });
     if (!lessee) {
-      return new Response(JSON.stringify({ error: 'Lessee not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return jsonErr('Lessee not found', 404);
     }
 
-    // Sources are not persisted — only summary totals are. The PDF still
-    // shows a clean summary; itemised detail is only present at aggregate-time.
-    // We surface the period via createdAt → +30 days as a fallback display.
     const periodFrom = stmt.contract?.startDate ?? stmt.createdAt ?? new Date();
     const periodTo = stmt.dueDate;
 
@@ -101,9 +105,6 @@ export async function GET(
   } catch (err) {
     captureException(err, { context: 'leasing.pre-billing.pdf', tags: { statementId: id, lang } });
     console.error('[pre-billing pdf] error:', err);
-    return new Response(JSON.stringify({ error: 'Failed to generate PDF' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return jsonErr('Failed to generate PDF', 500);
   }
 }

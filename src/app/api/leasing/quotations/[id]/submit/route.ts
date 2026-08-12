@@ -1,13 +1,25 @@
+/**
+ * POST /api/leasing/quotations/[id]/submit
+ *
+ * Marks a LeaseQuotation as SENT_TO_CUSTOMER and (best-effort) emails the
+ * lessee using the configured SMTP integration. Tenant scoping: the
+ * quotation must belong to the caller's tenant.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import nodemailer from 'nodemailer';
 import { quotationEmailHtml, quotationEmailText } from '@/lib/email-templates/quotation';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
-    // 1. Fetch full quotation with lessee
-    const quotation = await prisma.leaseQuotation.findUnique({
-      where: { id: params.id },
+    // 1. Fetch full quotation with lessee (tenant-scoped).
+    const quotation = await prisma.leaseQuotation.findFirst({
+      where: { id: params.id, tenantId },
       include: {
         lessee:   true,
         vehicles: true,
@@ -21,11 +33,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       || (quotation.lessee as any)?.email
       || null;
 
-    // 2. Update status to SENT_TO_CUSTOMER
-    await prisma.leaseQuotation.update({
-      where: { id: params.id },
+    // 2. Update status to SENT_TO_CUSTOMER (tenant-scoped via updateMany so
+    //    we refuse to flip a row that doesn't belong to this tenant).
+    const upd = await prisma.leaseQuotation.updateMany({
+      where: { id: params.id, tenantId },
       data:  { status: 'SENT_TO_CUSTOMER', updatedAt: new Date() },
     });
+    if (upd.count === 0) {
+      return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
+    }
 
     // 3. Try to send email if SMTP is configured
     let emailResult: { sent: boolean; message: string; recipient?: string } = {

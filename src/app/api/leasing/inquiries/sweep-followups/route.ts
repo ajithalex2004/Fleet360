@@ -7,12 +7,16 @@
  *
  * Idempotent — same-day, same-title dedup.
  *
+ * Tenant scoping: cron-triggered sweeps iterate every active tenant; a
+ * logged-in user only triggers for their own tenant.
+ *
  * Auth: optional CRON_SECRET Bearer.
  * Query: ?dryRun=1 to preview.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withSystemJob } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 import { sendEmail } from '@/lib/email';
@@ -21,8 +25,9 @@ import { sendWhatsApp } from '@/lib/whatsapp';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  const tenantHeader = req.headers.get('x-tenant-id');
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && !req.headers.get('x-tenant-id')) {
+  if (cronSecret && !tenantHeader) {
     const auth = req.headers.get('authorization');
     if (auth !== `Bearer ${cronSecret}`) {
       return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
@@ -34,32 +39,10 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    const due = await prisma.leaseInquiryActivity.findMany({
-      where: {
-        followUpDone: false,
-        followUpAt: { lte: now },
-      },
-      select: {
-        id: true, inquiryId: true, activityType: true, subject: true,
-        followUpAt: true, performedByName: true,
-      },
-    });
-
-    // Aggregate by inquiry — one alert summarising N overdue follow-ups.
-    const byInquiry = new Map<string, typeof due>();
-    for (const d of due) {
-      const arr = byInquiry.get(d.inquiryId) ?? [];
-      arr.push(d);
-      byInquiry.set(d.inquiryId, arr);
-    }
-
-    const inquiries = await prisma.leaseInquiry.findMany({
-      where: { id: { in: [...byInquiry.keys()] }, deletedAt: null, status: { notIn: ['CONVERTED', 'LOST'] } },
-      select: { id: true, inquiryNumber: true, customerName: true, companyName: true },
-    });
-    const inquiryById = new Map(inquiries.map(i => [i.id, i]));
+    type DueActivity = Awaited<ReturnType<typeof prisma.leaseInquiryActivity.findMany>>[number];
 
     interface Assessment {
+      tenantId: string;
       inquiryId: string;
       inquiryNumber: string | null;
       label: string;
@@ -68,73 +51,144 @@ export async function POST(req: NextRequest) {
       title: string;
       message: string;
     }
+    interface PerTenantResult {
+      activities: number;
+      inquiries: number;
+      assessments: Assessment[];
+      alertsCreated: number;
+      alertsSkipped: number;
+      errors: number;
+    }
 
-    const assessments: Assessment[] = [];
-    for (const [iid, items] of byInquiry) {
-      const inq = inquiryById.get(iid);
-      if (!inq) continue; // skip converted/lost
-      items.sort((a, b) => a.followUpAt!.getTime() - b.followUpAt!.getTime());
-      const oldestDue = items[0].followUpAt!;
-      const daysOverdue = Math.floor((now.getTime() - oldestDue.getTime()) / 86400000);
-      const label = inq.companyName ?? inq.customerName;
-      assessments.push({
-        inquiryId: iid,
-        inquiryNumber: inq.inquiryNumber,
-        label,
-        count: items.length,
-        oldestDue,
-        title: `Sales follow-up overdue: ${inq.inquiryNumber ?? iid.slice(0, 8)} — ${label}`,
-        message: `${items.length} pending follow-up${items.length === 1 ? '' : 's'} for ${label}. Oldest due ${oldestDue.toISOString().slice(0, 10)} (${daysOverdue}d ago).`,
-      });
+    const perTenant = await withSystemJob<PerTenantResult>(
+      prisma,
+      async ({ tx, tenantId }) => {
+        const due = (await tx.leaseInquiryActivity.findMany({
+          where: {
+            tenantId,
+            followUpDone: false,
+            followUpAt: { lte: now },
+          },
+          select: {
+            id: true, inquiryId: true, activityType: true, subject: true,
+            followUpAt: true, performedByName: true,
+          },
+        })) as DueActivity[];
+
+        const byInquiry = new Map<string, DueActivity[]>();
+        for (const d of due) {
+          const arr = byInquiry.get(d.inquiryId) ?? [];
+          arr.push(d);
+          byInquiry.set(d.inquiryId, arr);
+        }
+
+        const inquiries = await tx.leaseInquiry.findMany({
+          where: {
+            id: { in: [...byInquiry.keys()] },
+            deletedAt: null,
+            status: { notIn: ['CONVERTED', 'LOST'] },
+          },
+          select: { id: true, inquiryNumber: true, customerName: true, companyName: true },
+        });
+        const inquiryById = new Map(inquiries.map(i => [i.id, i]));
+
+        const assessments: Assessment[] = [];
+        for (const [iid, items] of byInquiry) {
+          const inq = inquiryById.get(iid);
+          if (!inq) continue;
+          items.sort((a, b) => a.followUpAt!.getTime() - b.followUpAt!.getTime());
+          const oldestDue = items[0].followUpAt!;
+          const daysOverdue = Math.floor((now.getTime() - oldestDue.getTime()) / 86400000);
+          const label = inq.companyName ?? inq.customerName;
+          assessments.push({
+            tenantId,
+            inquiryId: iid,
+            inquiryNumber: inq.inquiryNumber,
+            label,
+            count: items.length,
+            oldestDue,
+            title: `Sales follow-up overdue: ${inq.inquiryNumber ?? iid.slice(0, 8)} — ${label}`,
+            message: `${items.length} pending follow-up${items.length === 1 ? '' : 's'} for ${label}. Oldest due ${oldestDue.toISOString().slice(0, 10)} (${daysOverdue}d ago).`,
+          });
+        }
+
+        if (dryRun) {
+          return {
+            activities: due.length, inquiries: byInquiry.size, assessments,
+            alertsCreated: 0, alertsSkipped: 0, errors: 0,
+          };
+        }
+
+        let alertsCreated = 0;
+        let alertsSkipped = 0;
+        let errors = 0;
+        for (const a of assessments) {
+          try {
+            const existing = await tx.leaseAlert.findFirst({
+              where: { title: a.title, status: 'OPEN', createdAt: { gte: today } },
+              select: { id: true },
+            });
+            if (existing) { alertsSkipped += 1; continue; }
+            await tx.leaseAlert.create({
+              data: {
+                alertType: 'CUSTOM', severity: 'WARNING',
+                title: a.title, message: a.message,
+                status: 'OPEN', tenantId,
+              },
+            });
+            alertsCreated += 1;
+          } catch (err) {
+            errors += 1;
+            captureException(err, {
+              context: 'leasing.inquiries.sweep-followups.apply',
+              tags: { inquiryId: a.inquiryId, tenantId },
+            });
+          }
+        }
+        return {
+          activities: due.length, inquiries: byInquiry.size, assessments,
+          alertsCreated, alertsSkipped, errors,
+        };
+      },
+      { tenantHeader },
+    );
+
+    let totalActivities = 0;
+    let totalInquiries = 0;
+    const allAssessments: Assessment[] = [];
+    const counts = { alertsCreated: 0, alertsSkipped: 0, errors: 0 };
+    for (const r of perTenant) {
+      totalActivities += r.result.activities;
+      totalInquiries += r.result.inquiries;
+      allAssessments.push(...r.result.assessments);
+      counts.alertsCreated += r.result.alertsCreated;
+      counts.alertsSkipped += r.result.alertsSkipped;
+      counts.errors += r.result.errors;
     }
 
     if (dryRun) {
       return NextResponse.json({
         dryRun: true, runAt: now.toISOString(),
-        scannedActivities: due.length,
-        scannedInquiries: byInquiry.size,
-        assessments,
+        tenantsScanned: perTenant.length,
+        scannedActivities: totalActivities,
+        scannedInquiries: totalInquiries,
+        assessments: allAssessments,
       });
     }
 
-    const counts = { alertsCreated: 0, alertsSkipped: 0, errors: 0 };
-    for (const a of assessments) {
-      try {
-        const existing = await prisma.leaseAlert.findFirst({
-          where: { title: a.title, status: 'OPEN', createdAt: { gte: today } },
-          select: { id: true },
-        });
-        if (existing) { counts.alertsSkipped += 1; continue; }
-        await prisma.leaseAlert.create({
-          data: {
-            alertType: 'CUSTOM',
-            severity: 'WARNING',
-            title: a.title,
-            message: a.message,
-            status: 'OPEN',
-          },
-        });
-        counts.alertsCreated += 1;
-      } catch (err) {
-        counts.errors += 1;
-        captureException(err, { context: 'leasing.inquiries.sweep-followups.apply', tags: { inquiryId: a.inquiryId } });
-      }
-    }
-
     // Digest notifications to the sales team (best-effort, non-blocking).
-    // Configured by LEASING_SALES_NOTIFY_EMAIL and/or LEASING_SALES_NOTIFY_WHATSAPP.
     let digestEmailSent = false;
     let digestWhatsAppSent = false;
-    if (assessments.length > 0) {
+    if (allAssessments.length > 0) {
       const teamEmail = process.env.LEASING_SALES_NOTIFY_EMAIL;
       const teamPhone = process.env.LEASING_SALES_NOTIFY_WHATSAPP ?? process.env.OPERATIONS_PHONE;
-      const lines = assessments.map(a =>
+      const lines = allAssessments.map(a =>
         `• ${a.inquiryNumber ?? a.inquiryId.slice(0, 8)} — ${a.label}: ${a.count} follow-up${a.count === 1 ? '' : 's'} (oldest ${a.oldestDue.toISOString().slice(0, 10)})`,
       );
-      const summary = `Sales follow-up digest — ${assessments.length} inquiries with overdue follow-ups`;
+      const summary = `Sales follow-up digest — ${allAssessments.length} inquiries with overdue follow-ups across ${perTenant.length} tenant(s)`;
 
       if (teamEmail) {
-        const html = `<p>${summary}</p><ul>${assessments.map(a =>
+        const html = `<p>${summary}</p><ul>${allAssessments.map(a =>
           `<li><strong>${a.inquiryNumber ?? a.inquiryId.slice(0, 8)}</strong> — ${escapeHtml(a.label)}: ${a.count} pending (oldest ${a.oldestDue.toISOString().slice(0, 10)})</li>`,
         ).join('')}</ul><p style="color:#666;font-size:12px">Triggered by daily sweep at ${now.toISOString()}.</p>`;
         const r = await sendEmail({
@@ -159,15 +213,16 @@ export async function POST(req: NextRequest) {
         userRole: 'SYSTEM',
         entityType: 'LeaseInquiry',
         action: 'UPDATE',
-        details: `Inquiry follow-up sweep: ${assessments.length} inquiries with overdue follow-ups, ${counts.alertsCreated} alerts emitted, ${counts.alertsSkipped} skipped, ${counts.errors} errors. Digest email: ${digestEmailSent}, WhatsApp: ${digestWhatsAppSent}.`,
+        details: `Inquiry follow-up sweep: ${allAssessments.length} inquiries with overdue follow-ups across ${perTenant.length} tenant(s), ${counts.alertsCreated} alerts emitted, ${counts.alertsSkipped} skipped, ${counts.errors} errors. Digest email: ${digestEmailSent}, WhatsApp: ${digestWhatsAppSent}.`,
       });
     }
 
     return NextResponse.json({
       dryRun: false, runAt: now.toISOString(),
-      scannedActivities: due.length,
-      scannedInquiries: byInquiry.size,
-      counts, assessments,
+      tenantsScanned: perTenant.length,
+      scannedActivities: totalActivities,
+      scannedInquiries: totalInquiries,
+      counts, assessments: allAssessments,
       digestEmailSent, digestWhatsAppSent,
     });
   } catch (err) {

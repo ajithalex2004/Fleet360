@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import PasswordInput from '@/components/ui/PasswordInput';
+import { MODULE_BY_KEY, type ModuleKey } from '@/lib/modules';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -25,21 +26,46 @@ interface FormData {
 }
 
 // ── Module definitions ────────────────────────────────────────────────────────
+// Onboarding presents a curated subset of the canonical registry. Module
+// identifiers use kebab-case ModuleKeys so they match what /api/tenants/provision
+// and the admin tenants matrix write to the DB. Names + descriptions are
+// pulled from the registry at build time — single source of truth.
+//
+// The emoji icons here are onboarding-specific (consumer-friendly glyphs);
+// the registry uses lucide names for the platform home. Both styles are
+// kept here as a deliberate UX choice for the onboarding flow.
 
-const ALL_MODULES = [
-  { id: 'fleet',          icon: '🚗', name: 'Fleet Management',          description: 'Core vehicle registry and maintenance' },
-  { id: 'rac',            icon: '🔑', name: 'Rental & Leasing',          description: 'RAC agreements and leasing contracts' },
-  { id: 'logistics',      icon: '📦', name: 'Logistics',                 description: 'Cargo bookings and freight management' },
-  { id: 'staff-transport',icon: '👥', name: 'Staff Transport',           description: 'Employee shuttle and trip scheduling' },
-  { id: 'school-bus',     icon: '🚌', name: 'School Bus',                description: 'Student transport and parent notifications' },
-  { id: 'ambulance',      icon: '🚑', name: 'Ambulance',                 description: 'Emergency dispatch and incident management' },
-  { id: 'finance',        icon: '💰', name: 'Finance',                   description: 'Invoicing, reconciliation, and reporting' },
-  { id: 'dispatch',       icon: '📍', name: 'Dispatch',                  description: 'Smart dispatch and job queue management' },
-];
+const ONBOARDING_MODULE_KEYS = [
+  'fleet', 'rental', 'logistics', 'bus-ops', 'school-bus', 'incidents', 'finance', 'dispatch',
+] as const satisfies readonly ModuleKey[];
+
+const ONBOARDING_ICONS: Readonly<Record<(typeof ONBOARDING_MODULE_KEYS)[number], string>> = {
+  'fleet':       '🚗',
+  'rental':      '🔑',
+  'logistics':   '📦',
+  'bus-ops':     '👥',
+  'school-bus':  '🚌',
+  'incidents':   '🚑',
+  'finance':     '💰',
+  'dispatch':    '📍',
+};
+
+const ALL_MODULES = ONBOARDING_MODULE_KEYS.map(key => {
+  const m = MODULE_BY_KEY[key];
+  return {
+    id:          m.key,
+    icon:        ONBOARDING_ICONS[key],
+    name:        m.name,
+    description: m.description,
+  };
+});
 
 // ── Plan cards ────────────────────────────────────────────────────────────────
+// Hardcoded fallback in case the API call fails or is still loading. The real
+// source is /api/platform/plans which reads from the platform_plans table.
+interface UiPlan { id: string; label: string; price: string; desc: string; highlight: boolean }
 
-const PLANS = [
+const FALLBACK_PLANS: readonly UiPlan[] = [
   { id: 'TRIAL',        label: 'Trial',        price: 'Free',          desc: '60 req/min · 1 tenant',           highlight: false },
   { id: 'STANDARD',     label: 'Standard',     price: 'AED 299/mo',   desc: '200 req/min · Up to 5 branches',  highlight: false },
   { id: 'PROFESSIONAL', label: 'Professional', price: 'AED 799/mo',   desc: '500 req/min · Unlimited branches', highlight: true  },
@@ -114,6 +140,29 @@ export default function OnboardingPage() {
   });
 
   const [emailError, setEmailError] = useState<string | null>(null);
+
+  // ── Plan catalog (fetched from /api/platform/plans) ──────────────────────
+  const [plans, setPlans] = useState<UiPlan[]>([...FALLBACK_PLANS]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/platform/plans')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (cancelled || !data?.plans) return;
+        const apiPlans: UiPlan[] = (data.plans as Array<{
+          code: string; name: string; priceLabel: string; description: string; highlight: boolean;
+        }>).map(p => ({
+          id:        p.code,
+          label:     p.name,
+          price:     p.priceLabel,
+          desc:      p.description,
+          highlight: p.highlight,
+        }));
+        if (apiPlans.length > 0) setPlans(apiPlans);
+      })
+      .catch(() => { /* keep fallback */ });
+    return () => { cancelled = true; };
+  }, []);
 
   const update = useCallback((field: keyof FormData, value: string | string[]) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -831,7 +880,7 @@ export default function OnboardingPage() {
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-3">Select Plan</label>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {PLANS.map(plan => (
+                    {plans.map(plan => (
                       <button
                         key={plan.id}
                         type="button"

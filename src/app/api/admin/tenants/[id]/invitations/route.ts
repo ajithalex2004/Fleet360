@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import {
   ensureInvitationTable, generateInvitationToken, INVITATION_TTL_DAYS,
 } from '@/lib/invitations';
@@ -44,21 +45,26 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
   await ensureInvitationTable();
 
-  const rows = await prisma.$queryRawUnsafe<Array<{
-    id: string; email: string; role_id: string; role_name: string;
-    invited_by_user_id: string | null; invited_by_email: string | null;
-    expires_at: string; used_at: string | null; revoked: boolean; created_at: string;
-  }>>(
-    `SELECT i.id::text, i.email, i.role_id, r.name AS role_name,
-            i.invited_by_user_id, u.email AS invited_by_email,
-            i.expires_at::text, i.used_at::text, i.revoked, i.created_at::text
-     FROM tenant_invitations i
-     LEFT JOIN roles  r ON r.id = i.role_id
-     LEFT JOIN "User" u ON u.id = i.invited_by_user_id
-     WHERE i.tenant_id = $1
-     ORDER BY i.created_at DESC
-     LIMIT 200`,
-    tenantId,
+  // tenant_invitations has tenant_id with RLS. Join to roles (also RLS)
+  // and User (global) — wrap with withTenantRls so the join sees the
+  // right rows and any future RLS on tenants / roles / users is honored.
+  const rows = await withTenantRls(prisma, tenantId, (tx) =>
+    tx.$queryRawUnsafe<Array<{
+      id: string; email: string; role_id: string; role_name: string;
+      invited_by_user_id: string | null; invited_by_email: string | null;
+      expires_at: string; used_at: string | null; revoked: boolean; created_at: string;
+    }>>(
+      `SELECT i.id::text, i.email, i.role_id, r.name AS role_name,
+              i.invited_by_user_id, u.email AS invited_by_email,
+              i.expires_at::text, i.used_at::text, i.revoked, i.created_at::text
+       FROM tenant_invitations i
+       LEFT JOIN roles  r ON r.id = i.role_id
+       LEFT JOIN "User" u ON u.id = i.invited_by_user_id
+       WHERE i.tenant_id = $1
+       ORDER BY i.created_at DESC
+       LIMIT 200`,
+      tenantId,
+    )
   );
 
   const now = new Date();
@@ -100,110 +106,112 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ ok: false, error: 'roleId is required.' }, { status: 400 });
   }
 
-  // Verify the role belongs to this tenant (or is global with tenant_id NULL).
-  const role = await prisma.role.findFirst({
-    where: { id: roleId, OR: [{ tenantId }, { tenantId: null }] },
-    select: { id: true, name: true, code: true },
-  });
-  if (!role) return NextResponse.json({ ok: false, error: 'Role not found for this tenant.' }, { status: 400 });
-
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: tenantId },
-    select: { id: true, name: true, isActive: true },
-  });
-  if (!tenant || !tenant.isActive) {
-    return NextResponse.json({ ok: false, error: 'Tenant not found or inactive.' }, { status: 400 });
-  }
-
-  // Block re-invitation when an active membership already exists.
-  const existing = await prisma.userTenant.findFirst({
-    where: { tenantId, isActive: true, user: { email } },
-    select: { id: true },
-  });
-  if (existing) {
-    return NextResponse.json({ ok: false, error: `${email} is already a member of this organisation.` }, { status: 400 });
-  }
-
-  // Quota: count active members + outstanding pending invitations against maxUsers.
-  const tenantPlan = (req.headers.get('x-tenant-plan') ?? 'TRIAL') as PlanCode;
-  const [activeCount, pendingRows] = await Promise.all([
-    prisma.userTenant.count({ where: { tenantId, isActive: true } }),
-    prisma.$queryRawUnsafe<{ c: bigint }[]>(
-      `SELECT COUNT(*)::bigint AS c FROM tenant_invitations
-       WHERE tenant_id = $1 AND used_at IS NULL AND revoked = FALSE AND expires_at > NOW()`,
-      tenantId,
-    ).catch(() => []),
-  ]);
-  const pending = pendingRows[0] ? Number(pendingRows[0].c) : 0;
-  const quotaGate = requireUnderQuota({
-    plan: tenantPlan, resource: 'maxUsers', current: activeCount + pending,
-  });
-  if (quotaGate) return quotaGate;
-
-  try {
-    await ensureInvitationTable();
-
-    // Single active invitation per email × tenant — revoke any prior live one.
-    await prisma.$executeRawUnsafe(
-      `UPDATE tenant_invitations
-         SET revoked = TRUE
-       WHERE tenant_id = $1 AND LOWER(email) = $2
-         AND used_at IS NULL AND revoked = FALSE AND expires_at > NOW()`,
-      tenantId, email,
-    ).catch(() => {});
-
-    const { token, hash } = generateInvitationToken();
-    const expiresAt = new Date(Date.now() + INVITATION_TTL_DAYS * 86_400_000);
-
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO tenant_invitations
-         (tenant_id, email, role_id, token_hash, invited_by_user_id, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      tenantId, email, roleId, hash, auth.userId, expiresAt,
-    );
-
-    const baseUrl   = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-    const acceptUrl = `${baseUrl}/invitation/${encodeURIComponent(token)}`;
-
-    const send = await sendEmail({
-      to: email,
-      subject: `You've been invited to ${tenant.name} on Fleet360`,
-      text: [
-        `You've been invited to join ${tenant.name} as ${role.name}.`,
-        '',
-        `Accept the invite (valid for ${INVITATION_TTL_DAYS} days):`,
-        acceptUrl,
-        '',
-        'If you didn\'t expect this, you can safely ignore the email.',
-      ].join('\n'),
-      html:
-        `<p>You&rsquo;ve been invited to join <strong>${escapeHtml(tenant.name)}</strong> as <strong>${escapeHtml(role.name)}</strong> on Fleet360.</p>` +
-        `<p><a href="${acceptUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:white;border-radius:8px;text-decoration:none">Accept invitation</a></p>` +
-        `<p style="color:#666;font-size:12px">Or copy this link: <code>${acceptUrl}</code><br/>Valid for ${INVITATION_TTL_DAYS} days.</p>` +
-        `<p style="color:#666;font-size:12px">If you didn&rsquo;t expect this, ignore the email.</p>`,
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    // Verify the role belongs to this tenant (or is global with tenant_id NULL).
+    const role = await tx.role.findFirst({
+      where: { id: roleId, OR: [{ tenantId }, { tenantId: null }] },
+      select: { id: true, name: true, code: true },
     });
+    if (!role) return NextResponse.json({ ok: false, error: 'Role not found for this tenant.' }, { status: 400 });
 
-    void logAudit({
-      tenantId, tenantName: tenant.name,
-      userId: auth.userId,
-      userRole: 'TENANT_ADMIN',
-      entityType: 'Invitation',
-      entityName: email,
-      action: 'CREATE',
-      details: `Invitation sent to ${email} as ${role.name}. Email send: ${send.sent ? 'OK' : `failed (${send.reason ?? 'unknown'})`}.`,
+    const tenant = await tx.tenant.findUnique({
+      where: { id: tenantId },
+      select: { id: true, name: true, isActive: true },
     });
+    if (!tenant || !tenant.isActive) {
+      return NextResponse.json({ ok: false, error: 'Tenant not found or inactive.' }, { status: 400 });
+    }
 
-    return NextResponse.json({
-      ok: true,
-      emailed: send.sent,
-      reason:  send.sent ? undefined : send.reason,
-      // Caller may still need the URL when SMTP isn't configured (dev environments).
-      acceptUrl: send.sent ? undefined : acceptUrl,
+    // Block re-invitation when an active membership already exists.
+    const existing = await tx.userTenant.findFirst({
+      where: { tenantId, isActive: true, user: { email } },
+      select: { id: true },
     });
-  } catch (err) {
-    captureException(err, { context: 'admin.invitations.post' });
-    return NextResponse.json({ ok: false, error: 'Failed to create invitation' }, { status: 500 });
-  }
+    if (existing) {
+      return NextResponse.json({ ok: false, error: `${email} is already a member of this organisation.` }, { status: 400 });
+    }
+
+    // Quota: count active members + outstanding pending invitations against maxUsers.
+    const tenantPlan = (req.headers.get('x-tenant-plan') ?? 'TRIAL') as PlanCode;
+    const [activeCount, pendingRows] = await Promise.all([
+      tx.userTenant.count({ where: { tenantId, isActive: true } }),
+      tx.$queryRawUnsafe<{ c: bigint }[]>(
+        `SELECT COUNT(*)::bigint AS c FROM tenant_invitations
+         WHERE tenant_id = $1 AND used_at IS NULL AND revoked = FALSE AND expires_at > NOW()`,
+        tenantId,
+      ).catch(() => []),
+    ]);
+    const pending = pendingRows[0] ? Number(pendingRows[0].c) : 0;
+    const quotaGate = requireUnderQuota({
+      plan: tenantPlan, resource: 'maxUsers', current: activeCount + pending,
+    });
+    if (quotaGate) return quotaGate;
+
+    try {
+      await ensureInvitationTable();
+
+      // Single active invitation per email × tenant — revoke any prior live one.
+      await tx.$executeRawUnsafe(
+        `UPDATE tenant_invitations
+           SET revoked = TRUE
+         WHERE tenant_id = $1 AND LOWER(email) = $2
+           AND used_at IS NULL AND revoked = FALSE AND expires_at > NOW()`,
+        tenantId, email,
+      ).catch(() => {});
+
+      const { token, hash } = generateInvitationToken();
+      const expiresAt = new Date(Date.now() + INVITATION_TTL_DAYS * 86_400_000);
+
+      await tx.$executeRawUnsafe(
+        `INSERT INTO tenant_invitations
+           (tenant_id, email, role_id, token_hash, invited_by_user_id, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        tenantId, email, roleId, hash, auth.userId, expiresAt,
+      );
+
+      const baseUrl   = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+      const acceptUrl = `${baseUrl}/invitation/${encodeURIComponent(token)}`;
+
+      const send = await sendEmail({
+        to: email,
+        subject: `You've been invited to ${tenant.name} on Fleet360`,
+        text: [
+          `You've been invited to join ${tenant.name} as ${role.name}.`,
+          '',
+          `Accept the invite (valid for ${INVITATION_TTL_DAYS} days):`,
+          acceptUrl,
+          '',
+          'If you didn\'t expect this, you can safely ignore the email.',
+        ].join('\n'),
+        html:
+          `<p>You&rsquo;ve been invited to join <strong>${escapeHtml(tenant.name)}</strong> as <strong>${escapeHtml(role.name)}</strong> on Fleet360.</p>` +
+          `<p><a href="${acceptUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:white;border-radius:8px;text-decoration:none">Accept invitation</a></p>` +
+          `<p style="color:#666;font-size:12px">Or copy this link: <code>${acceptUrl}</code><br/>Valid for ${INVITATION_TTL_DAYS} days.</p>` +
+          `<p style="color:#666;font-size:12px">If you didn&rsquo;t expect this, ignore the email.</p>`,
+      });
+
+      void logAudit({
+        tenantId, tenantName: tenant.name,
+        userId: auth.userId,
+        userRole: 'TENANT_ADMIN',
+        entityType: 'Invitation',
+        entityName: email,
+        action: 'CREATE',
+        details: `Invitation sent to ${email} as ${role.name}. Email send: ${send.sent ? 'OK' : `failed (${send.reason ?? 'unknown'})`}.`,
+      });
+
+      return NextResponse.json({
+        ok: true,
+        emailed: send.sent,
+        reason:  send.sent ? undefined : send.reason,
+        // Caller may still need the URL when SMTP isn't configured (dev environments).
+        acceptUrl: send.sent ? undefined : acceptUrl,
+      });
+    } catch (err) {
+      captureException(err, { context: 'admin.invitations.post' });
+      return NextResponse.json({ ok: false, error: 'Failed to create invitation' }, { status: 500 });
+    }
+  });
 }
 
 function escapeHtml(s: string): string {

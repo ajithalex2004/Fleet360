@@ -1,10 +1,22 @@
+/**
+ * /api/leasing/contracts/[id] — V1 detail route.
+ *
+ * History: written against the V1 `leaseContract` model (removed by
+ * Layer 2.6). Now backed by `leaseContract2` with tenant scoping on every
+ * operation.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
-    const contract = await prisma.leaseContract.findUnique({
-      where: { id: params.id },
+    const contract = await prisma.leaseContract2.findFirst({
+      where: { id: params.id, tenantId },
     });
     if (!contract) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -17,9 +29,21 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const body = await req.json();
-    const contract = await prisma.leaseContract.update({
+    // Guarded update — refuses to touch contracts from another tenant.
+    const existing = await prisma.leaseContract2.findFirst({
+      where: { id: params.id, tenantId },
+      select: { id: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    const contract = await prisma.leaseContract2.update({
       where: { id: params.id },
       data: body,
     });
@@ -31,8 +55,19 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
-    await prisma.leaseContract.update({
+    const existing = await prisma.leaseContract2.findFirst({
+      where: { id: params.id, tenantId },
+      select: { id: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    await prisma.leaseContract2.update({
       where: { id: params.id },
       data: { deletedAt: new Date() },
     });

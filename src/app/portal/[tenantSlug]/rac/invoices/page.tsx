@@ -28,8 +28,8 @@ const STATUS_BG: Record<string, string> = {
 };
 
 export default function PortalRacInvoicesPage() {
-  const params = useParams();
-  const search = useSearchParams();
+  const params = useParams() ?? {};
+  const search = useSearchParams() ?? new URLSearchParams();
   const tenantSlug = (params?.tenantSlug as string) ?? '';
   const customerId = search.get('customerId') ?? '';
 

@@ -1,28 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
+import { revalidateCache } from '@/lib/server-cache';
+
+const ROLES_TAG = 'roles:all';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const rps = await prisma.rolePermission.findMany({
-    where: { roleId: params.id },
-    include: { permission: true },
+  return withPlatformAdmin(prisma, async (tx) => {
+    const rps = await tx.rolePermission.findMany({
+      where: { roleId: params.id },
+      include: { permission: true },
+    });
+    return NextResponse.json(rps.map(rp => rp.permission), {
+      headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' },
+    });
   });
-  return NextResponse.json(rps.map(rp => rp.permission));
 }
 
 // PUT: replace all permissions for a role
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const { permissionIds }: { permissionIds: string[] } = await req.json();
-    await prisma.$transaction([
-      prisma.rolePermission.deleteMany({ where: { roleId: params.id } }),
-      prisma.rolePermission.createMany({
-        data: permissionIds.map(pid => ({ roleId: params.id, permissionId: pid })),
-        skipDuplicates: true,
-      }),
-    ]);
-    const perms = await prisma.rolePermission.findMany({
-      where: { roleId: params.id }, include: { permission: true },
+    const perms = await withPlatformAdmin(prisma, async (tx) => {
+      await tx.rolePermission.deleteMany({ where: { roleId: params.id } });
+      if (permissionIds.length > 0) {
+        const BATCH = 50;
+        for (let i = 0; i < permissionIds.length; i += BATCH) {
+          const slice = permissionIds.slice(i, i + BATCH).map(pid => ({
+            roleId: params.id, permissionId: pid,
+          }));
+          await tx.rolePermission.createMany({ data: slice, skipDuplicates: true });
+        }
+      }
+      return tx.rolePermission.findMany({
+        where: { roleId: params.id }, include: { permission: true },
+      });
     });
+    // The role's permission set changed, so the cached role list
+    // (which embeds the permission count) is now stale.
+    await revalidateCache(ROLES_TAG);
     return NextResponse.json(perms.map(rp => rp.permission));
-  } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+  } catch (e) {
+    console.error('[PUT /api/admin/roles/[id]/permissions]', e);
+    return NextResponse.json(
+      {
+        error: 'Failed',
+        message: e instanceof Error ? e.message : String(e),
+      },
+      { status: 500 },
+    );
+  }
 }

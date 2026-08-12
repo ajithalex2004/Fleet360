@@ -1,17 +1,18 @@
+/**
+ * /api/leasing/handover — vehicle handover & return checklists (raw-SQL backend).
+ *
+ * Tenant scoping: requires x-tenant-id. The schema is provisioned with a
+ * `tenant_id` column by ensureTable(); reads filter by tenant; creates
+ * stamp the new row with the same tenantId.
+ *
+ * Note: this route manages a hand-rolled `leasing_handovers` table (not a
+ * Prisma model) via raw SQL. The auto-CREATE statement adds `tenant_id`
+ * for new installs; existing databases without the column will get it
+ * added in place via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-
-/**
- * Leasing Vehicle Handover & Return Checklists API
- * Auto-creates `leasing_handovers` table on every request.
- *
- * Handover types: DELIVERY | RETURN
- * Lifecycle:      SCHEDULED → IN_PROGRESS → COMPLETED | DISPUTED
- *
- * GET   /api/leasing/handover?handover_type=&status=&search=&page=&limit=
- * POST  /api/leasing/handover      — schedule a new handover
- * PATCH /api/leasing/handover?id=  — update status / sign off
- */
 
 async function ensureTable() {
   await prisma.$executeRawUnsafe(`
@@ -19,6 +20,7 @@ async function ensureTable() {
       id                 UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
       created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
       updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      tenant_id          TEXT,
       handover_no        TEXT         UNIQUE NOT NULL,
       contract_id        TEXT,
       contract_no        TEXT,
@@ -52,6 +54,18 @@ async function ensureTable() {
     )
   `);
   await prisma.$executeRawUnsafe(`
+    ALTER TABLE leasing_handovers
+      ADD COLUMN IF NOT EXISTS tenant_id TEXT
+  `);
+  await prisma.$executeRawUnsafe(`
+    UPDATE leasing_handovers
+       SET tenant_id = (SELECT id FROM tenants WHERE COALESCE(is_active, TRUE) = TRUE ORDER BY created_at ASC NULLS LAST LIMIT 1)
+     WHERE tenant_id IS NULL
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_leasing_handovers_tenant ON leasing_handovers(tenant_id)
+  `);
+  await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_leasing_handovers_status ON leasing_handovers(status)
   `);
   await prisma.$executeRawUnsafe(`
@@ -66,6 +80,7 @@ type HandoverRow = {
   id: string;
   created_at: string;
   updated_at: string;
+  tenant_id: string | null;
   handover_no: string;
   contract_id: string | null;
   contract_no: string | null;
@@ -107,6 +122,7 @@ function mapHandover(r: HandoverRow) {
     id: r.id,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    tenantId: r.tenant_id,
     handoverNo: r.handover_no,
     contractId: r.contract_id,
     contractNo: r.contract_no,
@@ -141,6 +157,10 @@ function mapHandover(r: HandoverRow) {
 }
 
 export async function GET(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     await ensureTable();
     const sp           = req.nextUrl.searchParams;
@@ -151,9 +171,9 @@ export async function GET(req: NextRequest) {
     const limit        = Math.min(100, Number(sp.get('limit') ?? 20));
     const offset       = (page - 1) * limit;
 
-    const conds: string[] = [];
-    const params: unknown[] = [];
-    let pi = 1;
+    const conds: string[] = ['h.tenant_id = $1'];
+    const params: unknown[] = [tenantId];
+    let pi = 2;
 
     if (handoverType) { conds.push(`h.handover_type = $${pi++}`);  params.push(handoverType); }
     if (status)       { conds.push(`h.status = $${pi++}`);         params.push(status); }
@@ -163,7 +183,7 @@ export async function GET(req: NextRequest) {
       pi++;
     }
 
-    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+    const where = `WHERE ${conds.join(' AND ')}`;
 
     const [rows, countRows, statusCounts, typeCounts] = await Promise.all([
       prisma.$queryRawUnsafe<HandoverRow[]>(
@@ -177,22 +197,25 @@ export async function GET(req: NextRequest) {
       ).catch(() => [{ cnt: BigInt(0) }]),
 
       prisma.$queryRawUnsafe<CountRow[]>(
-        `SELECT status, COUNT(*) AS cnt FROM leasing_handovers GROUP BY status`
+        `SELECT status, COUNT(*) AS cnt FROM leasing_handovers WHERE tenant_id = $1 GROUP BY status`,
+        tenantId
       ).catch(() => [] as CountRow[]),
 
       prisma.$queryRawUnsafe<TypeCountRow[]>(
-        `SELECT handover_type, COUNT(*) AS cnt FROM leasing_handovers GROUP BY handover_type`
+        `SELECT handover_type, COUNT(*) AS cnt FROM leasing_handovers WHERE tenant_id = $1 GROUP BY handover_type`,
+        tenantId
       ).catch(() => [] as TypeCountRow[]),
     ]);
 
     const today = new Date().toISOString().slice(0, 10);
     const [completedToday] = await prisma.$queryRawUnsafe<[{ cnt: bigint }]>(
-      `SELECT COUNT(*) AS cnt FROM leasing_handovers WHERE status = 'COMPLETED' AND DATE(updated_at) = $1`,
-      today
+      `SELECT COUNT(*) AS cnt FROM leasing_handovers WHERE tenant_id = $1 AND status = 'COMPLETED' AND DATE(updated_at) = $2`,
+      tenantId, today
     ).catch(() => [{ cnt: BigInt(0) }]);
 
     const [pendingSignoff] = await prisma.$queryRawUnsafe<[{ cnt: bigint }]>(
-      `SELECT COUNT(*) AS cnt FROM leasing_handovers WHERE status = 'IN_PROGRESS'`
+      `SELECT COUNT(*) AS cnt FROM leasing_handovers WHERE tenant_id = $1 AND status = 'IN_PROGRESS'`,
+      tenantId
     ).catch(() => [{ cnt: BigInt(0) }]);
 
     const total = Number(countRows[0]?.cnt ?? 0);
@@ -223,6 +246,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     await ensureTable();
     const body = await req.json();
@@ -250,11 +277,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'handover_date is required' }, { status: 400 });
     }
 
-    // Generate handover_no: LHO-YYYYMM-XXXX
+    if (contractId) {
+      const owned = await prisma.leaseContract2.findFirst({
+        where: { id: contractId, tenantId },
+        select: { id: true },
+      });
+      if (!owned) {
+        return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
+      }
+    }
+
     const yyyymm = new Date().toISOString().slice(0, 7).replace('-', '');
     const [seqRow] = await prisma.$queryRawUnsafe<SeqRow[]>(
-      `SELECT COUNT(*) + 1 AS seq FROM leasing_handovers WHERE handover_no LIKE $1`,
-      `LHO-${yyyymm}-%`
+      `SELECT COUNT(*) + 1 AS seq FROM leasing_handovers WHERE tenant_id = $1 AND handover_no LIKE $2`,
+      tenantId, `LHO-${yyyymm}-%`
     );
     const seq = String(Number(seqRow?.seq ?? 1)).padStart(4, '0');
     const handoverNo = `LHO-${yyyymm}-${seq}`;
@@ -262,14 +298,15 @@ export async function POST(req: NextRequest) {
     type NewRow = { id: string; handover_no: string };
     const [row] = await prisma.$queryRawUnsafe<NewRow[]>(
       `INSERT INTO leasing_handovers
-         (handover_no, contract_id, contract_no, lessee_name, vehicle_id, vehicle_no, vehicle_name,
+         (tenant_id, handover_no, contract_id, contract_no, lessee_name, vehicle_id, vehicle_no, vehicle_name,
           handover_type, handover_date, location, fuel_level, odometer_reading,
           condition_score, body_condition, interior_condition, tyres_condition,
           keys_count, spare_key, salik_tag, parking_card, service_book,
           accessories, checklist_items, damage_notes, notes,
           signed_by, witnessed_by, branch_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
        RETURNING id, handover_no`,
+      tenantId,
       handoverNo,
       contractId     || null,
       contractNo     || null,
@@ -308,6 +345,10 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     await ensureTable();
     const id = req.nextUrl.searchParams.get('id');
@@ -319,8 +360,8 @@ export async function PATCH(req: NextRequest) {
     const { action, signedBy, witnessedBy, damageNotes, notes, status: newStatus } = body;
 
     const [current] = await prisma.$queryRawUnsafe<HandoverRow[]>(
-      `SELECT * FROM leasing_handovers WHERE id = $1`,
-      id
+      `SELECT * FROM leasing_handovers WHERE id = $1 AND tenant_id = $2`,
+      id, tenantId
     );
     if (!current) {
       return NextResponse.json({ error: 'Handover not found' }, { status: 404 });
@@ -333,8 +374,8 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: 'Only SCHEDULED handovers can be started' }, { status: 400 });
       }
       await prisma.$executeRawUnsafe(
-        `UPDATE leasing_handovers SET status='IN_PROGRESS', updated_at=$1 WHERE id=$2`,
-        now, id
+        `UPDATE leasing_handovers SET status='IN_PROGRESS', updated_at=$1 WHERE id=$2 AND tenant_id=$3`,
+        now, id, tenantId
       );
     } else if (action === 'COMPLETE') {
       if (!['SCHEDULED', 'IN_PROGRESS'].includes(current.status)) {
@@ -347,30 +388,28 @@ export async function PATCH(req: NextRequest) {
         `UPDATE leasing_handovers
            SET status='COMPLETED', signed_by=$1, signed_at=$2, witnessed_by=$3,
                damage_notes=$4, notes=$5, updated_at=$6
-         WHERE id=$7`,
+         WHERE id=$7 AND tenant_id=$8`,
         signedBy.trim(), now, witnessedBy || null,
         damageNotes || current.damage_notes,
         notes       || current.notes,
-        now, id
+        now, id, tenantId
       );
     } else if (action === 'DISPUTE') {
       await prisma.$executeRawUnsafe(
-        `UPDATE leasing_handovers SET status='DISPUTED', damage_notes=$1, updated_at=$2 WHERE id=$3`,
-        damageNotes || current.damage_notes, now, id
+        `UPDATE leasing_handovers SET status='DISPUTED', damage_notes=$1, updated_at=$2 WHERE id=$3 AND tenant_id=$4`,
+        damageNotes || current.damage_notes, now, id, tenantId
       );
     } else if (newStatus) {
-      // Generic status update
       await prisma.$executeRawUnsafe(
-        `UPDATE leasing_handovers SET status=$1, updated_at=$2 WHERE id=$3`,
-        newStatus, now, id
+        `UPDATE leasing_handovers SET status=$1, updated_at=$2 WHERE id=$3 AND tenant_id=$4`,
+        newStatus, now, id, tenantId
       );
     } else {
       return NextResponse.json({ error: 'action or status required' }, { status: 400 });
     }
 
     const [updated] = await prisma.$queryRawUnsafe<HandoverRow[]>(
-      `SELECT * FROM leasing_handovers WHERE id = $1`,
-      id
+      `SELECT * FROM leasing_handovers WHERE id = $1 AND tenant_id = $2`, id, tenantId
     );
     return NextResponse.json(mapHandover(updated));
   } catch (err) {

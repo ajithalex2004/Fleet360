@@ -9,6 +9,9 @@
  * - Clears the convenience driverId on LeaseContractVehicle if it points
  *   at the released driver.
  * - Audit-logged.
+ *
+ * Tenant scoping: requires x-tenant-id. The allocation and any touched
+ * contract-vehicle rows must belong to the caller's tenant.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -22,10 +25,14 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { allocationId: string } },
 ) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const body = await req.json().catch(() => ({}));
-    const allocation = await prisma.leaseDriverAllocation.findUnique({
-      where: { id: params.allocationId },
+    const allocation = await prisma.leaseDriverAllocation.findFirst({
+      where: { id: params.allocationId, tenantId },
     });
     if (!allocation) {
       return NextResponse.json({ error: 'Allocation not found' }, { status: 404 });
@@ -45,16 +52,20 @@ export async function POST(
     });
 
     if (allocation.contractVehicleId) {
-      // Clear the contract-vehicle's convenience driverId only if it still
-      // matches this driver — avoids clobbering a parallel re-assignment.
+      // LeaseContractVehicle is scoped via the parent contract (already
+      // owned by this tenant via the allocation), no tenant column on
+      // the model itself.
       await prisma.leaseContractVehicle.updateMany({
-        where: { id: allocation.contractVehicleId, driverId: allocation.driverId },
+        where: {
+          id: allocation.contractVehicleId,
+          driverId: allocation.driverId,
+        },
         data: { driverId: null },
       });
     }
 
     void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
+      tenantId,
       userId: req.headers.get('x-user-id') ?? 'system',
       userRole: req.headers.get('x-user-role') ?? 'STAFF',
       entityType: 'LeaseDriverAllocation',

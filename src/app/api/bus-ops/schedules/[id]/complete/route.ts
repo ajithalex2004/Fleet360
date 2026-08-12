@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { prisma }          from '@/lib/prisma';
+import { getEventBus }     from '@/events/event-bus';
+import { TRIP_COMPLETED }  from '@/events/registry';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -63,6 +65,40 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           console.warn('[bus-ops complete] vehicle mileage propagation failed:', err);
         }
       }
+    }
+
+    // ── Finance lineage (best-effort — never fails the trip completion) ───
+    // Resolve the final trip log state for the bridge (it may have just been
+    // created/updated inside the transaction, so re-read from results).
+    const completedLog = results[1] as {
+      id: string; scheduleId: string; fuelUsed: number | null;
+      passengersBoarded: number | null;
+      actualDepartureTime: Date | null; actualArrivalTime: Date | null;
+    } | undefined;
+
+    if (completedLog) {
+      const tenantId = schedule.tenantId ?? null;
+      // Publish via outbox — Finance consumers pick this up asynchronously
+      getEventBus().publish({
+        eventType:     TRIP_COMPLETED,
+        aggregateType: 'TripSchedule',
+        aggregateId:   schedule.id,
+        sourceModule:  'bus-ops',
+        tenantId,
+        payload: {
+          scheduleId:          schedule.id,
+          tripNumber:          schedule.tripNumber ?? null,
+          vehicleId:           schedule.vehicleId  ?? null,
+          driverId:            schedule.driverId   ?? null,
+          tripLogId:           completedLog.id,
+          fuelUsed:            completedLog.fuelUsed,
+          passengersBoarded:   completedLog.passengersBoarded,
+          farePerHead:         Number(body.farePerHead ?? 0),
+          actualDepartureTime: completedLog.actualDepartureTime?.toISOString() ?? null,
+          actualArrivalTime:   completedLog.actualArrivalTime?.toISOString()   ?? null,
+          endMileage:          body.endMileage ?? null,
+        },
+      }).catch(err => console.warn('[bus-ops complete] outbox publish failed:', err));
     }
 
     return NextResponse.json({ schedule: results[0] });

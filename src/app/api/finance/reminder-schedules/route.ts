@@ -6,70 +6,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-async function bootstrap() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS finance_reminder_schedules (
-      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      name            TEXT NOT NULL,
-      trigger_type    TEXT NOT NULL DEFAULT 'AFTER_DUE',
-      trigger_days    INTEGER NOT NULL DEFAULT 7,
-      channel         TEXT NOT NULL DEFAULT 'EMAIL',
-      template_subject TEXT NOT NULL DEFAULT 'Payment Reminder',
-      template_body   TEXT NOT NULL,
-      is_active       BOOLEAN NOT NULL DEFAULT TRUE,
-      module_filter   TEXT,
-      branch_filter   TEXT,
-      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS finance_reminder_log (
-      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      schedule_id     UUID REFERENCES finance_reminder_schedules(id) ON DELETE SET NULL,
-      invoice_id      TEXT NOT NULL,
-      invoice_no      TEXT NOT NULL,
-      client_name     TEXT NOT NULL,
-      client_email    TEXT,
-      channel         TEXT NOT NULL,
-      subject         TEXT,
-      body            TEXT,
-      status          TEXT NOT NULL DEFAULT 'SENT',
-      error_message   TEXT,
-      sent_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  // Seed default schedules if none exist
-  const cnt = await prisma.$queryRawUnsafe(
-    `SELECT COUNT(*) AS c FROM finance_reminder_schedules`
-  ) as { c: bigint | number }[];
-  if (Number(cnt[0].c) === 0) {
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO finance_reminder_schedules
-        (name, trigger_type, trigger_days, channel, template_subject, template_body)
-      VALUES
-        ('7-Day Pre-Due Reminder', 'BEFORE_DUE', 7, 'EMAIL',
-         'Payment Due in 7 Days — Invoice {invoice_no}',
-         'Dear {client_name},\n\nThis is a friendly reminder that invoice {invoice_no} for AED {amount} is due on {due_date}.\n\nPlease arrange payment at your earliest convenience.\n\nRegards,\nFinance Team'),
-        ('Due Date Reminder',      'ON_DUE',     0, 'EMAIL',
-         'Invoice {invoice_no} Due Today',
-         'Dear {client_name},\n\nInvoice {invoice_no} for AED {amount} is due today.\n\nPlease process payment to avoid any service interruption.\n\nRegards,\nFinance Team'),
-        ('7-Day Overdue Notice',   'AFTER_DUE',  7, 'EMAIL',
-         'OVERDUE: Invoice {invoice_no} — 7 Days Past Due',
-         'Dear {client_name},\n\nInvoice {invoice_no} for AED {amount} is now 7 days overdue.\n\nPlease settle the outstanding balance immediately or contact us to discuss payment arrangements.\n\nRegards,\nFinance Team'),
-        ('30-Day Final Notice',    'AFTER_DUE',  30, 'EMAIL',
-         'FINAL NOTICE: Invoice {invoice_no} — 30 Days Overdue',
-         'Dear {client_name},\n\nThis is a final notice for invoice {invoice_no} for AED {amount}, now 30 days overdue.\n\nFurther delay may result in service suspension and legal action.\n\nRegards,\nFinance Team'),
-        ('WhatsApp 3-Day Nudge',   'AFTER_DUE',  3, 'WHATSAPP',
-         'Payment Overdue',
-         'Hi {client_name}, your invoice {invoice_no} for AED {amount} is overdue by 3 days. Please make payment to avoid disruption.')
-    `);
-  }
-}
+// finance_reminder_schedules and finance_reminder_log are created + seeded by
+// migration 20260810000003_finance_reference_data_seed — no runtime DDL needed.
 
 export async function GET(req: NextRequest) {
-  await bootstrap();
   const p           = req.nextUrl.searchParams;
   const include_log = p.get('include_log') === 'true';
   const schedule_id = p.get('schedule_id');
@@ -109,7 +49,6 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  await bootstrap();
   const b = await req.json();
 
   if (b.action === 'run') {
@@ -211,7 +150,6 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  await bootstrap();
   const b = await req.json();
   const { id } = b;
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
@@ -245,7 +183,6 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  await bootstrap();
   const { id } = await req.json();
   await prisma.$executeRawUnsafe(`DELETE FROM finance_reminder_schedules WHERE id = $1::uuid`, id);
   return NextResponse.json({ ok: true });

@@ -25,6 +25,8 @@ export async function POST(request: Request) {
 
         const alert = await prisma.alert.create({
             data: {
+                // TODO: read tenantId from request headers via getTenantContext()
+                tenantId: '',
                 type: body.type,
                 title: body.title,
                 description: body.description,

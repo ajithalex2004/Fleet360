@@ -10,9 +10,13 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 import { randomUUID } from 'crypto';
 import { requireUnderQuota } from '@/lib/plan-limits';
+import { cacheRead, publicCacheControl, revalidateCache } from '@/lib/server-cache';
 import type { PlanCode } from '@/lib/billing';
+
+const CACHE_TAG = 'users:list';
 
 // All modules in the platform — used for moduleAccess validation
 const ALL_MODULES = [
@@ -44,43 +48,61 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    if (tenantId) {
-      // Return users for a specific tenant with their roles
-      const uts = await prisma.userTenant.findMany({
-        where: { tenantId },
-        include: { role: true },
-      });
-      const userIds = uts.map(ut => ut.userId);
-      const users   = await prisma.user.findMany({ where: { ...where, id: { in: userIds } } });
-      const userMap = Object.fromEntries(users.map(u => [u.id, u]));
-      return NextResponse.json(
-        uts
-          .filter(ut => userMap[ut.userId])
-          .map(ut => ({
-            ...userMap[ut.userId],
-            roleId:       ut.roleId,
-            roleName:     ut.role.name,
-            roleCode:     ut.role.code,
-            userTenantId: ut.id,
-            isTenantActive: ut.isActive,
-          }))
+    // User is a global table (no RLS) but UserTenant has RLS. We use
+    // withPlatformAdmin so the UserTenant lookup is allowed even when
+    // ?tenantId= refers to a tenant the admin's session is not in.
+    return await withPlatformAdmin(prisma, async (tx) => {
+      if (tenantId) {
+        // Return users for a specific tenant with their roles — tenant-scoped,
+        // not cached (data shape varies by tenant, low call frequency).
+        const uts = await tx.userTenant.findMany({
+          where: { tenantId },
+          include: { role: true },
+        });
+        const userIds = uts.map(ut => ut.userId);
+        const users   = await tx.user.findMany({ where: { ...where, id: { in: userIds } } });
+        const userMap = Object.fromEntries(users.map(u => [u.id, u]));
+        return NextResponse.json(
+          uts
+            .filter(ut => userMap[ut.userId])
+            .map(ut => ({
+              ...userMap[ut.userId],
+              roleId:       ut.roleId,
+              roleName:     ut.role.name,
+              roleCode:     ut.role.code,
+              userTenantId: ut.id,
+              isTenantActive: ut.isActive,
+            })),
+          { headers: { 'Cache-Control': publicCacheControl(30) } }
+        );
+      }
+
+      // Cached: the platform admin dashboard's stat card calls this on
+      // every page load. Data Cache + s-maxage makes 1st hit sub-100ms,
+      // 2nd hit is microseconds. Stale-while-revalidate hides the origin
+      // latency for cold CDN edges.
+      const getUsers = cacheRead(
+        async () => tx.user.findMany({
+          where,
+          orderBy: { username: 'asc' },
+        }),
+        [CACHE_TAG]
       );
-    }
 
-    const users = await prisma.user.findMany({
-      where,
-      orderBy: { username: 'asc' },
+      const users = await getUsers();
+
+      // Filter by module access if requested (in-memory, post-fetch)
+      const filtered = module
+        ? users.filter(u => {
+            const ma = u.moduleAccess as Record<string, boolean> | null;
+            return !ma || ma[module] !== false; // null = full access (backward compat)
+          })
+        : users;
+
+      return NextResponse.json(filtered, {
+        headers: { 'Cache-Control': publicCacheControl(60) },
+      });
     });
-
-    // Filter by module access if requested
-    const filtered = module
-      ? users.filter(u => {
-          const ma = u.moduleAccess as Record<string, boolean> | null;
-          return !ma || ma[module] !== false; // null = full access (backward compat)
-        })
-      : users;
-
-    return NextResponse.json(filtered);
   } catch (e) {
     console.error('[Admin Hub] GET /api/admin/users error:', e);
     return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
@@ -112,7 +134,9 @@ export async function POST(req: NextRequest) {
     // Quota: count active members in the target tenant against maxUsers.
     if (tenantId) {
       const tenantPlan = (req.headers.get('x-tenant-plan') ?? 'TRIAL') as PlanCode;
-      const current = await prisma.userTenant.count({ where: { tenantId, isActive: true } });
+      const current = await withPlatformAdmin(prisma, (tx) =>
+        tx.userTenant.count({ where: { tenantId, isActive: true } })
+      );
       const gate = requireUnderQuota({ plan: tenantPlan, resource: 'maxUsers', current });
       if (gate) return gate;
     }
@@ -132,40 +156,49 @@ export async function POST(req: NextRequest) {
 
     const userId = id?.trim() || randomUUID();
 
-    const user = await prisma.user.create({
-      data: {
-        id:           userId,
-        username:     username.trim(),
-        email:        email.trim(),
-        firstName:    firstName?.trim()    || null,
-        lastName:     lastName?.trim()     || null,
-        department:   department?.trim()   || null,
-        position:     position?.trim()     || null,
-        mobileNumber: mobileNumber?.trim() || null,
-        hierarchy:    hierarchy?.trim()    || null,
-        userType:     userType?.trim()     || 'STAFF',
-        employeeId:   employeeId?.trim()   || null,
-        isActive:     isActive,
-        moduleAccess: moduleAccess ?? null,
-        updatedAt:    new Date(),
-      },
-    });
-
-    // If tenantId + roleId provided, create the UserTenant membership
-    let userTenant = null;
-    if (tenantId && roleId) {
-      userTenant = await prisma.userTenant.create({
+    // Use withPlatformAdmin — User is global but the optional UserTenant
+    // membership write is tenant-scoped. We need '*' so the UserTenant
+    // create can land on the target tenant.
+    return await withPlatformAdmin(prisma, async (tx) => {
+      const user = await tx.user.create({
         data: {
-          userId,
-          tenantId,
-          roleId,
-          isActive: true,
+          id:           userId,
+          username:     username.trim(),
+          email:        email.trim(),
+          firstName:    firstName?.trim()    || null,
+          lastName:     lastName?.trim()     || null,
+          department:   department?.trim()   || null,
+          position:     position?.trim()     || null,
+          mobileNumber: mobileNumber?.trim() || null,
+          hierarchy:    hierarchy?.trim()    || null,
+          userType:     userType?.trim()     || 'STAFF',
+          employeeId:   employeeId?.trim()   || null,
+          isActive:     isActive,
+          moduleAccess: moduleAccess ?? null,
+          updatedAt:    new Date(),
         },
-        include: { role: true },
       });
-    }
 
-    return NextResponse.json({ ...user, userTenant }, { status: 201 });
+      // If tenantId + roleId provided, create the UserTenant membership
+      let userTenant = null;
+      if (tenantId && roleId) {
+        userTenant = await tx.userTenant.create({
+          data: {
+            userId,
+            tenantId,
+            roleId,
+            isActive: true,
+          },
+          include: { role: true },
+        });
+      }
+
+      // Invalidate cached list so the platform dashboard's stat card
+      // and the user list page see the new user on next request.
+      revalidateCache([CACHE_TAG]);
+
+      return NextResponse.json({ ...user, userTenant }, { status: 201 });
+    });
   } catch (e: unknown) {
     console.error('[Admin Hub] POST /api/admin/users error:', e);
     const err = e as { code?: string; meta?: { target?: string[] } };

@@ -14,6 +14,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 import { signSession } from '@/lib/tenant-session';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -42,82 +43,85 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'tenantId is required' }, { status: 400 });
     }
 
-    // Resolve target tenant + tenant admin user (or specified user).
-    const tenantRows = await prisma.$queryRawUnsafe<{ id: string; name: string; plan: string; is_active: boolean }[]>(
-      `SELECT id, name, plan, is_active FROM tenants WHERE id = $1 LIMIT 1`,
-      tenantId,
-    );
-    const tenant = tenantRows[0];
-    if (!tenant) return NextResponse.json({ ok: false, error: 'Tenant not found' }, { status: 404 });
-    if (!tenant.is_active) {
-      return NextResponse.json({ ok: false, error: 'Tenant is inactive' }, { status: 400 });
-    }
-
-    // Find a UserTenant — explicit user if provided, otherwise the most recent
-    // active TENANT_ADMIN, otherwise the most recent active member.
-    const memberships = await prisma.userTenant.findMany({
-      where: {
+    return await withPlatformAdmin(prisma, async (tx) => {
+      // Resolve target tenant. The tenants table is read across the
+      // '*' wildcard set by the wrap.
+      const tenantRows = await tx.$queryRawUnsafe<{ id: string; name: string; plan: string; is_active: boolean }[]>(
+        `SELECT id, name, plan, is_active FROM tenants WHERE id = $1 LIMIT 1`,
         tenantId,
-        isActive: true,
-        ...(targetUserId ? { userId: targetUserId } : {}),
-      },
-      include: {
-        user: { select: { id: true, email: true, isActive: true } },
-        role: { select: { code: true } },
-      },
-      orderBy: [{ role: { code: 'asc' } }, { createdAt: 'desc' }],
-    });
-    const usable = memberships.filter(m => m.user.isActive);
-    if (usable.length === 0) {
-      return NextResponse.json({ ok: false, error: 'No active user found for this tenant' }, { status: 404 });
-    }
-    const target = usable.find(m => m.role.code === 'TENANT_ADMIN') ?? usable[0];
+      );
+      const tenant = tenantRows[0];
+      if (!tenant) return NextResponse.json({ ok: false, error: 'Tenant not found' }, { status: 404 });
+      if (!tenant.is_active) {
+        return NextResponse.json({ ok: false, error: 'Tenant is inactive' }, { status: 400 });
+      }
 
-    // Stash the current (impersonator's) session under a separate cookie so we
-    // can restore it on /stop. The original cookie is then overwritten with
-    // the impersonation session.
-    const originalToken = req.cookies.get(COOKIE_NAME)?.value ?? '';
+      // Find a UserTenant — explicit user if provided, otherwise the most recent
+      // active TENANT_ADMIN, otherwise the most recent active member.
+      const memberships = await tx.userTenant.findMany({
+        where: {
+          tenantId,
+          isActive: true,
+          ...(targetUserId ? { userId: targetUserId } : {}),
+        },
+        include: {
+          user: { select: { id: true, email: true, isActive: true } },
+          role: { select: { code: true } },
+        },
+        orderBy: [{ role: { code: 'asc' } }, { createdAt: 'desc' }],
+      });
+      const usable = memberships.filter(m => m.user.isActive);
+      if (usable.length === 0) {
+        return NextResponse.json({ ok: false, error: 'No active user found for this tenant' }, { status: 404 });
+      }
+      const target = usable.find(m => m.role.code === 'TENANT_ADMIN') ?? usable[0];
 
-    const newToken = await signSession({
-      userId:         target.user.id,
-      tenantId:       tenant.id,
-      plan:           tenant.plan ?? 'TRIAL',
-      role:           target.role.code,
-      impersonatedBy: impersonatorId,
-      ttlMs:          IMPERSONATION_TTL_MS,
-    });
+      // Stash the current (impersonator's) session under a separate cookie so we
+      // can restore it on /stop. The original cookie is then overwritten with
+      // the impersonation session.
+      const originalToken = req.cookies.get(COOKIE_NAME)?.value ?? '';
 
-    void logAudit({
-      tenantId: tenant.id,
-      tenantName: tenant.name,
-      userId: impersonatorId,
-      userRole: 'SUPER_ADMIN',
-      entityType: 'Impersonation',
-      entityId: target.user.id,
-      entityName: target.user.email,
-      action: 'CREATE',
-      details: `Impersonation started by ${impersonatorId} → tenant ${tenant.name} (${tenant.id}) as user ${target.user.email}.`,
-    });
+      const newToken = await signSession({
+        userId:         target.user.id,
+        tenantId:       tenant.id,
+        plan:           tenant.plan ?? 'TRIAL',
+        role:           target.role.code,
+        impersonatedBy: impersonatorId,
+        ttlMs:          IMPERSONATION_TTL_MS,
+      });
 
-    const res = NextResponse.json({
-      ok: true,
-      tenant:  { id: tenant.id, name: tenant.name, plan: tenant.plan },
-      asUser:  { id: target.user.id, email: target.user.email, role: target.role.code },
-      ttlSec:  IMPERSONATION_TTL_MS / 1000,
-    });
-    res.cookies.set(COOKIE_NAME, newToken, {
-      httpOnly: true, sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: IMPERSONATION_TTL_MS / 1000, path: '/',
-    });
-    if (originalToken) {
-      res.cookies.set(IMPERSONATOR_COOKIE_NAME, originalToken, {
+      void logAudit({
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        userId: impersonatorId,
+        userRole: 'SUPER_ADMIN',
+        entityType: 'Impersonation',
+        entityId: target.user.id,
+        entityName: target.user.email,
+        action: 'CREATE',
+        details: `Impersonation started by ${impersonatorId} → tenant ${tenant.name} (${tenant.id}) as user ${target.user.email}.`,
+      });
+
+      const res = NextResponse.json({
+        ok: true,
+        tenant:  { id: tenant.id, name: tenant.name, plan: tenant.plan },
+        asUser:  { id: target.user.id, email: target.user.email, role: target.role.code },
+        ttlSec:  IMPERSONATION_TTL_MS / 1000,
+      });
+      res.cookies.set(COOKIE_NAME, newToken, {
         httpOnly: true, sameSite: 'lax',
         secure: process.env.NODE_ENV === 'production',
         maxAge: IMPERSONATION_TTL_MS / 1000, path: '/',
       });
-    }
-    return res;
+      if (originalToken) {
+        res.cookies.set(IMPERSONATOR_COOKIE_NAME, originalToken, {
+          httpOnly: true, sameSite: 'lax',
+          secure: process.env.NODE_ENV === 'production',
+          maxAge: IMPERSONATION_TTL_MS / 1000, path: '/',
+        });
+      }
+      return res;
+    });
   } catch (err) {
     captureException(err, { context: 'admin.impersonate.start' });
     return NextResponse.json({ ok: false, error: 'Impersonation failed' }, { status: 500 });

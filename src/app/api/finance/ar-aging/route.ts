@@ -2,25 +2,20 @@
  * AR Aging Report API — /api/finance/ar-aging
  * Standard buckets: Current / 1-30 / 31-60 / 61-90 / 91-120 / 120+
  * Source: finance_invoices (payment_status != PAID/CANCELLED/DRAFT)
+ *
+ * finance_invoices and the branch/vehicle_no/contract_type columns are
+ * owned by Prisma migrations — no runtime DDL is needed here. All queries
+ * are scoped to the current tenant (x-tenant-id header) for defence-in-depth
+ * in addition to the FORCE ROW LEVEL SECURITY policy on the table.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-async function bootstrap() {
-  // finance_invoices must exist — created by invoices route. Ensure branch col exists.
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS branch TEXT DEFAULT 'Dubai'
-  `).catch(() => {});
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS vehicle_no TEXT
-  `).catch(() => {});
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS contract_type TEXT
-  `).catch(() => {});
-}
-
 export async function GET(req: NextRequest) {
-  await bootstrap();
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   const p             = req.nextUrl.searchParams;
   const branch        = p.get('branch');
@@ -29,9 +24,12 @@ export async function GET(req: NextRequest) {
   const search        = p.get('search');
   const as_of_date    = p.get('as_of_date') ?? new Date().toISOString().split('T')[0];
 
-  let where = `WHERE deleted_at IS NULL AND payment_status NOT IN ('PAID','CANCELLED','DRAFT')`;
-  const params: unknown[] = [as_of_date];
-  let idx = 2;
+  // Always scope to the calling tenant — $1 = as_of_date, $2 = tenant_id
+  let where = `WHERE deleted_at IS NULL
+    AND tenant_id = $2
+    AND payment_status NOT IN ('PAID','CANCELLED','DRAFT')`;
+  const params: unknown[] = [as_of_date, tenantId];
+  let idx = 3;
 
   if (branch)        { where += ` AND branch = $${idx++}`;        params.push(branch); }
   if (module_filter) { where += ` AND module = $${idx++}`;        params.push(module_filter); }
@@ -41,7 +39,7 @@ export async function GET(req: NextRequest) {
     params.push(`%${search}%`); idx++;
   }
 
-  // ── Detail rows with computed age ───────────────────────────────────────────
+  // ── Detail rows with computed age ──────────────────────────────────────────
   const rows = await prisma.$queryRawUnsafe(`
     SELECT
       id,
@@ -71,7 +69,7 @@ export async function GET(req: NextRequest) {
     ORDER BY age_days DESC
   `, ...params) as Record<string, unknown>[];
 
-  // ── Bucket summary ────────────────────────────────────────────────────────
+  // ── Bucket summary ─────────────────────────────────────────────────────────
   const buckets = await prisma.$queryRawUnsafe(`
     SELECT
       bucket,
@@ -100,7 +98,7 @@ export async function GET(req: NextRequest) {
     END
   `, ...params) as Record<string, unknown>[];
 
-  // ── Customer rollup ───────────────────────────────────────────────────────
+  // ── Customer rollup ────────────────────────────────────────────────────────
   const by_customer = await prisma.$queryRawUnsafe(`
     SELECT
       client_name,

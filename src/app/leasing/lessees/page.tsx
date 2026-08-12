@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { Database } from 'lucide-react';
+import ImportModal from '@/components/leasing/ImportModal';
 
 interface Lessee {
   id: string; name: string; type: string; licenseNo?: string; tradeLicense?: string;
@@ -16,6 +18,7 @@ export default function LesseesPage() {
   const [search, setSearch]           = useState('');
   const [typeFilter, setTypeFilter]   = useState('all');
   const [showModal, setShowModal]     = useState(false);
+  const [showImport, setShowImport]   = useState(false);
   const [editLessee, setEditLessee]   = useState<Lessee | null>(null);
   const [loading, setLoading]         = useState(true);
   const [saving, setSaving]           = useState(false);
@@ -152,7 +155,16 @@ export default function LesseesPage() {
           <h1 className="text-4xl font-bold text-white mb-2">Lessees</h1>
           <p className="text-slate-400">{lessees.filter(l=>l.type==='corporate').length} corporate, {lessees.filter(l=>l.type==='individual').length} individual  -  {lessees.length} total</p>
         </div>
-        <button onClick={openNew} className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90">+ New Lessee</button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowImport(true)}
+            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-5 py-3 text-sm font-medium text-white hover:opacity-90"
+            title="Bulk import lessees or vehicles from a CSV file"
+          >
+            <Database className="h-4 w-4" /> Bulk Import
+          </button>
+          <button onClick={openNew} className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90">+ New Lessee</button>
+        </div>
       </div>
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
       <div className="flex gap-4 flex-wrap">
@@ -417,6 +429,7 @@ export default function LesseesPage() {
           </div>
         </div>
       )}
+      {showImport && <ImportModal onClose={() => setShowImport(false)} />}
     </div>
   );
 }

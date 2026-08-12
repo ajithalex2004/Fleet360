@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 
 // ── PBKDF2 helpers — must match /api/auth/login and /api/tenants/provision ──
 
@@ -46,46 +47,55 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Step 1: Verify user exists via Prisma ORM (standard columns — always reliable)
-    const userRecord = await prisma.user.findUnique({
-      where: { id: user_id },
-      select: { id: true },
+    // Read + verify + hash are intentionally split so the two pbkdf2 calls
+    // (CPU-bound, ~200-500 ms each) and the ALTER (a no-op round-trip once
+    // the column exists) do NOT happen inside the transaction. They used to
+    // push the work past Prisma's 5 s default timeout, killing the commit
+    // with P2028 and returning 500. The User table is global (no RLS), so
+    // the pre-read can run on the bare client.
+
+    // 1. Pre-read: user + stored hash (no tx — User has no RLS, no need for
+    //    the platform-admin GUC here, but we keep the wrap for consistency
+    //    with how the rest of the codebase reads the User table).
+    const precheck = await withPlatformAdmin(prisma, async (tx) => {
+      const u = await tx.user.findUnique({ where: { id: user_id }, select: { id: true } });
+      if (!u) return null;
+      const rows = await tx.$queryRawUnsafe<{ password_hash: string | null }[]>(
+        `SELECT password_hash FROM "User" WHERE id = $1 LIMIT 1`,
+        user_id,
+      );
+      return rows[0]?.password_hash ?? null;
     });
-    if (!userRecord) {
+    if (precheck === null) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
+    const storedHash = precheck;
 
-    // Step 2: Ensure password_hash column exists (not in Prisma schema — added out-of-band)
-    await prisma.$executeRawUnsafe(
-      `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS password_hash TEXT`
-    ).catch(() => {});
-
-    // Step 3: Fetch current password hash via raw SQL
-    const rows = await prisma.$queryRawUnsafe<{ password_hash: string | null }[]>(
-      `SELECT password_hash FROM "User" WHERE id = $1 LIMIT 1`,
-      user_id
-    );
-
-    const storedHash = rows[0]?.password_hash ?? null;
-    if (!storedHash) {
-      // Account has no password set — allow setting a new one without verifying current
-      // (e.g. SSO-only accounts getting a password for the first time)
-    } else {
+    // 2. Verify the current password (CPU — outside any transaction).
+    if (storedHash) {
       const valid = verifyPassword(current_password, storedHash);
       if (!valid) {
         return NextResponse.json({ error: 'Current password is incorrect' }, { status: 401 });
       }
     }
+    // If storedHash is null (no password set yet — e.g. SSO-only account
+    // getting a password for the first time), we skip verify and proceed.
 
-    // Hash and persist new password
+    // 3. Hash the new password (CPU — outside any transaction).
     const newHash = hashPassword(new_password);
-    await prisma.$executeRawUnsafe(
-      `UPDATE "User" SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
-      newHash,
-      user_id
-    );
 
-    return NextResponse.json({ ok: true, message: 'Password changed successfully' });
+    // 4. Persist inside a short transaction. Only SQL, no CPU.
+    // NOTE: User table is legacy — column is camelCase "updatedAt" (quoted at
+    // CREATE TABLE time), not snake_case. Prisma model has no @map on it.
+    // Unquoted identifiers in Postgres fold to lowercase, so this MUST be quoted.
+    return withPlatformAdmin(prisma, async (tx) => {
+      await tx.$executeRawUnsafe(
+        `UPDATE "User" SET password_hash = $1, "updatedAt" = NOW() WHERE id = $2`,
+        newHash,
+        user_id,
+      );
+      return NextResponse.json({ ok: true, message: 'Password changed successfully' });
+    });
   } catch (err: unknown) {
     console.error('[change-password]', err);
     const msg = err instanceof Error ? err.message : String(err);

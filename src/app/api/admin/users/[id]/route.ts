@@ -7,6 +7,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
+import { revalidateCache } from '@/lib/server-cache';
+
+const CACHE_TAG = 'users:list';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -19,15 +23,19 @@ const ALL_MODULES = [
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
-    const user = await prisma.user.findUnique({ where: { id } });
-    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    // User is global but UserTenant has RLS. Use platform-admin so we can
+    // see all of the user's tenant memberships in one shot.
+    return await withPlatformAdmin(prisma, async (tx) => {
+      const user = await tx.user.findUnique({ where: { id } });
+      if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    const tenants = await prisma.userTenant.findMany({
-      where: { userId: id },
-      include: { tenant: true, role: true },
+      const tenants = await tx.userTenant.findMany({
+        where: { userId: id },
+        include: { tenant: true, role: true },
+      });
+
+      return NextResponse.json({ ...user, tenants });
     });
-
-    return NextResponse.json({ ...user, tenants });
   } catch (e) {
     console.error('[Admin Hub] GET /api/admin/users/[id]:', e);
     return NextResponse.json({ error: 'Failed to fetch user' }, { status: 500 });
@@ -74,7 +82,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (isActive     !== undefined) data.isActive     = isActive;
     if (moduleAccess !== undefined) data.moduleAccess = moduleAccess;
 
-    const user = await prisma.user.update({ where: { id }, data });
+    const user = await withPlatformAdmin(prisma, (tx) =>
+      tx.user.update({ where: { id }, data })
+    );
+    // isActive changed → bust the cached user list so the dashboard
+    // count and the user list both reflect the new state immediately.
+    revalidateCache([CACHE_TAG]);
     return NextResponse.json(user);
   } catch (e) {
     console.error('[Admin Hub] PATCH /api/admin/users/[id]:', e);
@@ -86,10 +99,13 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
     // Soft-delete: deactivate rather than hard-delete
-    const user = await prisma.user.update({
-      where: { id },
-      data:  { isActive: false, updatedAt: new Date() },
-    });
+    const user = await withPlatformAdmin(prisma, (tx) =>
+      tx.user.update({
+        where: { id },
+        data:  { isActive: false, updatedAt: new Date() },
+      })
+    );
+    revalidateCache([CACHE_TAG]);
     return NextResponse.json({ success: true, message: 'User deactivated', user });
   } catch (e) {
     console.error('[Admin Hub] DELETE /api/admin/users/[id]:', e);

@@ -1,10 +1,44 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { cacheRead, privateCacheControl } from '@/lib/server-cache';
+
+const CACHE_TAG = 'logistics:stats';
+
+const activeShipmentStatuses = ['DISPATCHED', 'ENROUTE_PICKUP', 'LOADED', 'ENROUTE_DELIVERY', 'ACTIVE'];
+const completedShipmentStatuses = ['CLOSED', 'COMPLETED', 'DELIVERED', 'POD_SUBMITTED'];
 
 const zero = () => Promise.resolve([{ count: BigInt(0) }]);
 
-export async function GET() {
-  try {
+type CountRow = { count: bigint | number | string };
+
+type RecentShipmentRow = {
+  id: string;
+  booking_ref: string;
+  status: string;
+  start_date: Date | null;
+  end_date: Date | null;
+  origin_location: string | null;
+  destination: string | null;
+  customer_name: string | null;
+  created_at: Date | null;
+};
+
+function count(row: CountRow[] | undefined) {
+  return Number(row?.[0]?.count ?? 0);
+}
+
+function iso(value: Date | string | null | undefined) {
+  if (!value) return null;
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+// 8 raw SQL queries on every page load — wrap in cacheRead. The page
+// also auto-refreshes every 30s, but the server cache means the auto-
+// refresh now hits the Data Cache instead of Neon. Per-tenant key keeps
+// responses isolated (no `public` because the URL doesn't carry the
+// tenantId — see server-cache.ts for the security rationale).
+const getLogisticsStats = cacheRead(
+  async (tenantId: string) => {
     const [
       totalVehicles,
       availableVehicles,
@@ -14,75 +48,126 @@ export async function GET() {
       pendingBookings,
       driversResult,
     ] = await Promise.all([
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
-        `SELECT COUNT(*) as count FROM vehicles WHERE deleted_at IS NULL AND vehicle_usage = 'LOGISTICS'`,
+      prisma.$queryRawUnsafe<CountRow[]>(
+        `SELECT COUNT(*) AS count
+           FROM vehicles
+          WHERE tenant_id = $1 AND deleted_at IS NULL AND vehicle_usage = 'LOGISTICS'`,
+        tenantId,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
-        `SELECT COUNT(*) as count FROM vehicles WHERE deleted_at IS NULL AND vehicle_usage = 'LOGISTICS' AND status = 'AVAILABLE'`,
+      prisma.$queryRawUnsafe<CountRow[]>(
+        `SELECT COUNT(*) AS count
+           FROM vehicles
+          WHERE tenant_id = $1 AND deleted_at IS NULL AND vehicle_usage = 'LOGISTICS' AND status = 'AVAILABLE'`,
+        tenantId,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
-        `SELECT COUNT(*) as count FROM vehicles WHERE deleted_at IS NULL AND vehicle_usage = 'LOGISTICS' AND status = 'MAINTENANCE'`,
+      prisma.$queryRawUnsafe<CountRow[]>(
+        `SELECT COUNT(*) AS count
+           FROM vehicles
+          WHERE tenant_id = $1 AND deleted_at IS NULL AND vehicle_usage = 'LOGISTICS' AND status = 'MAINTENANCE'`,
+        tenantId,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
-        `SELECT COUNT(*) as count FROM bookings WHERE deleted_at IS NULL AND service_type = 'LOGISTICS' AND status IN ('CONFIRMED','ACTIVE')`,
+      prisma.$queryRawUnsafe<CountRow[]>(
+        `SELECT COUNT(*) AS count
+          FROM logistics_shipment_orders
+          WHERE tenant_id = $1 AND deleted_at IS NULL AND status = ANY($2::text[])`,
+        tenantId,
+        activeShipmentStatuses,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
-        `SELECT COUNT(*) as count FROM bookings WHERE deleted_at IS NULL AND service_type = 'LOGISTICS' AND status = 'COMPLETED' AND DATE(updated_at) = CURRENT_DATE`,
+      prisma.$queryRawUnsafe<CountRow[]>(
+        `SELECT COUNT(*) AS count
+           FROM logistics_shipment_orders
+          WHERE tenant_id = $1
+            AND deleted_at IS NULL
+            AND status = ANY($2::text[])
+            AND DATE(updated_at) = CURRENT_DATE`,
+        tenantId,
+        completedShipmentStatuses,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
-        `SELECT COUNT(*) as count FROM bookings WHERE deleted_at IS NULL AND service_type = 'LOGISTICS' AND status = 'PENDING'`,
+      prisma.$queryRawUnsafe<CountRow[]>(
+        `SELECT COUNT(*) AS count
+           FROM logistics_shipment_orders
+          WHERE tenant_id = $1 AND deleted_at IS NULL AND status = 'PENDING'`,
+        tenantId,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
-        `SELECT COUNT(*) as count FROM drivers WHERE deleted_at IS NULL AND assignment_type = 'LOGISTICS'`,
+      prisma.$queryRawUnsafe<CountRow[]>(
+        `SELECT COUNT(*) AS count
+          FROM drivers
+          WHERE tenant_id = $1 AND deleted_at IS NULL`,
+        tenantId,
       ).catch(zero),
     ]);
 
-    // Recent trips
-    const recentTrips = await prisma.$queryRawUnsafe<Array<{
-      id: string; booking_ref: string; status: string;
-      start_date: Date; end_date: Date | null;
-      origin_location: string | null; destination: string | null;
-      customer_name: string | null; created_at: Date;
-    }>>(
-      `SELECT b.id, b.booking_ref, b.status, b.start_date, b.end_date,
-              b.origin_location, b.destination, b.customer_name, b.created_at
-       FROM bookings b
-       WHERE b.deleted_at IS NULL AND b.service_type = 'LOGISTICS'
-       ORDER BY b.created_at DESC
-       LIMIT 10`,
-    ).catch(() => [] as Array<{
-      id: string; booking_ref: string; status: string;
-      start_date: Date; end_date: Date | null;
-      origin_location: string | null; destination: string | null;
-      customer_name: string | null; created_at: Date;
-    }>);
+    const recentTrips = await prisma.$queryRawUnsafe<RecentShipmentRow[]>(
+      `SELECT id,
+              shipment_no AS booking_ref,
+              status,
+              pickup_window_from AS start_date,
+              delivery_window_to AS end_date,
+              origin_name AS origin_location,
+              destination_name AS destination,
+              cargo_owner_name AS customer_name,
+              created_at
+         FROM logistics_shipment_orders
+        WHERE tenant_id = $1 AND deleted_at IS NULL
+        ORDER BY created_at DESC
+        LIMIT 10`,
+      tenantId,
+    ).catch(() => [] as RecentShipmentRow[]);
 
-    return NextResponse.json({
-      totalVehicles:    Number(totalVehicles[0]?.count    ?? 0),
-      availableVehicles: Number(availableVehicles[0]?.count ?? 0),
-      inMaintenance:    Number(inMaintenance[0]?.count    ?? 0),
-      activeTrips:      Number(activeTrips[0]?.count      ?? 0),
-      completedToday:   Number(completedToday[0]?.count   ?? 0),
-      pendingBookings:  Number(pendingBookings[0]?.count  ?? 0),
-      drivers:          Number(driversResult[0]?.count    ?? 0),
-      recentTrips:      recentTrips.map(t => ({
-        ...t,
-        start_date: t.start_date?.toISOString?.() ?? null,
-        end_date:   t.end_date?.toISOString?.()   ?? null,
-        created_at: t.created_at?.toISOString?.() ?? null,
+    return {
+      totalVehicles: count(totalVehicles),
+      availableVehicles: count(availableVehicles),
+      inMaintenance: count(inMaintenance),
+      activeTrips: count(activeTrips),
+      completedToday: count(completedToday),
+      pendingBookings: count(pendingBookings),
+      drivers: count(driversResult),
+      recentTrips: recentTrips.map((trip) => ({
+        ...trip,
+        start_date: iso(trip.start_date),
+        end_date: iso(trip.end_date),
+        created_at: iso(trip.created_at),
       })),
+    };
+  },
+  [CACHE_TAG],
+  30,
+);
+
+export async function GET(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json(
+      { error: 'Valid session required' },
+      { status: 401, headers: { 'Cache-Control': 'private, no-store' } },
+    );
+  }
+
+  try {
+    const data = await getLogisticsStats(tenantId);
+    return NextResponse.json(data, {
+      headers: { 'Cache-Control': privateCacheControl(30, 120) },
     });
   } catch (err) {
     console.error('[logistics/stats]', err);
-    return NextResponse.json({
-      totalVehicles: 0, availableVehicles: 0, inMaintenance: 0,
-      activeTrips: 0, completedToday: 0, pendingBookings: 0, drivers: 0, recentTrips: [],
-    });
+    return NextResponse.json(
+      {
+        totalVehicles: 0,
+        availableVehicles: 0,
+        inMaintenance: 0,
+        activeTrips: 0,
+        completedToday: 0,
+        pendingBookings: 0,
+        drivers: 0,
+        recentTrips: [],
+      },
+      { headers: { 'Cache-Control': 'private, no-store' } },
+    );
   }
 }

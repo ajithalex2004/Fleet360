@@ -3,10 +3,12 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(req: NextRequest) {
   try {
+    const tenantId = req.headers.get('x-tenant-id');
+    if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const { searchParams } = new URL(req.url);
     const tripId = searchParams.get('tripId');
     const passengers = await prisma.tripPassenger.findMany({
-      where: tripId ? { tripId } : {},
+      where: { tenantId, ...(tripId ? { tripId } : {}) },
       include: { trip: { include: { route: true } } },
       orderBy: { createdAt: 'desc' },
     });
@@ -19,9 +21,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const tenantId = req.headers.get('x-tenant-id');
+    if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const body = await req.json();
     const passenger = await prisma.tripPassenger.create({
-      data: body,
+      data: { ...body, tenantId },
       include: { trip: true },
     });
     // Increment trip confirmed count

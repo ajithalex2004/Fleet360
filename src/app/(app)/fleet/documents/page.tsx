@@ -93,7 +93,7 @@ export default function FleetDocuments() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center h-full min-h-[200px]">
         <div className="animate-spin">
           <div className="w-12 h-12 border-4 border-slate-700 border-t-orange-500 rounded-full"></div>
         </div>

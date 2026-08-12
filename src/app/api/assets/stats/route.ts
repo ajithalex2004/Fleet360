@@ -1,27 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureAssetsSchema } from '@/lib/assets/schema';
+import { cacheRead, privateCacheControl } from '@/lib/server-cache';
+
+const CACHE_TAG = 'assets:stats';
 
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
 
-function ser(rows: Row[]): Row[] {
-  return rows.map(r => {
-    const o: Row = {};
-    for (const [k, v] of Object.entries(r)) {
-      o[k] = v instanceof Date ? v.toISOString() : typeof v === 'bigint' ? Number(v) : v;
-    }
-    return o;
-  });
-}
-
-export async function GET(req: NextRequest) {
-  try {
-    await ensureAssetsSchema();
-    const sp = req.nextUrl.searchParams;
-    const tenantId = sp.get('tenantId') ?? 'default';
-
+// 18 raw SQL queries on every page load. Wrap in cacheRead; per-tenant
+// key keeps responses isolated. Invalidation handled on the write
+// endpoints (asset_registry POST/PATCH/DELETE etc.).
+const getAssetsStats = cacheRead(
+  async (tenantId: string) => {
     const [
       totalAssetsRes,
       totalValueRes,
@@ -62,7 +54,7 @@ export async function GET(req: NextRequest) {
       query<{ domain: string; count: bigint; total_value: unknown }>(`SELECT domain, COUNT(*) as count, COALESCE(SUM(unit_cost_aed * current_stock), 0) as total_value FROM asset_registry WHERE tenant_id = $1 AND is_active = TRUE GROUP BY domain ORDER BY count DESC`, tenantId),
     ]);
 
-    return NextResponse.json({
+    return {
       totalAssets: Number(totalAssetsRes[0]?.count ?? 0),
       totalValue: Number(totalValueRes[0]?.total ?? 0),
       lowStockCount: Number(lowStockRes[0]?.count ?? 0),
@@ -85,6 +77,25 @@ export async function GET(req: NextRequest) {
         count: Number(r.count),
         totalValue: Number(r.total_value ?? 0),
       })),
+    };
+  },
+  [CACHE_TAG],
+  30,
+);
+
+export async function GET(req: NextRequest) {
+  try {
+    await ensureAssetsSchema();
+    const sp = req.nextUrl.searchParams;
+    const queryTenantId = sp.get('tenantId') ?? 'default';
+    // Use the middleware-injected tenantId when available — query-string
+    // tenantId is allowed as a fallback for the assets page which sends
+    // it explicitly.
+    const tenantId = req.headers.get('x-tenant-id') ?? queryTenantId;
+
+    const data = await getAssetsStats(tenantId);
+    return NextResponse.json(data, {
+      headers: { 'Cache-Control': privateCacheControl(30, 120) },
     });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

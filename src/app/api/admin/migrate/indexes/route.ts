@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 
 const INDEXES = [
   // MaintenanceRequest
@@ -51,28 +52,35 @@ const INDEXES = [
 ];
 
 export async function POST() {
-  const results: { index: string; status: 'created' | 'skipped'; error?: string }[] = [];
-  for (const sql of INDEXES) {
-    const name = sql.match(/IF NOT EXISTS (\S+)/)?.[1] ?? sql;
-    try {
-      await prisma.$executeRawUnsafe(sql);
-      results.push({ index: name, status: 'created' });
-    } catch (e: any) {
-      results.push({ index: name, status: 'skipped', error: e.message?.slice(0, 80) });
+  // CREATE INDEX on tenant-scoped tables — wrap with platform admin so
+  // the existing tenant data is visible (some CREATE INDEX CONCURRENTLY
+  // variants need to scan the whole table).
+  return withPlatformAdmin(prisma, async (tx) => {
+    const results: { index: string; status: 'created' | 'skipped'; error?: string }[] = [];
+    for (const sql of INDEXES) {
+      const name = sql.match(/IF NOT EXISTS (\S+)/)?.[1] ?? sql;
+      try {
+        await tx.$executeRawUnsafe(sql);
+        results.push({ index: name, status: 'created' });
+      } catch (e: any) {
+        results.push({ index: name, status: 'skipped', error: e.message?.slice(0, 80) });
+      }
     }
-  }
-  const created = results.filter(r => r.status === 'created').length;
-  const skipped = results.filter(r => r.status === 'skipped').length;
-  return NextResponse.json({ created, skipped, results });
+    const created = results.filter(r => r.status === 'created').length;
+    const skipped = results.filter(r => r.status === 'skipped').length;
+    return NextResponse.json({ created, skipped, results });
+  });
 }
 
 export async function GET() {
   // Check which indexes already exist
-  const rows = await prisma.$queryRaw<{ indexname: string }[]>`
-    SELECT indexname FROM pg_indexes
-    WHERE schemaname = 'public'
-    AND indexname LIKE 'idx_%'
-    ORDER BY indexname
-  `;
+  const rows = await withPlatformAdmin(prisma, (tx) =>
+    tx.$queryRaw<{ indexname: string }[]>`
+      SELECT indexname FROM pg_indexes
+      WHERE schemaname = 'public'
+      AND indexname LIKE 'idx_%'
+      ORDER BY indexname
+    `
+  );
   return NextResponse.json({ count: rows.length, indexes: rows.map(r => r.indexname) });
 }

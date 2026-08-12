@@ -1,40 +1,28 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { Settings } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
+import { useFetchedData } from '@/hooks/useFetchedData';
+
+type Tenant = { id: string };
+type User   = { id: string };
+type Role   = { id: string };
+type Perm   = { id: string };
 
 export default function AdminOverview() {
-  const [stats, setStats] = useState({ tenants: 0, users: 0, roles: 0, permissions: 0 });
-  const [leasingSeeding, setLeasingSeeding] = useState(false);
-  const [leasingMsg, setLeasingMsg] = useState('');
+  // Session-scoped fetch cache: 1st visit hits the server (fast — Data Cache
+  // + CDN s-maxage), 2nd visit in the same tab is instant from the Map cache.
+  const tenants     = useFetchedData<Tenant[]>('/api/admin/tenants');
+  const users       = useFetchedData<User[]>(  '/api/admin/users');
+  const roles       = useFetchedData<Role[]>(  '/api/admin/roles');
+  const permissions = useFetchedData<Perm[]>(  '/api/admin/permissions');
 
-  useEffect(() => {
-    Promise.all([
-      fetch('/api/admin/tenants').then(r => r.json()).catch(() => []),
-      fetch('/api/admin/users').then(r => r.json()).catch(() => []),
-      fetch('/api/admin/roles').then(r => r.json()).catch(() => []),
-      fetch('/api/admin/permissions').then(r => r.json()).catch(() => []),
-    ]).then(([t, u, r, p]) => {
-      setStats({
-        tenants:     Array.isArray(t) ? t.length : 0,
-        users:       Array.isArray(u) ? u.length : 0,
-        roles:       Array.isArray(r) ? r.length : 0,
-        permissions: Array.isArray(p) ? p.length : 0,
-      });
-    });
-  }, []);
-
-  const handleLeasingSeed = async () => {
-    setLeasingSeeding(true); setLeasingMsg('');
-    try {
-      const res = await fetch('/api/admin/seed/leasing', { method: 'POST' });
-      const data = await res.json();
-      setLeasingMsg(res.ok
-        ? data.message
-        : `Error: ${data.error}`);
-    } catch { setLeasingMsg('Seed failed'); }
-    finally { setLeasingSeeding(false); }
+  const stats = {
+    tenants:     tenants.data?.length     ?? 0,
+    users:       users.data?.length       ?? 0,
+    roles:       roles.data?.length       ?? 0,
+    permissions: permissions.data?.length  ?? 0,
   };
 
   const cards = [
@@ -53,7 +41,7 @@ export default function AdminOverview() {
         accent="rose"
       />
 
-      {/* Stats */}
+      {/* Stats — instant on re-visit, fast first paint via Data Cache + CDN */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map(c => (
           <Link key={c.label} href={c.href}
@@ -62,27 +50,6 @@ export default function AdminOverview() {
             <div className="text-sm text-white/80 mt-1">{c.label}</div>
           </Link>
         ))}
-      </div>
-
-      {/* Leasing UAE Seed */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-        <h2 className="text-lg font-semibold text-white mb-2">UAE Vehicle Leasing Demo Data</h2>
-        <p className="text-slate-400 text-sm mb-4">
-          Seeds realistic UAE demo data across all Vehicle Leasing modules:
-          7 corporate customers (Emaar, ADNOC, SLB, DP World, Etisalat, GFH, EXL Solutions),
-          linked lessees, 5 lease contracts, payment schedules, traffic fines, fuel logs,
-          insurance policies, mileage readings, receipts, renewals and credit assessments.
-          Also creates the Region/Department/Unit hierarchy for UAE.
-        </p>
-        <button onClick={handleLeasingSeed} disabled={leasingSeeding}
-          className="px-6 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white font-medium hover:opacity-90 disabled:opacity-50">
-          {leasingSeeding ? 'Seeding UAE Data...' : 'Seed UAE Leasing Demo Data'}
-        </button>
-        {leasingMsg && (
-          <p className={`mt-3 text-sm ${leasingMsg.includes('Error') || leasingMsg.includes('failed') ? 'text-rose-400' : 'text-emerald-400'}`}>
-            {leasingMsg}
-          </p>
-        )}
       </div>
 
       {/* Quick actions */}

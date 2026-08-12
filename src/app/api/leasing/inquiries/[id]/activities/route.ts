@@ -2,6 +2,10 @@
  * GET  /api/leasing/inquiries/[id]/activities — full activity log for an inquiry
  * POST /api/leasing/inquiries/[id]/activities — append a new activity entry
  *   Body: { activityType, subject?, body?, outcome?, followUpAt?, performedAt?, performedByName? }
+ *
+ * Tenant scoping: requires x-tenant-id. The inquiry must belong to the
+ * caller's tenant; the new LeaseInquiryActivity row is stamped with the
+ * same tenantId.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -13,15 +17,30 @@ export const runtime = 'nodejs';
 
 const ALLOWED_TYPES = ['NOTE', 'CALL', 'EMAIL', 'MEETING', 'SMS', 'WHATSAPP', 'FOLLOW_UP_DUE'];
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+  const inquiry = await prisma.leaseInquiry.findFirst({
+    where: { id: params.id, tenantId },
+    select: { id: true },
+  });
+  if (!inquiry) {
+    return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
+  }
   const activities = await prisma.leaseInquiryActivity.findMany({
-    where: { inquiryId: params.id },
+    where: { tenantId, inquiryId: params.id },
     orderBy: { performedAt: 'desc' },
   });
   return NextResponse.json(activities);
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const body = await req.json();
     const activityType = String(body.activityType ?? '').toUpperCase();
@@ -29,8 +48,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: `activityType must be one of: ${ALLOWED_TYPES.join(', ')}` }, { status: 400 });
     }
 
-    const inquiry = await prisma.leaseInquiry.findUnique({
-      where: { id: params.id },
+    const inquiry = await prisma.leaseInquiry.findFirst({
+      where: { id: params.id, tenantId },
       select: { id: true, deletedAt: true, status: true },
     });
     if (!inquiry || inquiry.deletedAt) {
@@ -48,10 +67,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         performedById: req.headers.get('x-user-id') ?? null,
         performedByName: body.performedByName ?? null,
         followUpAt: body.followUpAt ? new Date(body.followUpAt) : null,
+        tenantId,
       },
     });
 
-    // Auto-bump pipeline status NEW → CONTACTED on first outbound contact.
     if (inquiry.status === 'NEW' && ['CALL', 'EMAIL', 'SMS', 'WHATSAPP', 'MEETING'].includes(activityType)) {
       await prisma.leaseInquiry.update({
         where: { id: params.id },
@@ -60,7 +79,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
+      tenantId,
       userId: req.headers.get('x-user-id') ?? 'system',
       userRole: req.headers.get('x-user-role') ?? 'STAFF',
       entityType: 'LeaseInquiry',

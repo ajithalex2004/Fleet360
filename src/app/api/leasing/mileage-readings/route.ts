@@ -10,6 +10,11 @@
  *
  * Rate sourced from LeaseContract2.mileageOverageRate; falls back to the
  * platform default (0.50 AED/km) if the contract doesn't override.
+ *
+ * Multi-tenant: every operation is scoped by x-tenant-id from the
+ * middleware. Layer 2.5 fix that closes TENANT-001 for the mileage
+ * surface. tenantId propagates through the readings, overages, and
+ * auto-generated invoice so they all stay inside the tenant.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -20,11 +25,15 @@ import { captureException } from '@/lib/sentry';
 const DEFAULT_OVERAGE_RATE_AED_PER_KM = 0.50;
 
 export async function GET(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const { searchParams } = new URL(req.url);
     const contractId = searchParams.get('contractId');
     const readings = await prisma.leaseMileageReading.findMany({
-      where: contractId ? { contractId } : {},
+      where: { tenantId, ...(contractId ? { contractId } : {}) },
       include: { contract: { select: { contractNumber: true, mileageCap: true } } },
       orderBy: { readingDate: 'desc' },
     });
@@ -36,25 +45,39 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const body = await req.json();
-    const reading = await prisma.leaseMileageReading.create({ data: body });
+
+    // Cross-tenant guard: the contract the reading is being posted
+    // against must belong to this tenant. Otherwise we'd create a
+    // reading that points at a contract owned by another tenant.
+    const contract = await prisma.leaseContract2.findFirst({
+      where: { id: body.contractId, tenantId },
+    });
+    if (!contract) {
+      return NextResponse.json({ error: 'Contract not found in this tenant' }, { status: 404 });
+    }
+
+    const reading = await prisma.leaseMileageReading.create({
+      data: { ...body, tenantId },
+    });
 
     // Only RETURN and MONTHLY readings trigger overage calculation.
     if (!['RETURN', 'MONTHLY'].includes(body.readingType)) {
       return NextResponse.json(reading, { status: 201 });
     }
 
-    const contract = await prisma.leaseContract2.findUnique({
-      where: { id: body.contractId },
-    });
-    if (!contract?.mileageCap) {
+    if (!contract.mileageCap) {
       return NextResponse.json(reading, { status: 201 });
     }
 
     // Find the delivery reading to compute usage since contract start.
     const delivery = await prisma.leaseMileageReading.findFirst({
-      where: { contractId: body.contractId, readingType: 'DELIVERY' },
+      where: { tenantId, contractId: body.contractId, readingType: 'DELIVERY' },
       orderBy: { readingDate: 'asc' },
     });
     if (!delivery) {
@@ -90,6 +113,7 @@ export async function POST(req: NextRequest) {
     const result = await prisma.$transaction(async (tx) => {
       const overage = await tx.leaseMileageOverage.create({
         data: {
+          tenantId,
           contractId: body.contractId,
           vehicleId: body.vehicleId ?? null,
           periodFrom: contract.startDate,
@@ -104,8 +128,8 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Auto-invoice the overage.
-      const count = await tx.leaseInvoice.count();
+      // Auto-invoice the overage — scoped to this tenant.
+      const count = await tx.leaseInvoice.count({ where: { tenantId } });
       const invoiceNo = `INV-${String(count + 1).padStart(6, '0')}`;
       const subTotal = overageAmount;
       const vatPct = 5;
@@ -116,6 +140,7 @@ export async function POST(req: NextRequest) {
 
       const invoice = await tx.leaseInvoice.create({
         data: {
+          tenantId,
           invoiceNo,
           lesseeId: contract.lesseeId,
           billingPeriod: `Mileage overage — ${overage.periodFrom.toISOString().slice(0, 10)} → ${overage.periodTo.toISOString().slice(0, 10)}`,
@@ -151,12 +176,12 @@ export async function POST(req: NextRequest) {
         data: { invoiced: true, invoiceRef: invoice.invoiceNo, status: 'INVOICED' },
       });
 
-      return { overage: linkedOverage, invoice };
+      return { overage: linkedOverage, invoice, totalAmount };
     });
 
     // Fire-and-forget audit
     void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
+      tenantId,
       userId: req.headers.get('x-user-id') ?? undefined,
       userRole: req.headers.get('x-user-role') ?? undefined,
       entityType: 'LeaseMileageOverage',
@@ -169,7 +194,7 @@ export async function POST(req: NextRequest) {
       {
         ...reading,
         overage: result.overage,
-        invoice: { id: result.invoice.id, invoiceNo: result.invoice.invoiceNo, totalAmount },
+        invoice: { id: result.invoice.id, invoiceNo: result.invoice.invoiceNo, totalAmount: result.totalAmount },
       },
       { status: 201 },
     );

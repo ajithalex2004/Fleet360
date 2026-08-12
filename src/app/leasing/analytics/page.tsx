@@ -12,7 +12,6 @@ interface KPIs {
   totalUnbilled: number;
   expiringPolicies: number;
   renewalsPending: number;
-  remarketingPL: number;
   totalLessees: number;
   corporateLessees: number;
   utilisationPct: number;
@@ -131,11 +130,11 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {[
           { label: 'Active Contracts',     value: kpis.activeContracts,                       sub: `of ${kpis.totalContracts} total`,      color: 'from-blue-500 to-indigo-600',          href: '/leasing/contracts-v2?status=ACTIVE' },
-          { label: 'Monthly Revenue',      value: `AED ${((kpis.monthlyRevenue ?? 0) / 1000).toFixed(1)}K`, sub: 'from active contracts', color: 'from-emerald-500 to-teal-600',     href: '/leasing/payments?status=PAID' },
+          { label: 'Monthly Revenue',      value: `AED ${((kpis.monthlyRevenue ?? 0) / 1000).toFixed(1)}K`, sub: 'from active contracts', color: 'from-emerald-500 to-teal-600',     href: '/finance/payments' },
           { label: 'Portfolio Value',      value: `AED ${((kpis.portfolioValue ?? 0) / 1000000).toFixed(2)}M`, sub: 'total contract value',  color: 'from-indigo-500 to-violet-600',  href: '/leasing/contracts-v2' },
-          { label: 'Overdue Amount',       value: `AED ${(kpis.overdueAmount ?? 0).toLocaleString()}`,     sub: (kpis.overdueAmount ?? 0) > 50000 ? 'CRITICAL' : 'pending collection', color: (kpis.overdueAmount ?? 0) > 50000 ? 'from-red-600 to-rose-600' : 'from-orange-500 to-amber-600', href: '/leasing/receivables' },
+          { label: 'Overdue Amount',       value: `AED ${(kpis.overdueAmount ?? 0).toLocaleString()}`,     sub: (kpis.overdueAmount ?? 0) > 50000 ? 'CRITICAL' : 'pending collection', color: (kpis.overdueAmount ?? 0) > 50000 ? 'from-red-600 to-rose-600' : 'from-orange-500 to-amber-600', href: '/finance/ar-aging' },
           { label: 'Unbilled Charges',     value: `AED ${(kpis.totalUnbilled ?? 0).toLocaleString()}`,     sub: 'fines + fuel + overage',   color: 'from-amber-500 to-orange-600',     href: '/leasing/mileage-overages?status=PENDING' },
-          { label: 'Expiring Policies',    value: kpis.expiringPolicies ?? 0,                 sub: 'insurance within 30 days', color: (kpis.expiringPolicies ?? 0) > 0 ? 'from-rose-500 to-pink-600' : 'from-slate-600 to-slate-500', href: '/leasing/insurance' },
+          { label: 'Expiring Policies',    value: kpis.expiringPolicies ?? 0,                 sub: 'insurance within 30 days', color: (kpis.expiringPolicies ?? 0) > 0 ? 'from-rose-500 to-pink-600' : 'from-slate-600 to-slate-500', href: '/fleet/insurance' },
           { label: 'Renewal Pipeline',     value: kpis.renewalsPending ?? 0,                  sub: 'awaiting customer response', color: 'from-violet-500 to-purple-600',  href: '/leasing/renewals' },
           { label: 'Total Lessees',        value: kpis.totalLessees ?? 0,                     sub: `${kpis.corporateLessees ?? 0} corporate`, color: 'from-cyan-500 to-blue-600',  href: '/leasing/lessees' },
         ].map(({ label, value, sub, color, href }) => (
@@ -324,15 +323,8 @@ export default function AnalyticsPage() {
         )}
       </div>
 
-      {/* Remarketing P&L */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-2">Remarketing P&L</h2>
-          <p className="text-slate-400 text-sm mb-4">Total profit from sold end-of-lease vehicles</p>
-          <div className={`text-4xl font-bold ${(kpis.remarketingPL ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-            AED {(kpis.remarketingPL ?? 0).toLocaleString()}
-          </div>
-        </div>
+      {/* Lessee portfolio */}
+      <div className="grid grid-cols-1 gap-6">
         <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
           <h2 className="text-lg font-semibold text-white mb-2">Lessee Portfolio</h2>
           <p className="text-slate-400 text-sm mb-4">Active lessee breakdown by type</p>

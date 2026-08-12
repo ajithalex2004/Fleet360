@@ -1,17 +1,18 @@
+/**
+ * /api/leasing/transfers — inter-branch vehicle transfers (raw-SQL backend).
+ *
+ * Tenant scoping: requires x-tenant-id. The schema is provisioned with a
+ * `tenant_id` column by ensureTable(); reads filter by tenant; creates
+ * stamp the new row with the same tenantId.
+ *
+ * Note: this route manages a hand-rolled `leasing_vehicle_transfers` table
+ * (not a Prisma model) via raw SQL. The auto-CREATE statement adds
+ * `tenant_id` for new installs; existing databases without the column will
+ * get it added in place via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-
-/**
- * Leasing Inter-Branch Vehicle Transfers API
- * Auto-creates `leasing_vehicle_transfers` table on every request.
- *
- * Status workflow: REQUESTED → APPROVED → IN_TRANSIT → COMPLETED | CANCELLED
- * Reasons: REBALANCING / CONTRACT_REQUIREMENT / MAINTENANCE / CUSTOMER_REQUEST / OTHER
- *
- * GET   /api/leasing/transfers?status=&from_branch=&to_branch=&search=&page=&limit=
- * POST  /api/leasing/transfers      — create transfer request (auto-generates LVT-YYYYMM-XXXX)
- * PATCH /api/leasing/transfers?id=  — workflow transitions
- */
 
 async function ensureTable() {
   await prisma.$executeRawUnsafe(`
@@ -19,6 +20,7 @@ async function ensureTable() {
       id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
       created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      tenant_id        TEXT,
       transfer_no      TEXT        UNIQUE NOT NULL,
       vehicle_id       TEXT,
       vehicle_no       TEXT        NOT NULL,
@@ -48,6 +50,21 @@ async function ensureTable() {
       notes            TEXT
     )
   `);
+  // Backfill column on legacy installs.
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE leasing_vehicle_transfers
+      ADD COLUMN IF NOT EXISTS tenant_id TEXT
+  `);
+  // Backfill existing rows to the default active tenant so historical
+  // data is reachable.
+  await prisma.$executeRawUnsafe(`
+    UPDATE leasing_vehicle_transfers
+       SET tenant_id = (SELECT id FROM tenants WHERE COALESCE(is_active, TRUE) = TRUE ORDER BY created_at ASC NULLS LAST LIMIT 1)
+     WHERE tenant_id IS NULL
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_lvt_tenant ON leasing_vehicle_transfers(tenant_id)
+  `);
   await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_lvt_status ON leasing_vehicle_transfers(status)
   `);
@@ -66,6 +83,7 @@ type TransferRow = {
   id: string;
   created_at: string;
   updated_at: string;
+  tenant_id: string | null;
   transfer_no: string;
   vehicle_id: string | null;
   vehicle_no: string;
@@ -103,6 +121,7 @@ function mapTransfer(r: TransferRow) {
     id: r.id,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    tenantId: r.tenant_id,
     transferNo: r.transfer_no,
     vehicleId: r.vehicle_id,
     vehicleNo: r.vehicle_no,
@@ -134,6 +153,10 @@ function mapTransfer(r: TransferRow) {
 }
 
 export async function GET(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     await ensureTable();
     const sp         = req.nextUrl.searchParams;
@@ -145,9 +168,9 @@ export async function GET(req: NextRequest) {
     const limit      = Math.min(100, Number(sp.get('limit') ?? 20));
     const offset     = (page - 1) * limit;
 
-    const conds: string[] = [];
-    const params: unknown[] = [];
-    let pi = 1;
+    const conds: string[] = ['t.tenant_id = $1'];
+    const params: unknown[] = [tenantId];
+    let pi = 2;
 
     if (status)     { conds.push(`t.status = $${pi++}`);                   params.push(status); }
     if (fromBranch) { conds.push(`t.from_branch_name ILIKE $${pi++}`);     params.push(`%${fromBranch}%`); }
@@ -158,7 +181,7 @@ export async function GET(req: NextRequest) {
       pi++;
     }
 
-    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+    const where = `WHERE ${conds.join(' AND ')}`;
 
     const [rows, countRows, statusCounts] = await Promise.all([
       prisma.$queryRawUnsafe<TransferRow[]>(
@@ -172,15 +195,16 @@ export async function GET(req: NextRequest) {
       ).catch(() => [{ cnt: BigInt(0) }]),
 
       prisma.$queryRawUnsafe<CountRow[]>(
-        `SELECT status, COUNT(*) AS cnt FROM leasing_vehicle_transfers GROUP BY status`
+        `SELECT status, COUNT(*) AS cnt FROM leasing_vehicle_transfers WHERE tenant_id = $1 GROUP BY status`,
+        tenantId
       ).catch(() => [] as CountRow[]),
     ]);
 
     const now = new Date();
     const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
     const [completedThisMonth] = await prisma.$queryRawUnsafe<[{ cnt: bigint }]>(
-      `SELECT COUNT(*) AS cnt FROM leasing_vehicle_transfers WHERE status = 'COMPLETED' AND arrived_at >= $1`,
-      firstOfMonth
+      `SELECT COUNT(*) AS cnt FROM leasing_vehicle_transfers WHERE tenant_id = $1 AND status = 'COMPLETED' AND arrived_at >= $2`,
+      tenantId, firstOfMonth
     ).catch(() => [{ cnt: BigInt(0) }]);
 
     const total = Number(countRows[0]?.cnt ?? 0);
@@ -206,6 +230,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     await ensureTable();
     const body = await req.json();
@@ -231,11 +259,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `reason must be one of: ${validReasons.join(', ')}` }, { status: 400 });
     }
 
-    // Generate transfer_no: LVT-YYYYMM-XXXX
     const yyyymm = new Date().toISOString().slice(0, 7).replace('-', '');
     const [seqRow] = await prisma.$queryRawUnsafe<SeqRow[]>(
-      `SELECT COUNT(*) + 1 AS seq FROM leasing_vehicle_transfers WHERE transfer_no LIKE $1`,
-      `LVT-${yyyymm}-%`
+      `SELECT COUNT(*) + 1 AS seq FROM leasing_vehicle_transfers WHERE tenant_id = $1 AND transfer_no LIKE $2`,
+      tenantId, `LVT-${yyyymm}-%`
     );
     const seq = String(Number(seqRow?.seq ?? 1)).padStart(4, '0');
     const transferNo = `LVT-${yyyymm}-${seq}`;
@@ -243,13 +270,14 @@ export async function POST(req: NextRequest) {
     type NewRow = { id: string; transfer_no: string };
     const [row] = await prisma.$queryRawUnsafe<NewRow[]>(
       `INSERT INTO leasing_vehicle_transfers
-         (transfer_no, vehicle_id, vehicle_no, vehicle_name, vehicle_make, vehicle_model,
+         (tenant_id, transfer_no, vehicle_id, vehicle_no, vehicle_name, vehicle_make, vehicle_model,
           from_branch_id, from_branch_name, from_emirate,
           to_branch_id, to_branch_name, to_emirate,
           transfer_date, reason, fuel_level, odometer_reading, condition_notes,
           driver_name, driver_phone, requested_by, notes, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,'REQUESTED')
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,'REQUESTED')
        RETURNING id, transfer_no`,
+      tenantId,
       transferNo,
       vehicleId      || null,
       vehicleNo.trim(),
@@ -281,6 +309,10 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     await ensureTable();
     const id = req.nextUrl.searchParams.get('id');
@@ -290,7 +322,7 @@ export async function PATCH(req: NextRequest) {
     const { action, approvedBy, cancelledReason } = body;
 
     const [current] = await prisma.$queryRawUnsafe<TransferRow[]>(
-      `SELECT * FROM leasing_vehicle_transfers WHERE id = $1`, id
+      `SELECT * FROM leasing_vehicle_transfers WHERE id = $1 AND tenant_id = $2`, id, tenantId
     );
     if (!current) return NextResponse.json({ error: 'Transfer not found' }, { status: 404 });
 
@@ -304,24 +336,24 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: 'approved_by is required' }, { status: 400 });
       }
       await prisma.$executeRawUnsafe(
-        `UPDATE leasing_vehicle_transfers SET status='APPROVED', approved_by=$1, approved_at=$2, updated_at=$3 WHERE id=$4`,
-        approvedBy.trim(), now, now, id
+        `UPDATE leasing_vehicle_transfers SET status='APPROVED', approved_by=$1, approved_at=$2, updated_at=$3 WHERE id=$4 AND tenant_id=$5`,
+        approvedBy.trim(), now, now, id, tenantId
       );
     } else if (action === 'DEPART') {
       if (current.status !== 'APPROVED') {
         return NextResponse.json({ error: 'Only APPROVED transfers can be departed' }, { status: 400 });
       }
       await prisma.$executeRawUnsafe(
-        `UPDATE leasing_vehicle_transfers SET status='IN_TRANSIT', departed_at=$1, updated_at=$2 WHERE id=$3`,
-        now, now, id
+        `UPDATE leasing_vehicle_transfers SET status='IN_TRANSIT', departed_at=$1, updated_at=$2 WHERE id=$3 AND tenant_id=$4`,
+        now, now, id, tenantId
       );
     } else if (action === 'ARRIVE') {
       if (current.status !== 'IN_TRANSIT') {
         return NextResponse.json({ error: 'Only IN_TRANSIT transfers can be completed' }, { status: 400 });
       }
       await prisma.$executeRawUnsafe(
-        `UPDATE leasing_vehicle_transfers SET status='COMPLETED', arrived_at=$1, updated_at=$2 WHERE id=$3`,
-        now, now, id
+        `UPDATE leasing_vehicle_transfers SET status='COMPLETED', arrived_at=$1, updated_at=$2 WHERE id=$3 AND tenant_id=$4`,
+        now, now, id, tenantId
       );
     } else if (action === 'CANCEL') {
       if (current.status === 'COMPLETED') {
@@ -331,15 +363,15 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: 'cancelled_reason is required' }, { status: 400 });
       }
       await prisma.$executeRawUnsafe(
-        `UPDATE leasing_vehicle_transfers SET status='CANCELLED', cancelled_reason=$1, updated_at=$2 WHERE id=$3`,
-        cancelledReason.trim(), now, id
+        `UPDATE leasing_vehicle_transfers SET status='CANCELLED', cancelled_reason=$1, updated_at=$2 WHERE id=$3 AND tenant_id=$4`,
+        cancelledReason.trim(), now, id, tenantId
       );
     } else {
       return NextResponse.json({ error: 'action must be one of: APPROVE, DEPART, ARRIVE, CANCEL' }, { status: 400 });
     }
 
     const [updated] = await prisma.$queryRawUnsafe<TransferRow[]>(
-      `SELECT * FROM leasing_vehicle_transfers WHERE id = $1`, id
+      `SELECT * FROM leasing_vehicle_transfers WHERE id = $1 AND tenant_id = $2`, id, tenantId
     );
     return NextResponse.json(mapTransfer(updated));
   } catch (err) {

@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth';
 import { ensureServiceConfigTables } from '@/lib/service-config/schema';
 import { LINKED_MODULES, type LinkedModule } from '@/types/service-config';
@@ -30,11 +31,13 @@ interface MappingRow {
 }
 
 async function ownsType(tenantId: string, typeId: string): Promise<boolean> {
-  const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-    `SELECT id::text FROM service_types
-     WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
-    typeId, tenantId,
-  ).catch(() => []);
+  const rows = await withTenantRls(prisma, tenantId, (tx) =>
+    tx.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id::text FROM service_types
+       WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
+      typeId, tenantId,
+    ).catch(() => [] as Array<{ id: string }>)
+  );
   return rows.length > 0;
 }
 
@@ -47,32 +50,45 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ ok: false, error: 'Service type not found' }, { status: 404 });
   }
 
-  let rows = await prisma.$queryRawUnsafe<MappingRow[]>(
-    `SELECT service_type_id::text, linked_module, sub_module,
-            workflow_engine_enabled, notification_engine_enabled,
-            approval_engine_enabled, finance_engine_enabled,
-            dispatch_engine_enabled, updated_at::text
-     FROM service_module_mapping
-     WHERE service_type_id = $1::uuid`,
-    id,
-  ).catch(() => []);
+  // service_module_mapping is reached via service_types (tenant-scoped).
+  // The mapping table itself has no tenant_id, so the join through the
+  // type is what enforces tenant isolation. Use withTenantRls so the join
+  // sees only this tenant's types.
+  let rows = await withTenantRls(prisma, auth.tenantId, (tx) =>
+    tx.$queryRawUnsafe<MappingRow[]>(
+      `SELECT m.service_type_id::text, m.linked_module, m.sub_module,
+              m.workflow_engine_enabled, m.notification_engine_enabled,
+              m.approval_engine_enabled, m.finance_engine_enabled,
+              m.dispatch_engine_enabled, m.updated_at::text
+       FROM service_module_mapping m
+       JOIN service_types t ON t.id = m.service_type_id
+       WHERE t.tenant_id = $1 AND t.id = $2::uuid AND t.deleted_at IS NULL`,
+      auth.tenantId, id,
+    ).catch(() => [] as MappingRow[])
+  );
 
   if (rows.length === 0) {
     // Lazy-create a sensible default so the UI always has something to edit.
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO service_module_mapping
-         (service_type_id, linked_module, notification_engine_enabled)
-       VALUES ($1::uuid, 'ADMIN', TRUE)
-       ON CONFLICT (service_type_id) DO NOTHING`,
-      id,
+    await withTenantRls(prisma, auth.tenantId, (tx) =>
+      tx.$executeRawUnsafe(
+        `INSERT INTO service_module_mapping
+           (service_type_id, linked_module, notification_engine_enabled)
+         VALUES ($1::uuid, 'ADMIN', TRUE)
+         ON CONFLICT (service_type_id) DO NOTHING`,
+        id,
+      )
     );
-    rows = await prisma.$queryRawUnsafe<MappingRow[]>(
-      `SELECT service_type_id::text, linked_module, sub_module,
-              workflow_engine_enabled, notification_engine_enabled,
-              approval_engine_enabled, finance_engine_enabled,
-              dispatch_engine_enabled, updated_at::text
-       FROM service_module_mapping WHERE service_type_id = $1::uuid`,
-      id,
+    rows = await withTenantRls(prisma, auth.tenantId, (tx) =>
+      tx.$queryRawUnsafe<MappingRow[]>(
+        `SELECT m.service_type_id::text, m.linked_module, m.sub_module,
+                m.workflow_engine_enabled, m.notification_engine_enabled,
+                m.approval_engine_enabled, m.finance_engine_enabled,
+                m.dispatch_engine_enabled, m.updated_at::text
+         FROM service_module_mapping m
+         JOIN service_types t ON t.id = m.service_type_id
+         WHERE t.tenant_id = $1 AND t.id = $2::uuid`,
+        auth.tenantId, id,
+      )
     );
   }
 
@@ -106,28 +122,30 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   const subModule    = (typeof body.subModule === 'string' && body.subModule.trim().length > 0) ? body.subModule.trim() : null;
 
   try {
-    const updated = await prisma.$queryRawUnsafe<MappingRow[]>(
-      `INSERT INTO service_module_mapping
-         (service_type_id, linked_module, sub_module,
-          workflow_engine_enabled, notification_engine_enabled, approval_engine_enabled,
-          finance_engine_enabled, dispatch_engine_enabled, updated_at)
-       VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, NOW())
-       ON CONFLICT (service_type_id) DO UPDATE SET
-         linked_module               = EXCLUDED.linked_module,
-         sub_module                  = EXCLUDED.sub_module,
-         workflow_engine_enabled     = EXCLUDED.workflow_engine_enabled,
-         notification_engine_enabled = EXCLUDED.notification_engine_enabled,
-         approval_engine_enabled     = EXCLUDED.approval_engine_enabled,
-         finance_engine_enabled      = EXCLUDED.finance_engine_enabled,
-         dispatch_engine_enabled     = EXCLUDED.dispatch_engine_enabled,
-         updated_at                  = NOW()
-       RETURNING service_type_id::text, linked_module, sub_module,
-                 workflow_engine_enabled, notification_engine_enabled,
-                 approval_engine_enabled, finance_engine_enabled,
-                 dispatch_engine_enabled, updated_at::text`,
-      id, linkedModule, subModule,
-      !!body.workflowEngineEnabled, body.notificationEngineEnabled !== false,
-      !!body.approvalEngineEnabled, !!body.financeEngineEnabled, !!body.dispatchEngineEnabled,
+    const updated = await withTenantRls(prisma, auth.tenantId, (tx) =>
+      tx.$queryRawUnsafe<MappingRow[]>(
+        `INSERT INTO service_module_mapping
+           (service_type_id, linked_module, sub_module,
+            workflow_engine_enabled, notification_engine_enabled, approval_engine_enabled,
+            finance_engine_enabled, dispatch_engine_enabled, updated_at)
+         VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, NOW())
+         ON CONFLICT (service_type_id) DO UPDATE SET
+           linked_module               = EXCLUDED.linked_module,
+           sub_module                  = EXCLUDED.sub_module,
+           workflow_engine_enabled     = EXCLUDED.workflow_engine_enabled,
+           notification_engine_enabled = EXCLUDED.notification_engine_enabled,
+           approval_engine_enabled     = EXCLUDED.approval_engine_enabled,
+           finance_engine_enabled      = EXCLUDED.finance_engine_enabled,
+           dispatch_engine_enabled     = EXCLUDED.dispatch_engine_enabled,
+           updated_at                  = NOW()
+         RETURNING service_type_id::text, linked_module, sub_module,
+                   workflow_engine_enabled, notification_engine_enabled,
+                   approval_engine_enabled, finance_engine_enabled,
+                   dispatch_engine_enabled, updated_at::text`,
+        id, linkedModule, subModule,
+        !!body.workflowEngineEnabled, body.notificationEngineEnabled !== false,
+        !!body.approvalEngineEnabled, !!body.financeEngineEnabled, !!body.dispatchEngineEnabled,
+      )
     );
 
     void logAudit({

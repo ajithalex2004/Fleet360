@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { sendBookingActivatedWhatsApp } from '@/lib/whatsapp';
 
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: `Cannot activate a booking in status: ${booking.status}` }, { status: 400 });
     }
 
-    const ops: Parameters<typeof prisma.$transaction>[0] = [
+    const ops: Prisma.PrismaPromise<unknown>[] = [
       prisma.rentalBooking.update({
         where: { id: params.id },
         data: { status: 'ACTIVE', updatedAt: new Date() },

@@ -31,6 +31,10 @@ const config = {
 };
 
 export async function POST(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const form = await req.formData();
     const file = form.get('file');
@@ -73,7 +77,7 @@ export async function POST(req: NextRequest) {
         data.nationality = row.nationality;
         if (row.licenseNo) data.licenseNo = row.licenseNo;
       }
-      await prisma.lessee.create({ data });
+      await prisma.lessee.create({ data: { ...data, tenantId } });
     });
 
     void logAudit({

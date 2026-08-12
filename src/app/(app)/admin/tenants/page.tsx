@@ -7,6 +7,9 @@ import {
   type ModuleKey,
   type ModuleDef,
 } from '@/lib/modules';
+import { EditTenantModal, type TenantForEdit } from '@/components/EditTenantModal';
+import { HardDeleteConfirm } from '@/components/HardDeleteConfirm';
+import { useFetchedData, invalidate, invalidatePrefix } from '@/hooks/useFetchedData';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -340,12 +343,15 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function TenantsPage() {
-  const [tenants,   setTenants]   = useState<TenantRow[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('basic');
   const [loading,   setLoading]   = useState(true);
   const [saving,    setSaving]    = useState(false);
   const [error,     setError]     = useState('');
+
+  // Edit / hard-delete dialogs
+  const [editingTenant,   setEditingTenant]   = useState<TenantForEdit | null>(null);
+  const [deletingTenant,  setDeletingTenant]  = useState<TenantRow | null>(null);
   const [form,      setForm]      = useState(emptyForm);
   // which service-type panels are expanded
   const [expanded,  setExpanded]  = useState<Record<string, boolean>>({
@@ -353,15 +359,21 @@ export default function TenantsPage() {
   });
 
   // ── data ──────────────────────────────────────────────────────────────────
+  // Session-scoped fetch cache — 1st visit hits the cached server endpoint
+  // (Data Cache + s-maxage), 2nd visit within the same tab is instant from
+  // the in-memory Map. `refresh` busts the session cache after writes.
+  const { data: tenantsRaw, loading: tenantsLoading, refresh: refreshTenants } =
+    useFetchedData<TenantRow[]>('/api/admin/tenants');
+  const tenants = tenantsRaw ?? [];
+
+  useEffect(() => {
+    if (tenantsLoading) setLoading(true);
+    else setLoading(false);
+  }, [tenantsLoading]);
+
   const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res  = await fetch('/api/admin/tenants');
-      const data = await res.json();
-      setTenants(Array.isArray(data) ? data : []);
-    } catch { setError('Failed to load tenants'); } finally { setLoading(false); }
-  }, []);
-  useEffect(() => { load(); }, [load]);
+    refreshTenants();
+  }, [refreshTenants]);
 
   // ── helpers ───────────────────────────────────────────────────────────────
   const set = (key: string, val: unknown) => setForm(p => ({ ...p, [key]: val }));
@@ -584,10 +596,51 @@ export default function TenantsPage() {
                   : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30'}`}>
                 {t.isActive ? 'Deactivate' : 'Activate'}
               </button>
+              <button
+                onClick={async () => {
+                  // Fetch the full tenant record so the Edit modal has every field
+                  const r = await fetch(`/api/admin/tenants/${t.id}`);
+                  if (r.ok) setEditingTenant(await r.json() as TenantForEdit);
+                }}
+                className="text-xs px-3 py-1.5 rounded-lg border border-white/10 text-slate-200 hover:bg-white/5">
+                Edit
+              </button>
+              {/* Hard delete — only for inactive tenants (server enforces this too) */}
+              {!t.isActive && (
+                <button
+                  onClick={() => setDeletingTenant(t)}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-rose-500/30 text-rose-300 hover:bg-rose-500/10">
+                  Hard Delete
+                </button>
+              )}
             </div>
           </div>
         ))}
       </div>
+
+      {/* ── Edit Tenant modal ────────────────────────────────────────────── */}
+      {editingTenant && (
+        <EditTenantModal
+          tenant={editingTenant}
+          onDone={() => { setEditingTenant(null); load(); }}
+          onCancel={() => setEditingTenant(null)}
+        />
+      )}
+
+      {/* ── Hard Delete Tenant dialog ────────────────────────────────────── */}
+      {deletingTenant && (
+        <HardDeleteConfirm
+          title="Hard delete tenant"
+          target={{
+            kind:        'tenant',
+            id:          deletingTenant.id,
+            confirmText: deletingTenant.name,
+          }}
+          description={`This will permanently destroy "${deletingTenant.name}" and ALL of its data — every row across every tenant-scoped table. This cannot be undone.`}
+          onDone={() => { setDeletingTenant(null); load(); }}
+          onCancel={() => setDeletingTenant(null)}
+        />
+      )}
 
       {/* ══════════════════════════════════════════════════════════════════════
           CREATE TENANT MODAL

@@ -1,10 +1,22 @@
 import { prisma } from '@/lib/prisma';
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET() {
+/**
+ * Quotation list (GET) + create (POST).
+ *
+ * Multi-tenant: every operation is scoped by x-tenant-id from the
+ * middleware. Layer 2.5 fix that closes TENANT-001 for the quotation
+ * surface. The schema-side tenantId column is set by the migration
+ * `20260627000001_add_tenant_id_to_leasing_tables`.
+ */
+export async function GET(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const quotations = await prisma.leaseQuotation.findMany({
-      where: { deletedAt: null },
+      where: { tenantId, deletedAt: null },
       include: {
         lineItems: true,
         vehicles:  true,
@@ -27,12 +39,15 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const tenantId = request.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const body = await request.json();
-    // Generate serial quotation number: QUO-0001, QUO-0002, etc.
-    const countExisting = await prisma.leaseQuotation.count();
+    // Generate serial quotation number scoped to this tenant
+    const countExisting = await prisma.leaseQuotation.count({ where: { tenantId } });
     const quotationNumber = `QUO-${String(countExisting + 1).padStart(4, '0')}`;
-
 
     // Strip relational/extra fields that aren't on the LeaseQuotation model
     const {
@@ -43,6 +58,7 @@ export async function POST(request: NextRequest) {
     const quotation = await prisma.leaseQuotation.create({
       data: {
         ...quotationData,
+        tenantId,
         quotationNumber,
         status: quotationData.status ?? 'NEW',
         ...(Array.isArray(vehicles) && vehicles.length > 0 ? {
@@ -67,7 +83,7 @@ export async function POST(request: NextRequest) {
       lineItems: Array.isArray(quotation.lineItems) ? quotation.lineItems : [],
     }, { status: 201 });
   } catch (error: any) {
-    console.error('POST /api/leasing/quotations error:', error);
+    console.error('POST /api/leasing/quotations error:', error?.message);
     return NextResponse.json(
       { error: error?.message ?? 'Failed to create quotation' },
       { status: 500 }

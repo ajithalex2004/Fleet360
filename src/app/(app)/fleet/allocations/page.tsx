@@ -185,13 +185,13 @@ export default function AllocationsPage() {
   };
 
   const isOverdue = (alloc: Allocation) =>
-    alloc.status === 'ACTIVE' && alloc.expectedReturnDate && new Date(alloc.expectedReturnDate) < now;
+    alloc.status === 'ACTIVE' && !!alloc.expectedReturnDate && new Date(alloc.expectedReturnDate) < new Date();
 
   const inputCls = 'bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-orange-500/50 focus:outline-none w-full';
   const labelCls = 'block text-xs text-slate-400 mb-1';
 
   return (
-    <div className="min-h-screen bg-[#0c1a3e] text-white p-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>

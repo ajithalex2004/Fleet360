@@ -9,6 +9,9 @@
  * - On SETTLED: stamps settledAt (defaults to now)
  * - Audit-logs every accepted transition
  * - 409 with the rule violation if illegal
+ *
+ * Tenant scoping: requires x-tenant-id. The policy + claim must belong to
+ * the caller's tenant.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -26,6 +29,10 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string; claimId: string } },
 ) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const body = await req.json();
     const to = body?.to as ClaimStatus | undefined;
@@ -33,10 +40,19 @@ export async function POST(
       return NextResponse.json({ error: 'Missing required body field: to' }, { status: 400 });
     }
 
-    const claim = await prisma.leaseInsuranceClaim.findUnique({
-      where: { id: params.claimId },
+    // Confirm both the policy and the claim belong to the caller's tenant
+    // before we expose the claim state to the state-machine validator.
+    const policy = await prisma.leaseInsurancePolicy.findFirst({
+      where: { id: params.id, tenantId },
+      select: { id: true },
     });
-    if (!claim || claim.policyId !== params.id) {
+    if (!policy) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    const claim = await prisma.leaseInsuranceClaim.findFirst({
+      where: { id: params.claimId, tenantId, policyId: params.id },
+    });
+    if (!claim) {
       return NextResponse.json({ error: 'Claim not found' }, { status: 404 });
     }
 
@@ -67,7 +83,7 @@ export async function POST(
     });
 
     void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
+      tenantId,
       userId: req.headers.get('x-user-id') ?? 'system',
       userRole: req.headers.get('x-user-role') ?? 'STAFF',
       entityType: 'LeaseInsuranceClaim',

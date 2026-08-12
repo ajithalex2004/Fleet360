@@ -45,22 +45,32 @@ body {
 }
 
 /* Custom Scrollbar */
+/* Bumped from 8px → 10px and darkened the thumb so the scrollbar reads as
+   a real affordance ("there's more content below") instead of blending into
+   the dark navy track. slate-600 in dark mode, slate-500 in light mode,
+   both high-contrast against their respective backgrounds. */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0c1a3e;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e3a8a;
-  border-radius: 4px;
+  background: #475569; /* slate-600 — visible against slate-950/900 */
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3b82f6;
+  background: #64748b; /* slate-500 — lighter on hover for affordance */
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 /* ── C1Chat / TheSys embedded chat overrides ────────────────────────────── */
@@ -167,3 +177,138 @@ select option {
   .print\:block  { display: block !important; }
   #print-manifest { display: block !important; }
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   LIGHT MODE — global skin
+   The app is authored dark (dark is the default; no overrides needed there).
+   Choosing Light adds `class="light"` to <html>; the rules below remap the
+   hardcoded dark palette (slate-950/900/800, white-alpha, slate text/borders)
+   to light equivalents app-wide, so light mode works without re-theming every
+   component. Accent colours (emerald/amber/sky/rose, gradients) are left as-is.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+html.light { color-scheme: light; }
+
+html.light body {
+  background: #eef2f7 !important;
+  color: #0f172a;
+}
+
+/* Scrollbar (light mode) — thumb is slate-700 so it reads clearly against
+   the light grey track (the old #cbd5e1 on #e2e8f0 was almost invisible). */
+html.light ::-webkit-scrollbar-track { background: transparent; }
+html.light ::-webkit-scrollbar-thumb { background: #475569; } /* slate-600 */
+html.light ::-webkit-scrollbar-thumb:hover { background: #334155; } /* slate-700 */
+
+/* Form controls (override the global `color: white !important`) */
+html.light input,
+html.light textarea,
+html.light select { color: #0f172a !important; }
+html.light input::placeholder,
+html.light textarea::placeholder { color: #94a3b8 !important; }
+html.light select option { background-color: #ffffff; color: #0f172a; }
+
+/* ── Backgrounds ──────────────────────────────────────────────────────────── */
+/* slate-950 (the app's near-black) → white */
+html.light .bg-slate-950,
+html.light .bg-slate-950\/95,
+html.light .bg-slate-950\/90,
+html.light .bg-slate-950\/80,
+html.light .bg-slate-950\/70,
+html.light .bg-slate-950\/60,
+html.light .bg-slate-950\/50,
+html.light .bg-slate-950\/40,
+html.light .bg-\[\#0c1a3e\] { background-color: #ffffff !important; }
+
+/* slate-900 (panels/cards) → very light grey */
+html.light .bg-slate-900,
+html.light .bg-slate-900\/95,
+html.light .bg-slate-900\/90,
+html.light .bg-slate-900\/80,
+html.light .bg-slate-900\/70,
+html.light .bg-slate-900\/60,
+html.light .bg-slate-900\/50,
+html.light .bg-slate-900\/40,
+html.light .bg-slate-900\/30 { background-color: #f8fafc !important; }
+
+/* slate-800 (raised/hover surfaces) → light grey */
+html.light .bg-slate-800,
+html.light .bg-slate-800\/95,
+html.light .bg-slate-800\/90,
+html.light .bg-slate-800\/80,
+html.light .bg-slate-800\/70,
+html.light .bg-slate-800\/60,
+html.light .bg-slate-800\/50,
+html.light .bg-slate-800\/40,
+html.light .bg-slate-800\/30 { background-color: #f1f5f9 !important; }
+
+html.light .bg-slate-700,
+html.light .bg-slate-600\/30 { background-color: #e2e8f0 !important; }
+
+/* white-alpha fills → black-alpha (subtle surfaces) */
+html.light .bg-white\/5  { background-color: rgba(15, 23, 42, 0.04) !important; }
+html.light .bg-white\/10 { background-color: rgba(15, 23, 42, 0.06) !important; }
+html.light .bg-white\/\[0\.02\] { background-color: rgba(15, 23, 42, 0.02) !important; }
+html.light .bg-white\/\[0\.03\] { background-color: rgba(15, 23, 42, 0.03) !important; }
+
+/* ── Text ─────────────────────────────────────────────────────────────────── */
+html.light .text-white,
+html.light .text-slate-100 { color: #0f172a !important; }
+html.light .text-slate-200 { color: #1e293b !important; }
+html.light .text-slate-300 { color: #334155 !important; }
+html.light .text-slate-400 { color: #475569 !important; }
+html.light .text-slate-500 { color: #64748b !important; }
+html.light .text-slate-600 { color: #94a3b8 !important; }
+/* Champagne-gold brand accent text (#E8C547) is too light to read on a light
+   surface — use the deep-gold shade in Light mode (keeps the gold identity). */
+html.light .text-\[\#E8C547\] { color: #b8860b !important; }
+
+/* ── Accent text on pale surfaces (buttons/pills) ─────────────────────────────
+   The 200–400 tints are too light to read on a light background — used heavily
+   on pale-tint accent buttons (e.g. bg-amber-500/15 + text-amber-200). Drop each
+   to a dark, readable shade in Light mode. (Dark mode keeps the bright tints.) */
+html.light .text-amber-200,  html.light .text-amber-300,  html.light .text-amber-400  { color: #92400e !important; }
+html.light .text-yellow-200, html.light .text-yellow-300, html.light .text-yellow-400 { color: #854d0e !important; }
+html.light .text-orange-200, html.light .text-orange-300, html.light .text-orange-400 { color: #9a3412 !important; }
+html.light .text-blue-200,   html.light .text-blue-300,   html.light .text-blue-400   { color: #1d4ed8 !important; }
+html.light .text-sky-200,    html.light .text-sky-300,    html.light .text-sky-400    { color: #0369a1 !important; }
+html.light .text-cyan-200,   html.light .text-cyan-300,   html.light .text-cyan-400   { color: #0e7490 !important; }
+html.light .text-indigo-200, html.light .text-indigo-300, html.light .text-indigo-400 { color: #4338ca !important; }
+html.light .text-violet-200, html.light .text-violet-300, html.light .text-violet-400 { color: #6d28d9 !important; }
+html.light .text-purple-200, html.light .text-purple-300, html.light .text-purple-400 { color: #7e22ce !important; }
+html.light .text-pink-200,   html.light .text-pink-300,   html.light .text-pink-400   { color: #be185d !important; }
+html.light .text-rose-200,   html.light .text-rose-300,   html.light .text-rose-400   { color: #be123c !important; }
+html.light .text-red-200,    html.light .text-red-300,    html.light .text-red-400    { color: #b91c1c !important; }
+html.light .text-emerald-200,html.light .text-emerald-300,html.light .text-emerald-400{ color: #047857 !important; }
+html.light .text-green-200,  html.light .text-green-300,  html.light .text-green-400  { color: #15803d !important; }
+html.light .text-teal-200,   html.light .text-teal-300,   html.light .text-teal-400   { color: #0f766e !important; }
+
+/* Sidebar / solid-black surfaces → light panel. Modal backdrops use bg-black/NN
+   (an opacity variant, a different class) so they correctly stay dark. */
+html.light .bg-black { background-color: #f1f5f9 !important; }
+
+/* Pale-background buttons: bold the label in Light mode so it reads clearly. */
+html.light button { font-weight: 600; }
+
+/* ── Borders ──────────────────────────────────────────────────────────────── */
+html.light .border-white\/5  { border-color: rgba(15, 23, 42, 0.06) !important; }
+html.light .border-white\/10 { border-color: rgba(15, 23, 42, 0.10) !important; }
+html.light .border-white\/20 { border-color: rgba(15, 23, 42, 0.16) !important; }
+
+/* ── Divides ──────────────────────────────────────────────────────────────── */
+html.light .divide-white\/5  > :not([hidden]) ~ :not([hidden]) { border-color: rgba(15, 23, 42, 0.06) !important; }
+html.light .divide-white\/10 > :not([hidden]) ~ :not([hidden]) { border-color: rgba(15, 23, 42, 0.10) !important; }
+
+/* ── Placeholders ─────────────────────────────────────────────────────────── */
+html.light .placeholder-slate-500::placeholder,
+html.light .placeholder-slate-600::placeholder { color: #94a3b8 !important; }
+
+/* ── Hover states ─────────────────────────────────────────────────────────── */
+html.light .hover\:bg-white\/5:hover  { background-color: rgba(15, 23, 42, 0.05) !important; }
+html.light .hover\:bg-white\/10:hover { background-color: rgba(15, 23, 42, 0.07) !important; }
+html.light .hover\:bg-white\/\[0\.02\]:hover { background-color: rgba(15, 23, 42, 0.03) !important; }
+html.light .hover\:bg-white\/\[0\.03\]:hover { background-color: rgba(15, 23, 42, 0.04) !important; }
+html.light .hover\:bg-slate-800:hover,
+html.light .hover\:bg-slate-800\/40:hover,
+html.light .hover\:bg-slate-800\/80:hover { background-color: #e2e8f0 !important; }
+html.light .hover\:border-white\/20:hover { border-color: rgba(15, 23, 42, 0.16) !important; }

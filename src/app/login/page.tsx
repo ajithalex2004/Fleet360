@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { clearClientSession, setClientSession, setClientSessionSnapshot } from '@/lib/client-session';
 
 const SSO_MESSAGES: Record<string, string> = {
   'unknown':                  'No SSO configured for that email domain.',
@@ -20,6 +22,7 @@ const SSO_MESSAGES: Record<string, string> = {
 };
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading]   = useState(false);
@@ -52,6 +55,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    clearClientSession();
     const params  = new URLSearchParams(window.location.search);
 
     const ssoFlag = params.get('sso');
@@ -105,10 +109,17 @@ export default function LoginPage() {
         return;
       }
 
-      localStorage.setItem(
-        'xl_mobility_session',
-        JSON.stringify({ userId: data.user.id, tenantId: data.tenant.id }),
-      );
+      setClientSession(data.user.id, data.tenant.id, data.backendToken);
+      if (data.user && data.tenant) {
+        setClientSessionSnapshot({
+          user: data.user,
+          tenant: {
+            ...data.tenant,
+            enabledModules: Array.isArray(data.tenant.enabledModules) ? data.tenant.enabledModules : [],
+          },
+          permissions: Array.isArray(data.permissions) ? data.permissions : [],
+        });
+      }
       // Stash the JWT for the Go backend. The Authorization-Bearer
       // fetcher in src/lib/auth/backend-fetch.ts reads from this key.
       // Login response may include backendToken=null when JWT_SECRET is
@@ -119,13 +130,13 @@ export default function LoginPage() {
       } else {
         localStorage.removeItem('xl_backend_token');
       }
-      window.location.href = '/platform';
+      router.replace('/platform');
     } catch {
       setError('Network error. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
-  }, [email, password]);
+  }, [email, password, router]);
 
   const handleLogin = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();

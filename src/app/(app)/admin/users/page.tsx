@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import PasswordInput from '@/components/ui/PasswordInput';
+import { HardDeleteConfirm } from '@/components/HardDeleteConfirm';
 
 const ALL_MODULES = [
   'fleet', 'driver', 'rental', 'leasing', 'maintenance',
@@ -67,6 +68,7 @@ export default function UsersPage() {
   const [showEdit, setShowEdit]       = useState<User | null>(null);
   const [showAssign, setShowAssign]   = useState<User | null>(null);
   const [showModules, setShowModules] = useState<User | null>(null);
+  const [hardDeleteTarget, setHardDeleteTarget] = useState<User | null>(null);
 
   const [userForm, setUserForm]   = useState(EMPTY_USER);
   const [editForm, setEditForm]   = useState<Partial<User & { newPassword: string }>>({});
@@ -348,6 +350,14 @@ export default function UsersPage() {
                             className="px-2.5 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors whitespace-nowrap">
                             Tenant
                           </button>
+                          {/* Hard delete — hidden for protected accounts. The server enforces the same whitelist. */}
+                          {u.email !== 'admin@xl-mobility.com' && (
+                            <button
+                              onClick={() => setHardDeleteTarget(u)}
+                              className="px-2.5 py-1.5 text-xs bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-lg transition-colors whitespace-nowrap">
+                              Hard Delete
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -557,6 +567,21 @@ export default function UsersPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Hard Delete User dialog */}
+      {hardDeleteTarget && (
+        <HardDeleteConfirm
+          title="Hard delete user"
+          target={{
+            kind:        'user',
+            id:          hardDeleteTarget.id,
+            confirmText: hardDeleteTarget.email,
+          }}
+          description={`This will permanently destroy the user "${hardDeleteTarget.email}" and ALL of their tenant memberships. Audit log entries authored by this user are kept (with the orphaned userId). This cannot be undone.`}
+          onDone={() => { setHardDeleteTarget(null); load(); }}
+          onCancel={() => setHardDeleteTarget(null)}
+        />
       )}
 
       {/* ── Assign to Tenant Modal ── */}

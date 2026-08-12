@@ -10,12 +10,18 @@ import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const gw = await prisma.bleGateway.findUnique({ where: { vehicleId: params.id } });
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Use findFirst so we can include tenantId in the where clause — findUnique
+  // only accepts the unique key field(s), not extra filters.
+  const gw = await prisma.bleGateway.findFirst({ where: { vehicleId: params.id, tenantId } });
   return gw ? NextResponse.json(gw) : NextResponse.json({ error: 'No gateway registered' }, { status: 404 });
 }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const body = await req.json();
   const gatewayId = String(body?.gatewayId ?? '').trim();
   if (!gatewayId) return NextResponse.json({ error: 'gatewayId is required' }, { status: 400 });
@@ -39,6 +45,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     },
     create: {
       vehicleId: params.id,
+      tenantId,
       gatewayId,
       model: body?.model ?? null,
       rssiThresholdDbm: typeof body?.rssiThresholdDbm === 'number' ? body.rssiThresholdDbm : -75,
@@ -49,7 +56,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   });
 
   void logAudit({
-    tenantId: req.headers.get('x-tenant-id') ?? undefined,
+    tenantId: tenantId ?? undefined,
     userId: req.headers.get('x-user-id') ?? 'system',
     userRole: req.headers.get('x-user-role') ?? 'STAFF',
     entityType: 'BleGateway',
@@ -62,12 +69,16 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const existing = await prisma.bleGateway.findFirst({ where: { vehicleId: params.id, tenantId } });
+  if (!existing) return NextResponse.json({ error: 'No gateway registered' }, { status: 404 });
   await prisma.bleGateway.update({
     where: { vehicleId: params.id },
     data: { isActive: false },
   }).catch(() => null);
   void logAudit({
-    tenantId: req.headers.get('x-tenant-id') ?? undefined,
+    tenantId: tenantId ?? undefined,
     userId: req.headers.get('x-user-id') ?? 'system',
     userRole: req.headers.get('x-user-role') ?? 'STAFF',
     entityType: 'BleGateway',

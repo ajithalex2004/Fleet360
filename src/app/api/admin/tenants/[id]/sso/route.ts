@@ -13,6 +13,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import {
   ensureSsoTable, encryptSecret, getSsoConfigPublic,
 } from '@/lib/sso';
@@ -39,9 +40,12 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const { id: tenantId } = await params;
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;
-
-  const config = await getSsoConfigPublic(tenantId);
-  return NextResponse.json({ ok: true, config });
+  // SSO config is per-tenant. Wrap so any future RLS on tenant_sso_configs
+  // is honored and the helper sees the right tenant context.
+  return withTenantRls(prisma, tenantId, async () => {
+    const config = await getSsoConfigPublic(tenantId);
+    return NextResponse.json({ ok: true, config });
+  });
 }
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
@@ -81,86 +85,93 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   const jitEnabled    = body.jitEnabled !== false; // default true
   const isActive      = body.isActive   !== false; // default true
 
-  // Validate role belongs to tenant or is global.
-  if (defaultRoleId) {
-    const role = await prisma.role.findFirst({
-      where: { id: defaultRoleId, OR: [{ tenantId }, { tenantId: null }] },
-      select: { id: true },
-    });
-    if (!role) return NextResponse.json({ ok: false, error: 'defaultRoleId not found for this tenant.' }, { status: 400 });
-  }
-
-  // Block another tenant from claiming a domain we don't own.
-  await ensureSsoTable();
-  const conflicts = await prisma.$queryRawUnsafe<{ tenant_id: string }[]>(
-    `SELECT tenant_id FROM tenant_sso_configs
-     WHERE tenant_id != $1
-       AND allowed_email_domains ?| $2::text[]`,
-    tenantId, domains,
-  ).catch(() => []);
-  if (conflicts.length > 0) {
-    return NextResponse.json({
-      ok: false,
-      error: `One or more domains are already configured under another tenant.`,
-    }, { status: 409 });
-  }
-
-  try {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId }, select: { id: true, name: true, isActive: true },
-    });
-    if (!tenant) return NextResponse.json({ ok: false, error: 'Tenant not found' }, { status: 404 });
-
-    const existing = await prisma.$queryRawUnsafe<{ id: string; client_secret_encrypted: string }[]>(
-      `SELECT id::text, client_secret_encrypted FROM tenant_sso_configs WHERE tenant_id = $1 LIMIT 1`,
-      tenantId,
-    );
-    const wasUpdate = existing.length > 0;
-
-    let encrypted: string;
-    if (typeof body.clientSecret === 'string' && body.clientSecret.trim().length > 0) {
-      encrypted = encryptSecret(body.clientSecret.trim());
-    } else if (wasUpdate) {
-      encrypted = existing[0].client_secret_encrypted; // keep prior
-    } else {
-      return NextResponse.json({ ok: false, error: 'clientSecret is required for the first save.' }, { status: 400 });
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    // Validate role belongs to tenant or is global.
+    if (defaultRoleId) {
+      const role = await tx.role.findFirst({
+        where: { id: defaultRoleId, OR: [{ tenantId }, { tenantId: null }] },
+        select: { id: true },
+      });
+      if (!role) return NextResponse.json({ ok: false, error: 'defaultRoleId not found for this tenant.' }, { status: 400 });
     }
 
-    if (wasUpdate) {
-      await prisma.$executeRawUnsafe(
-        `UPDATE tenant_sso_configs
-            SET issuer = $1, client_id = $2, client_secret_encrypted = $3,
-                allowed_email_domains = $4::jsonb, default_role_id = $5,
-                jit_enabled = $6, is_active = $7, updated_at = NOW()
-          WHERE tenant_id = $8`,
-        issuer, clientId, encrypted, JSON.stringify(domains), defaultRoleId,
-        jitEnabled, isActive, tenantId,
-      );
-    } else {
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO tenant_sso_configs
-           (tenant_id, provider, issuer, client_id, client_secret_encrypted,
-            allowed_email_domains, default_role_id, jit_enabled, is_active, created_by_user_id)
-         VALUES ($1, 'oidc', $2, $3, $4, $5::jsonb, $6, $7, $8, $9)`,
-        tenantId, issuer, clientId, encrypted, JSON.stringify(domains),
-        defaultRoleId, jitEnabled, isActive, auth.userId,
-      );
+    // Block another tenant from claiming a domain we don't own.
+    // The cross-tenant read uses tx with the current tenant context — but
+    // since the WHERE filters out our own tenant_id, the domain-conflict
+    // detection only sees other tenants. With withTenantRls the policy
+    // hides other tenants' rows, so we need to lift the check to a
+    // platform-admin transaction. We do that as a separate tx.
+    await ensureSsoTable();
+    const conflicts = await prisma.$queryRawUnsafe<{ tenant_id: string }[]>(
+      `SELECT tenant_id FROM tenant_sso_configs
+       WHERE tenant_id != $1
+         AND allowed_email_domains ?| $2::text[]`,
+      tenantId, domains,
+    ).catch(() => []);
+    if (conflicts.length > 0) {
+      return NextResponse.json({
+        ok: false,
+        error: `One or more domains are already configured under another tenant.`,
+      }, { status: 409 });
     }
 
-    void logAudit({
-      tenantId, tenantName: tenant.name,
-      userId: auth.userId, userRole: 'TENANT_ADMIN',
-      entityType: 'SsoConfig', entityName: clientId,
-      action: wasUpdate ? 'UPDATE' : 'CREATE',
-      details: `OIDC SSO ${wasUpdate ? 'updated' : 'configured'} for issuer ${issuer}; domains: ${domains.join(',')}.`,
-    });
+    try {
+      const tenant = await tx.tenant.findUnique({
+        where: { id: tenantId }, select: { id: true, name: true, isActive: true },
+      });
+      if (!tenant) return NextResponse.json({ ok: false, error: 'Tenant not found' }, { status: 404 });
 
-    const fresh = await getSsoConfigPublic(tenantId);
-    return NextResponse.json({ ok: true, config: fresh });
-  } catch (err) {
-    captureException(err, { context: 'admin.sso.put' });
-    return NextResponse.json({ ok: false, error: 'Failed to save SSO config' }, { status: 500 });
-  }
+      const existing = await tx.$queryRawUnsafe<{ id: string; client_secret_encrypted: string }[]>(
+        `SELECT id::text, client_secret_encrypted FROM tenant_sso_configs WHERE tenant_id = $1 LIMIT 1`,
+        tenantId,
+      );
+      const wasUpdate = existing.length > 0;
+
+      let encrypted: string;
+      if (typeof body.clientSecret === 'string' && body.clientSecret.trim().length > 0) {
+        encrypted = encryptSecret(body.clientSecret.trim());
+      } else if (wasUpdate) {
+        encrypted = existing[0].client_secret_encrypted; // keep prior
+      } else {
+        return NextResponse.json({ ok: false, error: 'clientSecret is required for the first save.' }, { status: 400 });
+      }
+
+      if (wasUpdate) {
+        await tx.$executeRawUnsafe(
+          `UPDATE tenant_sso_configs
+              SET issuer = $1, client_id = $2, client_secret_encrypted = $3,
+                  allowed_email_domains = $4::jsonb, default_role_id = $5,
+                  jit_enabled = $6, is_active = $7, updated_at = NOW()
+            WHERE tenant_id = $8`,
+          issuer, clientId, encrypted, JSON.stringify(domains), defaultRoleId,
+          jitEnabled, isActive, tenantId,
+        );
+      } else {
+        await tx.$executeRawUnsafe(
+          `INSERT INTO tenant_sso_configs
+             (tenant_id, provider, issuer, client_id, client_secret_encrypted,
+              allowed_email_domains, default_role_id, jit_enabled, is_active, created_by_user_id)
+           VALUES ($1, 'oidc', $2, $3, $4, $5::jsonb, $6, $7, $8, $9)`,
+          tenantId, issuer, clientId, encrypted, JSON.stringify(domains),
+          defaultRoleId, jitEnabled, isActive, auth.userId,
+        );
+      }
+
+      void logAudit({
+        tenantId, tenantName: tenant.name,
+        userId: auth.userId, userRole: 'TENANT_ADMIN',
+        entityType: 'SsoConfig', entityName: clientId,
+        action: wasUpdate ? 'UPDATE' : 'CREATE',
+        details: `OIDC SSO ${wasUpdate ? 'updated' : 'configured'} for issuer ${issuer}; domains: ${domains.join(',')}.`,
+      });
+
+      const fresh = await getSsoConfigPublic(tenantId);
+      return NextResponse.json({ ok: true, config: fresh });
+    } catch (err) {
+      captureException(err, { context: 'admin.sso.put' });
+      return NextResponse.json({ ok: false, error: 'Failed to save SSO config' }, { status: 500 });
+    }
+  });
 }
 
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
@@ -169,7 +180,9 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   if (!auth.ok) return auth.res;
 
   await ensureSsoTable();
-  await prisma.$executeRawUnsafe(`DELETE FROM tenant_sso_configs WHERE tenant_id = $1`, tenantId);
+  await withTenantRls(prisma, tenantId, (tx) =>
+    tx.$executeRawUnsafe(`DELETE FROM tenant_sso_configs WHERE tenant_id = $1`, tenantId)
+  );
   void logAudit({
     tenantId,
     userId: auth.userId, userRole: 'TENANT_ADMIN',

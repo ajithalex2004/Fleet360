@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth';
 import { ensureServiceConfigTables } from '@/lib/service-config/schema';
 import { SERVICE_TONES } from '@/types/service-config';
@@ -49,36 +50,42 @@ export async function POST(req: NextRequest) {
   await ensureServiceConfigTables();
 
   // Verify the category belongs to this tenant.
-  const cat = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-    `SELECT id::text FROM service_categories
-     WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
-    categoryId, auth.tenantId,
-  ).catch(() => []);
+  const cat = await withTenantRls(prisma, auth.tenantId, (tx) =>
+    tx.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id::text FROM service_categories
+       WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
+      categoryId, auth.tenantId,
+    ).catch(() => [] as Array<{ id: string }>)
+  );
   if (!cat[0]) return NextResponse.json({ ok: false, error: 'Category not found' }, { status: 404 });
 
   try {
-    const inserted = await prisma.$queryRawUnsafe<TypeRow[]>(
-      `INSERT INTO service_types
-        (tenant_id, category_id, key, name, description, icon, tone,
-         default_priority, sort_order, is_system)
-       VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9, FALSE)
-       RETURNING id::text, tenant_id, category_id::text, key, name, description, icon, tone,
-                 default_priority, sort_order, is_system, created_at::text, updated_at::text`,
-      auth.tenantId, categoryId, key, name, body.description ?? null,
-      body.icon ?? null, tone, priority, sortOrder,
+    const inserted = await withTenantRls(prisma, auth.tenantId, (tx) =>
+      tx.$queryRawUnsafe<TypeRow[]>(
+        `INSERT INTO service_types
+          (tenant_id, category_id, key, name, description, icon, tone,
+           default_priority, sort_order, is_system)
+         VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9, FALSE)
+         RETURNING id::text, tenant_id, category_id::text, key, name, description, icon, tone,
+                   default_priority, sort_order, is_system, created_at::text, updated_at::text`,
+        auth.tenantId, categoryId, key, name, body.description ?? null,
+        body.icon ?? null, tone, priority, sortOrder,
+      )
     );
     const t = inserted[0];
     if (!t) return NextResponse.json({ ok: false, error: 'Insert returned no row' }, { status: 500 });
 
     // Default mapping — owned by ADMIN, notifications on, everything else off.
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO service_module_mapping
-         (service_type_id, linked_module, sub_module,
-          workflow_engine_enabled, notification_engine_enabled, approval_engine_enabled,
-          finance_engine_enabled, dispatch_engine_enabled)
-       VALUES ($1::uuid, 'ADMIN', NULL, FALSE, TRUE, FALSE, FALSE, FALSE)
-       ON CONFLICT (service_type_id) DO NOTHING`,
-      t.id,
+    await withTenantRls(prisma, auth.tenantId, (tx) =>
+      tx.$executeRawUnsafe(
+        `INSERT INTO service_module_mapping
+           (service_type_id, linked_module, sub_module,
+            workflow_engine_enabled, notification_engine_enabled, approval_engine_enabled,
+            finance_engine_enabled, dispatch_engine_enabled)
+         VALUES ($1::uuid, 'ADMIN', NULL, FALSE, TRUE, FALSE, FALSE, FALSE)
+         ON CONFLICT (service_type_id) DO NOTHING`,
+        t.id,
+      )
     );
 
     void logAudit({

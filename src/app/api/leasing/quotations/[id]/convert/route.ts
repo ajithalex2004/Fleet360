@@ -1,23 +1,36 @@
+/**
+ * POST /api/leasing/quotations/[id]/convert
+ *
+ * Converts an approved LeaseQuotation into an active LeaseContract2 with a
+ * payment schedule and contract vehicles. Tenant scoping: the quotation
+ * must belong to the caller's tenant; every newly-created row (contract,
+ * contract vehicles, payments) is stamped with the same tenantId.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const body = await req.json();
     const { agreementType, openingBranchId, closingBranchId, startDate, lesseeId } = body;
 
     const quotation = await prisma.leaseQuotation.findFirst({
-      where: { id: params.id, deletedAt: null },
+      where: { id: params.id, tenantId, deletedAt: null },
       include: { vehicles: true, lineItems: true },
     });
     if (!quotation) return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
 
     const ALLOWED_CONVERT_STATUSES = [
-      'CUSTOMER_APPROVED', 
-      'PENDING_CREDIT_APPROVAL', 
-      'CREDIT_APPROVED', 
-      'PO_PREPARATION', 
-      'PO_PREPARED', 
+      'CUSTOMER_APPROVED',
+      'PENDING_CREDIT_APPROVAL',
+      'CREDIT_APPROVED',
+      'PO_PREPARATION',
+      'PO_PREPARED',
       'DELIVERY_IN_PROGRESS',
       'DELIVERED'
     ];
@@ -38,7 +51,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const monthlyRate = Number(quotation.totalMonthlyRate ?? 0);
     const totalContractValue = monthlyRate * durationMonths;
 
-    // Create the contract
+    // Create the contract — stamped with the caller's tenant id so the row
+    // satisfies the NOT NULL constraint added by the Layer 2.5 migration.
     const contract = await prisma.leaseContract2.create({
       data: {
         contractNumber,
@@ -58,10 +72,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         insuranceIncluded: quotation.insuranceIncluded ?? false,
         maintenanceIncluded: quotation.maintenanceIncluded ?? false,
         driverIncluded: quotation.driverIncluded ?? false,
+        tenantId,
       },
     });
 
-    // Create contract vehicles from quotation vehicles
+    // Create contract vehicles from quotation vehicles.
+    // Note: LeaseContractVehicle has no tenant_id column — tenant scope
+    // travels via the parent LeaseContract2 row.
     for (const qv of quotation.vehicles) {
       await prisma.leaseContractVehicle.create({
         data: {
@@ -77,7 +94,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       });
     }
 
-    // Generate payment schedule
+    // Generate payment schedule.
     const payments = [];
     for (let i = 0; i < durationMonths; i++) {
       const dueDate = new Date(start);
@@ -93,11 +110,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         periodMonth: dueDate.getMonth() + 1,
         periodYear: dueDate.getFullYear(),
         currency: quotation.currency ?? 'AED',
+        tenantId,
       });
     }
     await prisma.leasePayment2.createMany({ data: payments });
 
-    // Update quotation status
+    // Scoped quotation update — refuse to touch quotations from another tenant.
     await prisma.leaseQuotation.update({
       where: { id: params.id },
       data: { status: 'DELIVERED', updatedAt: new Date() },

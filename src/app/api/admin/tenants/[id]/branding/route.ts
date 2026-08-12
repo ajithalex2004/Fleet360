@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import {
   ensureBrandingColumns, getBranding, normalizeHexColor, normalizeUrl,
 } from '@/lib/branding';
@@ -37,8 +38,13 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const { id: tenantId } = await params;
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;
-  const branding = await getBranding(tenantId);
-  return NextResponse.json({ ok: true, branding });
+  // Branding columns live on the Tenant table, which has no RLS — but we still
+  // run inside the tenant-scoped transaction so the helper and audit log see
+  // the correct tenant context.
+  return withTenantRls(prisma, tenantId, async () => {
+    const branding = await getBranding(tenantId);
+    return NextResponse.json({ ok: true, branding });
+  });
 }
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
@@ -75,44 +81,46 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   if (body.accentColor  && body.accentColor.trim()  && accentColor  === null) return NextResponse.json({ ok: false, error: 'accentColor must be #rgb or #rrggbb.' }, { status: 400 });
 
   try {
-    await ensureBrandingColumns();
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { id: true, name: true },
+    return await withTenantRls(prisma, tenantId, async (tx) => {
+      await ensureBrandingColumns();
+      const tenant = await tx.tenant.findUnique({
+        where: { id: tenantId },
+        select: { id: true, name: true },
+      });
+      if (!tenant) return NextResponse.json({ ok: false, error: 'Tenant not found' }, { status: 404 });
+
+      await tx.$executeRawUnsafe(
+        `UPDATE tenants
+           SET brand_product_name   = $1,
+               brand_tagline        = $2,
+               brand_logo_url       = $3,
+               brand_favicon_url    = $4,
+               brand_primary_color  = $5,
+               brand_accent_color   = $6,
+               updated_at           = NOW()
+         WHERE id = $7`,
+        productName, tagline,
+        logoUrl ?? null, faviconUrl ?? null,
+        primaryColor ?? null, accentColor ?? null,
+        tenantId,
+      );
+
+      void logAudit({
+        tenantId, tenantName: tenant.name,
+        userId: auth.userId, userRole: 'TENANT_ADMIN',
+        entityType: 'Branding',
+        action: 'UPDATE',
+        details: `Branding updated: ${[
+          productName ? `productName=${productName}` : null,
+          primaryColor ? `primary=${primaryColor}` : null,
+          accentColor  ? `accent=${accentColor}`   : null,
+          logoUrl ? 'logoUrl set' : null,
+        ].filter(Boolean).join('; ') || 'cleared'}.`,
+      });
+
+      const fresh = await getBranding(tenantId);
+      return NextResponse.json({ ok: true, branding: fresh });
     });
-    if (!tenant) return NextResponse.json({ ok: false, error: 'Tenant not found' }, { status: 404 });
-
-    await prisma.$executeRawUnsafe(
-      `UPDATE tenants
-         SET brand_product_name   = $1,
-             brand_tagline        = $2,
-             brand_logo_url       = $3,
-             brand_favicon_url    = $4,
-             brand_primary_color  = $5,
-             brand_accent_color   = $6,
-             updated_at           = NOW()
-       WHERE id = $7`,
-      productName, tagline,
-      logoUrl ?? null, faviconUrl ?? null,
-      primaryColor ?? null, accentColor ?? null,
-      tenantId,
-    );
-
-    void logAudit({
-      tenantId, tenantName: tenant.name,
-      userId: auth.userId, userRole: 'TENANT_ADMIN',
-      entityType: 'Branding',
-      action: 'UPDATE',
-      details: `Branding updated: ${[
-        productName ? `productName=${productName}` : null,
-        primaryColor ? `primary=${primaryColor}` : null,
-        accentColor  ? `accent=${accentColor}`   : null,
-        logoUrl ? 'logoUrl set' : null,
-      ].filter(Boolean).join('; ') || 'cleared'}.`,
-    });
-
-    const fresh = await getBranding(tenantId);
-    return NextResponse.json({ ok: true, branding: fresh });
   } catch (err) {
     captureException(err, { context: 'admin.branding.put' });
     return NextResponse.json({ ok: false, error: 'Failed to save branding' }, { status: 500 });

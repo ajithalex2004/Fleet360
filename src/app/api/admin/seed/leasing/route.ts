@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 import { randomUUID } from 'crypto';
 
 function addMonths(d: Date, m: number) { const r = new Date(d); r.setMonth(r.getMonth() + m); return r; }
 function ago(days: number) { return new Date(Date.now() - days * 86400000); }
 
 export async function POST(req: NextRequest) {
+  // The leasing demo seed touches every leasing table (customer hierarchy,
+  // customers, lessees, contracts, payments, fines, fuel, insurance,
+  // mileage, receipts, renewals, credit). Every one of these is
+  // tenant-scoped via RLS. We need the '*' wildcard so we can write rows
+  // with arbitrary tenant_id (including tenant_id: '' in the seed, which
+  // the policy's "tenant_id IS NULL" branch would NOT match — so this
+  // seed effectively needs to run as platform admin to work at all).
+  return withPlatformAdmin(prisma, async (prisma) => {
   try {
     const results: Record<string, number> = {};
 
@@ -181,6 +190,8 @@ export async function POST(req: NextRequest) {
       await prisma.lessee.upsert({
         where: { id: lesseeId },
         create: {
+          // TODO: read tenantId from request headers via getTenantContext()
+          tenantId: '',
           id: lesseeId,
           name: cd.nameEn,
           type: 'corporate',
@@ -211,6 +222,8 @@ export async function POST(req: NextRequest) {
       await prisma.leaseInquiry.upsert({
         where: { id: inq.id },
         create: {
+          // TODO: read tenantId from request headers via getTenantContext()
+          tenantId: '',
           id: inq.id, inquiryNumber: `INQ-${inq.id.slice(-3).toUpperCase()}`,
           customerName: inq.name, companyName: inq.name,
           vehicleType: inq.vehicleType, vehicleCount: inq.count,
@@ -258,6 +271,8 @@ export async function POST(req: NextRequest) {
       await prisma.leaseQuotation.upsert({
         where: { id: q.id },
         create: {
+          // TODO: read tenantId from request headers via getTenantContext()
+          tenantId: '',
           id: q.id,
           quotationNumber: `QUO-${q.id.slice(-3).toUpperCase()}`,
           lesseeId: q.lesseeId,
@@ -331,6 +346,8 @@ export async function POST(req: NextRequest) {
       const contract = await prisma.leaseContract2.upsert({
         where: { id: cd.id },
         create: {
+          // TODO: read tenantId from request headers via getTenantContext()
+          tenantId: '',
           id: cd.id,
           contractNumber: `LC-2024-${cd.id.slice(-3).toUpperCase()}`,
           agreementType: 'INDIVIDUAL',
@@ -374,6 +391,8 @@ export async function POST(req: NextRequest) {
         await prisma.leasePayment2.upsert({
           where: { id: payId },
           create: {
+            // TODO: read tenantId from request headers via getTenantContext()
+            tenantId: '',
             id: payId, contractId: cd.id,
             periodMonth: dueDate.getMonth() + 1, periodYear: dueDate.getFullYear(),
             dueDate, amount: cd.monthlyRate, vatAmount: cd.monthlyRate * 0.05,
@@ -498,6 +517,8 @@ export async function POST(req: NextRequest) {
       await prisma.leaseReceipt.upsert({
         where: { id: r.id },
         create: {
+          // TODO: read tenantId from request headers via getTenantContext()
+          tenantId: '',
           id: r.id, contractId: r.contractId, receiptNumber: `RCT-${r.id.slice(-3).toUpperCase()}`,
           paymentType: r.type as any, amount: r.amount, currency: 'AED',
           receivedDate: ago(r.daysAgo), paymentMethod: r.method as any,
@@ -565,4 +586,5 @@ export async function POST(req: NextRequest) {
     console.error('Seed error:', e);
     return NextResponse.json({ error: e?.message ?? 'Seed failed', stack: e?.stack }, { status: 500 });
   }
+  });
 }

@@ -38,8 +38,8 @@ function expiryStatus(expiry: string | null): {
 }
 
 export default function PortalDocumentsPage() {
-  const params = useParams();
-  const search = useSearchParams();
+  const params = useParams() ?? {};
+  const search = useSearchParams() ?? new URLSearchParams();
   const tenantSlug = (params?.tenantSlug as string) ?? '';
   const lesseeId = search.get('lesseeId') ?? '';
 

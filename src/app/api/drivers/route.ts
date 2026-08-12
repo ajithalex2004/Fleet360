@@ -138,6 +138,8 @@ export async function POST(request: Request) {
 
     const driver = await prisma.driver.create({
       data: {
+        // TODO: read tenantId from request headers via getTenantContext()
+        tenantId:              '',
         // Identity
         name:                  fullName,
         firstName:             body.firstName              ?? null,

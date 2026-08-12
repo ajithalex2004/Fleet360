@@ -20,6 +20,8 @@ export async function POST(request: Request) {
 
         const config = await prisma.alertConfig.create({
             data: {
+                // TODO: read tenantId from request headers via getTenantContext()
+                tenantId: '',
                 alertFor: body.alertFor || body.alert_for,
                 alertType: body.alertType || body.alert_type,
                 frequency: body.frequency,

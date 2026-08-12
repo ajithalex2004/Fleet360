@@ -3,7 +3,10 @@ import { prisma } from '@/lib/prisma';
 import { paginate, paginatedResponse } from '@/lib/pagination';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
 import { requireUnderQuota } from '@/lib/plan-limits';
+import { revalidateCache } from '@/lib/server-cache';
 import type { PlanCode } from '@/lib/billing';
+
+const FLEET_STATS_TAG = 'fleet:stats';
 
 const toCamel = (s: string) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 const rowToCamel = (r: Record<string, unknown>) =>
@@ -163,6 +166,9 @@ export async function POST(req: NextRequest) {
       now,
     );
 
+    // New vehicle shifts the fleet-stats counters (totalVehicles,
+    // byLifecycleStage, byUsage) and the available/maintenance splits.
+    revalidateCache([FLEET_STATS_TAG]);
     return NextResponse.json(rowToCamel(record[0]), { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

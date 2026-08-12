@@ -1,10 +1,17 @@
 import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { cacheRead, privateCacheControl } from '@/lib/server-cache';
+
+const CACHE_TAG = 'school-bus:stats';
 
 const zero = () => Promise.resolve([{ count: BigInt(0) }]);
 
-export async function GET() {
-  try {
+// 8 raw SQL queries on every page load. The page also auto-refreshes
+// every 30s — the server cache means the auto-refresh hits the Data
+// Cache instead of Neon. Per-tenant key keeps responses isolated.
+const getSchoolBusStats = cacheRead(
+  async (_tenantId: string) => {
     const [
       totalVehicles,
       availableVehicles,
@@ -26,12 +33,10 @@ export async function GET() {
         `SELECT COUNT(*) as count FROM vehicles WHERE deleted_at IS NULL AND vehicle_usage = 'SCHOOL_BUS' AND status = 'MAINTENANCE'`,
       ).catch(zero),
 
-      // Routes from bus_routes table (from bus-ops schema)
       prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count FROM bus_routes WHERE route_type = 'SCHOOL' AND is_active = true`,
       ).catch(zero),
 
-      // Schedules today from trip_schedules table
       prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count FROM trip_schedules WHERE DATE(departure_time) = CURRENT_DATE`,
       ).catch(zero),
@@ -45,7 +50,6 @@ export async function GET() {
       ).catch(zero),
     ]);
 
-    // Today's schedules — from school_bus_schedules (departure_time is TIME, not TIMESTAMPTZ)
     const todayTrips = await prisma.$queryRawUnsafe<Array<{
       id: string; trip_no: string | null; status: string; departure_time: string | null;
       arrival_time: string | null; route_name: string | null; vehicle_plate: string | null;
@@ -64,7 +68,7 @@ export async function GET() {
       arrival_time: string | null; route_name: string | null; vehicle_plate: string | null;
     }>);
 
-    return NextResponse.json({
+    return {
       totalVehicles:    Number(totalVehicles[0]?.count    ?? 0),
       availableVehicles: Number(availableVehicles[0]?.count ?? 0),
       inMaintenance:    Number(inMaintenance[0]?.count    ?? 0),
@@ -73,6 +77,18 @@ export async function GET() {
       inTransit:        Number(inTransit[0]?.count        ?? 0),
       drivers:          Number(driversResult[0]?.count    ?? 0),
       todayTrips,
+    };
+  },
+  [CACHE_TAG],
+  30,
+);
+
+export async function GET(req: NextRequest) {
+  try {
+    const tenantId = req.headers.get('x-tenant-id') ?? 'unknown';
+    const data = await getSchoolBusStats(tenantId);
+    return NextResponse.json(data, {
+      headers: { 'Cache-Control': privateCacheControl(30, 120) },
     });
   } catch (err) {
     console.error('[school-bus/stats]', err);

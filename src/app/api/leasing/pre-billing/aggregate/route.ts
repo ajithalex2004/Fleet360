@@ -14,6 +14,10 @@
  *     commit?: boolean        (default false — preview-only)
  *   }
  *
+ * Tenant scoping: requires x-tenant-id. The contract is verified to belong
+ * to that tenant before preview/commit. The created LeasePreBillingStatement
+ * row is stamped with the caller's tenant id.
+ *
  * Preview returns the aggregated charges + line-item sources without writing.
  * Commit additionally creates a LeasePreBillingStatement row in DRAFT status.
  */
@@ -40,6 +44,10 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const json = await req.json();
     const parsed = bodySchema.safeParse(json);
@@ -65,6 +73,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Confirm the contract belongs to the caller's tenant before we expose
+    // any aggregated figures (otherwise we'd leak base rent + fuel + fine
+    // totals from other tenants via the preview response).
+    const contract = await prisma.leaseContract2.findFirst({
+      where: { id: parsed.data.contractId, tenantId },
+      select: { id: true },
+    });
+    if (!contract) {
+      return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
+    }
+
     const aggregated = await aggregatePreBilling({
       contractId: parsed.data.contractId,
       periodFrom,
@@ -78,14 +97,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ mode: 'preview', ...aggregated });
     }
 
-    // Commit: persist as LeasePreBillingStatement.
     const dueDate = parsed.data.dueDate
       ? new Date(parsed.data.dueDate)
       : new Date(periodTo.getTime() + 30 * 86400000);
     const billingPeriod =
       parsed.data.billingPeriod ?? aggregated.periodFrom.toISOString().slice(0, 7);
 
-    const count = await prisma.leasePreBillingStatement.count();
+    const count = await prisma.leasePreBillingStatement.count({ where: { tenantId } });
     const statementNo = `PBS-${String(count + 1).padStart(5, '0')}`;
 
     const statement = await prisma.leasePreBillingStatement.create({
@@ -105,11 +123,12 @@ export async function POST(req: NextRequest) {
         totalAmount: aggregated.totalAmount,
         currency: aggregated.currency,
         status: 'DRAFT',
+        tenantId,
       },
     });
 
     void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
+      tenantId,
       userId: req.headers.get('x-user-id') ?? undefined,
       userRole: req.headers.get('x-user-role') ?? undefined,
       entityType: 'LeasePreBillingStatement',

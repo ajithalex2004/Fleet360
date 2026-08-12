@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 import { MODULES } from '@/lib/permissions';
+import { cacheRead, publicCacheControl, revalidateCache } from '@/lib/server-cache';
 
-export async function GET(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const search = searchParams.get('search')?.trim() ?? '';
-    const limit  = Math.min(parseInt(searchParams.get('limit') ?? '50'), 200);
+const CACHE_TAG = 'tenants:list';
 
+const getTenants = cacheRead(
+  async (search: string, limit: number) => withPlatformAdmin(prisma, async (tx) => {
     const where = search
       ? {
           OR: [
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
         }
       : {};
 
-    const tenants = await prisma.tenant.findMany({
+    return tx.tenant.findMany({
       where,
       include: {
         modules: true,
@@ -28,45 +28,61 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'desc' },
       take: limit,
     });
-    return NextResponse.json(tenants);
+  }),
+  [CACHE_TAG],
+);
+
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const search = searchParams.get('search')?.trim() ?? '';
+    const limit  = Math.min(parseInt(searchParams.get('limit') ?? '200'), 200);
+
+    const tenants = await getTenants(search, limit);
+    return NextResponse.json(tenants, {
+      headers: { 'Cache-Control': publicCacheControl(30) },
+    });
   } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const {
-      enabledModules = MODULES,
-      // pull out fields that need special handling
-      localizedName, localizedDesc, bookingTypes,
-      supportedLanguages, defaultLanguage,
-      domain, address, contactName, contactEmail, contactPhone,
-      plan, industry, code, name,
-    } = body;
+    return await withPlatformAdmin(prisma, async (tx) => {
+      const body = await req.json();
+      const {
+        enabledModules = MODULES,
+        localizedName, localizedDesc, bookingTypes,
+        supportedLanguages, defaultLanguage,
+        domain, address, contactName, contactEmail, contactPhone,
+        plan, industry, code, name,
+      } = body;
 
-    const tenant = await prisma.tenant.create({
-      data: {
-        name:              name,
-        code:              code   || undefined,
-        plan:              plan   || 'STANDARD',
-        industry:          industry || undefined,
-        domain:            domain   || undefined,
-        address:           address  || undefined,
-        contactName:       contactName  || undefined,
-        contactEmail:      contactEmail || undefined,
-        contactPhone:      contactPhone || undefined,
-        defaultLanguage:   defaultLanguage  || 'en',
-        supportedLanguages: supportedLanguages || 'en',
-        localizedName:     localizedName  || undefined,
-        localizedDesc:     localizedDesc  || undefined,
-        bookingTypes:      bookingTypes   || undefined,
-        modules: {
-          create: (enabledModules as string[]).map((m: string) => ({ module: m, isEnabled: true })),
+      const tenant = await tx.tenant.create({
+        data: {
+          name:              name,
+          code:              code   || undefined,
+          plan:              plan   || 'STANDARD',
+          industry:          industry || undefined,
+          domain:            domain   || undefined,
+          address:           address  || undefined,
+          contactName:       contactName  || undefined,
+          contactEmail:      contactEmail || undefined,
+          contactPhone:      contactPhone || undefined,
+          defaultLanguage:   defaultLanguage  || 'en',
+          supportedLanguages: supportedLanguages || 'en',
+          localizedName:     localizedName  || undefined,
+          localizedDesc:     localizedDesc  || undefined,
+          bookingTypes:      bookingTypes   || undefined,
+          modules: {
+            create: (enabledModules as string[]).map((m: string) => ({ module: m, isEnabled: true })),
+          },
         },
-      },
-      include: { modules: true },
+        include: { modules: true },
+      });
+      // New tenant means the cached tenant list is now stale.
+      await revalidateCache(CACHE_TAG);
+      return NextResponse.json(tenant, { status: 201 });
     });
-    return NextResponse.json(tenant, { status: 201 });
   } catch (e) {
     console.error('[CREATE TENANT]', e);
     return NextResponse.json({ error: String(e) }, { status: 500 });

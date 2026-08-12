@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Plus, Edit2, Send, Check, Trash2 } from 'lucide-react';
+import { Plus, Edit2, Send, Check, Trash2, Calculator } from 'lucide-react';
+import AdvanceBillingModal from '@/components/leasing/AdvanceBillingModal';
 
 interface InvoiceLine {
   id?: string;
@@ -58,6 +59,7 @@ export default function InvoicesPage() {
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [showNewModal, setShowNewModal] = useState(false);
+  const [showAdvanceBilling, setShowAdvanceBilling] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const [formData, setFormData] = useState({
@@ -208,12 +210,21 @@ export default function InvoicesPage() {
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold">Invoice Management</h1>
-          <button
-            onClick={() => setShowNewModal(true)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition"
-          >
-            <Plus size={20} /> New Invoice
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowAdvanceBilling(true)}
+              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg transition"
+              title="Generate and manage pre-billing statements (sent to lessee for review before formal invoice)"
+            >
+              <Calculator size={20} /> Advance Billing
+            </button>
+            <button
+              onClick={() => setShowNewModal(true)}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition"
+            >
+              <Plus size={20} /> New Invoice
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -548,6 +559,11 @@ export default function InvoicesPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Advance Billing Modal — Pre-billing statements managed from inside Invoices */}
+        {showAdvanceBilling && (
+          <AdvanceBillingModal onClose={() => setShowAdvanceBilling(false)} />
         )}
       </div>
     </div>

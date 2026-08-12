@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTenantPortal } from './layout';
+import { MODULE_BY_KEY, type ModuleKey } from '@/lib/modules';
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface ModuleBilling {
@@ -62,11 +63,73 @@ const STATUS_BADGE: Record<string, string> = {
   OVERDUE:   'bg-red-500/20 text-red-300 border-red-500/30',
 };
 
-const MODULE_META: Record<string, { icon: string; label: string; path: string; color: string }> = {
-  RAC:        { icon: '🚗', label: 'Rent-A-Car',  path: 'rac',        color: 'from-blue-600 to-cyan-500' },
-  SCHOOL_BUS: { icon: '🚌', label: 'School Bus',  path: 'school-bus', color: 'from-amber-600 to-orange-500' },
-  school_bus: { icon: '🚌', label: 'School Bus',  path: 'school-bus', color: 'from-amber-600 to-orange-500' },
-  FINANCE:    { icon: '💰', label: 'Finance',     path: 'finance',    color: 'from-emerald-600 to-teal-500' },
+// ── Module meta for the subscription cards ──────────────────────────────────
+//
+// Subscription cards (line ~192) look up MODULE_META[m.module] where
+// m.module is whatever the tenant has stored in tenant_modules. After the
+// canonical-key migration (see prisma/migrations/20260624000002_*), this
+// is always a canonical ModuleKey. We project MODULE_BY_KEY through a
+// small map that adds the portal-specific emoji icon and a relative path
+// (the registry stores an absolute href; the portal links are relative to
+// the tenant slug).
+//
+// Keys are canonical ModuleKeys. To support any leftover pre-migration rows
+// (where the DB might still hold 'rac' or 'school_bus'), we also project
+// legacy aliases through the same map — see LEGACY_OVERRIDES below.
+
+type ModuleMeta = { icon: string; label: string; path: string; color: string };
+
+function projectMeta(key: ModuleKey): ModuleMeta {
+  const m = MODULE_BY_KEY[key];
+  return {
+    icon:  PORTAL_ICONS[key],
+    label: m.shortName ?? m.name,
+    path:  m.href.replace(/^\//, ''),  // strip leading slash — tenant-relative
+    color: m.gradient,
+  };
+}
+
+// Portal-specific emoji glyphs (the registry uses lucide names; the portal
+// keeps a consumer-friendly emoji set).
+const PORTAL_ICONS: Readonly<Record<ModuleKey, string>> = {
+  'service-tickets': '🎫',
+  'agents':          '🤖',
+  'maintenance':     '🔧',
+  'leasing':         '📋',
+  'rental':          '🚗',
+  'bus-ops':         '🚌',
+  'school-bus':      '🎒',
+  'logistics':       '🚛',
+  'incidents':       '🚨',
+  'fleet':           '🚘',
+  'driver-mgmt':     '👤',
+  'customer-mgmt':   '🏢',
+  'booking-portal':  '📲',
+  'finance':         '💰',
+  'compliance':      '⚖️',
+  'customer':        '📱',
+  'mobile-apps':     '📲',
+  'reports':         '📊',
+  'dispatch':        '🚦',
+  'sustainability':  '🌱',
+  'assets':          '📦',
+};
+
+// Curated subset of modules the portal shows prominently. These are the
+// modules with billing/subscription UI in the tenant portal.
+const PORTAL_FEATURED_KEYS: readonly ModuleKey[] = ['rental', 'bus-ops', 'school-bus', 'finance'];
+
+const MODULE_META: Readonly<Record<string, ModuleMeta>> = Object.fromEntries(
+  PORTAL_FEATURED_KEYS.map(k => [k, projectMeta(k)])
+) as Record<string, ModuleMeta>;
+
+// Legacy alias fallback — when a tenant's enabled_modules still contains a
+// pre-migration value (e.g. 'rac'), this map routes it to the canonical
+// meta. Once the migration runs and stale rows are cleaned up, this
+// fallback is dead code. Kept for defense in depth.
+const LEGACY_META_OVERRIDES: Readonly<Record<string, ModuleMeta>> = {
+  rac:        projectMeta('rental'),
+  school_bus: projectMeta('school-bus'),
 };
 
 /* ─────────────────────────── KPI Card ─────────────────────────── */
@@ -137,8 +200,12 @@ export default function TenantDashboard() {
   }, [tenant, today, yearStart]);
 
   const activeModules = tenant?.modules.filter(m => m.isEnabled) ?? [];
-  const hasRAC = hasModule('RAC');
-  const hasBus = hasModule('SCHOOL_BUS') || hasModule('school_bus');
+  // After the canonical-key migration, tenants have modules stored as
+  // ModuleKey (e.g. 'rental', 'school-bus'). The portal's local hasModule
+  // does case-insensitive matching, so legacy keys still resolve, but we
+  // check canonical keys here for clarity.
+  const hasRAC = hasModule('rental');
+  const hasBus = hasModule('school-bus');
 
   const revenue = pl?.summary?.totalRevenue ?? 0;
   const outstandingCount = invoices.filter(i => i.status !== 'PAID').length;
@@ -190,7 +257,7 @@ export default function TenantDashboard() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {billingModules.map(m => {
-              const meta = MODULE_META[m.module] ?? { icon: '📦', label: m.module, path: '', color: 'from-slate-600 to-slate-500' };
+              const meta = MODULE_META[m.module] ?? LEGACY_META_OVERRIDES[m.module] ?? { icon: '📦', label: m.module, path: '', color: 'from-slate-600 to-slate-500' };
               return (
                 <div key={m.module} className="rounded-2xl border border-white/8 bg-slate-800/40 p-4">
                   <div className="flex items-center justify-between mb-3">
@@ -312,46 +379,60 @@ export default function TenantDashboard() {
       <section>
         <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">Quick Access</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {hasRAC && (
-            <Link href={`/portal/${slug}/rac`} className="group rounded-2xl border border-white/8 bg-slate-800/40 hover:bg-slate-800/70 hover:border-blue-500/30 p-6 transition-all">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-2xl flex-shrink-0">
-                  🚗
+          {hasRAC && (() => {
+            const m = MODULE_BY_KEY['rental'];
+            const meta = MODULE_META['rental']!;
+            return (
+              <Link href={`/portal/${slug}/${meta.path}`} className="group rounded-2xl border border-white/8 bg-slate-800/40 hover:bg-slate-800/70 hover:border-blue-500/30 p-6 transition-all">
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${m.gradient} flex items-center justify-center text-2xl flex-shrink-0`}>
+                    {meta.icon}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-white group-hover:text-blue-300 transition-colors">{meta.label}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Fleet · Bookings · Agreements</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-semibold text-white group-hover:text-blue-300 transition-colors">Rent-A-Car</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Fleet · Bookings · Agreements</p>
+                <p className="mt-4 text-xs text-slate-600 group-hover:text-slate-400 transition-colors">Manage your rental fleet →</p>
+              </Link>
+            );
+          })()}
+          {hasBus && (() => {
+            const m = MODULE_BY_KEY['school-bus'];
+            const meta = MODULE_META['school-bus']!;
+            return (
+              <Link href={`/portal/${slug}/${meta.path}`} className="group rounded-2xl border border-white/8 bg-slate-800/40 hover:bg-slate-800/70 hover:border-amber-500/30 p-6 transition-all">
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${m.gradient} flex items-center justify-center text-2xl flex-shrink-0`}>
+                    {meta.icon}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-white group-hover:text-amber-300 transition-colors">{meta.label}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Routes · Students · Attendance</p>
+                  </div>
                 </div>
-              </div>
-              <p className="mt-4 text-xs text-slate-600 group-hover:text-slate-400 transition-colors">Manage your rental fleet →</p>
-            </Link>
-          )}
-          {hasBus && (
-            <Link href={`/portal/${slug}/school-bus`} className="group rounded-2xl border border-white/8 bg-slate-800/40 hover:bg-slate-800/70 hover:border-amber-500/30 p-6 transition-all">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-600 to-orange-500 flex items-center justify-center text-2xl flex-shrink-0">
-                  🚌
+                <p className="mt-4 text-xs text-slate-600 group-hover:text-slate-400 transition-colors">Manage student transport →</p>
+              </Link>
+            );
+          })()}
+          {(() => {
+            const m = MODULE_BY_KEY['finance'];
+            const meta = MODULE_META['finance']!;
+            return (
+              <Link href={`/portal/${slug}/${meta.path}`} className="group rounded-2xl border border-white/8 bg-slate-800/40 hover:bg-slate-800/70 hover:border-emerald-500/30 p-6 transition-all">
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${m.gradient} flex items-center justify-center text-2xl flex-shrink-0`}>
+                    {meta.icon}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-white group-hover:text-emerald-300 transition-colors">{meta.label}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">P&L · Invoices · Bank Recon</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-semibold text-white group-hover:text-amber-300 transition-colors">School Bus</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Routes · Students · Attendance</p>
-                </div>
-              </div>
-              <p className="mt-4 text-xs text-slate-600 group-hover:text-slate-400 transition-colors">Manage student transport →</p>
-            </Link>
-          )}
-          <Link href={`/portal/${slug}/finance`} className="group rounded-2xl border border-white/8 bg-slate-800/40 hover:bg-slate-800/70 hover:border-emerald-500/30 p-6 transition-all">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-500 flex items-center justify-center text-2xl flex-shrink-0">
-                💰
-              </div>
-              <div>
-                <p className="font-semibold text-white group-hover:text-emerald-300 transition-colors">Finance</p>
-                <p className="text-xs text-slate-500 mt-0.5">P&L · Invoices · Bank Recon</p>
-              </div>
-            </div>
-            <p className="mt-4 text-xs text-slate-600 group-hover:text-slate-400 transition-colors">View financial dashboard →</p>
-          </Link>
+                <p className="mt-4 text-xs text-slate-600 group-hover:text-slate-400 transition-colors">View financial dashboard →</p>
+              </Link>
+            );
+          })()}
         </div>
       </section>
     </div>

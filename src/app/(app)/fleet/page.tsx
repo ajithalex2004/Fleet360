@@ -1,8 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { CarFront, CheckCircle2, Wrench, AlertTriangle } from 'lucide-react';
+import Link from 'next/link';
+import { CarFront, CheckCircle2, Wrench, AlertTriangle, Gauge, ArrowRight } from 'lucide-react';
 import { PageHeader, KpiCard } from '@/components/ui/page-theme';
+import { useFetchedData, invalidate, invalidatePrefix } from '@/hooks/useFetchedData';
+import type { MaintenanceRiskScore } from '@/types/maintenance';
 
 interface FleetStats {
   totalVehicles: number;
@@ -27,54 +30,46 @@ const EMPTY_STATS: FleetStats = {
   expiringDocs: 0,
 };
 
+interface RiskApiResponse { scores: MaintenanceRiskScore[] }
+
 export default function FleetDashboard() {
-  const [stats, setStats] = useState<FleetStats>(EMPTY_STATS);
-  const [expiringDocs, setExpiringDocs] = useState<DocumentExpiry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  // Session-scoped fetch cache — 1st visit hits the cached server endpoint
+  // (unstable_cache + private s-maxage), 2nd visit in the same tab is
+  // instant from the in-memory Map. `refresh` busts the session cache
+  // after a write (e.g. adding a vehicle, marking a document renewed).
+  const { data: statsRaw, loading: statsLoading, error: statsError,
+          refresh: refreshStats } =
+    useFetchedData<FleetStats>('/api/fleet/stats');
+  const { data: docsRaw,   loading: docsLoading,  error: docsError,
+          refresh: refreshDocs } =
+    useFetchedData<DocumentExpiry[]>('/api/fleet/documents/expiring?days=30&limit=5');
+  const { data: riskRaw, loading: riskLoading } =
+    useFetchedData<RiskApiResponse>('/api/maintenance/risk-scores');
 
+  const stats: FleetStats = statsRaw ?? EMPTY_STATS;
+  const expiringDocs: DocumentExpiry[] = Array.isArray(docsRaw) ? docsRaw : [];
+  const top5Risk: MaintenanceRiskScore[] = (riskRaw?.scores ?? []).slice(0, 5);
+  const loading = statsLoading || docsLoading;
+
+  // Combine per-endpoint errors into one banner; keep the page rendering
+  // with the safe fallback values if either endpoint failed.
+  const error = [statsError, docsError].filter(Boolean).length
+    ? 'Fleet dashboard data is temporarily unavailable. Showing safe fallback values.'
+    : '';
+
+  // Expose a manual refresh trigger so other parts of the app (e.g. the
+  // Hub workspace tabs) can call window.fleet360.refreshFleet() after
+  // a write. Keeping the surface tiny avoids leaking the full hook.
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError('');
-        const [statsResult, docsResult] = await Promise.allSettled([
-          fetch('/api/fleet/stats'),
-          fetch('/api/fleet/documents/expiring?days=30&limit=5'),
-        ]);
-
-        let warning = '';
-
-        if (statsResult.status === 'fulfilled' && statsResult.value.ok) {
-          setStats(await statsResult.value.json());
-        } else {
-          setStats(EMPTY_STATS);
-          warning = 'Fleet stats are temporarily unavailable.';
-        }
-
-        if (docsResult.status === 'fulfilled' && docsResult.value.ok) {
-          const docsData = await docsResult.value.json();
-          setExpiringDocs(Array.isArray(docsData) ? docsData : []);
-        } else {
-          setExpiringDocs([]);
-          warning = warning ? `${warning} Document expiry data is temporarily unavailable.` : 'Document expiry data is temporarily unavailable.';
-        }
-
-        setError(warning);
-      } catch {
-        setStats(EMPTY_STATS);
-        setExpiringDocs([]);
-        setError('Fleet dashboard data is temporarily unavailable. Showing safe fallback values.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
+    const w = window as unknown as { fleet360?: Record<string, () => void> };
+    w.fleet360 = w.fleet360 ?? {};
+    w.fleet360.refreshFleet = () => { refreshStats(); refreshDocs(); };
+    return () => { delete w.fleet360?.refreshFleet; };
+  }, [refreshStats, refreshDocs]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center h-full min-h-[200px]">
         <div className="animate-spin">
           <div className="w-12 h-12 border-4 border-slate-700 border-t-orange-500 rounded-full"></div>
         </div>
@@ -136,6 +131,60 @@ export default function FleetDashboard() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Risk Heat — top 5 highest-risk vehicles */}
+      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <Gauge className="w-5 h-5 text-orange-400" />
+              Risk Heat
+            </h2>
+            <p className="text-slate-400 text-sm mt-0.5">Top 5 highest-risk vehicles — maintenance score 0–100</p>
+          </div>
+          <Link
+            href="/maintenance/risk"
+            className="flex items-center gap-1.5 text-xs text-orange-400 hover:text-orange-300 transition-colors"
+          >
+            View all <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+
+        {riskLoading ? (
+          <div className="flex justify-center py-6">
+            <div className="w-6 h-6 border-2 border-slate-600 border-t-orange-500 rounded-full animate-spin" />
+          </div>
+        ) : top5Risk.length === 0 ? (
+          <p className="text-slate-500 text-sm text-center py-6">No vehicle risk data available</p>
+        ) : (
+          <div className="space-y-2">
+            {top5Risk.map((rs, i) => {
+              const barColor =
+                rs.band === 'CRITICAL' ? 'bg-red-500' :
+                rs.band === 'HIGH'     ? 'bg-orange-500' :
+                rs.band === 'MEDIUM'   ? 'bg-amber-400' :
+                'bg-emerald-500';
+              return (
+                <div key={rs.vehicleId} className="flex items-center gap-3">
+                  <span className="text-slate-600 text-xs w-4 text-right">{i + 1}</span>
+                  <span className="text-white text-sm font-medium w-24 truncate">
+                    {rs.vehicleCode}
+                  </span>
+                  <div className="flex-1 bg-slate-700 rounded-full h-2">
+                    <div
+                      className={`${barColor} h-2 rounded-full transition-all`}
+                      style={{ width: `${rs.score}%` }}
+                    />
+                  </div>
+                  <span className="text-sm font-bold text-white w-12 text-right">
+                    {rs.emoji} {rs.score}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Document Expiry Alert Table */}

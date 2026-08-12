@@ -1,0 +1,65 @@
+import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+
+// GET /api/maintenance/warranties
+// Query params: tenantId?, vehicleId?, activeOnly?
+export async function GET(request: Request) {
+    try {
+        const { searchParams } = new URL(request.url);
+        const tenantId  = searchParams.get('tenantId')  ?? '';
+        const vehicleId = searchParams.get('vehicleId') ?? undefined;
+        const activeOnly = searchParams.get('activeOnly') !== 'false';
+
+        const warranties = await prisma.vehicleWarranty.findMany({
+            where: {
+                ...(tenantId  ? { tenantId }  : {}),
+                ...(vehicleId ? { vehicleId } : {}),
+                ...(activeOnly ? { isActive: true } : {}),
+            },
+            include: { claims: { orderBy: { createdAt: 'desc' } } },
+            orderBy: { expiryDate: 'asc' },
+        });
+
+        return NextResponse.json(JSON.parse(JSON.stringify(warranties)));
+    } catch (error) {
+        console.error('Failed to fetch warranties:', error);
+        return NextResponse.json(
+            { error: 'Internal Server Error', details: String(error) },
+            { status: 500 },
+        );
+    }
+}
+
+// POST /api/maintenance/warranties
+// Body: { vehicleId, warrantyType, provider?, startDate, expiryDate,
+//         coverageDescription?, maxClaimAmount?, isActive?, tenantId? }
+export async function POST(request: Request) {
+    try {
+        const body = await request.json();
+
+        const warranty = await prisma.vehicleWarranty.create({
+            data: {
+                tenantId:            body.tenantId            ?? '',
+                vehicleId:           body.vehicleId,
+                warrantyType:        body.warrantyType,
+                provider:            body.provider            ?? null,
+                startDate:           new Date(body.startDate),
+                expiryDate:          new Date(body.expiryDate),
+                coverageDescription: body.coverageDescription ?? null,
+                maxClaimAmount:      body.maxClaimAmount      ?? null,
+                isActive:            body.isActive            ?? true,
+            },
+        });
+
+        return NextResponse.json(
+            JSON.parse(JSON.stringify(warranty)),
+            { status: 201 },
+        );
+    } catch (error) {
+        console.error('Failed to create warranty:', error);
+        return NextResponse.json(
+            { error: 'Internal Server Error', details: String(error) },
+            { status: 500 },
+        );
+    }
+}
