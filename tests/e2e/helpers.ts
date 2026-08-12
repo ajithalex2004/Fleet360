@@ -194,7 +194,11 @@ export async function loginWithStoredState(
   ctx: E2EContext,
 ): Promise<void> {
   // Inject all cookies from the saved session
-  await page.context().addCookies(state.cookies);
+  // playwright's addCookies expects a tightly-typed readonly tuple of explicit
+  // fields; runtime works fine with the looser SavedStorageState cookie shape,
+  // so cast through `unknown` to bridge.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await page.context().addCookies(state.cookies as unknown as any);
   // Navigate straight to the authenticated area
   await page.goto('/platform', { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('load', { timeout: 15_000 }).catch(() => {});

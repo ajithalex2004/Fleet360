@@ -4,7 +4,7 @@
  * Journey:
  *  1.  Login as ENTERPRISE tenant admin
  *  2.  Navigate to Leasing dashboard → verify KPIs render
- *  3.  Contracts page renders with list or empty state
+ *  3.  Lease Agreements page renders with list or empty state
  *  4.  Create a new leasing contract (lessee, vehicle, dates, monthly rent)
  *  5.  Verify contract appears in contracts list
  *  6.  Quotations page renders correctly
@@ -17,16 +17,16 @@
  * 13.  Renewals page renders
  * 14.  Early-terminations page renders
  * 15.  Documents page renders
- * 16.  Insurance page renders
+ * 16.  Legacy insurance route redirects to Fleet
  *
  * Prerequisites: `npm run dev` must be running on localhost:3000
  * Run: npx playwright test tests/e2e/leasing-workflow.spec.ts
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import {
   isServerAvailable, createE2ETenant, cleanupE2ETenant,
-  login, saveAuthState, loginWithStoredState,
+  saveAuthState, loginWithStoredState,
   skipIfOffline, waitForSettle,
   type E2EContext, type StorageState,
 } from './helpers';
@@ -69,7 +69,7 @@ test.beforeEach(async ({}, testInfo) => {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-async function goToLeasing(page: any) {
+async function goToLeasing(page: Page) {
   await page.goto('/leasing', { waitUntil: 'domcontentloaded' });
   await waitForSettle(page);
 }
@@ -91,9 +91,9 @@ test('LSG-01: Leasing module is accessible from platform', async ({ page }) => {
   ).toBeVisible({ timeout: 10_000 });
 });
 
-test('LSG-02: Contracts page renders', async ({ page }) => {
+test('LSG-02: Lease Agreements page renders', async ({ page }) => {
   await loginWithStoredState(page, authState!, ctx!);
-  await page.goto('/leasing/contracts', { waitUntil: 'domcontentloaded' });
+  await page.goto('/leasing/contracts-v2', { waitUntil: 'domcontentloaded' });
   await waitForSettle(page);
 
   await expect(
@@ -103,7 +103,7 @@ test('LSG-02: Contracts page renders', async ({ page }) => {
 
 test('LSG-03: Create a new leasing contract', async ({ page }) => {
   await loginWithStoredState(page, authState!, ctx!);
-  await page.goto('/leasing/contracts', { waitUntil: 'domcontentloaded' });
+  await page.goto('/leasing/contracts-v2', { waitUntil: 'domcontentloaded' });
   await waitForSettle(page);
 
   const newBtn = page.locator(
@@ -176,7 +176,7 @@ test('LSG-03: Create a new leasing contract', async ({ page }) => {
 
 test('LSG-04: Contract appears in contracts list', async ({ page }) => {
   await loginWithStoredState(page, authState!, ctx!);
-  await page.goto('/leasing/contracts', { waitUntil: 'domcontentloaded' });
+  await page.goto('/leasing/contracts-v2', { waitUntil: 'domcontentloaded' });
   await waitForSettle(page);
 
   await expect(page.locator('h1, h2, main').first()).toBeVisible({ timeout: 10_000 });
@@ -251,11 +251,12 @@ test('LSG-08: Lessees / CRM page renders', async ({ page }) => {
   ).toBeVisible({ timeout: 10_000 });
 });
 
-test('LSG-09: Payments page renders', async ({ page }) => {
+test('LSG-09: Leasing payments route redirects to Finance', async ({ page }) => {
   await loginWithStoredState(page, authState!, ctx!);
   await page.goto('/leasing/payments', { waitUntil: 'domcontentloaded' });
   await waitForSettle(page);
 
+  await expect(page).toHaveURL(/\/finance\/payments/);
   await expect(
     page.locator('h1, h2, :text("Payment"), main').first()
   ).toBeVisible({ timeout: 10_000 });
@@ -301,11 +302,12 @@ test('LSG-13: Early Terminations page renders', async ({ page }) => {
   ).toBeVisible({ timeout: 10_000 });
 });
 
-test('LSG-14: Insurance Documents page renders', async ({ page }) => {
+test('LSG-14: Leasing insurance route redirects to Fleet', async ({ page }) => {
   await loginWithStoredState(page, authState!, ctx!);
   await page.goto('/leasing/insurance', { waitUntil: 'domcontentloaded' });
   await waitForSettle(page);
 
+  await expect(page).toHaveURL(/\/fleet\/insurance/);
   await expect(
     page.locator('h1, h2, :text("Insurance"), main').first()
   ).toBeVisible({ timeout: 10_000 });

@@ -24,8 +24,8 @@ describe('canWrite()', () => {
     it('always returns true regardless of plan', () => {
       const plans = ['TRIAL', 'STANDARD', 'PROFESSIONAL', 'ENTERPRISE'];
       const modules: AppModule[] = [
-        'fleet', 'rac', 'leasing', 'logistics', 'finance',
-        'school-bus', 'ambulance', 'dispatch', 'staff', 'admin',
+        'fleet', 'rental', 'leasing', 'logistics', 'finance',
+        'school-bus', 'incidents', 'dispatch', 'bus-ops', 'admin',
       ];
 
       for (const plan of plans) {
@@ -63,24 +63,24 @@ describe('canWrite()', () => {
       expect(canWrite('TRIAL', 'TENANT_ADMIN', 'logistics')).toBe(false);
     });
 
-    it('returns false for rac on TRIAL plan', () => {
-      expect(canWrite('TRIAL', 'TENANT_ADMIN', 'rac')).toBe(false);
+    it('returns false for rental on TRIAL plan', () => {
+      expect(canWrite('TRIAL', 'TENANT_ADMIN', 'rental')).toBe(false);
     });
 
     it('returns false for school-bus on TRIAL plan', () => {
       expect(canWrite('TRIAL', 'TENANT_ADMIN', 'school-bus')).toBe(false);
     });
 
-    it('returns false for ambulance on TRIAL plan', () => {
-      expect(canWrite('TRIAL', 'TENANT_ADMIN', 'ambulance')).toBe(false);
+    it('returns false for incidents on TRIAL plan', () => {
+      expect(canWrite('TRIAL', 'TENANT_ADMIN', 'incidents')).toBe(false);
     });
 
     it('returns false for dispatch on TRIAL plan', () => {
       expect(canWrite('TRIAL', 'TENANT_ADMIN', 'dispatch')).toBe(false);
     });
 
-    it('returns false for staff on TRIAL plan', () => {
-      expect(canWrite('TRIAL', 'TENANT_ADMIN', 'staff')).toBe(false);
+    it('returns false for bus-ops on TRIAL plan', () => {
+      expect(canWrite('TRIAL', 'TENANT_ADMIN', 'bus-ops')).toBe(false);
     });
 
     it('returns false for admin on TRIAL plan', () => {
@@ -91,8 +91,8 @@ describe('canWrite()', () => {
   describe('paid plans', () => {
     const paidPlans = ['STANDARD', 'PROFESSIONAL', 'ENTERPRISE'];
     const allModules: AppModule[] = [
-      'fleet', 'rac', 'leasing', 'logistics', 'finance',
-      'school-bus', 'ambulance', 'dispatch', 'staff', 'admin',
+      'fleet', 'rental', 'leasing', 'logistics', 'finance',
+      'school-bus', 'incidents', 'dispatch', 'bus-ops', 'admin',
     ];
 
     for (const plan of paidPlans) {
@@ -147,13 +147,13 @@ describe('moduleFromPath()', () => {
     });
   });
 
-  describe('rac module paths', () => {
-    it('maps /api/rac to rac', () => {
-      expect(moduleFromPath('/api/rac')).toBe('rac');
+  describe('rental module paths', () => {
+    it('maps /api/rac to rental', () => {
+      expect(moduleFromPath('/api/rac')).toBe('rental');
     });
 
-    it('maps /api/rac/bookings to rac', () => {
-      expect(moduleFromPath('/api/rac/bookings')).toBe('rac');
+    it('maps /api/rac/bookings to rental', () => {
+      expect(moduleFromPath('/api/rac/bookings')).toBe('rental');
     });
   });
 
@@ -213,17 +213,17 @@ describe('moduleFromPath()', () => {
     });
   });
 
-  describe('ambulance module paths', () => {
-    it('maps /api/ambulance to ambulance', () => {
-      expect(moduleFromPath('/api/ambulance')).toBe('ambulance');
+  describe('incidents module paths', () => {
+    it('maps /api/ambulance to incidents', () => {
+      expect(moduleFromPath('/api/ambulance')).toBe('incidents');
     });
 
-    it('maps /api/incidents to ambulance', () => {
-      expect(moduleFromPath('/api/incidents')).toBe('ambulance');
+    it('maps /api/incidents to incidents', () => {
+      expect(moduleFromPath('/api/incidents')).toBe('incidents');
     });
 
-    it('maps /api/incidents/123 to ambulance', () => {
-      expect(moduleFromPath('/api/incidents/123')).toBe('ambulance');
+    it('maps /api/incidents/123 to incidents', () => {
+      expect(moduleFromPath('/api/incidents/123')).toBe('incidents');
     });
   });
 
@@ -237,9 +237,9 @@ describe('moduleFromPath()', () => {
     });
   });
 
-  describe('staff module paths', () => {
-    it('maps /api/staff to staff', () => {
-      expect(moduleFromPath('/api/staff')).toBe('staff');
+  describe('bus-ops module paths', () => {
+    it('maps /api/staff to bus-ops', () => {
+      expect(moduleFromPath('/api/staff')).toBe('bus-ops');
     });
   });
 

@@ -21,7 +21,10 @@ import { afterAll } from 'vitest';
 
 // test-utils handles dotenv loading + Web Crypto polyfill and exports hashPassword
 // It must be imported BEFORE @/lib/prisma so DATABASE_URL is set in time.
-export { hashPassword } from './test-utils';
+// Both an import (for local use) and a re-export (so consumers see it from
+// this module) — the bare re-export doesn't bring the symbol into local scope.
+import { hashPassword } from './test-utils';
+export { hashPassword };
 
 // ── Lazy Prisma import (after env is loaded) ──────────────────────────────────
 import { prisma } from '@/lib/prisma';
