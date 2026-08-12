@@ -64,7 +64,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       // observed-speed window (default is 5) with headroom for gaps.
       prisma.$queryRawUnsafe<PingRow[]>(
         `SELECT latitude, longitude, occurred_at
-           FROM bus_gps_pings
+           FROM fleet.bus_gps_pings
           WHERE schedule_id = $1
           ORDER BY occurred_at DESC
           LIMIT 10`,

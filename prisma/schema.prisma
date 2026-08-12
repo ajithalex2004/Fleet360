@@ -1781,7 +1781,7 @@ model BusGpsPing {
   @@index([scheduleId, occurredAt], map: "idx_bus_gps_pings_schedule_occurred")
   @@index([vehicleId, occurredAt], map: "idx_bus_gps_pings_vehicle_occurred")
   @@map("bus_gps_pings")
-  @@schema("public")
+  @@schema("fleet")
 }
 
 model TripStopVisit {

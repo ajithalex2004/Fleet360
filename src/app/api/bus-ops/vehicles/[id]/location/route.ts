@@ -99,7 +99,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const nowIso = new Date().toISOString();
     for (const p of validPings) {
       await prisma.$executeRawUnsafe(
-        `INSERT INTO bus_gps_pings (id, tenant_id, vehicle_id, schedule_id, latitude, longitude,
+        `INSERT INTO fleet.bus_gps_pings (id, tenant_id, vehicle_id, schedule_id, latitude, longitude,
            speed_kmh, heading_deg, accuracy_m, occurred_at, source)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         randomUUID(), tenantId, vehicleId, scheduleId, p.latitude, p.longitude,

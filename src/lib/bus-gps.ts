@@ -170,8 +170,11 @@ let ensured = false;
  */
 export async function ensureBusGpsTables(): Promise<void> {
   if (ensured) return;
+  // bus_gps_pings lives in the `fleet` domain schema (see
+  // prisma/raw/add_domain_schemas_workforce_fleet_operations.sql and the
+  // BusGpsPing model in schema.prisma with @@schema("fleet")).
   await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS bus_gps_pings (
+    CREATE TABLE IF NOT EXISTS fleet.bus_gps_pings (
       id            TEXT PRIMARY KEY,
       created_at    TIMESTAMPTZ DEFAULT NOW(),
       tenant_id     TEXT,
@@ -187,10 +190,10 @@ export async function ensureBusGpsTables(): Promise<void> {
     )
   `);
   await prisma.$executeRawUnsafe(
-    `CREATE INDEX IF NOT EXISTS idx_bus_gps_pings_schedule_occurred ON bus_gps_pings (schedule_id, occurred_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_bus_gps_pings_schedule_occurred ON fleet.bus_gps_pings (schedule_id, occurred_at)`,
   );
   await prisma.$executeRawUnsafe(
-    `CREATE INDEX IF NOT EXISTS idx_bus_gps_pings_vehicle_occurred ON bus_gps_pings (vehicle_id, occurred_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_bus_gps_pings_vehicle_occurred ON fleet.bus_gps_pings (vehicle_id, occurred_at)`,
   );
 
   await prisma.$executeRawUnsafe(`
