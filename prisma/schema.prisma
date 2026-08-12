@@ -1740,6 +1740,48 @@ model BusOpsScheduleTemplate {
   @@schema("public")
 }
 
+/// TransportCalendar — per-tenant exception-day calendar. The schedule
+/// template generator consults the tenant's active calendar and skips
+/// HOLIDAY dates (in addition to per-template exceptionDates), and can
+/// force-generate on WORKING_OVERRIDE dates. HALF_DAY and REDUCED_SERVICE
+/// are informational for the UI (phase 2).
+model TransportCalendar {
+  id            String    @id @default(uuid())
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId      String    @map("tenant_id")
+  name          String
+  effectiveFrom DateTime  @default(now()) @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
+  isActive      Boolean   @default(true) @map("is_active")
+  notes         String?
+  createdBy     String?   @map("created_by")
+  entries       TransportCalendarEntry[]
+
+  @@index([tenantId],  map: "idx_transport_calendars_tenant")
+  @@index([isActive],  map: "idx_transport_calendars_active")
+  @@index([deletedAt], map: "idx_transport_calendars_deleted")
+  @@map("transport_calendars")
+  @@schema("public")
+}
+
+model TransportCalendarEntry {
+  id         String            @id @default(uuid())
+  createdAt  DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  calendarId String            @map("calendar_id")
+  entryDate  DateTime          @map("entry_date") @db.Date
+  kind       String                                    // HOLIDAY | WORKING_OVERRIDE | HALF_DAY | REDUCED_SERVICE
+  note       String?
+  calendar   TransportCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
+  @@unique([calendarId, entryDate], map: "uniq_transport_calendar_entries_cal_date")
+  @@index([calendarId], map: "idx_transport_calendar_entries_calendar")
+  @@index([entryDate],  map: "idx_transport_calendar_entries_date")
+  @@map("transport_calendar_entries")
+  @@schema("public")
+}
+
 model BusRouteType {
   id        String    @id @default(uuid())
   createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)

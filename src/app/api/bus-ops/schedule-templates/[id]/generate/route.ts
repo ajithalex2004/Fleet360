@@ -69,6 +69,31 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     tpl.exceptionDates.map(d => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())).toISOString().slice(0, 10)),
   );
 
+  // Tenant-active TransportCalendar layered on top of per-template
+  // exception dates. HOLIDAY entries add to the skip set; WORKING_OVERRIDE
+  // entries force-generate even if the day-of-week isn't in activeDays.
+  // If multiple active calendars exist (shouldn't in MVP), later ones
+  // override earlier ones for the same date.
+  const holidaySet  = new Set<string>();
+  const overrideSet = new Set<string>();
+  const calendars = await prisma.transportCalendar.findMany({
+    where: {
+      tenantId, deletedAt: null, isActive: true,
+      effectiveFrom: { lte: endUTC },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gte: startUTC } }],
+    },
+    include: {
+      entries: { where: { entryDate: { gte: startUTC, lte: endUTC } } },
+    },
+  }).catch(() => [] as Array<{ entries: Array<{ entryDate: Date; kind: string }> }>);
+  for (const cal of calendars) {
+    for (const e of cal.entries) {
+      const iso = new Date(Date.UTC(e.entryDate.getUTCFullYear(), e.entryDate.getUTCMonth(), e.entryDate.getUTCDate())).toISOString().slice(0, 10);
+      if (e.kind === 'HOLIDAY')           holidaySet.add(iso);
+      else if (e.kind === 'WORKING_OVERRIDE') overrideSet.add(iso);
+    }
+  }
+
   // Parse the template's HH:MM time-of-day so we can slap it onto each candidate day.
   const [hh, mm] = tpl.departureTime.split(':').map(n => parseInt(n, 10));
   // Arrival time (also HH:MM) — kept as null if absent; timestamp version
@@ -114,9 +139,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const isoDay = cursor.toISOString().slice(0, 10);
 
     const outOfWindow = cursor < effFromUTC || (effToUTC && cursor > effToUTC);
+    // WORKING_OVERRIDE beats the activeDays filter (weekend work day).
+    // HOLIDAY beats everything short of override (per-template exception
+    // still takes precedence — operator's explicit intent wins).
+    const dayIsActive = activeDaysSet.has(dow) || overrideSet.has(isoDay);
+    const dayIsSkipped = exceptionSet.has(isoDay) || holidaySet.has(isoDay);
     if (outOfWindow) {
       stats.skippedOutOfWindow++;
-    } else if (!activeDaysSet.has(dow) || exceptionSet.has(isoDay)) {
+    } else if (!dayIsActive || dayIsSkipped) {
       stats.skippedInactiveOrException++;
     } else if (existingDates.has(isoDay)) {
       stats.skippedAlreadyExisted++;
