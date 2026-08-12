@@ -1,8 +1,26 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { TrendingUp } from 'lucide-react';
+import { TrendingUp, Plus, Flag } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+
+// Session → default departure time-of-day when spawning a trip from a
+// forecast row. Ops can still edit the resulting trip in Schedules.
+const SESSION_DEFAULT_TIME: Record<string, string> = {
+  MORNING: '07:00',
+  EVENING: '17:00',
+  NIGHT:   '22:00',
+  SPLIT:   '07:00',
+};
+
+// Given today and a target day-of-week (0=Sun..6=Sat), return next date
+// (today if today matches, else next occurrence within 7 days).
+function nextDateForDayOfWeek(dow: number): Date {
+  const now = new Date();
+  const delta = ((dow - now.getDay()) + 7) % 7;
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + delta);
+  return d;
+}
 
 interface ForecastRow {
   routeId: string;
@@ -64,6 +82,75 @@ export default function DemandForecastPage() {
   const overCount = data?.rows.filter(r => (r.capacityRiskPct ?? 0) >= 95).length ?? 0;
   const underCount = data?.rows.filter(r => r.capacityRiskPct != null && r.capacityRiskPct <= 55).length ?? 0;
 
+  // Per-row action state: which row is currently spinning + last outcome
+  // (keyed on the row's synthetic id so multiple concurrent actions can
+  // show independent feedback).
+  const [rowBusy, setRowBusy]     = useState<Record<string, 'trip' | 'flag' | null>>({});
+  const [rowResult, setRowResult] = useState<Record<string, string>>({});
+
+  const rowKey = (r: ForecastRow) => `${r.routeId}-${r.shiftType}-${r.dayOfWeek}`;
+
+  const createTripFromRow = async (r: ForecastRow) => {
+    const key = rowKey(r);
+    setRowBusy(b => ({ ...b, [key]: 'trip' }));
+    setRowResult(x => ({ ...x, [key]: '' }));
+    try {
+      const target = nextDateForDayOfWeek(r.dayOfWeek);
+      const time = SESSION_DEFAULT_TIME[r.shiftType.toUpperCase()] ?? '07:00';
+      const [hh, mm] = time.split(':').map(n => parseInt(n, 10));
+      const departure = new Date(target.getFullYear(), target.getMonth(), target.getDate(), hh, mm, 0);
+      const res = await fetch('/api/bus-ops/schedules', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          routeId:       r.routeId,
+          departureTime: departure.toISOString(),
+          shiftType:     r.shiftType,
+          status:        'SCHEDULED',
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j?.error ?? `HTTP ${res.status}`);
+      }
+      const trip = await res.json();
+      setRowResult(x => ({ ...x, [key]: `Trip ${trip.tripNumber ?? ''} created for ${target.toLocaleDateString()}` }));
+    } catch (e) {
+      setRowResult(x => ({ ...x, [key]: e instanceof Error ? e.message : 'Trip create failed' }));
+    } finally {
+      setRowBusy(b => ({ ...b, [key]: null }));
+    }
+  };
+
+  const flagRowForReview = async (r: ForecastRow) => {
+    const key = rowKey(r);
+    setRowBusy(b => ({ ...b, [key]: 'flag' }));
+    setRowResult(x => ({ ...x, [key]: '' }));
+    try {
+      const pct = r.capacityRiskPct ?? 0;
+      const sev = pct >= 95 ? 'HIGH' : pct <= 55 ? 'MEDIUM' : 'LOW';
+      const res = await fetch('/api/alerts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type:        'FORECAST_REVIEW',
+          title:       `Forecast review: ${r.routeName} · ${r.shiftType} · ${DAYS[r.dayOfWeek]}`,
+          description: `Baseline ${r.baseline}, trend ${r.trendDelta >= 0 ? '+' : ''}${r.trendDelta}, capacity ${r.capacity ?? 'n/a'}, risk ${pct}%${r.aiAnnotation ? ` · AI: ${r.aiAnnotation.rationale}` : ''}`,
+          severity:    sev,
+          status:      'PENDING',
+          relatedEntityId: r.routeId,
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j?.error ?? `HTTP ${res.status}`);
+      }
+      setRowResult(x => ({ ...x, [key]: 'Flagged for review — see Alerts inbox' }));
+    } catch (e) {
+      setRowResult(x => ({ ...x, [key]: e instanceof Error ? e.message : 'Flag failed' }));
+    } finally {
+      setRowBusy(b => ({ ...b, [key]: null }));
+    }
+  };
+
   if (loading && !data) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading forecast...</div></div>;
 
   return (
@@ -117,6 +204,7 @@ export default function DemandForecastPage() {
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Capacity</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Risk %</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">AI</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -146,6 +234,36 @@ export default function DemandForecastPage() {
                       ) : (
                         <span className="text-xs text-slate-300">—</span>
                       )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const key = rowKey(r);
+                        const busy = rowBusy[key];
+                        const msg  = rowResult[key];
+                        return (
+                          <div className="flex flex-col items-end gap-1">
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => createTripFromRow(r)}
+                                disabled={!!busy}
+                                title={`Create trip for next ${DAYS[r.dayOfWeek]}`}
+                                className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-violet-500/40 bg-violet-500/10 text-violet-200 hover:bg-violet-500/20 disabled:opacity-50">
+                                <Plus className="w-3 h-3" />
+                                {busy === 'trip' ? '…' : 'Create trip'}
+                              </button>
+                              <button
+                                onClick={() => flagRowForReview(r)}
+                                disabled={!!busy}
+                                title="Raise ops alert for review"
+                                className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20 disabled:opacity-50">
+                                <Flag className="w-3 h-3" />
+                                {busy === 'flag' ? '…' : 'Flag'}
+                              </button>
+                            </div>
+                            {msg && <div className="text-[10px] text-slate-400 max-w-[16rem] text-right truncate" title={msg}>{msg}</div>}
+                          </div>
+                        );
+                      })()}
                     </td>
                   </tr>
                 );
