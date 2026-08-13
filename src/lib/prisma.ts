@@ -1,7 +1,26 @@
 import { PrismaClient, Prisma } from '@prisma/client';
-import { headers } from 'next/headers';
 import { MirrorCircuitBreaker } from '@/lib/mirror-circuit-breaker';
 import { activeRlsScope, runWithRlsScope } from '@/lib/rls-scope';
+
+// `next/headers` is Server-Component-only. A static top-level import of it
+// contaminates every transitive importer — any 'use client' page that
+// imports something that imports something that imports prisma fails to
+// compile with "You're importing a component that needs next/headers".
+// This module is legitimately used from both Server Components and Server
+// Actions, and its exported *types* are widely referenced from client
+// code (via `@prisma/client` re-exports of the Prisma namespace).
+//
+// Dynamic-import guarantees the header lookup only runs when a caller
+// actually invokes it (inside requestTenantId below). Client-side
+// bundles never see the import so webpack never trips its rule.
+async function readRequestHeaders(): Promise<Headers | null> {
+  try {
+    const mod = await import('next/headers');
+    return await mod.headers();
+  } catch {
+    return null;
+  }
+}
 
 // Fix BigInt serialization for JSON responses
 (BigInt.prototype as unknown as { toJSON: () => string }).toJSON = function () {
@@ -201,13 +220,10 @@ function isValidTenantId(value: string | null): value is string {
  * other non-request code, which must use the explicit RLS helpers instead.
  */
 async function requestTenantId(): Promise<string | null> {
-  try {
-    const requestHeaders = await headers();
-    const tenantId = requestHeaders.get('x-tenant-id');
-    return isValidTenantId(tenantId) ? tenantId : null;
-  } catch {
-    return null;
-  }
+  const requestHeaders = await readRequestHeaders();
+  if (!requestHeaders) return null;
+  const tenantId = requestHeaders.get('x-tenant-id');
+  return isValidTenantId(tenantId) ? tenantId : null;
 }
 
 async function withPrimaryConnectionRetry<T>(run: () => Promise<T>): Promise<T> {
