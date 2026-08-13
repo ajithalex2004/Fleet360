@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { Bluetooth, RefreshCw } from 'lucide-react';
+import { Bluetooth, RefreshCw, Key, Copy, Check, X } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
 
 interface Gateway {
@@ -18,6 +18,13 @@ interface Gateway {
   health: 'ONLINE' | 'OFFLINE' | 'DISABLED' | 'NEVER_SEEN';
   lastSeenSecondsAgo: number | null;
   lastEventSecondsAgo: number | null;
+  secretRotatedAt?: string | null;
+}
+
+interface RotateResult {
+  gatewayId: string;
+  secret: string;
+  rotatedAt: string;
 }
 
 const HEALTH_PILL: Record<string, string> = {
@@ -39,6 +46,40 @@ export default function GatewaysAdminPage() {
   const [gateways, setGateways] = useState<Gateway[]>([]);
   const [secretConfigured, setSecretConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [rotating, setRotating] = useState<string | null>(null);
+  const [rotateResult, setRotateResult] = useState<RotateResult | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const rotate = async (id: string, gatewayId: string) => {
+    if (!confirm(
+      `Rotate secret for gateway ${gatewayId}?\n\n` +
+      `The current secret will stop working immediately. ` +
+      `You must copy the new secret and paste it into the gateway hardware config.`,
+    )) return;
+    setRotating(id); setRotateResult(null);
+    try {
+      const res = await fetch(`/api/bus-ops/gateways/${id}/rotate-secret`, { method: 'POST' });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j?.error ?? `HTTP ${res.status}`);
+      }
+      const data = await res.json() as RotateResult;
+      setRotateResult(data);
+      setCopied(false);
+      await load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Rotate failed');
+    } finally { setRotating(null); }
+  };
+
+  const copySecret = async () => {
+    if (!rotateResult) return;
+    try {
+      await navigator.clipboard.writeText(rotateResult.secret);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard denied — user reads the field manually */ }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,6 +144,8 @@ export default function GatewaysAdminPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Last heartbeat</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Last event</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Health</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Secret</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -121,12 +164,68 @@ export default function GatewaysAdminPage() {
                       {g.health}
                     </span>
                   </td>
+                  <td className="px-4 py-3 text-xs text-slate-400">
+                    {g.secretRotatedAt
+                      ? <span className="text-emerald-300">rotated {new Date(g.secretRotatedAt).toLocaleDateString('en-AE')}</span>
+                      : <span className="text-amber-300">using env fallback</span>}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button onClick={() => rotate(g.id, g.gatewayId)} disabled={rotating === g.id}
+                      title="Rotate HMAC secret"
+                      className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-violet-500/40 bg-violet-500/10 text-violet-200 hover:bg-violet-500/20 disabled:opacity-50">
+                      <Key className="w-3 h-3" />
+                      {rotating === g.id ? 'Rotating…' : 'Rotate'}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+
+      {/* One-time reveal modal for rotate result */}
+      {rotateResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg bg-slate-800/95 border border-violet-500/40 rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Key className="w-5 h-5 text-violet-300" />
+                New secret for {rotateResult.gatewayId}
+              </h2>
+              <button onClick={() => setRotateResult(null)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 text-amber-200 text-xs mb-4">
+              ⚠ This secret is shown ONCE. Copy it now — closing this dialog
+              means re-running rotation to get a new value. The old secret
+              stopped working the moment this rotation ran.
+            </div>
+            <div className="mb-4">
+              <label className="block text-xs text-slate-400 mb-1">HMAC secret</label>
+              <div className="flex gap-2">
+                <input readOnly value={rotateResult.secret}
+                  className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white font-mono text-xs" />
+                <button onClick={copySecret}
+                  className="inline-flex items-center gap-1 rounded-lg bg-violet-500/20 border border-violet-500/40 px-3 py-2 text-xs text-violet-200 hover:bg-violet-500/30 whitespace-nowrap">
+                  {copied ? <><Check className="w-3.5 h-3.5" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
+                </button>
+              </div>
+            </div>
+            <div className="text-[11px] text-slate-500">
+              Rotated at {new Date(rotateResult.rotatedAt).toLocaleString('en-AE')}. Paste into
+              your gateway's <code>BLE_HMAC_SECRET</code> config and restart it.
+            </div>
+            <div className="flex justify-end pt-4">
+              <button onClick={() => setRotateResult(null)}
+                className="px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 text-sm">
+                Done (I've copied the secret)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-slate-800/30 border border-white/5 rounded-2xl p-5 text-xs text-slate-400 space-y-2">
         <h3 className="text-white font-semibold">Integration contract</h3>
