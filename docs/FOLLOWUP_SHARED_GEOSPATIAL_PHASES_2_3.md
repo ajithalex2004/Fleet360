@@ -53,15 +53,20 @@ All three FKs use `ON DELETE SET NULL` so a Place soft/hard-delete doesn't casca
 
 **No reader was cut over** — this ships the *capability*. Existing consumers still use `garage.location`, `route_stops.gps_lat/gps_lng`, `route_stops.geofence_radius_m` as before. The Prisma model comments call out that Phase 3.5 migrates readers.
 
-### 3.5. Reader migration (NEW — not started)
+### 3.5. Reader migration ✅ PARTIALLY SHIPPED (RouteStop only)
 
-The FK columns land data in `spatial.places`, but every current reader still reads the denormalized columns on the source model. Migrating readers is the follow-up:
-- **RouteStop reads**: [/api/driver-app/trips/[id]/geofences](../src/app/api/driver-app/trips/[id]/geofences/route.ts) reads `route_stops.gps_lat/gps_lng/geofence_radius_m` directly. Switch to reading the linked Place. Same for [/api/bus-ops/schedules/[id]/eta](../src/app/api/bus-ops/schedules/[id]/eta/route.ts) and every ETA/dispatch consumer.
-- **Dual-write on RouteStop create/update**: the write path (routes UI, planner) must also create/update the Place row. Extract a `syncStopPlace(stop)` helper.
-- **Garage reads**: garage list/detail pages read `location` (text). If we start capturing coords, they'll come from Place — add an "on the map" section on the garage page.
-- **Vehicle homeDepot reads**: fleet/vehicles page can add a "home depot" column that joins Place.
+**Done:**
+- `syncStopPlace(stop, tenantId?)` helper in [src/lib/places/sync-stop.ts](../src/lib/places/sync-stop.ts) — upserts a Place with the stop's own id, sets `RouteStop.placeId`, and no-ops on missing tenant or coords (also clears a stale `placeId` in that case). Batch variant `syncStopPlaces()` for the "replace all stops" pattern.
+- [/api/bus-ops/routes/[id]/stops](../src/app/api/bus-ops/routes/[id]/stops/route.ts): POST and PUT now dual-write. Also fixed a pre-existing bug where RouteStop.tenantId was never populated on create/replace (now derived from `BusRoute.tenantId`).
+- [/api/driver-app/trips/[id]/geofences](../src/app/api/driver-app/trips/[id]/geofences/route.ts): reader prefers the linked Place's `center_lat/center_lng/radius_m/name` when the stop is linked, falls back to the local columns otherwise. Single LEFT JOIN — no N+1.
 
-Watch out for the RLS boundary — cross-schema reads under `withTenantRls()` need `spatial.places` policies to accept the same GUC (they already do — see `add_spatial_places.sql`).
+**Not done — future scope:**
+- **Other RouteStop readers**: [/api/bus-ops/schedules/[id]/eta](../src/app/api/bus-ops/schedules/[id]/eta/route.ts), the ETA/dispatch consumers on the bus-ops pages, and the school-bus seed. Same LEFT JOIN pattern applies. Low risk to defer since they still work — Phase 3b keeps the source-model columns in sync via dual-write.
+- **Garage reader migration**: garage list/detail pages read `location` (text). No coords today; a "capture on map" UI is new capability, not migration.
+- **Vehicle homeDepot reader**: fleet/vehicles page can grow a "home depot" column via `place.name`. New capability.
+- **Backfill for existing dev data**: 22 RouteStops on dev have null `tenant_id` and can't get Places until they're re-tenanted. The next write to each of those stops via `/api/bus-ops/routes/[id]/stops` will fix the tenantId and trigger the sync.
+
+Watch out for the RLS boundary — cross-schema reads under `withTenantRls()` need `spatial.places` policies to accept the same GUC (they already do — see `add_spatial_places.sql`). The dual-write in `syncStopPlace` doesn't run under RLS today because it goes through the standard prisma client (not `withTenantRls`); acceptable because the Place's tenantId is stamped from the caller and matches the RouteStop's tenant.
 
 ### 3c. Consider a `spatial.place_associations` table
 When a Place needs to be linked to many things (e.g. one Depot serves 5 routes), a join table `place_associations(place_id, ref_module, ref_id, role)` is cleaner than adding FKs to every consuming model. Design this in Phase 3, don't build it until at least three consumers need it.

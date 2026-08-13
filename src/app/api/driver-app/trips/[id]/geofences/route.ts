@@ -28,6 +28,13 @@ interface StopRow {
   geofence_radius_m: number | null;
   stop_name: string | null;
   sequence: number;
+  // Phase 3.5 — Place link. When present its centerLat/centerLng/radius
+  // are preferred over the local columns; the join happens in the SQL
+  // below so we don't do a per-stop N+1 round-trip.
+  place_center_lat: number | null;
+  place_center_lng: number | null;
+  place_radius_m: number | null;
+  place_name: string | null;
 }
 
 export async function GET(
@@ -66,15 +73,22 @@ export async function GET(
   }
 
   // 2) Origin = lowest sequence, destination = highest sequence.
-  //    Use the route's tenant_id when it matches the trip's tenant;
-  //    otherwise filter by trip_id (some tenants share routes).
+  //    Left-joined to spatial.places so Phase 3.5 can prefer the linked
+  //    Place geometry over the denormalized route_stops columns. The
+  //    join is optional — pre-Phase-3.5 stops have place_id NULL and
+  //    fall back to route_stops.gps_lat/gps_lng.
   const stops = await prisma.$queryRaw<StopRow[]>`
-    SELECT gps_lat, gps_lng, geofence_radius_m, stop_name, sequence
-    FROM route_stops
-    WHERE route_id = ${trip.route_id}
-      AND gps_lat IS NOT NULL
-      AND gps_lng IS NOT NULL
-    ORDER BY sequence ASC
+    SELECT s.gps_lat, s.gps_lng, s.geofence_radius_m, s.stop_name, s.sequence,
+           p.center_lat AS place_center_lat,
+           p.center_lng AS place_center_lng,
+           p.radius_m   AS place_radius_m,
+           p.name       AS place_name
+    FROM route_stops s
+    LEFT JOIN spatial.places p ON p.id = s.place_id AND p.deleted_at IS NULL
+    WHERE s.route_id = ${trip.route_id}
+      AND (COALESCE(p.center_lat, s.gps_lat) IS NOT NULL)
+      AND (COALESCE(p.center_lng, s.gps_lng) IS NOT NULL)
+    ORDER BY s.sequence ASC
     LIMIT 2
   `;
   if (stops.length === 0) {
@@ -95,25 +109,23 @@ export async function GET(
     );
   }
 
+  // Prefer Place fields when the stop is linked (Phase 3.5); fall back
+  // to the local columns for pre-migration stops.
+  const project = (s: StopRow) => ({
+    lat:     s.place_center_lat ?? s.gps_lat,
+    lng:     s.place_center_lng ?? s.gps_lng,
+    name:    s.place_name       ?? s.stop_name,
+    sequence: s.sequence,
+    radiusM: s.place_radius_m ?? s.geofence_radius_m ?? DEFAULT_RADIUS_M,
+  });
+
   return NextResponse.json(
     {
       tripId: params.id,
       routeId: trip.route_id,
       defaultRadiusM: DEFAULT_RADIUS_M,
-      origin: {
-        lat: origin.gps_lat,
-        lng: origin.gps_lng,
-        name: origin.stop_name,
-        sequence: origin.sequence,
-        radiusM: origin.geofence_radius_m ?? DEFAULT_RADIUS_M,
-      },
-      destination: {
-        lat: destination.gps_lat,
-        lng: destination.gps_lng,
-        name: destination.stop_name,
-        sequence: destination.sequence,
-        radiusM: destination.geofence_radius_m ?? DEFAULT_RADIUS_M,
-      },
+      origin:      project(origin),
+      destination: project(destination),
     },
     { headers: { 'Cache-Control': privateCacheControl(300, 300) } },
   );
