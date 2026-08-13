@@ -10,18 +10,18 @@ Each of the 10 alert conditions needs a publisher. All should call
 `raiseAlert({...})` from [src/lib/alerts/raise.ts](../src/lib/alerts/raise.ts) — never
 `prisma.alert.create()` directly.
 
-| Code | Trigger | Target file |
+| Code | Trigger | Status |
 |---|---|---|
-| `TRIP_OVERDUE` | schedule cron: `arrival + tolerance` passed with no completion | new job under [src/lib/jobs/](../src/lib/jobs/) |
-| `VEHICLE_OFFLINE` | GPS ingest: no ping received for N minutes | [src/lib/bus-gps.ts](../src/lib/bus-gps.ts) periodic sweep |
-| `VEHICLE_BREAKDOWN` | driver-app breakdown report OR incident type=BREAKDOWN | ✅ reference wired in [/api/bus-ops/incidents](../src/app/api/bus-ops/incidents/route.ts) |
-| `CAPACITY_EXCEEDED` | trip create / passenger add: seated >= capacity | trip PATCH + passenger POST handlers |
-| `MISSED_STOP` | stop-visit evaluator: bus never entered a scheduled stop's geofence | [src/lib/bus-gps.ts](../src/lib/bus-gps.ts) |
-| `DRIVER_ABSENT` | pre-trip: no driver check-in within N min of departure | schedule cron |
-| `PASSENGER_ABSENT` | bus depart: CONFIRMED → NO_SHOW flip | already computed in [/api/bus-ops/schedules/[id]/depart](../src/app/api/bus-ops/schedules/[id]/depart/route.ts) — add raiseAlert if noShowsMarked > 0 |
-| `ROUTE_DEVIATION` | GPS evaluator: bus > N metres off route corridor | [src/lib/bus-gps.ts](../src/lib/bus-gps.ts) or new evaluator |
-| `LATE_DEPARTURE` | depart: actual > scheduled + tolerance | [/api/bus-ops/schedules/[id]/depart](../src/app/api/bus-ops/schedules/[id]/depart/route.ts) |
-| `LATE_ARRIVAL` | ETA evaluator: predicted > scheduled + tolerance (dup of `trip.delayed`) | ETA endpoint |
+| `VEHICLE_BREAKDOWN` | driver-app breakdown report OR incident type=BREAKDOWN | ✅ [/api/bus-ops/incidents](../src/app/api/bus-ops/incidents/route.ts) |
+| `PASSENGER_ABSENT` | bus depart: CONFIRMED → NO_SHOW flip | ✅ [/api/bus-ops/schedules/[id]/depart](../src/app/api/bus-ops/schedules/[id]/depart/route.ts) |
+| `LATE_DEPARTURE` | depart: actual > scheduled + tolerance (5 min) | ✅ same depart handler |
+| `LATE_ARRIVAL` | ETA evaluator: predicted > scheduled + tolerance (5 min), dedup per (schedule, stop) | ✅ [/api/bus-ops/schedules/[id]/eta](../src/app/api/bus-ops/schedules/[id]/eta/route.ts) |
+| `CAPACITY_EXCEEDED` | trip create: expanded roster > capacity | ✅ [/api/bus-ops/schedules](../src/app/api/bus-ops/schedules/route.ts) |
+| `TRIP_OVERDUE` | cron: `arrival + 15 min` passed with status still SCHEDULED/DEPARTED/IN_TRANSIT | ✅ [src/lib/jobs/alert-trip-overdue.ts](../src/lib/jobs/alert-trip-overdue.ts) — register a Vercel cron entry pointing at `/api/jobs/run?job=alert-trip-overdue` |
+| `VEHICLE_OFFLINE` | GPS ingest: no ping received for N minutes | ⏳ TODO — sweep in [src/lib/bus-gps.ts](../src/lib/bus-gps.ts) |
+| `MISSED_STOP` | stop-visit evaluator: bus never entered a scheduled stop's geofence | ⏳ TODO — stop-visit evaluator |
+| `DRIVER_ABSENT` | pre-trip: no driver check-in within N min of departure | ⏳ TODO — new pre-trip check-in concept OR cron on trips lacking a BusPreTripCheck |
+| `ROUTE_DEVIATION` | GPS evaluator: bus > N metres off route corridor | ⏳ TODO — new evaluator |
 
 **Dedup keys** — the engine defaults to `${code}:${subjectId}`. Use
 explicit keys when a coarser grain is wanted:
@@ -48,14 +48,14 @@ Not shipped. Design:
   `acknowledgedAt IS NULL`, raise a downstream `alert.sla_breached`
   event (or increment a counter).
 
-## Notification pipeline reuse
+## Notification pipeline reuse ✅ SHIPPED
 
-The engine writes `Alert.channels` and `Alert.recipients` today but
-does NOT write `NotificationLog` rows. Recommended follow-up: have
-`AlertEngineConsumer` also write one `NotificationLog` row per
-`channel × recipient` at creation time, so the existing channel
-workers deliver the message without a separate integration. Template
-rendering can reuse the `context` field.
+`AlertEngineConsumer` now writes one `NotificationLog` row per
+`channel × recipient` at creation time (via `enqueueNotifications()`
+helper in the same file), so the existing channel workers deliver
+alerts without an alert-specific delivery pipeline. `triggerReason`
+threads the alert id so ops can trace a delivery back to the alert
+that raised it.
 
 ## Legacy `Alert` writers to clean up
 

@@ -58,6 +58,7 @@ import { runAutoCloseTrips }         from '@/lib/jobs/auto-close-trips';
 import { runDunningSweep }           from '@/lib/jobs/dunning-sweep';
 import { runOutboxPublisher }        from '@/lib/jobs/outbox-publisher';
 import { runBusOpsGenerateScheduleTemplates } from '@/lib/jobs/bus-ops-generate-schedule-templates';
+import { runAlertTripOverdue }       from '@/lib/jobs/alert-trip-overdue';
 import {
   runFuelSweepBill,
   runTrafficFinesSweepBill,
@@ -77,6 +78,12 @@ export const JOB_REGISTRY: JobDef[] = [
     name:           'auto-close-trips',
     description:    'Auto-close bus/school trips still IN_PROGRESS 4h past scheduled arrival',
     handler:        runAutoCloseTrips,
+    maxDurationSec: 60,
+  },
+  {
+    name:           'alert-trip-overdue',
+    description:    'Raise TRIP_OVERDUE alerts for trips past scheduled arrival + tolerance',
+    handler:        runAlertTripOverdue,
     maxDurationSec: 60,
   },
   {

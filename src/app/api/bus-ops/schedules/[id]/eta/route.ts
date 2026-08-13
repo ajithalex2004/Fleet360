@@ -26,9 +26,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { predictEta, type TrackingPoint } from '@/lib/logistics/eta-predictor';
-// ensureBusGpsTables import removed — DDL in prisma/raw/*.sql migrations
+import { raiseAlert } from '@/lib/alerts/raise';
 
 export const runtime = 'nodejs';
+
+/**
+ * LATE_ARRIVAL trips when the predictor's ETA slips past the trip's
+ * scheduled arrival window by more than this many minutes. Same
+ * philosophy as LATE_DEPARTURE — soft tolerance so GPS jitter or a
+ * traffic-light stop doesn't page ops.
+ */
+const LATE_ARRIVAL_TOLERANCE_MIN = 5;
 
 interface PingRow { latitude: number; longitude: number; occurred_at: Date }
 interface StopRow { id: string; sequence: number; stop_name: string; gps_lat: number | null; gps_lng: number | null; estimated_arrival_mins: number | null }
@@ -129,6 +137,41 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       now: new Date().toISOString(),
       plannedArrivalAt,
     });
+
+    // Alert Engine — LATE_ARRIVAL. Dedup key includes the stop id so
+    // the passenger sees one alert per stop, not per ETA poll (this
+    // endpoint is polled every ~15s during a live trip). The Alert
+    // Engine's partial unique index enforces this; we can also rely on
+    // it not to spam the pipeline.
+    if (
+      prediction.etaAt &&
+      plannedArrivalAt &&
+      new Date(prediction.etaAt).getTime() - new Date(plannedArrivalAt).getTime() > LATE_ARRIVAL_TOLERANCE_MIN * 60_000
+    ) {
+      const delayMin = Math.round((new Date(prediction.etaAt).getTime() - new Date(plannedArrivalAt).getTime()) / 60_000);
+      void raiseAlert({
+        tenantId,
+        code:         'LATE_ARRIVAL',
+        sourceModule: 'bus-ops',
+        subjectType:  'TripSchedule',
+        subjectId:    schedule.id,
+        // (schedule, stop) dedup — one alert per stop-per-trip that
+        // stays open until acknowledged or the arrival lands.
+        dedupeKey:    `LATE_ARRIVAL:${schedule.id}:${nextStop.id}`,
+        title:        `Trip ${schedule.id.slice(0, 8)} · late arriving at ${nextStop.stop_name} by ${delayMin} min`,
+        description:  `Planned ${plannedArrivalAt}, predicted ${prediction.etaAt}. Confidence: ${prediction.confidence}.`,
+        severity:     delayMin > 15 ? 'HIGH' : 'MEDIUM',
+        context: {
+          scheduleId:  schedule.id,
+          stopId:      nextStop.id,
+          stopName:    nextStop.stop_name,
+          plannedAt:   plannedArrivalAt,
+          predictedAt: prediction.etaAt,
+          delayMinutes: delayMin,
+          method:      prediction.method,
+        },
+      });
+    }
 
     return NextResponse.json({
       stopId: nextStop.id,

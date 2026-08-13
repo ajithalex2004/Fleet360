@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
 import { expandRosterToTrip } from '@/lib/bus-ops/expand-roster';
 import { resolveVariantVersionForTrip } from '@/lib/bus-ops/resolve-variant-version';
+import { raiseAlert } from '@/lib/alerts/raise';
 
 const CACHE_TAG = 'bus-ops:schedules';
 
@@ -104,6 +105,35 @@ export async function POST(req: NextRequest) {
         );
       } catch (err) {
         console.error('[schedules.POST] roster expansion failed:', err);
+      }
+    }
+
+    // Alert Engine — CAPACITY_EXCEEDED. Roster expansion just wrote the
+    // definitive attendance count; compare against the schedule's
+    // capacity (which the caller sets or defaults from the route).
+    // Dedup on scheduleId — only one CAPACITY_EXCEEDED per trip at a
+    // time. Re-triggers after ops resolves the alert and a passenger is
+    // added later.
+    if (schedule.capacity && rosterExpansion) {
+      const seated = (rosterExpansion.inserted ?? 0) + (rosterExpansion.skipped ?? 0);
+      if (seated > schedule.capacity) {
+        void raiseAlert({
+          tenantId,
+          code:         'CAPACITY_EXCEEDED',
+          sourceModule: 'bus-ops',
+          subjectType:  'TripSchedule',
+          subjectId:    schedule.id,
+          title:        `Trip ${schedule.tripNumber ?? schedule.id.slice(0, 8)} · over capacity (${seated}/${schedule.capacity})`,
+          description:  `${seated - schedule.capacity} passenger${seated - schedule.capacity === 1 ? '' : 's'} above the bus's ${schedule.capacity}-seat capacity.`,
+          severity:     'HIGH',
+          context: {
+            scheduleId:    schedule.id,
+            tripNumber:    schedule.tripNumber,
+            capacity:      schedule.capacity,
+            confirmedCount: seated,
+            overBy:        seated - schedule.capacity,
+          },
+        });
       }
     }
 

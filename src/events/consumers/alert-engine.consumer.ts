@@ -98,9 +98,10 @@ export class AlertEngineConsumer extends BaseEventConsumer<AlertConditionDetecte
     }
 
     try {
+      const alertId = randomUUID();
       await prisma.alert.create({
         data: {
-          id:            randomUUID(),
+          id:            alertId,
           tenantId,
           code:          data.code,
           type:          data.code,             // populate legacy `type` for back-compat
@@ -123,6 +124,23 @@ export class AlertEngineConsumer extends BaseEventConsumer<AlertConditionDetecte
           slaResolveDueAt: routing.slaResolveDueAt,
         },
       });
+
+      // Phase 2 addition — fan out to NotificationLog so the existing
+      // channel workers (push / sms / whatsapp / email / in-app) deliver
+      // the alert without a separate integration. One row per channel ×
+      // recipient. Kept best-effort — a delivery-log failure shouldn't
+      // roll back the alert creation (the alert is the source of truth;
+      // the notifications are the delivery artefact).
+      await enqueueNotifications({
+        alertId,
+        code:       data.code,
+        title:      data.title,
+        body:       data.description ?? data.title,
+        channels:   routing.channels,
+        recipients: routing.recipients,
+        subjectId:  data.subjectId,
+      }).catch(err => console.warn('[alert-engine] notification fan-out failed:', err));
+
       console.log(`[alert-engine] raised ${data.code} for ${data.subjectId} (${routing.channels.length} channels)`);
     } catch (err) {
       // Unique-index violation → race with another worker for the same
@@ -133,6 +151,40 @@ export class AlertEngineConsumer extends BaseEventConsumer<AlertConditionDetecte
         return;
       }
       throw err;
+    }
+  }
+}
+
+/**
+ * Fan out an alert to NotificationLog rows so the existing channel
+ * workers (push / sms / whatsapp / email / in_app) deliver without an
+ * alert-specific delivery pipeline. Same shape as
+ * TripNotificationDispatchConsumer's fan-out — one row per channel ×
+ * recipient, status 'Pending', triggerReason threading the alert id.
+ */
+async function enqueueNotifications(args: {
+  alertId: string;
+  code: string;
+  title: string;
+  body: string;
+  channels: string[];
+  recipients: string[];
+  subjectId: string;
+}): Promise<void> {
+  if (args.channels.length === 0 || args.recipients.length === 0) return;
+  for (const channel of args.channels) {
+    for (const recipient of args.recipients) {
+      await prisma.notificationLog.create({
+        data: {
+          id:            randomUUID(),
+          recipient,
+          type:          channel,
+          subject:       args.title,
+          body:          args.body,
+          triggerReason: `${args.code} — alert:${args.alertId}`,
+          status:        'Pending',
+        },
+      });
     }
   }
 }

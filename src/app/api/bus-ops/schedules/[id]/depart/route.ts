@@ -3,6 +3,14 @@ import { prisma }         from '@/lib/prisma';
 import { getEventBus }    from '@/events/event-bus';
 import { TRIP_DEPARTED }  from '@/events/registry';
 import { assertTripTransition, TripTransitionError, type TripScheduleStatus } from '@/lib/bus-ops/state-machines';
+import { raiseAlert }     from '@/lib/alerts/raise';
+
+/**
+ * How many minutes late is "late" — a soft tolerance so a 30-second slip
+ * from the scheduled departure doesn't page ops. Configurable per tenant
+ * via AlertRule.escalation_levels later (Phase 2b).
+ */
+const LATE_DEPARTURE_TOLERANCE_MIN = 5;
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const tenantId = req.headers.get('x-tenant-id');
@@ -88,6 +96,57 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         noShowsMarked:       noShowResult.count,
       },
     }).catch(err => console.warn('[bus-ops depart] outbox publish failed:', err));
+
+    // Alert Engine Phase 2 — two conditions detectable at depart time.
+    // Both raiseAlert calls are best-effort by default and don't block
+    // the HTTP response.
+    if (schedule.tenantId) {
+      // PASSENGER_ABSENT — one alert per trip summarising how many
+      // CONFIRMED passengers rolled over to NO_SHOW. The Alert Engine
+      // dedups on scheduleId so a re-depart (unusual but possible)
+      // doesn't spam.
+      if (noShowResult.count > 0) {
+        void raiseAlert({
+          tenantId:     schedule.tenantId,
+          code:         'PASSENGER_ABSENT',
+          sourceModule: 'bus-ops',
+          subjectType:  'TripSchedule',
+          subjectId:    schedule.id,
+          title:        `Trip ${schedule.tripNumber ?? schedule.id.slice(0, 8)} · ${noShowResult.count} no-show${noShowResult.count === 1 ? '' : 's'}`,
+          description:  `${noShowResult.count} passenger${noShowResult.count === 1 ? '' : 's'} did not board and were auto-marked NO_SHOW at departure.`,
+          context: {
+            scheduleId:    schedule.id,
+            tripNumber:    schedule.tripNumber,
+            noShowsMarked: noShowResult.count,
+          },
+        });
+      }
+
+      // LATE_DEPARTURE — actual > scheduled + tolerance.
+      const actualDeparture = tripLog.actualDepartureTime ?? new Date();
+      const delayMin = Math.round((actualDeparture.getTime() - schedule.departureTime.getTime()) / 60_000);
+      if (delayMin > LATE_DEPARTURE_TOLERANCE_MIN) {
+        void raiseAlert({
+          tenantId:     schedule.tenantId,
+          code:         'LATE_DEPARTURE',
+          sourceModule: 'bus-ops',
+          subjectType:  'TripSchedule',
+          subjectId:    schedule.id,
+          title:        `Trip ${schedule.tripNumber ?? schedule.id.slice(0, 8)} · departed ${delayMin} min late`,
+          description:  `Scheduled ${schedule.departureTime.toISOString()}, departed ${actualDeparture.toISOString()}.`,
+          severity:     delayMin > 30 ? 'HIGH' : 'MEDIUM',
+          context: {
+            scheduleId:    schedule.id,
+            tripNumber:    schedule.tripNumber,
+            vehicleId:     schedule.vehicleId,
+            driverId:      schedule.driverId,
+            scheduledAt:   schedule.departureTime.toISOString(),
+            actualAt:      actualDeparture.toISOString(),
+            delayMinutes:  delayMin,
+          },
+        });
+      }
+    }
 
     return NextResponse.json({ ...updated, noShowsMarked: noShowResult.count });
   } catch (error) {
