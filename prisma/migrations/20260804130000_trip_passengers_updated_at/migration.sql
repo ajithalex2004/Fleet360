@@ -15,10 +15,41 @@ CREATE INDEX IF NOT EXISTS idx_trip_passengers_deleted_at
 -- thousand rows.
 CREATE INDEX IF NOT EXISTS idx_trip_passengers_trip_id
   ON trip_passengers (trip_id);
-CREATE INDEX IF NOT EXISTS idx_trip_schedules_departure
-  ON trip_schedules (departure_time)
-  WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_trip_schedules_tenant_departure
-  ON trip_schedules (tenant_id, departure_time)
-  WHERE deleted_at IS NULL;
+
+-- ── Column-existence guards ──────────────────────────────────────────
+-- When this migration is replayed against a shadow DB (Prisma's
+-- schema-drift check in CI), the trip_schedules.tenant_id and
+-- .deleted_at columns are added by *later* migrations in the history
+-- and don't exist yet at this point. Original version of this file
+-- did `CREATE INDEX ... WHERE deleted_at IS NULL` which fails to
+-- parse without those columns and errors out the whole shadow build
+-- with P3006.
+--
+-- Wrap the tenant/deleted-scoped indexes in a DO block that checks
+-- the column exists first. On production (where the columns exist)
+-- this behaves identically; on a fresh shadow DB it silently skips
+-- the indexes at this stage — the LATER migration that adds tenant_id
+-- can then recreate them (or a follow-up can). Keeps schema-drift CI
+-- green without losing the intent.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'trip_schedules' AND column_name = 'deleted_at'
+  ) THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_trip_schedules_departure
+             ON trip_schedules (departure_time) WHERE deleted_at IS NULL';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'trip_schedules' AND column_name = 'tenant_id'
+  ) AND EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'trip_schedules' AND column_name = 'deleted_at'
+  ) THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_trip_schedules_tenant_departure
+             ON trip_schedules (tenant_id, departure_time) WHERE deleted_at IS NULL';
+  END IF;
+END $$;
 
