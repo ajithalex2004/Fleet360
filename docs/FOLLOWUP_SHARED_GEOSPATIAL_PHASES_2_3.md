@@ -4,32 +4,35 @@ Phase 1 (delivered) shipped the `spatial.places` table + `Place` Prisma model + 
 
 ## Phase 2 — Consumer cutover (per module)
 
-Each module points at `/api/places` instead of its own geofence store. **Do these one module at a time**, verify, then move on — don't do them as a single big-bang.
+### 2a. bus-ops geofences ✅ SHIPPED (commit c137ac17)
 
-### 2a. bus-ops geofences
-- Replace fetches to `/api/bus-ops/geofences` with `/api/places?type=STOP,GEOFENCE,GARAGE,ORIGIN_DESTINATION,BASE_CAMP,ACCOMMODATION&sourceModule=bus-ops`.
-- Update [src/app/(app)/bus-ops/geofences/page.tsx](../src/app/(app)/bus-ops/geofences/page.tsx) writes to POST/PATCH `/api/places` with `sourceModule: 'bus-ops'` stamped.
-- Update [src/components/bus-ops/GeofenceMap.tsx](../src/components/bus-ops/GeofenceMap.tsx) — component signature can stay the same; wire it to the shared endpoint.
-- Once the page is exclusively on `/api/places`, deprecate `/api/bus-ops/geofences/*` (leave stubs returning 410 Gone for a release, then remove).
-- **Do not drop `public.bus_ops_geofences` yet** — Phase 3 handles the DDL sunset after every consumer is on Places for at least one release.
+The API routes `/api/bus-ops/geofences` and `/[id]` now read/write against `spatial.places` filtered by `sourceModule='bus-ops'`. Response contract is unchanged (projection maps `Place.description` → `notes`) so the bus-ops geofences page and any external cached references keep working with no rewrite. The `[id]` handler also accepts legacy `bus_ops_geofences.id` via `source_id` lookup as a fallback.
 
-### 2b. logistics geofences
-Logistics has no persistent geofence store today — it derives them per-shipment. Migration is smaller:
-- New `spatial.places` rows of `type: GEOFENCE, sourceModule: 'logistics'` for any per-stop overrides that should persist across shipments.
-- [src/lib/logistics/geofence-service.ts](../src/lib/logistics/geofence-service.ts) reads from Places first, falls back to the current per-stop radius column.
-- No API deprecation needed.
+Data still resides in `public.bus_ops_geofences` (nothing dropped) but no *new* writes land there — every new geofence goes to `spatial.places`.
 
-### 2c. school-bus + ambulance dispatch
-Both currently reuse bus-ops' geofence endpoints ad-hoc. Repoint to `/api/places?sourceModule=school-bus` and `...&sourceModule=ambulance`. Same shape as 2a.
+### 2b. logistics geofences — no action needed today
 
-### 2d. Map drawing in the shared page
-Reuse [`GeofenceMap.tsx`](../src/components/bus-ops/GeofenceMap.tsx) inside `/locations`:
-- Extract to `src/components/shared/PlaceMap.tsx` (rename + tighten signature — should take generic `Place[]` not `GeofenceRecord[]`).
-- Update the Locations page to drop the "Polygon geometry can't be drawn from this form yet" placeholder and use the map for draw + edit like bus-ops geofences does today.
+Logistics derives geofences in-memory from `logistics_shipment_stops` (per-stop `latitude`/`longitude`/`geofence_radius_m` columns) plus an optional `metadata.routePolyline` corridor. **There is no persistent geofence table to migrate.**
 
-### 2e. Sidebar per-type shortcuts
-Once the sidebar sub-page matcher supports querystring matching (currently `pathname === sp.href` — misses query), add per-type shortcuts back to `/locations` in `src/lib/nav/modules.ts`:
-- `/locations?type=STOP`, `/locations?type=GEOFENCE`, `/locations?type=DEPOT`, etc.
+Add a Place-based override capability only when an operator actually asks for it. When that happens the change is:
+- Read `spatial.places` rows tagged `sourceModule='logistics'` with `metadata.shipmentStopId = <id>` before deriving the on-the-fly circle in [src/lib/logistics/geofence-service.ts](../src/lib/logistics/geofence-service.ts).
+- Fall back to the current per-stop radius when no override exists.
+- No API surface needed — read directly via `prisma.place.findMany()`.
+
+### 2c. school-bus + ambulance dispatch — no consumers
+
+Verified via `grep '/api/bus-ops/geofences|busOpsGeofence' src/` — the only consumer of the bus-ops geofence endpoint is the bus-ops geofences page itself. School-bus and ambulance never shared it. Nothing to cut over.
+
+### 2d. Map drawing on `/locations` — deferred UX polish
+
+Currently `/locations` is form-only for geometry entry. The bus-ops geofences page still provides full map-based drawing, and it writes to the same shared table now, so no user is blocked. Fold in later by:
+- Extracting [src/components/bus-ops/GeofenceMap.tsx](../src/components/bus-ops/GeofenceMap.tsx) → `src/components/shared/PlaceMap.tsx` (rename + widen typing to `Place[]`).
+- Update the bus-ops geofences page to import from the new path (small).
+- Add the map to `/locations` next to the table view.
+
+### 2e. Sidebar per-type shortcuts — deferred
+
+Adding `/locations?type=STOP`, `?type=DEPOT`, etc. requires the sub-page matcher in [src/components/nav/Sidebar.tsx](../src/components/nav/Sidebar.tsx) to compare pathname *plus* querystring (currently just pathname). Small change, but low value until users need it — the in-page type filter covers the case for now.
 
 ## Phase 3 — Legacy sunset + first-class references
 
