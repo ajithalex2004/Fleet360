@@ -1,0 +1,240 @@
+'use client';
+/**
+ * /bus-ops/trips/[id] — ops trip detail + attendance
+ *
+ * Shows one specific TripSchedule with its passengers and lets ops
+ * mark BOARDED / ABSENT / ALIGHTED per row without leaving the page.
+ * All status writes go through PATCH /api/bus-ops/passengers/[id],
+ * which enforces the passenger state-machine (illegal transitions
+ * return 409 with the allowed next states).
+ *
+ * Reached from the Trip Monitor board or a link on the Schedules page.
+ */
+
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { ArrowLeft, Users, RefreshCw } from 'lucide-react';
+import { PageHeader } from '@/components/bus-ops/theme';
+
+type PassengerStatus = 'CONFIRMED' | 'BOARDED' | 'ALIGHTED' | 'ABSENT' | 'NO_SHOW' | 'CANCELLED' | 'WAITLISTED';
+type TripStatus = 'SCHEDULED' | 'DEPARTED' | 'IN_TRANSIT' | 'COMPLETED' | 'CANCELLED';
+
+interface Passenger {
+  id: string;
+  employeeId: string | null;
+  employeeName: string | null;
+  boardingStopName: string | null;
+  alightingStopName: string | null;
+  boardedAt: string | null;
+  status: PassengerStatus | null;
+}
+interface Trip {
+  id: string;
+  tripNumber: string | null;
+  status: TripStatus | null;
+  departureTime: string;
+  arrivalTime: string | null;
+  confirmedCount: number | null;
+  capacity: number | null;
+  shiftType: string | null;
+  direction: string | null;
+  route: { id: string; name: string; origin: string; destination: string } | null;
+  passengers: Passenger[];
+}
+
+const PAX_PILL: Record<PassengerStatus, string> = {
+  CONFIRMED:  'bg-blue-500/20 text-blue-300 border-blue-500/40',
+  BOARDED:    'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+  ALIGHTED:   'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
+  ABSENT:     'bg-rose-500/20 text-rose-300 border-rose-500/40',
+  NO_SHOW:    'bg-slate-500/20 text-slate-400 border-slate-500/40',
+  CANCELLED:  'bg-slate-500/20 text-slate-400 border-slate-500/40',
+  WAITLISTED: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+};
+
+const TRIP_PILL: Record<TripStatus, string> = {
+  SCHEDULED:  'bg-blue-500/20 text-blue-300 border-blue-500/40',
+  DEPARTED:   'bg-amber-500/20 text-amber-300 border-amber-500/40',
+  IN_TRANSIT: 'bg-orange-500/20 text-orange-300 border-orange-500/40',
+  COMPLETED:  'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+  CANCELLED:  'bg-red-500/20 text-red-300 border-red-500/40',
+};
+
+// Allowed passenger status advances the ops UI surfaces per current status.
+const NEXT_ACTIONS: Record<PassengerStatus, PassengerStatus[]> = {
+  CONFIRMED:  ['BOARDED', 'ABSENT'],
+  BOARDED:    ['ALIGHTED'],
+  ALIGHTED:   [],
+  ABSENT:     [],
+  NO_SHOW:    [],
+  CANCELLED:  [],
+  WAITLISTED: ['CONFIRMED', 'CANCELLED'],
+};
+
+export default function TripDetailPage() {
+  const params = useParams<{ id: string }>();
+  const tripId = params?.id;
+  const [trip, setTrip] = useState<Trip | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [rowBusy, setRowBusy] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!tripId) return;
+    setLoading(true); setError('');
+    try {
+      const res = await fetch(`/api/bus-ops/schedules/${tripId}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setTrip(await res.json());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load trip');
+    } finally { setLoading(false); }
+  }, [tripId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const markPassenger = async (passengerId: string, nextStatus: PassengerStatus) => {
+    setRowBusy(passengerId); setError('');
+    try {
+      const res = await fetch(`/api/bus-ops/passengers/${passengerId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        // 409 → state-machine rejection with a helpful message
+        throw new Error(j?.error ?? `HTTP ${res.status}`);
+      }
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Mark failed');
+    } finally { setRowBusy(null); }
+  };
+
+  const counts = useMemo(() => {
+    const c = { CONFIRMED: 0, BOARDED: 0, ALIGHTED: 0, ABSENT: 0, NO_SHOW: 0, WAITLISTED: 0, CANCELLED: 0 } as Record<PassengerStatus, number>;
+    trip?.passengers.forEach(p => { if (p.status) c[p.status]++; });
+    return c;
+  }, [trip]);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title={trip?.tripNumber ? `Trip ${trip.tripNumber}` : 'Trip Detail'}
+        subtitle={
+          trip
+            ? `${trip.route?.name ?? '—'} · ${new Date(trip.departureTime).toLocaleString('en-AE')}${trip.shiftType ? ` · ${trip.shiftType}` : ''}${trip.direction ? ` · ${trip.direction}` : ''}`
+            : 'Loading…'
+        }
+        icon={Users}
+        accent="violet"
+        actions={
+          <>
+            <Link href="/bus-ops/dispatch"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 border border-white/10 px-3 py-2 text-sm text-slate-200 hover:border-violet-500/40">
+              <ArrowLeft className="w-4 h-4" /> Trip Monitor
+            </Link>
+            <button onClick={load}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 border border-white/10 px-3 py-2 text-sm text-slate-200 hover:border-violet-500/40">
+              <RefreshCw className="w-4 h-4" /> Refresh
+            </button>
+          </>
+        }
+      />
+
+      {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-300 text-sm">{error}</div>}
+
+      {loading && !trip ? (
+        <div className="text-slate-400 text-sm animate-pulse py-10 text-center">Loading trip…</div>
+      ) : !trip ? (
+        <div className="text-slate-400 text-sm py-10 text-center">Trip not found.</div>
+      ) : (
+        <>
+          {/* Status + KPIs */}
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+            <div className="col-span-2 md:col-span-1 bg-slate-800/60 border border-white/5 rounded-xl p-3">
+              <p className="text-xs text-slate-500 mb-1">Trip status</p>
+              <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium border ${TRIP_PILL[(trip.status ?? 'SCHEDULED') as TripStatus]}`}>
+                {trip.status ?? 'SCHEDULED'}
+              </span>
+            </div>
+            {(['CONFIRMED','BOARDED','ALIGHTED','ABSENT','WAITLISTED'] as PassengerStatus[]).map(s => (
+              <div key={s} className="bg-slate-800/60 border border-white/5 rounded-xl p-3 text-center">
+                <p className="text-lg font-bold text-white">{counts[s]}</p>
+                <p className="text-[10px] text-slate-500 uppercase mt-0.5">{s}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Passenger manifest */}
+          <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-white/5 text-sm text-slate-300">
+              Passenger manifest ({trip.passengers.length})
+              {trip.capacity != null && <span className="text-slate-500"> of {trip.capacity}</span>}
+            </div>
+            {trip.passengers.length === 0 ? (
+              <div className="py-10 text-center text-slate-400 text-sm">
+                No passengers on this trip yet. Roster expansion runs on trip create — check the Passengers page for the route roster.
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-white/5 text-xs text-slate-400">
+                    <th className="px-4 py-2 text-left">Emp ID</th>
+                    <th className="px-4 py-2 text-left">Employee</th>
+                    <th className="px-4 py-2 text-left">Pickup</th>
+                    <th className="px-4 py-2 text-left">Drop-off</th>
+                    <th className="px-4 py-2 text-left">Status</th>
+                    <th className="px-4 py-2 text-left">Boarded at</th>
+                    <th className="px-4 py-2 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trip.passengers.map(p => {
+                    const status = (p.status ?? 'CONFIRMED') as PassengerStatus;
+                    const actions = NEXT_ACTIONS[status] ?? [];
+                    return (
+                      <tr key={p.id} className="border-b border-white/5 hover:bg-white/5">
+                        <td className="px-4 py-2 text-sm font-mono text-white">{p.employeeId ?? '—'}</td>
+                        <td className="px-4 py-2 text-sm text-white">{p.employeeName ?? '—'}</td>
+                        <td className="px-4 py-2 text-sm text-slate-300">{p.boardingStopName ?? '—'}</td>
+                        <td className="px-4 py-2 text-sm text-slate-300">{p.alightingStopName ?? '—'}</td>
+                        <td className="px-4 py-2">
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium border ${PAX_PILL[status]}`}>{status}</span>
+                        </td>
+                        <td className="px-4 py-2 text-xs text-slate-400 whitespace-nowrap">
+                          {p.boardedAt ? new Date(p.boardedAt).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          {actions.length === 0 ? (
+                            <span className="text-[10px] text-slate-500 italic">terminal</span>
+                          ) : (
+                            <div className="flex gap-1 justify-end">
+                              {actions.map(nxt => (
+                                <button key={nxt} onClick={() => markPassenger(p.id, nxt)} disabled={rowBusy === p.id}
+                                  className={`text-[11px] px-2 py-1 rounded border transition-colors disabled:opacity-50 ${
+                                    nxt === 'BOARDED'  ? 'border-emerald-500/40 text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20'  :
+                                    nxt === 'ABSENT'   ? 'border-rose-500/40    text-rose-200    bg-rose-500/10    hover:bg-rose-500/20'    :
+                                    nxt === 'ALIGHTED' ? 'border-cyan-500/40    text-cyan-200    bg-cyan-500/10    hover:bg-cyan-500/20'    :
+                                    'border-slate-500/40 text-slate-200 bg-slate-500/10 hover:bg-slate-500/20'
+                                  }`}>
+                                  {rowBusy === p.id ? '…' : nxt}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
