@@ -14,6 +14,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { calculateRate, type RateRequest } from '@/lib/rental-rate-engine';
+import { getEventBus }               from '@/events/event-bus';
+import { RENTAL_INVOICE_GENERATED }  from '@/events/registry';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -203,6 +205,30 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const invoice = await prisma.$queryRawUnsafe<any[]>(
       "SELECT * FROM rental_invoices WHERE id = $1", invoiceId
     );
+
+    // Enqueue finance mirroring via transactional outbox.
+    // FinanceRentalInvoiceConsumer calls mirrorRentalInvoiceToFinance() asynchronously.
+    const tenantId = req.headers.get('x-tenant-id');
+    if (tenantId) {
+      await getEventBus().publish({
+        eventType:     RENTAL_INVOICE_GENERATED,
+        aggregateType: 'RentalInvoice',
+        aggregateId:   invoiceId,
+        sourceModule:  'rental',
+        tenantId,
+        actor:         'system',
+        payload: {
+          rentalInvoiceId: invoiceId,
+          invoiceNo,
+          agreementId:     params.id,
+          customerId:      agr.customer_id ?? null,
+          totalAmount,
+          currency:        agr.currency ?? 'AED',
+          status,
+          generatedAt:     now,
+        },
+      }).catch(err => console.error('[rental] outbox publish failed:', err));
+    }
 
     return NextResponse.json({ invoice: invoice[0], lineItems }, { status: 201 });
   } catch (e: any) {

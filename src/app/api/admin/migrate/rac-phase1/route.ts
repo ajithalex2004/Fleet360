@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 
 export async function POST() {
-  const results: string[] = [];
-  const run = async (label: string, sql: string) => {
-    try { await prisma.$executeRawUnsafe(sql); results.push('OK: ' + label); }
-    catch (e: any) { results.push('SKIP: ' + label + ' — ' + e.message?.slice(0, 100)); }
-  };
+  return withPlatformAdmin(prisma, async (tx) => {
+    const results: string[] = [];
+    const run = async (label: string, sql: string) => {
+      try { await tx.$executeRawUnsafe(sql); results.push('OK: ' + label); }
+      catch (e: any) { results.push('SKIP: ' + label + ' — ' + e.message?.slice(0, 100)); }
+    };
 
   // pricing_rules enhancements
   await run('pricing_rules.name',               "ALTER TABLE pricing_rules ADD COLUMN IF NOT EXISTS name TEXT");
@@ -220,7 +222,8 @@ export async function POST() {
   await run('idx_agreements_status',          "CREATE INDEX IF NOT EXISTS idx_rental_agreements_status ON rental_agreements(status)");
   await run('idx_agreements_vehicle',         "CREATE INDEX IF NOT EXISTS idx_rental_agreements_vehicle_id ON rental_agreements(vehicle_id)");
 
-  const ok = results.filter(r => r.startsWith('OK')).length;
-  const skip = results.filter(r => r.startsWith('SKIP')).length;
-  return NextResponse.json({ ok, skip, results });
+    const ok = results.filter(r => r.startsWith('OK')).length;
+    const skip = results.filter(r => r.startsWith('SKIP')).length;
+    return NextResponse.json({ ok, skip, results });
+  });
 }

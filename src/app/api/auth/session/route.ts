@@ -25,7 +25,14 @@ function sessionCookieOptions(maxAge: number) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json(
+        { error: 'Bad Request', message: 'JSON body with userId and tenantId is required' },
+        { status: 400 }
+      );
+    }
+
     const { userId, tenantId } = body as { userId?: string; tenantId?: string };
 
     if (!userId || !tenantId) {

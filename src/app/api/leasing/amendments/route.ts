@@ -1,17 +1,21 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-
 /**
- * Leasing Amendment Processing API
- * Auto-creates `leasing_amendments` table on every request.
+ * /api/leasing/amendments — leasing amendment processing (raw-SQL backend).
+ *
+ * Tenant scoping: requires x-tenant-id. The schema is provisioned with a
+ * `tenant_id` column by ensureTable(); reads filter by tenant; creates
+ * stamp the new row with the same tenantId.
+ *
+ * Note: this route manages a hand-rolled `leasing_amendments` table (not a
+ * Prisma model) via raw SQL. The auto-CREATE statement adds `tenant_id`
+ * for new installs; existing databases without the column will get it
+ * added in place via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
  *
  * Workflow: DRAFT → SUBMITTED → APPROVED → IMPLEMENTED
  *                              → REJECTED
- *
- * GET   /api/leasing/amendments?status=&amendment_type=&search=&page=&limit=
- * POST  /api/leasing/amendments                  — create new amendment
- * PATCH /api/leasing/amendments?id=<uuid>        — workflow transition
  */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 
 async function ensureTable() {
   await prisma.$executeRawUnsafe(`
@@ -20,6 +24,7 @@ async function ensureTable() {
       created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
       updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
       deleted_at        TIMESTAMPTZ,
+      tenant_id         TEXT,
       amendment_no      TEXT         UNIQUE NOT NULL,
       contract_id       TEXT,
       contract_no       TEXT,
@@ -47,6 +52,18 @@ async function ensureTable() {
     )
   `);
   await prisma.$executeRawUnsafe(`
+    ALTER TABLE leasing_amendments
+      ADD COLUMN IF NOT EXISTS tenant_id TEXT
+  `);
+  await prisma.$executeRawUnsafe(`
+    UPDATE leasing_amendments
+       SET tenant_id = (SELECT id FROM tenants WHERE COALESCE(is_active, TRUE) = TRUE ORDER BY created_at ASC NULLS LAST LIMIT 1)
+     WHERE tenant_id IS NULL
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_leasing_amendments_tenant ON leasing_amendments(tenant_id)
+  `);
+  await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_leasing_amendments_status ON leasing_amendments(status)
   `);
   await prisma.$executeRawUnsafe(`
@@ -62,6 +79,7 @@ type AmendmentRow = {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+  tenant_id: string | null;
   amendment_no: string;
   contract_id: string | null;
   contract_no: string | null;
@@ -99,6 +117,7 @@ function mapAmendment(r: AmendmentRow) {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     deletedAt: r.deleted_at,
+    tenantId: r.tenant_id,
     amendmentNo: r.amendment_no,
     contractId: r.contract_id,
     contractNo: r.contract_no,
@@ -127,6 +146,10 @@ function mapAmendment(r: AmendmentRow) {
 }
 
 export async function GET(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     await ensureTable();
     const sp = req.nextUrl.searchParams;
@@ -137,9 +160,9 @@ export async function GET(req: NextRequest) {
     const limit         = Math.min(100, Number(sp.get('limit') ?? 20));
     const offset        = (page - 1) * limit;
 
-    const conds: string[] = ['a.deleted_at IS NULL'];
-    const params: unknown[] = [];
-    let pi = 1;
+    const conds: string[] = ['a.deleted_at IS NULL', 'a.tenant_id = $1'];
+    const params: unknown[] = [tenantId];
+    let pi = 2;
 
     if (status)        { conds.push(`a.status = $${pi++}`);           params.push(status); }
     if (amendmentType) { conds.push(`a.amendment_type = $${pi++}`);   params.push(amendmentType); }
@@ -163,15 +186,18 @@ export async function GET(req: NextRequest) {
       ).catch(() => [{ cnt: BigInt(0) }]),
 
       prisma.$queryRawUnsafe<CountRow[]>(
-        `SELECT status, COUNT(*) AS cnt FROM leasing_amendments WHERE deleted_at IS NULL GROUP BY status`
+        `SELECT status, COUNT(*) AS cnt FROM leasing_amendments WHERE deleted_at IS NULL AND tenant_id = $1 GROUP BY status`,
+        tenantId
       ).catch(() => [] as CountRow[]),
 
       prisma.$queryRawUnsafe<TypeCountRow[]>(
-        `SELECT amendment_type, COUNT(*) AS cnt FROM leasing_amendments WHERE deleted_at IS NULL GROUP BY amendment_type`
+        `SELECT amendment_type, COUNT(*) AS cnt FROM leasing_amendments WHERE deleted_at IS NULL AND tenant_id = $1 GROUP BY amendment_type`,
+        tenantId
       ).catch(() => [] as TypeCountRow[]),
 
       prisma.$queryRawUnsafe<TotalRow[]>(
-        `SELECT SUM(financial_impact)::TEXT AS total FROM leasing_amendments WHERE deleted_at IS NULL AND financial_impact > 0`
+        `SELECT SUM(financial_impact)::TEXT AS total FROM leasing_amendments WHERE deleted_at IS NULL AND tenant_id = $1 AND financial_impact > 0`,
+        tenantId
       ).catch(() => [{ total: '0' }]),
     ]);
 
@@ -179,11 +205,10 @@ export async function GET(req: NextRequest) {
     const statusMap = Object.fromEntries(statusCounts.map(s => [s.status, Number(s.cnt)]));
     const typeMap   = Object.fromEntries(typeCounts.map(t => [t.amendment_type, Number(t.cnt)]));
 
-    // Month-approved count
-    const thisMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+    const thisMonth = new Date().toISOString().slice(0, 7);
     const [approvedThisMonthRow] = await prisma.$queryRawUnsafe<[{ cnt: bigint }]>(
-      `SELECT COUNT(*) AS cnt FROM leasing_amendments WHERE status = 'APPROVED' AND TO_CHAR(approved_at, 'YYYY-MM') = $1`,
-      thisMonth
+      `SELECT COUNT(*) AS cnt FROM leasing_amendments WHERE tenant_id = $1 AND status = 'APPROVED' AND TO_CHAR(approved_at, 'YYYY-MM') = $2`,
+      tenantId, thisMonth
     ).catch(() => [{ cnt: BigInt(0) }]);
 
     return NextResponse.json({
@@ -209,6 +234,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     await ensureTable();
     const body = await req.json();
@@ -234,16 +263,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `amendment_type must be one of: ${validTypes.join(', ')}` }, { status: 400 });
     }
 
-    // Generate amendment_no: LAM-YYYYMM-XXXX
+    if (contractId) {
+      const owned = await prisma.leaseContract2.findFirst({
+        where: { id: contractId, tenantId },
+        select: { id: true },
+      });
+      if (!owned) {
+        return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
+      }
+    }
+
     const yyyymm = new Date().toISOString().slice(0, 7).replace('-', '');
     const [seqRow] = await prisma.$queryRawUnsafe<SeqRow[]>(
-      `SELECT COUNT(*) + 1 AS seq FROM leasing_amendments WHERE amendment_no LIKE $1`,
-      `LAM-${yyyymm}-%`
+      `SELECT COUNT(*) + 1 AS seq FROM leasing_amendments WHERE tenant_id = $1 AND amendment_no LIKE $2`,
+      tenantId, `LAM-${yyyymm}-%`
     );
     const seq = String(Number(seqRow?.seq ?? 1)).padStart(4, '0');
     const amendmentNo = `LAM-${yyyymm}-${seq}`;
 
-    // Compute VAT (5% of financial_impact if positive) and total_impact
     const impact    = parseFloat(String(financialImpact)) || 0;
     const vatAmount = impact > 0 ? parseFloat((impact * 0.05).toFixed(2)) : 0;
     const totalImpact = parseFloat((impact + vatAmount).toFixed(2));
@@ -251,12 +288,13 @@ export async function POST(req: NextRequest) {
     type NewRow = { id: string; amendment_no: string };
     const [row] = await prisma.$queryRawUnsafe<NewRow[]>(
       `INSERT INTO leasing_amendments
-         (amendment_no, contract_id, contract_no, lessee_name, vehicle_no, vehicle_name,
+         (tenant_id, amendment_no, contract_id, contract_no, lessee_name, vehicle_no, vehicle_name,
           amendment_type, description, original_value, new_value,
           financial_impact, vat_amount, total_impact, effective_date,
           submitted_by, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
        RETURNING id, amendment_no`,
+      tenantId,
       amendmentNo,
       contractId   || null,
       contractNo   || null,
@@ -283,6 +321,10 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     await ensureTable();
     const id = req.nextUrl.searchParams.get('id');
@@ -293,10 +335,9 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
     const { action, approvedBy, rejectedBy, rejectionReason } = body;
 
-    // Fetch current record
     const [current] = await prisma.$queryRawUnsafe<AmendmentRow[]>(
-      `SELECT * FROM leasing_amendments WHERE id = $1 AND deleted_at IS NULL`,
-      id
+      `SELECT * FROM leasing_amendments WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+      id, tenantId
     );
     if (!current) {
       return NextResponse.json({ error: 'Amendment not found' }, { status: 404 });
@@ -309,16 +350,16 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: 'Only DRAFT amendments can be submitted' }, { status: 400 });
       }
       await prisma.$executeRawUnsafe(
-        `UPDATE leasing_amendments SET status='SUBMITTED', submitted_at=$1, updated_at=$2 WHERE id=$3`,
-        now, now, id
+        `UPDATE leasing_amendments SET status='SUBMITTED', submitted_at=$1, updated_at=$2 WHERE id=$3 AND tenant_id=$4`,
+        now, now, id, tenantId
       );
     } else if (action === 'APPROVE') {
       if (current.status !== 'SUBMITTED') {
         return NextResponse.json({ error: 'Only SUBMITTED amendments can be approved' }, { status: 400 });
       }
       await prisma.$executeRawUnsafe(
-        `UPDATE leasing_amendments SET status='APPROVED', approved_by=$1, approved_at=$2, updated_at=$3 WHERE id=$4`,
-        approvedBy || 'System', now, now, id
+        `UPDATE leasing_amendments SET status='APPROVED', approved_by=$1, approved_at=$2, updated_at=$3 WHERE id=$4 AND tenant_id=$5`,
+        approvedBy || 'System', now, now, id, tenantId
       );
     } else if (action === 'REJECT') {
       if (current.status !== 'SUBMITTED') {
@@ -328,24 +369,23 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: 'rejection_reason is required' }, { status: 400 });
       }
       await prisma.$executeRawUnsafe(
-        `UPDATE leasing_amendments SET status='REJECTED', rejected_by=$1, rejected_at=$2, rejection_reason=$3, updated_at=$4 WHERE id=$5`,
-        rejectedBy || 'System', now, rejectionReason.trim(), now, id
+        `UPDATE leasing_amendments SET status='REJECTED', rejected_by=$1, rejected_at=$2, rejection_reason=$3, updated_at=$4 WHERE id=$5 AND tenant_id=$6`,
+        rejectedBy || 'System', now, rejectionReason.trim(), now, id, tenantId
       );
     } else if (action === 'IMPLEMENT') {
       if (current.status !== 'APPROVED') {
         return NextResponse.json({ error: 'Only APPROVED amendments can be implemented' }, { status: 400 });
       }
       await prisma.$executeRawUnsafe(
-        `UPDATE leasing_amendments SET status='IMPLEMENTED', implemented_at=$1, updated_at=$2 WHERE id=$3`,
-        now, now, id
+        `UPDATE leasing_amendments SET status='IMPLEMENTED', implemented_at=$1, updated_at=$2 WHERE id=$3 AND tenant_id=$4`,
+        now, now, id, tenantId
       );
     } else {
       return NextResponse.json({ error: `Unknown action: ${action}. Must be SUBMIT, APPROVE, REJECT, or IMPLEMENT` }, { status: 400 });
     }
 
     const [updated] = await prisma.$queryRawUnsafe<AmendmentRow[]>(
-      `SELECT * FROM leasing_amendments WHERE id = $1`,
-      id
+      `SELECT * FROM leasing_amendments WHERE id = $1 AND tenant_id = $2`, id, tenantId
     );
     return NextResponse.json(mapAmendment(updated));
   } catch (err) {

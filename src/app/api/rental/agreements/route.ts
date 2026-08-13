@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const guard = assertCanWrite(req, 'rac');
+  const guard = assertCanWrite(req, 'rental');
   if (guard) return guard;
 
   try {

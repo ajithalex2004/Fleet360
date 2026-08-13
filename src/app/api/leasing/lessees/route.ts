@@ -7,6 +7,9 @@ import { z } from 'zod';
  * Lessee — B2B (corporate) and B2C (individual) supported via the `type` field.
  * Each type has its own validation: corporate requires trade license; individual
  * requires Emirates ID. See lesseeSchema below.
+ *
+ * Multi-tenant: every query is filtered by x-tenant-id from the middleware.
+ * This is the Layer 2.5 fix that closes TENANT-001 (see docs/KNOWN_GAPS.md).
  */
 
 const baseSchema = z.object({
@@ -33,10 +36,14 @@ const individualSchema = baseSchema.extend({
 
 const lesseeSchema = z.discriminatedUnion('type', [corporateSchema, individualSchema]);
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const lessees = await prisma.lessee.findMany({
-      where: { deletedAt: null },
+      where: { tenantId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
     return NextResponse.json(lessees);
@@ -48,6 +55,10 @@ export async function GET(_req: NextRequest) {
 
 export const POST = withAudit(
   async (req: NextRequest) => {
+    const tenantId = req.headers.get('x-tenant-id');
+    if (!tenantId) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
     try {
       const body = await req.json();
       const parsed = lesseeSchema.safeParse(body);
@@ -64,7 +75,7 @@ export const POST = withAudit(
         );
       }
 
-      const lessee = await prisma.lessee.create({ data: parsed.data });
+      const lessee = await prisma.lessee.create({ data: { ...parsed.data, tenantId } });
       return NextResponse.json(lessee, { status: 201 });
     } catch (error) {
       console.error('Error creating lessee:', error);

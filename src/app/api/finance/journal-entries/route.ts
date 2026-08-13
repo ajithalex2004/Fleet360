@@ -1,74 +1,43 @@
 /**
  * Journal Entries API — /api/finance/journal-entries
- * Double-entry accounting: every entry must balance (total debits = total credits)
+ *
+ * Double-entry accounting: every entry must balance (total debits = total credits).
  * Lifecycle: DRAFT → SUBMITTED → APPROVED → POSTED → REVERSED
+ *
+ * Schema is owned by migration 20260809000000_adopt_finance_tables_with_rls.
+ * Runtime CREATE TABLE DDL removed — tables are guaranteed present at boot.
+ *
+ * All queries are scoped to the tenant from the x-tenant-id header set by
+ * middleware. Platform admins (x-tenant-id = '*') see all tenants.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-const INIT_JE = `
-  CREATE TABLE IF NOT EXISTS finance_journal_entries (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ DEFAULT NOW(),
-    deleted_at      TIMESTAMPTZ,
-    je_number       TEXT UNIQUE NOT NULL,
-    entry_date      DATE NOT NULL,
-    period_year     INTEGER NOT NULL,
-    period_month    INTEGER NOT NULL,
-    narration       TEXT NOT NULL,
-    reference       TEXT,
-    source_type     TEXT DEFAULT 'MANUAL',  -- MANUAL | INVOICE | PAYMENT | DEPRECIATION | ADJUSTMENT | REVERSAL
-    source_id       TEXT,
-    status          TEXT DEFAULT 'DRAFT',   -- DRAFT | SUBMITTED | APPROVED | POSTED | REVERSED | VOID
-    total_debit     NUMERIC(15,2) DEFAULT 0,
-    total_credit    NUMERIC(15,2) DEFAULT 0,
-    is_balanced     BOOLEAN DEFAULT FALSE,
-    reversed_je_id  TEXT,       -- pointer to the JE this one reverses
-    reversal_je_id  TEXT,       -- pointer to the reversal JE created from this one
-    prepared_by     TEXT,
-    approved_by     TEXT,
-    posted_by       TEXT,
-    approved_at     TIMESTAMPTZ,
-    posted_at       TIMESTAMPTZ,
-    notes           TEXT,
-    currency        TEXT DEFAULT 'AED'
-  );
-`;
-
-const INIT_LINES = `
-  CREATE TABLE IF NOT EXISTS finance_journal_lines (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    journal_entry_id TEXT NOT NULL,
-    line_number     INTEGER NOT NULL,
-    account_code    TEXT NOT NULL,
-    account_name    TEXT,
-    description     TEXT,
-    debit_amount    NUMERIC(15,2) DEFAULT 0,
-    credit_amount   NUMERIC(15,2) DEFAULT 0,
-    normal_balance  TEXT DEFAULT 'DEBIT',
-    cost_centre     TEXT,
-    currency        TEXT DEFAULT 'AED'
-  );
-`;
-
 type JeRow   = Record<string, unknown>;
-type LineRow = Record<string, unknown>;
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+function getTenant(req: NextRequest): string | null {
+  return req.headers.get('x-tenant-id');
+}
 
 async function nextJeNumber(): Promise<string> {
-  const [row] = await prisma.$queryRawUnsafe<{count: string}[]>(
-    `SELECT COUNT(*)::text as count FROM finance_journal_entries`
+  const [row] = await prisma.$queryRawUnsafe<{ count: string }[]>(
+    `SELECT COUNT(*)::text AS count FROM finance_journal_entries WHERE deleted_at IS NULL`,
   ).catch(() => [{ count: '0' }]);
   const now = new Date();
-  const ym  = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}`;
+  const ym  = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
   const seq = (parseInt(row?.count ?? '0') + 1).toString().padStart(5, '0');
   return `JE-${ym}-${seq}`;
 }
 
+// ── GET /api/finance/journal-entries ─────────────────────────────────────────
+
 export async function GET(req: NextRequest) {
-  await prisma.$executeRawUnsafe(INIT_JE).catch(() => {});
-  await prisma.$executeRawUnsafe(INIT_LINES).catch(() => {});
+  const tenantId = getTenant(req);
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   const sp     = req.nextUrl.searchParams;
   const status = sp.get('status');
@@ -79,117 +48,189 @@ export async function GET(req: NextRequest) {
   const limit  = Math.min(100, parseInt(sp.get('limit') ?? '50'));
   const offset = (page - 1) * limit;
 
-  let where = `WHERE deleted_at IS NULL`;
+  // Build WHERE clause — always scope by tenant unless platform admin.
+  let where = `WHERE je.deleted_at IS NULL`;
   const params: unknown[] = [];
   let pi = 1;
-  if (status) { where += ` AND status = $${pi++}`; params.push(status); }
-  if (source) { where += ` AND source_type = $${pi++}`; params.push(source); }
-  if (from)   { where += ` AND entry_date >= $${pi++}`; params.push(from); }
-  if (to)     { where += ` AND entry_date <= $${pi++}`; params.push(to); }
+
+  if (tenantId !== '*') {
+    where += ` AND je.tenant_id = $${pi++}`;
+    params.push(tenantId);
+  }
+  if (status) { where += ` AND je.status = $${pi++}`;      params.push(status); }
+  if (source) { where += ` AND je.source_type = $${pi++}`; params.push(source); }
+  if (from)   { where += ` AND je.entry_date >= $${pi++}`; params.push(from); }
+  if (to)     { where += ` AND je.entry_date <= $${pi++}`; params.push(to); }
 
   const [entries, counts] = await Promise.all([
     prisma.$queryRawUnsafe<JeRow[]>(
       `SELECT je.*,
-         json_agg(json_build_object(
-           'id', jl.id, 'lineNumber', jl.line_number, 'accountCode', jl.account_code,
-           'accountName', jl.account_name, 'description', jl.description,
-           'debitAmount', jl.debit_amount, 'creditAmount', jl.credit_amount,
-           'costCentre', jl.cost_centre
-         ) ORDER BY jl.line_number) FILTER (WHERE jl.id IS NOT NULL) as lines
+         COALESCE(
+           json_agg(json_build_object(
+             'id',          jl.id,
+             'lineNumber',  jl.line_number,
+             'accountCode', jl.account_code,
+             'accountName', jl.account_name,
+             'description', jl.description,
+             'debitAmount', jl.debit_amount,
+             'creditAmount',jl.credit_amount,
+             'costCentre',  jl.cost_centre
+           ) ORDER BY jl.line_number) FILTER (WHERE jl.id IS NOT NULL),
+           '[]'::json
+         ) AS lines
        FROM finance_journal_entries je
-       LEFT JOIN finance_journal_lines jl ON jl.journal_entry_id = je.id::text
-       ${where} GROUP BY je.id
+       LEFT JOIN finance_journal_lines jl ON jl.journal_entry_id = je.id
+       ${where}
+       GROUP BY je.id
        ORDER BY je.entry_date DESC, je.je_number DESC
-       LIMIT $${pi} OFFSET $${pi+1}`,
-      ...params, limit, offset
-    ).catch(() => []),
-    prisma.$queryRawUnsafe<{status: string; count: string; total_debit: string}[]>(
-      `SELECT status, COUNT(*)::text as count, COALESCE(SUM(total_debit),0)::text as total_debit
-         FROM finance_journal_entries WHERE deleted_at IS NULL GROUP BY status`
+       LIMIT $${pi} OFFSET $${pi + 1}`,
+      ...params, limit, offset,
+    ).catch(() => [] as JeRow[]),
+
+    prisma.$queryRawUnsafe<{ status: string; count: string; total_debit: string }[]>(
+      tenantId === '*'
+        ? `SELECT status, COUNT(*)::text AS count,
+                  COALESCE(SUM(total_debit), 0)::text AS total_debit
+             FROM finance_journal_entries
+            WHERE deleted_at IS NULL
+            GROUP BY status`
+        : `SELECT status, COUNT(*)::text AS count,
+                  COALESCE(SUM(total_debit), 0)::text AS total_debit
+             FROM finance_journal_entries
+            WHERE deleted_at IS NULL AND tenant_id = $1
+            GROUP BY status`,
+      ...(tenantId !== '*' ? [tenantId] : []),
     ).catch(() => []),
   ]);
 
   return NextResponse.json({ data: entries, counts, page, limit });
 }
 
+// ── POST /api/finance/journal-entries ────────────────────────────────────────
+
 export async function POST(req: NextRequest) {
-  await prisma.$executeRawUnsafe(INIT_JE).catch(() => {});
-  await prisma.$executeRawUnsafe(INIT_LINES).catch(() => {});
+  const tenantId = getTenant(req);
+  if (!tenantId || tenantId === '*') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const body = await req.json();
 
-  // Validate lines
-  const lines: {accountCode: string; accountName?: string; description?: string; debitAmount: number; creditAmount: number; costCentre?: string}[] = body.lines ?? [];
-  if (lines.length < 2) return NextResponse.json({ error: 'Journal entry must have at least 2 lines' }, { status: 400 });
+  const lines: {
+    accountCode: string;
+    accountName?: string;
+    description?: string;
+    debitAmount: number;
+    creditAmount: number;
+    costCentre?: string;
+  }[] = body.lines ?? [];
+
+  if (lines.length < 2) {
+    return NextResponse.json(
+      { error: 'Journal entry must have at least 2 lines' },
+      { status: 400 },
+    );
+  }
 
   const totalDebit  = lines.reduce((s, l) => s + (parseFloat(String(l.debitAmount))  || 0), 0);
   const totalCredit = lines.reduce((s, l) => s + (parseFloat(String(l.creditAmount)) || 0), 0);
   const isBalanced  = Math.abs(totalDebit - totalCredit) < 0.01;
 
   if (!isBalanced) {
-    return NextResponse.json({
-      error: `Journal entry is not balanced. Total Debits: ${totalDebit.toFixed(2)}, Total Credits: ${totalCredit.toFixed(2)}, Difference: ${(totalDebit - totalCredit).toFixed(2)}`
-    }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: `Journal entry is not balanced. Debits: ${totalDebit.toFixed(2)}, ` +
+               `Credits: ${totalCredit.toFixed(2)}, ` +
+               `Difference: ${(totalDebit - totalCredit).toFixed(2)}`,
+      },
+      { status: 400 },
+    );
   }
+
+  // Resolve account names from Chart of Accounts.
+  const accountCodes = lines.map(l => l.accountCode);
+  const accounts = await prisma.$queryRawUnsafe<
+    { account_code: string; account_name: string; normal_balance: string }[]
+  >(
+    `SELECT account_code, account_name, normal_balance
+       FROM finance_chart_of_accounts
+      WHERE account_code = ANY($1::text[]) AND tenant_id = $2`,
+    accountCodes, tenantId,
+  ).catch(() => []);
+  const accMap = new Map(accounts.map(a => [a.account_code, a]));
 
   const jeNumber  = await nextJeNumber();
   const entryDate = body.entryDate ?? new Date().toISOString().slice(0, 10);
   const d         = new Date(entryDate);
 
-  // Get account names for lines
-  const accountCodes = lines.map(l => l.accountCode);
-  const accounts = await prisma.$queryRawUnsafe<{account_code: string; account_name: string; normal_balance: string}[]>(
-    `SELECT account_code, account_name, normal_balance FROM finance_chart_of_accounts WHERE account_code = ANY($1::text[])`,
-    accountCodes
-  ).catch(() => []);
-  const accMap = new Map(accounts.map(a => [a.account_code, a]));
-
   const [je] = await prisma.$queryRawUnsafe<JeRow[]>(
     `INSERT INTO finance_journal_entries
-       (je_number, entry_date, period_year, period_month, narration, reference,
-        source_type, source_id, status, total_debit, total_credit, is_balanced,
-        prepared_by, notes, currency)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'DRAFT',$9,$10,$11,$12,$13,$14)
+       (je_number, entry_date, period_year, period_month,
+        narration, reference, source_type, source_id, status,
+        total_debit, total_credit, is_balanced,
+        prepared_by, notes, currency, tenant_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'DRAFT',$9,$10,$11,$12,$13,$14,$15)
      RETURNING *`,
-    jeNumber, entryDate, d.getFullYear(), d.getMonth() + 1,
-    body.narration, body.reference ?? null,
-    body.sourceType ?? 'MANUAL', body.sourceId ?? null,
-    totalDebit, totalCredit, isBalanced,
-    body.preparedBy ?? null, body.notes ?? null,
-    body.currency ?? 'AED',
+    jeNumber,
+    entryDate,
+    d.getFullYear(),
+    d.getMonth() + 1,
+    body.narration,
+    body.reference  ?? null,
+    body.sourceType ?? 'MANUAL',
+    body.sourceId   ?? null,
+    totalDebit,
+    totalCredit,
+    isBalanced,
+    body.preparedBy ?? req.headers.get('x-user-id') ?? null,
+    body.notes      ?? null,
+    body.currency   ?? 'AED',
+    tenantId,
   ).catch(() => []);
 
-  if (!je) return NextResponse.json({ error: 'Failed to create journal entry' }, { status: 500 });
+  if (!je) {
+    return NextResponse.json({ error: 'Failed to create journal entry' }, { status: 500 });
+  }
   const jeId = (je as Record<string, string>).id;
 
-  // Insert lines
   for (let i = 0; i < lines.length; i++) {
     const l   = lines[i];
     const acc = accMap.get(l.accountCode);
     await prisma.$executeRawUnsafe(
       `INSERT INTO finance_journal_lines
-         (journal_entry_id, line_number, account_code, account_name, description,
-          debit_amount, credit_amount, normal_balance, cost_centre)
+         (journal_entry_id, line_number, account_code, account_name,
+          description, debit_amount, credit_amount, normal_balance, cost_centre)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      jeId, i + 1, l.accountCode, acc?.account_name ?? l.accountName ?? null,
+      jeId,
+      i + 1,
+      l.accountCode,
+      acc?.account_name ?? l.accountName ?? null,
       l.description ?? null,
-      parseFloat(String(l.debitAmount)) || 0,
+      parseFloat(String(l.debitAmount))  || 0,
       parseFloat(String(l.creditAmount)) || 0,
       acc?.normal_balance ?? 'DEBIT',
       l.costCentre ?? null,
     ).catch(() => {});
   }
 
-  // Return JE with lines
   const [result] = await prisma.$queryRawUnsafe<JeRow[]>(
     `SELECT je.*,
-       json_agg(json_build_object(
-         'id', jl.id, 'lineNumber', jl.line_number, 'accountCode', jl.account_code,
-         'accountName', jl.account_name, 'description', jl.description,
-         'debitAmount', jl.debit_amount, 'creditAmount', jl.credit_amount
-       ) ORDER BY jl.line_number) as lines
+       COALESCE(
+         json_agg(json_build_object(
+           'id',          jl.id,
+           'lineNumber',  jl.line_number,
+           'accountCode', jl.account_code,
+           'accountName', jl.account_name,
+           'description', jl.description,
+           'debitAmount', jl.debit_amount,
+           'creditAmount',jl.credit_amount
+         ) ORDER BY jl.line_number),
+         '[]'::json
+       ) AS lines
      FROM finance_journal_entries je
-     LEFT JOIN finance_journal_lines jl ON jl.journal_entry_id = je.id::text
-     WHERE je.id = $1 GROUP BY je.id`, jeId
+     LEFT JOIN finance_journal_lines jl ON jl.journal_entry_id = je.id
+     WHERE je.id = $1 GROUP BY je.id`,
+    jeId,
   ).catch(() => []);
 
   return NextResponse.json(result ?? je, { status: 201 });

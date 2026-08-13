@@ -1,23 +1,80 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
 
-export async function GET(req: NextRequest) {
-  try {
+const CACHE_TAG = 'leasing:analytics';
+
+/**
+ * Leasing analytics — multi-tenant dashboard KPIs.
+ *
+ * Multi-tenant: every model in the analytics Promise.all is filtered by
+ * `tenantId` from x-tenant-id (set by middleware). This is the Layer 2.5
+ * fix that closes TENANT-001 for the leasing analytics surface.
+ *
+ * Note: `leaseContractVehicle` and `leaseQuotationItem` do not have their
+ * own tenantId column (intentional — they are scoped via the parent
+ * LeaseContract2 / LeaseQuotation that IS in the where filter).
+ *
+ * Performance: the heavy work (9 Prisma queries + JS-side reduction across
+ * thousands of rows) is wrapped in cacheRead so repeated page loads on the
+ * leasing dashboard don't re-pay that cost. 60s server cache, 300s browser
+ * stale-while-revalidate. Per-tenant key keeps responses isolated (we
+ * cannot use public CDN cache because the URL doesn't carry the tenantId).
+ */
+
+// Heavy work extracted into a cacheable, self-contained function. No
+// closures over request state — only the tenantId parameter.
+const getLeasingAnalytics = cacheRead(
+  async (tenantId: string) => {
     const now = new Date();
     const startOfYear = new Date(now.getFullYear(), 0, 1);
     const last6Months = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+    const safe = async <T>(label: string, promise: Promise<T[]>): Promise<T[]> => {
+      try {
+        return await promise;
+      } catch (error) {
+        console.warn(`[leasing analytics] ${label} unavailable`, error);
+        return [];
+      }
+    };
 
-    const [contracts, contractVehicles, payments, overages, fines, fuel, insurance, renewals, remarketing, lessees] = await Promise.all([
-      prisma.leaseContract2.findMany({ where: { deletedAt: null }, select: { id: true, contractNumber: true, status: true, monthlyRate: true, totalContractValue: true, startDate: true, endDate: true, lesseeId: true } }),
-      prisma.leaseContractVehicle.findMany({ select: { id: true, contractId: true, status: true } }),
-      prisma.leasePayment2.findMany({ select: { id: true, contractId: true, amount: true, totalAmount: true, status: true, dueDate: true, paidDate: true, periodMonth: true, periodYear: true } }),
-      prisma.leaseMileageOverage.findMany({ select: { id: true, contractId: true, overageAmount: true, status: true, createdAt: true } }),
-      prisma.leaseTrafficFine.findMany({ select: { id: true, contractId: true, finalAmount: true, fineAmount: true, billingStatus: true, violationDate: true } }),
-      prisma.leaseFuelLog.findMany({ select: { id: true, contractId: true, totalCost: true, billingStatus: true, fuelDate: true } }),
-      prisma.leaseInsurancePolicy.findMany({ where: { deletedAt: null }, select: { id: true, status: true, expiryDate: true, premium: true } }),
-      prisma.leaseRenewal.findMany({ select: { id: true, status: true, createdAt: true } }),
-      prisma.leaseRemarketing.findMany({ select: { id: true, stage: true, saleProfit: true, saleDate: true } }),
-      prisma.lessee.findMany({ where: { deletedAt: null }, select: { id: true, type: true } }),
+    const [contracts, contractVehicles, payments, overages, fines, fuel, insurance, renewals, lessees] = await Promise.all([
+      safe('contracts', prisma.leaseContract2.findMany({
+        where: { tenantId, deletedAt: null },
+        select: { id: true, contractNumber: true, status: true, monthlyRate: true, totalContractValue: true, startDate: true, endDate: true, lesseeId: true },
+      })),
+      safe('contract vehicles', prisma.leaseContractVehicle.findMany({
+        where: { contract: { tenantId } },
+        select: { id: true, contractId: true, status: true },
+      })),
+      safe('legacy leasing payments', prisma.leasePayment2.findMany({
+        where: { tenantId },
+        select: { id: true, contractId: true, amount: true, totalAmount: true, status: true, dueDate: true, paidDate: true, periodMonth: true, periodYear: true },
+      })),
+      safe('mileage overages', prisma.leaseMileageOverage.findMany({
+        where: { tenantId },
+        select: { id: true, contractId: true, overageAmount: true, status: true, createdAt: true },
+      })),
+      safe('traffic fines', prisma.leaseTrafficFine.findMany({
+        where: { tenantId },
+        select: { id: true, contractId: true, finalAmount: true, fineAmount: true, billingStatus: true, violationDate: true },
+      })),
+      safe('fuel logs', prisma.leaseFuelLog.findMany({
+        where: { tenantId },
+        select: { id: true, contractId: true, totalCost: true, billingStatus: true, fuelDate: true },
+      })),
+      safe('insurance policies', prisma.leaseInsurancePolicy.findMany({
+        where: { tenantId, deletedAt: null },
+        select: { id: true, status: true, expiryDate: true, premium: true },
+      })),
+      safe('renewals', prisma.leaseRenewal.findMany({
+        where: { tenantId },
+        select: { id: true, status: true, createdAt: true },
+      })),
+      safe('lessees', prisma.lessee.findMany({
+        where: { tenantId, deletedAt: null },
+        select: { id: true, type: true },
+      })),
     ]);
 
     // Portfolio KPIs
@@ -52,18 +109,11 @@ export async function GET(req: NextRequest) {
       return days >= 0 && days <= 30;
     });
 
-    // Remarketing P&L
-    const soldVehicles  = remarketing.filter(r => r.stage === 'SOLD');
-    const remarketingPL = soldVehicles.reduce((s, r) => s + Number(r.saleProfit ?? 0), 0);
-
     // Utilisation rate (active / total fleet - rough)
     const totalLessees     = lessees.length;
     const corporateLessees = lessees.filter(l => l.type === 'corporate').length;
 
-    // ── Real fleet utilisation: active vehicle-months / available vehicle-months
-    //    over the trailing 6 months window. A LeaseContractVehicle counts as
-    //    "active" for any month it spent inside that window with status=ACTIVE
-    //    on a non-terminated contract.
+    // Real fleet utilisation: active vehicle-months / available vehicle-months
     const utilisationWindowStart = last6Months;
     const monthBuckets: string[] = [];
     {
@@ -83,7 +133,6 @@ export async function GET(req: NextRequest) {
         const [y, m] = bucket.split('-').map(Number);
         const monthStart = new Date(y, m - 1, 1);
         const monthEnd = new Date(y, m, 0, 23, 59, 59);
-        // Vehicle existed in this month if the contract overlapped it.
         const overlapped = c.startDate <= monthEnd && c.endDate >= monthStart;
         if (!overlapped) continue;
         totalVehicleMonths += 1;
@@ -93,11 +142,10 @@ export async function GET(req: NextRequest) {
       }
     }
     const utilisationPct = totalVehicleMonths > 0
-      ? Math.round((activeVehicleMonths / totalVehicleMonths) * 1000) / 10  // 1dp
+      ? Math.round((activeVehicleMonths / totalVehicleMonths) * 1000) / 10
       : 0;
 
-    // ── Top-5 contracts by net revenue contribution (paid revenue this YTD
-    //    minus unbilled exposure: fines + fuel + overage on the same contract).
+    // Top-5 contracts by net revenue contribution
     const revenueByContract = new Map<string, number>();
     for (const p of payments.filter(p => p.status === 'PAID' && p.paidDate && new Date(p.paidDate) >= startOfYear)) {
       revenueByContract.set(p.contractId, (revenueByContract.get(p.contractId) ?? 0) + Number(p.totalAmount ?? p.amount));
@@ -123,7 +171,7 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => b.netContribution - a.netContribution)
       .slice(0, 5);
 
-    return NextResponse.json({
+    return {
       kpis: {
         activeContracts: activeContracts.length,
         totalContracts:  contracts.length,
@@ -134,7 +182,6 @@ export async function GET(req: NextRequest) {
         totalUnbilled,
         expiringPolicies: expiringPolicies.length,
         renewalsPending: renewals.filter(r => r.status === 'PROPOSED' || r.status === 'SENT_TO_CUSTOMER').length,
-        remarketingPL,
         totalLessees,
         corporateLessees,
         utilisationPct,
@@ -148,6 +195,21 @@ export async function GET(req: NextRequest) {
         pendingBillingBreakdown: { fines: pendingFines, fuel: pendingFuel, mileageOverage: pendingOverage },
       },
       topContracts,
+    };
+  },
+  [CACHE_TAG],
+  60,
+);
+
+export async function GET(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+  try {
+    const data = await getLeasingAnalytics(tenantId);
+    return NextResponse.json(data, {
+      headers: { 'Cache-Control': privateCacheControl(60, 300) },
     });
   } catch (e) {
     console.error(e);

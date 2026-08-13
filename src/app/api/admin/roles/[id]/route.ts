@@ -1,13 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
+import { revalidateCache } from '@/lib/server-cache';
+
+const CACHE_TAG = 'roles:all';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const role = await prisma.role.findUnique({
-    where: { id: params.id },
-    include: { permissions: { include: { permission: true } } },
+  // Roles are tenant-scoped (tenantId column with RLS). Super admin can see
+  // any role by id, so we use the '*' wildcard.
+  return withPlatformAdmin(prisma, async (tx) => {
+    const role = await tx.role.findUnique({
+      where: { id: params.id },
+      include: { permissions: { include: { permission: true } } },
+    });
+    if (!role) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    return NextResponse.json(role, { headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' } });
   });
-  if (!role) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  return NextResponse.json(role);
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -15,10 +23,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const { permissions, ...data } = await req.json();
     // Super Admin can update any role including system roles
     // This allows editing name, description, isSystem flag etc.
-    const role = await prisma.role.update({
-      where: { id: params.id },
-      data,
-    });
+    const role = await withPlatformAdmin(prisma, (tx) =>
+      tx.role.update({
+        where: { id: params.id },
+        data,
+      })
+    );
+    await revalidateCache(CACHE_TAG);
     return NextResponse.json(role);
   } catch (e: any) {
     console.error('PATCH /api/admin/roles/[id] error:', e);
@@ -30,7 +41,10 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   try {
     // Super Admin can delete any role including system roles
     // The UI already shows a warning confirmation for system roles
-    await prisma.role.delete({ where: { id: params.id } });
+    await withPlatformAdmin(prisma, (tx) =>
+      tx.role.delete({ where: { id: params.id } })
+    );
+    await revalidateCache(CACHE_TAG);
     return NextResponse.json({ success: true });
   } catch (e: any) {
     console.error('DELETE /api/admin/roles/[id] error:', e);

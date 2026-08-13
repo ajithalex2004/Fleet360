@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth';
 import { ensureSeededForTenant } from '@/lib/service-config/schema';
 import { SERVICE_TONES, type ServiceTone, type ServiceCategoryWithTypes, type ServiceCategory, type ServiceType, type ServiceModuleMapping } from '@/types/service-config';
@@ -76,34 +77,38 @@ export async function GET(req: NextRequest) {
   await ensureSeededForTenant(auth.tenantId);
 
   try {
-    const [cats, types, mappings] = await Promise.all([
-      prisma.$queryRawUnsafe<CategoryRow[]>(
-        `SELECT id::text, tenant_id, key, name, description, icon, tone,
-                sort_order, is_system, created_at::text, updated_at::text
-         FROM service_categories
-         WHERE tenant_id = $1 AND deleted_at IS NULL
-         ORDER BY sort_order, name`,
-        auth.tenantId,
-      ),
-      prisma.$queryRawUnsafe<TypeRow[]>(
-        `SELECT id::text, tenant_id, category_id::text, key, name, description, icon, tone,
-                default_priority, sort_order, is_system, created_at::text, updated_at::text
-         FROM service_types
-         WHERE tenant_id = $1 AND deleted_at IS NULL
-         ORDER BY sort_order, name`,
-        auth.tenantId,
-      ),
-      prisma.$queryRawUnsafe<MappingRow[]>(
-        `SELECT m.service_type_id::text, m.linked_module, m.sub_module,
-                m.workflow_engine_enabled, m.notification_engine_enabled,
-                m.approval_engine_enabled, m.finance_engine_enabled,
-                m.dispatch_engine_enabled, m.updated_at::text
-         FROM service_module_mapping m
-         JOIN service_types t ON t.id = m.service_type_id
-         WHERE t.tenant_id = $1 AND t.deleted_at IS NULL`,
-        auth.tenantId,
-      ),
-    ]);
+    // service_categories / service_types / service_module_mapping all have
+    // tenant_id with RLS. Single wrap, three parallel queries.
+    const [cats, types, mappings] = await withTenantRls(prisma, auth.tenantId, (tx) =>
+      Promise.all([
+        tx.$queryRawUnsafe<CategoryRow[]>(
+          `SELECT id::text, tenant_id, key, name, description, icon, tone,
+                  sort_order, is_system, created_at::text, updated_at::text
+           FROM service_categories
+           WHERE tenant_id = $1 AND deleted_at IS NULL
+           ORDER BY sort_order, name`,
+          auth.tenantId,
+        ),
+        tx.$queryRawUnsafe<TypeRow[]>(
+          `SELECT id::text, tenant_id, category_id::text, key, name, description, icon, tone,
+                  default_priority, sort_order, is_system, created_at::text, updated_at::text
+           FROM service_types
+           WHERE tenant_id = $1 AND deleted_at IS NULL
+           ORDER BY sort_order, name`,
+          auth.tenantId,
+        ),
+        tx.$queryRawUnsafe<MappingRow[]>(
+          `SELECT m.service_type_id::text, m.linked_module, m.sub_module,
+                  m.workflow_engine_enabled, m.notification_engine_enabled,
+                  m.approval_engine_enabled, m.finance_engine_enabled,
+                  m.dispatch_engine_enabled, m.updated_at::text
+           FROM service_module_mapping m
+           JOIN service_types t ON t.id = m.service_type_id
+           WHERE t.tenant_id = $1 AND t.deleted_at IS NULL`,
+          auth.tenantId,
+        ),
+      ])
+    );
 
     const mappingByType = new Map(mappings.map(m => [m.service_type_id, mappingRowToApi(m)]));
     const typesByCat: Record<string, ServiceType[]> = {};
@@ -143,13 +148,15 @@ export async function POST(req: NextRequest) {
   await ensureSeededForTenant(auth.tenantId);
 
   try {
-    const inserted = await prisma.$queryRawUnsafe<CategoryRow[]>(
-      `INSERT INTO service_categories
-        (tenant_id, key, name, description, icon, tone, sort_order, is_system)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE)
-       RETURNING id::text, tenant_id, key, name, description, icon, tone,
-                 sort_order, is_system, created_at::text, updated_at::text`,
-      auth.tenantId, key, name, body.description ?? null, body.icon ?? null, tone, sortOrder,
+    const inserted = await withTenantRls(prisma, auth.tenantId, (tx) =>
+      tx.$queryRawUnsafe<CategoryRow[]>(
+        `INSERT INTO service_categories
+          (tenant_id, key, name, description, icon, tone, sort_order, is_system)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE)
+         RETURNING id::text, tenant_id, key, name, description, icon, tone,
+                   sort_order, is_system, created_at::text, updated_at::text`,
+        auth.tenantId, key, name, body.description ?? null, body.icon ?? null, tone, sortOrder,
+      )
     );
     const cat = inserted[0];
     if (!cat) return NextResponse.json({ ok: false, error: 'Insert returned no row' }, { status: 500 });

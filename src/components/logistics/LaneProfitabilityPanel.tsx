@@ -17,6 +17,7 @@
 import { useEffect, useState } from 'react';
 import { TrendingUp, TrendingDown, Route as RouteIcon } from 'lucide-react';
 import { Panel } from '@/components/ui/page-theme';
+import { fetchCached } from '@/lib/fetch-cache';
 
 interface LaneSummary {
   origin: string;
@@ -52,9 +53,11 @@ export default function LaneProfitabilityPanel() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/logistics/analytics/lanes?period=90&limit=50', { cache: 'no-store' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json() as LanesResponse;
+        // fetchCached dedupes — remounts within the 30s TTL return cached data
+        // without hitting the network.
+        const json = await fetchCached<LanesResponse>(
+          '/api/logistics/analytics/lanes?period=90&limit=50',
+        );
         if (!cancelled) { setData(json); setError(null); }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'fetch failed');

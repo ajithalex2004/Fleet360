@@ -3,10 +3,12 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(req: NextRequest) {
   try {
+    const tenantId = req.headers.get('x-tenant-id');
+    if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const { searchParams } = new URL(req.url);
     const scheduleId = searchParams.get('scheduleId');
     const logs = await prisma.tripLog.findMany({
-      where: scheduleId ? { scheduleId } : {},
+      where: { tenantId, ...(scheduleId ? { scheduleId } : {}) },
       include: { schedule: { include: { route: true } } },
       orderBy: { createdAt: 'desc' },
     });
@@ -18,8 +20,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const tenantId = req.headers.get('x-tenant-id');
+    if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const body = await req.json();
-    const log = await prisma.tripLog.create({ data: body });
+    const log = await prisma.tripLog.create({ data: { ...body, tenantId } });
     return NextResponse.json(log, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to create' }, { status: 500 });

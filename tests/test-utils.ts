@@ -10,13 +10,16 @@
 import * as crypto from 'crypto';
 import * as dotenv from 'dotenv';
 
-// Load env so DATABASE_URL is available when this module is imported standalone
+// Load env so DATABASE_URL is available when this module is imported standalone.
+// Order matters: .env.test first (test overrides), then .env with override=true
+// so the dev server's actual values (e.g. SESSION_SECRET) win. This is critical
+// for integration tests that hit the running dev server — the test must sign
+// session cookies with the SAME secret the server uses to verify them.
 dotenv.config({ path: '.env.test' });
-dotenv.config({ path: '.env' });
+dotenv.config({ path: '.env', override: true });
 
 // Web Crypto polyfill (Node < 20)
 if (typeof globalThis.crypto === 'undefined' || !globalThis.crypto.subtle) {
-  // @ts-expect-error polyfill
   globalThis.crypto = (crypto as any).webcrypto;
 }
 

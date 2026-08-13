@@ -112,8 +112,8 @@ function PermitPage({ data, lang }: PermitProps) {
       </View>
 
       <View style={s.destinationBanner}>
-        <Text style={[s.destinationLabel, { writingDirection: dir }]}>{t('destinationCountry', lang)}</Text>
-        <Text style={[s.destinationValue, { writingDirection: dir }]}>{data.destinationCountry}</Text>
+        <Text style={s.destinationLabel}>{t('destinationCountry', lang)}</Text>
+        <Text style={s.destinationValue}>{data.destinationCountry}</Text>
       </View>
 
       <View style={s.validityBlock}>
@@ -127,7 +127,7 @@ function PermitPage({ data, lang }: PermitProps) {
         </View>
       </View>
 
-      <Text style={[s.declaration, { writingDirection: dir }]}>{t('permitDeclaration', lang)}</Text>
+      <Text style={s.declaration}>{t('permitDeclaration', lang)}</Text>
 
       <Text style={s.sectionTitle}>{t('renter', lang)}</Text>
       <View style={s.panel}>
@@ -162,7 +162,7 @@ function PermitPage({ data, lang }: PermitProps) {
 
       <View style={s.conditions}>
         <Text style={s.conditionsTitle}>{t('termsConditions', lang)}</Text>
-        <Text style={{ writingDirection: dir }}>{t('permitConditions', lang)}</Text>
+        <Text>{t('permitConditions', lang)}</Text>
       </View>
 
       <View style={s.signRow}>

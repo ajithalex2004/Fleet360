@@ -48,8 +48,8 @@ interface PortalInvoice {
 }
 
 export default function LeasingPortalDashboard() {
-  const params = useParams();
-  const search = useSearchParams();
+  const params = useParams() ?? {};
+  const search = useSearchParams() ?? new URLSearchParams();
   const router = useRouter();
   const tenantSlug = (params?.tenantSlug as string) ?? '';
   const lesseeId = search.get('lesseeId') ?? '';

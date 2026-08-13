@@ -8,7 +8,7 @@
  *   - configured (= shared secret present in env)
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { gatewaySecretConfigured } from '@/lib/bus-gateway';
 
@@ -16,8 +16,12 @@ export const runtime = 'nodejs';
 
 const OFFLINE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes without heartbeat → offline
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const gateways = await prisma.bleGateway.findMany({
+    where: { tenantId },
     orderBy: { createdAt: 'desc' },
   });
   const now = Date.now();

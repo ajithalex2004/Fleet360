@@ -26,7 +26,8 @@ export async function PATCH(
             data: {
                 status: body.status,
                 assignedTo: body.assignedTo,
-                assignedDate: body.assignedDate,
+                // `body.assignedDate` is not persisted — Alert model has no timestamp column.
+                // It's accepted by the API for future use; strip it here to keep the call typed.
                 // Add other fields as needed
             },
         });

@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { ensureBrandingColumns, getBranding } from '@/lib/branding';
 import { getStorage } from '@/lib/storage';
 import { requirePlan } from '@/lib/plan-limits';
@@ -68,9 +69,11 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       prefix: `branding/${tenantId}`,
     });
 
-    await prisma.$executeRawUnsafe(
-      `UPDATE tenants SET brand_logo_url = $1, updated_at = NOW() WHERE id = $2`,
-      stored.url, tenantId,
+    await withTenantRls(prisma, tenantId, (tx) =>
+      tx.$executeRawUnsafe(
+        `UPDATE tenants SET brand_logo_url = $1, updated_at = NOW() WHERE id = $2`,
+        stored.url, tenantId,
+      )
     );
 
     void logAudit({

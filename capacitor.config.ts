@@ -1,0 +1,65 @@
+/**
+ * Capacitor config for the Fleet360 driver mobile app.
+ *
+ * `webDir` is set to the Next.js production output (`out/` after `next build`).
+ * For dev/iteration we use `npm run cap:sync:dev` which copies the current
+ * `.next/standalone` build to a `out/` dir Capacitor can pick up. For the
+ * first cut we ship the Capacitor scaffold but the actual native build is
+ * documented in `docs/DRIVER_MOBILE_APP_ROADMAP.md` — you need Xcode (iOS)
+ * and Android Studio to actually produce .ipa / .apk.
+ *
+ * `appId` MUST match a real bundle id you control (iOS + Play Store).
+ * `webDir` is set to `out` because the actual `next build` output for a
+ * static-export is in `./out`. We do NOT static-export the whole Next.js
+ * app — that would break the admin dashboard. Only the driver-app route
+ * group is mobile-built; the admin app stays a web app.
+ */
+import type { CapacitorConfig } from '@capacitor/cli';
+
+const config: CapacitorConfig = {
+  appId: 'com.fleet360.driver',
+  appName: 'Fleet360 Driver',
+  webDir: 'out/driver',
+  // The bundled WebView config. iOS + Android use the system WebView
+  // (WKWebView on iOS 14+, Chromium on Android 9+) — no Cordova,
+  // no embedded browser. Background colour matches the dark theme to
+  // avoid a white flash on cold start.
+  backgroundColor: '#0F172A',
+  // Server URL. We do NOT set `server.url` to an empty string — that
+  // caused `Uri.parse(null)` to throw on launch. Either omit the
+  // `server` block entirely (Capacitor then defaults to
+  // `https://localhost`, the standard "use bundled assets" URL on
+  // Android) or set it explicitly. We go with the explicit form for
+  // documentation. The driver app talks to the absolute API base
+  // configured at runtime via NEXT_PUBLIC_API_BASE.
+  server: {
+    url: 'https://localhost',
+    cleartext: false,
+  },
+  plugins: {
+    // Camera — DVIR defect photos. We restrict to environment + photos
+    // (no video) and prefer the system picker when possible (lighter
+    // permission model than in-app capture).
+    Camera: {
+      // Limit to stills. No video.
+      // (Plugin doesn't expose a direct flag; we enforce on the caller.)
+    },
+    SplashScreen: {
+      launchShowDuration: 800,
+      backgroundColor: '#0F172A',
+      androidSplashResourceName: 'splash',
+      iosContentMode: 'cover',
+      showSpinner: true,
+    },
+    StatusBar: {
+      style: 'DARK',
+      backgroundColor: '#0F172A',
+    },
+    Keyboard: {
+      resize: 'body',
+      resizeOnFullScreen: true,
+    },
+  },
+};
+
+export default config;

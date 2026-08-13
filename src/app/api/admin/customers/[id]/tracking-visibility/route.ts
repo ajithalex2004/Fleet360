@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import {
   setCustomerTrackingDefault,
   TRACKING_LEVELS,
@@ -37,12 +38,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     // Confirm the customer belongs to this tenant + capture the previous
     // level for the audit entry.
-    const own = await prisma.$queryRawUnsafe<Array<{ name_en: string; current: string | null }>>(
-      `SELECT name_en, portal_tracking_level AS current
-         FROM customers
-        WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
-        LIMIT 1`,
-      customerId, tenantId,
+    const own = await withTenantRls(prisma, tenantId, (tx) =>
+      tx.$queryRawUnsafe<Array<{ name_en: string; current: string | null }>>(
+        `SELECT name_en, portal_tracking_level AS current
+           FROM customers
+          WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
+          LIMIT 1`,
+        customerId, tenantId,
+      )
     );
     if (!own[0]) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 });

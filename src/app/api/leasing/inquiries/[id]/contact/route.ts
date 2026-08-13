@@ -5,6 +5,10 @@
  * Auto-creates a LeaseInquiryActivity entry of type CALL/EMAIL/SMS/WHATSAPP
  * so the timeline shows the contact happened.
  *
+ * Tenant scoping: requires x-tenant-id. The inquiry must belong to the
+ * caller's tenant; the new LeaseInquiryActivity row is stamped with the
+ * same tenantId.
+ *
  * Body:
  *   {
  *     channel: 'WHATSAPP' | 'EMAIL',
@@ -24,6 +28,10 @@ import { captureException } from '@/lib/sentry';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const body = await req.json();
     const channel = String(body?.channel ?? '').toUpperCase();
@@ -37,7 +45,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'body is required' }, { status: 400 });
     }
 
-    const inquiry = await prisma.leaseInquiry.findUnique({ where: { id: params.id } });
+    const inquiry = await prisma.leaseInquiry.findFirst({
+      where: { id: params.id, tenantId },
+    });
     if (!inquiry || inquiry.deletedAt) {
       return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
     }
@@ -80,6 +90,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         performedById: req.headers.get('x-user-id') ?? null,
         performedByName: req.headers.get('x-user-name') ?? null,
         followUpAt: body?.followUpAt ? new Date(body.followUpAt) : null,
+        tenantId,
       },
     });
 
@@ -92,7 +103,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
+      tenantId,
       userId: req.headers.get('x-user-id') ?? 'system',
       userRole: req.headers.get('x-user-role') ?? 'STAFF',
       entityType: 'LeaseInquiry',

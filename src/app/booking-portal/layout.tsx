@@ -7,7 +7,7 @@ import PlatformHomeBar from '@/components/PlatformHomeBar';
 
 import ModuleGuard from '@/components/ModuleGuard';
 export default function BookingPortalLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
 
   const navItems = [
     { href: '/booking-portal', label: 'All Bookings', icon: '📋' },

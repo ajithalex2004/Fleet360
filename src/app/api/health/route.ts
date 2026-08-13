@@ -11,7 +11,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { ensureDbConnected, prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic'; // never cache
 
@@ -26,6 +26,7 @@ export async function GET() {
   let dbStatus: 'connected' | 'error' = 'connected';
   let dbError: string | undefined;
   try {
+    await ensureDbConnected({ force: true, retries: 2, timeoutMs: 2_500 });
     await prisma.$queryRaw`SELECT 1`;
   } catch (err) {
     dbStatus = 'error';

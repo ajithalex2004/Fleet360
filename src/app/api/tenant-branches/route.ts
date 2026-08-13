@@ -31,78 +31,13 @@ export const LICENSE_AUTHORITIES: Record<string, string[]> = {
 };
 
 // ---------------------------------------------------------------------------
-// Bootstrap
+// Schema note
 // ---------------------------------------------------------------------------
-async function ensureTable() {
-  // Core table — must succeed
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS tenant_branches (
-      id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id                TEXT NOT NULL,
-      branch_name              TEXT NOT NULL,
-      emirate                  TEXT NOT NULL DEFAULT 'DUBAI',
-      trade_license_no         TEXT,
-      trade_license_authority  TEXT,
-      trade_license_expiry     DATE,
-      billing_address          TEXT,
-      billing_city             TEXT,
-      billing_po_box           TEXT,
-      contact_name             TEXT,
-      contact_email            TEXT,
-      contact_phone            TEXT,
-      cost_center_code         TEXT,
-      is_default               BOOLEAN NOT NULL DEFAULT FALSE,
-      is_active                BOOLEAN NOT NULL DEFAULT TRUE,
-      notes                    TEXT,
-      created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      deleted_at               TIMESTAMPTZ
-    )
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_tenant_branches_tenant ON tenant_branches(tenant_id) WHERE deleted_at IS NULL
-  `).catch(() => {});
-
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_tenant_branches_emirate ON tenant_branches(emirate) WHERE deleted_at IS NULL
-  `).catch(() => {});
-
-  // Add trn column to tenants if it doesn't exist yet
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trn TEXT
-  `).catch(() => {});
-
-  // Add branch_id to finance_invoices if missing
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES tenant_branches(id) ON DELETE SET NULL
-  `).catch(() => {});
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS branch_name TEXT
-  `).catch(() => {});
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS branch_trade_license TEXT
-  `).catch(() => {});
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS branch_address TEXT
-  `).catch(() => {});
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS tenant_id TEXT
-  `).catch(() => {});
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS module_source TEXT
-  `).catch(() => {});
-
-  // Add branch_id to vehicles if missing
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES tenant_branches(id) ON DELETE SET NULL
-  `).catch(() => {});
-
-  // Add branch_id to trip_logs if missing
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE trip_logs ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES tenant_branches(id) ON DELETE SET NULL
-  `).catch(() => {});
-}
+// tenant_branches, tenants.trn, vehicles.branch_id, and trip_logs.branch_id
+// are all migration-managed:
+//   20260810000002_tenant_branches_and_fleet_columns  — table + fleet columns
+//   20260810000001_finance_extended_columns           — finance_invoices columns
+// Do NOT add runtime DDL here.
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -139,8 +74,6 @@ function serializeRow(row: Row): Row {
 // ?includeInactive=true — include inactive branches
 // ---------------------------------------------------------------------------
 export async function GET(req: NextRequest) {
-  await ensureTable();
-
   const { searchParams } = new URL(req.url);
   const tenantId        = searchParams.get('tenantId') ?? '';
   const emirate         = searchParams.get('emirate') ?? '';
@@ -232,8 +165,6 @@ export async function GET(req: NextRequest) {
 // POST /api/tenant-branches — create branch
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
-  await ensureTable();
-
   try {
     const body = await req.json();
     const {
@@ -301,8 +232,6 @@ export async function POST(req: NextRequest) {
 // Body: { id, ...fields }
 // ---------------------------------------------------------------------------
 export async function PATCH(req: NextRequest) {
-  await ensureTable();
-
   try {
     const body = await req.json();
     const { id, tenantId, ...fields } = body;
@@ -376,8 +305,6 @@ export async function PATCH(req: NextRequest) {
 // Body: { id }
 // ---------------------------------------------------------------------------
 export async function DELETE(req: NextRequest) {
-  await ensureTable();
-
   try {
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });

@@ -34,6 +34,7 @@ export async function POST(request: Request) {
             // Log as 'Sent' (Mock) so UI shows success
             await prisma.notificationLog.create({
                 data: {
+                    id: crypto.randomUUID(),
                     recipient: finalRecipient,
                     type: 'Email',
                     subject,
@@ -71,6 +72,7 @@ export async function POST(request: Request) {
             // 4. Log Success
             await prisma.notificationLog.create({
                 data: {
+                    id: crypto.randomUUID(),
                     recipient: finalRecipient,
                     type: 'Email',
                     subject,
@@ -88,6 +90,7 @@ export async function POST(request: Request) {
             // 4. Log Failure
             await prisma.notificationLog.create({
                 data: {
+                    id: crypto.randomUUID(),
                     recipient: finalRecipient,
                     type: 'Email',
                     subject,

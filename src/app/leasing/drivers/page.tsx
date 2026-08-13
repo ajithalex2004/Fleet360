@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
+import { Users } from 'lucide-react';
+import StaffModal from '@/components/leasing/StaffModal';
 
 interface Driver {
   id: string;
@@ -41,6 +43,7 @@ export default function LeasingDriversPage() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
   const [scope, setScope] = useState<'allocated' | 'all'>('allocated');
+  const [showStaff, setShowStaff] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -87,6 +90,13 @@ export default function LeasingDriversPage() {
             All Drivers
           </button>
         </div>
+        <button
+          onClick={() => setShowStaff(true)}
+          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+          title="Manage branch staff assignments across leasing branches"
+        >
+          <Users className="h-4 w-4" /> Branch Staff
+        </button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -179,6 +189,7 @@ export default function LeasingDriversPage() {
           Per-contract driver picker is on the contract detail page.
         </p>
       </div>
+      {showStaff && <StaffModal onClose={() => setShowStaff(false)} />}
     </div>
   );
 }

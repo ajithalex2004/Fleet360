@@ -3,6 +3,8 @@
 // ============================================================
 
 // ─── LEASING ────────────────────────────────────────────────
+// Canonical DB model: LeaseContract2 (+ LeasePayment2 and sibling tables).
+// Use Prisma-generated types for lease entities — see prisma/schema.prisma.
 export type LeaseStatus = 'DRAFT' | 'APPROVED' | 'ACTIVE' | 'EXTENDED' | 'TERMINATED' | 'CLOSED';
 export type LeasePaymentStatus = 'PENDING' | 'PAID' | 'OVERDUE';
 
@@ -20,48 +22,6 @@ export interface Lessee {
   address?: string;
   nationality?: string;
   emiratesId?: string;
-  leaseContracts?: LeaseContract[];
-}
-
-export interface LeaseContract {
-  id: string;
-  createdAt?: string;
-  updatedAt?: string;
-  contractNumber?: string;
-  lesseeId: string;
-  lessee?: Lessee;
-  vehicleId: string;
-  startDate: string;
-  endDate: string;
-  monthlyRate: number;
-  mileageCap?: number;
-  securityDeposit?: number;
-  currency?: string;
-  status?: LeaseStatus;
-  notes?: string;
-  payments?: LeasePayment[];
-  returns?: LeaseVehicleReturn[];
-}
-
-export interface LeasePayment {
-  id: string;
-  contractId: string;
-  dueDate: string;
-  amount: number;
-  paidDate?: string;
-  receiptNo?: string;
-  status?: LeasePaymentStatus;
-}
-
-export interface LeaseVehicleReturn {
-  id: string;
-  contractId: string;
-  returnDate: string;
-  mileage?: number;
-  condition?: string;
-  damages?: string;
-  inspector?: string;
-  finalCost?: number;
 }
 
 // ─── RENT-A-CAR ──────────────────────────────────────────────

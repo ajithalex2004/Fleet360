@@ -2,41 +2,37 @@
  * Revenue Analysis API — /api/finance/revenue-analysis
  * Vehicle-level and Customer-level profitability from finance_invoices
  * + maintenance cost from maintenance module + depreciation from fixed_assets
+ *
+ * vehicle_no, contract_type, branch columns on finance_invoices are managed by
+ * Prisma migration 20260810000001_finance_extended_columns.
+ * Runtime ALTER TABLE bootstrap() removed — schema is authoritative.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-async function bootstrap() {
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS vehicle_no TEXT
-  `).catch(() => {});
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS contract_type TEXT
-  `).catch(() => {});
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS branch TEXT DEFAULT 'Dubai'
-  `).catch(() => {});
-}
-
 export async function GET(req: NextRequest) {
-  await bootstrap();
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Missing x-tenant-id header' }, { status: 401 });
+  }
 
-  const p          = req.nextUrl.searchParams;
-  const view       = p.get('view') ?? 'vehicle';  // vehicle | customer | branch
-  const branch     = p.get('branch');
-  const module_f   = p.get('module');
-  const date_from  = p.get('date_from');
-  const date_to    = p.get('date_to');
-  const search     = p.get('search');
+  const p         = req.nextUrl.searchParams;
+  const view      = p.get('view') ?? 'vehicle';   // vehicle | customer | branch
+  const branch    = p.get('branch');
+  const module_f  = p.get('module');
+  const date_from = p.get('date_from');
+  const date_to   = p.get('date_to');
+  const search    = p.get('search');
 
-  let where = `WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED')`;
-  const params: unknown[] = [];
-  let idx = 1;
+  // tenant scoping is the mandatory first condition ($1)
+  let where = `WHERE tenant_id = $1 AND deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED')`;
+  const params: unknown[] = [tenantId];
+  let idx = 2;
 
-  if (branch)    { where += ` AND branch = $${idx++}`;                 params.push(branch); }
-  if (module_f)  { where += ` AND module = $${idx++}`;                 params.push(module_f); }
-  if (date_from) { where += ` AND issue_date >= $${idx++}`;            params.push(date_from); }
-  if (date_to)   { where += ` AND issue_date <= $${idx++}`;            params.push(date_to); }
+  if (branch)    { where += ` AND branch = $${idx++}`;      params.push(branch); }
+  if (module_f)  { where += ` AND module = $${idx++}`;      params.push(module_f); }
+  if (date_from) { where += ` AND issue_date >= $${idx++}`; params.push(date_from); }
+  if (date_to)   { where += ` AND issue_date <= $${idx++}`; params.push(date_to); }
   if (search && view === 'vehicle')  {
     where += ` AND vehicle_no ILIKE $${idx}`;
     params.push(`%${search}%`); idx++;
@@ -67,7 +63,7 @@ export async function GET(req: NextRequest) {
       LIMIT 100
     `, ...params) as Record<string, unknown>[];
 
-    // Maintenance costs per vehicle
+    // Maintenance costs per vehicle (cross-module; no tenant scope on this table yet)
     const maint_costs = await prisma.$queryRawUnsafe(`
       SELECT
         COALESCE(vehicle_registration, vehicle_id::text, 'UNKNOWN') AS vehicle_no,
@@ -107,22 +103,22 @@ export async function GET(req: NextRequest) {
       const net_margin = gross - total_cost;
       const margin_pct = gross > 0 ? (net_margin / gross) * 100 : 0;
       return {
-        vehicle_no:       vno,
-        module:           r.module,
-        branch:           r.branch,
-        invoice_count:    Number(r.invoice_count),
-        gross_revenue:    gross,
-        collected:        Number(r.collected ?? 0),
-        outstanding:      Number(r.outstanding ?? 0),
-        vat_collected:    Number(r.vat_collected ?? 0),
-        maint_cost:       maint,
-        maint_count:      maintMap[vno]?.count ?? 0,
-        depreciation:     depr,
+        vehicle_no:    vno,
+        module:        r.module,
+        branch:        r.branch,
+        invoice_count: Number(r.invoice_count),
+        gross_revenue: gross,
+        collected:     Number(r.collected ?? 0),
+        outstanding:   Number(r.outstanding ?? 0),
+        vat_collected: Number(r.vat_collected ?? 0),
+        maint_cost:    maint,
+        maint_count:   maintMap[vno]?.count ?? 0,
+        depreciation:  depr,
         total_cost,
         net_margin,
-        margin_pct:       Math.round(margin_pct * 10) / 10,
-        first_invoice:    r.first_invoice,
-        last_invoice:     r.last_invoice,
+        margin_pct:    Math.round(margin_pct * 10) / 10,
+        first_invoice: r.first_invoice,
+        last_invoice:  r.last_invoice,
       };
     });
 
@@ -187,13 +183,13 @@ export async function GET(req: NextRequest) {
   // ── Branch Revenue Breakdown ──────────────────────────────────────────────
   const branches = await prisma.$queryRawUnsafe(`
     SELECT
-      COALESCE(branch, 'Unassigned')   AS branch,
+      COALESCE(branch, 'Unassigned') AS branch,
       module,
-      COUNT(*)                          AS invoice_count,
-      SUM(total_amount)                 AS gross_revenue,
-      SUM(paid_amount)                  AS collected,
-      SUM(vat_amount)                   AS vat_amount,
-      COUNT(DISTINCT client_name)       AS customer_count
+      COUNT(*)                        AS invoice_count,
+      SUM(total_amount)               AS gross_revenue,
+      SUM(paid_amount)                AS collected,
+      SUM(vat_amount)                 AS vat_amount,
+      COUNT(DISTINCT client_name)     AS customer_count
     FROM finance_invoices
     ${where}
     GROUP BY branch, module

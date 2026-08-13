@@ -1,78 +1,37 @@
 /**
  * Plan limits + gating helpers.
  *
- * Pure module — no DB calls. Combine with usage counters and the
- * tenant's current plan (from /api/auth/me header x-tenant-plan)
- * to enforce quotas.
- *
- * Limits intentionally generous so trial doesn't hard-block early
- * exploration. Adjust per business reality.
+ * Re-exports from @/lib/plans which is the canonical reader. The data
+ * lives in the `platform_plans` table and is admin-editable via
+ * /admin/platform-plans. This module keeps its public API stable so
+ * existing route handlers don't have to change.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { PlanCode } from '@/lib/billing';
+import { getLimits as _getLimits, planAtLeast as _planAtLeast } from '@/lib/plans';
+import type { PlanLimits } from '@/lib/plans';
 
-export interface PlanLimits {
-  maxUsers:               number;
-  maxVehicles:            number;
-  maxBookingsPerMonth:    number;
-  /** Modules gated behind higher plans — others unlock everywhere. */
-  premiumModules:         readonly string[];
-  /** Whether a tenant on this plan can configure SSO. */
-  sso:                    boolean;
-  /** Whether a tenant on this plan can issue API keys. */
-  apiKeys:                boolean;
-  /** Whether a tenant on this plan can white-label. */
-  branding:               boolean;
+export type { PlanLimits };
+
+/**
+ * Re-export the limits table. Kept as a `Record<string, PlanLimits>` for
+ * back-compat with any caller that did `PLAN_LIMITS[code]`. The four
+ * canonical codes (TRIAL / STANDARD / PROFESSIONAL / ENTERPRISE) are
+ * always present; the rest come from whatever's in the DB cache.
+ */
+export const PLAN_LIMITS: Record<string, PlanLimits> = new Proxy(
+  {} as Record<string, PlanLimits>,
+  {
+    get: (_target, prop: string) => _getLimits(prop),
+  },
+);
+
+export function planAtLeast(actual: string, minimum: string): boolean {
+  return _planAtLeast(actual, minimum);
 }
 
-export const PLAN_LIMITS: Record<PlanCode, PlanLimits> = {
-  TRIAL: {
-    maxUsers:            5,
-    maxVehicles:         10,
-    maxBookingsPerMonth: 200,
-    premiumModules:      [],
-    sso:                 false,
-    apiKeys:             false,
-    branding:            false,
-  },
-  STANDARD: {
-    maxUsers:            25,
-    maxVehicles:         100,
-    maxBookingsPerMonth: 5_000,
-    premiumModules:      [],
-    sso:                 false,
-    apiKeys:             true,
-    branding:            false,
-  },
-  PROFESSIONAL: {
-    maxUsers:            200,
-    maxVehicles:         1_000,
-    maxBookingsPerMonth: 50_000,
-    premiumModules:      [],
-    sso:                 true,
-    apiKeys:             true,
-    branding:            true,
-  },
-  ENTERPRISE: {
-    maxUsers:            Number.POSITIVE_INFINITY,
-    maxVehicles:         Number.POSITIVE_INFINITY,
-    maxBookingsPerMonth: Number.POSITIVE_INFINITY,
-    premiumModules:      [],
-    sso:                 true,
-    apiKeys:             true,
-    branding:            true,
-  },
-};
-
-const PLAN_RANK: Record<PlanCode, number> = { TRIAL: 0, STANDARD: 1, PROFESSIONAL: 2, ENTERPRISE: 3 };
-
-export function planAtLeast(actual: PlanCode, minimum: PlanCode): boolean {
-  return PLAN_RANK[actual] >= PLAN_RANK[minimum];
-}
-
-export function getLimits(plan: PlanCode): PlanLimits {
-  return PLAN_LIMITS[plan] ?? PLAN_LIMITS.TRIAL;
+export function getLimits(plan: string): PlanLimits {
+  return _getLimits(plan);
 }
 
 // ── Route-level gating ──────────────────────────────────────────────────────
@@ -84,8 +43,8 @@ export function getLimits(plan: PlanCode): PlanLimits {
  *   const gate = requirePlan(req, 'PROFESSIONAL');
  *   if (gate) return gate;
  */
-export function requirePlan(req: NextRequest, minimumPlan: PlanCode): NextResponse | null {
-  const plan = (req.headers.get('x-tenant-plan') ?? 'TRIAL') as PlanCode;
+export function requirePlan(req: NextRequest, minimumPlan: string): NextResponse | null {
+  const plan = (req.headers.get('x-tenant-plan') ?? 'TRIAL');
   if (planAtLeast(plan, minimumPlan)) return null;
 
   return NextResponse.json(
@@ -106,7 +65,7 @@ export function requirePlan(req: NextRequest, minimumPlan: PlanCode): NextRespon
  * with details so the client can render a sensible upgrade prompt.
  */
 export function requireUnderQuota(opts: {
-  plan:       PlanCode;
+  plan:       string;
   resource:   keyof Pick<PlanLimits, 'maxUsers' | 'maxVehicles' | 'maxBookingsPerMonth'>;
   current:    number;
 }): NextResponse | null {

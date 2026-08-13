@@ -5,65 +5,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-const INIT_CATEGORIES = `
-  CREATE TABLE IF NOT EXISTS finance_tax_categories (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at  TIMESTAMPTZ DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ DEFAULT NOW(),
-    code        TEXT UNIQUE NOT NULL,
-    name        TEXT NOT NULL,
-    rate        NUMERIC(5,2) NOT NULL DEFAULT 0,
-    description TEXT,
-    is_default  BOOLEAN DEFAULT FALSE,
-    is_active   BOOLEAN DEFAULT TRUE,
-    fta_code    TEXT
-  );
-`;
-
-const INIT_AUDIT = `
-  CREATE TABLE IF NOT EXISTS finance_vat_audit_logs (
-    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at   TIMESTAMPTZ DEFAULT NOW(),
-    action       TEXT NOT NULL,
-    entity_type  TEXT,
-    entity_id    TEXT,
-    performed_by TEXT,
-    details      JSONB,
-    ip_address   TEXT,
-    notes        TEXT
-  );
-`;
-
-const DEFAULT_CATEGORIES = [
-  { code: 'STANDARD',     name: 'Standard Rate',    rate: 5.00,  description: 'Standard UAE VAT at 5%',                    fta_code: '1a', is_default: true  },
-  { code: 'ZERO',         name: 'Zero-Rated',       rate: 0.00,  description: 'Inter-emirate transport, exports, medicines', fta_code: '1b', is_default: false },
-  { code: 'EXEMPT',       name: 'Exempt',            rate: 0.00,  description: 'Bare land, residential properties, local transport (some conditions)', fta_code: '1c', is_default: false },
-  { code: 'OUT_OF_SCOPE', name: 'Out of Scope',      rate: 0.00,  description: 'Outside UAE VAT scope entirely',             fta_code: 'OOS', is_default: false },
-];
+// finance_tax_categories and finance_vat_audit_logs are created + seeded by
+// migration 20260810000003_finance_reference_data_seed — no runtime DDL needed.
 
 type TaxRow = Record<string, unknown>;
 
-async function ensureDefaults() {
-  const [{ count }] = await prisma.$queryRawUnsafe<{ count: string }[]>(
-    `SELECT COUNT(*)::text as count FROM finance_tax_categories`
-  ).catch(() => [{ count: '0' }]);
-
-  if (parseInt(count) === 0) {
-    for (const cat of DEFAULT_CATEGORIES) {
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO finance_tax_categories (code,name,rate,description,fta_code,is_default)
-         VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (code) DO NOTHING`,
-        cat.code, cat.name, cat.rate, cat.description, cat.fta_code, cat.is_default
-      ).catch(() => {});
-    }
-  }
-}
-
 export async function GET(req: NextRequest) {
-  await prisma.$executeRawUnsafe(INIT_CATEGORIES).catch(() => {});
-  await prisma.$executeRawUnsafe(INIT_AUDIT).catch(() => {});
-  await ensureDefaults();
-
   const sp = req.nextUrl.searchParams;
   const type = sp.get('type'); // categories | audit | summary
 
@@ -96,8 +43,8 @@ export async function GET(req: NextRequest) {
 
     // Output VAT from logistics
     const [logRow] = await prisma.$queryRawUnsafe<{ total: string }[]>(
-      `SELECT COALESCE(SUM(total_amount * 0.05 / 1.05),0)::text as total
-         FROM logistics_bookings WHERE deleted_at IS NULL
+      `SELECT COALESCE(SUM(customer_rate_amount * 0.05 / 1.05),0)::text as total
+         FROM logistics_shipment_orders WHERE deleted_at IS NULL
            AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')
            AND created_at::date BETWEEN $1 AND $2`,
       startDate, endDate
@@ -156,7 +103,6 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  await prisma.$executeRawUnsafe(INIT_CATEGORIES).catch(() => {});
   const body = await req.json();
 
   if (body.type === 'audit_log') {

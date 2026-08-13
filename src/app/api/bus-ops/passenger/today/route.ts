@@ -13,13 +13,21 @@ import { prisma } from '@/lib/prisma';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
+  // Audit risk #13 — tenant scoping. Middleware already gated the request at
+  // 401, but this handler was looking up the employee by employeeId with no
+  // tenant filter, so a user authenticated for tenant A could enumerate
+  // employees + beacon UUIDs + RFID tags in tenant B. Stamp the tenant from
+  // the session-injected header and scope every read.
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+
   const employeeId = req.nextUrl.searchParams.get('employeeId');
   if (!employeeId) {
     return NextResponse.json({ error: 'employeeId is required' }, { status: 400 });
   }
 
-  const staff = await prisma.staffMember.findUnique({
-    where: { employeeId },
+  const staff = await prisma.staffMember.findFirst({
+    where: { employeeId, tenantId },
     include: {
       transportRequests: {
         where: { tripDate: { gte: startOfToday() } },
@@ -37,7 +45,7 @@ export async function GET(req: NextRequest) {
   const passengers = await prisma.tripPassenger.findMany({
     where: {
       staffMemberId: staff.id,
-      trip: { departureTime: { gte: start, lt: end }, deletedAt: null },
+      trip: { tenantId, departureTime: { gte: start, lt: end }, deletedAt: null },
     },
     include: {
       trip: { include: { route: { include: { stops: true } } } },
@@ -50,7 +58,7 @@ export async function GET(req: NextRequest) {
   const vehicleIds = [...new Set(passengers.map(p => p.trip.vehicleId).filter(Boolean) as string[])];
   const beacons = vehicleIds.length > 0
     ? await prisma.vehicleBeacon.findMany({
-        where: { vehicleId: { in: vehicleIds }, isActive: true },
+        where: { vehicleId: { in: vehicleIds }, tenantId, isActive: true },
         select: { vehicleId: true, bleUuid: true },
       })
     : [];

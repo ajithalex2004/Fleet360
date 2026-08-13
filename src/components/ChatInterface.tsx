@@ -10,8 +10,10 @@ export default function ChatInterface() {
             <div className="flex-1 overflow-hidden">
                 <C1Chat
                     apiUrl="/api/chat"
-                    components={{
-                        createBooking: BookingForm,
+                    customizeC1={{
+                        customComponents: {
+                            createBooking: BookingForm,
+                        },
                     }}
                     theme={{
                         mode: "light",

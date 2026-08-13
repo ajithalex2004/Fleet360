@@ -1,5 +1,10 @@
 import { UserRole } from '@/types/maintenance';
 
+// Re-export so consumers that already depend on @/services/rbac don't need
+// to also import from @/types/maintenance. The UserRole enum is the source
+// of truth and lives in the types module; rbac just consumes it.
+export { UserRole };
+
 // Permission definitions
 export enum Permission {
     SUBMIT_REQUEST = 'SUBMIT_REQUEST',

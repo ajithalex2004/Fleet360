@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 
 /* ── Bootstrap table ─────────────────────────────────────── */
 async function ensureTable() {
@@ -68,12 +69,18 @@ async function ensureTable() {
 /* ── GET — return all settings as flat object ────────────── */
 export async function GET() {
   try {
-    await ensureTable();
-    const rows = await prisma.$queryRawUnsafe<{ key: string; value: string }[]>(
-      `SELECT key, value FROM platform_settings ORDER BY key`
-    );
-    const settings: Record<string, string> = {};
-    for (const r of rows) settings[r.key] = r.value;
+    // platform_settings is a global table (no tenant_id), but the wrap is
+    // the canonical pattern for admin routes and keeps future RLS additions
+    // backward-compatible.
+    const settings = await withPlatformAdmin(prisma, async (tx) => {
+      await ensureTable();
+      const rows = await tx.$queryRawUnsafe<{ key: string; value: string }[]>(
+        `SELECT key, value FROM platform_settings ORDER BY key`
+      );
+      const out: Record<string, string> = {};
+      for (const r of rows) out[r.key] = r.value;
+      return out;
+    });
     return NextResponse.json({ settings });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -84,18 +91,18 @@ export async function GET() {
 /* ── PATCH — update one or many settings ─────────────────── */
 export async function PATCH(req: NextRequest) {
   try {
-    await ensureTable();
     const body = await req.json() as Record<string, string>;
-
-    for (const [key, value] of Object.entries(body)) {
-      await prisma.$executeRawUnsafe(`
-        INSERT INTO platform_settings (key, value, updated_at)
-        VALUES ($1, $2, NOW())
-        ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()
-      `, key, String(value));
-    }
-
-    return NextResponse.json({ ok: true });
+    return await withPlatformAdmin(prisma, async (tx) => {
+      await ensureTable();
+      for (const [key, value] of Object.entries(body)) {
+        await tx.$executeRawUnsafe(`
+          INSERT INTO platform_settings (key, value, updated_at)
+          VALUES ($1, $2, NOW())
+          ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()
+        `, key, String(value));
+      }
+      return NextResponse.json({ ok: true });
+    });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: msg }, { status: 500 });

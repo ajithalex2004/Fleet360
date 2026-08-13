@@ -6,6 +6,7 @@
  */
 
 import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
+import type { Style } from '@react-pdf/types';
 import type { Lang } from '../theme';
 import { colors, spacing, typography, fontFor, dirFor, formatDate } from '../theme';
 import { t } from '../i18n';
@@ -197,14 +198,14 @@ function ManifestPage({ data, lang }: PageProps) {
           <Text style={[s.th, s.c_med]}>{lang === 'ar' ? 'طبي' : 'Med'}</Text>
         </View>
         {data.students.map((p, i) => {
-          const rowStyles: object[] = [s.trow];
+          const rowStyles: Style[] = [s.trow];
           if (p.medicalAlert) rowStyles.push(s.trowMedical);
           else if (i % 2 === 1) rowStyles.push(s.trowAlt);
           return (
             <View key={i} style={rowStyles}>
               <Text style={[s.td, s.c_idx]}>{i + 1}</Text>
               <Text style={[s.td, s.c_code]}>{p.studentCode}</Text>
-              <Text style={[s.td, s.c_name, { writingDirection: dir }]}>{p.fullName}</Text>
+              <Text style={[s.td, s.c_name]}>{p.fullName}</Text>
               <Text style={[s.td, s.c_grade]}>{p.grade ?? ''}{p.section ? `-${p.section}` : ''}</Text>
               <Text style={[s.td, s.c_pickup]}>{p.pickupStop ?? '—'}</Text>
               <Text style={[s.td, s.c_drop]}>{p.dropoffStop ?? '—'}</Text>

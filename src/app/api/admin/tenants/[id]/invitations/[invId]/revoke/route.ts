@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { ensureInvitationTable } from '@/lib/invitations';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -26,11 +27,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   try {
     await ensureInvitationTable();
-    const result = await prisma.$executeRawUnsafe(
-      `UPDATE tenant_invitations
-         SET revoked = TRUE
-       WHERE id = $1::uuid AND tenant_id = $2 AND used_at IS NULL AND revoked = FALSE`,
-      invId, tenantId,
+    const result = await withTenantRls(prisma, tenantId, (tx) =>
+      tx.$executeRawUnsafe(
+        `UPDATE tenant_invitations
+           SET revoked = TRUE
+         WHERE id = $1::uuid AND tenant_id = $2 AND used_at IS NULL AND revoked = FALSE`,
+        invId, tenantId,
+      )
     );
 
     void logAudit({

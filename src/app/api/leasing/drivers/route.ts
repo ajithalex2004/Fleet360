@@ -8,6 +8,8 @@
  *
  * Each driver is annotated with allocation stats (active/total) and a
  * licence-expiry status flag for the dashboard.
+ *
+ * Tenant scoping: requires x-tenant-id. Allocations are scoped per tenant.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -16,12 +18,16 @@ import { prisma } from '@/lib/prisma';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   const all = req.nextUrl.searchParams.get('all') === '1';
   const now = new Date();
 
-  // Find driver IDs with active leasing allocations.
+  // Active leasing allocations in the caller's tenant.
   const activeAllocations = await prisma.leaseDriverAllocation.findMany({
-    where: { status: 'ACTIVE' },
+    where: { tenantId, status: 'ACTIVE' },
     select: {
       driverId: true,
       contractId: true,
@@ -41,8 +47,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json([]);
   }
 
+  // Driver is tenant-scoped (see schema: tenant_id column + idx_drivers_tenant_id).
+  // Always filter by tenantId — "?all=1" means "the wider pool inside this tenant",
+  // NOT the whole platform. Without this filter, a tenant admin could see every
+  // other tenant's drivers (name, licence, EID, visa) via the All Drivers toggle.
   const drivers = await prisma.driver.findMany({
     where: {
+      tenantId,
       deletedAt: null,
       ...(driverIds ? { id: { in: driverIds } } : {}),
     },
@@ -66,10 +77,9 @@ export async function GET(req: NextRequest) {
     orderBy: { name: 'asc' },
   });
 
-  // Total allocation counts per driver (for the list view).
   const totalGroups = await prisma.leaseDriverAllocation.groupBy({
     by: ['driverId'],
-    where: { driverId: { in: drivers.map(d => d.id) } },
+    where: { tenantId, driverId: { in: drivers.map(d => d.id) } },
     _count: { _all: true },
   });
   const totalByDriver = new Map(totalGroups.map(g => [g.driverId, g._count._all]));

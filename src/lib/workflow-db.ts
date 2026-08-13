@@ -189,9 +189,9 @@ export async function listWorkflows(filter?: string | {
     `SELECT "workflowId", COUNT(*) as count FROM "WorkflowStep"
      WHERE "workflowId" = ANY($1::text[]) GROUP BY "workflowId"`, ids);
   // active instances per workflow
-  const instances: any[] = await prisma.$queryRawUnsafe(
+  const instances: any[] = (await prisma.$queryRawUnsafe(
     `SELECT "workflowId", COUNT(*) as count FROM "WorkflowInstance"
-     WHERE "workflowId" = ANY($1::text[]) AND status='IN_PROGRESS' GROUP BY "workflowId"`, ids).catch(() => []);
+     WHERE "workflowId" = ANY($1::text[]) AND status='IN_PROGRESS' GROUP BY "workflowId"`, ids).catch(() => [])) as any[];
   const countMap: Record<string, number> = {};
   const instanceMap: Record<string, number> = {};
   counts.forEach((c: any) => { countMap[c.workflowId] = parseInt(c.count); });
@@ -374,12 +374,12 @@ export async function getWorkflowStats() {
     `SELECT COUNT(*) as total,
             SUM(CASE WHEN "isActive" THEN 1 ELSE 0 END) as active
      FROM "WorkflowDefinition"`);
-  const pending: any[] = await prisma.$queryRawUnsafe(
+  const pending: any[] = (await prisma.$queryRawUnsafe(
     `SELECT COUNT(*) as count FROM "WorkflowStepInstance" WHERE status='PENDING'`
-  ).catch(() => [{ count: 0 }]);
-  const instances: any[] = await prisma.$queryRawUnsafe(
+  ).catch(() => [{ count: 0 }])) as any[];
+  const instances: any[] = (await prisma.$queryRawUnsafe(
     `SELECT COUNT(*) as count FROM "WorkflowInstance" WHERE status='IN_PROGRESS'`
-  ).catch(() => [{ count: 0 }]);
+  ).catch(() => [{ count: 0 }])) as any[];
   return {
     total: parseInt(totals[0]?.total ?? 0),
     active: parseInt(totals[0]?.active ?? 0),

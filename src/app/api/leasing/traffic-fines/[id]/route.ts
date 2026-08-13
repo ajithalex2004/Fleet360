@@ -1,19 +1,65 @@
+/**
+ * /api/leasing/traffic-fines/[id] — single fine detail / PATCH / DELETE.
+ *
+ * Tenant scoping: requires x-tenant-id. Refuses to touch fines from another
+ * tenant.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const fine = await prisma.leaseTrafficFine.findUnique({ where: { id: params.id }, include: { contract: true } });
-  return fine ? NextResponse.json(fine) : NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+  const fine = await prisma.leaseTrafficFine.findFirst({
+    where: { id: params.id, tenantId },
+    include: { contract: true },
+  });
+  return fine
+    ? NextResponse.json(fine)
+    : NextResponse.json({ error: 'Not found' }, { status: 404 });
 }
+
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
+    const existing = await prisma.leaseTrafficFine.findFirst({
+      where: { id: params.id, tenantId },
+      select: { id: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
     const body = await req.json();
     const { contract, ...data } = body;
     if (data.billingStatus === 'PAID' && !data.paidDate) data.paidDate = new Date();
-    const fine = await prisma.leaseTrafficFine.update({ where: { id: params.id }, data: { ...data, updatedAt: new Date() } });
+    const fine = await prisma.leaseTrafficFine.update({
+      where: { id: params.id },
+      data: { ...data, updatedAt: new Date() },
+    });
     return NextResponse.json(fine);
-  } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+  } catch (e) {
+    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+  }
 }
+
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+  const existing = await prisma.leaseTrafficFine.findFirst({
+    where: { id: params.id, tenantId },
+    select: { id: true },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
   await prisma.leaseTrafficFine.delete({ where: { id: params.id } });
   return NextResponse.json({ success: true });
 }

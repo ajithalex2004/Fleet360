@@ -27,13 +27,14 @@ export const runtime = 'nodejs';
 export async function POST(req: NextRequest) {
   // Optional shared-secret auth for cron triggers.
   const cronSecret = process.env.CRON_SECRET;
+  const tenantHeader = req.headers.get('x-tenant-id');
   if (cronSecret) {
     const auth = req.headers.get('authorization');
     if (auth !== `Bearer ${cronSecret}`) {
       // Fall through if user is authenticated via session — middleware
       // already handled that. We only enforce CRON_SECRET when the request
       // doesn't have a tenant header (i.e. unauthenticated cron pings).
-      if (!req.headers.get('x-tenant-id')) {
+      if (!tenantHeader) {
         return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
       }
     }
@@ -41,11 +42,13 @@ export async function POST(req: NextRequest) {
 
   try {
     const dryRun = req.nextUrl.searchParams.get('dryRun') === '1';
-    const result = await runExpirySweep({ dryRun });
+    // Cron-triggered (no tenant header) iterates all active tenants; a
+    // logged-in user only triggers for their own tenant.
+    const result = await runExpirySweep({ dryRun, tenantId: tenantHeader ?? undefined });
 
     if (!dryRun && result.alertsCreated > 0) {
       void logAudit({
-        tenantId: req.headers.get('x-tenant-id') ?? undefined,
+        tenantId: tenantHeader ?? undefined,
         userId: req.headers.get('x-user-id') ?? 'system:cron',
         userRole: req.headers.get('x-user-role') ?? 'SYSTEM',
         entityType: 'LeaseDocument',

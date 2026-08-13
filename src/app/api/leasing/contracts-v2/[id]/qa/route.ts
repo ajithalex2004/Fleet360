@@ -7,10 +7,14 @@
  *
  * The agent looks up the contract / payment schedule / mileage / invoices
  * via tool calls and returns a concise NL answer in the user's language.
+ *
+ * Tenant scoping: requires x-tenant-id. The contract must belong to the
+ * caller's tenant before the Q&A agent is invoked.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { prisma } from '@/lib/prisma';
 import { answerContractQuestion } from '@/lib/agents/contract-qa/agent';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -27,7 +31,20 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
+    // Verify contract ownership before exposing any data via the agent.
+    const contract = await prisma.leaseContract2.findFirst({
+      where: { id, tenantId },
+      select: { id: true },
+    });
+    if (!contract) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+
     const json = await req.json();
     const parsed = bodySchema.safeParse(json);
     if (!parsed.success) {
@@ -46,7 +63,7 @@ export async function POST(
     }
 
     void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
+      tenantId,
       userId: req.headers.get('x-user-id') ?? undefined,
       userRole: req.headers.get('x-user-role') ?? undefined,
       entityType: 'AIContractQA',

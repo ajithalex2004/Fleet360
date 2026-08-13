@@ -3,6 +3,9 @@
  *
  * Customer Account Statement PDF — invoices + receipts in the requested
  * period, with running balance. Defaults to the last 90 days.
+ *
+ * Tenant scoping: requires x-tenant-id. The lessee, invoices, and receipts
+ * (via contract ownership) must all belong to the caller's tenant.
  */
 
 import { createElement } from 'react';
@@ -25,6 +28,10 @@ const VENDOR = {
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: lesseeId } = await params;
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return jsonErr('Not authenticated', 401);
+  }
   const lang: Lang = req.nextUrl.searchParams.get('lang') === 'ar' ? 'ar' : 'en';
   const download = req.nextUrl.searchParams.get('download') === '1';
 
@@ -34,35 +41,36 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const periodFrom = fromParam ? new Date(fromParam) : new Date(periodTo.getTime() - 90 * 86400000);
 
   try {
-    const lessee = await prisma.lessee.findUnique({ where: { id: lesseeId } });
+    const lessee = await prisma.lessee.findFirst({
+      where: { id: lesseeId, tenantId },
+    });
     if (!lessee) return jsonErr('Lessee not found', 404);
 
-    // Pull invoices in period.
     const invoices = await prisma.leaseInvoice.findMany({
-      where: { lesseeId, issueDate: { gte: periodFrom, lte: periodTo } },
+      where: { tenantId, lesseeId, issueDate: { gte: periodFrom, lte: periodTo } },
       orderBy: { issueDate: 'asc' },
     });
 
-    // Pull receipts (via the lessee's contracts).
     const contracts = await prisma.leaseContract2.findMany({
-      where: { lesseeId },
+      where: { tenantId, lesseeId },
       select: { id: true },
     });
     const receipts = await prisma.leaseReceipt.findMany({
       where: {
+        tenantId,
         contractId: { in: contracts.map((c) => c.id) },
         receivedDate: { gte: periodFrom, lte: periodTo },
       },
       orderBy: { receivedDate: 'asc' },
     });
 
-    // Compute opening balance: invoices issued before period - payments before period.
     const priorInvoices = await prisma.leaseInvoice.findMany({
-      where: { lesseeId, issueDate: { lt: periodFrom } },
+      where: { tenantId, lesseeId, issueDate: { lt: periodFrom } },
       select: { totalAmount: true },
     });
     const priorReceipts = await prisma.leaseReceipt.findMany({
       where: {
+        tenantId,
         contractId: { in: contracts.map((c) => c.id) },
         receivedDate: { lt: periodFrom },
       },
@@ -72,7 +80,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       priorInvoices.reduce((s, i) => s + Number(i.totalAmount ?? 0), 0) -
       priorReceipts.reduce((s, r) => s + Number(r.amount), 0);
 
-    // Merge invoice + receipt events on a timeline + accumulate running balance.
     type Event = { date: Date; type: 'INVOICE' | 'PAYMENT'; ref: string; amount: number };
     const events: Event[] = [
       ...invoices.map((i) => ({

@@ -60,7 +60,7 @@ export default function FuelImportPage() {
           <h1 className="text-3xl font-bold text-white">Fuel CSV Import</h1>
           <p className="text-sm text-slate-400 mt-1">Bulk-load fuel-card transactions. ENOC SmartTAG, ADNOC Voyager, EMARAT FleetCard, and generic CSVs auto-detected.</p>
         </div>
-        <Link href="/leasing/fuel" className="text-sm text-emerald-400 hover:underline">← Back to Fuel</Link>
+        <Link href="/fleet/fuel" className="text-sm text-emerald-400 hover:underline">Back to Fleet Fuel</Link>
       </div>
 
       <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 space-y-4">
@@ -84,7 +84,7 @@ export default function FuelImportPage() {
             <option value="">None — skip rows with unmatched plates</option>
             {contracts.map(c => <option key={c.id} value={c.id}>{c.contractNumber ?? c.id.slice(0, 8)}</option>)}
           </select>
-          <p className="text-[11px] text-slate-500 mt-1">Used when a row's plate doesn't match any LeaseContractVehicle.</p>
+          <p className="text-[11px] text-slate-500 mt-1">Used when a row&apos;s plate doesn&apos;t match any LeaseContractVehicle.</p>
         </div>
 
         <div className="flex gap-3 pt-2">

@@ -1,8 +1,8 @@
 /**
- * Logistics trip notification utility.
- * Sends WhatsApp and email alerts when a logistics trip changes status.
+ * Logistics shipment notification utility.
+ * Sends WhatsApp and email alerts when a logistics shipment changes status.
  * Uses the existing /api/notifications/whatsapp and /api/notifications/send endpoints.
- * All calls are fire-and-forget (best-effort) — failures never block trip operations.
+ * All calls are fire-and-forget (best-effort) - failures never block shipment operations.
  */
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
@@ -10,30 +10,30 @@ const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
 // ── Message templates ─────────────────────────────────────────────────────────
 
 const STATUS_MESSAGES: Record<string, (ref: string, extra?: string) => string> = {
-  CRITICAL_SLA: (ref) => `🚨 *SLA BREACH — CRITICAL*: Trip *${ref}* is more than 4 hours past its delivery deadline. Immediate action required.`,
-  APPROVED:         (ref) => `✅ Your logistics trip *${ref}* has been approved and is being prepared for dispatch.`,
-  ASSIGNED:         (ref, driver?) => `👤 Trip *${ref}* has been assigned to driver ${driver ?? 'our team'}.`,
-  DISPATCHED:       (ref, vehicle?) => `🚦 Trip *${ref}* has been dispatched. Vehicle: ${vehicle ?? 'assigned vehicle'} is on its way.`,
-  ENROUTE_PICKUP:   (ref) => `🗺️ Driver is en-route to the pickup location for trip *${ref}*.`,
-  LOADED:           (ref) => `📦 Cargo for trip *${ref}* has been loaded and secured.`,
-  ENROUTE_DELIVERY: (ref) => `🚛 Trip *${ref}* is now en-route to the delivery destination.`,
-  DELIVERED:        (ref) => `📍 Trip *${ref}* — cargo has been delivered. POD confirmation pending.`,
-  POD_SUBMITTED:    (ref) => `📝 Proof of Delivery submitted for trip *${ref}*. Trip is being closed.`,
-  CLOSED:           (ref) => `🔒 Trip *${ref}* has been successfully closed. Thank you!`,
-  CANCELLED:        (ref) => `❌ Trip *${ref}* has been cancelled. Please contact operations for assistance.`,
+  CRITICAL_SLA: (ref) => `🚨 *SLA BREACH - CRITICAL*: Shipment *${ref}* is more than 4 hours past its delivery deadline. Immediate action required.`,
+  APPROVED:         (ref) => `✅ Your logistics shipment *${ref}* has been approved and is being prepared for dispatch.`,
+  ASSIGNED:         (ref, driver?) => `👤 Shipment *${ref}* has been assigned to driver ${driver ?? 'our team'}.`,
+  DISPATCHED:       (ref, vehicle?) => `🚦 Shipment *${ref}* has been dispatched. Vehicle: ${vehicle ?? 'assigned vehicle'} is on its way.`,
+  ENROUTE_PICKUP:   (ref) => `🗺️ Driver is en-route to the pickup location for shipment *${ref}*.`,
+  LOADED:           (ref) => `📦 Cargo for shipment *${ref}* has been loaded and secured.`,
+  ENROUTE_DELIVERY: (ref) => `🚛 Shipment *${ref}* is now en-route to the delivery destination.`,
+  DELIVERED:        (ref) => `📍 Shipment *${ref}* - cargo has been delivered. POD confirmation pending.`,
+  POD_SUBMITTED:    (ref) => `📝 Proof of Delivery submitted for shipment *${ref}*. Shipment is being closed.`,
+  CLOSED:           (ref) => `🔒 Shipment *${ref}* has been successfully closed. Thank you!`,
+  CANCELLED:        (ref) => `❌ Shipment *${ref}* has been cancelled. Please contact operations for assistance.`,
 };
 
 const EMAIL_SUBJECTS: Record<string, string> = {
-  APPROVED:         'Trip Approved — Logistics',
-  ASSIGNED:         'Driver Assigned — Logistics',
+  APPROVED:         'Shipment Approved - Logistics',
+  ASSIGNED:         'Driver Assigned - Logistics',
   DISPATCHED:       'Your Shipment is Dispatched',
   ENROUTE_PICKUP:   'Driver En-route to Pickup',
   LOADED:           'Cargo Loaded — En-route',
   ENROUTE_DELIVERY: 'Shipment En-route to Delivery',
   DELIVERED:        'Shipment Delivered',
   POD_SUBMITTED:    'Proof of Delivery Submitted',
-  CLOSED:           'Trip Closed',
-  CANCELLED:        'Trip Cancelled',
+  CLOSED:           'Shipment Closed',
+  CANCELLED:        'Shipment Cancelled',
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ async function sendEmail(to: string, subject: string, body: string, triggerReaso
 // ── Main export ───────────────────────────────────────────────────────────────
 
 /**
- * Fire-and-forget notification for trip status transitions.
+ * Fire-and-forget notification for shipment status transitions.
  * Safe to call without await — never throws.
  */
 export function notifyTripStatusChange(payload: TripNotificationPayload): void {
@@ -95,11 +95,11 @@ export function notifyTripStatusChange(payload: TripNotificationPayload): void {
   if (!msgFn) return; // No template for this status
 
   const waMessage    = msgFn(bookingRef, driverName ?? vehiclePlate ?? undefined);
-  const emailSubject = EMAIL_SUBJECTS[toStatus] ?? `Trip ${bookingRef} Update`;
+  const emailSubject = EMAIL_SUBJECTS[toStatus] ?? `Shipment ${bookingRef} Update`;
   const emailBody    = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
       <div style="background:#1a1a2e;padding:24px;border-radius:12px">
-        <h2 style="color:#f59e0b;margin:0 0 16px">🚛 Logistics Trip Update</h2>
+        <h2 style="color:#f59e0b;margin:0 0 16px">🚛 Logistics Shipment Update</h2>
         <p style="color:#e2e8f0;font-size:16px">${waMessage.replace(/\*/g, '<strong>').replace(/\*/g, '</strong>')}</p>
         <div style="background:#0f172a;border-radius:8px;padding:16px;margin-top:16px">
           <p style="color:#94a3b8;font-size:12px;margin:0">
@@ -120,10 +120,10 @@ export function notifyTripStatusChange(payload: TripNotificationPayload): void {
   // Notify driver on assignment / dispatch
   if (driverPhone && ['ASSIGNED', 'DISPATCHED', 'ENROUTE_PICKUP'].includes(toStatus)) {
     const driverMsg = toStatus === 'ASSIGNED'
-      ? `🚛 You have been assigned to trip *${bookingRef}*. Please check the dispatch board.`
+      ? `🚛 You have been assigned to shipment *${bookingRef}*. Please check the dispatch board.`
       : toStatus === 'DISPATCHED'
-      ? `🚦 Trip *${bookingRef}* is dispatched. Please proceed to pickup location.`
-      : `📍 Please confirm when you arrive at the pickup for trip *${bookingRef}*.`;
+      ? `🚦 Shipment *${bookingRef}* is dispatched. Please proceed to pickup location.`
+      : `📍 Please confirm when you arrive at the pickup for shipment *${bookingRef}*.`;
     sendWhatsApp(driverPhone, driverMsg);
   }
 

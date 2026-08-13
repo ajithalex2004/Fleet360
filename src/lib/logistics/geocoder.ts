@@ -1,40 +1,44 @@
 /**
- * Mapbox Geocoding wrapper with tenant-scoped caching.
+ * Geocoding wrapper — Google primary, Mapbox fallback, tenant-scoped cache.
  *
- * Address strings → { latitude, longitude } via Mapbox's forward-geocoding
- * endpoint. Cache hits avoid the API call entirely, which is the difference
- * between staying inside Mapbox's 100k/month free tier and not. Real-world
- * cache hit rates land at 80-95% once a tenant has been operating for a
- * few weeks — most shipments pick up from a small set of repeat warehouses.
+ * Address strings → { latitude, longitude }. Cache hits avoid the API call
+ * entirely (real-world hit rates land at 80-95% once a tenant has been
+ * operating for a few weeks — most shipments pick up from a small set of
+ * repeat warehouses).
  *
- * Surface area:
+ * Provider selection (auto, per-call):
+ *   1. Cache hit? → return cached row (source = 'cache')
+ *   2. GOOGLE_MAPS_API_KEY set? → try Google Geocoding API (source = 'google')
+ *   3. Google unavailable or failed with an operational error? → try Mapbox
+ *      (source = 'mapbox')
+ *   4. Both unavailable → throw GeocodeError with kind = 'no_token'
+ *
+ * A `no_match` from either vendor is authoritative — we don't fall through
+ * to the other. Only NETWORK / QUOTA / KEY errors trigger the fallback,
+ * because a well-formed address that Google can't find is also a well-
+ * formed address that Mapbox is unlikely to find, and double-billing every
+ * miss to both vendors is wasteful.
+ *
+ * Surface area (unchanged):
  *   geocode(addr, tenantId)                — single address, throws on failure
  *   geocodeBatch(addrs, tenantId)          — many at once, returns per-item
  *                                            result/error, never throws
  *   invalidateCache(addr, tenantId)        — drop a cache row when address changes
- *
- * Mode of operation:
- *   - If MAPBOX_TOKEN is set → cache lookup then Mapbox call on miss
- *   - If MAPBOX_TOKEN is missing → cache lookup only; throws on miss with
- *     a clear "no token configured" message. This is the dev/CI mode; tests
- *     pre-populate the cache.
- *
- * Why not a full SDK: Mapbox's official SDK is bulky and bundles
- * client/server in unhealthy ways. The geocoding endpoint is a single GET
- * with documented query params — a 30-line fetch wrapper is correct here.
  */
 
 import { prisma } from '@/lib/prisma';
 import { ensureRouteOptimizerSchema } from './route-optimizer-schema';
 
 const MAPBOX_BASE = 'https://api.mapbox.com/geocoding/v5/mapbox.places';
+const GOOGLE_GEOCODE_BASE = 'https://maps.googleapis.com/maps/api/geocode/json';
 
 export interface GeocodeResult {
   latitude: number;
   longitude: number;
-  /** Mapbox returns "relevance" 0..1; we store and surface it as confidence. */
+  /** Normalised confidence 0..1. From Mapbox's "relevance", or derived from
+   *  Google's location_type ± partial_match heuristic. */
   confidence: number;
-  source: 'cache' | 'mapbox';
+  source: 'cache' | 'google' | 'mapbox';
 }
 
 export class GeocodeError extends Error {
@@ -153,6 +157,95 @@ async function callMapbox(address: string, token: string): Promise<GeocodeResult
   };
 }
 
+// ── Google Geocoding API ──────────────────────────────────────────────────
+
+interface GoogleGeocodeResult {
+  geometry?: { location?: { lat?: number; lng?: number }; location_type?: string };
+  formatted_address?: string;
+  partial_match?: boolean;
+}
+interface GoogleGeocodeResponse {
+  status?: string;
+  results?: GoogleGeocodeResult[];
+  error_message?: string;
+}
+
+/**
+ * Map Google's location_type + partial_match flag to a 0..1 confidence
+ * comparable to Mapbox's relevance:
+ *   ROOFTOP            → 1.0   (exact address point)
+ *   RANGE_INTERPOLATED → 0.9   (interpolated between two known addresses)
+ *   GEOMETRIC_CENTER   → 0.75  (bounded region, e.g. a street)
+ *   APPROXIMATE        → 0.5   (city / country / bounding box)
+ *   partial_match=true → ×0.7  (Google matched fewer components than requested)
+ */
+function googleConfidence(r: GoogleGeocodeResult): number {
+  const base = {
+    ROOFTOP: 1.0,
+    RANGE_INTERPOLATED: 0.9,
+    GEOMETRIC_CENTER: 0.75,
+    APPROXIMATE: 0.5,
+  }[r.geometry?.location_type ?? 'APPROXIMATE'] ?? 0.5;
+  return r.partial_match ? base * 0.7 : base;
+}
+
+async function callGoogle(address: string, key: string): Promise<GeocodeResult> {
+  // Regional biasing.
+  //   `region`     — SOFT hint (top-level ccTLD ranking bias). Cheap; too weak
+  //                  on its own for ambiguous names like "Emirates Private
+  //                  School" which Google also matches in Algeria.
+  //   `components=country:XX` — HARD filter, rejects results outside the country.
+  //                             Reliable; the trade-off is cross-border routes
+  //                             fail if the country is wrong.
+  //
+  // Defaults for Fleet360's typical tenant (UAE-based):
+  //   region       = 'ae'
+  //   restrictTo   = 'AE'  ← HARD RESTRICT by default; ambiguous global matches
+  //                          were the top cause of wildly wrong distances.
+  //
+  // Overrides (add to .env.local):
+  //   GEOCODER_REGION_BIAS=sa
+  //   GEOCODER_RESTRICT_COUNTRY=SA        (or a comma list: SA,AE,OM)
+  //   GEOCODER_RESTRICT_COUNTRY=""        (empty string disables hard restrict)
+  const region = process.env.GEOCODER_REGION_BIAS?.trim().toLowerCase() || 'ae';
+  // `undefined` env var → default AE. Empty string → no restriction (escape hatch).
+  const restrictSetting = process.env.GEOCODER_RESTRICT_COUNTRY;
+  const restrictCountry = restrictSetting === undefined
+    ? 'AE'
+    : restrictSetting.trim().toUpperCase();
+  const params = new URLSearchParams({ address, key, region });
+  if (restrictCountry) params.set('components', `country:${restrictCountry}`);
+  const url = `${GOOGLE_GEOCODE_BASE}?${params.toString()}`;
+  const res = await fetchImpl(url);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new GeocodeError(`Google geocoding HTTP ${res.status}: ${detail}`, 'api_error');
+  }
+  const data = await res.json() as GoogleGeocodeResponse;
+  // Google returns a machine-readable `status` field inside a 200 response —
+  // treat non-OK as an API error so the fallback can trigger. ZERO_RESULTS is
+  // authoritative (no fallback) — Mapbox almost never finds what Google can't.
+  if (data.status === 'ZERO_RESULTS') {
+    throw new GeocodeError(`No match for "${address}"`, 'no_match');
+  }
+  if (data.status !== 'OK') {
+    const msg = data.error_message ?? data.status ?? 'unknown';
+    throw new GeocodeError(`Google geocoding failed: ${msg}`, 'api_error');
+  }
+  const top = data.results?.[0];
+  const lat = top?.geometry?.location?.lat;
+  const lng = top?.geometry?.location?.lng;
+  if (top == null || lat == null || lng == null) {
+    throw new GeocodeError(`Google returned OK but no usable result for "${address}"`, 'api_error');
+  }
+  return {
+    latitude: lat,
+    longitude: lng,
+    confidence: googleConfidence(top),
+    source: 'google',
+  };
+}
+
 // ── Public API ────────────────────────────────────────────────────────────
 
 export async function geocode(rawAddress: string, tenantId: string): Promise<GeocodeResult> {
@@ -166,15 +259,52 @@ export async function geocode(rawAddress: string, tenantId: string): Promise<Geo
   const cached = await readCache(tenantId, normalised);
   if (cached) return cached;
 
-  const token = process.env.MAPBOX_TOKEN;
-  if (!token) {
+  const googleKey = process.env.GOOGLE_MAPS_API_KEY;
+  const mapboxToken = process.env.MAPBOX_TOKEN;
+
+  if (!googleKey && !mapboxToken) {
     throw new GeocodeError(
-      `MAPBOX_TOKEN not configured and "${rawAddress}" not in cache`,
+      `No geocoding provider configured (set GOOGLE_MAPS_API_KEY or MAPBOX_TOKEN) and "${rawAddress}" not in cache`,
       'no_token',
     );
   }
 
-  const result = await callMapbox(rawAddress, token);
+  // Provider ladder: Google → Mapbox. A no_match from Google is authoritative
+  // (Mapbox almost never finds what Google can't) so we DON'T fall through on
+  // that kind — only on transient errors (network, quota, key issues). This
+  // avoids double-billing every unfindable address.
+  let result: GeocodeResult | null = null;
+  let lastError: unknown = null;
+  if (googleKey) {
+    try {
+      result = await callGoogle(rawAddress, googleKey);
+    } catch (err) {
+      lastError = err;
+      // Authoritative "no result" → stop; don't try Mapbox.
+      if (err instanceof GeocodeError && err.kind === 'no_match') throw err;
+      // Otherwise fall through to Mapbox (transient / quota / config error).
+    }
+  }
+  if (!result && mapboxToken) {
+    try {
+      result = await callMapbox(rawAddress, mapboxToken);
+    } catch (err) {
+      // If Google already errored transiently AND Mapbox now errors too,
+      // surface the Mapbox error but include a hint that Google also failed.
+      if (lastError) {
+        const g = lastError instanceof Error ? lastError.message : String(lastError);
+        const m = err instanceof Error ? err.message : String(err);
+        throw new GeocodeError(`Both providers failed. Google: ${g}. Mapbox: ${m}`, 'api_error');
+      }
+      throw err;
+    }
+  }
+  if (!result) {
+    // We had Google but it failed transiently and no Mapbox fallback available.
+    if (lastError instanceof Error) throw lastError;
+    throw new GeocodeError('All geocoding providers failed', 'api_error');
+  }
+
   await writeCache({
     tenantId,
     normalised,

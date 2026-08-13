@@ -1,14 +1,34 @@
+/**
+ * /api/leasing/inquiries/[id] — single inquiry detail / PATCH / DELETE.
+ *
+ * Tenant scoping: requires x-tenant-id. Refuses to touch inquiries from
+ * another tenant.
+ */
+
 import { prisma } from '@/lib/prisma';
 import { NextRequest, NextResponse } from 'next/server';
 
+async function guardTenant(req: NextRequest, id: string) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return { tenantId: null, owned: false } as const;
+  }
+  const owned = await prisma.leaseInquiry.findFirst({
+    where: { id, tenantId },
+    select: { id: true },
+  });
+  return { tenantId, owned: !!owned } as const;
+}
+
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const inquiry = await prisma.leaseInquiry.findUnique({
-      where: { id: params.id },
-    });
+    const { tenantId, owned } = await guardTenant(req, params.id);
+    if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    if (!owned) return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
+    const inquiry = await prisma.leaseInquiry.findUnique({ where: { id: params.id } });
     if (!inquiry) return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
     return NextResponse.json(inquiry);
   } catch (error) {
@@ -17,15 +37,18 @@ export async function GET(
   }
 }
 
-// PATCH: safe partial update  -  only updates whitelisted fields
+// PATCH: safe partial update — only updates whitelisted fields
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const { tenantId, owned } = await guardTenant(request, params.id);
+    if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    if (!owned) return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
+
     const body = await request.json();
 
-    // Only allow safe fields to be updated
     const allowed: Record<string, unknown> = {};
     if (body.status      !== undefined) allowed.status      = body.status;
     if (body.notes       !== undefined) allowed.notes       = body.notes;
@@ -63,10 +86,14 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const { tenantId, owned } = await guardTenant(req, params.id);
+    if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    if (!owned) return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
+
     await prisma.leaseInquiry.update({
       where: { id: params.id },
       data: { deletedAt: new Date() },

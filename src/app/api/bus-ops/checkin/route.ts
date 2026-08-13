@@ -25,6 +25,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import {
   verifyQrToken,
@@ -160,8 +161,8 @@ export async function POST(req: NextRequest) {
           performedAt,
           performedBy,
           rawPayload: body && typeof body === 'object'
-            ? (body as Record<string, unknown>)
-            : null,
+            ? (body as unknown as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
         },
       }),
       prisma.tripPassenger.update({

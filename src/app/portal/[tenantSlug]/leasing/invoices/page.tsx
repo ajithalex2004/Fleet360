@@ -32,8 +32,8 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function PortalInvoicesPage() {
-  const params = useParams();
-  const search = useSearchParams();
+  const params = useParams() ?? {};
+  const search = useSearchParams() ?? new URLSearchParams();
   const tenantSlug = (params?.tenantSlug as string) ?? '';
   const lesseeId = search.get('lesseeId') ?? '';
 

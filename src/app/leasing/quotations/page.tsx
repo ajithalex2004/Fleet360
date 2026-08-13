@@ -2,10 +2,12 @@
 
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { addMonths, addDays, toDateInput, calcValidUntil, inquiryToQuotation } from '@/lib/autoFill';
 import { VEHICLE_MAKES, getModelsForMake, getAllMakes } from '@/lib/vehicleMaster';
 import { useSearchParams } from 'next/navigation';
-import { Plus, Eye, Check, Send, FileText, X, ArrowRight, Mail, History, MessageSquare } from 'lucide-react';
+import { Plus, Eye, Check, Send, FileText, X, ArrowRight, Mail, History, MessageSquare, Workflow } from 'lucide-react';
+import WorkflowModal from '@/components/leasing/WorkflowModal';
 import { getQuotationAction, getQuotationStatusStyles } from '@/services/leasingWorkflow';
 
 interface Vehicle {
@@ -87,7 +89,7 @@ function SearchParamsReader({
 }: {
   onFromInquiry: (id: string) => void;
 }) {
-  const searchParams = useSearchParams();
+  const searchParams = useSearchParams() ?? new URLSearchParams();
   const processed = typeof window !== 'undefined'
     ? window.sessionStorage.getItem('xl_last_inquiry_id')
     : null;
@@ -108,6 +110,7 @@ export default function LeaseQuotationsPage() {
   const [quotations, setQuotations] = useState<LeaseQuotation[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNewModal, setShowNewModal] = useState(false);
+  const [showWorkflow, setShowWorkflow] = useState(false);
   const [activeStep, setActiveStep] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [prefilling, setPrefilling]     = useState(false);
@@ -310,7 +313,7 @@ export default function LeaseQuotationsPage() {
         inquiryId, // Link to the inquiry
         lesseeId:            matchedLesseeId,
         lesseeName:          matchedLesseeName,
-      }));
+      } as typeof prev));
 
       setShowNewModal(true);
       setActiveStep(1);
@@ -819,13 +822,31 @@ export default function LeaseQuotationsPage() {
               Loading inquiry data...
             </span>
           )}
-          <button
-            onClick={() => setShowNewModal(true)}
-            className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90 flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            New Quotation
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/leasing/quotations/copilot"
+              className="rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90 flex items-center gap-2 shadow-md"
+              title="Open AI Copilot for quotation assistance"
+            >
+              <MessageSquare className="h-4 w-4" />
+              AI Copilot
+            </Link>
+            <button
+              onClick={() => setShowWorkflow(true)}
+              className="rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90 flex items-center gap-2"
+              title="Open workflow — pending approvals, history, variance alerts"
+            >
+              <Workflow className="h-4 w-4" />
+              Workflow
+            </button>
+            <button
+              onClick={() => setShowNewModal(true)}
+              className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90 flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              New Quotation
+            </button>
+          </div>
         </div>
 
         {/* Status Pipeline */}
@@ -1928,6 +1949,7 @@ export default function LeaseQuotationsPage() {
           </div>
         </div>
       )}
+      {showWorkflow && <WorkflowModal onClose={() => setShowWorkflow(false)} />}
     </div>
   );
 }

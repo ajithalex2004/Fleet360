@@ -8,6 +8,9 @@
  *
  * The suggestion is NOT persisted — the UI shows it for review and the user
  * decides whether to apply it to a new quotation form.
+ *
+ * Tenant scoping: requires x-tenant-id so the audit trail of co-pilot usage
+ * is correctly attributed per tenant.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -24,6 +27,10 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const json = await req.json();
     const parsed = bodySchema.safeParse(json);
@@ -44,11 +51,11 @@ export async function POST(req: NextRequest) {
     }
 
     void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
+      tenantId,
       userId: req.headers.get('x-user-id') ?? undefined,
       userRole: req.headers.get('x-user-role') ?? undefined,
       entityType: 'AICopilot',
-      action: 'EXPORT', // Closest existing action for "AI generation"
+      action: 'EXPORT',
       details: `Quotation Co-pilot: ${result.suggestion.vehicles.length} vehicle line(s), ${result.suggestion.durationMonths} months, ${result.suggestion.confidence} confidence (${result.modelUsed}, ${result.promptTokens + result.completionTokens} tokens, ${result.durationMs}ms).`,
     });
 

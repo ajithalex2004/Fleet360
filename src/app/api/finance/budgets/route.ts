@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
     ).catch(zero),
     // Logistics operational cost (40% of revenue)
     prisma.$queryRawUnsafe<NumRow[]>(
-      `SELECT COALESCE(SUM(total_amount) * 0.40, 0) AS total FROM logistics_bookings
+      `SELECT COALESCE(SUM(customer_rate_amount) * 0.40, 0) AS total FROM logistics_shipment_orders
        WHERE deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')
          AND created_at::date BETWEEN $1 AND $2`, startDate, endDate
     ).catch(zero),
@@ -91,30 +91,10 @@ export async function GET(req: NextRequest) {
   };
 
   // ── Budget entries ─────────────────────────────────────────────────────────
-  let budgets = await prisma.financeBudget.findMany({
-    where: { deletedAt: null, year },
+  const budgets = await prisma.financeBudget.findMany({
+    where: { year },
     orderBy: { category: 'asc' },
   }).catch(() => []);
-
-  // Auto-seed default budget categories if empty
-  if (budgets.length === 0) {
-    const defaults = [
-      { category: 'MAINTENANCE',     budgetAmount: 50000,  notes: 'Vehicle maintenance & repairs' },
-      { category: 'FUEL',            budgetAmount: 30000,  notes: 'Fleet fuel costs' },
-      { category: 'LEASING',         budgetAmount: 80000,  notes: 'Vehicle lease payments' },
-      { category: 'STAFF_TRANSPORT', budgetAmount: 20000,  notes: 'Staff bus operations' },
-      { category: 'SCHOOL_BUS',      budgetAmount: 15000,  notes: 'School bus operations' },
-      { category: 'RAC',             budgetAmount: 10000,  notes: 'RAC operating costs' },
-      { category: 'LOGISTICS',       budgetAmount: 40000,  notes: 'Logistics operating costs' },
-      { category: 'INSURANCE',       budgetAmount: 25000,  notes: 'Fleet insurance premiums' },
-    ];
-    for (const d of defaults) {
-      await prisma.financeBudget.create({
-        data: { ...d, year, month: month || null, actualAmount: 0 },
-      }).catch(() => {});
-    }
-    budgets = await prisma.financeBudget.findMany({ where: { deletedAt: null, year }, orderBy: { category: 'asc' } }).catch(() => []);
-  }
 
   // Merge live actuals into budget rows
   const enriched = budgets.map(b => {

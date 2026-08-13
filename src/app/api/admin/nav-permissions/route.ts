@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import crypto from 'crypto';
 
 // Keys that the platform admin can enable/disable per tenant
@@ -65,9 +66,13 @@ export async function GET(request: NextRequest) {
   await ensureTable();
 
   type Row = { nav_key: string; enabled: boolean };
-  const rows = await prisma.$queryRawUnsafe<Row[]>(
-    `SELECT nav_key, enabled FROM tenant_admin_nav_permissions WHERE tenant_id = $1`,
-    targetId,
+  // tenant_admin_nav_permissions has tenant_id with RLS. Wrap with
+  // withTenantRls(targetId) so the SELECT is constrained to that tenant.
+  const rows = await withTenantRls(prisma, targetId, (tx) =>
+    tx.$queryRawUnsafe<Row[]>(
+      `SELECT nav_key, enabled FROM tenant_admin_nav_permissions WHERE tenant_id = $1`,
+      targetId,
+    )
   );
 
   // Build a full map — keys not in DB default to false
@@ -96,18 +101,20 @@ export async function PUT(request: NextRequest) {
   await ensureTable();
 
   // Upsert each toggleable key
-  for (const key of TOGGLEABLE_NAV_KEYS) {
-    const enabled = permissions[key] === true;
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO tenant_admin_nav_permissions (id, tenant_id, nav_key, enabled, updated_at)
-       VALUES ($1, $2, $3, $4, NOW())
-       ON CONFLICT (tenant_id, nav_key) DO UPDATE SET enabled = $4, updated_at = NOW()`,
-      crypto.randomUUID(),
-      tenantId,
-      key,
-      enabled,
-    );
-  }
+  await withTenantRls(prisma, tenantId, async (tx) => {
+    for (const key of TOGGLEABLE_NAV_KEYS) {
+      const enabled = permissions[key] === true;
+      await tx.$executeRawUnsafe(
+        `INSERT INTO tenant_admin_nav_permissions (id, tenant_id, nav_key, enabled, updated_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (tenant_id, nav_key) DO UPDATE SET enabled = $4, updated_at = NOW()`,
+        crypto.randomUUID(),
+        tenantId,
+        key,
+        enabled,
+      );
+    }
+  });
 
   return NextResponse.json({ ok: true, tenantId });
 }

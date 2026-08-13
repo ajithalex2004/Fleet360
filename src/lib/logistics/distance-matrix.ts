@@ -1,29 +1,34 @@
 /**
- * Distance matrix wrapper — Mapbox primary, haversine fallback.
+ * Distance matrix wrapper — Google primary, Mapbox fallback, haversine last.
  *
  * Given N points (lat/lng pairs), returns an N×N matrix of road distances
  * (km) and durations (min). The VRP solver reads this matrix exclusively —
  * it never sees raw lat/lng or vendor-specific shapes.
  *
- * Two providers:
- *   - 'mapbox'    — calls Mapbox Matrix API. Real road network, real
- *                   durations including traffic estimates. Default when
- *                   MAPBOX_TOKEN is set.
+ * Three providers:
+ *   - 'google'    — calls Google Distance Matrix API. Real road network with
+ *                   traffic. Preferred provider when GOOGLE_MAPS_API_KEY is
+ *                   set. Per-request limits: 25 origins, 25 destinations,
+ *                   100 total elements → we chunk to 10×10 windows.
+ *   - 'mapbox'    — calls Mapbox Matrix API. Real road network. Used when
+ *                   Google isn't configured or fails transiently. Per-call
+ *                   limit 25 points → 25×25 = 625 elements.
  *   - 'haversine' — pure math, no network. Distance = great-circle ×
  *                   detour factor (default 1.3×). Duration estimated at
- *                   60 km/h average. Used when MAPBOX_TOKEN is absent or
+ *                   60 km/h average. Used when no vendor is available or
  *                   the caller explicitly requests offline mode.
  *
- * Mapbox Matrix has a hard limit of 25 points per call (25×25 = 625 elements
- * per request). For larger matrices we chunk into overlapping windows and
- * stitch results. The chunking is transparent to the caller.
- *
  * The solver should never have to think about which provider produced the
- * matrix — both return the same { distances, durations, provider } shape.
+ * matrix — all three return the same { distances, durations, provider } shape.
  */
 
 const MAPBOX_BASE = 'https://api.mapbox.com/directions-matrix/v1/mapbox/driving';
 const MAPBOX_CHUNK_LIMIT = 25;       // Mapbox per-call point limit
+const GOOGLE_MATRIX_BASE = 'https://maps.googleapis.com/maps/api/distancematrix/json';
+// Google per-request limit: 100 elements = 10×10 the largest square we can
+// send in one call. 25 origins × 4 destinations would also fit but 10×10 gives
+// symmetric chunking that's simpler to stitch.
+const GOOGLE_CHUNK_LIMIT = 10;
 const DEFAULT_DETOUR_FACTOR = 1.3;   // haversine multiplier — calibrated for GCC urban+highway
 const DEFAULT_AVG_SPEED_KMH = 60;    // haversine duration estimate
 
@@ -37,14 +42,14 @@ export interface DistanceMatrix {
   distances: number[][];
   /** durations[i][j] = minutes from point i to point j */
   durations: number[][];
-  provider: 'mapbox' | 'haversine';
+  provider: 'google' | 'mapbox' | 'haversine';
 }
 
 export interface MatrixOptions {
-  provider?: 'mapbox' | 'haversine';
-  /** Multiplier applied to haversine distance. Ignored when provider='mapbox'. */
+  provider?: 'google' | 'mapbox' | 'haversine';
+  /** Multiplier applied to haversine distance. Ignored for real providers. */
   detourFactor?: number;
-  /** Average speed for haversine duration estimate. Ignored when provider='mapbox'. */
+  /** Average speed for haversine duration estimate. Ignored for real providers. */
   avgSpeedKmh?: number;
 }
 
@@ -185,6 +190,65 @@ function range(start: number, endExclusive: number): number[] {
   return arr;
 }
 
+// ── Google Distance Matrix API ────────────────────────────────────────────
+
+interface GoogleElement {
+  status?: string;                                    // 'OK' | 'ZERO_RESULTS' | 'NOT_FOUND' | ...
+  distance?: { value?: number; text?: string };       // metres
+  duration?: { value?: number; text?: string };       // seconds
+}
+interface GoogleRow { elements?: GoogleElement[] }
+interface GoogleMatrixResponse {
+  status?: string;
+  rows?: GoogleRow[];
+  error_message?: string;
+}
+
+/**
+ * Build an N×N matrix from Google's API. Requests are chunked into 10×10
+ * sub-matrices to stay under the 100-element per-request cap. Cell-level
+ * ZERO_RESULTS is treated as Infinity (same as Mapbox null) so the solver
+ * can treat both providers identically.
+ */
+async function buildGoogleMatrix(points: LatLng[], key: string): Promise<DistanceMatrix> {
+  const n = points.length;
+  const distances: number[][] = Array.from({ length: n }, () => new Array(n).fill(Infinity));
+  const durations: number[][] = Array.from({ length: n }, () => new Array(n).fill(Infinity));
+
+  const coord = (p: LatLng) => `${p.latitude},${p.longitude}`;
+
+  for (let iStart = 0; iStart < n; iStart += GOOGLE_CHUNK_LIMIT) {
+    for (let jStart = 0; jStart < n; jStart += GOOGLE_CHUNK_LIMIT) {
+      const origins      = range(iStart, Math.min(iStart + GOOGLE_CHUNK_LIMIT, n)).map(i => coord(points[i])).join('|');
+      const destinations = range(jStart, Math.min(jStart + GOOGLE_CHUNK_LIMIT, n)).map(j => coord(points[j])).join('|');
+      const url = `${GOOGLE_MATRIX_BASE}?origins=${encodeURIComponent(origins)}&destinations=${encodeURIComponent(destinations)}&mode=driving&units=metric&key=${key}`;
+      const res = await fetchImpl(url);
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        throw new Error(`Google matrix HTTP ${res.status}: ${detail}`);
+      }
+      const body = await res.json() as GoogleMatrixResponse;
+      if (body.status !== 'OK') {
+        throw new Error(`Google matrix status ${body.status}: ${body.error_message ?? '(no message)'}`);
+      }
+      const rows = body.rows ?? [];
+      for (let i = 0; i < rows.length; i++) {
+        const elements = rows[i].elements ?? [];
+        for (let j = 0; j < elements.length; j++) {
+          const e = elements[j];
+          // Only OK elements carry usable data; the rest keep the Infinity
+          // sentinel we pre-filled (matches the Mapbox "null → Infinity" rule).
+          if (e.status === 'OK' && e.distance?.value != null && e.duration?.value != null) {
+            distances[iStart + i][jStart + j] = round(e.distance.value / 1000, 2);
+            durations[iStart + i][jStart + j] = round(e.duration.value / 60, 1);
+          }
+        }
+      }
+    }
+  }
+  return { distances, durations, provider: 'google' };
+}
+
 // ── Public API ────────────────────────────────────────────────────────────
 
 /**
@@ -192,8 +256,11 @@ function range(start: number, endExclusive: number): number[] {
  *
  * Provider selection:
  *   - opts.provider === 'haversine' → force haversine, no API call
- *   - opts.provider === 'mapbox'   → require Mapbox, throw if no token
- *   - omitted → use Mapbox when MAPBOX_TOKEN is set, fall back to haversine
+ *   - opts.provider === 'google'    → require Google key, throw if not set
+ *   - opts.provider === 'mapbox'    → require Mapbox token, throw if not set
+ *   - omitted → try Google → Mapbox → haversine. Transient Google failures
+ *     (network / quota / config) fall through to Mapbox so a bad key doesn't
+ *     take down the solver mid-request.
  */
 export async function computeDistanceMatrix(
   points: LatLng[],
@@ -208,19 +275,31 @@ export async function computeDistanceMatrix(
   }
 
   const explicit = opts.provider;
-  const token = process.env.MAPBOX_TOKEN;
+  const mapboxToken = process.env.MAPBOX_TOKEN;
+  const googleKey   = process.env.GOOGLE_MAPS_API_KEY;
 
   if (explicit === 'haversine') {
     return buildHaversineMatrix(points, opts);
   }
-  if (explicit === 'mapbox') {
-    if (!token) throw new Error('MAPBOX_TOKEN not configured but provider="mapbox" was requested');
-    return buildMapboxMatrix(points, token);
+  if (explicit === 'google') {
+    if (!googleKey) throw new Error('GOOGLE_MAPS_API_KEY not configured but provider="google" was requested');
+    return buildGoogleMatrix(points, googleKey);
   }
-  // Auto: prefer Mapbox, fall back silently to haversine if no token. This
-  // lets dev environments work out of the box; production should always
-  // have a token configured.
-  if (token) return buildMapboxMatrix(points, token);
+  if (explicit === 'mapbox') {
+    if (!mapboxToken) throw new Error('MAPBOX_TOKEN not configured but provider="mapbox" was requested');
+    return buildMapboxMatrix(points, mapboxToken);
+  }
+  // Auto ladder: Google → Mapbox → haversine. A transient Google failure
+  // falls through to Mapbox — noisy, but keeps the solver running. haversine
+  // is the last resort so the app never hard-fails on distance calc.
+  if (googleKey) {
+    try {
+      return await buildGoogleMatrix(points, googleKey);
+    } catch (err) {
+      console.warn('[distance-matrix] Google failed, falling back:', err instanceof Error ? err.message : err);
+    }
+  }
+  if (mapboxToken) return buildMapboxMatrix(points, mapboxToken);
   return buildHaversineMatrix(points, opts);
 }
 

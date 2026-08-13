@@ -83,7 +83,7 @@ async function persistFlags(flags: AnomalyFlag[], runId: string): Promise<number
   for (const flag of flags) {
     try {
       await prisma.$executeRawUnsafe(
-        `INSERT INTO finance_anomaly_flags (
+        `INSERT INTO ai.agent_anomaly_flags (
            detector_id, entity_type, entity_id, severity, confidence,
            explanation, amount, currency, metadata, status, agent_run_id
          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'OPEN',$10)

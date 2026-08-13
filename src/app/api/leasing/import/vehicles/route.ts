@@ -11,6 +11,9 @@
  * Commit only inserts rows that pass validation. Existing license plates
  * are skipped (logged as 'duplicate' errors); the rest of the import
  * continues so a single bad row doesn't block the whole batch.
+ *
+ * Tenant scoping: requires x-tenant-id. Each created Vehicle row is
+ * stamped with the same tenantId.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -37,6 +40,10 @@ const config = {
 };
 
 export async function POST(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const form = await req.formData();
     const file = form.get('file');
@@ -64,9 +71,9 @@ export async function POST(req: NextRequest) {
     }
 
     const result: ImportResult = await commitCsvRows(csvText, config, async (row) => {
-      // Skip if license plate already exists (idempotent re-imports).
-      const existing = await prisma.vehicle.findUnique({
-        where: { licensePlate: row.licensePlate },
+      // Skip if license plate already exists in this tenant (idempotent re-imports).
+      const existing = await prisma.vehicle.findFirst({
+        where: { tenantId, licensePlate: row.licensePlate },
       });
       if (existing) {
         throw new Error(`vehicle with licensePlate=${row.licensePlate} already exists`);
@@ -87,12 +94,13 @@ export async function POST(req: NextRequest) {
           seatingCapacity: row.seatingCapacity ?? null,
           status: row.status ?? 'AVAILABLE',
           currentMileage: row.currentMileage != null ? BigInt(row.currentMileage) : null,
+          tenantId,
         },
       });
     });
 
     void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
+      tenantId,
       userId: req.headers.get('x-user-id') ?? undefined,
       userRole: req.headers.get('x-user-role') ?? undefined,
       entityType: 'Vehicle',

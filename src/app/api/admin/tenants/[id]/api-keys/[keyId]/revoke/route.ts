@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { ensureApiKeyTable } from '@/lib/api-keys';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -26,11 +27,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   try {
     await ensureApiKeyTable();
-    const result = await prisma.$executeRawUnsafe(
-      `UPDATE tenant_api_keys
-         SET revoked = TRUE, revoked_at = NOW()
-       WHERE id = $1::uuid AND tenant_id = $2 AND revoked = FALSE`,
-      keyId, tenantId,
+    const result = await withTenantRls(prisma, tenantId, (tx) =>
+      tx.$executeRawUnsafe(
+        `UPDATE tenant_api_keys
+           SET revoked = TRUE, revoked_at = NOW()
+         WHERE id = $1::uuid AND tenant_id = $2 AND revoked = FALSE`,
+        keyId, tenantId,
+      )
     );
 
     void logAudit({

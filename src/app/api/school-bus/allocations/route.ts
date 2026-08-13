@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
 
     // Capacity check: count active allocations on same route
     if (routeId) {
-      const [capRow] = await prisma.$queryRawUnsafe<{ enrolled: bigint; seat_capacity: number }[]>(`
+      const capRowsResult = await prisma.$queryRawUnsafe<Array<{ enrolled: bigint; seat_capacity: number }>>(`
         SELECT
           COUNT(a.id)                   AS enrolled,
           COALESCE(r.seat_capacity, 40) AS seat_capacity
@@ -178,8 +178,9 @@ export async function POST(req: NextRequest) {
         WHERE a.tenant_id = $1
           AND a.route_id = $2::uuid
           AND a.status = 'ACTIVE'
-      `, tenantId, routeId).catch(() => null);
+      `, tenantId, routeId).catch(() => [] as Array<{ enrolled: bigint; seat_capacity: number }>);
 
+      const capRow = capRowsResult[0];
       if (capRow) {
         const enrolled = Number(capRow.enrolled ?? 0);
         const capacity = Number(capRow.seat_capacity ?? 40);

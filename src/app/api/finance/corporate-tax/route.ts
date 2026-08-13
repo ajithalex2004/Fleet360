@@ -61,8 +61,8 @@ async function computeRevenue(from: string, to: string): Promise<number> {
      WHERE deleted_at IS NULL AND created_at::date BETWEEN $1 AND $2`, from, to
   ).catch(()=>[{t:'0'}]);
   const [lg] = await prisma.$queryRawUnsafe<{t:string}[]>(
-    `SELECT COALESCE(SUM(total_amount),0)::text as t FROM logistics_bookings
-     WHERE deleted_at IS NULL AND status IN ('DELIVERED','CLOSED') AND created_at::date BETWEEN $1 AND $2`, from, to
+    `SELECT COALESCE(SUM(customer_rate_amount),0)::text as t FROM logistics_shipment_orders
+     WHERE deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED') AND created_at::date BETWEEN $1 AND $2`, from, to
   ).catch(()=>[{t:'0'}]);
   return toN(rev?.t) + toN(rac?.t) + toN(lg?.t);
 }

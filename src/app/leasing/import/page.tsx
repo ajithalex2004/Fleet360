@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Upload, FileWarning, FileCheck2, Database, Send } from 'lucide-react';
 
 type Resource = 'vehicles' | 'lessees';
@@ -8,7 +9,7 @@ type Resource = 'vehicles' | 'lessees';
 interface PreviewRow {
   row: number;
   raw: Record<string, string>;
-  parsed?: any;
+  parsed?: unknown;
   errors: { row: number; path: string; message: string }[];
 }
 
@@ -100,6 +101,16 @@ export default function LeasingImportPage() {
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
+      <div className="rounded-2xl border border-amber-500/30 bg-amber-950/30 px-5 py-4 text-sm text-amber-100">
+        <div className="font-semibold text-white">Compatibility workspace</div>
+        <p className="mt-1 text-amber-100/80">
+          Bulk import is being moved under Admin data management. This page remains active until the Admin import workspace is available.
+        </p>
+        <Link href="/admin" className="mt-3 inline-flex rounded-lg border border-amber-400/40 px-3 py-2 text-xs font-semibold text-amber-50 hover:bg-amber-900/40">
+          Go to Admin
+        </Link>
+      </div>
+
       <div>
         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
           <Database className="h-6 w-6" /> Bulk Import

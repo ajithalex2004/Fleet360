@@ -5,7 +5,8 @@
  * overages bucketed by status, plus a top-5 list of contracts with the
  * largest unbilled overage exposure.
  *
- * Query: ?since=ISO (default = first day of current year)
+ * Tenant scoping: requires x-tenant-id; only the caller's overages are
+ * aggregated. Query: ?since=ISO (default = first day of current year).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -14,13 +15,18 @@ import { prisma } from '@/lib/prisma';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+
   const sinceParam = req.nextUrl.searchParams.get('since');
   const since = sinceParam
     ? new Date(sinceParam)
     : new Date(new Date().getFullYear(), 0, 1);
 
   const overages = await prisma.leaseMileageOverage.findMany({
-    where: { createdAt: { gte: since } },
+    where: { tenantId, createdAt: { gte: since } },
     include: { contract: { select: { contractNumber: true, lesseeId: true } } },
   });
 
@@ -39,7 +45,6 @@ export async function GET(req: NextRequest) {
   const unbilled = overages.filter(o => o.status === 'PENDING');
   const unbilledTotal = unbilled.reduce((s, o) => s + Number(o.overageAmount), 0);
 
-  // Top 5 contracts by unbilled overage exposure.
   const byContract = new Map<string, { contractId: string; contractNumber: string | null; total: number; km: number }>();
   for (const o of unbilled) {
     const existing = byContract.get(o.contractId) ?? {

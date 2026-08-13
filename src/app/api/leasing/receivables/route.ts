@@ -1,33 +1,42 @@
+/**
+ * /api/leasing/receivables — aging buckets for outstanding payments.
+ *
+ * Tenant scoping: requires x-tenant-id. All queries are filtered to the
+ * caller's tenant via the payments → contracts join.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 export async function GET(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const { searchParams } = new URL(req.url);
     const lesseeId = searchParams.get('lesseeId');
     const now = new Date();
 
-    // Get all overdue / pending payments with contract + lessee info
     const payments = await prisma.leasePayment2.findMany({
       where: {
         status: { in: ['PENDING', 'OVERDUE'] },
+        contract: { tenantId },
       },
       include: {
         contract: {
-          include: {
-            // We join to lessees via a sub-select below
-          },
           select: { contractNumber: true, lesseeId: true, monthlyRate: true },
         },
       },
       orderBy: { dueDate: 'asc' },
     });
 
-    // Group by lessee
     const lesseeIds = [...new Set(payments.map(p => p.contract.lesseeId))];
     const filteredIds = lesseeId ? lesseeIds.filter(id => id === lesseeId) : lesseeIds;
 
-    const lessees = await prisma.lessee.findMany({ where: { id: { in: filteredIds } } });
+    const lessees = await prisma.lessee.findMany({
+      where: { tenantId, id: { in: filteredIds } },
+    });
     const lesseeMap = Object.fromEntries(lessees.map(l => [l.id, l]));
 
     const agingBuckets = filteredIds.map(lid => {

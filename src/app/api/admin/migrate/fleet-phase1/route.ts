@@ -1,12 +1,18 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 
 export async function POST() {
-  const results: string[] = [];
-  const run = async (label: string, sql: string) => {
-    try { await prisma.$executeRawUnsafe(sql); results.push('OK: ' + label); }
-    catch (e: any) { results.push('SKIP: ' + label + ' — ' + (e.message ?? '').slice(0, 120)); }
-  };
+  // Schema migrations are platform-admin operations: they create / alter
+  // tables, may write to system catalogs, and need to see every existing
+  // row. Wrap with withPlatformAdmin so any future RLS on these tables
+  // does not block the migration.
+  return withPlatformAdmin(prisma, async (tx) => {
+    const results: string[] = [];
+    const run = async (label: string, sql: string) => {
+      try { await tx.$executeRawUnsafe(sql); results.push('OK: ' + label); }
+      catch (e: any) { results.push('SKIP: ' + label + ' — ' + (e.message ?? '').slice(0, 120)); }
+    };
 
   // ── vehicle_types (new comprehensive master table) ────────────────────────
   await run('create vehicle_types', `CREATE TABLE IF NOT EXISTS vehicle_types (
@@ -238,9 +244,10 @@ export async function POST() {
   await run('idx_reg_expiry',   "CREATE INDEX IF NOT EXISTS idx_vehicle_registrations_expiry_date ON vehicle_registrations(expiry_date)");
   await run('idx_reg_status',   "CREATE INDEX IF NOT EXISTS idx_vehicle_registrations_status ON vehicle_registrations(status)");
 
-  const ok   = results.filter(r => r.startsWith('OK')).length;
-  const skip = results.filter(r => r.startsWith('SKIP')).length;
-  return NextResponse.json({ ok, skip, results });
+    const ok   = results.filter(r => r.startsWith('OK')).length;
+    const skip = results.filter(r => r.startsWith('SKIP')).length;
+    return NextResponse.json({ ok, skip, results });
+  });
 }
 
 export async function GET() {

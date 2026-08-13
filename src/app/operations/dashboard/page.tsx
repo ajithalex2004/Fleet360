@@ -6,7 +6,8 @@ import {
     EnhancedMaintenanceRequest,
     MaintenanceStatus,
     Vehicle,
-    Driver
+    Driver,
+    MaintenancePriority
 } from '@/types/maintenance';
 import { getMaintenanceRequests, getVehicles, getDrivers } from '@/services/mockData';
 
@@ -48,7 +49,7 @@ export default function OperationsDashboardPage() {
         fetchData();
     }, []);
 
-    const handleAcknowledge = async (request: EnhancedMaintenanceRequest) => {
+    const handleAcknowledge = async (request: EnhancedMaintenanceRequest, comments?: string) => {
         // const acknowledgment: OperationsAcknowledgment = {
         //     acknowledgedBy: 'ops-user-1', // TODO: Get from auth
         //     acknowledgedByName: 'Operations Manager',
@@ -65,7 +66,7 @@ export default function OperationsDashboardPage() {
         setSelectedRequest(null);
 
         // TODO: Save to backend
-        alert(`Request ${request.id} acknowledged successfully!`);
+        alert(`Request ${request.id} acknowledged successfully!${comments ? ` Notes: ${comments}` : ''}`);
     };
 
     const handleBulkAcknowledge = async () => {
@@ -217,12 +218,12 @@ export default function OperationsDashboardPage() {
                                             {new Date(request.requestDate).toLocaleDateString()}
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4">
-                                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${request.priority === 'Critical' ? 'bg-red-100 text-red-700 border-red-300' :
-                                                request.priority === 'High' ? 'bg-orange-100 text-orange-700 border-orange-300' :
-                                                    request.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700 border-yellow-300' :
+                                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${request.priority === MaintenancePriority.CRITICAL ? 'bg-red-100 text-red-700 border-red-300' :
+                                                request.priority === MaintenancePriority.HIGH ? 'bg-orange-100 text-orange-700 border-orange-300' :
+                                                    request.priority === MaintenancePriority.MEDIUM ? 'bg-yellow-100 text-yellow-700 border-yellow-300' :
                                                         'bg-green-100 text-green-700 border-green-300'
                                                 }`}>
-                                                {request.priority || 'Low'}
+                                                {request.priority || MaintenancePriority.LOW}
                                             </span>
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4">

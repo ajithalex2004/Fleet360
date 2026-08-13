@@ -35,11 +35,11 @@ export async function GET(req: NextRequest) {
 
     const [countRows, rows, summaryRows] = await Promise.all([
       prisma.$queryRawUnsafe<[{ count: bigint }]>(
-        `SELECT COUNT(*) AS count FROM finance_anomaly_flags ${where}`,
+        `SELECT COUNT(*) AS count FROM ai.agent_anomaly_flags ${where}`,
         ...countParams,
       ),
       prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-        `SELECT * FROM finance_anomaly_flags ${where}
+        `SELECT * FROM ai.agent_anomaly_flags ${where}
          ORDER BY
            CASE severity WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 ELSE 4 END,
            confidence DESC,
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
       ),
       prisma.$queryRawUnsafe<Array<{ severity: string; count: bigint }>>(
         `SELECT severity, COUNT(*) AS count
-         FROM finance_anomaly_flags WHERE status = 'OPEN'
+         FROM ai.agent_anomaly_flags WHERE status = 'OPEN'
          GROUP BY severity`,
       ),
     ]);
@@ -85,7 +85,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     await prisma.$executeRawUnsafe(
-      `UPDATE finance_anomaly_flags
+      `UPDATE ai.agent_anomaly_flags
        SET status = $1, reviewed_by = $2, reviewed_at = NOW()
        WHERE id = $3`,
       body.status,

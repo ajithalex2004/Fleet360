@@ -4,10 +4,8 @@
  * Mark a traffic fine as DISPUTED (lessee is contesting). Refuses if the fine
  * has already been PAID or fully ABSORBED. Body: { reason }
  *
- * POST /resolve under the same path with { resolution: 'UPHELD'|'OVERTURNED'|'PARTIAL', adjustedAmount? }
- * resolves the dispute; UPHELD flips back to PENDING for re-billing,
- * OVERTURNED flips to ABSORBED (we eat the cost), PARTIAL adjusts finalAmount
- * and flips to PENDING.
+ * Tenant scoping: requires x-tenant-id. Refuses to touch fines from another
+ * tenant.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -18,9 +16,15 @@ import { captureException } from '@/lib/sentry';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const body = await req.json();
-    const fine = await prisma.leaseTrafficFine.findUnique({ where: { id: params.id } });
+    const fine = await prisma.leaseTrafficFine.findFirst({
+      where: { id: params.id, tenantId },
+    });
     if (!fine) return NextResponse.json({ error: 'Fine not found' }, { status: 404 });
 
     if (fine.billingStatus === 'PAID') {
@@ -45,7 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
 
     void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
+      tenantId,
       userId: req.headers.get('x-user-id') ?? 'system',
       userRole: req.headers.get('x-user-role') ?? 'STAFF',
       entityType: 'LeaseTrafficFine',

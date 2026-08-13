@@ -45,7 +45,7 @@ describe('hasPermission()', () => {
 
     it('grants create on any module', () => {
       expect(hasPermission(superPerms, 'leasing', 'create')).toBe(true);
-      expect(hasPermission(superPerms, 'rac', 'create')).toBe(true);
+      expect(hasPermission(superPerms, 'rental', 'create')).toBe(true);
     });
 
     it('grants delete on any module', () => {
@@ -142,6 +142,50 @@ describe('hasPermission()', () => {
       const perms = ['fleet:view:*', 'finance:view:*'];
       expect(hasPermission(perms, 'admin', 'view')).toBe(false);
       expect(hasPermission(perms, 'fleet', 'create')).toBe(false);
+    });
+  });
+
+  // ── Legacy alias resolution (backward-compat with pre-migration permStrings) ─
+  // The DB may still contain permission rows with legacy snake_case module
+  // values (`rac`, `bus_ops`, `drivers`). hasPermission() resolves these
+  // automatically when callers pass canonical kebab-case keys.
+
+  describe('legacy alias backward-compat', () => {
+    it('matches legacy "rac:create:*" when checking canonical "rental"', () => {
+      const perms = ['rac:create:*'];
+      expect(hasPermission(perms, 'rental', 'create')).toBe(true);
+    });
+
+    it('matches legacy "bus_ops:create:*" when checking canonical "bus-ops"', () => {
+      const perms = ['bus_ops:create:*'];
+      expect(hasPermission(perms, 'bus-ops', 'create')).toBe(true);
+    });
+
+    it('matches legacy "drivers:view:*" when checking canonical "driver-mgmt"', () => {
+      const perms = ['drivers:view:*'];
+      expect(hasPermission(perms, 'driver-mgmt', 'view')).toBe(true);
+    });
+
+    it('also matches the legacy alias directly (pre-migration callers)', () => {
+      const perms = ['rac:create:*'];
+      expect(hasPermission(perms, 'rac', 'create')).toBe(true);
+    });
+
+    it('does not over-match — unrelated legacy keys do not grant access', () => {
+      const perms = ['rac:create:*'];
+      expect(hasPermission(perms, 'bus-ops', 'create')).toBe(false);
+      expect(hasPermission(perms, 'driver-mgmt', 'create')).toBe(false);
+    });
+
+    it('handles exact-match legacy keys for resources (not wildcards)', () => {
+      const perms = ['bus_ops:approve:trips'];
+      expect(hasPermission(perms, 'bus-ops', 'approve', 'trips')).toBe(true);
+    });
+
+    it('handles module-level wildcard in legacy form', () => {
+      const perms = ['drivers:*:*'];
+      expect(hasPermission(perms, 'driver-mgmt', 'view')).toBe(true);
+      expect(hasPermission(perms, 'driver-mgmt', 'delete', 'profiles')).toBe(true);
     });
   });
 });

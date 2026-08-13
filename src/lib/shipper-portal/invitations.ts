@@ -16,6 +16,7 @@ import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 import { ensureShipperPortalTables } from './schema';
 import { setPortalUserPassword } from './portal-users-store';
+import { sendEmail } from '@/lib/email';
 
 const INVITATION_TTL_DAYS = 7;
 
@@ -139,23 +140,7 @@ export async function sendInvitationEmail(args: {
   baseUrl: string;
   expiresAt: string;
 }): Promise<{ ok: true } | { ok: false; reason: string }> {
-  try {
-    // Read the tenant's active EMAIL integration. Falls back to the global
-    // (tenantId IS NULL) row.
-    const cfgRows = await prisma.$queryRawUnsafe<Array<{ config: unknown }>>(
-      `SELECT config FROM "IntegrationConfig"
-        WHERE type = 'EMAIL' AND "isActive" = true
-          AND (tenant_id = $1 OR tenant_id IS NULL)
-        ORDER BY tenant_id NULLS LAST
-        LIMIT 1`,
-      args.tenantId,
-    ).catch(() => []);
-    if (!cfgRows[0]) return { ok: false, reason: 'No active EMAIL integration configured.' };
-
-    const raw = cfgRows[0].config as unknown;
-    const config = typeof raw === 'string' ? JSON.parse(raw) : (raw as Record<string, unknown>);
-
-    const link = `${args.baseUrl.replace(/\/$/, '')}/shipper-portal/setup?token=${encodeURIComponent(args.rawToken)}`;
+  const link = `${args.baseUrl.replace(/\/$/, '')}/shipper-portal/setup?token=${encodeURIComponent(args.rawToken)}`;
     const greeting = args.recipientName ? `Dear ${args.recipientName},` : 'Hello,';
     const subject = `Set up your Fleet360 portal access for ${args.customerName}`;
     const html = `
@@ -186,23 +171,45 @@ export async function sendInvitationEmail(args: {
       </div>
     `;
 
-    const nodemailer = await import('nodemailer');
-    const cfg = config as Record<string, unknown>;
-    const transporter = nodemailer.createTransport({
-      host: String(cfg.smtpHost ?? ''),
-      port: parseInt(String(cfg.smtpPort ?? '587')) || 587,
-      secure: cfg.smtpSecure === true || String(cfg.smtpPort ?? '') === '465',
-      auth: { user: String(cfg.smtpUser ?? ''), pass: String(cfg.smtpPassword ?? '') },
-    });
-    await transporter.sendMail({
-      from: (cfg.fromEmail as string) ?? (cfg.smtpUser as string),
-      to: args.recipientEmail,
-      subject,
-      html,
-    });
-    return { ok: true };
-  } catch (e) {
-    console.warn('[shipper-portal] invitation email send failed:', e);
-    return { ok: false, reason: e instanceof Error ? e.message : 'Unknown' };
-  }
+    // 1) Preferred: the tenant's active EMAIL IntegrationConfig (SMTP via nodemailer).
+    try {
+      const cfgRows = await prisma.$queryRawUnsafe<Array<{ config: unknown }>>(
+        `SELECT config FROM "IntegrationConfig"
+          WHERE type = 'EMAIL' AND "isActive" = true
+            AND (tenant_id = $1 OR tenant_id IS NULL)
+          ORDER BY tenant_id NULLS LAST
+          LIMIT 1`,
+        args.tenantId,
+      ).catch(() => []);
+      if (cfgRows[0]) {
+        const raw = cfgRows[0].config as unknown;
+        const cfg = (typeof raw === 'string' ? JSON.parse(raw) : raw) as Record<string, unknown>;
+        const nodemailer = await import('nodemailer');
+        const transporter = nodemailer.createTransport({
+          host: String(cfg.smtpHost ?? ''),
+          port: parseInt(String(cfg.smtpPort ?? '587')) || 587,
+          secure: cfg.smtpSecure === true || String(cfg.smtpPort ?? '') === '465',
+          auth: { user: String(cfg.smtpUser ?? ''), pass: String(cfg.smtpPassword ?? '') },
+        });
+        await transporter.sendMail({
+          from: (cfg.fromEmail as string) ?? (cfg.smtpUser as string),
+          to: args.recipientEmail,
+          subject,
+          html,
+        });
+        return { ok: true };
+      }
+    } catch (e) {
+      console.warn('[shipper-portal] SMTP invitation email failed; trying SendGrid fallback:', e);
+    }
+
+    // 2) Fallback: the centralized SendGrid transport (SENDGRID_API_KEY + EMAIL_FROM).
+    const r = await sendEmail({ to: args.recipientEmail, subject, html });
+    if (r.sent) return { ok: true };
+    return {
+      ok: false,
+      reason: r.reason === 'not_configured'
+        ? 'No email transport configured — set up an EMAIL integration, or set SENDGRID_API_KEY + EMAIL_FROM in the environment.'
+        : (r.error ?? r.reason ?? 'Email send failed.'),
+    };
 }

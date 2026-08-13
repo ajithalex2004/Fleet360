@@ -12,7 +12,7 @@ import { usePathname } from 'next/navigation';
 export default function FieldLayout({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const isActive = (href: string) =>
-    href === '/leasing/field' ? path === '/leasing/field' : path.startsWith(href);
+    href === '/leasing/field' ? path === '/leasing/field' : (path?.startsWith(href) ?? false);
 
   const tabs = [
     { href: '/leasing/field',           label: 'Home',     icon: '🏠' },

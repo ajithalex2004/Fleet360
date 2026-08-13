@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth';
 import { ensureServiceConfigTables } from '@/lib/service-config/schema';
 import { SERVICE_TONES } from '@/types/service-config';
@@ -62,13 +63,15 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   args.push(id, auth.tenantId);
 
   try {
-    const updated = await prisma.$queryRawUnsafe<TypeRow[]>(
-      `UPDATE service_types
-         SET ${sets.join(', ')}
-       WHERE id = $${p}::uuid AND tenant_id = $${p + 1} AND deleted_at IS NULL
-       RETURNING id::text, tenant_id, category_id::text, key, name, description, icon, tone,
-                 default_priority, sort_order, is_system, created_at::text, updated_at::text`,
-      ...args,
+    const updated = await withTenantRls(prisma, auth.tenantId, (tx) =>
+      tx.$queryRawUnsafe<TypeRow[]>(
+        `UPDATE service_types
+           SET ${sets.join(', ')}
+         WHERE id = $${p}::uuid AND tenant_id = $${p + 1} AND deleted_at IS NULL
+         RETURNING id::text, tenant_id, category_id::text, key, name, description, icon, tone,
+                   default_priority, sort_order, is_system, created_at::text, updated_at::text`,
+        ...args,
+      )
     );
     const t = updated[0];
     if (!t) return NextResponse.json({ ok: false, error: 'Service type not found' }, { status: 404 });
@@ -95,18 +98,22 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   const { id } = await params;
   await ensureServiceConfigTables();
 
-  const rows = await prisma.$queryRawUnsafe<Array<{ is_system: boolean; name: string }>>(
-    `SELECT is_system, name FROM service_types
-     WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
-    id, auth.tenantId,
-  ).catch(() => []);
+  const rows = await withTenantRls(prisma, auth.tenantId, (tx) =>
+    tx.$queryRawUnsafe<Array<{ is_system: boolean; name: string }>>(
+      `SELECT is_system, name FROM service_types
+       WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
+      id, auth.tenantId,
+    ).catch(() => [] as Array<{ is_system: boolean; name: string }>)
+  );
   const found = rows[0];
   if (!found) return NextResponse.json({ ok: false, error: 'Service type not found' }, { status: 404 });
   if (found.is_system) return NextResponse.json({ ok: false, error: 'Cannot delete a system service type.' }, { status: 400 });
 
-  await prisma.$executeRawUnsafe(
-    `UPDATE service_types SET deleted_at = NOW() WHERE id = $1::uuid AND tenant_id = $2`,
-    id, auth.tenantId,
+  await withTenantRls(prisma, auth.tenantId, (tx) =>
+    tx.$executeRawUnsafe(
+      `UPDATE service_types SET deleted_at = NOW() WHERE id = $1::uuid AND tenant_id = $2`,
+      id, auth.tenantId,
+    )
   );
 
   void logAudit({

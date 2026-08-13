@@ -87,7 +87,7 @@ export const POST = withAudit(
     }
   },
   {
-    entityType: 'LeaseContract',
+    entityType: 'LeaseContract2',
     action: 'CREATE',
     extractEntity: (body) => ({ id: body?.id, name: body?.contractNumber }),
     describe: (_req, body) =>

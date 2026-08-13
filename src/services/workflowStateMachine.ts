@@ -1,4 +1,16 @@
 import { MaintenanceStatus, EnhancedMaintenanceRequest } from '@/types/maintenance';
+import { getEventBus }      from '@/events/event-bus';
+import {
+    MAINTENANCE_REPAIR_COMPLETED,
+    MAINTENANCE_QC_STARTED,
+    MAINTENANCE_INSPECTION_FAILED,
+    MAINTENANCE_VEHICLE_READY,
+    MAINTENANCE_WORK_ORDER_COMPLETED,
+} from '@/events/contracts/maintenance.events';
+import type {
+    MaintenanceQCEventPayload,
+    MaintenanceWorkOrderCompletedPayload,
+} from '@/events/contracts/maintenance.events';
 
 /**
  * Workflow State Machine
@@ -8,6 +20,11 @@ import { MaintenanceStatus, EnhancedMaintenanceRequest } from '@/types/maintenan
 // Define valid status transitions
 // Define valid status transitions
 const STATUS_TRANSITIONS: Record<MaintenanceStatus, MaintenanceStatus[]> = {
+    [MaintenanceStatus.SUBMITTED]: [
+        MaintenanceStatus.REQUESTED,
+        MaintenanceStatus.ACCEPTED,
+        MaintenanceStatus.REJECTED
+    ],
     [MaintenanceStatus.REQUESTED]: [
         MaintenanceStatus.ACCEPTED,
         MaintenanceStatus.REJECTED,
@@ -21,9 +38,36 @@ const STATUS_TRANSITIONS: Record<MaintenanceStatus, MaintenanceStatus[]> = {
         MaintenanceStatus.ESTIMATION_APPROVED,
         MaintenanceStatus.UNDER_ESTIMATION // Back to estimation if rejected
     ],
-    [MaintenanceStatus.ESTIMATION_APPROVED]: [MaintenanceStatus.UNDER_MAINTENANCE],
-    [MaintenanceStatus.UNDER_MAINTENANCE]: [MaintenanceStatus.MAINTENANCE_COMPLETED],
-    [MaintenanceStatus.MAINTENANCE_COMPLETED]: [MaintenanceStatus.PENDING_INVOICE],
+    [MaintenanceStatus.ESTIMATION_APPROVED]: [
+        MaintenanceStatus.PENDING_OPERATIONS_ACK,
+        MaintenanceStatus.UNDER_MAINTENANCE // Skip ack if not required
+    ],
+    [MaintenanceStatus.PENDING_OPERATIONS_ACK]: [
+        MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL,
+        MaintenanceStatus.UNDER_MAINTENANCE
+    ],
+    [MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL]: [
+        MaintenanceStatus.UNDER_MAINTENANCE,
+        MaintenanceStatus.REJECTED_BY_MAINTENANCE
+    ],
+    [MaintenanceStatus.REJECTED_BY_MAINTENANCE]: [
+        MaintenanceStatus.ACCEPTED // Retry path
+    ],
+    [MaintenanceStatus.UNDER_MAINTENANCE]: [MaintenanceStatus.REPAIR_COMPLETED],
+    [MaintenanceStatus.REPAIR_COMPLETED]: [MaintenanceStatus.QUALITY_INSPECTION],
+    [MaintenanceStatus.QUALITY_INSPECTION]: [
+        MaintenanceStatus.READY_FOR_SERVICE,   // QC passed
+        MaintenanceStatus.INSPECTION_FAILED    // QC failed — return to garage
+    ],
+    [MaintenanceStatus.INSPECTION_FAILED]: [
+        MaintenanceStatus.UNDER_MAINTENANCE    // Garage re-opens the repair
+    ],
+    [MaintenanceStatus.READY_FOR_SERVICE]: [MaintenanceStatus.MAINTENANCE_COMPLETED],
+    [MaintenanceStatus.MAINTENANCE_COMPLETED]: [
+        MaintenanceStatus.COMPLETED,
+        MaintenanceStatus.PENDING_INVOICE
+    ],
+    [MaintenanceStatus.COMPLETED]: [MaintenanceStatus.PENDING_INVOICE],
     [MaintenanceStatus.PENDING_INVOICE]: [MaintenanceStatus.INVOICE_SUBMITTED],
     [MaintenanceStatus.INVOICE_SUBMITTED]: [MaintenanceStatus.CLOSED],
     [MaintenanceStatus.CLOSED]: [], // Terminal state
@@ -68,6 +112,14 @@ export function getStatusColor(status: MaintenanceStatus): string {
             return 'bg-yellow-100 text-yellow-700 border-yellow-300';
         case MaintenanceStatus.UNDER_MAINTENANCE:
             return 'bg-purple-100 text-purple-700 border-purple-300';
+        case MaintenanceStatus.REPAIR_COMPLETED:
+            return 'bg-amber-100 text-amber-700 border-amber-300';
+        case MaintenanceStatus.QUALITY_INSPECTION:
+            return 'bg-indigo-100 text-indigo-700 border-indigo-300';
+        case MaintenanceStatus.INSPECTION_FAILED:
+            return 'bg-red-100 text-red-700 border-red-300';
+        case MaintenanceStatus.READY_FOR_SERVICE:
+            return 'bg-green-100 text-green-700 border-green-300';
         case MaintenanceStatus.MAINTENANCE_COMPLETED:
         case MaintenanceStatus.PENDING_INVOICE:
         case MaintenanceStatus.INVOICE_SUBMITTED:
@@ -90,7 +142,8 @@ export async function transitionStatus(
     newStatus: MaintenanceStatus,
     transitionedBy: string,
     transitionedByName: string,
-    comments?: string
+    comments?: string,
+    tenantId?: string,
 ): Promise<EnhancedMaintenanceRequest> {
     // Validate transition
     if (!canTransition(request.status, newStatus)) {
@@ -129,7 +182,7 @@ export async function transitionStatus(
     };
 
     // Handle side effects
-    await handleStatusChange(updatedRequest, newStatus);
+    await handleStatusChange(updatedRequest, newStatus, tenantId ?? '');
 
     return updatedRequest;
 }
@@ -139,7 +192,8 @@ export async function transitionStatus(
  */
 async function handleStatusChange(
     request: EnhancedMaintenanceRequest,
-    newStatus: MaintenanceStatus
+    newStatus: MaintenanceStatus,
+    tenantId: string,
 ): Promise<void> {
     switch (newStatus) {
         case MaintenanceStatus.REQUESTED:
@@ -158,8 +212,28 @@ async function handleStatusChange(
             await sendWorkOrderConfirmation(request);
             break;
 
+        case MaintenanceStatus.REPAIR_COMPLETED:
+            await notifyInspectionRequired(request, tenantId);
+            break;
+
+        case MaintenanceStatus.QUALITY_INSPECTION:
+            await notifyQCInProgress(request, tenantId);
+            break;
+
+        case MaintenanceStatus.INSPECTION_FAILED:
+            await notifyGarageInspectionFailed(request, tenantId);
+            break;
+
+        case MaintenanceStatus.READY_FOR_SERVICE:
+            await notifyVehicleReadyForService(request, tenantId);
+            break;
+
         case MaintenanceStatus.MAINTENANCE_COMPLETED:
             await notifyInvoiceRequired(request);
+            break;
+
+        case MaintenanceStatus.INVOICE_SUBMITTED:
+            await emitWorkOrderCompleted(request, tenantId);
             break;
 
         case MaintenanceStatus.CLOSED:
@@ -207,6 +281,127 @@ async function sendJobClosureNotifications(request: EnhancedMaintenanceRequest):
     // TODO: Implement closure emails
 }
 
+async function notifyInspectionRequired(
+    request: EnhancedMaintenanceRequest,
+    tenantId: string,
+): Promise<void> {
+    await getEventBus().publish<MaintenanceQCEventPayload>({
+        eventType:     MAINTENANCE_REPAIR_COMPLETED,
+        aggregateType: 'MaintenanceRequest',
+        aggregateId:   request.id,
+        sourceModule:  'maintenance',
+        tenantId,
+        actor:         'system',
+        payload: {
+            requestId:     request.id,
+            vehicleId:     request.vehicleId,
+            requestNumber: request.readableId ?? null,
+            garageId:      request.garageId ?? null,
+            garageName:    (request as any).garageName ?? null,
+            tenantId,
+            occurredAt:    new Date().toISOString(),
+        },
+    });
+}
+
+async function notifyQCInProgress(
+    request: EnhancedMaintenanceRequest,
+    tenantId: string,
+): Promise<void> {
+    await getEventBus().publish<MaintenanceQCEventPayload>({
+        eventType:     MAINTENANCE_QC_STARTED,
+        aggregateType: 'MaintenanceRequest',
+        aggregateId:   request.id,
+        sourceModule:  'maintenance',
+        tenantId,
+        actor:         'system',
+        payload: {
+            requestId:     request.id,
+            vehicleId:     request.vehicleId,
+            requestNumber: request.readableId ?? null,
+            garageId:      request.garageId ?? null,
+            garageName:    (request as any).garageName ?? null,
+            tenantId,
+            occurredAt:    new Date().toISOString(),
+        },
+    });
+}
+
+async function notifyGarageInspectionFailed(
+    request: EnhancedMaintenanceRequest,
+    tenantId: string,
+): Promise<void> {
+    await getEventBus().publish<MaintenanceQCEventPayload>({
+        eventType:     MAINTENANCE_INSPECTION_FAILED,
+        aggregateType: 'MaintenanceRequest',
+        aggregateId:   request.id,
+        sourceModule:  'maintenance',
+        tenantId,
+        actor:         'system',
+        payload: {
+            requestId:     request.id,
+            vehicleId:     request.vehicleId,
+            requestNumber: request.readableId ?? null,
+            garageId:      request.garageId ?? null,
+            garageName:    (request as any).garageName ?? null,
+            tenantId,
+            occurredAt:    new Date().toISOString(),
+        },
+    });
+}
+
+async function notifyVehicleReadyForService(
+    request: EnhancedMaintenanceRequest,
+    tenantId: string,
+): Promise<void> {
+    await getEventBus().publish<MaintenanceQCEventPayload>({
+        eventType:     MAINTENANCE_VEHICLE_READY,
+        aggregateType: 'MaintenanceRequest',
+        aggregateId:   request.id,
+        sourceModule:  'maintenance',
+        tenantId,
+        actor:         'system',
+        payload: {
+            requestId:     request.id,
+            vehicleId:     request.vehicleId,
+            requestNumber: request.readableId ?? null,
+            garageId:      request.garageId ?? null,
+            garageName:    (request as any).garageName ?? null,
+            tenantId,
+            occurredAt:    new Date().toISOString(),
+        },
+    });
+}
+
+async function emitWorkOrderCompleted(
+    request: EnhancedMaintenanceRequest,
+    tenantId: string,
+): Promise<void> {
+    await getEventBus().publish<MaintenanceWorkOrderCompletedPayload>({
+        eventType:     MAINTENANCE_WORK_ORDER_COMPLETED,
+        aggregateType: 'MaintenanceRequest',
+        aggregateId:   request.id,
+        sourceModule:  'maintenance',
+        tenantId,
+        actor:         'system',
+        payload: {
+            requestId:          request.id,
+            vehicleId:          request.vehicleId,
+            requestType:        (request as any).maintenanceType ?? 'SERVICE',
+            invoiceSubmittedAt: new Date().toISOString(),
+            totalCost:          Number((request as any).actualCost ?? (request as any).estimatedCost ?? 0),
+            estimatedCost:      (request as any).estimatedCost != null
+                                    ? Number((request as any).estimatedCost)
+                                    : null,
+            currency:           'AED',
+            garageId:           request.garageId ?? null,
+            garageName:         (request as any).garageName ?? null,
+            requestNumber:      request.workOrderNo ?? null,
+            tenantId,
+        },
+    });
+}
+
 /**
  * Get workflow progress percentage
  */
@@ -218,6 +413,9 @@ export function getWorkflowProgress(status: MaintenanceStatus): number {
         MaintenanceStatus.UNDER_ESTIMATION,
         MaintenanceStatus.PENDING_ESTIMATION_APPROVAL,
         MaintenanceStatus.UNDER_MAINTENANCE,
+        MaintenanceStatus.REPAIR_COMPLETED,
+        MaintenanceStatus.QUALITY_INSPECTION,
+        MaintenanceStatus.READY_FOR_SERVICE,
         MaintenanceStatus.MAINTENANCE_COMPLETED,
         MaintenanceStatus.PENDING_INVOICE,
         MaintenanceStatus.INVOICE_SUBMITTED,
@@ -240,7 +438,9 @@ export function getWorkflowStage(status: MaintenanceStatus): string {
     if ([MaintenanceStatus.UNDER_ESTIMATION, MaintenanceStatus.PENDING_ESTIMATION_APPROVAL].includes(status)) {
         return 'Estimation';
     }
-    if ([MaintenanceStatus.UNDER_MAINTENANCE, MaintenanceStatus.MAINTENANCE_COMPLETED].includes(status)) {
+    if ([MaintenanceStatus.UNDER_MAINTENANCE, MaintenanceStatus.REPAIR_COMPLETED,
+         MaintenanceStatus.QUALITY_INSPECTION, MaintenanceStatus.INSPECTION_FAILED,
+         MaintenanceStatus.READY_FOR_SERVICE, MaintenanceStatus.MAINTENANCE_COMPLETED].includes(status)) {
         return 'Execution';
     }
     if ([MaintenanceStatus.PENDING_INVOICE, MaintenanceStatus.INVOICE_SUBMITTED, MaintenanceStatus.CLOSED].includes(status)) {

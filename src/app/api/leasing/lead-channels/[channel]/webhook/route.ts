@@ -6,12 +6,18 @@
  * `x-channel-signature`. We verify, normalize via the channel adapter, and
  * upsert a LeaseInquiry. Dedup by externalRef stored as inquiryNumber.
  *
+ * Tenant scoping: inbound webhooks are not authenticated by a session, so
+ * we derive tenantId from the channel descriptor (a multi-tenant deployment
+ * would need per-channel tenant binding; until then the active/default
+ * tenant is used via a small lookup).
+ *
  * Failures are logged + returned as structured errors. Auth/normalization
  * failures return 4xx; persist failures return 500 only on unexpected errors.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withWebhookTenant } from '@/lib/rls';
 import {
   getLeadChannel,
   normalizeLeadPayload,
@@ -72,42 +78,68 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
     return NextResponse.json({ ok: false, error: 'customerName is required after normalization' }, { status: 400 });
   }
 
+  // Webhook pattern (canonical):
+  //   1. Identify the tenant — prefer x-tenant-id header (some channel
+  //      proxies forward it), fall back to the first active tenant for
+  //      single-tenant deployments.
+  //   2. Run the upsert in a tenant-scoped transaction.
   try {
-    // Idempotency: dedup by externalRef stored as inquiryNumber.
-    const existing = await prisma.leaseInquiry.findUnique({
-      where: { inquiryNumber: lead.externalRef },
-    });
-    if (existing) {
-      return NextResponse.json({ ok: true, inquiryId: existing.id, status: existing.status, dedup: true });
-    }
-
-    const inquiry = await prisma.leaseInquiry.create({
-      data: {
-        inquiryNumber: lead.externalRef,
-        customerName: lead.customerName.trim(),
-        customerEmail: lead.customerEmail,
-        customerPhone: lead.customerPhone,
-        companyName: lead.companyName,
-        vehicleType: lead.vehicleType,
-        vehicleCount: lead.vehicleCount,
-        leaseType: lead.leaseType,
-        durationMonths: lead.durationMonths,
-        notes: [`[${lead.sourceTag}]`, lead.notes].filter(Boolean).join('\n\n'),
-        status: 'NEW',
+    const result = await withWebhookTenant(
+      prisma,
+      async (tx): Promise<string | null> => {
+        const fromHeader = req.headers.get('x-tenant-id');
+        if (fromHeader) return fromHeader;
+        const fallback = await tx.tenant.findFirst({
+          where: { isActive: { not: false } },
+          select: { id: true },
+          orderBy: { createdAt: 'asc' },
+        });
+        return fallback?.id ?? null;
       },
-    });
+      async ({ tx, tenantId }) => {
+        // Idempotency: dedup by externalRef stored as inquiryNumber (scoped per tenant).
+        const existing = await tx.leaseInquiry.findFirst({
+          where: { tenantId, inquiryNumber: lead.externalRef },
+        });
+        if (existing) {
+          return NextResponse.json({ ok: true, inquiryId: existing.id, status: existing.status, dedup: true });
+        }
 
-    void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
-      userId: `channel:${descriptor.key}`,
-      userRole: 'CHANNEL',
-      entityType: 'LeaseInquiry',
-      entityId: inquiry.id,
-      action: 'CREATE',
-      details: `Inbound lead from ${descriptor.label}: ${lead.externalRef} — ${lead.customerName}${lead.companyName ? ` (${lead.companyName})` : ''}.`,
-    });
+        const inquiry = await tx.leaseInquiry.create({
+          data: {
+            inquiryNumber: lead.externalRef,
+            customerName: lead.customerName.trim(),
+            customerEmail: lead.customerEmail,
+            customerPhone: lead.customerPhone,
+            companyName: lead.companyName,
+            vehicleType: lead.vehicleType,
+            vehicleCount: lead.vehicleCount,
+            leaseType: lead.leaseType,
+            durationMonths: lead.durationMonths,
+            notes: [`[${lead.sourceTag}]`, lead.notes].filter(Boolean).join('\n\n'),
+            status: 'NEW',
+            tenantId,
+          },
+        });
 
-    return NextResponse.json({ ok: true, inquiryId: inquiry.id, status: inquiry.status, dedup: false });
+        void logAudit({
+          tenantId,
+          userId: `channel:${descriptor.key}`,
+          userRole: 'CHANNEL',
+          entityType: 'LeaseInquiry',
+          entityId: inquiry.id,
+          action: 'CREATE',
+          details: `Inbound lead from ${descriptor.label}: ${lead.externalRef} — ${lead.customerName}${lead.companyName ? ` (${lead.companyName})` : ''}.`,
+        });
+
+        return NextResponse.json({ ok: true, inquiryId: inquiry.id, status: inquiry.status, dedup: false });
+      },
+    );
+
+    if (result === null) {
+      return NextResponse.json({ ok: false, error: 'No active tenant to attribute this lead to' }, { status: 503 });
+    }
+    return result;
   } catch (err) {
     captureException(err, {
       context: 'leasing.lead-channels.persist',

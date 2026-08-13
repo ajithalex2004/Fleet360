@@ -3,6 +3,9 @@
  *
  * Mark a follow-up as done. Refuses if the activity has no follow-up scheduled
  * or it's already marked done.
+ *
+ * Tenant scoping: requires x-tenant-id. The activity must belong to the
+ * caller's tenant (via inquiry ownership).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -15,8 +18,14 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string; activityId: string } },
 ) {
-  const a = await prisma.leaseInquiryActivity.findUnique({ where: { id: params.activityId } });
-  if (!a || a.inquiryId !== params.id) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+  const a = await prisma.leaseInquiryActivity.findFirst({
+    where: { id: params.activityId, tenantId, inquiryId: params.id },
+  });
+  if (!a) {
     return NextResponse.json({ error: 'Activity not found' }, { status: 404 });
   }
   if (!a.followUpAt) {
@@ -32,7 +41,7 @@ export async function POST(
   });
 
   void logAudit({
-    tenantId: req.headers.get('x-tenant-id') ?? undefined,
+    tenantId,
     userId: req.headers.get('x-user-id') ?? 'system',
     userRole: req.headers.get('x-user-role') ?? 'STAFF',
     entityType: 'LeaseInquiry',

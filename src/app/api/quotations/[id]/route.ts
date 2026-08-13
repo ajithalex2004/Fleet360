@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getEventBus }        from '@/events/event-bus';
+import { QUOTATION_APPROVED } from '@/events/registry';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
@@ -63,6 +65,34 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
                 attachments: true,
             },
         });
+
+        // ── Finance: quotation APPROVED → transactional outbox ────────────
+        // FinanceQuotationConsumer handles AP payable + DRAFT JE asynchronously.
+        // mirrorMaintenanceToFinance() will idempotently skip the JE on completion.
+        const newStatus = (updated as any).status as string | undefined;
+        if (newStatus === 'APPROVED') {
+            const amount   = Number((updated as any).grandTotal ?? (updated as any).totalCost ?? 0);
+            const tenantId = (updated as any).tenantId as string | null;
+            if (amount > 0 && tenantId) {
+                await getEventBus().publish({
+                    eventType:     QUOTATION_APPROVED,
+                    aggregateType: 'Quotation',
+                    aggregateId:   id,
+                    sourceModule:  'maintenance',
+                    tenantId,
+                    actor:         'system',
+                    payload: {
+                        quotationId:          id,
+                        maintenanceRequestId: (updated as any).maintenanceRequestId ?? null,
+                        garageId:             (updated as any).Garage?.id            ?? null,
+                        garageName:           (updated as any).Garage?.name          ?? null,
+                        amount,
+                        currency:             (updated as any).currency ?? 'AED',
+                        approvedAt:           new Date().toISOString(),
+                    },
+                }).catch(err => console.warn('[quotation approve] outbox publish failed:', err));
+            }
+        }
 
         return NextResponse.json(JSON.parse(JSON.stringify(updated)));
     } catch (error) {

@@ -1,0 +1,46 @@
+/**
+ * Finance consumer: fuel.filled → Finance
+ *
+ * Mirrors a fuel log entry to finance.finance_expenses via
+ * postFuelLogToFinance(). Idempotency is handled at the bridge
+ * (expense_no = 'FUEL-{id}') and at the inbox level.
+ */
+
+import { BaseEventConsumer }         from '@/events/consumer-base';
+import type { DomainEventEnvelope }  from '@/events/event-envelope';
+import { FUEL_FILLED }               from '@/events/registry';
+import type { FuelFilledPayload }    from '@/events/contracts/fuel.events';
+import { postFuelLogToFinance }      from '@/lib/bus-ops/finance-bridge';
+
+export class FinanceFuelConsumer extends BaseEventConsumer<FuelFilledPayload> {
+  readonly consumerName = 'finance-fuel';
+  readonly eventType    = FUEL_FILLED;
+
+  protected async handle(
+    envelope: DomainEventEnvelope<FuelFilledPayload>,
+  ): Promise<void> {
+    const { data, tenantId } = envelope;
+
+    const result = await postFuelLogToFinance(
+      {
+        id:           data.fuelLogId,
+        vehicleId:    data.vehicleId,
+        driverId:     data.driverId,
+        fuelDate:     new Date(data.fuelDate),
+        liters:       data.liters,
+        costPerLiter: data.costPerLiter,
+        totalCost:    data.totalCost,
+        station:      data.station,
+      },
+      tenantId,
+    );
+
+    if (result === null) {
+      // Bridge returned null: zero-amount or already mirrored — not an error
+      console.log(`[finance-fuel] fuelLog ${data.fuelLogId} — skipped (zero amount or already mirrored)`);
+      return;
+    }
+
+    console.log(`[finance-fuel] fuelLog ${data.fuelLogId} → expense ${result.expenseId}`);
+  }
+}

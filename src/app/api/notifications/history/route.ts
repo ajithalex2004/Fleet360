@@ -31,12 +31,14 @@ export async function POST(request: Request) {
 
         const newLog = await prisma.notificationLog.create({
             data: {
+                id: crypto.randomUUID(),
                 recipient,
                 type,
                 subject,
                 body: messageBody,
                 status: status || 'Pending',
                 triggerReason,
+                sentAt: new Date(),
             }
         });
         return NextResponse.json(newLog);

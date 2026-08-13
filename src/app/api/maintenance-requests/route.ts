@@ -30,6 +30,8 @@ export async function POST(request: Request) {
 
         const req = await prisma.maintenanceRequest.create({
             data: {
+                // TODO: read tenantId from request headers via getTenantContext()
+                tenantId: '',
                 vehicleId: body.vehicleId || body.vehicle_id,
                 driverId: body.driverId || body.driver_id,
                 description: body.description,

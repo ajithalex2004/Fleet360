@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import {
   setTenantTrackingDefault,
   TRACKING_LEVELS,
@@ -29,12 +30,15 @@ export async function GET(req: NextRequest) {
   }
   try {
     await ensureShipperPortalTables();
-    const rows = await prisma.$queryRawUnsafe<Array<{ level: string | null }>>(
-      `SELECT default_portal_tracking_level AS level
-         FROM tenant_settings
-        WHERE tenant_id = $1
-        LIMIT 1`,
-      tenantId,
+    // tenant_settings has tenant_id with RLS.
+    const rows = await withTenantRls(prisma, tenantId, (tx) =>
+      tx.$queryRawUnsafe<Array<{ level: string | null }>>(
+        `SELECT default_portal_tracking_level AS level
+           FROM tenant_settings
+          WHERE tenant_id = $1
+          LIMIT 1`,
+        tenantId,
+      )
     );
     return NextResponse.json({
       level: rows[0]?.level ?? DEFAULT_TRACKING_LEVEL,
@@ -59,29 +63,35 @@ export async function PUT(req: NextRequest) {
         error: `level must be one of: ${TRACKING_LEVELS.join(', ')}`,
       }, { status: 400 });
     }
+    // Pull `level` out into a const so TypeScript narrowing survives the
+    // closure (and the runtime value can't change between checks).
+    const newLevel = body.level;
 
-    // Read the previous value for the audit entry.
     await ensureShipperPortalTables();
-    const prevRows = await prisma.$queryRawUnsafe<Array<{ level: string | null }>>(
-      `SELECT default_portal_tracking_level AS level FROM tenant_settings WHERE tenant_id = $1 LIMIT 1`,
-      tenantId,
-    );
-    const previousLevel = prevRows[0]?.level ?? DEFAULT_TRACKING_LEVEL;
+    // Read the previous value for the audit entry, then write — all under
+    // the tenant-scoped transaction.
+    return await withTenantRls(prisma, tenantId, async (tx) => {
+      const prevRows = await tx.$queryRawUnsafe<Array<{ level: string | null }>>(
+        `SELECT default_portal_tracking_level AS level FROM tenant_settings WHERE tenant_id = $1 LIMIT 1`,
+        tenantId,
+      );
+      const previousLevel = prevRows[0]?.level ?? DEFAULT_TRACKING_LEVEL;
 
-    await setTenantTrackingDefault({ tenantId, level: body.level });
+      await setTenantTrackingDefault({ tenantId, level: newLevel });
 
-    void logAudit({
-      tenantId,
-      userId,
-      userRole: req.headers.get('x-user-role') ?? 'TENANT_ADMIN',
-      entityType: 'TenantSettings',
-      entityId: tenantId,
-      entityName: 'Portal tracking default',
-      action: 'UPDATE',
-      details: `Set tenant-wide default portal tracking visibility to ${body.level} (was ${previousLevel})`,
+      void logAudit({
+        tenantId,
+        userId,
+        userRole: req.headers.get('x-user-role') ?? 'TENANT_ADMIN',
+        entityType: 'TenantSettings',
+        entityId: tenantId,
+        entityName: 'Portal tracking default',
+        action: 'UPDATE',
+        details: `Set tenant-wide default portal tracking visibility to ${newLevel} (was ${previousLevel})`,
+      });
+
+      return NextResponse.json({ ok: true, level: newLevel });
     });
-
-    return NextResponse.json({ ok: true, level: body.level });
   } catch (e) {
     console.error('[admin/tenant-settings/tracking-visibility] PUT', e);
     return NextResponse.json({ error: 'Failed to update' }, { status: 500 });

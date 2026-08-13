@@ -19,6 +19,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Ship, LayoutDashboard, PackageOpen, Plus, LogOut } from 'lucide-react';
+import { requestServerLogout } from '@/lib/client-session';
 
 interface PortalMe {
   user: { id: string; email: string; fullName: string | null; role: string };
@@ -71,8 +72,8 @@ export default function ShipperPortalLayout({ children }: { children: React.Reac
     return () => { cancelled = true; };
   }, [isAuthSurface, router]);
 
-  const logout = async () => {
-    await fetch('/api/shipper-portal/auth/logout', { method: 'POST' });
+  const logout = () => {
+    requestServerLogout('/api/shipper-portal/auth/logout');
     router.replace('/shipper-portal/login');
   };
 

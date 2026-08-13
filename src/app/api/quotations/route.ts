@@ -27,6 +27,8 @@ export async function POST(request: Request) {
 
         const quotation = await prisma.quotation.create({
             data: {
+                // TODO: read tenantId from request headers via getTenantContext()
+                tenantId: '',
                 maintenanceRequestId: body.maintenanceRequestId || body.maintenance_request_id,
                 garageId: body.garageId || body.garage_id,
                 status: body.status || 'PENDING',

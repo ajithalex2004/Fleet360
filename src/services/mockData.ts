@@ -31,7 +31,7 @@ export const mockAlertConfigs: any[] = []; // Placeholder
 
 // API Helpers
 export const api = {
-    get: async (endpoint: string) => {
+    get: async <T = any>(endpoint: string): Promise<T> => {
         const res = await fetch(`/api/${endpoint}`, { cache: 'no-store' });
         if (!res.ok) {
             let errorDetails = `Status: ${res.status}`;
@@ -43,9 +43,9 @@ export const api = {
             }
             throw new Error(`Failed to fetch ${endpoint} (${errorDetails})`);
         }
-        return res.json();
+        return res.json() as T;
     },
-    post: async (endpoint: string, data: any) => {
+    post: async <T = any>(endpoint: string, data: any): Promise<T> => {
         const response = await fetch(`/api/${endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -55,9 +55,9 @@ export const api = {
             const errorText = await response.text();
             throw new Error(`Failed to POST ${endpoint}: ${errorText}`);
         }
-        return response.json();
+        return response.json() as T;
     },
-    delete: async (endpoint: string) => {
+    delete: async <T = any>(endpoint: string): Promise<T> => {
         const response = await fetch(`/api/${endpoint}`, {
             method: 'DELETE',
         });
@@ -65,9 +65,9 @@ export const api = {
             const errorText = await response.text();
             throw new Error(`Failed to DELETE ${endpoint}: ${errorText}`);
         }
-        return response.json();
+        return response.json() as T;
     },
-    patch: async (endpoint: string, data: any) => {
+    patch: async <T = any>(endpoint: string, data: any): Promise<T> => {
         const response = await fetch(`/api/${endpoint}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -77,9 +77,9 @@ export const api = {
             const errorText = await response.text();
             throw new Error(`Failed to PATCH ${endpoint}: ${errorText}`);
         }
-        return response.json();
+        return response.json() as T;
     },
-    put: async (endpoint: string, data: any) => {
+    put: async <T = any>(endpoint: string, data: any): Promise<T> => {
         const response = await fetch(`/api/${endpoint}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -89,21 +89,21 @@ export const api = {
             const errorText = await response.text();
             throw new Error(`Failed to PUT ${endpoint}: ${errorText}`);
         }
-        return response.json();
+        return response.json() as T;
     },
 };
 // Vehicles
-export const getVehicles = () => api.get('vehicles');
-export const getVehicleById = async (id: string) => api.get(`vehicles/${id}`);
-export const createVehicle = (vehicle: any) => api.post('vehicles', vehicle);
-export const updateVehicle = (id: string, updates: any) => api.patch(`vehicles/${id}`, updates);
+export const getVehicles = () => api.get<Vehicle[]>('vehicles');
+export const getVehicleById = async (id: string) => api.get<Vehicle>(`vehicles/${id}`);
+export const createVehicle = (vehicle: any) => api.post<Vehicle>('vehicles', vehicle);
+export const updateVehicle = (id: string, updates: any) => api.patch<Vehicle>(`vehicles/${id}`, updates);
 export const deleteVehicle = (id: string) => api.delete(`vehicles/${id}`);
 
 // Drivers
-export const getDrivers = () => api.get('drivers');
-export const getDriverById = async (id: string) => api.get(`drivers/${id}`);
-export const createDriver = (driver: any) => api.post('drivers', driver);
-export const updateDriver = (id: string, updates: any) => api.patch(`drivers/${id}`, updates);
+export const getDrivers = () => api.get<Driver[]>('drivers');
+export const getDriverById = async (id: string) => api.get<Driver>(`drivers/${id}`);
+export const createDriver = (driver: any) => api.post<Driver>('drivers', driver);
+export const updateDriver = (id: string, updates: any) => api.patch<Driver>(`drivers/${id}`, updates);
 export const deleteDriver = (id: string) => api.delete(`drivers/${id}`);
 
 // Users
@@ -113,30 +113,30 @@ export const updateUser = (id: string, updates: any) => api.patch(`users/${id}`,
 export const deleteUser = (id: string) => api.delete(`users/${id}`);
 
 // Garages
-export const getGarages = () => api.get('garages');
-export const createGarage = (garage: Garage) => api.post('garages', garage);
-export const updateGarage = (id: string, garage: Garage) => api.put(`garages/${id}`, garage);
+export const getGarages = () => api.get<Garage[]>('garages');
+export const createGarage = (garage: Garage) => api.post<Garage>('garages', garage);
+export const updateGarage = (id: string, garage: Garage) => api.put<Garage>(`garages/${id}`, garage);
 export const deleteGarage = (id: string) => api.delete(`garages/${id}`);
 
 
 
 // Maintenance Requests
-export const getMaintenanceRequests = () => api.get('maintenance-requests');
-export const getMaintenanceRequestById = (id: string) => api.get(`maintenance-requests/${id}`);
-export const createMaintenanceRequest = (request: Omit<MaintenanceRequest, 'id' | 'status' | 'comments'>) => api.post('maintenance-requests', request);
-export const updateMaintenanceRequest = (id: string, updates: Partial<MaintenanceRequest>) => api.patch(`maintenance-requests/${id}`, updates);
+export const getMaintenanceRequests = () => api.get<MaintenanceRequest[]>('maintenance-requests');
+export const getMaintenanceRequestById = (id: string) => api.get<MaintenanceRequest>(`maintenance-requests/${id}`);
+export const createMaintenanceRequest = (request: Omit<MaintenanceRequest, 'id' | 'status' | 'comments'>) => api.post<MaintenanceRequest>('maintenance-requests', request);
+export const updateMaintenanceRequest = (id: string, updates: Partial<MaintenanceRequest>) => api.patch<MaintenanceRequest>(`maintenance-requests/${id}`, updates);
 
 // Quotations
-export const createQuotation = (quotation: any) => api.post('quotations', quotation);
-export const updateQuotation = (id: string, updates: any) => api.patch(`quotations/${id}`, updates);
+export const createQuotation = (quotation: any) => api.post<Quotation>('quotations', quotation);
+export const updateQuotation = (id: string, updates: any) => api.patch<Quotation>(`quotations/${id}`, updates);
 
 // Work Orders
 export const createWorkOrder = (workOrder: any) => api.post('work-orders', workOrder);
 
 // Alerts
-export const getAlerts = () => api.get('alerts');
-export const createAlert = (alert: any) => api.post('alerts', alert);
-export const updateAlert = (id: string, updates: Partial<Alert>) => api.patch(`alerts/${id}`, updates);
+export const getAlerts = () => api.get<Alert[]>('alerts');
+export const createAlert = (alert: any) => api.post<Alert>('alerts', alert);
+export const updateAlert = (id: string, updates: Partial<Alert>) => api.patch<Alert>(`alerts/${id}`, updates);
 
 // Invoices (Mock for now)
 export const getInvoices = () => Promise.resolve(mockInvoices);

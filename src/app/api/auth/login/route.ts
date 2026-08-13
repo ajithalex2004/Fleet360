@@ -7,11 +7,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { prisma } from '@/lib/prisma';
+import { isDbConnectionError, prisma } from '@/lib/prisma';
 import { signSession } from '@/lib/tenant-session';
 import { signJwtForBackend } from '@/lib/auth/jwt';
 import { ensureMfaColumns } from '@/lib/auth-mfa-schema';
 import { verifyTotp, verifyRecoveryCode } from '@/lib/totp';
+import { getEffectiveRole } from '@/lib/permissions/effective-role';
 
 // ── Password verification (matches the PBKDF2 format used in /api/tenants/provision) ──
 
@@ -138,8 +139,25 @@ export async function POST(request: NextRequest) {
     const userTenants = await prisma.userTenant.findMany({
       where: { userId: user.id, isActive: true },
       include: {
-        tenant: { select: { id: true, name: true, code: true, plan: true, isActive: true } },
-        role:   { select: { id: true, name: true, code: true } },
+        tenant: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            plan: true,
+            isActive: true,
+            dataResidency: true,
+            modules: { where: { isEnabled: true }, select: { module: true } },
+          },
+        },
+        role: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            permissions: { include: { permission: true } },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -163,13 +181,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. Sign session cookie (include role so middleware can inject x-user-role)
+    // Resolve the effective role — if the assigned role is a platform
+    // role, swap in a tenant override of the same code (if one exists).
+    // We do this AFTER the userTenant lookup so we still have the
+    // UserTenant row for the session payload.
+    let effectiveRole: Awaited<ReturnType<typeof getEffectiveRole>> | null = null;
+    try {
+      effectiveRole = await getEffectiveRole(prisma as never, user.id, userTenant.tenantId);
+    } catch (e) {
+      // Diagnostic — write to disk so we can see in dev
+      try {
+        const fs = await import('fs');
+        const path = await import('path');
+        const log = path.join(process.cwd(), '.next', 'login-debug.log');
+        fs.appendFileSync(log, `${new Date().toISOString()} ${e instanceof Error ? e.stack : String(e)}\n`);
+      } catch {/* ignore */}
+      console.error('[auth/login] effective-role resolution failed (falling back to assigned role):', e);
+    }
+    const effectivePermissions = effectiveRole ? effectiveRole.permissions
+      : userTenant.role.permissions.map(rp =>
+          `${rp.permission.module}:${rp.permission.action}:${rp.permission.resource ?? '*'}`
+        );
+    // A platform SUPER_ADMIN gets the wildcard. A tenant override of
+    // SUPER_ADMIN does NOT — it's a tenant-scoped admin.
+    const permissions = (effectiveRole?.code === 'SUPER_ADMIN' && effectiveRole.isPlatform)
+      ? [...effectivePermissions, '*:*:*']
+      : effectivePermissions;
+
+    // 4. Sign session cookie (include role + residency so middleware can inject
+    //    x-user-role / x-data-residency without extra DB lookups per request)
     const plan = userTenant.tenant.plan ?? 'TRIAL';
     const token = await signSession({
       userId:   user.id,
       tenantId: userTenant.tenantId,
       plan,
       role:     userTenant.role.code,
+      // Only ENTERPRISE tenants with a non-GLOBAL residency need the header.
+      ...(plan === 'ENTERPRISE' &&
+          userTenant.tenant.dataResidency &&
+          userTenant.tenant.dataResidency !== 'GLOBAL'
+        ? { dataResidency: userTenant.tenant.dataResidency }
+        : {}),
     });
 
     // 4b. Sign a JWT for the Go backend (Authorization: Bearer <token>).
@@ -196,18 +248,27 @@ export async function POST(request: NextRequest) {
       ok: true,
       user: {
         id:        user.id,
+        username:  user.username,
         email:     user.email,
         firstName: user.firstName,
         lastName:  user.lastName,
-        roleCode:  userTenant.role.code,
-        roleName:  userTenant.role.name,
+        roleCode:  effectiveRole?.code        ?? userTenant.role.code,
+        roleName:  effectiveRole?.name        ?? userTenant.role.name,
+        // Surfaced so the client can show "you have a custom override for
+        // this tenant" without re-fetching. null when the effective role
+        // is the same as the assigned role.
+        effectiveRoleId:    effectiveRole?.id ?? null,
+        isTenantOverride:   effectiveRole?.isOverride ?? false,
+        originalRoleCode:   userTenant.role.code,
       },
       tenant: {
         id:   userTenant.tenant.id,
         name: userTenant.tenant.name,
         code: userTenant.tenant.code,
         plan,
+        enabledModules: userTenant.tenant.modules.map(m => m.module),
       },
+      permissions: [...new Set(permissions)],
       // Return all tenants so the client can show a tenant-switcher if needed
       availableTenants: userTenants.map(ut => ({
         id:   ut.tenant.id,
@@ -234,6 +295,15 @@ export async function POST(request: NextRequest) {
     return response;
   } catch (err) {
     console.error('[auth/login]', err);
+    if (isDbConnectionError(err)) {
+      return NextResponse.json(
+        {
+          error: 'Service Unavailable',
+          message: 'Database connection unavailable. Please check Neon/network connectivity and try again.',
+        },
+        { status: 503 },
+      );
+    }
     return NextResponse.json(
       { error: 'Internal Server Error', message: 'Login failed. Please try again.' },
       { status: 500 },

@@ -46,8 +46,8 @@ const STATUS_BG: Record<string, string> = {
 };
 
 export default function RacCustomerPortalPage() {
-  const params = useParams();
-  const search = useSearchParams();
+  const params = useParams() ?? {};
+  const search = useSearchParams() ?? new URLSearchParams();
   const router = useRouter();
   const tenantSlug = (params?.tenantSlug as string) ?? '';
   const customerId = search.get('customerId') ?? '';

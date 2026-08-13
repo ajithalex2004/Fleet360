@@ -10,6 +10,9 @@
  * The classification is NOT persisted — the UI uses it to prefill the
  * upload form. The user reviews the suggested fields and then submits
  * via the regular /api/leasing/documents/upload endpoint.
+ *
+ * Tenant scoping: requires x-tenant-id so the audit trail of classifier
+ * usage is correctly attributed per tenant.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -20,9 +23,13 @@ import { captureException } from '@/lib/sentry';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-const MAX_BYTES = 10 * 1024 * 1024; // 10 MB cap on classification input
+const MAX_BYTES = 10 * 1024 * 1024;
 
 export async function POST(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const form = await req.formData();
     const file = form.get('file');
@@ -55,7 +62,7 @@ export async function POST(req: NextRequest) {
     }
 
     void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
+      tenantId,
       userId: req.headers.get('x-user-id') ?? undefined,
       userRole: req.headers.get('x-user-role') ?? undefined,
       entityType: 'AIDocClassifier',

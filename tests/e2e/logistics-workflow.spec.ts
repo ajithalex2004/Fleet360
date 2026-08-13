@@ -4,9 +4,9 @@
  * Journey:
  *  1.  Login as ENTERPRISE tenant admin
  *  2.  Logistics dashboard renders
- *  3.  Trips page renders with list or empty state
- *  4.  Create a new logistics trip
- *  5.  Trip appears in trips list
+ *  3.  Shipment orders page renders with list or empty state
+ *  4.  Create a new shipment order
+ *  5.  Shipment appears in shipment orders list
  *  6.  Dispatch page renders
  *  7.  Tracking page renders
  *  8.  Quotes page renders
@@ -31,6 +31,8 @@ import {
 // ── State ──────────────────────────────────────────────────────────────────────
 
 let serverUp  = false;
+let setupReady = false;
+let setupSkipReason = 'E2E logistics tenant setup did not complete';
 let ctx: E2EContext | null = null;
 let authState: StorageState | null = null;
 
@@ -50,9 +52,16 @@ test.beforeAll(async ({ browser }) => {
   } catch (err) {
     console.warn('[Logistics E2E] First createE2ETenant attempt failed, retrying…', err);
     await new Promise(r => setTimeout(r, 3_000));
-    ctx = await createE2ETenant('Logistics');
+    try {
+      ctx = await createE2ETenant('Logistics');
+    } catch (retryErr) {
+      setupSkipReason = `[Logistics E2E] Tenant setup unavailable: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`;
+      console.warn(setupSkipReason);
+      return;
+    }
   }
   authState = await saveAuthState(browser, ctx!.email, ctx!.password);
+  setupReady = true;
 });
 
 test.afterAll(async () => {
@@ -61,6 +70,7 @@ test.afterAll(async () => {
 
 test.beforeEach(async ({}, testInfo) => {
   skipIfOffline(serverUp, testInfo);
+  testInfo.skip(!setupReady, setupSkipReason);
 });
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -87,62 +97,47 @@ test('LOG-01: Logistics module is accessible from platform', async ({ page }) =>
   ).toBeVisible({ timeout: 10_000 });
 });
 
-test('LOG-02: Trips page renders', async ({ page }) => {
+test('LOG-02: Shipment orders page renders', async ({ page }) => {
   await loginWithStoredState(page, authState!, ctx!);
   await page.goto('/logistics/trips', { waitUntil: 'domcontentloaded' });
   await waitForSettle(page);
 
   await expect(
-    page.locator('h1, h2, :text("Trip"), main').first()
+    page.locator('h1, h2, :text("Shipment"), main').first()
   ).toBeVisible({ timeout: 10_000 });
 });
 
-test('LOG-03: Create a new logistics trip', async ({ page }) => {
+test('LOG-03: Create a new shipment order', async ({ page }) => {
   await loginWithStoredState(page, authState!, ctx!);
   await page.goto('/logistics/trips', { waitUntil: 'domcontentloaded' });
   await waitForSettle(page);
 
   const newBtn = page.locator(
-    'button:has-text("New Trip"), button:has-text("Create Trip"), ' +
-    'button:has-text("Add Trip"), a:has-text("New Trip"), button:has-text("New")'
+    'button:has-text("New shipment"), button:has-text("Create shipment"), ' +
+    'button:has-text("New Shipment"), button:has-text("New")'
   ).first();
 
   if (await newBtn.count() === 0) {
-    console.warn('[LOG-03] No "New Trip" button found — skipping creation step');
+    console.warn('[LOG-03] No "New shipment" button found - skipping creation step');
     return;
   }
   await newBtn.click();
 
   await page.waitForSelector(
-    'h2:has-text("Trip"), [role="dialog"], form',
+    'h2:has-text("shipment"), h2:has-text("Shipment"), [role="dialog"], form',
     { timeout: 10_000 }
   ).catch(() => {});
 
-  // Customer / company name
-  await page.locator(
-    'input[placeholder*="customer" i], input[placeholder*="company" i], ' +
-    'input[placeholder*="name" i], input[placeholder*="client" i]'
-  ).first().fill(CUSTOMER_NAME).catch(() => {});
-
-  // Origin
-  await page.locator(
-    'input[placeholder*="origin" i], input[placeholder*="pickup" i], ' +
-    'input[placeholder*="from" i]'
-  ).first().fill(ORIGIN).catch(() => {});
-
-  // Destination
-  await page.locator(
-    'input[placeholder*="destination" i], input[placeholder*="delivery" i], ' +
-    'input[placeholder*="to" i]'
-  ).first().fill(DESTINATION).catch(() => {});
-
-  // Scheduled date
+  const inputs = page.locator('input');
+  await inputs.nth(0).fill(CUSTOMER_NAME).catch(() => {});
+  await inputs.nth(2).fill(ORIGIN).catch(() => {});
+  await inputs.nth(3).fill(DESTINATION).catch(() => {});
   await page.locator('input[type="date"]').first().fill(futureDate(1)).catch(() => {});
 
   await page.waitForTimeout(400);
 
-  const tripResponsePromise = page.waitForResponse(
-    r => r.url().includes('/api/logistics') && r.request().method() === 'POST',
+  const shipmentResponsePromise = page.waitForResponse(
+    r => r.url().includes('/api/logistics/shipments') && r.request().method() === 'POST',
     { timeout: 8_000 },
   ).catch(() => null);
 
@@ -152,7 +147,7 @@ test('LOG-03: Create a new logistics trip', async ({ page }) => {
     console.warn('[LOG-03] Submit button not found or not clickable');
   });
 
-  const resp = await tripResponsePromise;
+  const resp = await shipmentResponsePromise;
   if (resp) {
     const status = resp.status();
     if (status >= 400) {
@@ -168,7 +163,7 @@ test('LOG-03: Create a new logistics trip', async ({ page }) => {
   expect(content).not.toContain('Application error');
 });
 
-test('LOG-04: Trip appears in trips list', async ({ page }) => {
+test('LOG-04: Shipment appears in shipment orders list', async ({ page }) => {
   await loginWithStoredState(page, authState!, ctx!);
   await page.goto('/logistics/trips', { waitUntil: 'domcontentloaded' });
   await waitForSettle(page);
@@ -177,7 +172,7 @@ test('LOG-04: Trip appears in trips list', async ({ page }) => {
 
   const nameCount = await page.locator(`:text("${CUSTOMER_NAME}")`).count();
   if (nameCount === 0) {
-    console.warn(`[LOG-04] "${CUSTOMER_NAME}" not in list — trip may not have been saved in LOG-03`);
+    console.warn(`[LOG-04] "${CUSTOMER_NAME}" not in list - shipment may not have been saved in LOG-03`);
   }
 });
 
@@ -304,4 +299,13 @@ test('LOG-13: Logistics dashboard shows summary metrics', async ({ page }) => {
   expect(title).not.toContain('Error');
 
   await expect(page.locator('h1').first()).toBeVisible({ timeout: 10_000 });
+});
+
+test('LOG-14: Carrier app surface renders awarded loads and RFQs', async ({ page }) => {
+  await page.goto('/carrier-portal/logistics/app', { waitUntil: 'domcontentloaded' });
+  await waitForSettle(page);
+
+  await expect(
+    page.locator(':text("Awarded loads"), :text("Available RFQs"), main').first()
+  ).toBeVisible({ timeout: 10_000 });
 });

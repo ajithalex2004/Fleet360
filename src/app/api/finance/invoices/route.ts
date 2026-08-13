@@ -6,67 +6,36 @@ import { assertCanWrite } from '@/lib/access-control';
  * GET  /api/finance/invoices  — paginated list with filters
  * POST /api/finance/invoices  — create invoice with line items + UAE 5% VAT
  *
- * Auto-creates finance_invoices table on first call.
+ * finance_invoices is owned by Prisma migration
+ * 20260809000000_adopt_finance_tables_with_rls — the table and all its
+ * columns exist before the application starts. FORCE ROW LEVEL SECURITY
+ * is the primary tenant isolation guard; every query here also passes an
+ * explicit tenant_id filter for defence-in-depth.
+ *
+ * The old ensureTable() function that ran CREATE TABLE IF NOT EXISTS and
+ * ALTER TABLE at request time has been removed. Schema changes must go
+ * through Prisma migrations.
  */
 
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS finance_invoices (
-      id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      invoice_number   TEXT NOT NULL UNIQUE,
-      client_name      TEXT NOT NULL,
-      client_email     TEXT,
-      client_phone     TEXT,
-      client_address   TEXT,
-      service_type     TEXT NOT NULL DEFAULT 'GENERAL',
-      module           TEXT NOT NULL DEFAULT 'GENERAL',
-      description      TEXT,
-      line_items       JSONB NOT NULL DEFAULT '[]',
-      subtotal         NUMERIC(14,2) NOT NULL DEFAULT 0,
-      discount_amount  NUMERIC(14,2) NOT NULL DEFAULT 0,
-      vat_rate         NUMERIC(5,2)  NOT NULL DEFAULT 5,
-      vat_amount       NUMERIC(14,2) NOT NULL DEFAULT 0,
-      total_amount     NUMERIC(14,2) NOT NULL DEFAULT 0,
-      paid_amount      NUMERIC(14,2) NOT NULL DEFAULT 0,
-      currency         TEXT NOT NULL DEFAULT 'AED',
-      issue_date       DATE NOT NULL DEFAULT CURRENT_DATE,
-      due_date         DATE,
-      payment_status   TEXT NOT NULL DEFAULT 'DRAFT',
-      notes            TEXT,
-      reference_id     UUID,
-      reference_type   TEXT,
-      created_by       TEXT,
-      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      deleted_at       TIMESTAMPTZ
-    )
-  `).catch(() => {});
-
-  // Ensure payment_status index exists
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_finance_invoices_status ON finance_invoices(payment_status)
-    WHERE deleted_at IS NULL
-  `).catch(() => {});
-
-  // Ensure tenant_id column exists (added for multi-tenant isolation)
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS tenant_id TEXT
-  `).catch(() => {});
-}
-
 export async function GET(req: NextRequest) {
-  await ensureTable();
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   const { searchParams } = new URL(req.url);
-  const status   = searchParams.get('status') ?? '';
-  const module   = searchParams.get('module') ?? '';
-  const q        = searchParams.get('q') ?? '';
-  const page     = Math.max(1, parseInt(searchParams.get('page') ?? '1'));
-  const limit    = Math.min(100, parseInt(searchParams.get('limit') ?? '25'));
-  const offset   = (page - 1) * limit;
+  const status = searchParams.get('status') ?? '';
+  const module = searchParams.get('module') ?? '';
+  const q      = searchParams.get('q') ?? '';
+  const page   = Math.max(1, parseInt(searchParams.get('page') ?? '1'));
+  const limit  = Math.min(100, parseInt(searchParams.get('limit') ?? '25'));
+  const offset = (page - 1) * limit;
 
-  const conditions: string[] = ['deleted_at IS NULL'];
-  const values: unknown[] = [];
+  // Always scope to the current tenant — both for defence-in-depth and
+  // because a platform admin with app.tenant_id='*' would otherwise see
+  // every tenant's invoices on this list endpoint.
+  const conditions: string[] = ['deleted_at IS NULL', 'tenant_id = $1'];
+  const values: unknown[]    = [tenantId];
 
   if (status) {
     values.push(status);
@@ -91,6 +60,7 @@ export async function GET(req: NextRequest) {
               service_type, module, description,
               subtotal, vat_amount, total_amount, paid_amount, discount_amount,
               currency, issue_date, due_date, payment_status, notes,
+              module_source, reference_id, reference_type,
               created_at, updated_at
          FROM finance_invoices
         WHERE ${where}
@@ -120,10 +90,14 @@ export async function GET(req: NextRequest) {
     updated_at: (r.updated_at as Date)?.toISOString?.() ?? r.updated_at,
   }));
 
-  // Summary counts
+  // Summary counts scoped to this tenant
   type SumRow = { payment_status: string; cnt: bigint };
   const summary = await prisma.$queryRawUnsafe<SumRow[]>(
-    `SELECT payment_status, COUNT(*) as cnt FROM finance_invoices WHERE deleted_at IS NULL GROUP BY payment_status`
+    `SELECT payment_status, COUNT(*) as cnt
+       FROM finance_invoices
+      WHERE deleted_at IS NULL AND tenant_id = $1
+      GROUP BY payment_status`,
+    tenantId
   ).catch(() => [] as SumRow[]);
 
   const counts: Record<string, number> = {};
@@ -143,7 +117,7 @@ export async function POST(req: NextRequest) {
   const guard = assertCanWrite(req, 'finance');
   if (guard) return guard;
 
-  await ensureTable();
+  const tenantId = req.headers.get('x-tenant-id') ?? null;
 
   try {
     const body = await req.json();
@@ -158,10 +132,10 @@ export async function POST(req: NextRequest) {
     if (!clientName) return NextResponse.json({ error: 'clientName is required' }, { status: 400 });
 
     // Calculate totals from line items
-    const subtotal = (lineItems as { qty: number; unitPrice: number }[])
+    const subtotal    = (lineItems as { qty: number; unitPrice: number }[])
       .reduce((sum, item) => sum + (Number(item.qty) || 1) * (Number(item.unitPrice) || 0), 0);
-    const discounted = Math.max(0, subtotal - Number(discountAmount));
-    const vatAmount  = Math.round(discounted * (Number(vatRate) / 100) * 100) / 100;
+    const discounted  = Math.max(0, subtotal - Number(discountAmount));
+    const vatAmount   = Math.round(discounted * (Number(vatRate) / 100) * 100) / 100;
     const totalAmount = Math.round((discounted + vatAmount) * 100) / 100;
 
     // Generate invoice number: INV-YYYYMM-XXXX-rnd (random suffix prevents concurrent insert collisions)
@@ -175,9 +149,6 @@ export async function POST(req: NextRequest) {
     const seq = (Number(seqRow?.last_seq ?? 0) + 1).toString().padStart(4, '0');
     const rnd = Math.random().toString(36).slice(2, 6).toUpperCase();
     const invoiceNumber = `${prefix}-${seq}-${rnd}`;
-
-    // Read tenant from middleware-injected header for multi-tenant isolation
-    const tenantId = req.headers.get('x-tenant-id') ?? null;
 
     type InsRow = { id: string };
     const [row] = await prisma.$queryRawUnsafe<InsRow[]>(

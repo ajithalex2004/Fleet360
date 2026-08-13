@@ -3,6 +3,8 @@
  * Provides tenant scoping helpers for multi-tenant SQL queries.
  */
 
+import { ACCOUNT_CODE_PREFIXES, type AccountPrefixGroup } from './modules';
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface TenantContext {
@@ -15,18 +17,18 @@ export interface TenantContext {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 /**
- * Maps module codes to Chart-of-Accounts account code prefixes.
- * RAC       → income 4100 + direct costs 5110, 5120
- * SCHOOL_BUS → income 4400 + direct cost 5140
+ * Maps CoA account-code groups to their income + direct-cost prefixes.
+ * Sourced from the canonical module registry (@/lib/modules) so adding
+ * a financial module requires editing one file.
+ *
+ *   RAC             → income 4100 + direct costs 5110, 5120
+ *   SCHOOL_BUS      → income 4400 + direct cost 5140
+ *   LOGISTICS       → income 4300 + direct cost 5130
+ *   LEASING         → income 4200 + direct cost 5115
+ *   STAFF_TRANSPORT → income 4500 + direct cost 5145
+ *   AMBULANCE       → income 4600 + direct cost 5160
  */
-export const MODULE_ACCOUNT_PREFIXES: Record<string, string[]> = {
-  RAC:             ['4100', '5110', '5120'],
-  SCHOOL_BUS:      ['4400', '5140'],
-  LOGISTICS:       ['4300', '5130'],
-  LEASING:         ['4200', '5115'],
-  STAFF_TRANSPORT: ['4500', '5145'],
-  AMBULANCE:       ['4600', '5160'],
-};
+export const MODULE_ACCOUNT_PREFIXES: Record<AccountPrefixGroup, readonly string[]> = ACCOUNT_CODE_PREFIXES;
 
 // ── Tenant ID Resolution ──────────────────────────────────────────────────────
 

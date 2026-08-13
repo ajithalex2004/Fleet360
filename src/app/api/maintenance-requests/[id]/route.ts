@@ -1,5 +1,17 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { prisma }       from '@/lib/prisma';
+import {
+  publishMaintenanceApproved,
+  publishMaintenanceRejected,
+  publishQuotationRequested,
+  publishQuotationReceived,
+  publishEstimationApproved,
+  publishWorkOrderCreated,
+  publishWorkOrderStarted,
+  publishRepairCompleted,
+  publishWorkOrderCompleted,
+  publishMaintenanceClosed,
+} from '@/lib/maintenance/publish-event';
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
     try {
@@ -71,6 +83,133 @@ export async function PATCH(request: Request, { params }: { params: { id: string
                 histories: true,
             },
         });
+
+        // ── Publish domain events via outbox (Phase D lifecycle) ──────────────
+        const newStatus = (updated as any).status as string | undefined;
+        const tenantId  = (updated as any).tenantId as string | null;
+        if (tenantId && newStatus) {
+            const req  = updated as any;
+            const now  = new Date().toISOString();
+            const base = {
+                requestId:  params.id,
+                vehicleId:  req.vehicleId       ?? '',
+                tenantId,
+                garageId:   req.garageId         ?? null,
+                garageName: req.Garage?.name      ?? null,
+            };
+
+            switch (newStatus) {
+                case 'APPROVED':
+                    publishMaintenanceApproved(params.id, tenantId, {
+                        ...base, approvedBy: req.approvedBy ?? null, approvedAt: now,
+                    }).catch(err => console.warn('[maintenance] approved publish failed:', err));
+                    break;
+
+                case 'REJECTED':
+                    publishMaintenanceRejected(params.id, tenantId, {
+                        ...base, rejectedBy: req.rejectedBy ?? null, rejectedAt: now,
+                        reason: req.rejectionReason ?? null,
+                    }).catch(err => console.warn('[maintenance] rejected publish failed:', err));
+                    break;
+
+                case 'QUOTATION_REQUESTED':
+                    publishQuotationRequested(params.id, tenantId, {
+                        ...base, requestedAt: now,
+                    }).catch(err => console.warn('[maintenance] quotation_requested publish failed:', err));
+                    break;
+
+                case 'QUOTATION_RECEIVED': {
+                    const qid = req.quotations?.[0]?.id ?? params.id;
+                    publishQuotationReceived(qid, tenantId, {
+                        ...base,
+                        quotationId:  qid,
+                        amount:       Number(req.estimatedCost ?? 0),
+                        currency:     'AED',
+                        receivedAt:   now,
+                    }).catch(err => console.warn('[maintenance] quotation_received publish failed:', err));
+                    break;
+                }
+
+                case 'ESTIMATION_APPROVED':
+                    publishEstimationApproved(params.id, tenantId, {
+                        ...base,
+                        estimatedCost: Number(req.estimatedCost ?? 0),
+                        currency:      'AED',
+                        approvedBy:    req.approvedBy ?? null,
+                        approvedAt:    now,
+                    }).catch(err => console.warn('[maintenance] estimation_approved publish failed:', err));
+                    break;
+
+                case 'WORK_ORDER_CREATED':
+                    publishWorkOrderCreated(params.id, tenantId, {
+                        ...base,
+                        workOrderId:  req.WorkOrder?.id   ?? params.id,
+                        workOrderNo:  req.workOrderNo      ?? null,
+                        createdAt:    now,
+                    }).catch(err => console.warn('[maintenance] work_order_created publish failed:', err));
+                    break;
+
+                case 'IN_PROGRESS':
+                    publishWorkOrderStarted(params.id, tenantId, {
+                        ...base,
+                        workOrderId: req.WorkOrder?.id ?? null,
+                        startedAt:   now,
+                    }).catch(err => console.warn('[maintenance] work_order_started publish failed:', err));
+                    break;
+
+                case 'REPAIR_COMPLETED':
+                    publishRepairCompleted(params.id, tenantId, {
+                        requestId:     params.id,
+                        vehicleId:     req.vehicleId       ?? '',
+                        tenantId,
+                        requestNumber: req.workOrderNo     ?? null,
+                        garageId:      req.garageId        ?? null,
+                        garageName:    req.Garage?.name    ?? null,
+                        occurredAt:    now,
+                    }).catch(err => console.warn('[maintenance] repair_completed publish failed:', err));
+                    break;
+
+                // INVOICE_SUBMITTED → Finance (AP payable + JE) + Fleet (vehicle available)
+                case 'INVOICE_SUBMITTED':
+                    publishWorkOrderCompleted(params.id, tenantId, {
+                        requestId:          params.id,
+                        vehicleId:          req.vehicleId          ?? '',
+                        requestType:        req.maintenanceType     ?? 'SERVICE',
+                        invoiceSubmittedAt: now,
+                        totalCost:          Number(req.actualCost ?? req.estimatedCost ?? 0),
+                        estimatedCost:      req.estimatedCost != null ? Number(req.estimatedCost) : null,
+                        currency:           'AED',
+                        garageId:           req.garageId            ?? null,
+                        garageName:         req.Garage?.name         ?? null,
+                        requestNumber:      req.workOrderNo          ?? null,
+                        tenantId,
+                    }).catch(err => console.warn('[maintenance] work_order_completed publish failed:', err));
+                    break;
+
+                // CLOSED → audit trail, analytics
+                case 'CLOSED':
+                    publishMaintenanceClosed(params.id, tenantId, {
+                        requestId:     params.id,
+                        vehicleId:     req.vehicleId          ?? '',
+                        requestType:   req.maintenanceType     ?? 'SERVICE',
+                        completedAt:   (req.completionDate ? new Date(req.completionDate).toISOString() : now),
+                        totalCost:     Number(req.actualCost ?? req.estimatedCost ?? 0) || null,
+                        currency:      'AED',
+                        garageId:      req.garageId            ?? null,
+                        garageName:    req.Garage?.name         ?? null,
+                        requestNumber: req.workOrderNo          ?? null,
+                    }).catch(err => console.warn('[maintenance] maintenance.completed publish failed:', err));
+                    break;
+
+                default:
+                    // No event for this status transition
+                    break;
+            }
+        } else if (newStatus && ['APPROVED','REJECTED','QUOTATION_REQUESTED','QUOTATION_RECEIVED',
+                                  'ESTIMATION_APPROVED','WORK_ORDER_CREATED','IN_PROGRESS',
+                                  'REPAIR_COMPLETED','INVOICE_SUBMITTED','CLOSED'].includes(newStatus)) {
+            console.warn(`[maintenance] outbox publish skipped: tenantId missing on MR ${params.id}`);
+        }
 
         return NextResponse.json(JSON.parse(JSON.stringify(updated)));
     } catch (error) {

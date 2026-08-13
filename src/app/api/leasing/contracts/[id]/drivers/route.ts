@@ -4,6 +4,10 @@
  *   Body: { driverId, contractVehicleId?, notes? }
  *   - Releases any currently ACTIVE allocation on the same (contract, vehicle)
  *     before creating the new one (transactional).
+ *
+ * Tenant scoping: requires x-tenant-id. The contract is verified to belong
+ * to that tenant before any reads or writes. The new LeaseDriverAllocation
+ * row is stamped with the caller's tenant id.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -13,9 +17,24 @@ import { captureException } from '@/lib/sentry';
 
 export const runtime = 'nodejs';
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+
+  // Confirm the contract belongs to the caller's tenant before exposing
+  // allocation history (otherwise we'd leak other tenants' driver mappings).
+  const contract = await prisma.leaseContract2.findFirst({
+    where: { id: params.id, tenantId },
+    select: { id: true },
+  });
+  if (!contract) {
+    return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
+  }
+
   const allocations = await prisma.leaseDriverAllocation.findMany({
-    where: { contractId: params.id },
+    where: { tenantId, contractId: params.id },
     orderBy: [{ status: 'asc' }, { allocatedAt: 'desc' }],
   });
 
@@ -35,6 +54,11 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+
   try {
     const body = await req.json();
     const driverId = String(body.driverId ?? '').trim();
@@ -42,8 +66,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'driverId is required' }, { status: 400 });
     }
 
-    const contract = await prisma.leaseContract2.findUnique({
-      where: { id: params.id },
+    const contract = await prisma.leaseContract2.findFirst({
+      where: { id: params.id, tenantId },
       select: { id: true, deletedAt: true },
     });
     if (!contract || contract.deletedAt) {
@@ -82,12 +106,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           allocatedBy: req.headers.get('x-user-id') ?? null,
           notes: body.notes ?? null,
           status: 'ACTIVE',
+          tenantId,
         },
       });
     });
 
     // Sync the convenience driverId column on the LeaseContractVehicle for the
-    // existing dashboard widgets that read it directly.
+    // existing dashboard widgets that read it directly. LeaseContractVehicle
+    // is scoped via the parent contract (already verified above) so no
+    // extra tenant filter is needed.
     if (contractVehicleId) {
       await prisma.leaseContractVehicle.update({
         where: { id: contractVehicleId },
@@ -96,7 +123,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
+      tenantId,
       userId: req.headers.get('x-user-id') ?? 'system',
       userRole: req.headers.get('x-user-role') ?? 'STAFF',
       entityType: 'LeaseDriverAllocation',

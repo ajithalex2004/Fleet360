@@ -67,6 +67,9 @@ const BranchContext = createContext<BranchContextValue>({
 
 const STORAGE_KEY_BRANCH   = 'xlai_active_branch_id';
 const STORAGE_KEY_TENANT   = 'xlai_active_tenant_id';
+const BRANCH_CACHE_TTL_MS  = 5 * 60 * 1000;
+
+const branchCache = new Map<string, { branches: Branch[]; ts: number }>();
 
 export function BranchProvider({ children }: { children: ReactNode }) {
   const [branches,       setBranches]       = useState<Branch[]>([]);
@@ -99,20 +102,30 @@ export function BranchProvider({ children }: { children: ReactNode }) {
       setBranches([]);
       return;
     }
+
+    const restoreActiveBranch = (list: Branch[]) => {
+      const savedId = localStorage.getItem(STORAGE_KEY_BRANCH);
+      if (!savedId) return;
+      const found = list.find(b => b.id === savedId);
+      if (found) setActiveBranchState(found);
+    };
+
+    const cached = branchCache.get(tid);
+    if (cached && Date.now() - cached.ts < BRANCH_CACHE_TTL_MS) {
+      setBranches(cached.branches);
+      restoreActiveBranch(cached.branches);
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch(`/api/tenant-branches?tenantId=${tid}`);
       if (res.ok) {
         const data = await res.json();
         const list: Branch[] = data.data ?? [];
+        branchCache.set(tid, { branches: list, ts: Date.now() });
         setBranches(list);
-
-        // Restore persisted branch selection
-        const savedId = localStorage.getItem(STORAGE_KEY_BRANCH);
-        if (savedId) {
-          const found = list.find(b => b.id === savedId);
-          if (found) setActiveBranchState(found);
-        }
+        restoreActiveBranch(list);
       }
     } catch { /* silent */ }
     finally { setLoading(false); }

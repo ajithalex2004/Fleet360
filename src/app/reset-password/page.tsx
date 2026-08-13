@@ -26,7 +26,7 @@ export default function ResetPasswordPage() {
 }
 
 function ResetPasswordInner() {
-  const params = useSearchParams();
+  const params = useSearchParams() ?? new URLSearchParams();
   const token  = params.get('token') ?? '';
 
   const [pw,  setPw]  = useState('');

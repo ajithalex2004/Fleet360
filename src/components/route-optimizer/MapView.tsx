@@ -41,6 +41,7 @@ declare global {
 
 interface MapboxMap {
   on(event: string, cb: () => void): void;
+  addControl(control: object, position?: string): void;
   addSource(id: string, source: object): void;
   addLayer(layer: object): void;
   getSource(id: string): { setData: (data: object) => void } | undefined;

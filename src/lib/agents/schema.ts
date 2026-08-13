@@ -4,7 +4,7 @@
  * Three tables that back the entire agent system:
  *   agent_runs           — immutable audit log of every agent execution
  *   fleet_risk_scores    — latest risk score per vehicle (upserted on each run)
- *   finance_anomaly_flags — flagged financial records awaiting review
+ *   agent_anomaly_flags  — flagged financial records awaiting review
  */
 import { prisma } from '@/lib/prisma';
 
@@ -69,8 +69,8 @@ async function _doInit(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_fleet_risk_scores_risk_score  ON fleet_risk_scores(risk_score DESC);
       CREATE INDEX IF NOT EXISTS idx_fleet_risk_scores_scored_at   ON fleet_risk_scores(scored_at DESC);
 
-      -- ── finance_anomaly_flags ──────────────────────────────────────────────────
-      CREATE TABLE IF NOT EXISTS finance_anomaly_flags (
+      -- ── agent_anomaly_flags (ai schema) ───────────────────────────────────────
+      CREATE TABLE IF NOT EXISTS ai.agent_anomaly_flags (
         id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         detector_id   TEXT NOT NULL,
         entity_type   TEXT NOT NULL,
@@ -88,13 +88,13 @@ async function _doInit(): Promise<void> {
         created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
-      CREATE INDEX IF NOT EXISTS idx_anomaly_flags_severity    ON finance_anomaly_flags(severity);
-      CREATE INDEX IF NOT EXISTS idx_anomaly_flags_status      ON finance_anomaly_flags(status);
-      CREATE INDEX IF NOT EXISTS idx_anomaly_flags_entity_type ON finance_anomaly_flags(entity_type);
-      CREATE INDEX IF NOT EXISTS idx_anomaly_flags_created_at  ON finance_anomaly_flags(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_anomaly_flags_severity    ON ai.agent_anomaly_flags(severity);
+      CREATE INDEX IF NOT EXISTS idx_anomaly_flags_status      ON ai.agent_anomaly_flags(status);
+      CREATE INDEX IF NOT EXISTS idx_anomaly_flags_entity_type ON ai.agent_anomaly_flags(entity_type);
+      CREATE INDEX IF NOT EXISTS idx_anomaly_flags_created_at  ON ai.agent_anomaly_flags(created_at DESC);
       -- Prevent duplicate flags for same entity + detector combo while OPEN
       CREATE UNIQUE INDEX IF NOT EXISTS idx_anomaly_flags_open_dedup
-        ON finance_anomaly_flags(entity_id, detector_id)
+        ON ai.agent_anomaly_flags(entity_id, detector_id)
         WHERE status = 'OPEN';
 
       -- ── route_optimisation_results ─────────────────────────────────────────────

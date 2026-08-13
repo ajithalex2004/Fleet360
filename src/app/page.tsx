@@ -1,21 +1,20 @@
-"use client";
+/**
+ * / — server-side redirect to /platform.
+ *
+ * The previous implementation was a 'use client' component that mounted a
+ * spinner, then called `router.replace('/platform')` from useEffect. Every
+ * visitor paid the cost of downloading the root JS bundle, hydrating it,
+ * firing the effect, and only then starting the navigation — a 400-800ms
+ * wasted spinner on the worst entry path (typed URL, stale bookmark, deep
+ * link).
+ *
+ * A server component calling `redirect()` issues a 307 with a Location
+ * header before any JS ships, so the browser follows the redirect
+ * immediately on first paint. No client code, no spinner, no useEffect.
+ */
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { redirect } from 'next/navigation';
 
 export default function Home() {
-  const router = useRouter();
-
-  useEffect(() => {
-    router.replace("/platform");
-  }, [router]);
-
-  return (
-    <div className="min-h-screen bg-[#0c1a3e] flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-12 h-12 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-slate-400 text-sm">Loading Fleet360...</p>
-      </div>
-    </div>
-  );
+  redirect('/platform');
 }

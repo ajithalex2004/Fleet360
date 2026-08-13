@@ -27,7 +27,10 @@ export async function GET(request: NextRequest) {
   const impersonatedBy = request.headers.get('x-impersonated-by') ?? '';
 
   if (!userId || !tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    return NextResponse.json(
+      { error: 'Not authenticated' },
+      { status: 401, headers: { 'Cache-Control': 'private, no-store' } },
+    );
   }
 
   const isSuperAdmin = role === 'SUPER_ADMIN';
@@ -80,9 +83,7 @@ export async function GET(request: NextRequest) {
     },
     {
       headers: {
-        // Browser caches this response for 60 s and serves stale for 120 s while
-        // revalidating in background. Marked private so CDNs don't share across users.
-        'Cache-Control': 'private, max-age=60, stale-while-revalidate=120',
+        'Cache-Control': 'private, no-store',
       },
     }
   );

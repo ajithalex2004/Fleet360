@@ -1,0 +1,155 @@
+/**
+ * /api/bus-ops/route-variants/[variantId]/versions — version CRUD.
+ *
+ * GET  — list versions of a variant
+ * POST — publish a new version. Optional body:
+ *          - effectiveFrom (defaults to today)
+ *          - stops: [{ stopName, sequence, gpsLat, gpsLng, geofenceRadiusM, landmark, estimatedArrivalMins }]
+ *          - notes
+ *          - publishNow (bool, default true — creates in PUBLISHED status
+ *                       and closes the prior PUBLISHED version's effectiveTo)
+ *
+ * Publishing rules:
+ *   - versionNumber = max(existing) + 1
+ *   - If publishNow=true and a PUBLISHED version exists for the variant,
+ *     that version's effectiveTo is set to yesterday (effectiveFrom - 1)
+ *     and its status becomes ARCHIVED. The new one becomes PUBLISHED.
+ *   - If publishNow=false, version stays DRAFT and no side-effects fire.
+ *
+ * Historical trips continue referencing the ARCHIVED version — nothing
+ * about their stored routeVariantVersionId changes.
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { randomUUID } from 'crypto';
+
+interface StopInput {
+  stopName?: string;
+  sequence?: number;
+  gpsLat?: number | null;
+  gpsLng?: number | null;
+  geofenceRadiusM?: number | null;
+  landmark?: string | null;
+  estimatedArrivalMins?: number | null;
+}
+
+export async function GET(req: NextRequest, { params }: { params: Promise<{ variantId: string }> }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const { variantId } = await params;
+  try {
+    const versions = await prisma.busRouteVariantVersion.findMany({
+      where: { tenantId, variantId, deletedAt: null },
+      orderBy: { versionNumber: 'desc' },
+      include: {
+        stops: { orderBy: { sequence: 'asc' } },
+      },
+    });
+    return NextResponse.json(versions);
+  } catch (e) {
+    console.error('[versions.GET]', e);
+    return NextResponse.json({ error: 'Failed to fetch versions' }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest, { params }: { params: Promise<{ variantId: string }> }) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const publishedBy = req.headers.get('x-user-id') ?? null;
+  const { variantId } = await params;
+
+  try {
+    const body = await req.json();
+    const variant = await prisma.busRouteVariant.findFirst({
+      where: { id: variantId, tenantId, deletedAt: null },
+      select: { id: true, routeId: true },
+    });
+    if (!variant) return NextResponse.json({ error: 'Variant not found' }, { status: 404 });
+
+    const effectiveFromDate = body.effectiveFrom ? new Date(body.effectiveFrom) : new Date();
+    // Normalise to UTC midnight so DATE comparisons don't shift by 1 day
+    // for operators in non-UTC timezones (audit risk #17 pattern).
+    const effectiveFrom = new Date(Date.UTC(
+      effectiveFromDate.getUTCFullYear(),
+      effectiveFromDate.getUTCMonth(),
+      effectiveFromDate.getUTCDate(),
+    ));
+
+    const stops = Array.isArray(body.stops) ? body.stops as StopInput[] : [];
+    const publishNow = body.publishNow !== false;
+
+    // Version number = max(existing) + 1.
+    const last = await prisma.busRouteVariantVersion.findFirst({
+      where: { variantId, deletedAt: null },
+      orderBy: { versionNumber: 'desc' },
+      select: { versionNumber: true },
+    });
+    const versionNumber = (last?.versionNumber ?? 0) + 1;
+
+    // The published-version cutover + new-version create + stop
+    // materialisation all run in one transaction so a partial failure
+    // never leaves the variant with two PUBLISHED versions (the partial
+    // unique index would raise, but the transaction gives a cleaner
+    // error surface).
+    const created = await prisma.$transaction(async (tx) => {
+      let closedPrevious: string | null = null;
+      if (publishNow) {
+        const prev = await tx.busRouteVariantVersion.findFirst({
+          where: { variantId, status: 'PUBLISHED', deletedAt: null },
+        });
+        if (prev) {
+          const yesterday = new Date(effectiveFrom.getTime() - 24 * 3600 * 1000);
+          await tx.busRouteVariantVersion.update({
+            where: { id: prev.id },
+            data:  { status: 'ARCHIVED', effectiveTo: yesterday },
+          });
+          closedPrevious = prev.id;
+        }
+      }
+
+      const version = await tx.busRouteVariantVersion.create({
+        data: {
+          id: randomUUID(),
+          tenantId,
+          variantId,
+          versionNumber,
+          effectiveFrom,
+          status:      publishNow ? 'PUBLISHED' : 'DRAFT',
+          publishedAt: publishNow ? new Date() : null,
+          publishedBy: publishNow ? publishedBy : null,
+          notes:       body.notes?.trim() || null,
+        },
+      });
+
+      if (stops.length > 0) {
+        await tx.routeStop.createMany({
+          data: stops.map((s, i) => ({
+            id: randomUUID(),
+            tenantId,
+            routeId: variant.routeId,           // back-compat: routeId stays populated
+            variantVersionId: version.id,        // Phase 1: link to the version
+            stopName: s.stopName ?? `Stop ${i + 1}`,
+            sequence: s.sequence ?? i + 1,
+            gpsLat:   s.gpsLat ?? null,
+            gpsLng:   s.gpsLng ?? null,
+            geofenceRadiusM:      s.geofenceRadiusM ?? null,
+            estimatedArrivalMins: s.estimatedArrivalMins ?? null,
+            landmark: s.landmark ?? null,
+          })),
+        });
+      }
+
+      return { version, closedPrevious, stopCount: stops.length };
+    });
+
+    return NextResponse.json(created, { status: 201 });
+  } catch (e) {
+    console.error('[versions.POST]', e);
+    const msg = e instanceof Error ? e.message : 'Failed to publish version';
+    if (/uq_bus_route_variant_versions_one_published/.test(msg)) {
+      return NextResponse.json({ error: 'A PUBLISHED version already exists — cutover conflict, please retry' }, { status: 409 });
+    }
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}

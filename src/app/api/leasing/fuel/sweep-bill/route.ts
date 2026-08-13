@@ -6,21 +6,29 @@
  * Mirrors the traffic-fines sweep pattern — atomic transaction flips logs
  * to INVOICED with receiptRef=invoice.invoiceNo so repeat runs are safe.
  *
+ * Tenant scoping: cron-triggered sweeps iterate every active tenant; a
+ * logged-in user only triggers for their own tenant.
+ *
  * Auth: optional CRON_SECRET Bearer.
  * Query: ?dryRun=1, ?olderThanDays=N (default 0 = bill everything pending),
  *        ?periodMonth=YYYY-MM (only bill logs from this month).
+ *
+ * RLS: withSystemJob iterates each tenant in its own transaction. Per-lessee
+ * $transaction calls use savepoints for atomic invoice+status-flip.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withSystemJob } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  const tenantHeader = req.headers.get('x-tenant-id');
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && !req.headers.get('x-tenant-id')) {
+  if (cronSecret && !tenantHeader) {
     const auth = req.headers.get('authorization');
     if (auth !== `Bearer ${cronSecret}`) {
       return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
@@ -44,119 +52,169 @@ export async function POST(req: NextRequest) {
       dateFilter = { lte: new Date(Date.now() - olderThanDays * 86400000) };
     }
 
-    const logs = await prisma.leaseFuelLog.findMany({
-      where: {
-        billingStatus: 'PENDING',
-        billedToLessee: true,
-        ...(dateFilter ? { fuelDate: dateFilter } : {}),
-      },
-      include: { contract: { select: { id: true, lesseeId: true, contractNumber: true, currency: true } } },
-    });
-
-    const byLessee = new Map<string, typeof logs>();
-    for (const l of logs) {
-      if (!l.contract?.lesseeId) continue;
-      const arr = byLessee.get(l.contract.lesseeId) ?? [];
-      arr.push(l);
-      byLessee.set(l.contract.lesseeId, arr);
-    }
+    type LogWithContract = Awaited<ReturnType<typeof prisma.leaseFuelLog.findMany>>[number] & {
+      contract: { id: string; lesseeId: string; contractNumber: string | null; currency: string | null } | null;
+    };
 
     interface Assessment {
+      tenantId: string;
       lesseeId: string;
       logCount: number;
       totalLiters: number;
       totalCost: number;
       currency: string;
     }
+    interface PerTenantResult {
+      scanned: number;
+      lesseeBuckets: number;
+      assessments: Assessment[];
+      invoicesCreated: number;
+      logsBilled: number;
+      errors: number;
+    }
+
+    const perTenant = await withSystemJob<PerTenantResult>(
+      prisma,
+      async ({ tx, tenantId }) => {
+        const logs = (await tx.leaseFuelLog.findMany({
+          where: {
+            tenantId,
+            billingStatus: 'PENDING',
+            billedToLessee: true,
+            ...(dateFilter ? { fuelDate: dateFilter } : {}),
+          },
+          include: { contract: { select: { id: true, lesseeId: true, contractNumber: true, currency: true } } },
+        })) as LogWithContract[];
+
+        const byLessee = new Map<string, LogWithContract[]>();
+        for (const l of logs) {
+          if (!l.contract?.lesseeId) continue;
+          const arr = byLessee.get(l.contract.lesseeId) ?? [];
+          arr.push(l);
+          byLessee.set(l.contract.lesseeId, arr);
+        }
+
+        const assessments: Assessment[] = [];
+        for (const [lesseeId, items] of byLessee) {
+          assessments.push({
+            tenantId,
+            lesseeId,
+            logCount: items.length,
+            totalLiters: items.reduce((s, l) => s + Number(l.liters ?? 0), 0),
+            totalCost: items.reduce((s, l) => s + Number(l.totalCost ?? 0), 0),
+            currency: items[0].currency ?? 'AED',
+          });
+        }
+
+        if (dryRun) {
+          return { scanned: logs.length, lesseeBuckets: byLessee.size, assessments,
+            invoicesCreated: 0, logsBilled: 0, errors: 0 };
+        }
+
+        let invoicesCreated = 0;
+        let logsBilled = 0;
+        let errors = 0;
+        for (const [lesseeId, items] of byLessee) {
+          try {
+            // tx.$transaction is a savepoint; the withSystemJob
+            // GUC persists through it. Cast through `any` because
+            // Prisma's TxClient type does not expose $transaction.
+            await (tx as any).$transaction(async (lesseeTx: typeof tx) => {
+              const count = await lesseeTx.leaseInvoice.count({ where: { tenantId } });
+              const invoiceNo = `INV-${String(count + 1).padStart(6, '0')}`;
+              const currency = items[0].currency ?? 'AED';
+              const subTotal = items.reduce((s, l) => s + Number(l.totalCost ?? 0), 0);
+              const vatPct = 5;
+              const vatAmount = subTotal * (vatPct / 100);
+              const totalAmount = subTotal + vatAmount;
+              const issueDate = new Date();
+              const dueDate = new Date(issueDate.getTime() + 30 * 86400000);
+              const billingPeriod = periodMonth
+                ? `Fuel — ${periodMonth}`
+                : `Fuel — ${issueDate.toISOString().slice(0, 10)}`;
+
+              const invoice = await lesseeTx.leaseInvoice.create({
+                data: {
+                  invoiceNo,
+                  lesseeId,
+                  billingPeriod,
+                  issueDate, dueDate,
+                  subTotal, vatPct, vatAmount, totalAmount, currency,
+                  status: 'DRAFT',
+                  notes: `Auto-generated consolidated fuel invoice for ${items.length} log${items.length === 1 ? '' : 's'}.`,
+                  tenantId,
+                  lines: {
+                    create: items.map(l => ({
+                      contractId: l.contract!.id,
+                      vehicleRef: l.vehicleId ?? null,
+                      description: `Fuel ${l.fuelDate.toISOString().slice(0, 10)}${l.station ? ` @ ${l.station}` : ''} — ${Number(l.liters).toFixed(2)} L${l.costPerLiter ? ` × ${Number(l.costPerLiter).toFixed(2)}/L` : ''}${l.fuelCardNo ? ` (card ${l.fuelCardNo})` : ''}`,
+                      lineType: 'FUEL',
+                      quantity: Number(l.liters ?? 0),
+                      unitAmount: Number(l.costPerLiter ?? 0),
+                      totalAmount: Number(l.totalCost ?? 0),
+                      currency,
+                    })),
+                  },
+                },
+              });
+
+              await lesseeTx.leaseFuelLog.updateMany({
+                where: { id: { in: items.map(l => l.id) } },
+                data: { billingStatus: 'INVOICED', receiptRef: invoice.invoiceNo },
+              });
+            });
+            invoicesCreated += 1;
+            logsBilled += items.length;
+          } catch (err) {
+            errors += 1;
+            captureException(err, {
+              context: 'leasing.fuel.sweep-bill.apply',
+              tags: { lesseeId, tenantId },
+            });
+          }
+        }
+        return { scanned: logs.length, lesseeBuckets: byLessee.size, assessments,
+          invoicesCreated, logsBilled, errors };
+      },
+      { tenantHeader },
+    );
+
+    let totalScanned = 0;
+    let totalLesseeBuckets = 0;
     const assessments: Assessment[] = [];
-    for (const [lesseeId, items] of byLessee) {
-      assessments.push({
-        lesseeId,
-        logCount: items.length,
-        totalLiters: items.reduce((s, l) => s + Number(l.liters ?? 0), 0),
-        totalCost: items.reduce((s, l) => s + Number(l.totalCost ?? 0), 0),
-        currency: items[0].currency ?? 'AED',
-      });
-    }
-
-    if (dryRun) {
-      return NextResponse.json({
-        dryRun: true, runAt: new Date().toISOString(),
-        scanned: logs.length, lesseeBuckets: byLessee.size, assessments,
-      });
-    }
-
     const counts = { invoicesCreated: 0, logsBilled: 0, errors: 0 };
-    for (const [lesseeId, items] of byLessee) {
-      try {
-        await prisma.$transaction(async (tx) => {
-          const count = await tx.leaseInvoice.count();
-          const invoiceNo = `INV-${String(count + 1).padStart(6, '0')}`;
-          const currency = items[0].currency ?? 'AED';
-          const subTotal = items.reduce((s, l) => s + Number(l.totalCost ?? 0), 0);
-          const vatPct = 5;
-          const vatAmount = subTotal * (vatPct / 100);
-          const totalAmount = subTotal + vatAmount;
-          const issueDate = new Date();
-          const dueDate = new Date(issueDate.getTime() + 30 * 86400000);
-          const billingPeriod = periodMonth
-            ? `Fuel — ${periodMonth}`
-            : `Fuel — ${issueDate.toISOString().slice(0, 10)}`;
-
-          const invoice = await tx.leaseInvoice.create({
-            data: {
-              invoiceNo,
-              lesseeId,
-              billingPeriod,
-              issueDate, dueDate,
-              subTotal, vatPct, vatAmount, totalAmount, currency,
-              status: 'DRAFT',
-              notes: `Auto-generated consolidated fuel invoice for ${items.length} log${items.length === 1 ? '' : 's'}.`,
-              lines: {
-                create: items.map(l => ({
-                  contractId: l.contract!.id,
-                  vehicleRef: l.vehicleId ?? null,
-                  description: `Fuel ${l.fuelDate.toISOString().slice(0, 10)}${l.station ? ` @ ${l.station}` : ''} — ${Number(l.liters).toFixed(2)} L${l.costPerLiter ? ` × ${Number(l.costPerLiter).toFixed(2)}/L` : ''}${l.fuelCardNo ? ` (card ${l.fuelCardNo})` : ''}`,
-                  lineType: 'FUEL',
-                  quantity: Number(l.liters ?? 0),
-                  unitAmount: Number(l.costPerLiter ?? 0),
-                  totalAmount: Number(l.totalCost ?? 0),
-                  currency,
-                })),
-              },
-            },
-          });
-
-          await tx.leaseFuelLog.updateMany({
-            where: { id: { in: items.map(l => l.id) } },
-            data: { billingStatus: 'INVOICED', receiptRef: invoice.invoiceNo },
-          });
-        });
-        counts.invoicesCreated += 1;
-        counts.logsBilled += items.length;
-      } catch (err) {
-        counts.errors += 1;
-        captureException(err, { context: 'leasing.fuel.sweep-bill.apply', tags: { lesseeId } });
-      }
+    for (const r of perTenant) {
+      totalScanned += r.result.scanned;
+      totalLesseeBuckets += r.result.lesseeBuckets;
+      assessments.push(...r.result.assessments);
+      counts.invoicesCreated += r.result.invoicesCreated;
+      counts.logsBilled += r.result.logsBilled;
+      counts.errors += r.result.errors;
     }
 
-    if (counts.invoicesCreated > 0) {
+    if (!dryRun && counts.invoicesCreated > 0) {
       void logAudit({
         tenantId: req.headers.get('x-tenant-id') ?? undefined,
         userId: req.headers.get('x-user-id') ?? 'system:cron',
         userRole: 'SYSTEM',
         entityType: 'LeaseFuelLog',
         action: 'CREATE',
-        details: `Fuel sweep-bill${periodMonth ? ` (${periodMonth})` : ''}: ${counts.invoicesCreated} invoices, ${counts.logsBilled} logs billed, ${counts.errors} errors.`,
+        details: `Fuel sweep-bill${periodMonth ? ` (${periodMonth})` : ''}: ${counts.invoicesCreated} invoices, ${counts.logsBilled} logs billed across ${perTenant.length} tenant(s), ${counts.errors} errors.`,
       });
     }
 
     return NextResponse.json({
-      dryRun: false, runAt: new Date().toISOString(),
-      scanned: logs.length, lesseeBuckets: byLessee.size, counts, assessments,
+      dryRun,
+      runAt: new Date().toISOString(),
+      tenantsScanned: perTenant.length,
+      scanned: totalScanned,
+      lesseeBuckets: totalLesseeBuckets,
+      counts,
+      assessments,
     });
   } catch (err) {
     captureException(err, { context: 'leasing.fuel.sweep-bill' });
+    console.error('[fuel sweep-bill] error:', err);
     return NextResponse.json({ error: 'Sweep failed' }, { status: 500 });
   }
 }

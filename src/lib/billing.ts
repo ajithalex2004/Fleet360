@@ -13,6 +13,7 @@
 
 import Stripe from 'stripe';
 import { prisma } from '@/lib/prisma';
+import { withWebhookTenant } from '@/lib/rls';
 
 let _stripe: Stripe | null = null;
 
@@ -146,47 +147,56 @@ export async function getOrCreateCustomer(tenantId: string): Promise<string> {
  * Apply a Stripe subscription to the tenant — derives plan from the
  * subscription's first item's price ID, persists status + period end.
  * Called from the webhook handler.
+ *
+ * Uses withWebhookTenant:
+ *   1. identifyFn looks up the tenant by Stripe customer ID (cross-tenant).
+ *   2. handleFn runs in the tenant's RLS context, so the UPDATE on
+ *      `tenants` is scoped to that tenant even if the SQL is wrong.
  */
 export async function syncSubscriptionToTenant(sub: Stripe.Subscription): Promise<void> {
-  const tenantId = (typeof sub.customer === 'string'
-    ? await tenantIdForCustomer(sub.customer)
-    : await tenantIdForCustomer(sub.customer.id));
-  if (!tenantId) return;
+  const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id;
 
+  // Derive the plan + status outside the wrap — these are pure
+  // computations on the subscription object, no DB access needed.
   const item     = sub.items.data[0];
   const priceId  = typeof item?.price === 'string' ? item.price : item?.price?.id;
   const plan     = priceId ? (priceIdToPlan(priceId) ?? 'TRIAL') : 'TRIAL';
   const status   = sub.status; // active | trialing | past_due | canceled | unpaid | incomplete
   const periodEnd = (item?.current_period_end ?? null);
   const trialEnd  = sub.trial_end ?? null;
-
-  // If subscription is canceled / unpaid, downgrade plan to TRIAL.
   const effectivePlan: PlanCode =
     status === 'canceled' || status === 'unpaid' || status === 'incomplete_expired'
       ? 'TRIAL'
       : plan;
 
   await ensureBillingColumns();
-  await prisma.$executeRawUnsafe(
-    `UPDATE tenants
-        SET plan                   = $1,
-            stripe_subscription_id = $2,
-            subscription_status    = $3,
-            current_period_end     = to_timestamp($4),
-            trial_ends_at          = CASE WHEN $5::bigint IS NULL THEN NULL ELSE to_timestamp($5) END,
-            updated_at             = NOW()
-      WHERE id = $6`,
-    effectivePlan,
-    sub.id,
-    status,
-    periodEnd,
-    trialEnd,
-    tenantId,
+
+  await withWebhookTenant(
+    prisma,
+    (tx) => tenantIdForCustomer(tx, customerId),
+    async ({ tx, tenantId }) => {
+      await tx.$executeRawUnsafe(
+        `UPDATE tenants
+            SET plan                   = $1,
+                stripe_subscription_id = $2,
+                subscription_status    = $3,
+                current_period_end     = to_timestamp($4),
+                trial_ends_at          = CASE WHEN $5::bigint IS NULL THEN NULL ELSE to_timestamp($5) END,
+                updated_at             = NOW()
+          WHERE id = $6`,
+        effectivePlan,
+        sub.id,
+        status,
+        periodEnd,
+        trialEnd,
+        tenantId,
+      );
+    },
   );
 }
 
-async function tenantIdForCustomer(customerId: string): Promise<string | null> {
-  const rows = await prisma.$queryRawUnsafe<{ id: string }[]>(
+async function tenantIdForCustomer(tx: { $queryRawUnsafe: <T>(sql: string, ...args: unknown[]) => Promise<T> }, customerId: string): Promise<string | null> {
+  const rows = await tx.$queryRawUnsafe<{ id: string }[]>(
     `SELECT id FROM tenants WHERE stripe_customer_id = $1 LIMIT 1`,
     customerId,
   ).catch(() => []);

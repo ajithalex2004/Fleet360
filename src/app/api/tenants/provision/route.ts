@@ -33,6 +33,11 @@ const ProvisionSchema = z.object({
   adminPassword:        z.string().min(8),
   trn:                  z.string().optional(),
   preVerificationId:    z.string().optional(), // from pre-registration domain verification
+  /**
+   * ENTERPRISE data-residency region. Only honoured when plan = ENTERPRISE.
+   * Defaults to GLOBAL (shared primary DB).
+   */
+  dataResidency:        z.enum(['GLOBAL', 'EU', 'UAE', 'US']).default('GLOBAL'),
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -300,8 +305,9 @@ export async function POST(request: NextRequest) {
           plan:         data.plan,
           isActive:     true,
           code:         generateCode(data.companyName),
-          // trn is set via raw SQL below — Prisma client may not know this column
-          // if schema was updated without regenerating the client
+          // data_residency — only meaningful for ENTERPRISE; store for all
+          // tiers so it's always a valid column value.
+          dataResidency: data.plan === 'ENTERPRISE' ? data.dataResidency : 'GLOBAL',
         },
       });
 
@@ -425,11 +431,17 @@ export async function POST(request: NextRequest) {
     void import('@/lib/billing').then(m => m.startTrialForTenant(tenant.id)).catch(() => {});
 
     // Set session cookie — newly provisioned users always start as TENANT_ADMIN
+    const effectivePlan = tenant.plan ?? 'TRIAL';
     const sessionToken = await signSession({
-      userId:   user.id,
-      tenantId: tenant.id,
-      plan:     tenant.plan ?? 'TRIAL',
-      role:     'TENANT_ADMIN',
+      userId:        user.id,
+      tenantId:      tenant.id,
+      plan:          effectivePlan,
+      role:          'TENANT_ADMIN',
+      // Embed residency in token so middleware can forward x-data-residency
+      // without a DB lookup on every subsequent request.
+      ...(effectivePlan === 'ENTERPRISE' && tenant.dataResidency && tenant.dataResidency !== 'GLOBAL'
+        ? { dataResidency: tenant.dataResidency }
+        : {}),
     });
 
     const payload: Record<string, unknown> = {

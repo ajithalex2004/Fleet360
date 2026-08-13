@@ -239,6 +239,9 @@ export default function LeasingStaffPage() {
         <div>
           <h1 className="text-3xl font-bold text-white mb-1">Branch Staff Management</h1>
           <p className="text-slate-400 text-sm">Manage staff assignments across all leasing branches</p>
+          <p className="mt-2 text-xs text-amber-300">
+            Compatibility page: this feature will move to Admin / Branch Management as Branch Staff Assignments.
+          </p>
         </div>
         <button
           onClick={() => { setEditTarget(null); setForm({ ...EMPTY_FORM }); setShowAssign(true); }}
@@ -322,7 +325,7 @@ export default function LeasingStaffPage() {
         <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-16 text-center">
           <div className="text-5xl mb-4">👔</div>
           <p className="text-slate-300 text-lg font-semibold">No staff assignments found</p>
-          <p className="text-slate-500 text-sm mt-1">Click "+ Assign Staff" to add your first team member</p>
+          <p className="text-slate-500 text-sm mt-1">Click &quot;+ Assign Staff&quot; to add your first team member</p>
         </div>
       ) : view === 'grid' ? (
         /* ── GRID VIEW ── */

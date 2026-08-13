@@ -25,6 +25,8 @@ export async function POST(request: Request) {
 
         const data = await prisma.serviceRequest.create({
             data: {
+                // TODO: read tenantId from request headers via getTenantContext()
+                tenantId: '',
                 requestorId: body.requestorId || body.requestor_id,
                 serviceType: body.serviceType || body.service_type,
                 vehicleId: body.vehicleId || body.vehicle_id,

@@ -3,6 +3,9 @@
  *
  * Fetches the quotation + lessee + vehicles, renders a bilingual PDF, and
  * returns it inline. Use ?download=1 to force a save dialog.
+ *
+ * Tenant scoping: requires x-tenant-id. The quotation is verified to belong
+ * to the caller's tenant before the PDF is generated.
  */
 
 import { createElement } from 'react';
@@ -13,7 +16,6 @@ import { QuotationPdf, type QuotationPdfData } from '@/lib/pdf/templates/quotati
 import type { Lang } from '@/lib/pdf/theme';
 import { captureException } from '@/lib/sentry';
 
-// Force the Node runtime — @react-pdf/renderer uses fs and other Node-only APIs.
 export const runtime = 'nodejs';
 
 const VENDOR_DEFAULT = {
@@ -31,14 +33,21 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  // Language from ?lang=, defaulting to en. Reject anything other than en/ar.
+  const tenantId = request.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return new Response(JSON.stringify({ error: 'Not authenticated' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   const langParam = request.nextUrl.searchParams.get('lang');
   const lang: Lang = langParam === 'ar' ? 'ar' : 'en';
   const download = request.nextUrl.searchParams.get('download') === '1';
 
   try {
-    const quotation = await prisma.leaseQuotation.findUnique({
-      where: { id },
+    const quotation = await prisma.leaseQuotation.findFirst({
+      where: { id, tenantId },
       include: {
         lessee: true,
         vehicles: true,

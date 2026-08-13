@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { addMonths, quotationToContract } from '@/lib/autoFill';
 
 interface Vehicle {
@@ -57,7 +58,7 @@ interface NewContractForm {
 }
 
 function ContractParamsReader({ onFromQuotation }: { onFromQuotation: (id: string) => void }) {
-  const sp = useSearchParams();
+  const sp = useSearchParams() ?? new URLSearchParams();
   useEffect(() => {
     const q = sp.get('fromQuotation');
     if (q) { onFromQuotation(q); window.history.replaceState(null, '', '/leasing/contracts-v2'); }
@@ -470,16 +471,53 @@ export default function ContractsV2Page() {
                 </div>
               )}
             </div>
-            <div className="p-6 border-t border-white/10 flex gap-3 justify-end">
-              <button
-                onClick={() => { setShowAddVehicle(selectedContract); setSelectedContract(null); setNewVehicleForm({ type: '', make: '', model: '', licensePlate: '', driver: '', monthlyRate: '' }); setAddVehicleMsg(''); }}
-                className="px-5 py-2.5 rounded-xl bg-indigo-600/80 border border-indigo-500/40 text-white hover:bg-indigo-600 font-medium transition-all text-sm">
-                Add Vehicle
-              </button>
-              <button onClick={() => setSelectedContract(null)}
-                className="px-6 py-2.5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 font-medium transition-all text-sm">
-                Close
-              </button>
+            <div className="p-6 border-t border-white/10 space-y-3">
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Contract actions</p>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                  <Link
+                    href={`/leasing/vehicle-exchange?contractId=${encodeURIComponent(selectedContract.id)}`}
+                    onClick={() => setSelectedContract(null)}
+                    className="px-3 py-2 rounded-lg bg-violet-500/15 text-violet-200 border border-violet-500/30 text-xs font-medium hover:bg-violet-500/25 text-center transition-all">
+                    Vehicle Exchange
+                  </Link>
+                  <Link
+                    href={`/leasing/handover?contractId=${encodeURIComponent(selectedContract.id)}`}
+                    onClick={() => setSelectedContract(null)}
+                    className="px-3 py-2 rounded-lg bg-cyan-500/15 text-cyan-200 border border-cyan-500/30 text-xs font-medium hover:bg-cyan-500/25 text-center transition-all">
+                    Handover
+                  </Link>
+                  <Link
+                    href={`/leasing/transfers?contractId=${encodeURIComponent(selectedContract.id)}`}
+                    onClick={() => setSelectedContract(null)}
+                    className="px-3 py-2 rounded-lg bg-amber-500/15 text-amber-200 border border-amber-500/30 text-xs font-medium hover:bg-amber-500/25 text-center transition-all">
+                    Transfers
+                  </Link>
+                  <Link
+                    href={`/leasing/returns?contractId=${encodeURIComponent(selectedContract.id)}`}
+                    onClick={() => setSelectedContract(null)}
+                    className="px-3 py-2 rounded-lg bg-rose-500/15 text-rose-200 border border-rose-500/30 text-xs font-medium hover:bg-rose-500/25 text-center transition-all">
+                    Returns
+                  </Link>
+                  <Link
+                    href={`/leasing/contracts-v2/qa?contractId=${encodeURIComponent(selectedContract.id)}`}
+                    onClick={() => setSelectedContract(null)}
+                    className="px-3 py-2 rounded-lg bg-indigo-500/15 text-indigo-200 border border-indigo-500/30 text-xs font-medium hover:bg-indigo-500/25 text-center transition-all">
+                    AI Q&amp;A
+                  </Link>
+                </div>
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => { setShowAddVehicle(selectedContract); setSelectedContract(null); setNewVehicleForm({ type: '', make: '', model: '', licensePlate: '', driver: '', monthlyRate: '' }); setAddVehicleMsg(''); }}
+                  className="px-5 py-2.5 rounded-xl bg-indigo-600/80 border border-indigo-500/40 text-white hover:bg-indigo-600 font-medium transition-all text-sm">
+                  Add Vehicle
+                </button>
+                <button onClick={() => setSelectedContract(null)}
+                  className="px-6 py-2.5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 font-medium transition-all text-sm">
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -9,6 +9,7 @@
 
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { isSessionRevoked } from '@/lib/session-blocklist';
 
 const SECRET =
   process.env.SESSION_SECRET ?? 'xl-mobility-dev-secret-change-in-production';
@@ -91,6 +92,13 @@ export interface SessionPayload {
   /** Set when a SUPER_ADMIN is impersonating this user — value is the
    *  impersonator's userId. Used to render the banner and audit actions. */
   impersonatedBy?: string;
+  /**
+   * ENTERPRISE data-residency region. Embedded in the session token so
+   * middleware can route DB calls without a round-trip DB lookup on every
+   * request. Values: 'GLOBAL' | 'EU' | 'UAE' | 'US'.
+   * Absent for non-ENTERPRISE tenants (treated as 'GLOBAL' by the router).
+   */
+  dataResidency?: string;
   exp: number;
 }
 
@@ -103,6 +111,12 @@ export async function signSession(payload: {
   plan: string;
   role: string;
   impersonatedBy?: string;
+  /**
+   * ENTERPRISE data-residency region. Omit for non-ENTERPRISE tenants.
+   * When present it is embedded in the token so the middleware can attach
+   * an x-data-residency header without an extra DB lookup per request.
+   */
+  dataResidency?: string;
   /** Override TTL in ms (default 24 h). Impersonation uses a shorter TTL. */
   ttlMs?: number;
 }): Promise<string> {
@@ -122,7 +136,7 @@ export async function signSession(payload: {
  */
 export async function verifySession(
   token: string,
-): Promise<{ userId: string; tenantId: string; plan: string; role: string; impersonatedBy?: string } | null> {
+): Promise<{ userId: string; tenantId: string; plan: string; role: string; impersonatedBy?: string; dataResidency?: string } | null> {
   try {
     const dotIndex = token.lastIndexOf('.');
     if (dotIndex === -1) return null;
@@ -139,12 +153,18 @@ export async function verifySession(
       return null;
     }
 
+    // Check revocation blocklist (Redis-backed; no-op when Redis not configured).
+    if (await isSessionRevoked(token)) {
+      return null;
+    }
+
     return {
-      userId:         payload.userId,
-      tenantId:       payload.tenantId,
-      plan:           payload.plan,
-      role:           payload.role ?? 'TENANT_ADMIN',
+      userId:        payload.userId,
+      tenantId:      payload.tenantId,
+      plan:          payload.plan,
+      role:          payload.role ?? 'TENANT_ADMIN',
       ...(payload.impersonatedBy ? { impersonatedBy: payload.impersonatedBy } : {}),
+      ...(payload.dataResidency  ? { dataResidency:  payload.dataResidency  } : {}),
     };
   } catch {
     return null;
@@ -157,6 +177,13 @@ export interface TenantContext {
   tenantId: string;
   userId: string;
   plan: string;
+  /**
+   * ENTERPRISE data-residency region injected by middleware as
+   * `x-data-residency`. Absent (undefined) for non-ENTERPRISE tenants.
+   * Use with `getPrismaForTenant()` from db-router.ts to obtain the
+   * correct regional Prisma client.
+   */
+  dataResidency?: string;
 }
 
 /**
@@ -179,11 +206,12 @@ export function getTenantContext(request: NextRequest): TenantContext {
  * Returns null instead of throwing if headers are missing.
  */
 export function getTenantContextOrNull(request: NextRequest): TenantContext | null {
-  const tenantId = request.headers.get('x-tenant-id');
-  const userId   = request.headers.get('x-user-id');
-  const plan     = request.headers.get('x-tenant-plan');
+  const tenantId     = request.headers.get('x-tenant-id');
+  const userId       = request.headers.get('x-user-id');
+  const plan         = request.headers.get('x-tenant-plan');
+  const dataResidency = request.headers.get('x-data-residency') ?? undefined;
 
   if (!tenantId || !userId || !plan) return null;
 
-  return { tenantId, userId, plan };
+  return { tenantId, userId, plan, dataResidency };
 }

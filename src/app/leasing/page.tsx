@@ -1,8 +1,20 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { FileText } from 'lucide-react';
+import {
+  Activity,
+  AlertTriangle,
+  BarChart3,
+  CarFront,
+  FileText,
+  MessageCircle,
+  RefreshCw,
+  ShieldCheck,
+  type LucideIcon,
+} from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
+import { useFetchedData, invalidate } from '@/hooks/useFetchedData';
 
 interface KPIs {
   activeContracts: number;
@@ -14,195 +26,167 @@ interface KPIs {
   totalUnbilled: number;
   expiringPolicies: number;
   renewalsPending: number;
-  remarketingPL: number;
   totalLessees: number;
   corporateLessees: number;
 }
 
 interface AnalyticsData {
   kpis: KPIs;
-  charts?: any;
 }
 
 interface QuickLink {
   label: string;
   href: string;
-  icon: string;
+  icon: LucideIcon;
+  tone: string;
+  description: string;
+}
+
+const EMPTY_KPIS: KPIs = {
+  activeContracts: 0,
+  totalContracts: 0,
+  monthlyRevenue: 0,
+  portfolioValue: 0,
+  overdueAmount: 0,
+  collectionRate: 0,
+  totalUnbilled: 0,
+  expiringPolicies: 0,
+  renewalsPending: 0,
+  totalLessees: 0,
+  corporateLessees: 0,
+};
+
+const quickLinks: QuickLink[] = [
+  { label: 'Inquiries', href: '/leasing/inquiries', icon: MessageCircle, tone: 'from-blue-500 to-cyan-500', description: 'Capture leasing demand' },
+  { label: 'Quotations', href: '/leasing/quotations', icon: FileText, tone: 'from-indigo-500 to-blue-500', description: 'Build customer offers' },
+  { label: 'Lease Agreements', href: '/leasing/contracts-v2', icon: FileText, tone: 'from-violet-500 to-purple-500', description: 'Manage active agreements' },
+  { label: 'Mileage', href: '/leasing/mileage', icon: Activity, tone: 'from-sky-500 to-indigo-500', description: 'Readings and overage' },
+  { label: 'Renewals', href: '/leasing/renewals', icon: RefreshCw, tone: 'from-emerald-500 to-teal-500', description: 'Manage renewal pipeline' },
+  { label: 'Early Terminations', href: '/leasing/early-terminations', icon: AlertTriangle, tone: 'from-rose-500 to-pink-500', description: 'Close contracts cleanly' },
+  { label: 'Credit Assessments', href: '/leasing/credit-assessments', icon: ShieldCheck, tone: 'from-violet-500 to-purple-500', description: 'Risk and approval checks' },
+  { label: 'Analytics', href: '/leasing/analytics', icon: BarChart3, tone: 'from-blue-500 to-indigo-500', description: 'Portfolio insights' },
+  { label: 'Fleet Operations', href: '/fleet', icon: CarFront, tone: 'from-slate-600 to-slate-800', description: 'Fuel, fines, insurance, and documents' },
+];
+
+function moneyShort(value: number, divisor: number, suffix: string) {
+  return `AED ${(value / divisor).toFixed(1)}${suffix}`;
 }
 
 export default function LeasingDashboard() {
-  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Session-scoped fetch cache — 1st visit hits the cached analytics
+  // endpoint (unstable_cache + private s-maxage), 2nd visit in the same
+  // tab is instant from the in-memory Map.
+  const { data: analyticsData, loading: loadingAnalytics, error: analyticsError,
+          refresh: refreshAnalytics } =
+    useFetchedData<AnalyticsData>('/api/leasing/analytics');
 
+  // Expose a manual refresh trigger so other parts of the app can call
+  // window.fleet360.refreshLeasing() after a write.
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        const res = await fetch('/api/leasing/analytics');
-        if (!res.ok) throw new Error('Failed to fetch analytics');
-        const data = await res.json();
-        setAnalyticsData(data);
-        setError(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred');
-        setLoading(false);
-      } finally {
-        setLoading(false);
-      }
-    };
+    const w = window as unknown as { fleet360?: Record<string, () => void> };
+    w.fleet360 = w.fleet360 ?? {};
+    w.fleet360.refreshLeasing = refreshAnalytics;
+    return () => { delete w.fleet360?.refreshLeasing; };
+  }, [refreshAnalytics]);
 
-    loadData();
-  }, []);
+  const error = analyticsError
+    ? 'Live analytics are temporarily unavailable. Showing the Leasing workspace with safe fallback values.'
+    : null;
+  const kpis = analyticsData?.kpis ?? EMPTY_KPIS;
 
-  const quickLinks: QuickLink[] = [
-    { label: 'Traffic Fines', href: '/leasing/traffic-fines', icon: '|>' },
-    { label: 'Fuel Management', href: '/leasing/fuel', icon: '()' },
-    { label: 'Insurance', href: '/leasing/insurance', icon: 'S' },
-    { label: 'Mileage Overage', href: '/leasing/mileage', icon: '#' },
-    { label: 'Renewals', href: '/leasing/renewals', icon: 'R' },
-    { label: 'Receivables', href: '/leasing/receivables', icon: 'M' },
-    { label: 'Early Termination', href: '/leasing/early-terminations', icon: 'X' },
-    { label: 'Documents', href: '/leasing/documents', icon: 'D' },
-    { label: 'Remarketing', href: '/leasing/remarketing', icon: '*' },
-    { label: 'Invoices', href: '/leasing/invoices', icon: 'I' },
-    { label: 'Credit Assessments', href: '/leasing/credit-assessments', icon: 'C' },
-    { label: 'Direct Debits', href: '/leasing/direct-debits', icon: 'E' },
-    { label: 'CRM & Leads', href: '/leasing/crm', icon: 'L' },
-    { label: 'Analytics', href: '/leasing/analytics', icon: 'A' },
-    { label: 'Pre-Billing', href: '/leasing/pre-billing', icon: 'P' },
+  const attentionItems = [
+    {
+      label: 'Overdue amount',
+      value: `AED ${kpis.overdueAmount.toLocaleString()}`,
+      state: kpis.overdueAmount > 0 ? 'Needs attention' : 'Clear',
+    },
+    {
+      label: 'Unbilled charges',
+      value: `AED ${kpis.totalUnbilled.toLocaleString()}`,
+      state: kpis.totalUnbilled > 0 ? 'Ready for review' : 'Clear',
+    },
+    {
+      label: 'Expiring policies',
+      value: String(kpis.expiringPolicies),
+      state: kpis.expiringPolicies > 0 ? 'Next 30 days' : 'Clear',
+    },
   ];
 
-  const getCollectionRateColor = (rate: number) => {
-    if (rate > 90) return 'text-emerald-300 bg-emerald-900 border-emerald-700';
-    if (rate > 70) return 'text-amber-300 bg-amber-900 border-amber-700';
-    return 'text-rose-300 bg-rose-900 border-rose-700';
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-gray-400">Loading dashboard...</div>
-      </div>
-    );
-  }
-
-  const kpis = analyticsData?.kpis;
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader
         title="Leasing Dashboard"
-        subtitle="Overview of all vehicle leasing contracts and operations"
+        subtitle="Vehicle leasing contracts, renewals, compliance, and operational billing readiness."
         icon={FileText}
         accent="violet"
       />
 
-      {/* Alert Strip */}
-      {kpis && ((kpis.overdueAmount ?? 0) > 0 || (kpis.totalUnbilled ?? 0) > 10000 || (kpis.expiringPolicies ?? 0) > 0) && (
-        <div className="bg-red-900 border border-red-700 text-red-200 p-4 rounded-lg flex items-start gap-3">
-          <span className="font-bold text-lg">!</span>
-          <div className="space-y-1">
-            {(kpis.overdueAmount ?? 0) > 0 && (
-              <p className="text-sm">
-                ALERT: AED {(kpis.overdueAmount ?? 0).toLocaleString()} overdue
-                {(kpis.overdueAmount ?? 0) > 50000 && ' [CRITICAL]'}
-              </p>
-            )}
-            {(kpis.totalUnbilled ?? 0) > 10000 && (
-              <p className="text-sm">
-                AED {(kpis.totalUnbilled ?? 0).toLocaleString()} in pending operational charges (fines, fuel, overage)
-              </p>
-            )}
-            {(kpis.expiringPolicies ?? 0) > 0 && (
-              <p className="text-sm">
-                {kpis.expiringPolicies} insurance {kpis.expiringPolicies === 1 ? 'policy' : 'policies'} expiring within 30 days
-              </p>
-            )}
-          </div>
+      {error && (
+        <div className="rounded-2xl border border-amber-300/60 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+          {error} Showing the Leasing workspace with safe fallback values.
         </div>
       )}
 
-      {/* KPI Cards Grid */}
-      {kpis && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="bg-blue-900 bg-opacity-20 border border-blue-700 rounded-lg p-6">
-            <p className="text-blue-300 text-sm font-medium mb-1">Active Contracts</p>
-            <p className="text-3xl font-bold text-blue-200">{kpis.activeContracts}</p>
-          </div>
-
-          <div className="bg-emerald-900 bg-opacity-20 border border-emerald-700 rounded-lg p-6">
-            <p className="text-emerald-300 text-sm font-medium mb-1">Monthly Revenue</p>
-            <p className="text-3xl font-bold text-emerald-200">
-              AED {((kpis.monthlyRevenue ?? 0) / 1000).toFixed(1)}K
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: 'Active contracts', value: kpis.activeContracts, sub: `${kpis.totalContracts} total contracts`, color: 'text-blue-600' },
+          { label: 'Monthly revenue', value: moneyShort(kpis.monthlyRevenue, 1000, 'K'), sub: 'active lease run-rate', color: 'text-emerald-600' },
+          { label: 'Portfolio value', value: moneyShort(kpis.portfolioValue, 1000000, 'M'), sub: 'contracted value', color: 'text-indigo-600' },
+          { label: 'Collection rate', value: `${kpis.collectionRate.toFixed(0)}%`, sub: 'finance-owned collections', color: 'text-orange-600' },
+        ].map(card => (
+          <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm font-medium text-slate-500">{card.label}</p>
+            <p className={`mt-3 text-3xl font-bold ${card.color}`}>
+              {loadingAnalytics ? '...' : card.value}
             </p>
+            <p className="mt-1 text-xs text-slate-500">{card.sub}</p>
           </div>
+        ))}
+      </section>
 
-          <div className="bg-indigo-900 bg-opacity-20 border border-indigo-700 rounded-lg p-6">
-            <p className="text-indigo-300 text-sm font-medium mb-1">Portfolio Value</p>
-            <p className="text-3xl font-bold text-indigo-200">
-              AED {((kpis.portfolioValue ?? 0) / 1000000).toFixed(2)}M
-            </p>
-          </div>
-
-          <div className={`border rounded-lg p-6 ${(kpis.overdueAmount ?? 0) > 50000 ? 'bg-red-900 bg-opacity-20 border-red-700' : 'bg-orange-900 bg-opacity-20 border-orange-700'}`}>
-            <div className="flex justify-between items-start">
+      <section className="grid gap-4 lg:grid-cols-3">
+        {attentionItems.map(item => (
+          <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <p className={`text-sm font-medium mb-1 ${(kpis.overdueAmount ?? 0) > 50000 ? 'text-red-300' : 'text-orange-300'}`}>
-                  Overdue Amount
-                </p>
-                <p className={`text-3xl font-bold ${(kpis.overdueAmount ?? 0) > 50000 ? 'text-red-200' : 'text-orange-200'}`}>
-                  AED {(kpis.overdueAmount ?? 0).toLocaleString()}
-                </p>
+                <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                <p className="mt-2 text-2xl font-bold text-slate-950">{loadingAnalytics ? '...' : item.value}</p>
               </div>
-              {(kpis.overdueAmount ?? 0) > 50000 && (
-                <span className="bg-red-600 text-white text-xs font-bold px-2 py-1 rounded">CRITICAL</span>
-              )}
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
+                {item.state}
+              </span>
             </div>
           </div>
+        ))}
+      </section>
 
-          <div className={`border rounded-lg p-6 ${getCollectionRateColor(kpis.collectionRate ?? 0)}`}>
-            <p className="text-sm font-medium mb-1">Collection Rate</p>
-            <p className="text-3xl font-bold">{(kpis.collectionRate ?? 0).toFixed(1)}%</p>
-          </div>
-
-          <div className="bg-amber-900 bg-opacity-20 border border-amber-700 rounded-lg p-6">
-            <p className="text-amber-300 text-sm font-medium mb-1">Unbilled Operational Charges</p>
-            <p className="text-3xl font-bold text-amber-200">
-              AED {(kpis.totalUnbilled ?? 0).toLocaleString()}
-            </p>
-          </div>
-
-          <div className="bg-slate-800 border border-slate-600 rounded-lg p-6">
-            <p className="text-slate-300 text-sm font-medium mb-1">Total Lessees</p>
-            <p className="text-3xl font-bold text-white">{kpis.totalLessees ?? 0}</p>
-            <p className="text-xs text-slate-400 mt-1">{kpis.corporateLessees ?? 0} corporate</p>
+      <section>
+        <div className="mb-4 flex items-end justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-950">Quick Actions</h2>
+            <p className="text-sm text-slate-500">Focused Leasing operations after finance and remarketing cleanup.</p>
           </div>
         </div>
-      )}
 
-      {/* Quick Links Grid */}
-      <div>
-        <h2 className="text-xl font-bold text-white mb-4">Quick Links</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-          {quickLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-gray-600 rounded-lg p-4 transition text-center"
-            >
-              <div className="text-2xl font-bold text-blue-400 mb-2">{link.icon}</div>
-              <p className="text-xs text-gray-200 font-medium">{link.label}</p>
-            </Link>
-          ))}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          {quickLinks.map(link => {
+            const Icon = link.icon;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+              >
+                <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${link.tone} text-white shadow-sm`}>
+                  <Icon className="h-6 w-6" />
+                </div>
+                <p className="font-semibold text-slate-950">{link.label}</p>
+                <p className="mt-1 text-sm text-slate-500">{link.description}</p>
+              </Link>
+            );
+          })}
         </div>
-      </div>
-
-      {error && (
-        <div className="bg-red-900 border border-red-700 text-red-200 p-4 rounded-lg">
-          {error}
-        </div>
-      )}
+      </section>
     </div>
   );
 }

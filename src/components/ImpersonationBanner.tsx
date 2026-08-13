@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { ShieldAlert } from 'lucide-react';
+import { fetchWithTimeout } from '@/lib/fetch-timeout';
 
 interface MeResponse { impersonatedBy?: string | null; tenantName?: string; userId?: string; }
 
@@ -22,7 +22,7 @@ export default function ImpersonationBanner() {
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch('/api/auth/me', { cache: 'no-store' });
+        const r = await fetchWithTimeout('/api/auth/me', { cache: 'no-store' }, 5_000);
         if (!r.ok) return;
         const data = await r.json();
         if (!cancelled) setInfo(data);
@@ -51,7 +51,9 @@ export default function ImpersonationBanner() {
   return (
     <div className="sticky top-0 z-[100] w-full bg-amber-500 text-amber-950 shadow-lg">
       <div className="max-w-7xl mx-auto px-4 py-2 flex items-center gap-3 text-sm">
-        <ShieldAlert className="w-4 h-4 flex-shrink-0" />
+        <span className="inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-amber-950/20 text-[10px] font-bold">
+          !
+        </span>
         <span className="font-semibold">Impersonating</span>
         <span className="opacity-80">
           {info.tenantName ? <>tenant <strong>{info.tenantName}</strong></> : 'this tenant'}

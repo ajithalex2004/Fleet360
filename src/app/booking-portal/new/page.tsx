@@ -774,7 +774,7 @@ const SERVICE_META: Record<ServiceType, { title: string; icon: string; gradient:
 // ─────────────────────────────────────────────────────────────────────────────
 
 function NewBookingInner() {
-  const searchParams = useSearchParams();
+  const searchParams = useSearchParams() ?? new URLSearchParams();
   const router       = useRouter();
 
   const initialType = (searchParams.get('type') ?? '') as ServiceType | '';

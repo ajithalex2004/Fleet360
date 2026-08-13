@@ -1,28 +1,26 @@
 /**
  * /api/shipper-portal/shipments
  *
- *   GET   — list the logged-in shipper's shipments (customer-scoped).
- *           Lightweight projection: id, shipmentNo, status, origin/destination
- *           summary, submittedAt. Detail page calls /[id] for the rest.
- *   POST  — submit a new shipment request. Tenant + customer are taken from
- *           the session, NEVER from the body. status='PENDING' so the
- *           operator sees it in dispatch immediately, sourceChannel
- *           tag lets them filter "from portal" vs "internal".
+ *   GET   — list the logged-in shipper's shipments (customer-scoped). These are
+ *           job orders the operator has already created (converted) from the
+ *           shipper's requests; lightweight projection for the list page.
+ *   POST  — submit a new SHIPPING REQUEST (model A + route-through-review). The
+ *           submission no longer creates a shipment order directly; it lands in
+ *           the operator's review inbox as a logistics_shipping_request
+ *           (source=SHIPPER_PORTAL). The operator reviews → converts it into a
+ *           job order, at which point it appears in the GET list above.
+ *
+ * Tenant + customer are taken from the session, NEVER from the body.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireShipperPortal } from '@/lib/shipper-portal/auth';
-import {
-  createShipmentOrder,
-  type LogisticsShipmentCreateInput,
-} from '@/lib/logistics/domain';
-import { applyContractQuoteToInput } from '@/lib/logistics/rate-engine';
-import { applyAutoAccessorialsToShipment } from '@/lib/logistics/accessorial-engine';
+import { createShipmentOrder, createShippingRequest, LogisticsValidationError } from '@/lib/logistics/domain';
 
 export const runtime = 'nodejs';
 
-// ── GET — list ─────────────────────────────────────────────────────────
+// ── GET — list converted job orders ────────────────────────────────────────
 
 interface ListRow {
   id: string;
@@ -76,20 +74,47 @@ export async function GET(req: NextRequest) {
       currency: r.currency,
     }));
 
+    // Pending shipping requests (not yet converted into a job order) so the
+    // shipper sees their submission immediately, with a review status.
+    const requestRows = await prisma.$queryRawUnsafe<Array<{
+      id: string; request_no: string; status: string;
+      origin_name: string | null; destination_name: string | null;
+      pickup_window_from: string | null; created_at: string;
+    }>>(
+      `SELECT id::text, request_no, status,
+              origin_name, destination_name,
+              pickup_window_from::text, created_at::text
+         FROM logistics_shipping_requests
+        WHERE tenant_id = $1 AND shipper_id = $2 AND deleted_at IS NULL
+          AND status IN ('SUBMITTED','UNDER_REVIEW','ACCEPTED')
+        ORDER BY created_at DESC
+        LIMIT 50`,
+      auth.tenantId, auth.customerId,
+    ).catch(() => []);
+
+    const requests = requestRows.map(r => ({
+      id: r.id,
+      requestNo: r.request_no,
+      status: r.status,
+      origin: { name: r.origin_name },
+      destination: { name: r.destination_name },
+      pickupWindowFrom: r.pickup_window_from,
+      submittedAt: r.created_at,
+    }));
+
     return NextResponse.json(
-      { shipments, limit, offset },
+      { shipments, requests, limit, offset },
       { headers: { 'Cache-Control': 'private, max-age=15, stale-while-revalidate=30' } },
     );
   } catch (e) {
     console.error('[shipper-portal/shipments] GET', e);
-    return NextResponse.json({ shipments: [], limit, offset }, { status: 200 });
+    return NextResponse.json({ shipments: [], requests: [], limit, offset }, { status: 200 });
   }
 }
 
-// ── POST — create ──────────────────────────────────────────────────────
+// ── POST — submit a shipping request (review inbox) ─────────────────────────
 
 interface IncomingBody {
-  // Pickup
   pickup?: {
     name?: string | null; address?: string | null;
     city?: string | null; country?: string | null;
@@ -97,7 +122,6 @@ interface IncomingBody {
     windowFrom?: string | null; windowTo?: string | null;
     instructions?: string | null;
   };
-  // Delivery
   delivery?: {
     name?: string | null; address?: string | null;
     city?: string | null; country?: string | null;
@@ -105,7 +129,6 @@ interface IncomingBody {
     windowFrom?: string | null; windowTo?: string | null;
     instructions?: string | null;
   };
-  // Cargo
   cargoLines?: Array<{
     description: string;
     quantity?: number | null;
@@ -116,11 +139,33 @@ interface IncomingBody {
     tempMinC?: number | null;
     tempMaxC?: number | null;
   }>;
-  // Other
   shipmentType?: string | null;
   requestedVehicleType?: string | null;
   priority?: 'Low' | 'Medium' | 'High';
   specialInstructions?: string | null;
+  bookingMode?: 'review' | 'book';
+  acceptedQuoteAmount?: number | string | null;
+  /** INLAND (no customs) | CROSS_BORDER (customs clearance section applies). */
+  haulage?: 'INLAND' | 'CROSS_BORDER' | null;
+  /** Customs section — only present when haulage = CROSS_BORDER. */
+  customs?: {
+    cargoType?: string | null;
+    hsCode?: string | null;
+    netWeightKg?: number | null;
+    grossWeightKg?: number | null;
+    customsValue?: number | null;
+    customsCurrency?: string | null;
+    incoterms?: string | null;
+    originCountry?: string | null;
+  } | null;
+  /** Dangerous-goods / regulated-cargo declaration — independent of haulage. */
+  hazmat?: {
+    unNumber?: string | null;
+    unClass?: string | null;
+    packingGroup?: string | null;
+    emergencyContactName?: string | null;
+    emergencyContactPhone?: string | null;
+  } | null;
 }
 
 export async function POST(req: NextRequest) {
@@ -131,7 +176,6 @@ export async function POST(req: NextRequest) {
   try { body = (await req.json()) as IncomingBody; }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
 
-  // Required-field validation — return specific errors so the form UX is helpful.
   if (!body.pickup?.address && !body.pickup?.name) {
     return NextResponse.json({ error: 'Pickup location is required' }, { status: 400 });
   }
@@ -142,170 +186,151 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'At least one cargo line is required' }, { status: 400 });
   }
 
-  // Hydrate cargo-owner details from the customer record so the operator
-  // sees them in dispatch without needing to look up the customer separately.
-  const customerRows = await prisma.$queryRawUnsafe<Array<{ name_en: string; email: string | null; mobile_number: string | null }>>(
-    `SELECT name_en, email, mobile_number
-       FROM customers
-      WHERE id = $1 AND tenant_id = $2
-      LIMIT 1`,
-    auth.customerId, auth.tenantId,
-  ).catch(() => []);
-  const customer = customerRows[0];
-
-  // Aggregates so operators see totals immediately.
   const totalWeightKg = body.cargoLines.reduce(
     (sum, c) => sum + ((c.quantity ?? 1) * (c.weightKg ?? 0)), 0,
   );
   const totalVolumeCbm = body.cargoLines.reduce(
     (sum, c) => sum + ((c.quantity ?? 1) * (c.volumeCbm ?? 0)), 0,
   );
-
-  // Build the input the existing engine expects.
-  const input: LogisticsShipmentCreateInput = {
-    tenantId: auth.tenantId,
-    cargoOwnerCustomerId: auth.customerId,
-    cargoOwnerName: customer?.name_en ?? null,
-    cargoOwnerEmail: auth.user.email ?? customer?.email ?? null,
-    cargoOwnerPhone: customer?.mobile_number ?? null,
-    bookingMode: 'CONTRACT',                    // operator decides spot/RFQ later
-    marketplaceStatus: 'PRIVATE',               // never auto-publish from portal
-    status: 'PENDING',                          // skip DRAFT — shipper has signed off
-    priority: body.priority ?? 'Medium',
-    shipmentType: body.shipmentType ?? null,
-    requestedVehicleType: body.requestedVehicleType ?? null,
-    originName: body.pickup?.name ?? null,
-    originAddress: body.pickup?.address ?? null,
-    originCity: body.pickup?.city ?? null,
-    originCountry: body.pickup?.country ?? null,
-    destinationName: body.delivery?.name ?? null,
-    destinationAddress: body.delivery?.address ?? null,
-    destinationCity: body.delivery?.city ?? null,
-    destinationCountry: body.delivery?.country ?? null,
-    pickupWindowFrom:   body.pickup?.windowFrom ?? null,
-    pickupWindowTo:     body.pickup?.windowTo ?? null,
-    deliveryWindowFrom: body.delivery?.windowFrom ?? null,
-    deliveryWindowTo:   body.delivery?.windowTo ?? null,
-    totalWeightKg: totalWeightKg > 0 ? totalWeightKg : null,
-    totalVolumeCbm: totalVolumeCbm > 0 ? totalVolumeCbm : null,
-    stops: [
-      {
-        stopType: 'PICKUP',
-        sequenceNo: 1,
-        locationName: body.pickup?.name ?? null,
-        address: body.pickup?.address ?? null,
-        contactName: body.pickup?.contactName ?? null,
-        contactPhone: body.pickup?.contactPhone ?? null,
-        plannedArrivalAt: body.pickup?.windowFrom ?? null,
-        plannedDepartAt: body.pickup?.windowTo ?? null,
-        instructions: body.pickup?.instructions ?? null,
-      },
-      {
-        stopType: 'DELIVERY',
-        sequenceNo: 2,
-        locationName: body.delivery?.name ?? null,
-        address: body.delivery?.address ?? null,
-        contactName: body.delivery?.contactName ?? null,
-        contactPhone: body.delivery?.contactPhone ?? null,
-        plannedArrivalAt: body.delivery?.windowFrom ?? null,
-        plannedDepartAt: body.delivery?.windowTo ?? null,
-        instructions: body.delivery?.instructions ?? null,
-      },
-    ],
-    cargoLines: body.cargoLines.map(c => ({
-      description: c.description,
-      quantity: c.quantity ?? null,
-      packageType: c.packageType ?? null,
-      weightKg: c.weightKg ?? null,
-      volumeCbm: c.volumeCbm ?? null,
-      isHazmat: !!c.isHazmat,
-      tempMinC: c.tempMinC ?? null,
-      tempMaxC: c.tempMaxC ?? null,
-    })),
-    metadata: {
-      sourceChannel: 'SHIPPER_PORTAL',
-      submittedByPortalUserId: auth.userId,
-      submittedAt: new Date().toISOString(),
-      specialInstructions: body.specialInstructions ?? null,
-    },
-    createdBy: auth.userId,
-  } as LogisticsShipmentCreateInput;
+  const goodsDescription = body.cargoLines
+    .map(c => c.description)
+    .filter(Boolean)
+    .join('; ')
+    .slice(0, 500) || null;
 
   try {
-    // Look up the contracted rate for this customer × lane × vehicle and
-    // populate customerRateAmount + audit metadata. Shippers never quote
-    // themselves — if no contract matches, the order still goes through
-    // with customerRateAmount=null and a `rateQuote.reason=no-lane-match`
-    // record so dispatch knows to set a price manually.
-    const { input: quotedInput, quote } = await applyContractQuoteToInput(input);
-
-    const created = await createShipmentOrder(quotedInput);
-    if (!created) {
-      return NextResponse.json({ error: 'Shipment creation failed' }, { status: 500 });
-    }
-
-    // Persist the winning contract id in the dedicated column so dispatch
-    // can query "shipments under contract RC-X" without parsing JSONB.
-    // Best-effort: column may not exist on very old tenants that haven't
-    // run ensureLogisticsDomainTables yet — non-fatal in that case.
-    if (quote?.matched && quote.contractId) {
-      await prisma.$executeRawUnsafe(
-        `UPDATE logistics_shipment_orders
-            SET quoted_contract_id = $1, updated_at = NOW()
-          WHERE id = $2 AND tenant_id = $3`,
-        quote.contractId, (created as { id: string }).id, auth.tenantId,
-      ).catch(() => { /* non-fatal */ });
-    }
-
-    // Auto-apply accessorial catalog rules — fuel surcharge, customs,
-    // multi-drop, weight-based handling, etc. Each rule that fires writes
-    // a freight_charges row tagged metadata.autoApplied=true with the
-    // human-readable reason. Operators can still add/edit/remove these
-    // via the standard accessorial endpoints; the auto-applier just
-    // ensures the obvious ones aren't silently dropped at booking time.
-    const isHazmat = body.cargoLines?.some(c => c.isHazmat) ?? false;
-    await applyAutoAccessorialsToShipment({
-      tenantId: auth.tenantId,
-      shipmentOrderId: (created as { id: string }).id,
-      actorUserId: auth.userId,
-      context: {
-        baseRate: quote?.matched ? quote.baseRate : null,
-        subtotal: quote?.matched ? quote.subtotal : null,
-        cargoValue: null, // shipper-portal form doesn't capture this yet
-        distanceKm: null, // no geocoding wired up on portal submissions
-        weightKg: totalWeightKg > 0 ? totalWeightKg : null,
-        stopsCount: 2,    // pickup + delivery; multi-drop happens via /logistics/dispatch
-        vehicleType: body.requestedVehicleType ?? null,
+    if (body.bookingMode === 'book') {
+      const shipment = await createShipmentOrder({
+        tenantId: auth.tenantId,
+        cargoOwnerCustomerId: auth.customerId,
+        cargoOwnerName: auth.user.fullName ?? null,
         shipmentType: body.shipmentType ?? null,
-        isHazmat,
-        requiresCustoms: false, // explicit flag not in portal form
-        originCountry: body.pickup?.country ?? null,
-        destinationCountry: body.delivery?.country ?? null,
+        bookingMode: 'SPOT',
+        marketplaceStatus: 'PRIVATE',
+        status: 'PENDING',
+        priority: body.priority ?? 'Medium',
+        originName: body.pickup?.name || body.pickup?.address || null,
+        originAddress: body.pickup?.address ?? null,
+        destinationName: body.delivery?.name || body.delivery?.address || null,
+        destinationAddress: body.delivery?.address ?? null,
+        pickupWindowFrom: body.pickup?.windowFrom ?? null,
+        pickupWindowTo: body.pickup?.windowTo ?? null,
+        deliveryWindowFrom: body.delivery?.windowFrom ?? null,
+        deliveryWindowTo: body.delivery?.windowTo ?? null,
+        requestedVehicleType: body.requestedVehicleType ?? null,
+        totalWeightKg: totalWeightKg > 0 ? totalWeightKg : null,
+        totalVolumeCbm: totalVolumeCbm > 0 ? totalVolumeCbm : null,
+        customerRateAmount: num(body.acceptedQuoteAmount),
+        currency: 'AED',
+        sourceChannel: 'SHIPPER_PORTAL_BOOK_NOW',
+        notes: body.specialInstructions ?? null,
+        metadata: {
+          priority: body.priority ?? 'Medium',
+          pickup: body.pickup ?? null,
+          delivery: body.delivery ?? null,
+          cargoLines: body.cargoLines ?? [],
+          submittedByPortalUserId: auth.userId,
+          shipperAcceptedQuote: body.acceptedQuoteAmount != null,
+          // Shipper-declared cargo classification — preserved on the order so
+          // the operator + downstream carrier see HS/INCOTERMS/DG class.
+          haulage: body.haulage ?? 'INLAND',
+          customs: body.customs ?? null,
+          hazmat: body.hazmat ?? null,
+        },
+        cargoLines: body.cargoLines?.map(line => ({
+          description: line.description,
+          quantity: line.quantity ?? null,
+          packageType: line.packageType ?? null,
+          weightKg: line.weightKg ?? null,
+          volumeCbm: line.volumeCbm ?? null,
+          isHazmat: Boolean(line.isHazmat),
+          tempMinC: line.tempMinC ?? null,
+          tempMaxC: line.tempMaxC ?? null,
+        })),
+        stops: [
+          {
+            stopType: 'PICKUP',
+            sequenceNo: 1,
+            locationName: body.pickup?.name || body.pickup?.address || null,
+            address: body.pickup?.address ?? null,
+            contactName: body.pickup?.contactName ?? null,
+            contactPhone: body.pickup?.contactPhone ?? null,
+            plannedArrivalAt: body.pickup?.windowFrom ?? null,
+            plannedDepartAt: body.pickup?.windowTo ?? null,
+            instructions: body.pickup?.instructions ?? null,
+          },
+          {
+            stopType: 'DELIVERY',
+            sequenceNo: 2,
+            locationName: body.delivery?.name || body.delivery?.address || null,
+            address: body.delivery?.address ?? null,
+            contactName: body.delivery?.contactName ?? null,
+            contactPhone: body.delivery?.contactPhone ?? null,
+            plannedArrivalAt: body.delivery?.windowFrom ?? null,
+            plannedDepartAt: body.delivery?.windowTo ?? null,
+            instructions: body.delivery?.instructions ?? null,
+          },
+        ],
+        createdBy: auth.userId,
+      });
+
+      return NextResponse.json({
+        shipment: shipment ? { id: shipment.id, shipmentNo: shipment.shipment_no, status: shipment.status } : null,
+        message: 'Your shipment was booked and is now available for tracking.',
+      }, { status: 201 });
+    }
+
+    // The full pickup/delivery/cargo payload is stashed in metadata so the
+    // operator can rebuild stops + cargo lines when they convert the request.
+    const request = await createShippingRequest({
+      tenantId: auth.tenantId,
+      shipperId: auth.customerId,
+      source: 'SHIPPER_PORTAL',
+      createdBy: auth.userId,
+      shipmentType: body.shipmentType ?? null,
+      requestedVehicleType: body.requestedVehicleType ?? null,
+      originName: body.pickup?.name || body.pickup?.address || null,
+      originAddress: body.pickup?.address ?? null,
+      destinationName: body.delivery?.name || body.delivery?.address || null,
+      destinationAddress: body.delivery?.address ?? null,
+      pickupWindowFrom: body.pickup?.windowFrom ?? null,
+      pickupWindowTo: body.pickup?.windowTo ?? null,
+      deliveryWindowFrom: body.delivery?.windowFrom ?? null,
+      deliveryWindowTo: body.delivery?.windowTo ?? null,
+      totalWeightKg: totalWeightKg > 0 ? totalWeightKg : null,
+      totalVolumeCbm: totalVolumeCbm > 0 ? totalVolumeCbm : null,
+      goodsDescription,
+      specialInstructions: body.specialInstructions ?? null,
+      metadata: {
+        priority: body.priority ?? 'Medium',
+        pickup: body.pickup ?? null,
+        delivery: body.delivery ?? null,
+        cargoLines: body.cargoLines ?? [],
+        submittedByPortalUserId: auth.userId,
+        // Carried through into the operator's review inbox; the convert step
+        // mirrors these onto the shipment order's metadata.
+        haulage: body.haulage ?? 'INLAND',
+        customs: body.customs ?? null,
+        hazmat: body.hazmat ?? null,
       },
-    }).catch(e => {
-      // Non-fatal: the shipment is already created. Log and move on.
-      console.error('[shipper-portal/shipments] accessorial auto-apply failed', e);
     });
 
-    // Tag the row with sourceChannel column too (in addition to metadata)
-    // so operator-side dispatch filters can use plain SQL.
-    await prisma.$executeRawUnsafe(
-      `UPDATE logistics_shipment_orders
-          SET source_channel = 'SHIPPER_PORTAL', updated_at = NOW()
-        WHERE id = $1 AND tenant_id = $2`,
-      (created as { id: string }).id, auth.tenantId,
-    ).catch(() => { /* column may not exist on very old tenants — non-fatal */ });
-
     return NextResponse.json({
-      shipment: {
-        id: (created as { id: string }).id,
-        shipmentNo: (created as { shipmentNo?: string | null }).shipmentNo ?? null,
-        status: (created as { status: string }).status,
-      },
+      request: request ? { id: request.id, requestNo: request.requestNo, status: request.status } : null,
+      message: 'Your shipping request was submitted and is awaiting review by our team.',
     }, { status: 201 });
   } catch (e) {
+    if (e instanceof LogisticsValidationError) {
+      return NextResponse.json({ error: e.message, issues: e.issues }, { status: 422 });
+    }
     console.error('[shipper-portal/shipments] POST', e);
-    const msg = e instanceof Error ? e.message : 'Failed to create shipment';
+    const msg = e instanceof Error ? e.message : 'Failed to submit shipping request';
     return NextResponse.json({ error: msg }, { status: 500 });
   }
+}
+
+function num(v: unknown): number | null {
+  if (v === null || v === undefined || v === '') return null;
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
 }

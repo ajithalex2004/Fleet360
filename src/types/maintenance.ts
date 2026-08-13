@@ -1,13 +1,22 @@
 export enum MaintenanceStatus {
     REQUESTED = 'Requested',
+    SUBMITTED = 'Submitted',
     ACCEPTED = 'Accepted',
     REJECTED = 'Rejected',
     RE_ASSIGN = 'Re-Assign',
     UNDER_ESTIMATION = 'Under Estimation',
     PENDING_ESTIMATION_APPROVAL = 'Pending Estimation Approval',
     ESTIMATION_APPROVED = 'Estimation Approved',
+    PENDING_OPERATIONS_ACK = 'Pending Operations Ack',
+    PENDING_MAINTENANCE_APPROVAL = 'Pending Maintenance Approval',
+    REJECTED_BY_MAINTENANCE = 'Rejected By Maintenance',
     UNDER_MAINTENANCE = 'Under Maintenance',
+    REPAIR_COMPLETED = 'Repair Completed',       // Garage marks repair done
+    QUALITY_INSPECTION = 'Quality Inspection',   // Fleet QC inspector reviews
+    INSPECTION_FAILED = 'Inspection Failed',     // QC failed — vehicle returned to garage
+    READY_FOR_SERVICE = 'Ready For Service',     // QC passed — vehicle cleared for use
     MAINTENANCE_COMPLETED = 'Maintenance Completed',
+    COMPLETED = 'Completed',
     PENDING_INVOICE = 'Pending Invoice',
     INVOICE_SUBMITTED = 'Invoice Submitted',
     CLOSED = 'Closed',
@@ -42,6 +51,7 @@ export enum MaintenanceType {
     CORRECTIVE = 'CORRECTIVE',
     EMERGENCY = 'EMERGENCY',
     INSPECTION = 'INSPECTION',
+    BREAKDOWN = 'BREAKDOWN',
 }
 
 export enum MaintenancePriority {
@@ -59,12 +69,14 @@ export enum AttachmentType {
     WORK_ORDER = 'WORK_ORDER',
     ESTIMATE = 'ESTIMATE',
     APPROVED_ESTIMATE = 'APPROVED_ESTIMATE',
+    INSPECTION_REPORT = 'INSPECTION_REPORT',
     OTHER = 'OTHER',
 }
 
 // Quotation Management
 export enum QuotationStatus {
     PENDING = 'PENDING',
+    ACCEPTED = 'ACCEPTED',
     APPROVED = 'APPROVED',
     REJECTED = 'REJECTED',
     EXPIRED = 'EXPIRED',
@@ -166,6 +178,17 @@ export interface Driver {
     contactNumber: string;
     email?: string;
     licenseLastRenewed?: string; // ISO Date
+    // Driver Hub core fields (Layer 2.7 — sync with Prisma Driver model)
+    firstName?: string;
+    lastName?: string;
+    hierarchy?: string;
+    driverType?: string; // PERMANENT|CONTRACT|OUTSOURCED
+    nationality?: string;
+    dob?: string; // ISO Date
+    emiratesId?: string;
+    communicationLanguage?: string;
+    dateOfJoin?: string; // ISO Date
+    dallasId?: string;
 }
 
 export interface Garage {
@@ -190,6 +213,7 @@ export interface MaintenanceRequest {
     driverId: string;
     requestDate: string; // ISO Date / Start Date
     expectedEndDate?: string; // ISO Date
+    expectedCompletionDate?: string; // ISO Date — alias used by the request detail UI
     description: string;
     status: MaintenanceStatus;
 
@@ -305,6 +329,7 @@ export interface Quotation {
     garageId: string;
     garageName: string;
     quotationDate: string;
+    submittedDate?: string; // ISO Date — when this quotation was submitted to the requestor
     validUntil: string;
     laborCost: number;
     partsCost: number;
@@ -312,11 +337,14 @@ export interface Quotation {
     currency?: 'AED';
     parts: PartItem[];
     labor: LaborItem[];
+    partsBreakdown?: PartItem[]; // Layer 2.7 — line-by-line parts the garage will supply
     consumablesCost: number;
     vatAmount: number;
     grandTotal: number;
     estimatedDuration: number; // hours
     estimatedCompletionDate?: string; // ISO Date
+    additionalCosts?: number;
+    taxAmount?: number;
     notes?: string;
     status: QuotationStatus;
     submittedBy: string;
@@ -765,6 +793,7 @@ export interface EstimateApproval {
     approvedByRole: UserRole;
     approvalMethod: 'IN_APP' | 'EMAIL_LINK';
     approvedAt: string; // ISO Date
+    approvedCost?: number; // Cost at the moment of approval (frozen for audit trail)
     comments?: string;
     rejectionReason?: string; // if rejected
 }
@@ -779,8 +808,45 @@ export interface ApprovalLink {
     approverName: string;
     createdAt: string; // ISO Date
     expiresAt: string; // ISO Date
+    expiresInHours?: number; // Layer 2.7 — convenience alias for email templates
+    approvalUrl?: string; // Layer 2.7 — fully-qualified URL embedded in emails
     usedAt?: string; // ISO Date (if used)
     status: 'ACTIVE' | 'USED' | 'EXPIRED';
+}
+
+// ============================================
+// QUALITY INSPECTION
+// ============================================
+
+export enum InspectionResult {
+    PASSED = 'PASSED',
+    FAILED = 'FAILED',
+    CONDITIONAL = 'CONDITIONAL', // passed with minor remarks
+}
+
+export interface InspectionChecklistItem {
+    id: string;
+    category: string;           // e.g., 'Safety', 'Mechanical', 'Cosmetic'
+    item: string;               // e.g., 'Brake response'
+    result: 'OK' | 'FAIL' | 'N/A';
+    notes?: string;
+}
+
+export interface QualityInspection {
+    id: string;
+    requestId: string;
+    workOrderNo?: string;
+    inspectorId: string;
+    inspectorName: string;
+    inspectedAt: string;        // ISO Date
+    result: InspectionResult;
+    checklistItems: InspectionChecklistItem[];
+    defectsFound?: string[];    // Free-text list of defects
+    recommendations?: string;
+    returnToGarageReason?: string; // populated when result = FAILED
+    photos?: string[];          // URLs
+    signatureUrl?: string;      // Inspector digital signature
+    attachments?: Attachment[];
 }
 
 // Work Order Closure with Cost Entry
@@ -799,6 +865,7 @@ export interface WorkOrderClosure {
     completedByName: string;
     completedAt: string; // ISO Date
     notes?: string;
+    completionNotes?: string; // Layer 2.7 — alias for `notes` used in some email templates
 }
 
 // RFQ Email Details
@@ -840,7 +907,7 @@ export interface EmailLog {
     cc?: string[];
     subject: string;
     sentAt: string; // ISO Date
-    status: 'SENT' | 'FAILED' | 'PENDING';
+    status: 'SENT' | 'FAILED' | 'PENDING' | 'MOCK_SENT';
     errorMessage?: string;
     retryCount: number;
 }
@@ -867,6 +934,10 @@ export interface EnhancedMaintenanceRequest extends MaintenanceRequest {
     assignedDriver?: DriverAssignment;
     workOrderClosure?: WorkOrderClosure;
 
+    // Quality Inspection
+    qualityInspections?: QualityInspection[];
+    latestInspectionId?: string;
+
     // RFQ Details
     rfqDetails?: RFQDetails;
     rfqSentAt?: string; // ISO Date
@@ -885,6 +956,94 @@ export interface EnhancedMaintenanceRequest extends MaintenanceRequest {
     partsUsed?: PartUsage[];
     checklistItems?: ChecklistItem[];
     actualCosts?: ActualCosts;
+}
+
+// ============================================
+// PREVENTIVE MAINTENANCE ENGINE
+// ============================================
+
+export enum PMTriggerType {
+    ODOMETER        = 'ODOMETER',
+    CALENDAR        = 'CALENDAR',
+    ENGINE_HOURS    = 'ENGINE_HOURS',
+    OPERATING_HOURS = 'OPERATING_HOURS',
+    COMPONENT_LIFE  = 'COMPONENT_LIFE',
+}
+
+export enum PMItemStatus {
+    UPCOMING  = 'UPCOMING',
+    DUE       = 'DUE',
+    OVERDUE   = 'OVERDUE',
+    COMPLETED = 'COMPLETED',
+    SNOOZED   = 'SNOOZED',
+}
+
+export interface PMApplicability {
+    allVehicles:   boolean;
+    vehicleIds?:   string[];
+    vehicleTypes?: string[];
+    vehicleGroups?: string[];
+}
+
+export interface PMTrigger {
+    id:            string;
+    planId:        string;
+    triggerType:   PMTriggerType;
+    /** Numeric interval: km for ODOMETER, days for CALENDAR, hours for ENGINE_HOURS */
+    intervalValue: number;
+    intervalUnit:  'KM' | 'DAYS' | 'HOURS';
+}
+
+export interface MaintenancePlan {
+    id:               string;
+    tenantId:         string;
+    name:             string;
+    description?:     string;
+    maintenanceType?: MaintenanceType;
+    applicability:    PMApplicability;
+    /** Days after nominal due date before status escalates to OVERDUE */
+    gracePeriodDays?: number;
+    /** Flag as DUE this many days before the calculated due date */
+    earlyWindowDays?: number;
+    /** Flag as DUE this many km before the calculated due odometer */
+    earlyWindowKm?:   number;
+    isActive:         boolean;
+    notifyDaysBefore?: number;
+    triggers:         PMTrigger[];
+    createdAt?:       string;
+    updatedAt?:       string;
+}
+
+export interface PMScheduleItem {
+    id:                 string;
+    tenantId:           string;
+    planId:             string;
+    plan?:              MaintenancePlan;
+    vehicleId:          string;
+    /** ISO Date — when the vehicle last received this service */
+    lastServiceDate?:   string;
+    /** Odometer reading at last service (km) */
+    lastOdometerKm?:    number;
+    /** Pre-computed next due date from calendar trigger */
+    nextDueDateCalc?:   string;
+    /** Pre-computed next due odometer from odometer trigger (km) */
+    nextDueOdometerKm?: number;
+    status:             PMItemStatus;
+    generatedRequestId?: string;
+}
+
+/** Computed due calculation result — not persisted, returned by the due-calc engine */
+export interface PMDueCalculation {
+    item:             PMScheduleItem;
+    effectiveStatus:  PMItemStatus;
+    /** Positive = days until due, negative = days overdue */
+    daysUntilDue?:    number;
+    /** Positive = km until due, negative = km overdue */
+    kmUntilDue?:      number;
+    /** Which trigger fired first */
+    triggeringFactor: 'ODOMETER' | 'CALENDAR' | 'BOTH' | 'NONE';
+    /** 0–100 urgency score; higher = act sooner */
+    urgencyScore:     number;
 }
 
 export interface ServiceRequest {
@@ -912,3 +1071,327 @@ export interface ServiceRequest {
     createdAt?: string; // ISO Date - Captured at submission
 }
 
+// ============================================
+// PHASE C — JOB CARDS
+// ============================================
+
+export type JobCardStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+
+export interface JobTask {
+    id: string;
+    jobCardId: string;
+    description: string;
+    completed: boolean;
+    completedAt?: string;  // ISO Date
+    completedBy?: string;
+}
+
+export interface JobCard {
+    id: string;
+    workOrderId: string;
+    title: string;
+    description?: string;
+    technicianId?: string;
+    technicianName?: string;
+    status: JobCardStatus;
+    estimatedHours?: number;
+    actualHours?: number;
+    tasks: JobTask[];
+    createdAt: string; // ISO Date
+}
+
+// ============================================
+// PHASE C — WARRANTY MANAGEMENT
+// ============================================
+
+export type WarrantyType = 'MANUFACTURER' | 'EXTENDED' | 'THIRD_PARTY';
+export type WarrantyClaimStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAID';
+
+export interface VehicleWarranty {
+    id: string;
+    tenantId: string;
+    vehicleId: string;
+    warrantyType: WarrantyType;
+    provider?: string;
+    startDate: string;    // ISO Date (date only)
+    expiryDate: string;   // ISO Date (date only)
+    coverageDescription?: string;
+    maxClaimAmount?: number;
+    isActive: boolean;
+    claims?: WarrantyClaim[];
+}
+
+export interface WarrantyClaim {
+    id: string;
+    warrantyId: string;
+    requestId?: string;   // linked MaintenanceRequest
+    claimDate?: string;   // ISO Date
+    claimedAmount?: number;
+    approvedAmount?: number;
+    status: WarrantyClaimStatus;
+    description?: string;
+    referenceNumber?: string;
+    createdAt: string;    // ISO Date
+}
+
+/** Returned by GET /api/maintenance/[id]/warranty-check */
+export interface WarrantyCheckResult {
+    hasActiveWarranty: boolean;
+    warranties: (VehicleWarranty & { coverageNote: string })[];
+}
+
+// ============================================
+// PHASE C — QC CHECKLIST (DB-backed)
+// ============================================
+
+export type QCItemResult = 'PASS' | 'FAIL' | 'NA';
+export type QCOverallResult = 'PENDING' | 'PASS' | 'FAIL';
+
+export interface QCChecklistItem {
+    id: string;
+    item: string;
+    result: QCItemResult;
+    notes?: string;
+    photoUrl?: string;
+}
+
+/** DB-backed quality inspection record (maps to quality_inspections table) */
+export interface QualityInspectionRecord {
+    id: string;
+    requestId: string;
+    tenantId: string;
+    inspectorId?: string;
+    inspectorName?: string;
+    overallResult: QCOverallResult;
+    notes?: string;
+    inspectedAt?: string; // ISO Date
+    checklist: QCChecklistItem[];
+    createdAt: string;    // ISO Date
+}
+
+// ============================================
+// PHASE E — BREAKDOWN MAINTENANCE
+// ============================================
+
+export type BreakdownType =
+    | 'FLAT_TYRE'
+    | 'ENGINE_FAILURE'
+    | 'BATTERY_DEAD'
+    | 'ACCIDENT'
+    | 'FUEL_EMPTY'
+    | 'OVERHEATING'
+    | 'ELECTRICAL'
+    | 'TRANSMISSION'
+    | 'OTHER';
+
+export type BreakdownStatus =
+    | 'REPORTED'
+    | 'RECOVERY_DISPATCHED'
+    | 'RECOVERY_COMPLETED'
+    | 'AT_WORKSHOP'
+    | 'RESOLVED';
+
+export type BreakdownSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+/** Maps to breakdown_reports table */
+export interface BreakdownReport {
+    id: string;
+    reportNo: string | null;          // BRK-YYYYMM-NNNNN
+    tenantId: string;
+    vehicleId: string | null;
+    driverId: string | null;
+    reportedAt: string;               // ISO Date
+    breakdownType: BreakdownType;
+    location: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    driverNotes: string | null;
+    photoUrls: string[];
+    severity: BreakdownSeverity;
+    status: BreakdownStatus;
+    // Recovery fields
+    recoveryVehicleId: string | null;
+    recoveryDriverId: string | null;
+    recoveryNotes: string | null;
+    recoveryDispatchedAt: string | null;  // ISO Date
+    recoveryCompletedAt: string | null;   // ISO Date
+    estimatedArrivalAt: string | null;    // ISO Date
+    // Linked maintenance request (auto-created)
+    maintenanceRequestId: string | null;
+    MaintenanceRequest?: { id: string; status: string; workOrderNo: string | null } | null;
+    createdAt: string;                // ISO Date
+    updatedAt: string | null;
+}
+
+/** POST /api/maintenance/breakdown-reports — body */
+export interface CreateBreakdownReportBody {
+    vehicleId: string;
+    driverId?: string;
+    breakdownType: BreakdownType;
+    location?: string;
+    latitude?: number;
+    longitude?: number;
+    driverNotes?: string;
+    photoUrls?: string[];
+    severity?: BreakdownSeverity;
+}
+
+/** POST /api/maintenance/breakdown-reports/[id]/dispatch-recovery — body */
+export interface DispatchRecoveryBody {
+    recoveryVehicleId?: string;
+    recoveryDriverId?: string;
+    recoveryNotes?: string;
+    estimatedArrivalAt?: string; // ISO Date
+}
+
+// ── Phase F — MAINTENANCE SLA MANAGEMENT ─────────────────────────────────────
+
+export type SLAStatus = 'MET' | 'AT_RISK' | 'BREACHED';
+
+export type SLAPhaseName =
+    | 'RESPONSE'    // MR created → first status change (Submitted/Accepted)
+    | 'DIAGNOSIS'   // Accepted → Under Estimation / Under Maintenance
+    | 'ESTIMATION'  // Under Estimation → Pending Estimation Approval
+    | 'APPROVAL'    // Pending Estimation Approval → Estimation Approved
+    | 'REPAIR'      // Under Maintenance → Repair Completed
+    | 'COMPLETION'  // Repair Completed → Maintenance Completed
+    | 'VENDOR';     // Accepted → Repair Completed (end-to-end vendor SLA)
+
+export type SLATier = 'CRITICAL' | 'HIGH' | 'NORMAL';
+
+export interface SLARuleSet {
+    tier: SLATier;
+    responseMinutes: number;
+    repairMinutes: number;
+    phaseMinutes: Record<SLAPhaseName, number>;
+}
+
+export const DEFAULT_SLA_RULES: Record<SLATier, SLARuleSet> = {
+    CRITICAL: {
+        tier: 'CRITICAL',
+        responseMinutes: 15,
+        repairMinutes: 240,
+        phaseMinutes: {
+            RESPONSE:   15,
+            DIAGNOSIS:  30,
+            ESTIMATION: 30,
+            APPROVAL:   60,
+            REPAIR:     120,
+            COMPLETION: 15,
+            VENDOR:     240,
+        },
+    },
+    HIGH: {
+        tier: 'HIGH',
+        responseMinutes: 30,
+        repairMinutes: 480,
+        phaseMinutes: {
+            RESPONSE:   30,
+            DIAGNOSIS:  60,
+            ESTIMATION: 60,
+            APPROVAL:   120,
+            REPAIR:     240,
+            COMPLETION: 30,
+            VENDOR:     480,
+        },
+    },
+    NORMAL: {
+        tier: 'NORMAL',
+        responseMinutes: 240,
+        repairMinutes: 2880,
+        phaseMinutes: {
+            RESPONSE:   240,
+            DIAGNOSIS:  480,
+            ESTIMATION: 480,
+            APPROVAL:   1440,
+            REPAIR:     1440,
+            COMPLETION: 240,
+            VENDOR:     2880,
+        },
+    },
+};
+
+export interface SLAPhaseSnapshot {
+    phase: SLAPhaseName;
+    label: string;
+    startedAt: string | null;        // ISO
+    completedAt: string | null;      // ISO
+    deadlineAt: string | null;       // ISO — null if phase not yet started
+    targetMinutes: number;
+    elapsedMinutes: number | null;   // null if not started
+    remainingMinutes: number | null; // null if completed or not started
+    status: SLAStatus | 'PENDING';   // PENDING = phase not started yet
+}
+
+export interface SLASnapshot {
+    mrId: string;
+    priority: string;
+    tier: SLATier;
+    createdAt: string;
+    overallStatus: SLAStatus;
+    responseDeadlineAt: string | null;
+    repairDeadlineAt: string | null;
+    responseStatus: SLAStatus | 'PENDING';
+    repairStatus: SLAStatus | 'PENDING';
+    phases: SLAPhaseSnapshot[];
+    rules: SLARuleSet;
+}
+
+// ── Phase G — MAINTENANCE RISK SCORE ─────────────────────────────────────────
+
+export type RiskBand = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+/** Raw inputs fed to the risk engine — all optional so callers can omit unknowns. */
+export interface RiskScoreInputs {
+    vehicleId:            string;
+    vehicleCode?:         string;
+    licensePlate?:        string;
+    make?:                string;
+    model?:               string;
+    /** Years since manufacture date (float). */
+    ageYears?:            number;
+    /** Current odometer reading in km. */
+    odometerKm?:          number;
+    /** Expected full-lifecycle km (e.g. 300 000). */
+    expectedLifetimeKm?:  number;
+    /** Days since last completed PM service (overdue when > PM interval). */
+    daysSinceLastPM?:     number;
+    /** PM interval in days (typically 90 or 180). */
+    pmIntervalDays?:      number;
+    /** BREAKDOWN / EMERGENCY / CORRECTIVE MR count in the last 90 days. */
+    failuresLast90d?:     number;
+    /** Unique jobs that recurred in the last 180 days (repeat repair count). */
+    repeatJobsLast180d?:  number;
+    /** Open MRs still in REQUESTED / SUBMITTED / ACCEPTED states. */
+    openDefects?:         number;
+    /** Days the vehicle was UNDER_MAINTENANCE in the last 90 days. */
+    downtimeDaysLast90d?: number;
+    /** True if a warranty is active; false/undefined = no warranty cover. */
+    warrantyActive?:      boolean;
+    /** Quality inspections that ended with INSPECTION_FAILED and no re-pass. */
+    failedInspections?:   number;
+    /** AI risk score from fleet_risk_scores (0–1). Used for factor 10. */
+    aiRiskScore01?:       number;
+}
+
+export interface RiskFactor {
+    key:         string;
+    label:       string;
+    score:       number;   // actual points contributed (0 – maxScore)
+    maxScore:    number;
+    pct:         number;   // score / maxScore  (0–1)
+    description: string;   // human-readable "why"
+}
+
+export interface MaintenanceRiskScore {
+    vehicleId:    string;
+    vehicleCode:  string;
+    licensePlate: string;
+    make:         string;
+    model:        string;
+    score:        number;    // 0–100 integer
+    band:         RiskBand;
+    emoji:        string;    // 🔴 🟠 🟡 🟢
+    factors:      RiskFactor[];
+    computedAt:   string;    // ISO
+}

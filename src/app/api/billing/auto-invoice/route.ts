@@ -2,50 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 // ---------------------------------------------------------------------------
-// Table bootstrap
+// billing_runs and the finance_invoices columns this route uses are owned
+// by Prisma migrations:
+//   20260809000000_adopt_finance_tables_with_rls  — finance_invoices
+//   20260810000001_finance_extended_columns       — billing_runs + extra cols
+//
+// The old ensureTables() function that ran CREATE TABLE IF NOT EXISTS and
+// ALTER TABLE ADD COLUMN at request time has been removed. Schema changes
+// must go through Prisma migrations.
 // ---------------------------------------------------------------------------
-async function ensureTables() {
-  // billing_runs table
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS billing_runs (
-      id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      created_at       TIMESTAMPTZ DEFAULT NOW(),
-      run_date         DATE NOT NULL,
-      status           TEXT DEFAULT 'RUNNING',
-      total_tenants    INTEGER DEFAULT 0,
-      invoices_created INTEGER DEFAULT 0,
-      total_amount     NUMERIC(15,2) DEFAULT 0,
-      errors           JSONB DEFAULT '[]',
-      completed_at     TIMESTAMPTZ
-    )
-  `).catch(() => {});
-
-  // Ensure finance_invoices has the extra columns we need
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS tenant_id TEXT
-  `).catch(() => {});
-
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS line_items_json JSONB DEFAULT '[]'
-  `).catch(() => {});
-
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS module_source TEXT
-  `).catch(() => {});
-
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS client_email TEXT
-  `).catch(() => {});
-
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_billing_runs_run_date ON billing_runs(run_date DESC)
-  `).catch(() => {});
-
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_fi_tenant_id ON finance_invoices(tenant_id)
-    WHERE tenant_id IS NOT NULL
-  `).catch(() => {});
-}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -197,7 +162,6 @@ async function computeBilling(sub: Subscription, tenantName: string): Promise<{
 // Returns billing runs list + last run summary
 // ---------------------------------------------------------------------------
 export async function GET(_req: NextRequest) {
-  await ensureTables();
 
   type RunRow = {
     id: string;
@@ -248,7 +212,6 @@ export async function GET(_req: NextRequest) {
 // action=preview      → dry run, returns what would be billed
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
-  await ensureTables();
 
   try {
     const body   = await req.json();

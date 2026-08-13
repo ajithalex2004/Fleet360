@@ -19,6 +19,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import {
   createPortalUser, listPortalUsersByCustomer,
 } from '@/lib/shipper-portal/portal-users-store';
@@ -39,12 +40,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { id: customerId } = await params;
 
     // Verify the customer belongs to this tenant.
-    const customerRows = await prisma.$queryRawUnsafe<Array<{ id: string; name_en: string }>>(
-      `SELECT id, name_en FROM customers
-        WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
-        LIMIT 1`,
-      customerId, tenantId,
-    ).catch(() => []);
+    const customerRows = await withTenantRls(prisma, tenantId, (tx) =>
+      tx.$queryRawUnsafe<Array<{ id: string; name_en: string }>>(
+        `SELECT id, name_en FROM customers
+          WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
+          LIMIT 1`,
+        customerId, tenantId,
+      ).catch(() => [] as Array<{ id: string; name_en: string }>)
+    );
     if (!customerRows[0]) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
     }

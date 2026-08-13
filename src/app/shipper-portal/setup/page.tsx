@@ -8,12 +8,18 @@
  * (token, password) for a session via POST /api/shipper-portal/auth/setup.
  */
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Ship, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { DEFAULT_PASSWORD_POLICY } from '@/lib/password-policy';
+
+// Single source of truth: pull the policy server uses → derive form rules from
+// it. Anything else (placeholder text, minLength, the "Requirements" hint) is
+// computed off this constant so it can't drift from the server's validator.
+const POLICY = DEFAULT_PASSWORD_POLICY;
 
 function SetupForm() {
-  const params = useSearchParams();
+  const params = useSearchParams() ?? new URLSearchParams();
   const router = useRouter();
   const token = params.get('token') ?? '';
 
@@ -22,6 +28,20 @@ function SetupForm() {
   const [confirm, setConfirm]     = useState('');
   const [busy, setBusy]           = useState(false);
   const [err, setErr]             = useState<string | null>(null);
+
+  // Live rule checks — each requirement is one row in the hint list with a
+  // ✓ when satisfied, • when pending. Mirrors validatePassword() exactly.
+  const checks = useMemo(() => {
+    const pw = password;
+    return [
+      { label: `At least ${POLICY.minLength} characters`, ok: pw.length >= POLICY.minLength },
+      ...(POLICY.requireUpper  ? [{ label: 'An uppercase letter (A–Z)', ok: /[A-Z]/.test(pw) }]      : []),
+      ...(POLICY.requireLower  ? [{ label: 'A lowercase letter (a–z)',  ok: /[a-z]/.test(pw) }]      : []),
+      ...(POLICY.requireDigit  ? [{ label: 'A digit (0–9)',             ok: /\d/.test(pw) }]         : []),
+      ...(POLICY.requireSymbol ? [{ label: 'A symbol (e.g. ! @ # $)',   ok: /[^A-Za-z0-9]/.test(pw) }] : []),
+    ];
+  }, [password]);
+  const allOk = checks.every(c => c.ok);
 
   useEffect(() => {
     if (!token) setErr('Missing setup token in the link. Please use the link from your invitation email.');
@@ -67,19 +87,29 @@ function SetupForm() {
       <div className="space-y-1">
         <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Choose a password</label>
         <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-          required minLength={8} autoComplete="new-password"
-          placeholder="At least 8 characters"
+          required minLength={POLICY.minLength} autoComplete="new-password"
+          placeholder={`At least ${POLICY.minLength} characters`}
           className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+        {/* Live requirements list — mirrors validatePassword() exactly so the
+            user never sees a server-side surprise. */}
+        <ul className="mt-2 space-y-0.5">
+          {checks.map(c => (
+            <li key={c.label} className={`flex items-center gap-1.5 text-[11px] ${c.ok ? 'text-emerald-300' : 'text-slate-500'}`}>
+              <span aria-hidden="true">{c.ok ? '✓' : '•'}</span>
+              {c.label}
+            </li>
+          ))}
+        </ul>
       </div>
 
       <div className="space-y-1">
         <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Confirm password</label>
         <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)}
-          required minLength={8} autoComplete="new-password"
+          required minLength={POLICY.minLength} autoComplete="new-password"
           className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
       </div>
 
-      <button type="submit" disabled={busy || !token}
+      <button type="submit" disabled={busy || !token || !allOk || password !== confirm}
         className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-90 disabled:opacity-50 text-white font-semibold rounded-lg text-sm inline-flex items-center justify-center gap-2">
         {busy ? 'Setting up…' : (<><CheckCircle2 className="w-4 h-4" /> Set up my access</>)}
       </button>

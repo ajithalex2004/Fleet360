@@ -1,23 +1,32 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
+import { MODULES, MODULE_BY_KEY } from '@/lib/modules';
 
-// Platform modules with metadata
-const PLATFORM_MODULES = [
-  { id: 'leasing',     name: 'Vehicle Leasing',      path: '/leasing',     color: 'from-violet-500 to-purple-600',  description: 'Long-term lease contract management, quotations, payments, traffic fines, fuel, insurance, mileage, renewals, early termination, remarketing, AR' },
-  { id: 'rac',         name: 'Rent-a-Car',            path: '/rental',      color: 'from-emerald-500 to-teal-600',   description: 'Short-term vehicle rental bookings, customer KYC, dynamic pricing, damage claims, agreements, availability' },
-  { id: 'bus_ops',     name: 'Staff Transportation',  path: '/bus-ops',     color: 'from-purple-500 to-pink-600',    description: 'Bus route management, trip scheduling, passenger boarding, GPS integration, incident logging' },
-  { id: 'fleet',       name: 'Fleet Management',      path: '/fleet',       color: 'from-orange-500 to-amber-600',   description: 'Vehicle document vault, fuel management, traffic fines, TCO analysis, asset lifecycle' },
-  { id: 'maintenance', name: 'Vehicle Maintenance',   path: '/maintenance', color: 'from-blue-500 to-indigo-600',    description: 'Service requests, work orders, quotations, predictive maintenance, spare parts' },
-  { id: 'finance',     name: 'Finance',               path: '/finance',     color: 'from-green-500 to-emerald-600',  description: 'Invoices, payments, VAT returns, budgets, credit notes, financial reporting' },
-  { id: 'drivers',     name: 'Driver Management',     path: '/driver-mgmt', color: 'from-cyan-500 to-blue-600',     description: 'Driver profiles, license tracking, shift management, performance analytics, training records' },
-  { id: 'compliance',  name: 'Compliance',            path: '/compliance',  color: 'from-rose-500 to-pink-600',      description: 'Document compliance, insurance policies, vehicle registration, regulatory tracking' },
-  { id: 'reports',     name: 'Reports & Analytics',   path: '/reports',     color: 'from-slate-500 to-slate-600',    description: 'Cross-module BI dashboards, scheduled reports, data exports, KPI monitoring' },
-  { id: 'admin',       name: 'Platform Admin',        path: '/admin',       color: 'from-red-500 to-rose-600',       description: 'Multi-tenant management, RBAC roles and permissions, user management, system info' },
-];
+// Platform modules — derived from the canonical registry so the admin info
+// endpoint stays in sync with the platform home, the admin tenants matrix,
+// the access-control layer, and the RBAC permission matrix. Editing the
+// registry now updates all five surfaces at once.
+//
+// Fields projected here match what /api/admin/info historically returned;
+// consumers depend on `id`, `name`, `path`, `color` (= Tailwind gradient
+// classes from the registry), and `description`.
+const PLATFORM_MODULES = MODULES.map(m => ({
+  id:          m.key,
+  name:        m.name,
+  path:        m.href,
+  color:       m.gradient,
+  description: m.description,
+}));
+
+// Reference used below so linter doesn't drop the MODULE_BY_KEY import.
+// (Not currently needed for data, but kept as a hint that consumers can
+//  look up any module by key — see portal/onboarding below.)
+void MODULE_BY_KEY;
 
 // API endpoint groups
 const API_ENDPOINTS = [
-  { module: 'Leasing',           base: '/api/leasing',           count: 55,  endpoints: ['inquiries','quotations','contracts-v2','payments','receipts','invoices','traffic-fines','fuel','insurance','mileage-readings','mileage-overages','renewals','early-terminations','pre-billing','receivables','remarketing','documents','credit-assessments','direct-debits','analytics','crm'] },
+  { module: 'Leasing',           base: '/api/leasing',           count: 45,  endpoints: ['inquiries','quotations','contracts-v2','traffic-fines','fuel','insurance','mileage-readings','mileage-overages','renewals','early-terminations','pre-billing','documents','credit-assessments','analytics','crm'] },
   { module: 'Rent-a-Car',        base: '/api/rental',            count: 17,  endpoints: ['bookings','customers','damage-claims','pricing','availability','agreements','inspections'] },
   { module: 'Staff Transport',   base: '/api/bus-ops',           count: 18,  endpoints: ['routes','schedules','staff','passengers','trip-logs','incidents','transport-requests'] },
   { module: 'Fleet',             base: '/api/fleet',             count: 10,  endpoints: ['vehicles','documents','fuel','fines','tco'] },
@@ -39,21 +48,25 @@ const NOTIFICATION_CHANNELS = [
   { id: 'erp',      name: 'ERP / Accounting', icon: 'P', description: 'Accounting system integration: SAP, Oracle, Sage, Navision, QuickBooks - invoice and payment sync', status: 'configurable', configPath: '/admin/settings/integrations' },
 ];
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    // DB model counts from Prisma
-    const modelCounts = await Promise.allSettled([
-      prisma.lessee.count(),
-      prisma.leaseContract2.count(),
-      prisma.rentalBooking.count(),
-      prisma.tripSchedule.count(),
-      prisma.vehicle.count(),
-      prisma.driver.count(),
-      prisma.user.count(),
-      prisma.tenant.count(),
-      prisma.role.count(),
-      prisma.permission.count(),
-    ]);
+    return await withPlatformAdmin(prisma, async (tx) => {
+      // DB model counts from Prisma. The 'tx' client is the same
+      // connection as `prisma` for the duration of the wrap, so
+      // model counts run inside the '*' wildcard — they reflect
+      // all tenants.
+      const modelCounts = await Promise.allSettled([
+        tx.lessee.count(),
+        tx.leaseContract2.count(),
+        tx.rentalBooking.count(),
+        tx.tripSchedule.count(),
+        tx.vehicle.count(),
+        tx.driver.count(),
+        tx.user.count(),
+        tx.tenant.count(),
+        tx.role.count(),
+        tx.permission.count(),
+      ]);
 
     const safeCount = (r: PromiseSettledResult<number>) => r.status === 'fulfilled' ? r.value : 0;
 
@@ -73,7 +86,7 @@ export async function GET(req: NextRequest) {
     // DB model inventory (from schema - static list)
     const DB_MODELS = [
       { category: 'Core / Fleet',        models: ['Vehicle','Driver','Garage','WorkOrder','MaintenanceRequest','ServiceRequest','WorkLog','ChecklistItem','PartUsage','FuelLog','FuelCard','TrafficFine','VehicleDocument','FuelCard'] },
-      { category: 'Leasing',             models: ['Lessee','LeaseContract2','LeaseQuotation','LeaseInquiry','LeasePayment2','LeaseReceipt','LeaseBranch','LeaseContractVehicle','LeaseVehicleExchange','LeaseAlert','LeaseApprovalStep','LeaseInsurancePolicy','LeaseInsuranceClaim','LeaseMileageReading','LeaseMileageOverage','LeaseTrafficFine','LeaseFuelLog','LeaseDocument','LeaseEarlyTermination','LeaseRenewal','LeasePreBillingStatement','LeaseDunningActivity','LeaseCreditAssessment','LeaseInvoice','LeaseInvoiceLine','LeaseDirectDebit','LeaseRemarketing','LeaseTelematics'] },
+      { category: 'Leasing',             models: ['Lessee','LeaseContract2','LeaseQuotation','LeaseInquiry','LeaseBranch','LeaseContractVehicle','LeaseVehicleExchange','LeaseAlert','LeaseApprovalStep','LeaseInsurancePolicy','LeaseInsuranceClaim','LeaseMileageReading','LeaseMileageOverage','LeaseTrafficFine','LeaseFuelLog','LeaseDocument','LeaseEarlyTermination','LeaseRenewal','LeasePreBillingStatement','LeaseCreditAssessment','LeaseTelematics'] },
       { category: 'Rent-a-Car',          models: ['RentalCustomer','RentalBooking','RentalAgreement','RentalExtension','RentalPayment','RentalAdditionalCharge','VehicleInspection','DamageClaim','PricingRule'] },
       { category: 'Staff Transport',     models: ['BusRoute','RouteStop','TripSchedule','TripPassenger','TripLog','StaffMember','StaffTransportRequest','TripIncident'] },
       { category: 'Finance',             models: ['Invoice','InvoiceLineItem','PaymentTransaction','CreditNote','FinanceBudget','VatReturn'] },
@@ -102,6 +115,7 @@ export async function GET(req: NextRequest) {
       dbModels: DB_MODELS,
       notificationChannels: NOTIFICATION_CHANNELS,
       dbStats,
+    });
     });
   } catch (e) {
     console.error(e);

@@ -12,6 +12,10 @@
  *   notes:       optional
  *
  * Returns: the created LeaseDocument row + storage metadata.
+ *
+ * Tenant scoping: requires x-tenant-id. The created LeaseDocument row is
+ * stamped with the same tenantId; if entityType=CONTRACT or entityType=LESSEE
+ * the referenced row is verified to belong to the caller's tenant first.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -23,7 +27,7 @@ import { captureException } from '@/lib/sentry';
 
 export const runtime = 'nodejs';
 
-const MAX_FILE_BYTES = 25 * 1024 * 1024; // 25 MB cap per file
+const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
 const ALLOWED_MIME_PREFIXES = [
   'image/',
@@ -53,6 +57,10 @@ const metadataSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
   try {
     const form = await req.formData();
     const file = form.get('file');
@@ -102,6 +110,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Verify ownership of the parent entity for entity types that have
+    // tenant-scoped backing rows.
+    if (parsed.data.entityType === 'CONTRACT') {
+      const owned = await prisma.leaseContract2.findFirst({
+        where: { id: parsed.data.entityId, tenantId },
+        select: { id: true },
+      });
+      if (!owned) {
+        return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
+      }
+    } else if (parsed.data.entityType === 'LESSEE') {
+      const owned = await prisma.lessee.findFirst({
+        where: { id: parsed.data.entityId, tenantId },
+        select: { id: true },
+      });
+      if (!owned) {
+        return NextResponse.json({ error: 'Lessee not found' }, { status: 404 });
+      }
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
     const storage = getStorage();
     const stored = await storage.upload({
@@ -114,7 +142,6 @@ export async function POST(req: NextRequest) {
     const expiry = parsed.data.expiryDate ? new Date(parsed.data.expiryDate) : null;
     const issue = parsed.data.issueDate ? new Date(parsed.data.issueDate) : null;
 
-    // Determine status: EXPIRED if past, EXPIRING_SOON if within 30 days, else ACTIVE.
     let status = 'ACTIVE';
     if (expiry) {
       const days = Math.ceil((expiry.getTime() - Date.now()) / 86400000);
@@ -137,11 +164,12 @@ export async function POST(req: NextRequest) {
         status,
         uploadedBy: req.headers.get('x-user-id') ?? null,
         notes: parsed.data.notes ?? null,
+        tenantId,
       },
     });
 
     void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
+      tenantId,
       userId: req.headers.get('x-user-id') ?? undefined,
       userRole: req.headers.get('x-user-role') ?? undefined,
       entityType: 'LeaseDocument',

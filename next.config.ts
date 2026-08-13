@@ -22,7 +22,6 @@ const nextConfig: NextConfig = {
   // Tree-shake heavy UI libraries so only used components are bundled
   experimental: {
     optimizePackageImports: [
-      "lucide-react",
       "@radix-ui/react-icons",
       "date-fns",
       "recharts",
@@ -69,7 +68,16 @@ const nextConfig: NextConfig = {
   // Long-term fix: move email/PDF/etc. calls out of client pages and
   // into API routes. This config is the safety net until that refactor
   // lands.
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, dev }) => {
+    // webpack cache is enabled in dev so hot reloads reuse the previous
+    // bundle. The historical corruption problem (Windows, missing
+    // manifest/chunk, _not-found runtime 500s) is now handled by the
+    // `predev` script (scripts/clean-next-cache.mjs) which only removes
+    // .next/cache on each dev start — the pack cache rebuilds in 1-3s
+    // instead of 5-15s, and the .next/build manifests survive.
+    void isServer;
+    void dev;
+
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -95,8 +103,30 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 60,
   },
 
+  async redirects() {
+    return [
+      { source: "/leasing/fuel", destination: "/fleet/fuel", permanent: false },
+      { source: "/leasing/traffic-fines", destination: "/fleet/fines", permanent: false },
+      { source: "/leasing/insurance", destination: "/fleet/insurance", permanent: false },
+      { source: "/leasing/branches", destination: "/admin/branches", permanent: false },
+    ];
+  },
+
   async rewrites() {
     return [
+      {
+        // /api/v1/* → /api/* — forwards versioned clients to the current
+        // Next.js routes without any route files needing to move.
+        // The rewrite injects x-api-version-path so middleware can surface
+        // the version in the X-API-Version response header.
+        source:      '/api/v1/:path*',
+        destination: '/api/:path*',
+        has: [{ type: 'header', key: 'accept', missing: true }],
+      },
+      {
+        source:      '/api/v1/:path*',
+        destination: '/api/:path*',
+      },
       {
         // Only proxy routes that belong to the Go backend
         source: `/api/:path((?:${GO_BACKEND_ROUTES}).*)`,
@@ -111,11 +141,6 @@ const nextConfig: NextConfig = {
     // max-age=30 = serve from browser cache for 30 s without a new request.
     // stale-while-revalidate=60 = keep serving stale data for 60 s while refreshing in background.
     const CACHE_30  = 'private, max-age=30, stale-while-revalidate=60';
-    // Auth / session endpoints — safe to cache longer since they only change on login/switch.
-    // In-memory caching in PermissionContext + AdminLayout provides the first defence;
-    // HTTP cache here protects against hard refreshes and second-tab opens.
-    const CACHE_AUTH = 'private, max-age=60, stale-while-revalidate=120';
-
     const statRoutes = [
       '/api/fleet/stats',
       '/api/fleet/vehicle-types',
@@ -128,7 +153,6 @@ const nextConfig: NextConfig = {
       '/api/school-bus/analytics',
       '/api/incidents/stats',
       '/api/platform/stats',
-      '/api/platform/kpis',        // ← was missing; 32-query endpoint benefits most
       '/api/compliance/stats',
       '/api/admin/branches',
       // Tenant detail page — 8 parallel requests fired on every tenant open
@@ -141,19 +165,10 @@ const nextConfig: NextConfig = {
       '/api/dispatch/weights',
     ];
 
-    const authRoutes = [
-      '/api/auth/me',              // read by AdminLayout on every /admin/* visit
-      '/api/admin/session',        // read by PermissionContext on every page refresh
-    ];
-
     return [
       ...statRoutes.map((source) => ({
         source,
         headers: [{ key: 'Cache-Control', value: CACHE_30 }],
-      })),
-      ...authRoutes.map((source) => ({
-        source,
-        headers: [{ key: 'Cache-Control', value: CACHE_AUTH }],
       })),
     ];
   },

@@ -57,6 +57,7 @@ export const sendServerEmail = async (
         // 4. Log Success
         await prisma.notificationLog.create({
             data: {
+                id: crypto.randomUUID(),
                 recipient,
                 type: 'Email',
                 subject,
@@ -75,6 +76,7 @@ export const sendServerEmail = async (
         try {
             await prisma.notificationLog.create({
                 data: {
+                    id: crypto.randomUUID(),
                     recipient,
                     type: 'Email',
                     subject,

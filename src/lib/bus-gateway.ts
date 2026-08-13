@@ -23,8 +23,16 @@ const SHARED_SECRET_ENV = 'BLE_GATEWAY_SHARED_SECRET';
 
 /* ── HMAC verification ──────────────────────────────────────────────────── */
 
-export function verifyGatewaySignature(rawBody: string, signatureHex: string | null): boolean {
-  const secret = process.env[SHARED_SECRET_ENV];
+/**
+ * Verify an HMAC-SHA256 signature against a raw body using the given
+ * secret. Pure — the caller decides which secret to use (per-gateway
+ * secret from BleGateway.secret, or the env fallback).
+ */
+export function verifyGatewaySignatureWithSecret(
+  rawBody: string,
+  signatureHex: string | null,
+  secret: string | null | undefined,
+): boolean {
   if (!secret || !signatureHex) return false;
   const expected = createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex');
   if (expected.length !== signatureHex.length) return false;
@@ -33,6 +41,26 @@ export function verifyGatewaySignature(rawBody: string, signatureHex: string | n
   } catch {
     return false;
   }
+}
+
+/**
+ * Back-compat wrapper for callers that don't have a per-gateway secret
+ * to hand in. Uses the env fallback. Deprecated — call
+ * `verifyGatewaySignatureWithSecret(body, sig, gateway.secret ?? envSecret)`
+ * instead so per-gateway rotation actually gates verification.
+ */
+export function verifyGatewaySignature(rawBody: string, signatureHex: string | null): boolean {
+  return verifyGatewaySignatureWithSecret(rawBody, signatureHex, process.env[SHARED_SECRET_ENV]);
+}
+
+/**
+ * Which secret should be used to verify a given gateway's payload?
+ * Prefers the per-gateway secret from BleGateway.secret; falls back to
+ * the env var for gateways whose per-row secret hasn't been rotated
+ * yet. Returns null if neither is set — caller should reject with 401.
+ */
+export function resolveGatewaySecret(perGatewaySecret: string | null | undefined): string | null {
+  return perGatewaySecret ?? process.env[SHARED_SECRET_ENV] ?? null;
 }
 
 export function gatewaySecretConfigured(): boolean {

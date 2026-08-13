@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
   ] = await Promise.all([
     // Standard-rated revenue (5% VAT applies)
     prisma.$queryRawUnsafe<RevRow[]>(
-      `SELECT COALESCE(SUM(total_amount),0) AS total FROM logistics_bookings
+      `SELECT COALESCE(SUM(customer_rate_amount),0) AS total FROM logistics_shipment_orders
        WHERE deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')
          AND created_at::date BETWEEN $1 AND $2`, start, end
     ).catch(zero),
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
 
     // VAT collected
     prisma.$queryRawUnsafe<RevRow[]>(
-      `SELECT COALESCE(SUM(total_amount * 0.05 / 1.05),0) AS total FROM logistics_bookings
+      `SELECT COALESCE(SUM(customer_rate_amount * 0.05 / 1.05),0) AS total FROM logistics_shipment_orders
        WHERE deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')
          AND created_at::date BETWEEN $1 AND $2`, start, end
     ).catch(zero),
@@ -113,7 +113,6 @@ export async function GET(req: NextRequest) {
 
   // ── VAT returns list ───────────────────────────────────────────────────────
   const returns = await prisma.vatReturn.findMany({
-    where: { deletedAt: null },
     orderBy: { createdAt: 'desc' },
   }).catch(() => []);
 
@@ -125,6 +124,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const vatReturn = await prisma.vatReturn.create({
       data: {
+        periodFrom:       new Date(body.periodStart),
+        periodTo:         new Date(body.periodEnd),
         periodStart:      new Date(body.periodStart),
         periodEnd:        new Date(body.periodEnd),
         totalSales:       body.totalSales       ?? 0,

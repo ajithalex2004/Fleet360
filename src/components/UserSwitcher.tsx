@@ -1,6 +1,8 @@
 'use client';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { usePermissions } from '@/contexts/PermissionContext';
+import { clearClientSession, requestServerLogout } from '@/lib/client-session';
+import { fetchWithTimeout } from '@/lib/fetch-timeout';
 
 interface TenantUser {
   id: string;
@@ -12,6 +14,9 @@ interface TenantUser {
   roleName?: string;
   isActive?: boolean;
 }
+
+const USER_CACHE_TTL = 5 * 60 * 1000;
+const tenantUserCache = new Map<string, { users: TenantUser[]; ts: number }>();
 
 export default function UserSwitcher() {
   const { user, tenant, permissions, setCurrentUser, isAuthenticated } = usePermissions();
@@ -29,18 +34,30 @@ export default function UserSwitcher() {
 
   const loadTenantUsers = useCallback(async () => {
     if (!tenant?.id || !canSwitch) return;
+    const cached = tenantUserCache.get(tenant.id);
+    if (cached && Date.now() - cached.ts < USER_CACHE_TTL) {
+      setTenantUsers(cached.users);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/users?tenantId=${tenant.id}`);
+      const res = await fetchWithTimeout(`/api/admin/users?tenantId=${tenant.id}`, { cache: 'no-store' }, 5_000);
       const data = await res.json();
-      setTenantUsers(Array.isArray(data) ? data : []);
-    } catch { /* silently fail */ }
+      const users = Array.isArray(data) ? data : [];
+      tenantUserCache.set(tenant.id, { users, ts: Date.now() });
+      setTenantUsers(users);
+    } catch {
+      const fallback = tenantUserCache.get(tenant.id)?.users;
+      if (fallback) setTenantUsers(fallback);
+    }
     finally { setLoading(false); }
   }, [tenant?.id, canSwitch]);
 
   useEffect(() => {
-    if (open) loadTenantUsers();
-  }, [open, loadTenantUsers]);
+    if (open && tenantUsers.length === 0) void loadTenantUsers();
+  }, [open, tenantUsers.length, loadTenantUsers]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -63,11 +80,11 @@ export default function UserSwitcher() {
     finally { setSwitching(false); }
   };
 
-  const signOut = async () => {
-    localStorage.removeItem('xl_mobility_session');
-    // Clear the httpOnly xl-session cookie via the server
-    try { await fetch('/api/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
-    window.location.href = '/login';
+  const signOut = () => {
+    setOpen(false);
+    clearClientSession();
+    requestServerLogout();
+    window.location.assign('/login');
   };
 
   if (!isAuthenticated || !user) return null;

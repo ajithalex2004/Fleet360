@@ -2,12 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cachedJson } from '@/lib/response-helpers';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
+import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
+
+const CACHE_TAG = 'fleet:stats';
 
 const zero = () => Promise.resolve([{ count: BigInt(0) }]);
 
-export async function GET(_req: NextRequest) {
-  await ensureFleetSchema();
-  try {
+// Stats change at most a few times per minute (vehicles/documents/insurance
+// don't flicker on every request). 60s server cache + 300s browser
+// stale-while-revalidate gives a near-instant response on repeated page
+// loads while still surfacing fresh data within a minute. The per-tenant
+// cache key keeps responses isolated.
+const getFleetStats = cacheRead(
+  async (tenantId: string) => {
+    await ensureFleetSchema();
     const [
       totalResult,
       availableResult,
@@ -74,7 +82,7 @@ export async function GET(_req: NextRequest) {
       ).catch(() => [] as Array<{ vehicle_usage: string; count: bigint }>),
     ]);
 
-    return cachedJson({
+    return {
       totalVehicles:     Number(totalResult[0]?.count     ?? 0),
       available:         Number(availableResult[0]?.count  ?? 0),
       inMaintenance:     Number(maintenanceResult[0]?.count ?? 0),
@@ -90,6 +98,20 @@ export async function GET(_req: NextRequest) {
         usage: r.vehicle_usage,
         count: Number(r.count),
       })),
+    };
+  },
+  [CACHE_TAG],
+  60,
+);
+
+export async function GET(req: NextRequest) {
+  try {
+    // tenantId is the per-tenant cache key — see server-cache.ts for the
+    // security rationale (public CDN would leak data across tenants).
+    const tenantId = req.headers.get('x-tenant-id') ?? 'unknown';
+    const stats = await getFleetStats(tenantId);
+    return NextResponse.json(stats, {
+      headers: { 'Cache-Control': privateCacheControl(60, 300) },
     });
   } catch (error) {
     console.error('Error fetching fleet stats:', error);

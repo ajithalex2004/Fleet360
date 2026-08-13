@@ -16,6 +16,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth';
 import {
   loadRulesForChain, saveRules,
@@ -35,11 +36,13 @@ export const runtime = 'nodejs';
 interface RouteParams { params: Promise<{ id: string; category: string }>; }
 
 async function ownsType(tenantId: string, typeId: string): Promise<{ ok: true; key: string } | { ok: false }> {
-  const rows = await prisma.$queryRawUnsafe<Array<{ key: string }>>(
-    `SELECT key FROM service_types
-     WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
-    typeId, tenantId,
-  ).catch(() => []);
+  const rows = await withTenantRls(prisma, tenantId, (tx) =>
+    tx.$queryRawUnsafe<Array<{ key: string }>>(
+      `SELECT key FROM service_types
+       WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
+      typeId, tenantId,
+    ).catch(() => [] as Array<{ key: string }>)
+  );
   return rows[0] ? { ok: true, key: rows[0].key } : { ok: false };
 }
 
