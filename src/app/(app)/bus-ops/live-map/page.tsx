@@ -46,24 +46,18 @@ const STATUS_CONFIG: Record<string, { color: string; bg: string; border: string;
   BREAKDOWN: { color: 'text-red-400',    bg: 'bg-red-500/15',    border: 'border-red-500/30',    dot: 'bg-red-400',    label: 'Breakdown' },
 };
 
-// Trip-status pill palette. Mirrors the STAGES array on the Trip Monitor
-// (dispatch/page.tsx) so the same trip reads with the same colour on both
-// screens — one small visual language across the module.
-const TRIP_STATUS_CONFIG: Record<string, { color: string; bg: string; border: string; label: string }> = {
-  SCHEDULED:  { color: 'text-blue-300',    bg: 'bg-blue-500/15',    border: 'border-blue-500/30',    label: 'Scheduled'  },
-  DEPARTED:   { color: 'text-amber-300',   bg: 'bg-amber-500/15',   border: 'border-amber-500/30',   label: 'Departed'   },
-  IN_TRANSIT: { color: 'text-orange-300',  bg: 'bg-orange-500/15',  border: 'border-orange-500/30',  label: 'In Transit' },
-  COMPLETED:  { color: 'text-emerald-300', bg: 'bg-emerald-500/15', border: 'border-emerald-500/30', label: 'Completed'  },
-  CANCELLED:  { color: 'text-red-300',     bg: 'bg-red-500/15',     border: 'border-red-500/30',     label: 'Cancelled'  },
-};
+// Trip-status pill palette imported from the shared source so this
+// page never drifts from Trip Monitor / Trip Detail.
+import { TRIP_STATUS_META, pillClass } from '@/lib/bus-ops/status-meta';
 
 function TripStatusPill({ status }: { status: string | null }) {
   if (!status) return null;
-  const cfg = TRIP_STATUS_CONFIG[status] ?? { color: 'text-slate-300', bg: 'bg-slate-700/40', border: 'border-slate-600', label: status };
+  const meta = TRIP_STATUS_META[status as keyof typeof TRIP_STATUS_META]
+    ?? { text: 'text-slate-300', bg: 'bg-slate-700/40', border: 'border-slate-600', dot: 'bg-slate-500', label: status };
   return (
-    <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium ${cfg.bg} ${cfg.color} ${cfg.border}`}
+    <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium ${pillClass(meta)}`}
       title="Trip status (workflow) — the trip's lifecycle stage from Trip Monitor">
-      Trip · {cfg.label}
+      Trip · {meta.label}
     </span>
   );
 }

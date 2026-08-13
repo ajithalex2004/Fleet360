@@ -43,23 +43,11 @@ interface Trip {
   passengers: Passenger[];
 }
 
-const PAX_PILL: Record<PassengerStatus, string> = {
-  CONFIRMED:  'bg-blue-500/20 text-blue-300 border-blue-500/40',
-  BOARDED:    'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-  ALIGHTED:   'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
-  ABSENT:     'bg-rose-500/20 text-rose-300 border-rose-500/40',
-  NO_SHOW:    'bg-slate-500/20 text-slate-400 border-slate-500/40',
-  CANCELLED:  'bg-slate-500/20 text-slate-400 border-slate-500/40',
-  WAITLISTED: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-};
-
-const TRIP_PILL: Record<TripStatus, string> = {
-  SCHEDULED:  'bg-blue-500/20 text-blue-300 border-blue-500/40',
-  DEPARTED:   'bg-amber-500/20 text-amber-300 border-amber-500/40',
-  IN_TRANSIT: 'bg-orange-500/20 text-orange-300 border-orange-500/40',
-  COMPLETED:  'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-  CANCELLED:  'bg-red-500/20 text-red-300 border-red-500/40',
-};
+// Palettes come from src/lib/bus-ops/status-meta.ts so every bus-ops UI
+// renders the same status with the same colour.
+import { TRIP_STATUS_META, PASSENGER_STATUS_META, pillClass } from '@/lib/bus-ops/status-meta';
+const PAX_PILL  = Object.fromEntries(Object.entries(PASSENGER_STATUS_META).map(([k, v]) => [k, pillClass(v)])) as Record<PassengerStatus, string>;
+const TRIP_PILL = Object.fromEntries(Object.entries(TRIP_STATUS_META).map(([k, v]) => [k, pillClass(v)])) as Record<TripStatus, string>;
 
 // Allowed passenger status advances the ops UI surfaces per current status.
 const NEXT_ACTIONS: Record<PassengerStatus, PassengerStatus[]> = {

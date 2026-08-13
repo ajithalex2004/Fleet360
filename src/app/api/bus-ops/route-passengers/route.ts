@@ -18,6 +18,20 @@ import { prisma } from '@/lib/prisma';
 
 const VALID_STATUSES = new Set(['ACTIVE', 'INACTIVE']);
 
+/**
+ * Parse a YYYY-MM-DD string into a UTC-midnight Date so effective-window
+ * comparisons don't shift by ±1 day when the operator's browser sits in a
+ * non-UTC timezone (audit risk #17). Accepts either 'YYYY-MM-DD' or an
+ * ISO with time portion; the time portion is discarded.
+ */
+function parseDateUtcMidnight(iso: string | Date | null | undefined): Date | null {
+  if (!iso) return null;
+  const s = typeof iso === 'string' ? iso : iso.toISOString();
+  const [y, m, d] = s.slice(0, 10).split('-').map(n => parseInt(n, 10));
+  if (!y || !m || !d) return null;
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
 function pickupDropoffValid(body: { pickupTime?: string; dropoffTime?: string }): string | null {
   const timeRe = /^([01]\d|2[0-3]):[0-5]\d$/;
   if (body.pickupTime  && !timeRe.test(body.pickupTime))  return 'pickupTime must be HH:MM (24h)';
@@ -67,8 +81,8 @@ export async function POST(req: NextRequest) {
     const timeErr = pickupDropoffValid(body);
     if (timeErr) return NextResponse.json({ error: timeErr }, { status: 400 });
 
-    const effectiveFrom = body.effectiveFrom ? new Date(body.effectiveFrom) : new Date();
-    const effectiveTo   = body.effectiveTo   ? new Date(body.effectiveTo)   : null;
+    const effectiveFrom = parseDateUtcMidnight(body.effectiveFrom) ?? parseDateUtcMidnight(new Date().toISOString())!;
+    const effectiveTo   = parseDateUtcMidnight(body.effectiveTo);
     if (effectiveTo && effectiveTo < effectiveFrom) {
       return NextResponse.json({ error: 'effectiveTo must be on or after effectiveFrom' }, { status: 400 });
     }

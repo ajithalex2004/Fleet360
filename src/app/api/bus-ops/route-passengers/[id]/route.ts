@@ -11,6 +11,14 @@ import { prisma } from '@/lib/prisma';
 const VALID_STATUSES = new Set(['ACTIVE', 'INACTIVE']);
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+function parseDateUtcMidnight(iso: string | Date | null | undefined): Date | null {
+  if (!iso) return null;
+  const s = typeof iso === 'string' ? iso : iso.toISOString();
+  const [y, m, d] = s.slice(0, 10).split('-').map(n => parseInt(n, 10));
+  if (!y || !m || !d) return null;
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
 async function loadOwned(id: string, tenantId: string) {
   return prisma.routePassenger.findFirst({ where: { id, tenantId, deletedAt: null } });
 }
@@ -47,8 +55,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       if (body.dropoffTime && !TIME_RE.test(body.dropoffTime)) return NextResponse.json({ error: 'dropoffTime must be HH:MM' }, { status: 400 });
       patch.dropoffTime = body.dropoffTime || null;
     }
-    if ('effectiveFrom' in body && body.effectiveFrom) patch.effectiveFrom = new Date(body.effectiveFrom);
-    if ('effectiveTo'   in body) patch.effectiveTo = body.effectiveTo ? new Date(body.effectiveTo) : null;
+    // UTC-midnight normalisation — see audit risk #17 note in route.ts
+    if ('effectiveFrom' in body && body.effectiveFrom) patch.effectiveFrom = parseDateUtcMidnight(body.effectiveFrom);
+    if ('effectiveTo'   in body) patch.effectiveTo = parseDateUtcMidnight(body.effectiveTo);
     if (typeof body.status === 'string') {
       if (!VALID_STATUSES.has(body.status)) return NextResponse.json({ error: 'invalid status' }, { status: 400 });
       patch.status = body.status;
