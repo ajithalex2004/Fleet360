@@ -86,8 +86,23 @@ CREATE INDEX IF NOT EXISTS idx_finance_payments_invoice
 -- ── finance_invoices: branch/tenant-branches columns ─────────────────────────
 -- Previously added at runtime by ensureTable() in
 -- /api/tenant-branches/route.ts. Moving here so they are migration-managed.
-
-ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS branch_id            UUID REFERENCES tenant_branches(id) ON DELETE SET NULL;
+--
+-- Ordering guard: the referenced tenant_branches table is created by
+-- the NEXT migration (20260810000002_tenant_branches_and_fleet_columns).
+-- On production DBs everything already exists so the FK add is fine;
+-- on shadow-DB replay this migration runs before 000002 does, so add
+-- the FK version conditionally and fall back to a plain UUID column
+-- otherwise. The FK is re-added by 000002 anyway once the table
+-- exists (as branch_id already exists at that point, ALTER ADD
+-- CONSTRAINT is a no-op).
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'tenant_branches') THEN
+    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES tenant_branches(id) ON DELETE SET NULL;
+  ELSE
+    ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS branch_id UUID;
+  END IF;
+END $$;
 ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS branch_name          TEXT;
 ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS branch_trade_license TEXT;
 ALTER TABLE finance_invoices ADD COLUMN IF NOT EXISTS branch_address       TEXT;
