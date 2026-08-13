@@ -42,11 +42,26 @@ Adding `/locations?type=STOP`, `?type=DEPOT`, etc. requires the sub-page matcher
 - `BusOpsGeofence` Prisma model removed from [prisma/schema.prisma](../prisma/schema.prisma) with a sunset marker pointing here.
 - Backfill INSERT in `add_spatial_places.sql` stays for now — it's idempotent (`NOT EXISTS` guard) and safe to re-run against environments that never received the Phase 2a cutover. Remove in a follow-up commit once every environment has been past Phase 3a for a release.
 
-### 3b. Adopt Places for other cross-module entities
-Optional but recommended — reduces duplicated geo-data across the platform:
-- **Garage**: `Garage.placeId` FK → `spatial.places.id`. Frees up the standalone lat/lng on `Garage` and lets garages be searchable through the shared catalogue.
-- **RouteStop**: `RouteStop.placeId` FK → `spatial.places.id`. The stop is a *reference to a Place at sequence N in a route*, not a separate geospatial entity. Backfill by creating a Place per existing `RouteStop`.
-- **Vehicle.homeDepotId**: FK to a `type: DEPOT` Place.
+### 3b. Adopt Places for other cross-module entities ✅ SHIPPED
+
+Three optional cross-schema FKs added, all backfill-safe and additive:
+- **Garage.placeId** → `spatial.places(id)`. No auto-backfill (Garage has no coord columns to migrate — `location` is text). Available for manual linking via UI.
+- **RouteStop.placeId** → `spatial.places(id)`. Auto-backfilled: for every RouteStop with `gps_lat`+`gps_lng`+`tenant_id`, a Place(type=STOP, shape=CIRCLE or POINT depending on `geofence_radius_m`) is created with the stop's id preserved as the Place id. Idempotent, filters out null-tenant rows (dev seed data).
+- **Vehicle.homeDepotId** → `spatial.places(id)`. New capability, no data to backfill.
+
+All three FKs use `ON DELETE SET NULL` so a Place soft/hard-delete doesn't cascade-orphan the source. Migration file: [prisma/raw/add_place_refs_to_garage_routestop_vehicle.sql](../prisma/raw/add_place_refs_to_garage_routestop_vehicle.sql).
+
+**No reader was cut over** — this ships the *capability*. Existing consumers still use `garage.location`, `route_stops.gps_lat/gps_lng`, `route_stops.geofence_radius_m` as before. The Prisma model comments call out that Phase 3.5 migrates readers.
+
+### 3.5. Reader migration (NEW — not started)
+
+The FK columns land data in `spatial.places`, but every current reader still reads the denormalized columns on the source model. Migrating readers is the follow-up:
+- **RouteStop reads**: [/api/driver-app/trips/[id]/geofences](../src/app/api/driver-app/trips/[id]/geofences/route.ts) reads `route_stops.gps_lat/gps_lng/geofence_radius_m` directly. Switch to reading the linked Place. Same for [/api/bus-ops/schedules/[id]/eta](../src/app/api/bus-ops/schedules/[id]/eta/route.ts) and every ETA/dispatch consumer.
+- **Dual-write on RouteStop create/update**: the write path (routes UI, planner) must also create/update the Place row. Extract a `syncStopPlace(stop)` helper.
+- **Garage reads**: garage list/detail pages read `location` (text). If we start capturing coords, they'll come from Place — add an "on the map" section on the garage page.
+- **Vehicle homeDepot reads**: fleet/vehicles page can add a "home depot" column that joins Place.
+
+Watch out for the RLS boundary — cross-schema reads under `withTenantRls()` need `spatial.places` policies to accept the same GUC (they already do — see `add_spatial_places.sql`).
 
 ### 3c. Consider a `spatial.place_associations` table
 When a Place needs to be linked to many things (e.g. one Depot serves 5 routes), a join table `place_associations(place_id, ref_module, ref_id, role)` is cleaner than adding FKs to every consuming model. Design this in Phase 3, don't build it until at least three consumers need it.

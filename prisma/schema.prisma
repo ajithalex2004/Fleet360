@@ -360,12 +360,19 @@ model Garage {
   contactNumber       String?              @map("contact_number")
   specialties         String[]
   isInternal          Boolean?             @map("is_internal")
+  /// Optional link to a spatial.places row of type GARAGE. Phase 3b addition
+  /// — no reader uses this yet; consumers still read `location` (text).
+  /// Phase 3.5 migrates readers so the Place row becomes the geospatial
+  /// source of truth.
+  placeId             String?              @map("place_id")
+  place               Place?               @relation("GaragePlace", fields: [placeId], references: [id], onDelete: SetNull)
   maintenanceRequests MaintenanceRequest[]
   quotations          Quotation[]
   workOrders          WorkOrder[]
 
   @@index([deletedAt], map: "idx_garages_deleted_at")
   @@index([tenantId], map: "idx_garages_tenant_id")
+  @@index([placeId],  map: "idx_garages_place_id")
   @@map("garages")
   @@schema("public")
 }
@@ -675,6 +682,14 @@ model Vehicle {
   odometerReading BigInt?  @map("odometer_reading")
   fuelLevel       Float?   @map("fuel_level")
 
+  // -- Home depot (Phase 3b addition) ---------------------------------------
+  // Optional FK to spatial.places(id) — the depot the vehicle returns to at
+  // end-of-day. App layer is responsible for ensuring the referenced Place
+  // has type=DEPOT; the FK itself is untyped so a depot can graduate to a
+  // multi-use site without an ALTER.
+  homeDepotId     String?  @map("home_depot_id")
+  homeDepot       Place?   @relation("VehicleHomeDepot", fields: [homeDepotId], references: [id], onDelete: SetNull)
+
   // -- Fleet extended fields (used by Fleet raw-SQL queries) ----------------
   vehicleCode     String?   @map("vehicle_code")
   vehicleTypeId   String?   @map("vehicle_type_id")
@@ -715,6 +730,7 @@ model Vehicle {
   @@index([vehicleUsage], map: "idx_vehicles_usage")
   @@index([status], map: "idx_vehicles_status")
   @@index([tenantId], map: "idx_vehicles_tenant_id")
+  @@index([homeDepotId], map: "idx_vehicles_home_depot")
   @@map("vehicles")
   @@schema("public")
 }
@@ -1652,8 +1668,16 @@ model RouteStop {
   geofenceRadiusM      Int?     @map("geofence_radius_m")
   estimatedArrivalMins Int?     @map("estimated_arrival_mins")
   landmark             String?
+  /// Phase 3b — link to spatial.places(type=STOP). The Place carries the
+  /// same lat/lng + radius as gpsLat/gpsLng/geofenceRadiusM here, and is
+  /// backfilled at migration time so both stay in sync. Readers still use
+  /// the local columns; the Place link is available for cross-module
+  /// queries (e.g. "all Places used by any route in this tenant").
+  placeId              String?  @map("place_id")
+  place                Place?   @relation("RouteStopPlace", fields: [placeId], references: [id], onDelete: SetNull)
   route                BusRoute @relation(fields: [routeId], references: [id])
 
+  @@index([placeId], map: "idx_route_stops_place_id")
   @@map("route_stops")
   @@schema("public")
 }
@@ -2422,6 +2446,12 @@ model Place {
   active      Boolean   @default(true)
   createdBy   String?   @map("created_by")
   updatedBy   String?   @map("updated_by")
+
+  // Back-relations from cross-schema consumers (Phase 3b). Named so Prisma
+  // can distinguish multiple relations to Place from different call-sites.
+  garages         Garage[]  @relation("GaragePlace")
+  routeStops      RouteStop[] @relation("RouteStopPlace")
+  vehiclesHomedAt Vehicle[] @relation("VehicleHomeDepot")
 
   @@index([tenantId],            map: "idx_places_tenant_id")
   @@index([tenantId, type],      map: "idx_places_tenant_type")
