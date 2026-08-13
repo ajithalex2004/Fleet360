@@ -40,6 +40,7 @@ import {
   MAINTENANCE_RECOVERY_COMPLETED,
 }                                   from '@/events/contracts/maintenance.events';
 import { QUOTATION_APPROVED }       from '@/events/contracts/quotation.events';
+import { ALERT_CONDITION_DETECTED } from '@/events/contracts/alert.events';
 import { SHIPMENT_CLOSED }          from '@/events/contracts/shipment.events';
 import { RENTAL_INVOICE_GENERATED } from '@/events/contracts/rental-invoice.events';
 
@@ -77,6 +78,7 @@ export {
   QUOTATION_APPROVED,
   SHIPMENT_CLOSED,
   RENTAL_INVOICE_GENERATED,
+  ALERT_CONDITION_DETECTED,
 };
 
 // ── Registry ──────────────────────────────────────────────────────────────────
@@ -314,6 +316,13 @@ export const FLEET360_EVENTS: EventRegistryEntry[] = [
     aggregateType: 'RentalInvoice',
     version:       '1',
     description:   'A rental invoice has been generated — mirrors AR receivable to finance',
+  },
+  {
+    type:          ALERT_CONDITION_DETECTED,
+    sourceModule:  'any',
+    aggregateType: 'Any',
+    version:       '1',
+    description:   'A cross-module alert condition tripped — routed by AlertEngineConsumer to Alert rows using AlertRule',
   },
 ];
 

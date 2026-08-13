@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
+import { raiseAlert } from '@/lib/alerts/raise';
 
 const CACHE_TAG = 'bus-ops:incidents';
 
@@ -52,31 +53,47 @@ export async function POST(req: NextRequest) {
       data: { ...body, incidentNo, tenantId },
     });
 
-    // Ops notification + work-item. Fleet360 has no dedicated Ticket model —
-    // the Alert row (with status = PENDING and assignedTo = ops queue) IS the
-    // ticket the operations team actions from the alerts console. Best-effort:
-    // a failure here must never break incident creation itself.
-    try {
-      const sev = incident.severity ?? 'LOW';
+    // Alert Engine — reference migration. Instead of writing prisma.alert
+    // directly with a hardcoded severity map, publish alert.condition_detected
+    // and let AlertEngineConsumer resolve severity / channels / recipients /
+    // SLA using the tenant's AlertRule for VEHICLE_BREAKDOWN.
+    //
+    // The code below deliberately keeps mapping of incident types → alert
+    // codes minimal (only BREAKDOWN → VEHICLE_BREAKDOWN). Other incident
+    // types still surface via the ops incidents page; a follow-up can map
+    // ACCIDENT / DELAY / MEDICAL to their own codes with their own rules.
+    const codeForType: Record<string, string | undefined> = {
+      BREAKDOWN: 'VEHICLE_BREAKDOWN',
+    };
+    const alertCode = codeForType[incident.incidentType ?? ''];
+    if (alertCode) {
       const originLabel = source === 'driver-app' ? 'driver app' : 'operations UI';
-      await prisma.alert.create({
-        data: {
-          tenantId,
-          type: 'INCIDENT',
-          title: `Incident ${incidentNo} · ${incident.incidentType}`,
-          description: [
-            `Reported via ${originLabel}.`,
-            incident.location ? `Location: ${incident.location}.` : null,
-            incident.description ? `Details: ${incident.description}` : null,
-          ].filter(Boolean).join(' '),
-          severity: SEV_TO_ALERT[sev] ?? 'MEDIUM',
-          status: 'PENDING',
-          relatedEntityId: incident.id,
-          dateCreated: new Date(),
+      // Best-effort — raiseAlert already swallows its own errors unless
+      // throwOnError is set; keeping the top-level await lets the outbox
+      // write land in the same request if the publish is fast.
+      await raiseAlert({
+        tenantId,
+        code:         alertCode,
+        sourceModule: 'bus-ops',
+        subjectType:  incident.vehicleId ? 'Vehicle' : 'Other',
+        subjectId:    incident.vehicleId ?? incident.id,
+        title:        `Incident ${incidentNo} · ${incident.incidentType}`,
+        description:  [
+          `Reported via ${originLabel}.`,
+          incident.location ? `Location: ${incident.location}.` : null,
+          incident.description ? `Details: ${incident.description}` : null,
+        ].filter(Boolean).join(' '),
+        severity: (SEV_TO_ALERT[incident.severity ?? 'LOW'] ?? 'MEDIUM') as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
+        context: {
+          incidentId:   incident.id,
+          incidentNo,
+          incidentType: incident.incidentType,
+          vehicleId:    incident.vehicleId,
+          driverId:     incident.driverId,
+          location:     incident.location,
+          source,
         },
       });
-    } catch (alertErr) {
-      console.error('[incidents.POST] alert/ticket create failed:', alertErr);
     }
 
     revalidateCache([CACHE_TAG]);

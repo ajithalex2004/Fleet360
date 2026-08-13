@@ -67,6 +67,7 @@ async function initEventConsumers(): Promise<void> {
     { FinanceRentalInvoiceConsumer },
     { NotificationDispatchConsumer },
     { TripNotificationDispatchConsumer, TRIP_NOTIFICATION_EVENT_TYPES },
+    { AlertEngineConsumer },
     // Phase D — Maintenance lifecycle consumers
     { FleetMaintenanceConsumer },
     { AnalyticsMaintenanceConsumer },
@@ -80,6 +81,7 @@ async function initEventConsumers(): Promise<void> {
     import('@/events/consumers/finance-rental-invoice.consumer'),
     import('@/events/consumers/notification-dispatch.consumer'),
     import('@/events/consumers/trip-notification.consumer'),
+    import('@/events/consumers/alert-engine.consumer'),
     // Phase D
     import('@/events/consumers/fleet-maintenance.consumer'),
     import('@/events/consumers/analytics-maintenance.consumer'),
@@ -104,6 +106,10 @@ async function initEventConsumers(): Promise<void> {
     ...TRIP_NOTIFICATION_EVENT_TYPES.map((type: string) =>
       new TripNotificationDispatchConsumer(type, `notif-${type.replace('.', '-')}`),
     ),
+    // Single Alert Engine consumer for `alert.condition_detected` — one
+    // event type serves every module's alert conditions; the payload's
+    // `code` field disambiguates.
+    new AlertEngineConsumer(),
     // Phase D — Maintenance lifecycle
     new FleetMaintenanceConsumer(),
     new FinanceEstimationConsumer(),

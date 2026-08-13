@@ -232,24 +232,96 @@ model AlertConfig {
   @@schema("public")
 }
 
+/// Alerts raised by the AlertEngine (or legacy direct writers).
+///
+/// Every module publishes `alert.condition_detected` events;
+/// AlertEngineConsumer looks up an AlertRule by (tenantId, code) and
+/// enriches the Alert row with SLA due dates, channels, recipients,
+/// and initial escalation level. The escalation cron then re-notifies
+/// at each configured level and marks SLA breaches.
+///
+/// Legacy `type` field is preserved for back-compat but new writers
+/// should stamp `code` (the canonical AlertCondition constant).
 model Alert {
   id              String    @id @default(uuid())
   createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
   tenantId        String    @map("tenant_id")
-  type            String?
+  type            String?   /// Legacy free-text category; superseded by `code`.
   title           String?
   description     String?
-  severity        String?
+  severity        String?   /// LOW | MEDIUM | HIGH | CRITICAL
   dateCreated     DateTime? @map("date_created") @db.Timestamptz(6)
   relatedEntityId String?   @map("related_entity_id")
   status          String?
   assignedTo      String?   @map("assigned_to")
 
+  // ── Alert engine (Phase 1) ──────────────────────────────────────────
+  /// Machine-readable condition code — see AlertCondition constants in
+  /// src/events/contracts/alert.events.ts.
+  code               String?
+  sourceModule       String?   @map("source_module")
+  sourceEventId      String?   @map("source_event_id") @db.Uuid
+  subjectType        String?   @map("subject_type")   /// TripSchedule | Vehicle | Driver | Passenger | Route | Stop
+  subjectId          String?   @map("subject_id")
+  /// Dedup guard — while an Alert with this key is OPEN (not resolved),
+  /// no new Alert with the same (tenantId, dedupeKey) can be raised.
+  dedupeKey          String?   @map("dedupe_key")
+  channels           String[]                                     /// PUSH | SMS | WHATSAPP | EMAIL | IN_APP
+  recipients         String[]                                     /// Role names or CUSTOM user ids
+  context            Json?                                        /// Free-form event context — tripNumber, vehicle plate, etc.
+  acknowledgedAt     DateTime? @map("acknowledged_at") @db.Timestamptz(6)
+  acknowledgedBy     String?   @map("acknowledged_by")
+  resolvedAt         DateTime? @map("resolved_at")    @db.Timestamptz(6)
+  resolvedBy         String?   @map("resolved_by")
+  resolutionNote     String?   @map("resolution_note")
+  slaAckDueAt        DateTime? @map("sla_ack_due_at")     @db.Timestamptz(6)
+  slaResolveDueAt    DateTime? @map("sla_resolve_due_at") @db.Timestamptz(6)
+  escalationLevel    Int       @default(0) @map("escalation_level")
+  lastEscalatedAt    DateTime? @map("last_escalated_at") @db.Timestamptz(6)
+
   @@index([deletedAt], map: "idx_alerts_deleted_at")
   @@index([tenantId], map: "idx_alerts_tenant_id")
+  @@index([code], map: "idx_alerts_code")
+  @@index([sourceModule, sourceEventId], map: "idx_alerts_source")
+  @@index([subjectType, subjectId], map: "idx_alerts_subject")
   @@map("alerts")
+  @@schema("public")
+}
+
+/// Per-tenant, per-condition routing config for AlertEngineConsumer.
+///
+/// One row per (tenantId, code). If no row exists for a condition, the
+/// engine falls back to sensible defaults (severity=MEDIUM, no channels,
+/// no SLA, no escalation) — the Alert is still created but nobody's
+/// notified until ops configures the rule.
+model AlertRule {
+  id                     String    @id @default(uuid())
+  createdAt              DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt              DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId               String    @map("tenant_id")
+
+  code                   String
+  isEnabled              Boolean   @default(true) @map("is_enabled")
+
+  defaultSeverity        String    @default("MEDIUM") @map("default_severity")
+  defaultChannels        String[]                     @map("default_channels")
+  recipientTypes         String[]                     @map("recipient_types")
+  specificRecipientIds   String[]                     @map("specific_recipient_ids")
+
+  slaAckMinutes          Int?      @map("sla_ack_minutes")
+  slaResolveMinutes      Int?      @map("sla_resolve_minutes")
+
+  /// Escalation ladder — [{ afterMinutes, channels, recipients }, ...]
+  /// Applied by the escalation cron in order.
+  escalationLevels       Json?     @map("escalation_levels")
+
+  @@unique([tenantId, code], map: "uq_alert_rules_tenant_code")
+  @@index([tenantId], map: "idx_alert_rules_tenant_id")
+  @@index([deletedAt], map: "idx_alert_rules_deleted_at")
+  @@map("alert_rules")
   @@schema("public")
 }
 
