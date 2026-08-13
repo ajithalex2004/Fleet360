@@ -7,7 +7,7 @@ datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
-  schemas   = ["public", "finance", "ai", "workforce", "fleet", "operations"]
+  schemas   = ["public", "finance", "ai", "workforce", "fleet", "operations", "spatial"]
 }
 
 model ChecklistItem {
@@ -2084,8 +2084,8 @@ model StaffMember {
   createdAt         DateTime?               @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime?               @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt         DateTime?               @map("deleted_at") @db.Timestamptz(6)
-  tenantId          String?                 @map("tenant_id")
-  employeeId        String?                 @unique @map("employee_id")
+  tenantId          String                  @map("tenant_id")
+  employeeId        String?                 @map("employee_id")
   name              String
   department        String?
   designation       String?
@@ -2112,6 +2112,7 @@ model StaffMember {
   // this row for now (deprecated) so existing readers keep working
   // during the migration window; new code should read them off the
   // TransportEnrollment child.
+  @@unique([tenantId, employeeId], map: "uniq_employees_tenant_employee_id")
   @@map("employees")
   @@schema("workforce")
 }
@@ -2385,6 +2386,73 @@ model BusOpsGeofence {
   @@index([type], map: "idx_bus_ops_geofences_type")
   @@map("bus_ops_geofences")
   @@schema("public")
+}
+
+// ============================================================
+// SHARED GEOSPATIAL — spatial.places
+// ============================================================
+//
+// Cross-module geospatial primitive. Every named piece of geometry the
+// platform cares about — stops, geofences, depots, garages, warehouses,
+// operational zones — is a row in this one table with a discriminator
+// (`type`) and a shape (POINT / CIRCLE / POLYGON).
+//
+// Why one table instead of per-type tables:
+//   - Every existing module (bus-ops, logistics, school-bus, ambulance,
+//     assets) grows its own geofence/stop store otherwise. Unifying kills
+//     the "every module invents places" pattern.
+//   - Reference from anywhere: RouteStop.placeId, TripSchedule origin/dest,
+//     Vehicle.homeDepotId — all point at the same table with the same
+//     tenant scoping and RLS.
+//   - Cross-module search is one query (`SELECT ... WHERE type IN (…)`)
+//     instead of a UNION across bus_ops_geofences + logistics_stops + …
+//
+// Phase 1 (this commit) ships the model + `spatial.places` table + backfill
+// from bus_ops_geofences. Consumers still write to the legacy tables —
+// Phase 2 cuts each reader over one module at a time.
+
+model Place {
+  id          String    @id @default(uuid())
+  createdAt   DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId    String    @map("tenant_id")
+
+  name        String
+  /// Short optional code for human cross-reference (e.g. "GAR-DUB-01").
+  code        String?
+  type        String    // PlaceType enum values (kept as text so a new type doesn't need a migration)
+  shape       String    // POINT | CIRCLE | POLYGON
+  description String?
+  address     String?
+
+  centerLat   Float?    @map("center_lat")
+  centerLng   Float?    @map("center_lng")
+  /// Circle radius in metres. Only meaningful when shape=CIRCLE.
+  radiusM     Int?      @map("radius_m")
+  /// Polygon vertices as JSON [{lat, lng}, ...]. Only meaningful when shape=POLYGON.
+  polygon     Json?
+
+  /// Per-type extras — e.g. capacity for a depot, opening hours for a
+  /// warehouse, parent route for a stop. Free-form so each consumer can
+  /// stash what it needs without a schema change.
+  metadata    Json?
+
+  /// Optional soft link to the source row that seeded this Place during
+  /// backfill. Lets us reconcile if a legacy row is edited before Phase 2.
+  sourceModule String?   @map("source_module")   // 'bus-ops' | 'logistics' | 'school-bus' | ...
+  sourceId     String?   @map("source_id")
+
+  active      Boolean   @default(true)
+  createdBy   String?   @map("created_by")
+  updatedBy   String?   @map("updated_by")
+
+  @@index([tenantId],            map: "idx_places_tenant_id")
+  @@index([tenantId, type],      map: "idx_places_tenant_type")
+  @@index([deletedAt],           map: "idx_places_deleted_at")
+  @@index([sourceModule, sourceId], map: "idx_places_source")
+  @@map("places")
+  @@schema("spatial")
 }
 
 // ============================================================

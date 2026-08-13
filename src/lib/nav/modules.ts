@@ -144,6 +144,14 @@ export const MODULES: ModuleDef[] = [
     ],
   },
   {
+    id: 'locations', label: 'Locations', href: '/locations', icon: MapPin,
+    // Shared geospatial catalogue — one row = one Place from spatial.places.
+    // Every module reads/writes here; the in-page filter picks the type.
+    // Per-type sidebar shortcuts (Stops / Geofences / Depots / …) will land
+    // in Phase 2 once the sub-page router supports querystring matching.
+  },
+
+  {
     id: 'bus-ops', label: 'Staff transport', href: '/bus-ops', icon: Bus,
     subPages: [
       // Overview — no group; Dashboard sits flush at the top.
