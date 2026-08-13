@@ -13,6 +13,7 @@
     { "path": "/api/jobs/run?job=attendance-sweep-no-show",  "schedule": "0 23 * * *"   },
     { "path": "/api/jobs/run?job=push-scheduler",            "schedule": "0/5 * * * *"  },
     { "path": "/api/jobs/run?job=outbox-publisher",          "schedule": "0/2 * * * *"  },
-    { "path": "/api/jobs/run?job=bus-ops-generate-schedule-templates", "schedule": "0 1 * * *"  }
+    { "path": "/api/jobs/run?job=bus-ops-generate-schedule-templates", "schedule": "0 1 * * *"  },
+    { "path": "/api/jobs/run?job=alert-trip-overdue",        "schedule": "0/5 * * * *"  }
   ]
 }
