@@ -127,14 +127,24 @@ jobs:
           sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'postgres';"
           sudo -u postgres createdb phase0_ci_parse_check
 
-          # Parse each migration file by wrapping it in a transaction
-          # that rolls back. This catches syntax errors without
-          # actually applying anything.
+          # Parse each migration file that exists. The list historically
+          # included several top-level Phase 0 SQL scripts that have
+          # since been removed (see chore 7ca921d2 — legacy top-level
+          # scripts + superseded ops migrations). Skip missing files
+          # rather than fail — a removed migration isn't a syntax error.
+          # If ALL files are absent, the loop simply prints a note and
+          # the job passes.
+          found_any=0
           for f in \
             prisma/migrations/tenant_isolation.sql \
             prisma/migrations/20260625_dispatch_tenant_isolation.sql \
             prisma/migrations/20260625_phase0_backfill_safety.sql \
             prisma/migrations/20260625_multi_tenant_saas_layer2_5.sql ; do
+            if [ ! -f "$f" ]; then
+              echo "::notice file=$f::Phase 0 migration removed from tree — skipping"
+              continue
+            fi
+            found_any=1
             echo "::group::Parse-check $f"
             PGPASSWORD=postgres psql -h localhost -U postgres -d phase0_ci_parse_check -v ON_ERROR_STOP=1 \
               --single-transaction --set AUTOCOMMIT=off \
@@ -144,3 +154,6 @@ jobs:
             }
             echo "::endgroup::"
           done
+          if [ "$found_any" = "0" ]; then
+            echo "No Phase 0 SQL files remain in tree — this check is now a stub. Consider removing the sql-syntax job when the phase-0 SQL layer is fully retired."
+          fi

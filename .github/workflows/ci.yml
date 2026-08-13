@@ -21,6 +21,29 @@ jobs:
       OPENAI_API_KEY: ci-dummy-openai-key
       NEXT_TELEMETRY_DISABLED: "1"
 
+    # Local Postgres for the schema-drift check. `prisma migrate diff
+    # --shadow-database-url` requires a reachable Postgres to spin up
+    # its temporary shadow DB. Credentials + port match DATABASE_URL
+    # above (user/pass@localhost:5432). The `ci_mock` database is
+    # created automatically by the postgres container's POSTGRES_DB.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: pass
+          POSTGRES_DB: ci_mock
+        ports:
+          - 5432:5432
+        # Wait until Postgres is actually accepting connections before
+        # subsequent steps run — a race here would produce the same
+        # P1001 "can't reach database server" error we're fixing.
+        options: >-
+          --health-cmd "pg_isready -U user -d ci_mock"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
