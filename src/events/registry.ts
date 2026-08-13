@@ -10,7 +10,11 @@
  *  3. Write a consumer in src/events/consumers/ and register it in initEventConsumers()
  */
 
-import { TRIP_COMPLETED, TRIP_DEPARTED, TRIP_CANCELLED } from '@/events/contracts/trip.events';
+import {
+  TRIP_COMPLETED, TRIP_DEPARTED, TRIP_CANCELLED,
+  TRIP_ARRIVING, TRIP_DELAYED,
+  VEHICLE_CHANGED, DRIVER_CHANGED, BOARDING_MISSED,
+} from '@/events/contracts/trip.events';
 import { FUEL_FILLED }              from '@/events/contracts/fuel.events';
 import {
   MAINTENANCE_COMPLETED,
@@ -43,6 +47,11 @@ export {
   TRIP_COMPLETED,
   TRIP_DEPARTED,
   TRIP_CANCELLED,
+  TRIP_ARRIVING,
+  TRIP_DELAYED,
+  VEHICLE_CHANGED,
+  DRIVER_CHANGED,
+  BOARDING_MISSED,
   FUEL_FILLED,
   MAINTENANCE_COMPLETED,
   MAINTENANCE_REPAIR_COMPLETED,
@@ -105,6 +114,41 @@ export const FLEET360_EVENTS: EventRegistryEntry[] = [
     aggregateType: 'TripSchedule',
     version:       '1',
     description:   'A bus/school trip has been cancelled before departure',
+  },
+  {
+    type:          TRIP_ARRIVING,
+    sourceModule:  'bus-ops',
+    aggregateType: 'TripSchedule',
+    version:       '1',
+    description:   'Bus is within N minutes of a stop / destination — published once per stop by the ETA evaluator',
+  },
+  {
+    type:          TRIP_DELAYED,
+    sourceModule:  'bus-ops',
+    aggregateType: 'TripSchedule',
+    version:       '1',
+    description:   'Bus is running late beyond the delay tolerance — published at most once per stop',
+  },
+  {
+    type:          VEHICLE_CHANGED,
+    sourceModule:  'bus-ops',
+    aggregateType: 'TripSchedule',
+    version:       '1',
+    description:   'Assigned vehicle on a scheduled trip swapped mid-trip or pre-departure',
+  },
+  {
+    type:          DRIVER_CHANGED,
+    sourceModule:  'bus-ops',
+    aggregateType: 'TripSchedule',
+    version:       '1',
+    description:   'Assigned driver on a scheduled trip swapped mid-trip or pre-departure',
+  },
+  {
+    type:          BOARDING_MISSED,
+    sourceModule:  'bus-ops',
+    aggregateType: 'TripPassenger',
+    version:       '1',
+    description:   'Bus left a stop without recording a BOARDED event for a still-CONFIRMED passenger',
   },
   {
     type:          FUEL_FILLED,

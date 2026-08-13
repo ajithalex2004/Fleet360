@@ -895,6 +895,18 @@ enum NotificationEvent {
   QUOTATION_REJECTED
   INVOICE_GENERATED
   ALERT_TRIGGERED
+  // Staff Transport / bus-ops trip lifecycle. One-to-one mapping with the
+  // domain events in src/events/contracts/trip.events.ts. Operators
+  // configure per-event channel + recipient rules in NotificationRule.
+  TRIP_SCHEDULED
+  TRIP_CANCELLED
+  TRIP_DEPARTED
+  TRIP_ARRIVING
+  TRIP_DELAYED
+  TRIP_COMPLETED
+  VEHICLE_CHANGED
+  DRIVER_CHANGED
+  BOARDING_MISSED
   @@schema("public")
 }
 

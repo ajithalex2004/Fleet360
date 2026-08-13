@@ -66,6 +66,7 @@ async function initEventConsumers(): Promise<void> {
     { FinanceShipmentConsumer },
     { FinanceRentalInvoiceConsumer },
     { NotificationDispatchConsumer },
+    { TripNotificationDispatchConsumer, TRIP_NOTIFICATION_EVENT_TYPES },
     // Phase D — Maintenance lifecycle consumers
     { FleetMaintenanceConsumer },
     { AnalyticsMaintenanceConsumer },
@@ -78,6 +79,7 @@ async function initEventConsumers(): Promise<void> {
     import('@/events/consumers/finance-shipment.consumer'),
     import('@/events/consumers/finance-rental-invoice.consumer'),
     import('@/events/consumers/notification-dispatch.consumer'),
+    import('@/events/consumers/trip-notification.consumer'),
     // Phase D
     import('@/events/consumers/fleet-maintenance.consumer'),
     import('@/events/consumers/analytics-maintenance.consumer'),
@@ -96,6 +98,12 @@ async function initEventConsumers(): Promise<void> {
     new NotificationDispatchConsumer('maintenance.quality_inspection_started', 'notif-qc-started'),
     new NotificationDispatchConsumer('maintenance.inspection_failed',          'notif-inspection-failed'),
     new NotificationDispatchConsumer('maintenance.vehicle_ready_for_service',  'notif-vehicle-ready'),
+    // Bus-ops trip lifecycle — one instance per event type. Same idempotency
+    // isolation as maintenance. Consumer names use the `notif-trip-*` prefix
+    // so ops can grep NotificationLog / logs for trip-triggered messages.
+    ...TRIP_NOTIFICATION_EVENT_TYPES.map((type: string) =>
+      new TripNotificationDispatchConsumer(type, `notif-${type.replace('.', '-')}`),
+    ),
     // Phase D — Maintenance lifecycle
     new FleetMaintenanceConsumer(),
     new FinanceEstimationConsumer(),
