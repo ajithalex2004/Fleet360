@@ -41,6 +41,14 @@ export interface SubPage {
    * uncluttered for tenant admins who can't act on it.
    */
   superOnly?: boolean;
+  /**
+   * Optional group heading (uppercase caption) rendered above this row and
+   * every subsequent row that shares the same group value, until the group
+   * changes or ends. Undefined leaves the item ungrouped (rendered flush at
+   * the top of the module's list — used for Dashboard-style landing rows).
+   * Order matters: sort sub-pages by group in the desired display order.
+   */
+  group?: string;
 }
 
 export interface ModuleDef {
@@ -138,24 +146,37 @@ export const MODULES: ModuleDef[] = [
   {
     id: 'bus-ops', label: 'Staff transport', href: '/bus-ops', icon: Bus,
     subPages: [
-      { label: 'Dashboard',       href: '/bus-ops',                 icon: LayoutDashboard },
-      { label: 'Routes',          href: '/bus-ops/routes',          icon: Route },
-      { label: 'Route planner',   href: '/bus-ops/route-planner',   icon: Route },
-      { label: 'Schedules',       href: '/bus-ops/schedules',       icon: Calendar },
-      { label: 'Schedule Templates', href: '/bus-ops/schedule-templates', icon: Repeat },
-      { label: 'Transport Calendars', href: '/bus-ops/transport-calendars', icon: CalendarCheck2 },
-      { label: 'Trip Monitor',        href: '/bus-ops/dispatch',        icon: Radio },
-      { label: 'Live Fleet Map',      href: '/bus-ops/live-map',        icon: Radar },
-      { label: 'Optimisation Status', href: '/bus-ops/optimisation',    icon: Sparkles },
-      { label: 'Demand forecast',     href: '/bus-ops/demand-forecast', icon: TrendingUp },
-      { label: 'Drivers Performance', href: '/bus-ops/drivers',         icon: UserCog },
-      { label: 'Passengers',      href: '/bus-ops/passengers',      icon: Users },
-      { label: 'Transport users',  href: '/bus-ops/staff',           icon: Users },
-      { label: 'Transport requests', href: '/bus-ops/transport-requests', icon: ClipboardList },
-      { label: 'Incidents',       href: '/bus-ops/incidents',       icon: AlertTriangle },
-      { label: 'Gateways',        href: '/bus-ops/gateways',        icon: Network },
-      { label: 'Geofences',       href: '/bus-ops/geofences',       icon: MapPin },
-      { label: 'Analytics',       href: '/bus-ops/analytics',       icon: BarChart3 },
+      // Overview — no group; Dashboard sits flush at the top.
+      { label: 'Dashboard',           href: '/bus-ops',                     icon: LayoutDashboard },
+
+      // Planning — design-time network (what the service *looks like*).
+      { label: 'Routes',              href: '/bus-ops/routes',              icon: Route,           group: 'Planning' },
+      { label: 'Route planner',       href: '/bus-ops/route-planner',       icon: Route,           group: 'Planning' },
+      { label: 'Schedules',           href: '/bus-ops/schedules',           icon: Calendar,        group: 'Planning' },
+      { label: 'Schedule Templates',  href: '/bus-ops/schedule-templates',  icon: Repeat,          group: 'Planning' },
+      { label: 'Transport Calendars', href: '/bus-ops/transport-calendars', icon: CalendarCheck2,  group: 'Planning' },
+
+      // Operations — day-of-service execution.
+      { label: 'Trip Monitor',        href: '/bus-ops/dispatch',            icon: Radio,           group: 'Operations' },
+      { label: 'Optimisation Status', href: '/bus-ops/optimisation',        icon: Sparkles,        group: 'Operations' },
+      { label: 'Demand forecast',     href: '/bus-ops/demand-forecast',     icon: TrendingUp,      group: 'Operations' },
+
+      // Tracking — real-time telemetry / geospatial infrastructure.
+      { label: 'Live Fleet Map',      href: '/bus-ops/live-map',            icon: Radar,           group: 'Tracking' },
+      { label: 'Geofences',           href: '/bus-ops/geofences',           icon: MapPin,          group: 'Tracking' },
+      { label: 'Gateways',            href: '/bus-ops/gateways',            icon: Network,         group: 'Tracking' },
+
+      // People — passengers + drivers + roster.
+      { label: 'Passengers',          href: '/bus-ops/passengers',          icon: Users,           group: 'People' },
+      { label: 'Transport users',     href: '/bus-ops/staff',               icon: Users,           group: 'People' },
+      { label: 'Drivers Performance', href: '/bus-ops/drivers',             icon: UserCog,         group: 'People' },
+
+      // Requests — inbound demand / exceptions.
+      { label: 'Transport requests',  href: '/bus-ops/transport-requests',  icon: ClipboardList,   group: 'Requests' },
+      { label: 'Incidents',           href: '/bus-ops/incidents',           icon: AlertTriangle,   group: 'Requests' },
+
+      // Analytics — after-the-fact reporting.
+      { label: 'Analytics',           href: '/bus-ops/analytics',           icon: BarChart3,       group: 'Analytics' },
     ],
   },
   {

@@ -27,7 +27,7 @@
  *    prefetch never throws it, only the tab-store op does.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, type LucideIcon } from 'lucide-react';
@@ -147,18 +147,31 @@ export default function Sidebar({ onTabsFull }: Props) {
                 />
                 {!collapsed && isActive && visibleSubPages(m.subPages)?.length ? (
                   <ul className="mt-0.5 mb-1 space-y-0.5 pl-2 border-l border-white/5 ml-4">
-                    {visibleSubPages(m.subPages)!.map(sp => (
-                      <li key={sp.href}>
-                        <SubRow
-                          page={sp}
-                          parentIcon={m.icon}
-                          active={pathname === sp.href}
-                          moduleId={m.id}
-                          onTabOpen={openTab}
-                          onTabsFull={onTabsFull}
-                        />
-                      </li>
-                    ))}
+                    {visibleSubPages(m.subPages)!.map((sp, idx, arr) => {
+                      // Emit a caption row before the first item of each new group.
+                      // Undefined group = ungrouped (renders flush, no header).
+                      const prevGroup = idx > 0 ? arr[idx - 1].group : undefined;
+                      const showHeader = sp.group && sp.group !== prevGroup;
+                      return (
+                        <React.Fragment key={sp.href}>
+                          {showHeader && (
+                            <li aria-hidden="true" className={`px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 ${idx > 0 ? 'pt-2' : ''}`}>
+                              {sp.group}
+                            </li>
+                          )}
+                          <li>
+                            <SubRow
+                              page={sp}
+                              parentIcon={m.icon}
+                              active={pathname === sp.href}
+                              moduleId={m.id}
+                              onTabOpen={openTab}
+                              onTabsFull={onTabsFull}
+                            />
+                          </li>
+                        </React.Fragment>
+                      );
+                    })}
                   </ul>
                 ) : null}
               </li>
@@ -180,20 +193,29 @@ export default function Sidebar({ onTabsFull }: Props) {
           >
             <div className="border-b border-white/10 px-2 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{m.label}</div>
             <ul className="mt-1 space-y-0.5">
-              {visible.map(sp => {
+              {visible.map((sp, idx, arr) => {
                 const ActiveIcon: LucideIcon = sp.icon ?? m.icon;
                 const isActive = pathname === sp.href;
+                const prevGroup = idx > 0 ? arr[idx - 1].group : undefined;
+                const showHeader = sp.group && sp.group !== prevGroup;
                 return (
-                  <li key={sp.href}>
-                    <button
-                      type="button"
-                      onClick={() => navigate(m.id, { label: sp.label, href: sp.href, icon: ActiveIcon })}
-                      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] ${isActive ? 'bg-amber-500/10 text-amber-200' : 'text-slate-200 hover:bg-white/5'}`}
-                    >
-                      <ActiveIcon className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
-                      <span className="truncate">{sp.label}</span>
-                    </button>
-                  </li>
+                  <React.Fragment key={sp.href}>
+                    {showHeader && (
+                      <li aria-hidden="true" className={`px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 ${idx > 0 ? 'pt-2' : ''}`}>
+                        {sp.group}
+                      </li>
+                    )}
+                    <li>
+                      <button
+                        type="button"
+                        onClick={() => navigate(m.id, { label: sp.label, href: sp.href, icon: ActiveIcon })}
+                        className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] ${isActive ? 'bg-amber-500/10 text-amber-200' : 'text-slate-200 hover:bg-white/5'}`}
+                      >
+                        <ActiveIcon className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
+                        <span className="truncate">{sp.label}</span>
+                      </button>
+                    </li>
+                  </React.Fragment>
                 );
               })}
             </ul>
