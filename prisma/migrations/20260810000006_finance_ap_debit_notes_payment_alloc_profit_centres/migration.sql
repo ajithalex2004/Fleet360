@@ -43,11 +43,18 @@ INSERT INTO finance.finance_profit_centres (code, name, module, description) VAL
 ON CONFLICT (code) DO NOTHING;
 
 -- ── 2. Add profit_centre to existing accounting tables ────────────────────────
+-- IF EXISTS guards: these tables were runtime-DDL creations in production
+-- and get their `finance.` schema via the 20260810000005_introduce_domain_schemas
+-- migration's SET SCHEMA IF EXISTS calls. On a fresh shadow DB the source
+-- tables never existed so the SET SCHEMA skipped, leaving these ALTERs
+-- pointing at nonexistent tables. The follow-up migration
+-- 20260811200000_create_missing_finance_tables materialises them; for
+-- shadow-DB replay these ADD COLUMNs are moot.
 
-ALTER TABLE finance.finance_journal_lines
+ALTER TABLE IF EXISTS finance.finance_journal_lines
   ADD COLUMN IF NOT EXISTS profit_centre TEXT;
 
-ALTER TABLE finance.finance_expenses
+ALTER TABLE IF EXISTS finance.finance_expenses
   ADD COLUMN IF NOT EXISTS profit_centre TEXT;
 
 -- ── 3. AP sub-ledger (finance_payables) ──────────────────────────────────────
