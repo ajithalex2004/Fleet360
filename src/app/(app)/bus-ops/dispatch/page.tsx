@@ -236,6 +236,31 @@ export default function BusOpsDispatchPage() {
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [dateFilter,  setDateFilter]  = useState(() => new Date().toISOString().split('T')[0]);
   const [shiftFilter, setShiftFilter] = useState('ALL');
+  const [routeFilter,   setRouteFilter]   = useState('');
+  const [driverFilter,  setDriverFilter]  = useState('');
+  const [vehicleFilter, setVehicleFilter] = useState('');
+  // Reference data for the filter dropdowns (lazy-loaded once).
+  const [routes,   setRoutes]   = useState<Array<{ id: string; name: string; code?: string | null }>>([]);
+  const [drivers,  setDrivers]  = useState<Array<{ id: string; name: string }>>([]);
+  const [vehicles, setVehicles] = useState<Array<{ id: string; licensePlate?: string; make?: string; model?: string }>>([]);
+
+  // Load reference data once — filter dropdowns don't need to refetch on
+  // every 30s poll.
+  useEffect(() => {
+    (async () => {
+      const [rRes, dRes, vRes] = await Promise.all([
+        fetch('/api/bus-ops/routes?active=true', { cache: 'no-store' }),
+        fetch('/api/bus-ops/drivers',            { cache: 'no-store' }),
+        fetch('/api/vehicles',                    { cache: 'no-store' }),
+      ]);
+      if (rRes.ok) setRoutes(await rRes.json());
+      if (dRes.ok) setDrivers(await dRes.json());
+      if (vRes.ok) {
+        const v = await vRes.json();
+        setVehicles(Array.isArray(v) ? v : (v?.vehicles ?? []));
+      }
+    })().catch(() => { /* silent — filters degrade to no-op */ });
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -286,11 +311,22 @@ export default function BusOpsDispatchPage() {
     finally { setTransitioning(null); }
   };
 
-  // Filter by shift
+  // Filter by shift + route + driver + vehicle. All AND'd together.
   const displayed = schedules.filter(s => {
-    if (shiftFilter === 'ALL') return true;
-    return s.shiftType === shiftFilter;
+    if (shiftFilter   !== 'ALL' && s.shiftType !== shiftFilter) return false;
+    if (routeFilter   && s.routeId   !== routeFilter)   return false;
+    if (driverFilter  && s.driverId  !== driverFilter)  return false;
+    if (vehicleFilter && s.vehicleId !== vehicleFilter) return false;
+    return true;
   });
+  const activeFilterCount =
+    (shiftFilter !== 'ALL' ? 1 : 0) +
+    (routeFilter   ? 1 : 0) +
+    (driverFilter  ? 1 : 0) +
+    (vehicleFilter ? 1 : 0);
+  const clearAllFilters = () => {
+    setShiftFilter('ALL'); setRouteFilter(''); setDriverFilter(''); setVehicleFilter('');
+  };
 
   // Build stage columns
   const visibleStages = STAGES.filter(s => s.status !== 'CANCELLED');
@@ -362,6 +398,41 @@ export default function BusOpsDispatchPage() {
               <p className="text-xs text-slate-500 mt-0.5">{k.label}</p>
             </div>
           ))}
+        </div>
+
+        {/* Filter bar — route + driver + vehicle dropdowns.
+            Shift chips sit below; clear-all button appears when >=1 filter active. */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+          <select value={routeFilter} onChange={e => setRouteFilter(e.target.value)}
+            className="bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-violet-500/40">
+            <option value="">All Routes</option>
+            {routes.map(r => (
+              <option key={r.id} value={r.id}>{r.name}{r.code ? ` [${r.code}]` : ''}</option>
+            ))}
+          </select>
+          <select value={driverFilter} onChange={e => setDriverFilter(e.target.value)}
+            className="bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-violet-500/40">
+            <option value="">All Drivers</option>
+            {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+          <select value={vehicleFilter} onChange={e => setVehicleFilter(e.target.value)}
+            className="bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-violet-500/40">
+            <option value="">All Vehicles</option>
+            {vehicles.map(v => {
+              const label = [v.licensePlate, [v.make, v.model].filter(Boolean).join(' ')].filter(Boolean).join(' — ') || v.id.slice(0,8);
+              return <option key={v.id} value={v.id}>{label}</option>;
+            })}
+          </select>
+          {activeFilterCount > 0 ? (
+            <button onClick={clearAllFilters}
+              className="bg-slate-800 border border-amber-500/40 text-amber-200 rounded-lg px-3 py-1.5 text-sm hover:bg-amber-500/10">
+              Clear {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''}
+            </button>
+          ) : (
+            <div className="text-xs text-slate-500 self-center pl-2">
+              Showing {displayed.length} of {schedules.length}
+            </div>
+          )}
         </div>
 
         {/* Shift filter */}
