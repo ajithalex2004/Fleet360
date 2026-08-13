@@ -1732,8 +1732,78 @@ model BusRoute {
   stops                 RouteStop[]
   schedules             TripSchedule[]
   headwayRules          HeadwayRule[]
+  /// Named direction variants (Morning→Office, Evening→Residence, …).
+  /// Phase 1 of route versioning — see FOLLOWUP_ROUTE_VERSIONING.md.
+  variants              BusRouteVariant[]
 
   @@map("bus_routes")
+  @@schema("public")
+}
+
+/// Named direction / variant of a route (Morning → Office, Evening →
+/// Residence, Weekend). One row per route × variant. Each variant has
+/// its own version history (BusRouteVariantVersion) so stops can differ
+/// between directions AND across time within a direction. See
+/// FOLLOWUP_ROUTE_VERSIONING.md for the migration strategy.
+model BusRouteVariant {
+  id           String    @id @default(uuid())
+  createdAt    DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId     String    @map("tenant_id")
+  routeId      String    @map("route_id")
+
+  name         String    /// Display label — "Morning → Office"
+  /// Canonical bucket for filtering / dispatch UI — MORNING | EVENING |
+  /// INBOUND | OUTBOUND | WEEKEND | SPECIAL | NIGHT (free-text, extensible).
+  kind         String?
+  description  String?
+  isActive     Boolean   @default(true) @map("is_active")
+  createdBy    String?   @map("created_by")
+
+  route        BusRoute  @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  versions     BusRouteVariantVersion[]
+
+  @@unique([routeId, name], map: "uq_bus_route_variants_route_name")
+  @@index([routeId],   map: "idx_bus_route_variants_route")
+  @@index([tenantId],  map: "idx_bus_route_variants_tenant")
+  @@index([deletedAt], map: "idx_bus_route_variants_deleted")
+  @@map("bus_route_variants")
+  @@schema("public")
+}
+
+/// Immutable snapshot of a variant at a point in time. Publishing a new
+/// version auto-closes the prior one's effectiveTo. Trips reference the
+/// version they used so historical reporting reads the stops that
+/// actually operated — not whatever the route looks like today.
+model BusRouteVariantVersion {
+  id             String    @id @default(uuid())
+  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId       String    @map("tenant_id")
+  variantId      String    @map("variant_id")
+
+  versionNumber  Int       @map("version_number")
+  effectiveFrom  DateTime  @map("effective_from") @db.Date
+  effectiveTo    DateTime? @map("effective_to")   @db.Date
+
+  /// DRAFT | PUBLISHED | ARCHIVED
+  status         String    @default("DRAFT")
+  publishedAt    DateTime? @map("published_at")   @db.Timestamptz(6)
+  publishedBy    String?   @map("published_by")
+  notes          String?
+
+  variant        BusRouteVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  stops          RouteStop[]
+  trips          TripSchedule[]
+
+  @@unique([variantId, versionNumber], map: "uq_bus_route_variant_versions_variant_ver")
+  @@index([variantId], map: "idx_bus_route_variant_versions_variant")
+  @@index([tenantId],  map: "idx_bus_route_variant_versions_tenant")
+  @@index([status],    map: "idx_bus_route_variant_versions_status")
+  @@index([deletedAt], map: "idx_bus_route_variant_versions_deleted")
+  @@map("bus_route_variant_versions")
   @@schema("public")
 }
 
@@ -1759,9 +1829,16 @@ model RouteStop {
   /// queries (e.g. "all Places used by any route in this tenant").
   placeId              String?  @map("place_id")
   place                Place?   @relation("RouteStopPlace", fields: [placeId], references: [id], onDelete: SetNull)
+  /// Route versioning Phase 1 — link to the specific variant version this
+  /// stop belongs to. When null the stop is a "flat" pre-versioning row
+  /// still readable via routeId. New stops written through the versioned
+  /// writer API always stamp this.
+  variantVersionId     String?  @map("variant_version_id")
+  variantVersion       BusRouteVariantVersion? @relation(fields: [variantVersionId], references: [id], onDelete: Cascade)
   route                BusRoute @relation(fields: [routeId], references: [id])
 
-  @@index([placeId], map: "idx_route_stops_place_id")
+  @@index([placeId],          map: "idx_route_stops_place_id")
+  @@index([variantVersionId], map: "idx_route_stops_variant_version")
   @@map("route_stops")
   @@schema("public")
 }
@@ -1987,11 +2064,18 @@ model TripSchedule {
   //                       expanded from HeadwayRule rows at view time.
   schedulingMode String?         @default("TIMEPOINT") @map("scheduling_mode") // TIMEPOINT|HEADWAY
   notes          String?
+  /// Route versioning Phase 1 — snapshot of the specific variant version
+  /// this trip runs. Historical reads should prefer this over `routeId`
+  /// so a route edit made after the trip completed can't corrupt
+  /// what-actually-happened.
+  routeVariantVersionId String?  @map("route_variant_version_id")
+  routeVariantVersion   BusRouteVariantVersion? @relation(fields: [routeVariantVersionId], references: [id], onDelete: SetNull)
   route          BusRoute        @relation(fields: [routeId], references: [id])
   passengers     TripPassenger[]
   tripLogs       TripLog[]
   headwayRules   HeadwayRule[]
 
+  @@index([routeVariantVersionId], map: "idx_trip_schedules_variant_version")
   @@map("trip_schedules")
   @@schema("public")
 }

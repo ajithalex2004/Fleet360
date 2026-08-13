@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
 import { expandRosterToTrip } from '@/lib/bus-ops/expand-roster';
+import { resolveVariantVersionForTrip } from '@/lib/bus-ops/resolve-variant-version';
 
 const CACHE_TAG = 'bus-ops:schedules';
 
@@ -60,8 +61,31 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const count = await prisma.tripSchedule.count();
     const tripNumber = body.tripNumber ?? `TRP-${String(count + 1).padStart(5, '0')}`;
+
+    // Route versioning Phase 1 — snapshot the exact variant version this
+    // trip runs. Prefer explicit body.routeVariantVersionId, else derive
+    // from routeVariantId, else from routeId+direction, else routeId
+    // alone. Null result means the route has no variants yet — the trip
+    // is written without a snapshot (Phase 1 back-compat) and Phase 2
+    // reader migration will start requiring it.
+    const snapshot = await resolveVariantVersionForTrip({
+      tenantId,
+      routeId:              body.routeId ?? null,
+      direction:            body.direction ?? null,
+      routeVariantId:       body.routeVariantId ?? null,
+      routeVariantVersionId: body.routeVariantVersionId ?? null,
+    }).catch(err => {
+      console.warn('[schedules.POST] variant-version resolve failed:', err);
+      return null;
+    });
+
     const schedule = await prisma.tripSchedule.create({
-      data: { ...body, tripNumber, tenantId },
+      data: {
+        ...body,
+        tripNumber,
+        tenantId,
+        routeVariantVersionId: snapshot?.id ?? null,
+      },
       include: { route: true },
     });
 
