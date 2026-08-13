@@ -79,7 +79,7 @@ ALTER TABLE IF EXISTS public.finance_payments  SET SCHEMA finance;
 
 -- ── 3. Move AI domain tables to ai schema ─────────────────────────────────────
 
-ALTER TABLE public.agent_anomaly_flags SET SCHEMA ai;
+ALTER TABLE IF EXISTS public.agent_anomaly_flags SET SCHEMA ai;
 
 -- ── 4. Backward-compatible search_path ───────────────────────────────────────
 --
