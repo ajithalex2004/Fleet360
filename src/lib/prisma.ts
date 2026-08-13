@@ -236,9 +236,36 @@ async function withPrimaryConnectionRetry<T>(run: () => Promise<T>): Promise<T> 
 }
 
 // ── Primary Prisma client (Neon) ──────────────────────────────────────────────
+//
+// Log config uses event-based error emission so we can filter Neon's
+// noisy `kind: Closed` errors (audit risk #10). The retry wrapper
+// (withPrimaryConnectionRetry) transparently reconnects on these
+// transient socket-close errors — re-emitting them to stderr on every
+// tick pollutes logs and masks real problems. Warn-level stays on
+// stdout in dev for visibility.
+const RECOVERABLE_PRISMA_ERROR_PATTERNS: RegExp[] = [
+  /\bkind:\s*(Closed|TimedOut|ConnectionAborted|ConnectionReset|BrokenPipe|Io)\b/,
+  /\bconnection.*(closed|reset|aborted)\b/i,
+  /Server has closed the connection/,
+];
+
 const prismaClientSingleton = () => {
   const client = new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+    log: [
+      { level: 'error', emit: 'event' },
+      ...(process.env.NODE_ENV === 'development'
+        ? ([{ level: 'warn', emit: 'stdout' }] as const)
+        : []),
+    ],
+  });
+
+  // Silence known-recoverable connection blips. Anything NOT matched
+  // still fires via console.error so real bugs surface.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (client as any).$on('error', (e: { message?: string; timestamp?: Date }) => {
+    const msg = e.message ?? '';
+    if (RECOVERABLE_PRISMA_ERROR_PATTERNS.some(p => p.test(msg))) return;
+    console.error('[prisma]', msg);
   });
 
   const originalTransaction = client.$transaction.bind(client);

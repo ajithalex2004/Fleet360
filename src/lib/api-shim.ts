@@ -16,6 +16,19 @@ const MIGRATED_EXACT_PATHS = new Set([
   '/api/logistics/tracking',
 ]);
 
+// ── Bus-ops shim: intentionally empty ────────────────────────────────────
+//
+// Architectural risk #8 from the Staff Transportation audit:
+// `/api/bus-ops/*` is Next-only. If a bus-ops handler is ever ported to
+// the Go backend (e.g. `/api/v1/bus-ops/schedules`), this shim WILL NOT
+// route to it — you must:
+//   1. Add the path here (MIGRATED_EXACT_PATHS or MIGRATED_PREFIXES)
+//   2. Verify the Go handler returns the same response contract
+//   3. Add an integration test that shows the shimmed path returns
+//      an `X-Backend: go` header
+// Without steps 1-3 a "silent migration" (Go route deployed, but Next
+// still serving here) leaves the two implementations drifting.
+
 const MIGRATED_PREFIXES = [
   // Only list paths the Go backend ACTUALLY implements under /api/v1/logistics.
   // Go serves rfqs, carriers and shipments (plus their leaf routes). The
