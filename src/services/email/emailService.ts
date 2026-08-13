@@ -1,3 +1,12 @@
+// 'use server' — this module is imported by a 'use client' page
+// (src/app/(app)/maintenance/job-closure/[requestId]/page.tsx) that
+// calls sendJobClosureEmail directly. Prisma internally imports
+// next/headers (for RLS scope tracking) which only compiles inside a
+// Server Component or Server Action. Marking the file as a Server
+// Actions module keeps the same export shape callable from the
+// client while running the actual work server-side.
+'use server';
+
 import { EmailLog, EnhancedMaintenanceRequest } from '@/types/maintenance';
 import nodemailer from 'nodemailer';
 import { prisma } from '@/lib/prisma';
