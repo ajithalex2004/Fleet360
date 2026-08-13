@@ -98,13 +98,19 @@ CREATE INDEX idx_transport_calendar_tenant_type ON transport_calendar (tenant_id
 -- of the new enum. NULL rows and blank strings are coerced to 'CONFIRMED'.
 -- The USING expression handles every case without a scan failure.
 
+-- Postgres refuses to auto-cast the existing text default 'CONFIRMED'
+-- to the new enum in one ALTER. Drop the default first, change the
+-- type, then re-set the default with the enum-typed value.
+ALTER TABLE trip_passengers ALTER COLUMN status DROP DEFAULT;
+
 ALTER TABLE trip_passengers
   ALTER COLUMN status TYPE "TripPassengerStatus"
     USING CASE
       WHEN status IS NULL OR status = '' THEN 'CONFIRMED'::"TripPassengerStatus"
       ELSE status::"TripPassengerStatus"
-    END,
-  ALTER COLUMN status SET DEFAULT 'CONFIRMED';
+    END;
+
+ALTER TABLE trip_passengers ALTER COLUMN status SET DEFAULT 'CONFIRMED'::"TripPassengerStatus";
 
 -- ── 5. Extend boarding_events: add typed enum + BLE confidence fields ─────────
 --
