@@ -44,18 +44,39 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const schedule = await prisma.tripSchedule.findFirst({
       where: { id: scheduleId, tenantId },
-      select: { id: true, routeId: true, departureTime: true, status: true },
+      select: {
+        id: true, routeId: true, departureTime: true, status: true,
+        // Route versioning Phase 2 — snapshotted variant version wins.
+        routeVariantVersionId: true,
+      },
     });
     if (!schedule) return NextResponse.json({ error: 'Schedule not found' }, { status: 404 });
 
+    // Prefer the trip's snapshotted variant version so a route edit
+    // published *after* this trip started can't change the ETA target.
+    // Falls back to the flat routeId list (pre-version rows have
+    // variant_version_id IS NULL).
+    const stopsQuery = schedule.routeVariantVersionId
+      ? prisma.$queryRawUnsafe<StopRow[]>(
+          `SELECT id, sequence, stop_name, gps_lat, gps_lng, estimated_arrival_mins
+             FROM route_stops
+            WHERE variant_version_id = $1
+              AND gps_lat IS NOT NULL AND gps_lng IS NOT NULL
+            ORDER BY sequence ASC`,
+          schedule.routeVariantVersionId,
+        )
+      : prisma.$queryRawUnsafe<StopRow[]>(
+          `SELECT id, sequence, stop_name, gps_lat, gps_lng, estimated_arrival_mins
+             FROM route_stops
+            WHERE route_id = $1
+              AND variant_version_id IS NULL
+              AND gps_lat IS NOT NULL AND gps_lng IS NOT NULL
+            ORDER BY sequence ASC`,
+          schedule.routeId,
+        );
+
     const [stopRows, visitRows, pingRows] = await Promise.all([
-      prisma.$queryRawUnsafe<StopRow[]>(
-        `SELECT id, sequence, stop_name, gps_lat, gps_lng, estimated_arrival_mins
-           FROM route_stops
-          WHERE route_id = $1 AND gps_lat IS NOT NULL AND gps_lng IS NOT NULL
-          ORDER BY sequence ASC`,
-        schedule.routeId,
-      ),
+      stopsQuery,
       prisma.$queryRawUnsafe<VisitRow[]>(
         `SELECT stop_id, entered_at FROM trip_stop_visits WHERE schedule_id = $1 AND entered_at IS NOT NULL`,
         scheduleId,

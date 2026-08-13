@@ -44,9 +44,14 @@ export async function GET(
   const ctx = await requireDriverSession(req);
   if (ctx instanceof NextResponse) return ctx;
 
-  // 1) Load the trip (just the route_id + driver check)
-  const trips = await prisma.$queryRaw<Array<{ id: string; route_id: string | null; driver_id: string }>>`
-    SELECT id, route_id, driver_id
+  // 1) Load the trip — pull route_variant_version_id too so we can prefer
+  //    the snapshotted version's stops (route versioning Phase 2). The
+  //    driver check keeps the same semantics.
+  const trips = await prisma.$queryRaw<Array<{
+    id: string; route_id: string | null; driver_id: string;
+    route_variant_version_id: string | null;
+  }>>`
+    SELECT id, route_id, driver_id, route_variant_version_id
     FROM trip_schedules
     WHERE id = ${params.id}
       AND tenant_id = ${ctx.tenantId}::uuid
@@ -65,7 +70,7 @@ export async function GET(
     );
   }
 
-  if (!trip.route_id) {
+  if (!trip.route_id && !trip.route_variant_version_id) {
     return NextResponse.json(
       { error: 'trip has no route assigned; no geofences to watch' },
       { status: 422 },
@@ -73,24 +78,53 @@ export async function GET(
   }
 
   // 2) Origin = lowest sequence, destination = highest sequence.
-  //    Left-joined to spatial.places so Phase 3.5 can prefer the linked
-  //    Place geometry over the denormalized route_stops columns. The
-  //    join is optional — pre-Phase-3.5 stops have place_id NULL and
-  //    fall back to route_stops.gps_lat/gps_lng.
-  const stops = await prisma.$queryRaw<StopRow[]>`
-    SELECT s.gps_lat, s.gps_lng, s.geofence_radius_m, s.stop_name, s.sequence,
-           p.center_lat AS place_center_lat,
-           p.center_lng AS place_center_lng,
-           p.radius_m   AS place_radius_m,
-           p.name       AS place_name
-    FROM route_stops s
-    LEFT JOIN spatial.places p ON p.id = s.place_id AND p.deleted_at IS NULL
-    WHERE s.route_id = ${trip.route_id}
-      AND (COALESCE(p.center_lat, s.gps_lat) IS NOT NULL)
-      AND (COALESCE(p.center_lng, s.gps_lng) IS NOT NULL)
-    ORDER BY s.sequence ASC
-    LIMIT 2
-  `;
+  //    Preference order for the source rows:
+  //      1. Stops linked to the trip's snapshotted variant version
+  //         (`route_stops.variant_version_id`). Historical-accurate.
+  //      2. Flat route_stops (route_id) — pre-versioning fallback.
+  //    Preference order for the coordinates within each stop:
+  //      1. spatial.places (Phase 3.5 place linkage)
+  //      2. route_stops.gps_lat/gps_lng (denormalized fallback)
+  //    Both preferences are expressed in one query so we don't do
+  //    per-stop N+1s.
+  //
+  //    Filter clause: use variant_version_id when the trip has a
+  //    snapshot; else fall back to the flat routeId match. Split into
+  //    two SQL calls rather than a UNION so the query planner picks the
+  //    right index.
+  let stops: StopRow[];
+  if (trip.route_variant_version_id) {
+    stops = await prisma.$queryRaw<StopRow[]>`
+      SELECT s.gps_lat, s.gps_lng, s.geofence_radius_m, s.stop_name, s.sequence,
+             p.center_lat AS place_center_lat,
+             p.center_lng AS place_center_lng,
+             p.radius_m   AS place_radius_m,
+             p.name       AS place_name
+      FROM route_stops s
+      LEFT JOIN spatial.places p ON p.id = s.place_id AND p.deleted_at IS NULL
+      WHERE s.variant_version_id = ${trip.route_variant_version_id}
+        AND (COALESCE(p.center_lat, s.gps_lat) IS NOT NULL)
+        AND (COALESCE(p.center_lng, s.gps_lng) IS NOT NULL)
+      ORDER BY s.sequence ASC
+      LIMIT 2
+    `;
+  } else {
+    stops = await prisma.$queryRaw<StopRow[]>`
+      SELECT s.gps_lat, s.gps_lng, s.geofence_radius_m, s.stop_name, s.sequence,
+             p.center_lat AS place_center_lat,
+             p.center_lng AS place_center_lng,
+             p.radius_m   AS place_radius_m,
+             p.name       AS place_name
+      FROM route_stops s
+      LEFT JOIN spatial.places p ON p.id = s.place_id AND p.deleted_at IS NULL
+      WHERE s.route_id = ${trip.route_id}
+        AND s.variant_version_id IS NULL
+        AND (COALESCE(p.center_lat, s.gps_lat) IS NOT NULL)
+        AND (COALESCE(p.center_lng, s.gps_lng) IS NOT NULL)
+      ORDER BY s.sequence ASC
+      LIMIT 2
+    `;
+  }
   if (stops.length === 0) {
     return NextResponse.json(
       { error: 'route has no stops with GPS coordinates' },

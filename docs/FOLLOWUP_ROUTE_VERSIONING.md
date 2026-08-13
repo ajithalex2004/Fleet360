@@ -13,27 +13,31 @@ Phase 1 (shipped) introduces variants and versions as an additive layer:
 `route_stops.routeId` link and the free-text `TripSchedule.direction`
 column. The versioned path is available for new writes.
 
-## Phase 2 — Reader migration
+## Phase 2 — Reader migration ✅ PARTIALLY SHIPPED
 
-Each reader should prefer the trip's snapshotted version when it exists,
-falling back to the route's current PUBLISHED variant version, falling
-back to the flat `route_stops` list. Order:
+Each reader prefers the trip's snapshotted version when it exists,
+falling back to the flat `route_stops` list.
 
 ```
-trip.routeVariantVersionId  →  variant's PUBLISHED version  →  route_stops flat
+trip.routeVariantVersionId  →  version's stops  →  route_stops flat (route_id)
 ```
 
-**Files to migrate (highest to lowest risk):**
+### Done in this pass
+
+| File | Change |
+|---|---|
+| [/api/driver-app/trips/[id]/geofences](../src/app/api/driver-app/trips/[id]/geofences/route.ts) | ✅ Loads `route_variant_version_id` on the trip; runs a version-scoped stops query when set, flat fallback otherwise. Composes with the existing Phase-3.5 spatial.places JOIN — projection now prefers Place geometry → snapshotted route_stop → flat stop. |
+| [/api/bus-ops/schedules/[id]/eta](../src/app/api/bus-ops/schedules/[id]/eta/route.ts) | ✅ Loads `route_variant_version_id`; scopes stops query to the snapshotted version when set. |
+| [src/lib/bus-ops/expand-roster.ts](../src/lib/bus-ops/expand-roster.ts) | ✅ When the trip is version-snapshotted, loads that version's stops in advance and resolves roster pickup/dropoff via id→name→legacy fallback so a passenger registered when v1 was live lands on the corresponding v2 stop, not a stale v1 id. |
+
+### Still to do (lower risk)
 
 | File | What to change |
 |---|---|
-| [/api/driver-app/trips/[id]/geofences](../src/app/api/driver-app/trips/[id]/geofences/route.ts) | Origin/destination lookup — join `trip_schedules → bus_route_variant_versions → route_stops` when `route_variant_version_id` is not null; else the current flat join |
-| [/api/bus-ops/schedules/[id]/eta](../src/app/api/bus-ops/schedules/[id]/eta/route.ts) | Same — the ETA evaluator reads stops for the trip; must read the *snapshotted* version to stay historically-accurate |
-| [/api/bus-ops/routes/[id]/stops](../src/app/api/bus-ops/routes/[id]/stops/route.ts) | Writer — GET returns the flat list today; POST/PUT should auto-create a DRAFT version instead of appending flat stops. Or deprecate this endpoint in favor of `POST .../route-variants/[variantId]/versions` |
+| [/api/bus-ops/routes/[id]/stops](../src/app/api/bus-ops/routes/[id]/stops/route.ts) | Writer — GET returns the flat list today; POST/PUT should auto-create a DRAFT version instead of appending flat stops. Or deprecate in favor of `POST .../route-variants/[variantId]/versions` |
 | [/api/bus-ops/route-stops](../src/app/api/bus-ops/route-stops/route.ts) | Read-only picker for the New Route form. Widen to accept a `variantVersionId` filter |
 | [/api/powerbi/stops](../src/app/api/powerbi/[endpoint]/route.ts) | PowerBI export — decide whether to emit one row per (stop, version) or just the current version |
 | Dispatch board + Trip Monitor pages | Show which version each trip ran (small badge) |
-| Roster expansion — [src/lib/bus-ops/expand-roster.ts](../src/lib/bus-ops/expand-roster.ts) | When materialising RoutePassenger rows into TripPassenger rows, use the trip's snapshotted stops (their pickup/dropoff stopIds must be resolved against the version, not the flat route) |
 
 ## Phase 3 — UI surfaces
 
