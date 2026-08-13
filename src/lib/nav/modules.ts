@@ -168,7 +168,7 @@ export const MODULES: ModuleDef[] = [
 
       // Workforce — passengers + drivers + roster.
       { label: 'Passengers',          href: '/bus-ops/passengers',          icon: Users,           group: 'Workforce' },
-      { label: 'Transport users',     href: '/bus-ops/staff',               icon: Users,           group: 'Workforce' },
+      { label: 'Employees',           href: '/bus-ops/staff',               icon: Users,           group: 'Workforce' },
       { label: 'Drivers Performance', href: '/bus-ops/drivers',             icon: UserCog,         group: 'Workforce' },
 
       // Requests — inbound demand / exceptions.
