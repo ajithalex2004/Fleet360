@@ -144,7 +144,12 @@ export default function PowerBiPage() {
         </h3>
         <ol className="text-sm text-slate-200 space-y-2 list-decimal list-inside">
           <li>In Power BI Desktop, choose <strong>Get Data → Web</strong>.</li>
-          <li>Paste an endpoint URL (see table below). Add the <code className="text-xs bg-slate-900 px-1 py-0.5 rounded">Cookie</code> header with your <code className="text-xs bg-slate-900 px-1 py-0.5 rounded">xl-session</code> value (or use an <em>Anonymous → Web</em> connector with a service account).</li>
+          <li>
+            Paste an endpoint URL (see table below). The connector <strong>must</strong> send
+            the <code className="text-xs bg-slate-900 px-1 py-0.5 rounded">Cookie: xl-session=…</code> header —
+            requests without a valid session are rejected with 401 by the tenant middleware.
+            Anonymous access is not supported; use a service-account session for automation.
+          </li>
           <li>Power BI flattens the <code className="text-xs bg-slate-900 px-1 py-0.5 rounded">value</code> array into a table automatically. Filter by <code className="text-xs bg-slate-900 px-1 py-0.5 rounded">?from=…&to=…</code> to scope the time window.</li>
         </ol>
       </div>

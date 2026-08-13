@@ -26,11 +26,15 @@ import {
 
 interface ViewBox { minLat: number; maxLat: number; minLng: number; maxLng: number; }
 
-const VIEW: ViewBox = { minLat: 24.93, maxLat: 25.32, minLng: 54.95, maxLng: 55.40 };
+// Fallback viewport for tenants who load the page before any GIS data has been
+// ingested. Uses Dubai (where Fleet360 was launched) so the demo dataset still
+// looks sensible — but the real per-render viewport is computed from GIS_DATA
+// in `useMemo` inside the component. See audit risk #20.
+const FALLBACK_VIEW: ViewBox = { minLat: 24.93, maxLat: 25.32, minLng: 54.95, maxLng: 55.40 };
 const W = 980;
 const H = 600;
 
-function project(lat: number, lng: number, view: ViewBox = VIEW): [number, number] {
+function project(lat: number, lng: number, view: ViewBox = FALLBACK_VIEW): [number, number] {
   const x = ((lng - view.minLng) / (view.maxLng - view.minLng)) * W;
   const y = H - ((lat - view.minLat) / (view.maxLat - view.minLat)) * H;
   return [x, y];
@@ -70,6 +74,29 @@ export default function GisPage() {
   );
   const [selectedRoute, setSelectedRoute] = useState<RouteFeature | null>(null);
   const [legendOpen, setLegendOpen] = useState(true);
+
+  // Auto-fit viewport to the actual GIS data (audit risk #20). Collects every
+  // coordinate across the visible layers, finds the bounding box, and pads it
+  // by 5% on each edge so features aren't flush against the SVG border.
+  const view: ViewBox = useMemo(() => {
+    const pts: Array<[number, number]> = [];
+    (GIS_DATA.routes    as RouteFeature[]).forEach(r => r.coordinates.forEach(c => pts.push(c)));
+    (GIS_DATA.stops     as StopFeature[]).forEach(s => pts.push([s.lat, s.lng]));
+    (GIS_DATA.traffic   as LineFeature[]).forEach(l => l.coordinates.forEach(c => pts.push(c)));
+    (GIS_DATA.serviceArea as PolygonFeature[]).forEach(p => p.ring.forEach(c => pts.push(c)));
+    (GIS_DATA.landmarks as PointFeature[]).forEach(p => pts.push([p.lat, p.lng]));
+    (GIS_DATA.demographics as PointFeature[]).forEach(p => pts.push([p.lat, p.lng]));
+    if (pts.length === 0) return FALLBACK_VIEW;
+    let minLat = pts[0][0], maxLat = pts[0][0], minLng = pts[0][1], maxLng = pts[0][1];
+    for (const [lat, lng] of pts) {
+      if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
+      if (lng < minLng) minLng = lng; if (lng > maxLng) maxLng = lng;
+    }
+    // 5% padding on each edge
+    const padLat = Math.max((maxLat - minLat) * 0.05, 0.001);
+    const padLng = Math.max((maxLng - minLng) * 0.05, 0.001);
+    return { minLat: minLat - padLat, maxLat: maxLat + padLat, minLng: minLng - padLng, maxLng: maxLng + padLng };
+  }, []);
 
   const toggle = (id: GisLayerId) => {
     setEnabled((prev) => {
@@ -165,7 +192,7 @@ export default function GisPage() {
               {enabled.has('traffic') && (
                 <g>
                   {(GIS_DATA.traffic as LineFeature[]).map((line) => (
-                    <path key={line.id} d={polylinePath(line.coordinates)}
+                    <path key={line.id} d={polylinePath(line.coordinates, view)}
                       fill="none" stroke="#64748b" strokeWidth="2.5" strokeOpacity="0.55" />
                   ))}
                 </g>
@@ -175,7 +202,7 @@ export default function GisPage() {
               {enabled.has('serviceArea') && (
                 <g>
                   {(GIS_DATA.serviceArea as PolygonFeature[]).map((p) => (
-                    <path key={p.id} d={polygonPath(p.ring)}
+                    <path key={p.id} d={polygonPath(p.ring, view)}
                       fill={densityColor(p.density)} stroke={densityStroke(p.density)}
                       strokeWidth="1.5" strokeOpacity="0.7" />
                   ))}
@@ -186,7 +213,7 @@ export default function GisPage() {
               {enabled.has('demographics') && (
                 <g>
                   {(GIS_DATA.demographics as PointFeature[]).map((d, i) => {
-                    const [x, y] = project(d.lat, d.lng);
+                    const [x, y] = project(d.lat, d.lng, view);
                     return <circle key={d.id} cx={x} cy={y} r="3" fill="#ec4899" fillOpacity="0.4" />;
                   })}
                 </g>
@@ -198,7 +225,7 @@ export default function GisPage() {
                   {(GIS_DATA.routes as RouteFeature[]).map((r) => {
                     const isSelected = selectedRoute?.id === r.id;
                     return (
-                      <path key={r.id} d={polylinePath(r.coordinates)}
+                      <path key={r.id} d={polylinePath(r.coordinates, view)}
                         fill="none"
                         stroke={isSelected ? '#f59e0b' : '#8b5cf6'}
                         strokeWidth={isSelected ? 4 : 2.5}
@@ -214,7 +241,7 @@ export default function GisPage() {
               {enabled.has('stops') && (
                 <g>
                   {(GIS_DATA.stops as StopFeature[]).map((s) => {
-                    const [x, y] = project(s.lat, s.lng);
+                    const [x, y] = project(s.lat, s.lng, view);
                     const isOnRoute = selectedRoute?.id === s.routeId;
                     return (
                       <g key={s.id}>
@@ -234,7 +261,7 @@ export default function GisPage() {
               {enabled.has('landmarks') && (
                 <g>
                   {(GIS_DATA.landmarks as PointFeature[]).map((p) => {
-                    const [x, y] = project(p.lat, p.lng);
+                    const [x, y] = project(p.lat, p.lng, view);
                     const icon = p.category === 'HOSPITAL' ? '🏥' : p.category === 'SCHOOL' ? '🏫' : p.category === 'MALL' ? '🛍' : p.category === 'TRANSIT' ? '🚇' : '🏢';
                     return (
                       <g key={p.id}>

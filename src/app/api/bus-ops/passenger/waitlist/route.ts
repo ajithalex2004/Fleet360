@@ -21,6 +21,12 @@ import { captureException } from '@/lib/sentry';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  // Audit risk #13 — tenant scoping. Both the trip and the staff member must
+  // be resolved *inside the caller's tenant* so an authenticated user for one
+  // tenant can't enroll another tenant's employee onto another tenant's trip.
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+
   try {
     const body = await req.json();
     const staffMemberId = String(body?.staffMemberId ?? '').trim();
@@ -29,8 +35,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'staffMemberId and tripId are required' }, { status: 400 });
     }
 
-    const trip = await prisma.tripSchedule.findUnique({
-      where: { id: tripId },
+    const trip = await prisma.tripSchedule.findFirst({
+      where: { id: tripId, tenantId },
       select: { id: true, status: true, deletedAt: true },
     });
     if (!trip || trip.deletedAt) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
@@ -38,8 +44,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Trip is ${trip.status}` }, { status: 409 });
     }
 
-    const staff = await prisma.staffMember.findUnique({
-      where: { id: staffMemberId },
+    const staff = await prisma.staffMember.findFirst({
+      where: { id: staffMemberId, tenantId },
       select: { id: true, name: true, employeeId: true, department: true, deletedAt: true },
     });
     if (!staff || staff.deletedAt) return NextResponse.json({ error: 'Staff not found' }, { status: 404 });
@@ -57,6 +63,7 @@ export async function POST(req: NextRequest) {
     const passenger = await prisma.tripPassenger.create({
       data: {
         tripId,
+        tenantId,
         staffMemberId,
         employeeId: staff.employeeId,
         employeeName: staff.name,
@@ -67,7 +74,7 @@ export async function POST(req: NextRequest) {
     });
 
     void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
+      tenantId,
       userId: req.headers.get('x-user-id') ?? 'system',
       userRole: req.headers.get('x-user-role') ?? 'STAFF',
       entityType: 'TripPassenger',
