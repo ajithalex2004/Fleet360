@@ -36,11 +36,11 @@ Adding `/locations?type=STOP`, `?type=DEPOT`, etc. requires the sub-page matcher
 
 ## Phase 3 — Legacy sunset + first-class references
 
-Only after every module has been on `spatial.places` for ≥1 release.
+### 3a. Drop legacy tables ✅ SHIPPED
 
-### 3a. Drop legacy tables
-- `DROP TABLE public.bus_ops_geofences` (and remove the `BusOpsGeofence` Prisma model).
-- Remove the backfill INSERT from `prisma/raw/add_spatial_places.sql` (leave a note in the migration header pointing to the follow-up commit).
+- `public.bus_ops_geofences` dropped ([prisma/raw/drop_bus_ops_geofences.sql](../prisma/raw/drop_bus_ops_geofences.sql)) with an orphan-preflight that refuses to run if any row is missing from `spatial.places`.
+- `BusOpsGeofence` Prisma model removed from [prisma/schema.prisma](../prisma/schema.prisma) with a sunset marker pointing here.
+- Backfill INSERT in `add_spatial_places.sql` stays for now — it's idempotent (`NOT EXISTS` guard) and safe to re-run against environments that never received the Phase 2a cutover. Remove in a follow-up commit once every environment has been past Phase 3a for a release.
 
 ### 3b. Adopt Places for other cross-module entities
 Optional but recommended — reduces duplicated geo-data across the platform:

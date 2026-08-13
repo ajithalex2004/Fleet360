@@ -2357,36 +2357,12 @@ model TripIncident {
   @@schema("operations")
 }
 
-/// Operator-defined named zones used by the bus-ops module. First-class
-/// entity so a single zone (garage, base camp, accommodation, stop) can be
-/// referenced from many places — routes, driver-app arrival detection,
-/// incident geo-triggers — without duplicating the geometry.
-/// Shape is either CIRCLE (centerLat/centerLng + radiusM) or POLYGON
-/// (polygon JSON = [{lat, lng}, …] closed automatically at render time).
-model BusOpsGeofence {
-  id        String    @id @default(uuid())
-  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
-  tenantId  String    @map("tenant_id")
-  name      String
-  type      String    // STOP | GARAGE | ORIGIN_DESTINATION | BASE_CAMP | ACCOMMODATION
-  shape     String    // CIRCLE | POLYGON
-  centerLat Float?    @map("center_lat")
-  centerLng Float?    @map("center_lng")
-  radiusM   Int?      @map("radius_m")
-  polygon   Json?
-  address   String?
-  notes     String?
-  active    Boolean   @default(true)
-  createdBy String?   @map("created_by")
-
-  @@index([tenantId], map: "idx_bus_ops_geofences_tenant_id")
-  @@index([deletedAt], map: "idx_bus_ops_geofences_deleted_at")
-  @@index([type], map: "idx_bus_ops_geofences_type")
-  @@map("bus_ops_geofences")
-  @@schema("public")
-}
+// The `BusOpsGeofence` model + `public.bus_ops_geofences` table were
+// removed in Phase 3a of the shared-geospatial capability. Data moved
+// to `spatial.places` in Phase 1 (id-preserving backfill), and the
+// /api/bus-ops/geofences endpoint switched storage in Phase 2a. See
+// docs/FOLLOWUP_SHARED_GEOSPATIAL_PHASES_2_3.md for the migration
+// history and prisma/raw/drop_bus_ops_geofences.sql for the DDL.
 
 // ============================================================
 // SHARED GEOSPATIAL — spatial.places
