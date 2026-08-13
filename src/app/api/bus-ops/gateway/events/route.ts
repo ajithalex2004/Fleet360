@@ -35,7 +35,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import {
-  verifyGatewaySignature,
+  verifyGatewaySignatureWithSecret,
+  resolveGatewaySecret,
   detectTransitions,
   type ProcessedGatewayEvent,
   type PresenceState,
@@ -61,10 +62,10 @@ interface IngestSummary {
 export async function POST(req: NextRequest) {
   const rawBody = await req.text();
   const sig = req.headers.get('x-gateway-signature');
-  if (!verifyGatewaySignature(rawBody, sig)) {
-    return NextResponse.json({ ok: false, error: 'Invalid signature' }, { status: 401 });
-  }
 
+  // Peek gatewayId from body BEFORE HMAC verify so we can resolve the
+  // per-gateway secret. The JSON parse is a read-only side-effect-free
+  // op; nothing downstream acts on payload until HMAC verifies below.
   let payload: { gatewayId?: string; events?: ProcessedGatewayEvent[]; scanWindow?: RawScanWindow; location?: { lat: number; lng: number } };
   try {
     payload = JSON.parse(rawBody);
@@ -78,10 +79,23 @@ export async function POST(req: NextRequest) {
 
   const gateway = await prisma.bleGateway.findUnique({
     where: { gatewayId },
-    select: { vehicleId: true, tenantId: true, isActive: true, rssiThresholdDbm: true, presenceGraceSeconds: true },
+    select: {
+      vehicleId: true, tenantId: true, isActive: true,
+      rssiThresholdDbm: true, presenceGraceSeconds: true,
+      // Per-gateway secret. When null, resolveGatewaySecret falls back
+      // to the BLE_GATEWAY_SHARED_SECRET env var for backward compat
+      // during the per-secret rollout.
+      secret: true,
+    },
   });
   if (!gateway || gateway.isActive === false) {
     return NextResponse.json({ ok: false, error: 'Gateway not registered or inactive' }, { status: 404 });
+  }
+
+  // Verify HMAC using the per-gateway secret (or env fallback).
+  const effectiveSecret = resolveGatewaySecret(gateway.secret);
+  if (!verifyGatewaySignatureWithSecret(rawBody, sig, effectiveSecret)) {
+    return NextResponse.json({ ok: false, error: 'Invalid signature' }, { status: 401 });
   }
 
   // tenantId is derived from the gateway row — hardware devices authenticate

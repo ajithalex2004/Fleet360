@@ -28,10 +28,18 @@ export async function POST(req: NextRequest) {
       data: { ...body, tenantId },
       include: { trip: true },
     });
-    // Increment trip confirmed count
+    // Recount confirmedCount from the source of truth (TripPassenger rows)
+    // instead of `increment: 1`. The roster-expansion helper
+    // (src/lib/bus-ops/expand-roster.ts) also updates this field by
+    // re-counting; using increment here would race under concurrent
+    // creates + expansions and could double- or under-count on retries.
+    // A single point of truth avoids drift.
+    const attendance = await prisma.tripPassenger.count({
+      where: { tripId: body.tripId, deletedAt: null },
+    });
     await prisma.tripSchedule.update({
       where: { id: body.tripId },
-      data: { confirmedCount: { increment: 1 } },
+      data: { confirmedCount: attendance },
     });
     return NextResponse.json(passenger, { status: 201 });
   } catch (error) {

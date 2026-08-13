@@ -2182,6 +2182,13 @@ model BleGateway {
   lastSeenAt           DateTime? @map("last_seen_at") @db.Timestamptz(6)
   lastEventAt          DateTime? @map("last_event_at") @db.Timestamptz(6)
   notes                String?
+  /// Per-gateway HMAC secret. Rotate via
+  /// POST /api/bus-ops/gateways/[id]/rotate-secret. When NULL the
+  /// ingest endpoint falls back to BLE_GATEWAY_SHARED_SECRET env var
+  /// for backward compat — remove that env var once every gateway is
+  /// rotated at least once.
+  secret               String?
+  secretRotatedAt      DateTime? @map("secret_rotated_at") @db.Timestamptz(6)
 
   @@index([tenantId],  map: "idx_ble_gateways_tenant_id")
   @@index([gatewayId], map: "idx_ble_gateways_gateway_id")
