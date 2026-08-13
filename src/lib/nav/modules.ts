@@ -22,6 +22,7 @@ import {
   Calculator, Repeat, Wallet, DollarSign, Lock, Network, Sliders, FileSearch,
   Sparkles, MessageCircle, Tag, History, CheckCircle2, PieChart, Brain,
   Paperclip, Send, Info, Pin, FileMinus, Target, BookText, TrendingUp, Clock,
+  CalendarCheck2,
   Gauge,
   type LucideIcon,
 } from 'lucide-react';
@@ -142,6 +143,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'Route planner',   href: '/bus-ops/route-planner',   icon: Route },
       { label: 'Schedules',       href: '/bus-ops/schedules',       icon: Calendar },
       { label: 'Schedule Templates', href: '/bus-ops/schedule-templates', icon: Repeat },
+      { label: 'Transport Calendars', href: '/bus-ops/transport-calendars', icon: CalendarCheck2 },
       { label: 'Trip Monitor',        href: '/bus-ops/dispatch',        icon: Radio },
       { label: 'Live Fleet Map',      href: '/bus-ops/live-map',        icon: Radar },
       { label: 'Optimisation Status', href: '/bus-ops/optimisation',    icon: Sparkles },
