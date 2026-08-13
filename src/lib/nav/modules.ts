@@ -166,10 +166,10 @@ export const MODULES: ModuleDef[] = [
       { label: 'Geofences',           href: '/bus-ops/geofences',           icon: MapPin,          group: 'Tracking' },
       { label: 'Gateways',            href: '/bus-ops/gateways',            icon: Network,         group: 'Tracking' },
 
-      // People — passengers + drivers + roster.
-      { label: 'Passengers',          href: '/bus-ops/passengers',          icon: Users,           group: 'People' },
-      { label: 'Transport users',     href: '/bus-ops/staff',               icon: Users,           group: 'People' },
-      { label: 'Drivers Performance', href: '/bus-ops/drivers',             icon: UserCog,         group: 'People' },
+      // Workforce — passengers + drivers + roster.
+      { label: 'Passengers',          href: '/bus-ops/passengers',          icon: Users,           group: 'Workforce' },
+      { label: 'Transport users',     href: '/bus-ops/staff',               icon: Users,           group: 'Workforce' },
+      { label: 'Drivers Performance', href: '/bus-ops/drivers',             icon: UserCog,         group: 'Workforce' },
 
       // Requests — inbound demand / exceptions.
       { label: 'Transport requests',  href: '/bus-ops/transport-requests',  icon: ClipboardList,   group: 'Requests' },
