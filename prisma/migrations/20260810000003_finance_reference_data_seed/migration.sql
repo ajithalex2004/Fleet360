@@ -29,6 +29,15 @@ CREATE TABLE IF NOT EXISTS finance_tax_categories (
   fta_code    TEXT
 );
 
+-- The ON CONFLICT clause below references (tenant_id, code) which
+-- doesn't exist on the fresh CREATE TABLE above. Production picked
+-- up tenant_id via a retired runtime-DDL path. Adding it defensively
+-- with IF NOT EXISTS so shadow-DB replay in CI works and prod is a
+-- no-op. Composite unique enables the ON CONFLICT.
+ALTER TABLE finance_tax_categories ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS finance_tax_categories_tenant_code_key
+  ON finance_tax_categories (tenant_id, code);
+
 INSERT INTO finance_tax_categories (code, name, rate, description, fta_code, is_default)
 VALUES
   ('STANDARD',     'Standard Rate', 5.00, 'Standard UAE VAT at 5%',                                        '1a',  TRUE),
