@@ -21,7 +21,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Users, Plus, Edit, Trash2, X, UserPlus } from 'lucide-react';
+import { Users, Plus, Edit, Trash2, X, UserPlus, Upload, FileDown } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -85,6 +85,215 @@ interface EmpDraft {
 }
 const EMPTY_EMP: EmpDraft = { employeeId: '', name: '', department: '', contactNumber: '', email: '', shiftType: '' };
 
+// ── Bulk import ─────────────────────────────────────────────────────────
+//
+// CSV columns (case-insensitive, order-flexible):
+//   employee_id, route_name (or route_code), pickup_stop, dropoff_stop,
+//   pickup_time (HH:MM), dropoff_time, effective_from (YYYY-MM-DD),
+//   effective_to (optional), notes
+//
+// Server resolves employee_id → StaffMember, route_name/code → BusRoute,
+// stop names → RouteStop on that route. Rows with unresolvable references
+// are reported per-row in the response; overlap with existing active
+// enrollment counts as `skipped` (not an error).
+
+function parseCsv(text: string): Array<Record<string, string>> {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+  const out: Array<Record<string, string>> = [];
+  for (let i = 1; i < lines.length; i++) {
+    const raw = lines[i];
+    if (!raw.trim()) continue;
+    // Simple splitter — does NOT handle quoted commas. Ops should
+    // quote-strip in Excel before export or use one of the safer
+    // header names. For MVP the columns are UUIDs / short names, so
+    // embedded commas are unlikely.
+    const cells = raw.split(',').map(c => c.trim());
+    const row: Record<string, string> = {};
+    header.forEach((h, j) => { row[h] = cells[j] ?? ''; });
+    out.push(row);
+  }
+  return out;
+}
+
+const CSV_TO_API: Record<string, string> = {
+  employee_id: 'employeeId',
+  route_name:  'routeName',
+  route_code:  'routeCode',
+  pickup_stop: 'pickupStopName',
+  dropoff_stop:'dropoffStopName',
+  pickup_time: 'pickupTime',
+  dropoff_time:'dropoffTime',
+  effective_from:'effectiveFrom',
+  effective_to:  'effectiveTo',
+  notes: 'notes',
+};
+
+function csvRowToApi(row: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(row)) {
+    if (!v) continue;
+    const apiKey = CSV_TO_API[k];
+    if (apiKey) out[apiKey] = v;
+  }
+  return out;
+}
+
+const CSV_TEMPLATE =
+  'employee_id,route_name,pickup_stop,dropoff_stop,pickup_time,dropoff_time,effective_from,effective_to,notes\n' +
+  'EMP-001,Marina Morning Route,ICAD Gate 3,HQ Main Entrance,07:00,08:15,2026-08-13,,\n';
+
+function BulkImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [csv, setCsv] = useState('');
+  const [preview, setPreview] = useState<Array<Record<string, string>>>([]);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState<{ total: number; created: number; skipped: number; errored: number; errors: Array<{ row: number; error: string }> } | null>(null);
+  const [err, setErr] = useState('');
+
+  const onFile = async (f: File | null) => {
+    if (!f) return;
+    const text = await f.text();
+    setCsv(text);
+    try { setPreview(parseCsv(text)); }
+    catch { setErr('Could not parse CSV — check header row + column names'); }
+  };
+
+  const submit = async () => {
+    if (preview.length === 0) { setErr('Load a CSV file first'); return; }
+    setImporting(true); setErr(''); setResult(null);
+    try {
+      const rows = preview.map(csvRowToApi);
+      const res = await fetch('/api/bus-ops/route-passengers/bulk-import', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
+      setResult(data);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Import failed');
+    } finally { setImporting(false); }
+  };
+
+  const downloadTemplate = () => {
+    const blob = new Blob([CSV_TEMPLATE], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'route-passenger-import-template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div className="w-full max-w-3xl max-h-[85vh] bg-slate-800/95 border border-white/10 rounded-2xl flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+          <h2 className="text-lg font-bold text-white">Bulk Import Passengers</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {err && <div className="bg-rose-500/15 border border-rose-500/40 rounded-lg px-3 py-2 text-rose-200 text-xs">{err}</div>}
+
+          {!result && (
+            <>
+              <div>
+                <label className="block text-sm text-slate-300 mb-2">CSV file</label>
+                <input type="file" accept=".csv,text/csv"
+                  onChange={e => onFile(e.target.files?.[0] ?? null)}
+                  className="block w-full text-sm text-slate-300 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border file:border-white/10 file:bg-slate-700 file:text-white file:text-xs file:hover:border-violet-500/40" />
+                <button onClick={downloadTemplate}
+                  className="mt-2 inline-flex items-center gap-1 text-[11px] text-violet-300 hover:text-violet-200">
+                  <FileDown className="w-3 h-3" /> Download CSV template
+                </button>
+              </div>
+              <div className="text-[11px] text-slate-400 bg-slate-900/60 rounded-lg p-3 border border-white/5">
+                <strong className="text-slate-200">Columns:</strong>{' '}
+                <code>employee_id</code> (business ID), <code>route_name</code> or <code>route_code</code>,
+                {' '}<code>pickup_stop</code>, <code>dropoff_stop</code>, <code>pickup_time</code> (HH:MM),
+                {' '}<code>dropoff_time</code>, <code>effective_from</code> (YYYY-MM-DD),
+                {' '}<code>effective_to</code> (optional), <code>notes</code>. Header is required, order flexible.
+              </div>
+              {preview.length > 0 && (
+                <div className="bg-slate-900/60 border border-white/5 rounded-lg p-3">
+                  <p className="text-xs text-slate-400 mb-2">Preview — {preview.length} row{preview.length === 1 ? '' : 's'}</p>
+                  <div className="overflow-x-auto max-h-48">
+                    <table className="text-xs">
+                      <thead className="text-slate-500 text-[10px]">
+                        <tr>{Object.keys(preview[0]).map(k => <th key={k} className="px-2 py-1 text-left whitespace-nowrap">{k}</th>)}</tr>
+                      </thead>
+                      <tbody className="text-slate-300 font-mono">
+                        {preview.slice(0, 10).map((r, i) => (
+                          <tr key={i}>{Object.keys(preview[0]).map(k => <td key={k} className="px-2 py-1 whitespace-nowrap">{r[k]}</td>)}</tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {preview.length > 10 && <p className="text-[10px] text-slate-500 pt-2">+{preview.length - 10} more…</p>}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {result && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-4 gap-2">
+                <div className="bg-slate-900/60 border border-white/10 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-white">{result.total}</p>
+                  <p className="text-[10px] text-slate-500 uppercase mt-0.5">Total</p>
+                </div>
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-emerald-300">{result.created}</p>
+                  <p className="text-[10px] text-emerald-400/70 uppercase mt-0.5">Created</p>
+                </div>
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-amber-300">{result.skipped}</p>
+                  <p className="text-[10px] text-amber-400/70 uppercase mt-0.5">Skipped (overlap)</p>
+                </div>
+                <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-rose-300">{result.errored}</p>
+                  <p className="text-[10px] text-rose-400/70 uppercase mt-0.5">Errored</p>
+                </div>
+              </div>
+              {result.errors.length > 0 && (
+                <div className="bg-rose-500/5 border border-rose-500/20 rounded-lg p-3 max-h-64 overflow-y-auto">
+                  <p className="text-xs text-rose-300 font-medium mb-2">Errors ({result.errors.length})</p>
+                  <ul className="space-y-1 text-[11px]">
+                    {result.errors.map((e, i) => (
+                      <li key={i} className="text-slate-300">
+                        <span className="text-slate-500">row {e.row}:</span> {e.error}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 px-5 py-4 border-t border-white/5">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5 text-sm">
+            {result ? 'Close' : 'Cancel'}
+          </button>
+          {!result && (
+            <button onClick={submit} disabled={importing || preview.length === 0}
+              className="px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50 text-sm inline-flex items-center gap-1.5">
+              <Upload className="w-4 h-4" /> {importing ? `Importing ${preview.length}…` : `Import ${preview.length} row${preview.length === 1 ? '' : 's'}`}
+            </button>
+          )}
+          {result && (
+            <button onClick={onDone}
+              className="px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 text-sm">
+              Done
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const STATUS_PILL: Record<string, string> = {
   ACTIVE:   'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
   INACTIVE: 'bg-slate-500/20 text-slate-400 border-slate-500/40',
@@ -110,6 +319,7 @@ export default function PassengersPage() {
   const [empDraft, setEmpDraft]   = useState<EmpDraft | null>(null);
   const [savingEmp, setSavingEmp] = useState(false);
   const [empError, setEmpError]   = useState('');
+  const [showImport, setShowImport] = useState(false);
 
   const loadRefData = useCallback(async () => {
     // Parallel fetches — none of these depend on each other.
@@ -298,10 +508,16 @@ export default function PassengersPage() {
         icon={Users}
         accent="violet"
         actions={
-          <button onClick={openNew}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
-            <Plus className="w-4 h-4" /> Add Passenger
-          </button>
+          <>
+            <button onClick={() => setShowImport(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 border border-white/10 px-3 py-2 text-sm text-slate-200 hover:border-violet-500/40 hover:text-white">
+              <Upload className="w-4 h-4" /> Bulk Import
+            </button>
+            <button onClick={openNew}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+              <Plus className="w-4 h-4" /> Add Passenger
+            </button>
+          </>
         }
       />
 
@@ -385,6 +601,10 @@ export default function PassengersPage() {
           </table>
         )}
       </div>
+
+      {showImport && (
+        <BulkImportModal onClose={() => setShowImport(false)} onDone={() => { setShowImport(false); loadPassengers(); }} />
+      )}
 
       {/* Inline "New Employee" sub-modal — sits on top of the passenger modal
           when open. Its scope is intentionally narrow: create a StaffMember
