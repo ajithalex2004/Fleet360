@@ -5,8 +5,24 @@ import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from 'recharts';
-import { LineChart as LineChartIcon, RefreshCw, Leaf, Wrench, ShieldCheck } from 'lucide-react';
+import { LineChart as LineChartIcon, RefreshCw, Leaf, Wrench, ShieldCheck, TrendingUp, X } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+
+interface CostRow {
+  id: string; label: string;
+  routeName?: string | null; departureAt?: string;
+  trips?: number;
+  fuelL: number; km: number; minutes: number; passengers: number;
+  fuelCost: number; driverCost: number; vehicleCost: number; totalCost: number;
+  costPerTrip?: number | null; costPerPax?: number | null;
+}
+interface CostResponse {
+  groupBy: 'trip' | 'route';
+  windowDays: number;
+  currency: string;
+  unitCosts: { fuelPerL: number; driverPerHr: number; vehiclePerKm: number };
+  rows: CostRow[];
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -83,6 +99,19 @@ function MetricBar({ label, value, color, max = 100 }: { label: string; value: n
 export default function BusOpsAnalyticsPage() {
   const [data,    setData]    = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(true);
+  const [costDrill, setCostDrill] = useState<'trip' | 'route' | null>(null);
+  const [costResp,  setCostResp]  = useState<CostResponse | null>(null);
+  const [costLoading, setCostLoading] = useState(false);
+
+  useEffect(() => {
+    if (!costDrill) return;
+    setCostLoading(true); setCostResp(null);
+    fetch(`/api/bus-ops/analytics/cost-breakdown?groupBy=${costDrill}&days=30`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then((d: CostResponse) => setCostResp(d))
+      .catch(err => setCostResp({ groupBy: costDrill, windowDays: 30, currency: 'AED', unitCosts: { fuelPerL: 0, driverPerHr: 0, vehiclePerKm: 0 }, rows: [] }) )
+      .finally(() => setCostLoading(false));
+  }, [costDrill]);
 
   const load = useCallback(async () => {
     try {
@@ -208,7 +237,13 @@ export default function BusOpsAnalyticsPage() {
         </div>
 
         <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 space-y-4">
-          <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">Cost (last 30 days)</p>
+          <div className="flex items-start justify-between">
+            <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">Cost (last 30 days)</p>
+            <button onClick={() => setCostDrill('trip')}
+              className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-violet-500/40 bg-violet-500/10 text-violet-200 hover:bg-violet-500/20">
+              <TrendingUp className="w-3 h-3" /> Drill down
+            </button>
+          </div>
           <div className="grid grid-cols-3 gap-4">
             <div>
               <p className="text-2xl font-bold text-white">AED {(kpis.costPerTrip ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
@@ -325,6 +360,89 @@ export default function BusOpsAnalyticsPage() {
           </div>
         </div>
       </div>
+
+      {/* Cost drill-down modal */}
+      {costDrill && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-6xl max-h-[85vh] bg-slate-800/95 border border-white/10 rounded-2xl flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+              <div>
+                <h2 className="text-lg font-bold text-white">Cost breakdown (last 30 days)</h2>
+                <div className="flex gap-2 mt-2">
+                  <button onClick={() => setCostDrill('trip')}
+                    className={`text-[11px] px-3 py-1 rounded-full border ${costDrill === 'trip' ? 'bg-violet-500/25 border-violet-500/50 text-white' : 'border-white/10 text-slate-400 hover:border-white/20'}`}>
+                    Per Trip
+                  </button>
+                  <button onClick={() => setCostDrill('route')}
+                    className={`text-[11px] px-3 py-1 rounded-full border ${costDrill === 'route' ? 'bg-violet-500/25 border-violet-500/50 text-white' : 'border-white/10 text-slate-400 hover:border-white/20'}`}>
+                    Per Route
+                  </button>
+                </div>
+              </div>
+              <button onClick={() => setCostDrill(null)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5">
+              {costLoading ? (
+                <div className="text-center text-slate-400 text-sm animate-pulse py-10">Loading breakdown…</div>
+              ) : !costResp || costResp.rows.length === 0 ? (
+                <div className="text-center text-slate-400 text-sm py-10">
+                  No completed trips with cost data in the last {costResp?.windowDays ?? 30} days.
+                </div>
+              ) : (
+                <>
+                  <div className="text-[10px] text-slate-500 mb-3 uppercase">
+                    Unit rates: fuel AED {costResp.unitCosts.fuelPerL}/L · driver AED {costResp.unitCosts.driverPerHr}/hr · vehicle AED {costResp.unitCosts.vehiclePerKm}/km
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/5 text-xs text-slate-400">
+                        <th className="px-3 py-2 text-left">{costDrill === 'trip' ? 'Trip' : 'Route'}</th>
+                        {costDrill === 'trip'
+                          ? <><th className="px-3 py-2 text-left">Route</th><th className="px-3 py-2 text-left">Departure</th></>
+                          : <th className="px-3 py-2 text-right">Trips</th>}
+                        <th className="px-3 py-2 text-right">Fuel L</th>
+                        <th className="px-3 py-2 text-right">Km</th>
+                        <th className="px-3 py-2 text-right">Min</th>
+                        <th className="px-3 py-2 text-right">Pax</th>
+                        <th className="px-3 py-2 text-right text-amber-300">Fuel AED</th>
+                        <th className="px-3 py-2 text-right text-cyan-300">Driver AED</th>
+                        <th className="px-3 py-2 text-right text-violet-300">Vehicle AED</th>
+                        <th className="px-3 py-2 text-right font-bold">Total AED</th>
+                        {costDrill === 'route' && <th className="px-3 py-2 text-right text-slate-400">/ Trip</th>}
+                        <th className="px-3 py-2 text-right text-slate-400">/ Pax</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {costResp.rows.map(r => (
+                        <tr key={r.id} className="border-b border-white/5 hover:bg-white/5">
+                          <td className="px-3 py-2 font-mono text-xs text-white">{r.label}</td>
+                          {costDrill === 'trip'
+                            ? <><td className="px-3 py-2 text-xs text-slate-300 truncate max-w-[10rem]">{r.routeName ?? '—'}</td>
+                                <td className="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">{r.departureAt ? new Date(r.departureAt).toLocaleDateString('en-AE', { day:'2-digit', month:'short'}) : '—'}</td></>
+                            : <td className="px-3 py-2 text-xs text-right text-slate-300">{r.trips ?? '—'}</td>}
+                          <td className="px-3 py-2 text-xs text-right text-white font-mono">{r.fuelL}</td>
+                          <td className="px-3 py-2 text-xs text-right text-white font-mono">{r.km}</td>
+                          <td className="px-3 py-2 text-xs text-right text-white font-mono">{r.minutes}</td>
+                          <td className="px-3 py-2 text-xs text-right text-white font-mono">{r.passengers}</td>
+                          <td className="px-3 py-2 text-xs text-right text-amber-300 font-mono">{r.fuelCost.toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
+                          <td className="px-3 py-2 text-xs text-right text-cyan-300 font-mono">{r.driverCost.toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
+                          <td className="px-3 py-2 text-xs text-right text-violet-300 font-mono">{r.vehicleCost.toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
+                          <td className="px-3 py-2 text-xs text-right text-white font-bold font-mono">{r.totalCost.toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
+                          {costDrill === 'route' && <td className="px-3 py-2 text-xs text-right text-slate-300 font-mono">{r.costPerTrip != null ? r.costPerTrip.toFixed(0) : '—'}</td>}
+                          <td className="px-3 py-2 text-xs text-right text-slate-300 font-mono">{r.costPerPax != null ? r.costPerPax.toFixed(2) : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* In-transit now */}
       {kpis.inTransitTrips > 0 && (
