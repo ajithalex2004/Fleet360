@@ -5088,43 +5088,13 @@ model CustomerInteraction {
 /// in the mobile-sync doc, non-trip incidents are owned by
 /// Operations, not Workforce or Fleet.) Closes gap 5 of the
 /// mobile-sync doc.
-model Incident {
-  id        String    @id @default(uuid())
-  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
-
-  incidentNo       String?   @unique @map("incident_no")
-  tenantId         String?   @map("tenant_id")
-  reportedBy       String?   @map("reported_by")  // driver, staff, or system id
-  occurredAt       DateTime  @map("occurred_at") @db.Timestamptz(6)
-  incidentType     String    @map("incident_type")
-    // SAFETY | WORKPLACE | CUSTOMER_COMPLAINT | SECURITY | REGULATORY |
-    // FACILITY | ENVIRONMENTAL | NEAR_MISS | OTHER
-  severity         String    @default("LOW") // LOW | MEDIUM | HIGH | CRITICAL
-  description      String?
-  location         String?
-  latitude         Decimal?  @db.Decimal
-  longitude        Decimal?  @db.Decimal
-  photoUrls        Json?     @map("photo_urls")
-  injuriesReported Boolean?  @default(false) @map("injuries_reported")
-  policeReport     Boolean?  @default(false) @map("police_report")
-  policeReportNo   String?   @map("police_report_no")
-  insuranceClaim   String?   @map("insurance_claim")
-  status           String    @default("OPEN") // OPEN | INVESTIGATING | RESOLVED | CLOSED
-  assignedTo       String?   @map("assigned_to")
-  resolvedAt       DateTime? @map("resolved_at") @db.Timestamptz(6)
-  resolvedBy       String?   @map("resolved_by")
-  resolution       String?
-
-  @@index([tenantId, occurredAt], map: "idx_incidents_tenant_occurred")
-  @@index([incidentType], map: "idx_incidents_type")
-  @@index([severity], map: "idx_incidents_severity")
-  @@index([status], map: "idx_incidents_status")
-  @@index([deletedAt], map: "idx_incidents_deleted_at")
-  @@map("incidents")
-  @@schema("public")
-}
+// Removed: `Incident` model previously mapped to `public.incidents`.
+// That table was dropped during the schema-domain-split (see
+// prisma/raw/drop_dead_public_incidents_table.sql). Incidents from
+// every module now live in `operations.incidents` via the
+// `TripIncident` model with the `moduleSource` discriminator.
+// Verified zero references via `grep prisma.incident` and
+// `import { Incident } from '@prisma/client'` before removal.
 
 // ============================================================
 // DOMAIN EVENT INFRASTRUCTURE (outbox + consumer inbox)
