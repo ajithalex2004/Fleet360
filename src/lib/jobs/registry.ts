@@ -57,6 +57,7 @@ export interface JobDef {
 import { runAutoCloseTrips }         from '@/lib/jobs/auto-close-trips';
 import { runDunningSweep }           from '@/lib/jobs/dunning-sweep';
 import { runOutboxPublisher }        from '@/lib/jobs/outbox-publisher';
+import { runBusOpsGenerateScheduleTemplates } from '@/lib/jobs/bus-ops-generate-schedule-templates';
 import {
   runFuelSweepBill,
   runTrafficFinesSweepBill,
@@ -143,6 +144,12 @@ export const JOB_REGISTRY: JobDef[] = [
     description:    'Domain event outbox publisher — polls event_outbox and fans out to consumers',
     handler:        runOutboxPublisher,
     maxDurationSec: 60,
+  },
+  {
+    name:           'bus-ops-generate-schedule-templates',
+    description:    'Nightly TripSchedule generation from active BusOpsScheduleTemplates (rolling 7-day window; override via ?days=N)',
+    handler:        runBusOpsGenerateScheduleTemplates,
+    maxDurationSec: 300,
   },
 ];
 
