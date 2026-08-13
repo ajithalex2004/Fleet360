@@ -1,14 +1,17 @@
 /**
  * /api/bus-ops/geofences — Bus-ops named-zone CRUD.
  *
- * A geofence is a first-class, tenant-scoped, named zone the operator draws
- * on the map. Type (STOP / GARAGE / ORIGIN_DESTINATION / BASE_CAMP /
- * ACCOMMODATION) is what the zone represents; shape (CIRCLE / POLYGON) is
- * how it was drawn. Downstream (Phase 2) we'll wire routes/stops and the
- * driver-app arrival detector to reference these by id.
+ * PHASE 2a — storage swap. Data now lives in `spatial.places` with
+ * `sourceModule='bus-ops'`. The response contract is unchanged so any
+ * consumer (bus-ops geofences page, driver-app arrival detector,
+ * school-bus / ambulance references) keeps working without a rewrite.
  *
- * GET  — list, filter by type/active, tenant-scoped
- * POST — create, tenantId always stamped from x-tenant-id (never trust body)
+ * Field mapping (Place → GeofenceRecord shape returned to caller):
+ *   description → notes    (legacy column was `notes`, Place uses `description`)
+ *   everything else        → direct pass-through
+ *
+ * The old `public.bus_ops_geofences` table is no longer written to but
+ * remains readable for one release; Phase 3a drops it.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -16,6 +19,33 @@ import { prisma } from '@/lib/prisma';
 
 const VALID_TYPES  = new Set(['STOP', 'GARAGE', 'ORIGIN_DESTINATION', 'BASE_CAMP', 'ACCOMMODATION']);
 const VALID_SHAPES = new Set(['CIRCLE', 'POLYGON']);
+
+/**
+ * Reshape a Place row into the legacy GeofenceRecord contract. Notes
+ * lives in description on the shared table but the API keeps `notes`
+ * so downstream consumers (page, driver-app) don't need updates today.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toLegacy(p: any) {
+  return {
+    id:        p.id,
+    tenantId:  p.tenantId,
+    name:      p.name,
+    type:      p.type,
+    shape:     p.shape,
+    centerLat: p.centerLat,
+    centerLng: p.centerLng,
+    radiusM:   p.radiusM,
+    polygon:   p.polygon,
+    address:   p.address,
+    notes:     p.description,
+    active:    p.active,
+    createdBy: p.createdBy,
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+    deletedAt: p.deletedAt,
+  };
+}
 
 function shapeIsValid(body: {
   shape?: string;
@@ -44,16 +74,21 @@ export async function GET(req: NextRequest) {
   const active  = sp.get('active'); // '1' | '0' | null (all)
 
   try {
-    const rows = await prisma.busOpsGeofence.findMany({
+    const rows = await prisma.place.findMany({
       where: {
         tenantId,
+        sourceModule: 'bus-ops',
         deletedAt: null,
-        ...(type && VALID_TYPES.has(type) ? { type } : {}),
+        // Also include any Place rows that use bus-ops types but never
+        // carried a sourceModule tag (e.g. rows created directly through
+        // /api/places with type=STOP but no sourceModule). Keeps the API
+        // usable as a single view over "everything bus-ops cares about".
+        ...(type && VALID_TYPES.has(type) ? { type } : { type: { in: [...VALID_TYPES] } }),
         ...(active === '1' ? { active: true } : active === '0' ? { active: false } : {}),
       },
       orderBy: { createdAt: 'desc' },
     });
-    return NextResponse.json(rows, { headers: { 'Cache-Control': 'private, max-age=15' } });
+    return NextResponse.json(rows.map(toLegacy), { headers: { 'Cache-Control': 'private, max-age=15' } });
   } catch (e) {
     console.error('[geofences.GET]', e);
     return NextResponse.json({ error: 'Failed to fetch geofences' }, { status: 500 });
@@ -74,23 +109,27 @@ export async function POST(req: NextRequest) {
     const shapeErr = shapeIsValid(body);
     if (shapeErr) return NextResponse.json({ error: shapeErr }, { status: 400 });
 
-    const row = await prisma.busOpsGeofence.create({
+    // Create against spatial.places with the bus-ops sourceModule tag so
+    // this row can be filtered back out through this endpoint AND also
+    // shows up on the shared /locations catalogue.
+    const row = await prisma.place.create({
       data: {
-        tenantId, // stamped from session, never from body
-        name:      body.name.trim(),
-        type:      body.type,
-        shape:     body.shape,
-        centerLat: body.shape === 'CIRCLE' ? body.centerLat : null,
-        centerLng: body.shape === 'CIRCLE' ? body.centerLng : null,
-        radiusM:   body.shape === 'CIRCLE' ? Math.round(body.radiusM) : null,
-        polygon:   body.shape === 'POLYGON' ? body.polygon : null,
-        address:   body.address?.trim() || null,
-        notes:     body.notes?.trim() || null,
-        active:    body.active ?? true,
+        tenantId,
+        sourceModule: 'bus-ops',
+        name:        body.name.trim(),
+        type:        body.type,
+        shape:       body.shape,
+        centerLat:   body.shape === 'CIRCLE' ? body.centerLat : null,
+        centerLng:   body.shape === 'CIRCLE' ? body.centerLng : null,
+        radiusM:     body.shape === 'CIRCLE' ? Math.round(body.radiusM) : null,
+        polygon:     body.shape === 'POLYGON' ? body.polygon : null,
+        address:     body.address?.trim() || null,
+        description: body.notes?.trim() || null,
+        active:      body.active ?? true,
         createdBy,
       },
     });
-    return NextResponse.json(row, { status: 201 });
+    return NextResponse.json(toLegacy(row), { status: 201 });
   } catch (e) {
     console.error('[geofences.POST]', e);
     return NextResponse.json({ error: 'Failed to create geofence' }, { status: 500 });

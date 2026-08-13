@@ -68,18 +68,22 @@ INSERT INTO spatial.places (
   active, created_by, source_module, source_id
 )
 SELECT
-  gen_random_uuid()::TEXT,
+  -- Preserve the legacy id so any consumer that cached bus_ops_geofences.id
+  -- (driver-app arrival detector, RouteStop.geofenceId once Phase 3 lands)
+  -- still resolves post-cutover. The old id lives on as the Place.id.
+  g.id::TEXT,
   g.created_at, g.updated_at, g.deleted_at, g.tenant_id,
   g.name, g.type, g.shape, g.address,
   g.center_lat, g.center_lng, g.radius_m, g.polygon,
   g.active, g.created_by, 'bus-ops', g.id::TEXT
 FROM public.bus_ops_geofences g
 WHERE NOT EXISTS (
-  -- Cast g.id to TEXT: bus_ops_geofences.id is a native UUID column (Prisma
-  -- shows it as String but the underlying type is uuid), whereas
-  -- spatial.places.source_id is TEXT so we compare on the string form.
+  -- Two possible sources of duplication: same source_id from a prior run,
+  -- or the legacy id already present as a Place.id (which can happen when
+  -- this migration is re-run after Phase 3 drops the source_module column).
   SELECT 1 FROM spatial.places p
-  WHERE p.source_module = 'bus-ops' AND p.source_id = g.id::TEXT
+  WHERE (p.source_module = 'bus-ops' AND p.source_id = g.id::TEXT)
+     OR p.id = g.id::TEXT
 );
 
 -- Grants — kept as plain statements (the ;\n splitter in the applier

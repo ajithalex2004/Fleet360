@@ -1,9 +1,11 @@
 /**
  * /api/bus-ops/geofences/[id] — single-geofence GET / PATCH / DELETE.
  *
- * DELETE is soft-delete (sets deletedAt) so any downstream references remain
- * resolvable for audit/history. A hard-delete would need a preflight to check
- * dependent routes/stops once phase 2 wires them up.
+ * PHASE 2a — reads and writes against `spatial.places` filtered by
+ * `sourceModule='bus-ops'`. Response contract unchanged; see the parent
+ * route for the field-mapping details.
+ *
+ * DELETE is soft-delete (sets deletedAt).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -12,9 +14,28 @@ import { prisma } from '@/lib/prisma';
 const VALID_TYPES  = new Set(['STOP', 'GARAGE', 'ORIGIN_DESTINATION', 'BASE_CAMP', 'ACCOMMODATION']);
 const VALID_SHAPES = new Set(['CIRCLE', 'POLYGON']);
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toLegacy(p: any) {
+  return {
+    id: p.id, tenantId: p.tenantId, name: p.name, type: p.type, shape: p.shape,
+    centerLat: p.centerLat, centerLng: p.centerLng, radiusM: p.radiusM, polygon: p.polygon,
+    address: p.address, notes: p.description, active: p.active, createdBy: p.createdBy,
+    createdAt: p.createdAt, updatedAt: p.updatedAt, deletedAt: p.deletedAt,
+  };
+}
+
 async function loadOwned(id: string, tenantId: string) {
-  return prisma.busOpsGeofence.findFirst({
-    where: { id, tenantId, deletedAt: null },
+  // Also accept legacy ids that were assigned before Phase 1 backfill:
+  // the migration preserves `id`, and pre-backfill callers may pass the
+  // former UUID which also lives in `source_id`.
+  return prisma.place.findFirst({
+    where: {
+      tenantId, deletedAt: null,
+      OR: [
+        { id },
+        { sourceModule: 'bus-ops', sourceId: id },
+      ],
+    },
   });
 }
 
@@ -25,12 +46,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   const row = await loadOwned(id, tenantId);
   if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  return NextResponse.json(row);
+  return NextResponse.json(toLegacy(row));
 }
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const tenantId = req.headers.get('x-tenant-id');
   if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const updatedBy = req.headers.get('x-user-id') ?? null;
   const { id } = await ctx.params;
 
   const existing = await loadOwned(id, tenantId);
@@ -39,7 +61,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   try {
     const body = await req.json();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const patch: any = {};
+    const patch: any = { updatedBy };
     if (typeof body.name === 'string' && body.name.trim()) patch.name = body.name.trim();
     if (typeof body.type === 'string') {
       if (!VALID_TYPES.has(body.type)) return NextResponse.json({ error: 'invalid type' }, { status: 400 });
@@ -62,15 +84,12 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         patch.centerLat = null; patch.centerLng = null; patch.radiusM = null;
       }
     }
-    if ('address' in body) patch.address = body.address?.trim() || null;
-    if ('notes'   in body) patch.notes   = body.notes?.trim()   || null;
+    if ('address' in body) patch.address     = body.address?.trim() || null;
+    if ('notes'   in body) patch.description = body.notes?.trim()   || null;
     if (typeof body.active === 'boolean') patch.active = body.active;
 
-    const row = await prisma.busOpsGeofence.update({
-      where: { id },
-      data: patch,
-    });
-    return NextResponse.json(row);
+    const row = await prisma.place.update({ where: { id: existing.id }, data: patch });
+    return NextResponse.json(toLegacy(row));
   } catch (e) {
     console.error('[geofences.PATCH]', e);
     return NextResponse.json({ error: 'Failed to update' }, { status: 500 });
@@ -86,8 +105,8 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   try {
-    await prisma.busOpsGeofence.update({
-      where: { id },
+    await prisma.place.update({
+      where: { id: existing.id },
       data: { deletedAt: new Date() },
     });
     return NextResponse.json({ ok: true });
