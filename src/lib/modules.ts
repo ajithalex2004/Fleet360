@@ -182,7 +182,11 @@ export const MODULES: readonly ModuleDef[] = [
     subscription: 'toggleable',
     accountPrefixes: ['RAC'],
     status: 'live',
-    apiPathPrefixes: ['/api/rac'],
+    // Actual API folder is /api/rental (module label is Rent-a-Car, brand
+    // is RAC). The declared '/api/rac' had no corresponding folder, so
+    // every rental request returned null from moduleFromPath() — silent
+    // loss of module attribution in audit logs, gates, analytics.
+    apiPathPrefixes: ['/api/rental'],
   },
   {
     key: 'bus-ops',
@@ -198,7 +202,11 @@ export const MODULES: readonly ModuleDef[] = [
     subscription: 'toggleable',
     accountPrefixes: ['STAFF_TRANSPORT'],
     status: 'live',
-    apiPathPrefixes: ['/api/staff'],
+    // Actual API folder is /api/bus-ops. The declared '/api/staff' had no
+    // corresponding folder — staff-transport endpoints (schedules, routes,
+    // passengers, dispatch, geofences, live-map, alerts) all live under
+    // /api/bus-ops.
+    apiPathPrefixes: ['/api/bus-ops'],
   },
   {
     key: 'school-bus',
@@ -214,7 +222,9 @@ export const MODULES: readonly ModuleDef[] = [
     subscription: 'toggleable',
     accountPrefixes: ['SCHOOL_BUS'],
     status: 'live',
-    apiPathPrefixes: ['/api/school-bus', '/api/students', '/api/routes'],
+    // Dropped '/api/students' and '/api/routes' — those top-level folders
+    // don't exist. Any student/route endpoints live under /api/school-bus/*.
+    apiPathPrefixes: ['/api/school-bus'],
   },
   {
     key: 'logistics',
@@ -230,7 +240,9 @@ export const MODULES: readonly ModuleDef[] = [
     subscription: 'toggleable',
     accountPrefixes: ['LOGISTICS'],
     status: 'live',
-    apiPathPrefixes: ['/api/logistics', '/api/trips'],
+    // Dropped '/api/trips' — folder doesn't exist. Trip endpoints live
+    // under /api/logistics/trips/*.
+    apiPathPrefixes: ['/api/logistics'],
   },
   {
     key: 'incidents',
@@ -318,7 +330,9 @@ export const MODULES: readonly ModuleDef[] = [
     tags: ['Invoices', 'Payments', 'VAT', 'Budgets'],
     subscription: 'toggleable',
     status: 'live',
-    apiPathPrefixes: ['/api/finance', '/api/invoice'],
+    // Dropped '/api/invoice' — folder doesn't exist. Invoice endpoints live
+    // under /api/finance/invoices/*.
+    apiPathPrefixes: ['/api/finance'],
   },
   {
     key: 'compliance',
