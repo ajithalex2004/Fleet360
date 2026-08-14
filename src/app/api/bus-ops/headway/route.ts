@@ -2,12 +2,25 @@
  * /api/bus-ops/headway — CRUD for headway rules + expand endpoint.
  *
  * GET  /api/bus-ops/headway?routeId=…        — list rules for a route
- * GET  /api/bus-ops/headway?routeId=…&from=…&to=…
+ * GET  /api/bus-ops/headway?routeId=…&from=…&to=…[&tz=Asia/Dubai]
  *                                          — list rules + their expanded
- *                                            departures for [from, to]
+ *                                            departures for [from, to],
+ *                                            with wall-clock times
+ *                                            interpreted in `tz` (IANA)
  * POST /api/bus-ops/headway                  — create a rule
  * DELETE /api/bus-ops/headway?id=…          — soft-delete a rule
+ *
+ * R3 (2026-08-14): timezone parameter threaded through to expandHeadway
+ * so the ISO output is DST-aware for tenants outside UTC. Defaults to
+ * 'Asia/Dubai' (platform's primary operational zone). Follow-up:
+ * persist a per-tenant IANA timezone on tenants and read it here so
+ * the client no longer needs to send `tz`.
  */
+
+/** Fallback timezone when neither query param nor per-tenant setting is
+ *  available. UAE is the platform's primary market — everywhere else
+ *  should override via ?tz=. */
+const DEFAULT_TZ = 'Asia/Dubai';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -52,6 +65,11 @@ export async function GET(req: NextRequest) {
   const routeId = sp.get('routeId');
   const from    = sp.get('from');
   const to      = sp.get('to');
+  // Timezone for wall-clock → UTC conversion. Query param wins so the
+  // client (which knows the operator's locale) can override; falls back
+  // to DEFAULT_TZ. When a per-tenant timezone column exists, read it
+  // here as the second-priority default.
+  const tz      = sp.get('tz') ?? DEFAULT_TZ;
   try {
     const rules = await withTenantRls(prisma, tenantId, (tx) =>
       tx.headwayRule.findMany({
@@ -66,8 +84,8 @@ export async function GET(req: NextRequest) {
     if (!from || !to) {
       return NextResponse.json({ rules: shaped }, { headers: { 'Cache-Control': 'private, max-age=60' } });
     }
-    const departures = expandHeadway(shaped, from, to);
-    return NextResponse.json({ rules: shaped, departures, from, to },
+    const departures = expandHeadway(shaped, from, to, tz);
+    return NextResponse.json({ rules: shaped, departures, from, to, tz },
       { headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' } });
   } catch (e) {
     console.error('[headway GET]', e);

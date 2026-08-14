@@ -140,3 +140,46 @@ describe('headway service — expandHeadway (cross-midnight windows)', () => {
     expect(times).toContain('01:00');
   });
 });
+
+describe('headway service — expandHeadway (R3: timezone-aware isoUtc)', () => {
+  // Same rule used in each case; only the `tz` parameter changes.
+  const rule: HeadwayRuleInput = {
+    id: 'r-tz', routeId: 'route-tz',
+    dayMask: 'YYYYYYY',
+    startTime: '07:30', endTime: '07:30',   // single departure
+    headwayMinutes: 60,
+    anchorTime: null,
+  };
+
+  it('keeps legacy UTC-as-local behaviour when tz is omitted', () => {
+    const out = expandHeadway([rule], '2026-08-14', '2026-08-14');
+    expect(out).toHaveLength(1);
+    // Wall clock 07:30 read as UTC → 07:30Z
+    expect(out[0].isoUtc).toBe('2026-08-14T07:30:00.000Z');
+  });
+
+  it('converts a Dubai (UTC+4, no DST) wall clock to UTC correctly', () => {
+    const out = expandHeadway([rule], '2026-08-14', '2026-08-14', 'Asia/Dubai');
+    expect(out).toHaveLength(1);
+    // 07:30 in Dubai (+04:00) → 03:30 UTC
+    expect(out[0].isoUtc).toBe('2026-08-14T03:30:00.000Z');
+    // Local field is still the wall clock as authored
+    expect(out[0].localTime).toBe('07:30');
+  });
+
+  it('handles DST correctly for a zone that observes it (Europe/London BST vs GMT)', () => {
+    // London on 2026-08-14 is in BST (UTC+1) — 07:30 local → 06:30 UTC.
+    const summer = expandHeadway([rule], '2026-08-14', '2026-08-14', 'Europe/London');
+    expect(summer[0].isoUtc).toBe('2026-08-14T06:30:00.000Z');
+
+    // London on 2026-01-14 is in GMT (UTC+0) — 07:30 local → 07:30 UTC.
+    const winter = expandHeadway([rule], '2026-01-14', '2026-01-14', 'Europe/London');
+    expect(winter[0].isoUtc).toBe('2026-01-14T07:30:00.000Z');
+  });
+
+  it('handles a negative-offset zone (America/New_York EDT summer)', () => {
+    // NYC on 2026-08-14 is EDT (UTC−4) — 07:30 local → 11:30 UTC.
+    const out = expandHeadway([rule], '2026-08-14', '2026-08-14', 'America/New_York');
+    expect(out[0].isoUtc).toBe('2026-08-14T11:30:00.000Z');
+  });
+});
