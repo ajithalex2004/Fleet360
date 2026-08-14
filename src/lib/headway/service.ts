@@ -35,15 +35,12 @@ export interface HeadwayRuleInput {
 export interface ExpandedDeparture {
   ruleId: string;
   routeId: string;
-  /** Local-time-of-day 'HH:MM' */
+  /** Local-time-of-day 'HH:MM' — as authored in the rule. */
   localTime: string;
-  /** Full ISO timestamp (UTC) — uses the date from the input window and
-   *  the local time from the rule. The engine treats the rule's time
-   *  window as local time in the tenant's IANA zone; the API converts
-   *  to UTC on the way out. For now, the engine is timezone-naive and
-   *  the timestamp is built as if local == UTC. The UI's user-facing
-   *  display uses the localTime field so a future timezone awareness
-   *  drops in without an API change. */
+  /** Full ISO timestamp (UTC). When `tz` is passed to expandHeadway(),
+   *  the rule's wall-clock localTime is interpreted in that IANA zone
+   *  (DST-aware) and converted to UTC. Without `tz`, the legacy
+   *  UTC-as-local behaviour is preserved for backward compatibility. */
   isoUtc: string;
   /** Anchor flag — true for the first departure of a window (or the
    *  one nearest to anchorTime, if set). Useful for the UI to mark
@@ -84,12 +81,62 @@ function hmCmp(a: string, b: string): number {
   return (pa.h * 60 + pa.m) - (pb.h * 60 + pb.m);
 }
 
-/** Format 'YYYY-MM-DD' + 'HH:MM' as ISO UTC. (Local == UTC for now.) */
-function ymdHmToIso(date: string, hm: string): string {
-  // Naive: treat the wall time as UTC. The UI uses the separate
-  // localTime field for display, so a future timezone-aware upgrade
-  // doesn't break API consumers.
-  return new Date(`${date}T${hm}:00Z`).toISOString();
+/**
+ * Format 'YYYY-MM-DD' + 'HH:MM' as an ISO UTC instant.
+ *
+ * When `tz` is a valid IANA zone (e.g. 'Asia/Dubai'), interpret the
+ * wall clock as *local time in that zone* (DST-aware) and convert to
+ * UTC. When `tz` is null/undefined, fall back to the legacy behaviour
+ * of treating the wall time as UTC — required for back-compat with
+ * pre-R3 callers that don't yet pass a timezone.
+ *
+ * Algorithm (DST-aware, no external deps):
+ *   1. Interpret the wall clock as if it were UTC → candidate instant.
+ *   2. Ask Intl.DateTimeFormat what wall-clock time the candidate
+ *      shows in the target zone.
+ *   3. The delta between the shown value and the candidate is the
+ *      zone's UTC offset at that instant.
+ *   4. Adjust: subtract the offset from the candidate to land on the
+ *      real UTC instant whose zone-local rendering matches the input.
+ *
+ * Handles DST fall-back / spring-forward gaps by defaulting to the
+ * before-transition offset (same behaviour as the browser's Date
+ * constructor with a local time in an ambiguous window).
+ */
+function ymdHmToIso(date: string, hm: string, tz?: string | null): string {
+  if (!tz) {
+    // Legacy: treat wall time as UTC.
+    return new Date(`${date}T${hm}:00Z`).toISOString();
+  }
+  const [y, m, d]     = date.split('-').map(Number);
+  const { h, m: min } = parseHm(hm);
+  const candidate     = Date.UTC(y, (m || 1) - 1, d || 1, h, min);
+  const shown         = zoneWallClockAsUtc(new Date(candidate), tz);
+  const offsetMs      = shown - candidate;
+  return new Date(candidate - offsetMs).toISOString();
+}
+
+/**
+ * Given a Date and an IANA timezone, return the UTC timestamp that
+ * would encode the *wall-clock* the zone shows at that instant. Used
+ * by ymdHmToIso() to compute a zone's offset without pulling in a
+ * date-fns-tz or luxon dependency.
+ */
+function zoneWallClockAsUtc(instant: Date, tz: string): number {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone:  tz,
+    hour12:    false,
+    year:      'numeric',
+    month:     '2-digit',
+    day:       '2-digit',
+    hour:      '2-digit',
+    minute:    '2-digit',
+    second:    '2-digit',
+  }).formatToParts(instant);
+  const get = (type: string) => Number(parts.find(p => p.type === type)?.value ?? 0);
+  // Intl's 'hour' returns 24 for midnight in en-CA — normalise to 0.
+  const hour = get('hour') === 24 ? 0 : get('hour');
+  return Date.UTC(get('year'), get('month') - 1, get('day'), hour, get('minute'), get('second'));
 }
 
 /** Yield YYYY-MM-DD strings for [from, to] inclusive. */
@@ -153,11 +200,18 @@ function expandWindow(
 /**
  * Expand a set of rules for a single route into a flat list of
  * departures within the [from, to] window.
+ *
+ * @param tz  Optional IANA timezone (e.g. 'Asia/Dubai'). When set, the
+ *            rule's wall-clock times are interpreted in that zone and
+ *            converted to UTC on the way out — DST-aware. When null,
+ *            legacy UTC-as-local behaviour is preserved for back-compat
+ *            with callers that don't yet thread tenant timezone through.
  */
 export function expandHeadway(
   rules: HeadwayRuleInput[],
   from: string,
   to: string,
+  tz?: string | null,
 ): ExpandedDeparture[] {
   const out: ExpandedDeparture[] = [];
   for (const date of dateRange(from, to)) {
@@ -168,11 +222,11 @@ export function expandHeadway(
         const times = expandWindow(subStart, subEnd, rule.headwayMinutes, rule.anchorTime);
         times.forEach((hm, i) => {
           out.push({
-            ruleId: rule.id,
-            routeId: rule.routeId,
+            ruleId:    rule.id,
+            routeId:   rule.routeId,
             localTime: hm,
-            isoUtc: ymdHmToIso(date, hm),
-            isAnchor: i === 0,
+            isoUtc:    ymdHmToIso(date, hm, tz),
+            isAnchor:  i === 0,
           });
         });
       }

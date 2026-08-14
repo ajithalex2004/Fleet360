@@ -5,19 +5,62 @@
  * All journal entries are created as DRAFT via createDraftJournalEntry().
  * Finance expenses are inserted idempotently keyed on expense_no = 'FUEL-{fuelLogId}'.
  *
- * GL mapping:
- *   5400  Bus Operations Expense  (debit on trip completion)
- *   4400  Bus Operations Revenue  (credit on AR mirror)
+ * GL mapping (aligned with src/lib/modules.ts:487 STAFF_TRANSPORT — R9 fix):
+ *   4500  Bus Operations Revenue  (credit on AR mirror, module registry revenue)
+ *   5145  Bus Operations Expense  (debit on trip completion, module registry expense)
  *   2100  Accounts Payable / Accrued Liabilities (credit on cost accrual)
  *
+ * Prior codes were 4400/5400 which didn't match the module registry's
+ * `revenue 4X00, expense 51XX` pattern (X = 5 for STAFF_TRANSPORT).
+ * Reverse-lookups from GL back to owning module returned undefined.
+ *
  * Cost centre / profit centre: PC-BUS
+ *
+ * ── R5 (2026-08-14): error propagation for outbox retry ──────────────────────
+ *
+ * Previously these functions used `catch { console.warn; return null }`,
+ * so a finance-side failure (Neon cold-start, transient network, schema
+ * drift, RLS deny) looked identical to a "nothing to write" skip. The
+ * outbox consumers treated the null as success and never retried;
+ * source events were already committed while the ledger row never
+ * landed. Books drifted silently.
+ *
+ * New contract:
+ *   - Return null ONLY for legitimate skips (zero amount, idempotency
+ *     hit, nothing to write).
+ *   - THROW FinanceBridgeError on any real failure. Consumers propagate
+ *     the throw; the outbox publisher retries per its retryCount/
+ *     maxRetries logic. Once retries exhaust the row is marked failed
+ *     and visible to /admin/events/outbox for manual replay.
  */
 
 import { prisma }                  from '@/lib/prisma';
 import { createDraftJournalEntry } from '@/lib/finance/journal-service';
 import { upsertFinanceInvoice }    from '@/lib/finance/module-ledger';
 
+// ── Errors ────────────────────────────────────────────────────────────────────
+
+/** See the file header (R5) for the retry contract. */
+export class FinanceBridgeError extends Error {
+  readonly cause?: unknown;
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message);
+    this.name = 'FinanceBridgeError';
+    if (options?.cause !== undefined) this.cause = options.cause;
+  }
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
+
+// CoA — keep in sync with src/lib/modules.ts:487 (STAFF_TRANSPORT: ['4500', '5145']).
+const GL_REVENUE  = '4500';  // Bus Operations Revenue
+const GL_EXPENSE  = '5145';  // Bus Operations Expense
+const GL_AP_ACCR  = '2100';  // Accounts Payable / Accrued Liabilities
+// Silence "declared but not used" for GL_REVENUE — it's the intended
+// AR account for future direct-JE revenue posting. upsertFinanceInvoice
+// derives its own account today; keeping the constant here means the
+// bridge is the single source of truth for bus-ops GL codes.
+void GL_REVENUE;
 
 const DEFAULT_FUEL_RATE_AED   = 3.50;  // AED per litre — UAE diesel fallback
 const DEFAULT_DRIVER_RATE_AED = 35.00; // AED per hour  — UAE bus driver fallback
@@ -57,7 +100,10 @@ export interface FuelLogBridgeInput {
 
 /**
  * Post operating costs for a completed trip to Finance as a DRAFT journal entry.
- * Best-effort — errors are caught and logged without failing the trip completion.
+ *
+ * Returns null when there are no operating costs to post (no fuel + no driver
+ * shift found → totalCost = 0). THROWS FinanceBridgeError on any real
+ * failure so the outbox consumer can propagate and the event gets retried.
  *
  * Includes fuel consumption cost and, when a COMPLETED DriverShift exists for the
  * vehicle on the departure date, driver labour cost.
@@ -122,14 +168,17 @@ export async function postTripOperatingCostsToFinance(
       preparedBy: 'system',
       costCentre: BUS_COST_CENTRE,
       notes:      `Auto-generated on trip completion. Vehicle: ${schedule.vehicleId ?? 'N/A'}`,
-      debit:  { code: '5400', name: 'Bus Operations Expense',       description: narration },
-      credit: { code: '2100', name: 'Accounts Payable / Accrued Exp.', description: `Accrual: ${tripRef}` },
+      debit:  { code: GL_EXPENSE, name: 'Bus Operations Expense',           description: narration },
+      credit: { code: GL_AP_ACCR, name: 'Accounts Payable / Accrued Exp.',  description: `Accrual: ${tripRef}` },
     });
 
     return { jeId: je.id, jeNumber: je.number };
   } catch (err) {
-    console.warn('[bus-ops finance-bridge] postTripOperatingCostsToFinance failed:', err);
-    return null;
+    // R5: propagate so the outbox retries. Do not swallow.
+    throw new FinanceBridgeError(
+      `postTripOperatingCostsToFinance failed for schedule ${schedule.id}`,
+      { cause: err },
+    );
   }
 }
 
@@ -139,6 +188,9 @@ export async function postTripOperatingCostsToFinance(
  * Mirror bus trip fare revenue to finance_invoices (AR).
  * Only fires when farePerHead > 0 and passengersBoarded > 0.
  * Idempotent — upsert keyed on (BUS_OPERATIONS, BUS_TRIP, scheduleId).
+ *
+ * Returns null when the trip has no fare or no passengers (legitimate skip).
+ * THROWS FinanceBridgeError on any real failure — see file header (R5).
  */
 export async function mirrorBusTripRevenueToFinance(
   schedule:    BusTripScheduleSummary,
@@ -183,8 +235,11 @@ export async function mirrorBusTripRevenueToFinance(
 
     return { financeInvoiceId: result.financeInvoiceId };
   } catch (err) {
-    console.warn('[bus-ops finance-bridge] mirrorBusTripRevenueToFinance failed:', err);
-    return null;
+    // R5: propagate so the outbox retries. Do not swallow.
+    throw new FinanceBridgeError(
+      `mirrorBusTripRevenueToFinance failed for schedule ${schedule.id}`,
+      { cause: err },
+    );
   }
 }
 
@@ -193,7 +248,10 @@ export async function mirrorBusTripRevenueToFinance(
 /**
  * Mirror a fuel log entry to finance.finance_expenses.
  * Idempotent — keyed on expense_no = 'FUEL-{fuelLogId}'.
- * Best-effort — errors are caught and logged.
+ *
+ * Returns null when there's nothing to write (amount ≤ 0). Returns the
+ * existing expense id on idempotency hit. THROWS FinanceBridgeError on
+ * any real failure — see file header (R5).
  */
 export async function postFuelLogToFinance(
   fuelLog:  FuelLogBridgeInput,
@@ -243,7 +301,11 @@ export async function postFuelLogToFinance(
     if (!row?.id) throw new Error(`INSERT finance_expenses failed for ${expenseNo}`);
     return { expenseId: row.id };
   } catch (err) {
-    console.warn('[bus-ops finance-bridge] postFuelLogToFinance failed:', err);
-    return null;
+    // R5: propagate so the outbox retries. Do not swallow.
+    if (err instanceof FinanceBridgeError) throw err;
+    throw new FinanceBridgeError(
+      `postFuelLogToFinance failed for fuel-log ${fuelLog.id}`,
+      { cause: err },
+    );
   }
 }

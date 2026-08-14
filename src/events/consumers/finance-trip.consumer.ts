@@ -46,13 +46,27 @@ export class FinanceTripConsumer extends BaseEventConsumer<TripCompletedPayload>
       mirrorBusTripRevenueToFinance(schedule, tripLog, data.farePerHead, tenantId),
     ]);
 
+    // R5 (2026-08-14): the bridge now THROWS FinanceBridgeError on real
+    // failures (used to silently return null). Propagating rejections
+    // makes the outbox retry — retryCount/maxRetries in event_outbox
+    // caps the loop; unresolvable failures land in the failed queue
+    // visible at /admin/events/outbox.
     if (jeResult.status === 'rejected') {
       throw new Error(`postTripOperatingCostsToFinance failed: ${jeResult.reason}`);
     }
     if (arResult.status === 'rejected') {
-      // AR mirror is best-effort — log but do not fail the consumer
-      console.warn(
-        `[finance-trip] mirrorBusTripRevenueToFinance non-fatal:`,
+      // AR is a separate write from the JE. Whether to retry the whole
+      // event on AR failure depends on JE-side idempotency: today
+      // createDraftJournalEntry doesn't dedupe on (sourceType, sourceId),
+      // so a full-event retry after JE success + AR failure would
+      // double-post the JE. Until JE creation is idempotent (follow-up
+      // FINANCE-JE-IDEMPOTENCE), AR failure is logged as an error (not
+      // a throw) so at least the operator sees it, but the event is
+      // treated as delivered. Consider raising a FINANCE_MIRROR_FAILED
+      // alert here once the idempotence lands.
+      console.error(
+        `[finance-trip] AR mirror failed for trip ${data.scheduleId} — ` +
+        `event will NOT retry (JE-idempotence follow-up required):`,
         arResult.reason,
       );
     }
