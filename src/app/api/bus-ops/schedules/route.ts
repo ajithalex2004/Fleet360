@@ -4,6 +4,12 @@ import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-ca
 import { expandRosterToTrip } from '@/lib/bus-ops/expand-roster';
 import { resolveVariantVersionForTrip } from '@/lib/bus-ops/resolve-variant-version';
 import { raiseAlert } from '@/lib/alerts/raise';
+import { validateResourceAssignment } from '@/lib/bus-ops/validate-assignment';
+import {
+  estimateRosterCountForTrip,
+  isValidationEnabled,
+  withAssignmentLocks,
+} from '@/lib/bus-ops/assignment-txn';
 
 const CACHE_TAG = 'bus-ops:schedules';
 
@@ -80,15 +86,92 @@ export async function POST(req: NextRequest) {
       return null;
     });
 
-    const schedule = await prisma.tripSchedule.create({
-      data: {
-        ...body,
-        tripNumber,
-        tenantId,
-        routeVariantVersionId: snapshot?.id ?? null,
-      },
-      include: { route: true },
-    });
+    // Resource Validation Engine (Phase 1) — validate + write inside
+    // a single transaction with advisory locks on (tenant, vehicle)
+    // and (tenant, driver). Prevents check-then-write races between
+    // concurrent dispatchers targeting the same resources.
+    //
+    // Validation runs read-only against the same transaction so the
+    // overlap check sees every committed prior trip but not this
+    // transaction's own future write.
+    //
+    // On POST the roster hasn't been materialised yet — we estimate
+    // future roster size via the same eligibility logic the roster
+    // expander uses. This lets V4 (capacity) fire honestly instead
+    // of always passing on new schedules.
+    const departureTime = body.departureTime ? new Date(body.departureTime) : null;
+    const arrivalTime   = body.arrivalTime   ? new Date(body.arrivalTime)   : null;
+    if (!departureTime) {
+      return NextResponse.json({ error: 'departureTime is required' }, { status: 400 });
+    }
+
+    let validation:
+      | Awaited<ReturnType<typeof validateResourceAssignment>>
+      | undefined;
+    let schedule: Awaited<ReturnType<typeof prisma.tripSchedule.create>>;
+
+    if (isValidationEnabled()) {
+      const estimatedRoster = body.routeId
+        ? await estimateRosterCountForTrip({ tenantId, routeId: body.routeId, tripDate: departureTime })
+        : 0;
+
+      const txResult = await withAssignmentLocks(
+        { tenantId, vehicleId: body.vehicleId ?? null, driverId: body.driverId ?? null },
+        async (tx) => {
+          const v = await validateResourceAssignment(
+            {
+              tenantId,
+              vehicleId:     body.vehicleId ?? null,
+              driverId:      body.driverId  ?? null,
+              departureTime,
+              arrivalTime,
+              routeId:       body.routeId ?? null,
+              confirmedCount: estimatedRoster,
+              timezone:      body.timezone ?? undefined,
+            },
+            tx,
+          );
+          if (v.verdict === 'BLOCK') {
+            // Bail out of the transaction (rolls back the lock) —
+            // return the verdict to the outer handler so it can 409.
+            return { verdict: 'BLOCK' as const, validation: v };
+          }
+          // Verdict is PASS or WARN — write inside the same tx while
+          // the lock is still held.
+          const s = await tx.tripSchedule.create({
+            data: {
+              ...body,
+              tripNumber,
+              tenantId,
+              routeVariantVersionId: snapshot?.id ?? null,
+            },
+            include: { route: true },
+          });
+          return { verdict: v.verdict, validation: v, schedule: s };
+        },
+      );
+
+      if (txResult.verdict === 'BLOCK') {
+        return NextResponse.json(
+          { error: 'Assignment blocked by resource validation', validation: txResult.validation },
+          { status: 409 },
+        );
+      }
+      validation = txResult.validation;
+      schedule = txResult.schedule!;
+    } else {
+      // Feature-disabled path — preserve pre-Phase-1 behaviour exactly.
+      // `validation` stays undefined so clients can tell the engine was off.
+      schedule = await prisma.tripSchedule.create({
+        data: {
+          ...body,
+          tripNumber,
+          tenantId,
+          routeVariantVersionId: snapshot?.id ?? null,
+        },
+        include: { route: true },
+      });
+    }
 
     // Materialise the route's standing passenger roster into TripPassenger
     // rows for this new trip. Best-effort: if the expansion fails for any
@@ -138,7 +221,7 @@ export async function POST(req: NextRequest) {
     }
 
     revalidateCache([CACHE_TAG]);
-    return NextResponse.json({ ...schedule, rosterExpansion }, { status: 201 });
+    return NextResponse.json({ ...schedule, rosterExpansion, validation }, { status: 201 });
   } catch (error) {
     console.error('Error creating schedule:', error);
     return NextResponse.json({ error: 'Failed to create schedule' }, { status: 500 });
