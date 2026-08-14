@@ -26,11 +26,28 @@ import { validateResourceAssignment, type ValidateAssignmentInput } from '@/lib/
 // ── Prisma mock builder ──────────────────────────────────────────────
 
 interface MockFacts {
-  vehicle?:            { id: string; isActive?: boolean | null; status?: string | null; seatingCapacity?: number | null; vehicleGroup?: string | null } | null;
-  driver?:             { id: string; status?: string | null } | null;
+  vehicle?: {
+    id: string; isActive?: boolean | null; status?: string | null;
+    seatingCapacity?: number | null; vehicleGroup?: string | null;
+    // Phase 2 vehicle compliance fields (all optional in the mock).
+    registrationExpiry?: Date | null;
+    insuranceExpiry?:    Date | null;
+    mulkiyaExpiry?:      Date | null;
+  } | null;
+  driver?: {
+    id: string; status?: string | null;
+    // Phase 2 driver license fields.
+    licenseExpiry?: Date | null;
+    licenseType?:   string | null;
+  } | null;
   overlappingTrips?:   Array<{ id: string; vehicleId?: string | null; driverId?: string | null; tripNumber?: string | null; departureTime: Date; arrivalTime?: Date | null; status?: string | null; route?: { estimatedDurationMins: number | null } | null }>;
   latestGpsPingAt?:    Date | null;
-  route?:              { id: string; estimatedDurationMins: number | null } | null;
+  route?: {
+    id: string; estimatedDurationMins: number | null;
+    // Phase 2 route requirement targets.
+    requiredVehicleGroup?: string | null;
+    requiredLicenseType?:  string | null;
+  } | null;
   scheduleRoster?:     number | null;
   hasShiftForDate?:    boolean;
 }
@@ -399,5 +416,215 @@ describe('null vehicleId / driverId', () => {
     const prisma = buildPrismaMock({ vehicle: okVehicle });
     const res = await validateResourceAssignment(baseInput({ driverId: null }), prisma);
     expect(res.checks.some(c => c.subject === 'driver')).toBe(false);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────
+// Phase 2 checks — V5, V7-V9, D6, D7
+// ────────────────────────────────────────────────────────────────────
+
+const expiredDate  = new Date('2026-01-01T00:00:00Z');   // well before baseInput.departureTime
+const futureDate   = new Date('2027-01-01T00:00:00Z');   // well after
+const routeWithReq = (extra: { requiredVehicleGroup?: string | null; requiredLicenseType?: string | null }) =>
+  ({ id: 'route-1', estimatedDurationMins: 60, ...extra });
+
+// ── V5 VEHICLE_TYPE_MISMATCH (deterministic) ────────────────────────
+
+describe('V5 VEHICLE_TYPE_MISMATCH (Phase 2)', () => {
+  it('PASSes when route has no requiredVehicleGroup (opt-in)', async () => {
+    const prisma = buildPrismaMock({
+      vehicle: okVehicle,
+      driver:  okDriver,
+      route:   { id: 'route-1', estimatedDurationMins: 60 },
+      hasShiftForDate: true,
+    });
+    const res = await validateResourceAssignment(baseInput(), prisma);
+    expect(res.checks.find(c => c.code === 'VEHICLE_TYPE_MISMATCH')?.severity).toBe('PASS');
+  });
+
+  it('PASSes when vehicle.vehicleGroup matches route.requiredVehicleGroup', async () => {
+    const prisma = buildPrismaMock({
+      vehicle: { ...okVehicle, vehicleGroup: 'BUS' },
+      driver:  okDriver,
+      route:   routeWithReq({ requiredVehicleGroup: 'BUS' }),
+      hasShiftForDate: true,
+    });
+    const res = await validateResourceAssignment(baseInput(), prisma);
+    expect(res.checks.find(c => c.code === 'VEHICLE_TYPE_MISMATCH')?.severity).toBe('PASS');
+  });
+
+  it('BLOCKs when vehicle.vehicleGroup mismatches (case-insensitive)', async () => {
+    const prisma = buildPrismaMock({
+      vehicle: { ...okVehicle, vehicleGroup: 'VAN' },
+      driver:  okDriver,
+      route:   routeWithReq({ requiredVehicleGroup: 'bus' }),   // lowercased to test case-insensitivity
+      hasShiftForDate: true,
+    });
+    const res = await validateResourceAssignment(baseInput(), prisma);
+    const v5 = res.checks.find(c => c.code === 'VEHICLE_TYPE_MISMATCH');
+    expect(v5?.severity).toBe('BLOCK');
+    expect((v5?.context as { required: string; actual: string }).required).toBe('bus');
+    expect((v5?.context as { required: string; actual: string }).actual).toBe('VAN');
+  });
+
+  it('PASSes when vehicle.vehicleGroup is null even if route requires one (no signal)', async () => {
+    const prisma = buildPrismaMock({
+      vehicle: { ...okVehicle, vehicleGroup: null },
+      driver:  okDriver,
+      route:   routeWithReq({ requiredVehicleGroup: 'BUS' }),
+      hasShiftForDate: true,
+    });
+    const res = await validateResourceAssignment(baseInput(), prisma);
+    expect(res.checks.find(c => c.code === 'VEHICLE_TYPE_MISMATCH')?.severity).toBe('PASS');
+  });
+});
+
+// ── V7 VEHICLE_REGISTRATION_EXPIRED ─────────────────────────────────
+
+describe('V7 VEHICLE_REGISTRATION_EXPIRED (Phase 2)', () => {
+  it('BLOCKs when registrationExpiry is before departureTime', async () => {
+    const prisma = buildPrismaMock({
+      vehicle: { ...okVehicle, registrationExpiry: expiredDate },
+      driver:  okDriver,
+      hasShiftForDate: true,
+    });
+    const res = await validateResourceAssignment(baseInput(), prisma);
+    expect(res.checks.find(c => c.code === 'VEHICLE_REGISTRATION_EXPIRED')?.severity).toBe('BLOCK');
+  });
+
+  it('PASSes when registrationExpiry is after departureTime', async () => {
+    const prisma = buildPrismaMock({
+      vehicle: { ...okVehicle, registrationExpiry: futureDate },
+      driver:  okDriver,
+      hasShiftForDate: true,
+    });
+    const res = await validateResourceAssignment(baseInput(), prisma);
+    expect(res.checks.find(c => c.code === 'VEHICLE_REGISTRATION_EXPIRED')?.severity).toBe('PASS');
+  });
+
+  it('PASSes when registrationExpiry is null (no signal)', async () => {
+    const prisma = buildPrismaMock({ vehicle: okVehicle, driver: okDriver, hasShiftForDate: true });
+    const res = await validateResourceAssignment(baseInput(), prisma);
+    expect(res.checks.find(c => c.code === 'VEHICLE_REGISTRATION_EXPIRED')?.severity).toBe('PASS');
+  });
+
+  it('BLOCKs when a FUTURE trip departs after the current insurance window (audit at scheduling time)', async () => {
+    // Trip 6 months out; insurance expires in 3 months. Should catch it now, not at departure.
+    const prisma = buildPrismaMock({
+      vehicle: { ...okVehicle, registrationExpiry: new Date('2026-11-01T00:00:00Z') },
+      driver:  okDriver,
+      hasShiftForDate: true,
+    });
+    const res = await validateResourceAssignment(
+      baseInput({ departureTime: new Date('2027-02-01T10:00:00Z'), arrivalTime: new Date('2027-02-01T11:00:00Z') }),
+      prisma,
+    );
+    expect(res.checks.find(c => c.code === 'VEHICLE_REGISTRATION_EXPIRED')?.severity).toBe('BLOCK');
+  });
+});
+
+// ── V8/V9 same pattern as V7 (thin coverage) ────────────────────────
+
+describe('V8 VEHICLE_INSURANCE_EXPIRED (Phase 2)', () => {
+  it('BLOCKs when insuranceExpiry is before departureTime', async () => {
+    const prisma = buildPrismaMock({
+      vehicle: { ...okVehicle, insuranceExpiry: expiredDate },
+      driver:  okDriver,
+      hasShiftForDate: true,
+    });
+    const res = await validateResourceAssignment(baseInput(), prisma);
+    expect(res.checks.find(c => c.code === 'VEHICLE_INSURANCE_EXPIRED')?.severity).toBe('BLOCK');
+  });
+});
+
+describe('V9 VEHICLE_MULKIYA_EXPIRED (Phase 2)', () => {
+  it('BLOCKs when mulkiyaExpiry is before departureTime', async () => {
+    const prisma = buildPrismaMock({
+      vehicle: { ...okVehicle, mulkiyaExpiry: expiredDate },
+      driver:  okDriver,
+      hasShiftForDate: true,
+    });
+    const res = await validateResourceAssignment(baseInput(), prisma);
+    expect(res.checks.find(c => c.code === 'VEHICLE_MULKIYA_EXPIRED')?.severity).toBe('BLOCK');
+  });
+});
+
+// ── D6 DRIVER_LICENSE_EXPIRED ────────────────────────────────────────
+
+describe('D6 DRIVER_LICENSE_EXPIRED (Phase 2)', () => {
+  it('BLOCKs when licenseExpiry is before departureTime', async () => {
+    const prisma = buildPrismaMock({
+      vehicle: okVehicle,
+      driver:  { ...okDriver, licenseExpiry: expiredDate },
+      hasShiftForDate: true,
+    });
+    const res = await validateResourceAssignment(baseInput(), prisma);
+    expect(res.checks.find(c => c.code === 'DRIVER_LICENSE_EXPIRED')?.severity).toBe('BLOCK');
+  });
+
+  it('PASSes when licenseExpiry is null (no signal)', async () => {
+    const prisma = buildPrismaMock({ vehicle: okVehicle, driver: okDriver, hasShiftForDate: true });
+    const res = await validateResourceAssignment(baseInput(), prisma);
+    expect(res.checks.find(c => c.code === 'DRIVER_LICENSE_EXPIRED')?.severity).toBe('PASS');
+  });
+});
+
+// ── D7 DRIVER_LICENSE_CATEGORY_MISMATCH ─────────────────────────────
+
+describe('D7 DRIVER_LICENSE_CATEGORY_MISMATCH (Phase 2)', () => {
+  it('PASSes when route has no requiredLicenseType', async () => {
+    const prisma = buildPrismaMock({
+      vehicle: okVehicle,
+      driver:  { ...okDriver, licenseType: 'BUS' },
+      route:   { id: 'route-1', estimatedDurationMins: 60 },
+      hasShiftForDate: true,
+    });
+    const res = await validateResourceAssignment(baseInput(), prisma);
+    expect(res.checks.find(c => c.code === 'DRIVER_LICENSE_CATEGORY_MISMATCH')?.severity).toBe('PASS');
+  });
+
+  it('PASSes when licenseType matches (case-insensitive)', async () => {
+    const prisma = buildPrismaMock({
+      vehicle: okVehicle,
+      driver:  { ...okDriver, licenseType: 'bus' },
+      route:   routeWithReq({ requiredLicenseType: 'BUS' }),
+      hasShiftForDate: true,
+    });
+    const res = await validateResourceAssignment(baseInput(), prisma);
+    expect(res.checks.find(c => c.code === 'DRIVER_LICENSE_CATEGORY_MISMATCH')?.severity).toBe('PASS');
+  });
+
+  it('BLOCKs when licenseType mismatches', async () => {
+    const prisma = buildPrismaMock({
+      vehicle: okVehicle,
+      driver:  { ...okDriver, licenseType: 'LIGHT' },
+      route:   routeWithReq({ requiredLicenseType: 'BUS' }),
+      hasShiftForDate: true,
+    });
+    const res = await validateResourceAssignment(baseInput(), prisma);
+    const d7 = res.checks.find(c => c.code === 'DRIVER_LICENSE_CATEGORY_MISMATCH');
+    expect(d7?.severity).toBe('BLOCK');
+    expect((d7?.context as { required: string; actual: string }).required).toBe('BUS');
+    expect((d7?.context as { required: string; actual: string }).actual).toBe('LIGHT');
+  });
+});
+
+// ── NOT_FOUND cascade includes Phase 2 checks ───────────────────────
+
+describe('NOT_FOUND cascade skips Phase 2 checks too', () => {
+  it('vehicle not found → V5/V7/V8/V9 all SKIPPED', async () => {
+    const prisma = buildPrismaMock({ vehicle: null, driver: okDriver, hasShiftForDate: true });
+    const res = await validateResourceAssignment(baseInput(), prisma);
+    for (const c of ['VEHICLE_TYPE_MISMATCH', 'VEHICLE_REGISTRATION_EXPIRED', 'VEHICLE_INSURANCE_EXPIRED', 'VEHICLE_MULKIYA_EXPIRED']) {
+      expect(res.checks.find(x => x.code === c)?.severity).toBe('SKIPPED');
+    }
+  });
+
+  it('driver not found → D6/D7 all SKIPPED', async () => {
+    const prisma = buildPrismaMock({ vehicle: okVehicle, driver: null, hasShiftForDate: true });
+    const res = await validateResourceAssignment(baseInput(), prisma);
+    for (const c of ['DRIVER_LICENSE_EXPIRED', 'DRIVER_LICENSE_CATEGORY_MISMATCH']) {
+      expect(res.checks.find(x => x.code === c)?.severity).toBe('SKIPPED');
+    }
   });
 });
