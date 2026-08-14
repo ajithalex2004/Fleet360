@@ -1724,6 +1724,16 @@ model BusRoute {
   origin                String
   destination           String
   routeType             String?        @default("STAFF") @map("route_type") // STAFF|SCHOOL|BOTH
+  /// Vehicle group the route is authored for (BUS | VAN | PICKUP | SUV | ECONOMY | LUXURY …).
+  /// When set, the Resource Validation Engine's V5 check compares this to
+  /// Vehicle.vehicleGroup and BLOCKs mismatches. Null → V5 is a no-op (PASS)
+  /// so tenants without a routing standard aren't false-alarmed.
+  requiredVehicleGroup  String?        @map("required_vehicle_group")
+  /// Minimum driver license category required for the route (LIGHT | HEAVY |
+  /// BUS | MOTORCYCLE). Matches Driver.licenseType. Null → D7 is a no-op.
+  /// Should reflect the most restrictive UAE RTA requirement for the route's
+  /// typical vehicle — a bus route uses BUS, a shuttle van typically LIGHT.
+  requiredLicenseType   String?        @map("required_license_type")
   totalDistanceKm       Float?         @map("total_distance_km")
   estimatedDurationMins Int?           @map("estimated_duration_mins")
   capacity              Int?           @default(30)

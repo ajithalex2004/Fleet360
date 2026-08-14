@@ -30,28 +30,37 @@
  *    function over the fetched facts. Straightforward to unit-test
  *    against canned facts.
  *
- * 5. PHASE 1 ONLY.
- *    - Registration / insurance / mulkiya expiry           → Phase 2
- *    - Driver license validity / category                  → Phase 2
- *    - Driver leave calendar                               → Phase 2
- *    - HOS / rest-break rules                              → Phase 2
- *    - Per-tenant policy (BLOCK/WARN/OFF per check)        → Phase 3
- *    - Deterministic vehicle-type match (V5 in review)     → deferred
- *      to Phase 2 once BusRoute.requiredVehicleGroup exists.
+ * 5. PHASE SCOPE.
+ *    Phase 1  — Phase 1 catalog below (9 checks; ships without any schema
+ *               additions).
+ *    Phase 2  — This file (15 checks total). Adds V5 (deterministic type
+ *               match) + V7/V8/V9 vehicle expiries + D6 license expiry
+ *               + D7 license category. Requires migration
+ *               add_bus_route_requirements.sql (BusRoute.requiredVehicleGroup
+ *               + BusRoute.requiredLicenseType) but no new tables — every
+ *               other input already lived on Vehicle / Driver.
+ *    Phase 3+ — Driver leave calendar (D5), HOS rest-break rules (D8/D9),
+ *               per-tenant policy (BLOCK/WARN/OFF per check code).
  *
- * ── Check catalog (Phase 1 — 9 checks) ───────────────────────────────
+ * ── Check catalog (Phase 1 + Phase 2 — 15 checks) ────────────────────
  *
- *   V0 VEHICLE_NOT_FOUND              BLOCK
- *   V1 VEHICLE_INACTIVE               BLOCK  (permanent: INACTIVE|SOLD|RETIRED|isActive=false)
- *   V2 VEHICLE_UNAVAILABLE            BLOCK  (temporary: MAINTENANCE|BREAKDOWN|OUT_OF_SERVICE|RESERVED|RENTED|ALLOCATED|IMPOUNDED)
- *   V3 VEHICLE_ALREADY_ASSIGNED       BLOCK  (overlap with another active trip)
- *   V4 VEHICLE_CAPACITY_EXCEEDED      WARN   (roster > seats)
- *   V6 VEHICLE_GPS_STALE              WARN   (only when departureTime is within GPS_HORIZON_MIN of now)
+ *   V0 VEHICLE_NOT_FOUND                  BLOCK
+ *   V1 VEHICLE_INACTIVE                   BLOCK  (permanent: INACTIVE|SOLD|RETIRED|isActive=false)
+ *   V2 VEHICLE_UNAVAILABLE                BLOCK  (temporary: MAINTENANCE|BREAKDOWN|OUT_OF_SERVICE|RESERVED|RENTED|ALLOCATED|IMPOUNDED)
+ *   V3 VEHICLE_ALREADY_ASSIGNED           BLOCK  (overlap with another active trip)
+ *   V4 VEHICLE_CAPACITY_EXCEEDED          WARN   (roster > seats)
+ *   V5 VEHICLE_TYPE_MISMATCH              BLOCK  (Phase 2: vehicleGroup vs route.requiredVehicleGroup — case-insensitive; PASS when either side null)
+ *   V6 VEHICLE_GPS_STALE                  WARN   (only when departureTime is within GPS_HORIZON_MIN of now)
+ *   V7 VEHICLE_REGISTRATION_EXPIRED       BLOCK  (Phase 2: registration expires before departureTime)
+ *   V8 VEHICLE_INSURANCE_EXPIRED          BLOCK  (Phase 2: insurance expires before departureTime)
+ *   V9 VEHICLE_MULKIYA_EXPIRED            BLOCK  (Phase 2: mulkiya expires before departureTime)
  *
- *   D0 DRIVER_NOT_FOUND               BLOCK
- *   D1 DRIVER_INACTIVE                BLOCK  (Driver.status not ACTIVE)
- *   D2 DRIVER_ALREADY_ASSIGNED        BLOCK  (overlap with another active trip)
- *   D3 DRIVER_NO_SHIFT                WARN   (no scheduled/active shift for the tenant-local date)
+ *   D0 DRIVER_NOT_FOUND                   BLOCK
+ *   D1 DRIVER_INACTIVE                    BLOCK  (Driver.status not ACTIVE)
+ *   D2 DRIVER_ALREADY_ASSIGNED            BLOCK  (overlap with another active trip)
+ *   D3 DRIVER_NO_SHIFT                    WARN   (no scheduled/active shift for the tenant-local date)
+ *   D6 DRIVER_LICENSE_EXPIRED             BLOCK  (Phase 2: licenseExpiry before departureTime)
+ *   D7 DRIVER_LICENSE_CATEGORY_MISMATCH   BLOCK  (Phase 2: licenseType vs route.requiredLicenseType)
  *
  * ── Concurrency ──────────────────────────────────────────────────────
  *
@@ -82,6 +91,7 @@ export type CheckSubject  = 'vehicle' | 'driver' | 'assignment';
  * Keep in sync with the file header check catalog.
  */
 export type AssignmentCheckCode =
+  // Phase 1
   | 'VEHICLE_NOT_FOUND'
   | 'VEHICLE_INACTIVE'
   | 'VEHICLE_UNAVAILABLE'
@@ -91,7 +101,14 @@ export type AssignmentCheckCode =
   | 'DRIVER_NOT_FOUND'
   | 'DRIVER_INACTIVE'
   | 'DRIVER_ALREADY_ASSIGNED'
-  | 'DRIVER_NO_SHIFT';
+  | 'DRIVER_NO_SHIFT'
+  // Phase 2 — compliance & routing standards
+  | 'VEHICLE_TYPE_MISMATCH'
+  | 'VEHICLE_REGISTRATION_EXPIRED'
+  | 'VEHICLE_INSURANCE_EXPIRED'
+  | 'VEHICLE_MULKIYA_EXPIRED'
+  | 'DRIVER_LICENSE_EXPIRED'
+  | 'DRIVER_LICENSE_CATEGORY_MISMATCH';
 
 export interface AssignmentCheck {
   code:     AssignmentCheckCode;
@@ -189,13 +206,35 @@ export async function validateResourceAssignment(
 // ── Fact fetching (async, all parallel, tenant-scoped) ───────────────
 
 interface Facts {
-  vehicle:          { id: string; isActive: boolean | null; status: string | null; seatingCapacity: number | null; vehicleGroup: string | null } | null;
-  driver:           { id: string; status: string | null } | null;
+  // Vehicle: Phase 1 fields + Phase 2 compliance expiries.
+  vehicle: {
+    id: string;
+    isActive: boolean | null;
+    status: string | null;
+    seatingCapacity: number | null;
+    vehicleGroup: string | null;
+    registrationExpiry: Date | null;   // Phase 2 — V7
+    insuranceExpiry:    Date | null;   // Phase 2 — V8
+    mulkiyaExpiry:      Date | null;   // Phase 2 — V9
+  } | null;
+  // Driver: Phase 1 status + Phase 2 license.
+  driver: {
+    id: string;
+    status: string | null;
+    licenseExpiry: Date | null;        // Phase 2 — D6
+    licenseType:   string | null;      // Phase 2 — D7
+  } | null;
   overlappingTrips: Array<{ id: string; vehicleId: string | null; driverId: string | null; tripNumber: string | null; departureTime: Date; arrivalTime: Date | null; status: string | null }>;
   latestGpsPingAt:  Date | null;
   hasShiftForDate:  boolean;
-  route:            { id: string; estimatedDurationMins: number | null } | null;
-  scheduleRoster:   number | null;   // TripPassenger count for the schedule being edited (PATCH); null on POST
+  // Route: Phase 1 duration + Phase 2 requirement targets.
+  route: {
+    id: string;
+    estimatedDurationMins: number | null;
+    requiredVehicleGroup: string | null;   // Phase 2 — V5
+    requiredLicenseType:  string | null;   // Phase 2 — D7
+  } | null;
+  scheduleRoster: number | null;
 }
 
 async function fetchFacts(
@@ -208,14 +247,17 @@ async function fetchFacts(
     input.vehicleId
       ? prisma.vehicle.findFirst({
           where:  { id: input.vehicleId, tenantId: input.tenantId },
-          select: { id: true, isActive: true, status: true, seatingCapacity: true, vehicleGroup: true },
+          select: {
+            id: true, isActive: true, status: true, seatingCapacity: true, vehicleGroup: true,
+            registrationExpiry: true, insuranceExpiry: true, mulkiyaExpiry: true,
+          },
         })
       : Promise.resolve(null),
 
     input.driverId
       ? prisma.driver.findFirst({
           where:  { id: input.driverId, tenantId: input.tenantId },
-          select: { id: true, status: true },
+          select: { id: true, status: true, licenseExpiry: true, licenseType: true },
         })
       : Promise.resolve(null),
 
@@ -232,7 +274,10 @@ async function fetchFacts(
     input.routeId
       ? prisma.busRoute.findFirst({
           where:  { id: input.routeId, tenantId: input.tenantId },
-          select: { id: true, estimatedDurationMins: true },
+          select: {
+            id: true, estimatedDurationMins: true,
+            requiredVehicleGroup: true, requiredLicenseType: true,
+          },
         })
       : Promise.resolve(null),
 
@@ -364,7 +409,13 @@ function evaluateChecks(input: ValidateAssignmentInput, facts: Facts): Assignmen
         context:  { vehicleId: input.vehicleId },
       });
       // Remaining vehicle checks can't run without the row.
-      pushSkipped(checks, 'vehicle', ['VEHICLE_INACTIVE', 'VEHICLE_UNAVAILABLE', 'VEHICLE_ALREADY_ASSIGNED', 'VEHICLE_CAPACITY_EXCEEDED', 'VEHICLE_GPS_STALE'], 'vehicle not found');
+      pushSkipped(checks, 'vehicle', [
+        'VEHICLE_INACTIVE', 'VEHICLE_UNAVAILABLE', 'VEHICLE_ALREADY_ASSIGNED',
+        'VEHICLE_CAPACITY_EXCEEDED', 'VEHICLE_GPS_STALE',
+        // Phase 2 vehicle checks also skipped when the row is missing.
+        'VEHICLE_TYPE_MISMATCH', 'VEHICLE_REGISTRATION_EXPIRED',
+        'VEHICLE_INSURANCE_EXPIRED', 'VEHICLE_MULKIYA_EXPIRED',
+      ], 'vehicle not found');
     } else {
       // V1 permanent-unavailable
       const permanentlyInactive =
@@ -434,6 +485,61 @@ function evaluateChecks(input: ValidateAssignmentInput, facts: Facts): Assignmen
           severity: 'WARN',
         }));
       }
+
+      // ── Phase 2 vehicle checks ─────────────────────────────────────
+
+      // V5 VEHICLE_TYPE_MISMATCH — deterministic vs route.requiredVehicleGroup.
+      // Both sides must be non-null. Null on either side = "no signal, PASS"
+      // so tenants who haven't codified routing standards aren't blocked.
+      // Case-insensitive to shield from data-entry variance.
+      const requiredGroup = facts.route?.requiredVehicleGroup ?? null;
+      const actualGroup   = facts.vehicle.vehicleGroup ?? null;
+      const groupMismatch =
+        requiredGroup != null &&
+        actualGroup != null &&
+        actualGroup.toUpperCase() !== requiredGroup.toUpperCase();
+      checks.push(pf('VEHICLE_TYPE_MISMATCH', 'vehicle', groupMismatch, {
+        title: `Vehicle group ${actualGroup} doesn't match route requirement ${requiredGroup}`,
+        detail: 'Route requires a specific vehicle group. Assign a matching vehicle or update the route.',
+        context: { required: requiredGroup, actual: actualGroup },
+        severity: 'BLOCK',
+      }));
+
+      // V7/V8/V9 expiry checks. Compared to the trip's departureTime,
+      // not now(), so a trip scheduled AFTER an insurance expiry is
+      // caught immediately at scheduling — not deferred until the
+      // paperwork actually lapses.
+      const departureTs = input.departureTime.getTime();
+
+      const regExpired =
+        facts.vehicle.registrationExpiry != null &&
+        facts.vehicle.registrationExpiry.getTime() < departureTs;
+      checks.push(pf('VEHICLE_REGISTRATION_EXPIRED', 'vehicle', regExpired, {
+        title: 'Vehicle registration expired',
+        detail: `Registration expired ${facts.vehicle.registrationExpiry?.toISOString().slice(0, 10)}. Trip departs ${input.departureTime.toISOString().slice(0, 10)}.`,
+        context: { registrationExpiry: facts.vehicle.registrationExpiry, departureTime: input.departureTime },
+        severity: 'BLOCK',
+      }));
+
+      const insExpired =
+        facts.vehicle.insuranceExpiry != null &&
+        facts.vehicle.insuranceExpiry.getTime() < departureTs;
+      checks.push(pf('VEHICLE_INSURANCE_EXPIRED', 'vehicle', insExpired, {
+        title: 'Vehicle insurance expired',
+        detail: `Insurance expired ${facts.vehicle.insuranceExpiry?.toISOString().slice(0, 10)}. Trip departs ${input.departureTime.toISOString().slice(0, 10)}.`,
+        context: { insuranceExpiry: facts.vehicle.insuranceExpiry, departureTime: input.departureTime },
+        severity: 'BLOCK',
+      }));
+
+      const mulExpired =
+        facts.vehicle.mulkiyaExpiry != null &&
+        facts.vehicle.mulkiyaExpiry.getTime() < departureTs;
+      checks.push(pf('VEHICLE_MULKIYA_EXPIRED', 'vehicle', mulExpired, {
+        title: 'Vehicle mulkiya expired',
+        detail: `Mulkiya expired ${facts.vehicle.mulkiyaExpiry?.toISOString().slice(0, 10)}. Trip departs ${input.departureTime.toISOString().slice(0, 10)}.`,
+        context: { mulkiyaExpiry: facts.vehicle.mulkiyaExpiry, departureTime: input.departureTime },
+        severity: 'BLOCK',
+      }));
     }
   }
 
@@ -448,7 +554,11 @@ function evaluateChecks(input: ValidateAssignmentInput, facts: Facts): Assignmen
         detail:   'The selected driver does not exist in this tenant.',
         context:  { driverId: input.driverId },
       });
-      pushSkipped(checks, 'driver', ['DRIVER_INACTIVE', 'DRIVER_ALREADY_ASSIGNED', 'DRIVER_NO_SHIFT'], 'driver not found');
+      pushSkipped(checks, 'driver', [
+        'DRIVER_INACTIVE', 'DRIVER_ALREADY_ASSIGNED', 'DRIVER_NO_SHIFT',
+        // Phase 2 driver checks also skipped when the row is missing.
+        'DRIVER_LICENSE_EXPIRED', 'DRIVER_LICENSE_CATEGORY_MISMATCH',
+      ], 'driver not found');
     } else {
       // D1 inactive
       const notActive = facts.driver.status !== 'ACTIVE';
@@ -476,6 +586,38 @@ function evaluateChecks(input: ValidateAssignmentInput, facts: Facts): Assignmen
         detail: `Driver has no SCHEDULED or ACTIVE shift on ${toTenantLocalDateBoundary(input.departureTime, input.timezone ?? DEFAULT_TZ).toISOString().slice(0, 10)} (${input.timezone ?? DEFAULT_TZ}).`,
         context: { departureTime: input.departureTime, tz: input.timezone ?? DEFAULT_TZ },
         severity: 'WARN',
+      }));
+
+      // ── Phase 2 driver checks ──────────────────────────────────────
+
+      // D6 DRIVER_LICENSE_EXPIRED — same "expired vs departure time"
+      // semantics as V7/V8/V9. Null licenseExpiry = no signal, PASS.
+      const departureTs = input.departureTime.getTime();
+      const licExpired =
+        facts.driver.licenseExpiry != null &&
+        facts.driver.licenseExpiry.getTime() < departureTs;
+      checks.push(pf('DRIVER_LICENSE_EXPIRED', 'driver', licExpired, {
+        title: 'Driver license expired',
+        detail: `License expired ${facts.driver.licenseExpiry?.toISOString().slice(0, 10)}. Trip departs ${input.departureTime.toISOString().slice(0, 10)}.`,
+        context: { licenseExpiry: facts.driver.licenseExpiry, departureTime: input.departureTime },
+        severity: 'BLOCK',
+      }));
+
+      // D7 DRIVER_LICENSE_CATEGORY_MISMATCH — driver's licenseType must
+      // match route.requiredLicenseType. Both sides case-insensitive.
+      // Null on either side = no signal (PASS) — same tenant-opt-in
+      // pattern as V5.
+      const requiredLic = facts.route?.requiredLicenseType ?? null;
+      const actualLic   = facts.driver.licenseType ?? null;
+      const licMismatch =
+        requiredLic != null &&
+        actualLic != null &&
+        actualLic.toUpperCase() !== requiredLic.toUpperCase();
+      checks.push(pf('DRIVER_LICENSE_CATEGORY_MISMATCH', 'driver', licMismatch, {
+        title: `Driver license ${actualLic} doesn't match route requirement ${requiredLic}`,
+        detail: 'Route requires a specific license category. Assign a driver with the matching category.',
+        context: { required: requiredLic, actual: actualLic },
+        severity: 'BLOCK',
       }));
     }
   }
