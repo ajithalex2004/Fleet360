@@ -22,7 +22,7 @@
  *    Never first-fail short-circuits. The UI needs the whole list so
  *    the operator can fix all issues at once. The one exception:
  *    when the vehicle or driver row itself isn't found, the
- *    remaining V*/D* checks for that entity are skipped because they
+ *    remaining V/D checks for that entity are skipped because they
  *    can't run without the row (marked SKIPPED with a reason).
  *
  * 4. DETERMINISTIC RULE EVALUATION.

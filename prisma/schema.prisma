@@ -2062,6 +2062,11 @@ model TripSchedule {
   driverId       String?         @map("driver_id")
   departureTime  DateTime        @map("departure_time") @db.Timestamptz(6)
   arrivalTime    DateTime?       @map("arrival_time") @db.Timestamptz(6)
+  /// Hard "must-arrive-by" deadline used by MERGED_ARRIVAL_SLA in the
+  /// Planning Constraint Engine. `arrivalTime` is an estimate; this is
+  /// the commitment. Nullable — trips without a stated SLA are treated
+  /// as unconstrained.
+  latestArrivalTime DateTime?    @map("latest_arrival_time") @db.Timestamptz(6)
   frequency      String?         @default("DAILY") // DAILY|WEEKLY|ONCE
   shiftType      String?         @map("shift_type") // MORNING|EVENING|NIGHT|SPLIT
   direction      String?         @default("INBOUND") // INBOUND|OUTBOUND
@@ -5454,6 +5459,48 @@ model TransportRequest {
   @@index([status],      map: "idx_transport_requests_status")
   @@index([requestType], map: "idx_transport_requests_type")
   @@map("transport_requests")
+  @@schema("public")
+}
+
+/// Planning Constraint Engine rule row.
+///
+/// Ops-configurable rules that the PCE evaluator dispatches on `kind`.
+/// The `params` JSON column carries kind-specific config so adding a new
+/// rule kind lands with an evaluator function + code — no DDL required.
+/// See prisma/raw/add_planning_constraints.sql for kind → params contracts.
+///
+/// `action`:
+///   BLOCK    — plan infeasible, optimiser must never propose it
+///   WARN     — plan legal but flagged for operator attention
+///   PENALTY  — plan legal but scored (penaltyScore) — future optimiser
+///              picks lowest total; today the evaluator only surfaces it
+model PlanningConstraint {
+  id             String    @id @default(uuid())
+  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId       String    @map("tenant_id")
+
+  name           String
+  kind           String
+  action         String    @default("BLOCK")
+  penaltyScore   Decimal?  @map("penalty_score") @db.Decimal(10, 2)
+
+  params         Json      @default("{}")
+
+  effectiveFrom  DateTime? @map("effective_from") @db.Date
+  effectiveTo    DateTime? @map("effective_to")   @db.Date
+
+  reason         String?
+  isEnabled      Boolean   @default(true) @map("is_enabled")
+  createdBy      String?   @map("created_by")
+  updatedBy      String?   @map("updated_by")
+
+  @@index([tenantId],         map: "idx_planning_constraints_tenant")
+  @@index([tenantId, kind],   map: "idx_planning_constraints_tenant_kind")
+  @@index([deletedAt],        map: "idx_planning_constraints_deleted")
+  @@index([isEnabled],        map: "idx_planning_constraints_enabled")
+  @@map("planning_constraints")
   @@schema("public")
 }
 
