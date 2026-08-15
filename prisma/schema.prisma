@@ -2072,7 +2072,13 @@ model TripSchedule {
   direction      String?         @default("INBOUND") // INBOUND|OUTBOUND
   capacity       Int?            @default(30)
   confirmedCount Int?            @default(0) @map("confirmed_count")
-  status         String?         @default("SCHEDULED") // SCHEDULED|DEPARTED|IN_TRANSIT|COMPLETED|CANCELLED
+  status         String?         @default("SCHEDULED") // SCHEDULED|DEPARTED|IN_TRANSIT|COMPLETED|CANCELLED|MERGED
+  /// Merge lineage — set on source trips when they get merged into a
+  /// new consolidated trip. Points at the merged trip's id. Nullable
+  /// on the common (unmerged) case. Self-relation kept as a plain FK
+  /// column here; the Prisma-level self-relation is deliberately not
+  /// declared to avoid churning include/select shapes across the app.
+  mergedIntoTripId String?       @map("merged_into_trip_id")
   // ── Headway support ──────────────────────────────────────────────────
   // 'TIMEPOINT' (default): the row IS a single timed trip.
   // 'HEADWAY':            the row is a headway template — actual trips are
