@@ -13,7 +13,8 @@
  * batch-load the shared parts once.
  */
 
-import { prisma } from '@/lib/prisma';
+import { prisma as defaultPrisma } from '@/lib/prisma';
+import type { PrismaClient } from '@prisma/client';
 import type {
   PlanFacts,
   PlanTripFacts,
@@ -59,9 +60,18 @@ export type LoadPlanFactsInput = {
   tenantTimezone?: string;
   existing?: ExistingTripInput[];
   proposed?: ProposedTripInput[];
+  /**
+   * Prisma client to query with. Defaults to the app-wide singleton;
+   * tests inject a mocked client here. Kept as the last positional
+   * parameter (not on the shared input type) so production callers
+   * don't have to think about it.
+   */
 };
 
-export async function loadPlanFacts(input: LoadPlanFactsInput): Promise<PlanFacts> {
+export async function loadPlanFacts(
+  input: LoadPlanFactsInput,
+  prisma: PrismaClient = defaultPrisma
+): Promise<PlanFacts> {
   const tenantTimezone = input.tenantTimezone ?? 'Asia/Dubai';
   const existingIds = (input.existing ?? []).map((e) => e.tripId);
 
@@ -87,7 +97,7 @@ export async function loadPlanFacts(input: LoadPlanFactsInput): Promise<PlanFact
             },
           },
         }),
-    loadConstraintsForTenant(input.tenantId),
+    loadConstraintsForTenant(prisma, input.tenantId),
   ]);
 
   const vehicleIds = new Set<string>();
@@ -163,12 +173,15 @@ export async function loadPlanFacts(input: LoadPlanFactsInput): Promise<PlanFact
     });
   }
 
-  const zones = await loadZonesReferencedBy(input.tenantId, constraints);
+  const zones = await loadZonesReferencedBy(prisma, input.tenantId, constraints);
 
   return { trips, constraints, zones, tenantTimezone };
 }
 
-async function loadConstraintsForTenant(tenantId: string): Promise<PlanningConstraintFacts[]> {
+async function loadConstraintsForTenant(
+  prisma: PrismaClient,
+  tenantId: string
+): Promise<PlanningConstraintFacts[]> {
   const rows = await prisma.planningConstraint.findMany({
     where: { tenantId, deletedAt: null, isEnabled: true },
   });
@@ -190,6 +203,7 @@ async function loadConstraintsForTenant(tenantId: string): Promise<PlanningConst
 }
 
 async function loadZonesReferencedBy(
+  prisma: PrismaClient,
   tenantId: string,
   constraints: PlanningConstraintFacts[]
 ): Promise<ZoneFacts> {
