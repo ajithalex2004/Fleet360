@@ -21,6 +21,16 @@
  *
  * Query: ?dryRun=1 to preview, ?forDate=YYYY-MM-DD to target a specific
  *        date (default tomorrow).
+ *
+ * Tenant scoping (2026-08-13):
+ *   - When called with an operator session (x-tenant-id header set by
+ *     the auth middleware), the sweep is scoped to that single tenant.
+ *     This prevents a platform-wide scan that hit the Prisma transaction
+ *     timeout on the shared dev DB and leaked cross-tenant data into
+ *     per-tenant notifications.
+ *   - When called with the CRON_SECRET bearer (no x-tenant-id), the
+ *     sweep remains a platform-wide operation. If you need to limit a
+ *     cron run to a specific tenant, pass ?tenantId=... in the query.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -46,6 +56,14 @@ export async function POST(req: NextRequest) {
     const dryRun = sp.get('dryRun') === '1';
     const forDateArg = sp.get('forDate');
 
+    // Tenant scoping: prefer the session's x-tenant-id header, fall back
+    // to an explicit ?tenantId= query param, then no scope (platform cron).
+    // Using a string | undefined filter so Prisma generates a clean
+    // parameterized WHERE clause.
+    const sessionTenantId = req.headers.get('x-tenant-id') ?? null;
+    const queryTenantId  = sp.get('tenantId') ?? null;
+    const tenantScope    = sessionTenantId ?? queryTenantId; // null = no scope
+
     const now = new Date();
     const target = forDateArg && /^\d{4}-\d{2}-\d{2}$/.test(forDateArg)
       ? new Date(forDateArg + 'T00:00:00Z')
@@ -61,6 +79,7 @@ export async function POST(req: NextRequest) {
         status: { in: ['PENDING', 'APPROVED'] },
         tripDate: { gte: target, lt: targetEnd },
         reason: { startsWith: 'ABSENCE' },
+        ...(tenantScope ? { tenantId: tenantScope } : {}),
       },
       select: { id: true, staffMemberId: true, reason: true, tripDate: true },
     });
@@ -142,6 +161,7 @@ export async function POST(req: NextRequest) {
         departureTime: { gte: target, lt: targetEnd },
         status: { in: ['SCHEDULED', 'DEPARTED', 'IN_TRANSIT'] },
         passengers: { some: { status: 'WAITLISTED' } },
+        ...(tenantScope ? { tenantId: tenantScope } : {}),
       },
       select: { id: true },
     });

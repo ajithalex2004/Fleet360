@@ -17,7 +17,22 @@
  *   effectiveTo,          // 'YYYY-MM-DD' (optional)
  * } ] }
  *
- * Response: { total, created, skipped, errors: [{ row, error }] }
+ * Query params (R10 fix 2026-08-13):
+ *   ?dryRun=true         — compute the result without writing anything
+ *                          to the DB. Use to preview an import before
+ *                          committing. Per-row errors are still
+ *                          reported.
+ *   ?idempotencyKey=xxx  — caller-supplied token. The first POST with
+ *                          a given key runs the import and stores the
+ *                          result; subsequent POSTs with the same
+ *                          key (and same body) return the cached
+ *                          result without re-running. This is the
+ *                          fix for "ops pasted the same CSV twice
+ *                          and got duplicate rows" — the client
+ *                          generates one key per paste and retries
+ *                          safely.
+ *
+ * Response: { total, created, skipped, errored, errors, dryRun, idempotencyKey? }
  *
  * All-or-nothing per row: a single bad row DOES NOT abort the batch;
  * the caller sees per-row status. Overlap protection (same as single
@@ -27,8 +42,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { createHash } from 'crypto';
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const IDEMPOTENCY_KEY_MAX_LEN = 200;
+const IDEMPOTENCY_TTL_HOURS = 24;
 
 interface InputRow {
   employeeId?: string;
@@ -45,10 +63,32 @@ interface InputRow {
 
 interface RowError { row: number; input: InputRow; error: string }
 
+interface ImportResult {
+  total: number;
+  created: number;
+  skipped: number;
+  errored: number;
+  errors: RowError[];
+  dryRun: boolean;
+  idempotencyKey?: string;
+}
+
 export async function POST(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id');
   if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   const createdBy = req.headers.get('x-user-id') ?? null;
+
+  // R10: query-string flags
+  const url = new URL(req.url);
+  const dryRun          = url.searchParams.get('dryRun') === 'true';
+  const idempotencyKey  = url.searchParams.get('idempotencyKey')?.trim() || null;
+
+  if (idempotencyKey && idempotencyKey.length > IDEMPOTENCY_KEY_MAX_LEN) {
+    return NextResponse.json(
+      { error: `idempotencyKey must be ≤ ${IDEMPOTENCY_KEY_MAX_LEN} chars` },
+      { status: 400 },
+    );
+  }
 
   let body: { rows?: InputRow[] };
   try { body = await req.json(); }
@@ -56,6 +96,34 @@ export async function POST(req: NextRequest) {
   const rows = Array.isArray(body.rows) ? body.rows : [];
   if (rows.length === 0) return NextResponse.json({ error: 'rows array is required' }, { status: 400 });
   if (rows.length > 5000) return NextResponse.json({ error: 'Max 5000 rows per import' }, { status: 400 });
+
+  // R10: idempotency replay — if this (tenant, key, body-hash) has been
+  // processed before, return the cached result without re-running.
+  if (idempotencyKey) {
+    const bodyHash = createHash('sha256').update(JSON.stringify(body)).digest('hex');
+    const cached = await prisma.bulkImportJob.findUnique({
+      where: {
+        tenantId_idempotencyKey: { tenantId, idempotencyKey },
+      },
+      select: { result: true, bodyHash: true, expiresAt: true },
+    });
+    if (cached && cached.expiresAt > new Date()) {
+      if (cached.bodyHash !== bodyHash) {
+        return NextResponse.json(
+          {
+            error: 'idempotencyKey was already used with a different request body',
+            hint: 'Generate a fresh key per logical paste, or omit the key to force re-execution.',
+          },
+          { status: 409 },
+        );
+      }
+      // Replay — return cached result.
+      return NextResponse.json({
+        ...(cached.result as object),
+        idempotencyReplay: true,
+      });
+    }
+  }
 
   // Preload lookup tables ONCE — resolving per-row would fire 4-5 queries
   // per input, killing throughput on 500+ row imports.
@@ -128,29 +196,57 @@ export async function POST(req: NextRequest) {
       });
       if (overlap) { skipped++; continue; }
 
-      await prisma.routePassenger.create({
-        data: {
-          tenantId, routeId: route.id, staffMemberId,
-          pickupStopId, dropoffStopId,
-          pickupTime:  r.pickupTime  || null,
-          dropoffTime: r.dropoffTime || null,
-          effectiveFrom, effectiveTo,
-          status: 'ACTIVE',
-          notes: r.notes?.trim() || null,
-          createdBy,
-        },
-      });
+      // R10: dry-run — skip the write but still count it as "would-create".
+      if (!dryRun) {
+        await prisma.routePassenger.create({
+          data: {
+            tenantId, routeId: route.id, staffMemberId,
+            pickupStopId, dropoffStopId,
+            pickupTime:  r.pickupTime  || null,
+            dropoffTime: r.dropoffTime || null,
+            effectiveFrom, effectiveTo,
+            status: 'ACTIVE',
+            notes: r.notes?.trim() || null,
+            createdBy,
+          },
+        });
+      }
       created++;
     } catch (err) {
       errors.push({ row: i + 1, input: r, error: err instanceof Error ? err.message : 'Unknown error' });
     }
   }
 
-  return NextResponse.json({
+  const result: ImportResult = {
     total: rows.length,
     created,
     skipped,      // active overlap
     errored: errors.length,
     errors,
-  });
+    dryRun,
+    ...(idempotencyKey ? { idempotencyKey } : {}),
+  };
+
+  // R10: persist the result so a retry with the same key is a no-op.
+  if (idempotencyKey && !dryRun) {
+    const bodyHash = createHash('sha256').update(JSON.stringify(body)).digest('hex');
+    await prisma.bulkImportJob.upsert({
+      where: { tenantId_idempotencyKey: { tenantId, idempotencyKey } },
+      create: {
+        tenantId,
+        idempotencyKey,
+        bodyHash,
+        result: result as object,
+        createdBy,
+        expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_HOURS * 60 * 60 * 1000),
+      },
+      update: {
+        bodyHash,
+        result: result as object,
+        expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_HOURS * 60 * 60 * 1000),
+      },
+    });
+  }
+
+  return NextResponse.json(result);
 }

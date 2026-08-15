@@ -1886,6 +1886,37 @@ model RoutePassenger {
   @@schema("public")
 }
 
+/// Idempotency record for bulk import endpoints. R10 fix (2026-08-13).
+///
+/// The bulk-import endpoints (route-passengers, and future ones) accept
+/// an optional `?idempotencyKey=…` query param. The first POST with a
+/// given (tenantId, idempotencyKey) runs the import and stores the
+/// result + body hash; subsequent POSTs with the same key (and same
+/// body) return the cached result without re-running. Keys expire
+/// after 24h.
+///
+/// `bodyHash` is the SHA-256 of the canonicalised request body. If a
+/// client reuses a key with a different body, the route returns 409
+/// rather than silently replaying a wrong result.
+model BulkImportJob {
+  id              String   @id @default(uuid())
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId        String   @map("tenant_id")
+  idempotencyKey  String   @map("idempotency_key")
+  bodyHash        String   @map("body_hash")
+  /// JSON column holding the import result (counts + per-row errors).
+  /// Prisma serialises as Json; the route does explicit casting.
+  result          Json     @map("result")
+  createdBy       String?  @map("created_by")
+  expiresAt       DateTime @map("expires_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, idempotencyKey], map: "uniq_bulk_import_tenant_key")
+  @@index([expiresAt], map: "idx_bulk_import_expires")
+  @@map("bulk_import_jobs")
+  @@schema("public")
+}
+
 /// Recurring schedule template for bus-ops. Describes the RULE
 /// ("Marina MORNING SUN-THU Pickup at 07:00 from Aug 7 onwards"); the
 /// generator materialises this rule into concrete TripSchedule rows for a

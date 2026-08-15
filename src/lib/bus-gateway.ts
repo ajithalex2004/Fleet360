@@ -57,10 +57,19 @@ export function verifyGatewaySignature(rawBody: string, signatureHex: string | n
  * Which secret should be used to verify a given gateway's payload?
  * Prefers the per-gateway secret from BleGateway.secret; falls back to
  * the env var for gateways whose per-row secret hasn't been rotated
- * yet. Returns null if neither is set — caller should reject with 401.
+ * yet (or whose per-row secret is the empty string). Returns null if
+ * neither is set — caller should reject with 401.
+ *
+ * Why `||` instead of `??`: the previous `??` treated `''` as a
+ * valid (but unusable) secret, which caused the route to 401 on a
+ * per-gateway row whose secret column was empty — even when the
+ * env fallback was configured. The empty string is the
+ * "not yet provisioned" sentinel; it should trigger the fallback
+ * just like null. (Test that caught this: tests/unit/bus-ops-gateway-signature.test.ts)
  */
 export function resolveGatewaySecret(perGatewaySecret: string | null | undefined): string | null {
-  return perGatewaySecret ?? process.env[SHARED_SECRET_ENV] ?? null;
+  if (perGatewaySecret && perGatewaySecret.length > 0) return perGatewaySecret;
+  return process.env[SHARED_SECRET_ENV] || null;
 }
 
 export function gatewaySecretConfigured(): boolean {

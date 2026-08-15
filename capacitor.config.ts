@@ -25,16 +25,22 @@ const config: CapacitorConfig = {
   // no embedded browser. Background colour matches the dark theme to
   // avoid a white flash on cold start.
   backgroundColor: '#0F172A',
-  // Server URL. We do NOT set `server.url` to an empty string — that
-  // caused `Uri.parse(null)` to throw on launch. Either omit the
-  // `server` block entirely (Capacitor then defaults to
-  // `https://localhost`, the standard "use bundled assets" URL on
-  // Android) or set it explicitly. We go with the explicit form for
-  // documentation. The driver app talks to the absolute API base
-  // configured at runtime via NEXT_PUBLIC_API_BASE.
+  // Set `server.hostname` to something other than the default
+  // `localhost`. This changes the WebView's main URL from
+  // `https://localhost/` to `https://localhost2/`, which
+  // invalidates any stale WebView HTTP cache (cache is keyed
+  // on the full URL — a different host = cache miss).
+  //
+  // v10 note: this is now defense-in-depth, not the primary
+  // cache-bust. The primary mechanism is
+  // `WebView.clearCache(true)` called from MainActivity.onCreate
+  // (see android/app/src/main/java/com/fleet360/driver/MainActivity.java).
+  // clearCache wipes the WebView's HTTP cache + localStorage +
+  // IndexedDB + Service Workers on every cold start, so the
+  // launcher always loads fresh — even on MIUI where the system
+  // WebView cache survives `pm clear` and uninstall+reinstall.
   server: {
-    url: 'https://localhost',
-    cleartext: false,
+    hostname: 'localhost2',
   },
   plugins: {
     // Camera — DVIR defect photos. We restrict to environment + photos
