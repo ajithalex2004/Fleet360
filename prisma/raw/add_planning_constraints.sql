@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS public.planning_constraints (
    *                              vehicleGroups?, fromHm?, toHm?, dayMask?}
    *   PICKUP_TIME_BUFFER         {minBufferMin}   — between merge candidates
    *   TRIP_MAX_DURATION          {maxMinutes}
-   *   PASSENGER_MAX_DETOUR       {maxMinutes | maxPercent}
+   *   PASSENGER_MAX_DETOUR       {maxMinutes | maxPercent}   — trip-execution shape
+   *   ROUTE_STOP_DEVIATION_MAX   {maxMinutes | maxPercent}   — network-design shape
    *   MERGED_ARRIVAL_SLA         {toleranceMin}   — vs latest_arrival_time
    *   ROUTE_STOP_RESTRICTION     {stopPlaceId, minSeats?, maxSeats?,
    *                              vehicleGroups?}
