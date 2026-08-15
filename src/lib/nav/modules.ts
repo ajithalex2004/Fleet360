@@ -162,6 +162,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'Route planner',       href: '/bus-ops/route-planner',       icon: Route,           group: 'Planning' },
       { label: 'Schedules',           href: '/bus-ops/schedules',           icon: Calendar,        group: 'Planning' },
       { label: 'Schedule Templates',  href: '/bus-ops/schedule-templates',  icon: Repeat,          group: 'Planning' },
+      { label: 'Planning Constraints',href: '/bus-ops/planning-constraints',icon: Shield,          group: 'Planning' },
       { label: 'Transport Calendars', href: '/bus-ops/transport-calendars', icon: CalendarCheck2,  group: 'Planning' },
 
       // Operations — day-of-service execution.
