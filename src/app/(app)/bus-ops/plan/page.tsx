@@ -19,6 +19,26 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
 import { useFetchedData, fetchOnce } from '@/hooks/useFetchedData';
+import PceVerdictPanel, { type PceVerdictBody } from '@/components/bus-ops/PceVerdictPanel';
+
+/**
+ * Success-payload PCE gate section. Present when the apply route ran
+ * the gate (i.e. PCE_APPLY_GATE_ENABLED wasn't disabled). Verdict is
+ * PASS or WARN; BLOCK never reaches here — it comes back as a 409.
+ */
+type PceGatePayload =
+  | { verdict: 'PASS' | 'WARN'; totalPenalty: number; warningTripIds: string[]; trips: PceVerdictBody['trips'] }
+  | { verdict: 'DISABLED' };
+
+/** 409 payload shape from /plan/[id]/apply when verdict === 'BLOCK'. */
+type PceBlockPayload = {
+  error: string;
+  planId: string;
+  verdict: 'BLOCK';
+  blockedTripIds: string[];
+  trips: PceVerdictBody['trips'];
+  totalPenalty: number;
+};
 
 // ── Types (mirror lib/plan/*) ───────────────────────────────────────────────
 
@@ -221,9 +241,19 @@ export default function PlanPage() {
   } | null>(null);
   const [comparing, setComparing] = useState(false);
 
-  // Apply state
+  // Apply state.
+  //   applyResult   — success payload (may include a PASS or WARN pceGate)
+  //   applyBlocked  — 409 payload from a PCE BLOCK verdict; treated as a
+  //                   result to render (not an error) so the operator sees
+  //                   which trips failed and can fix rules / assignments.
   const [applying, setApplying] = useState(false);
-  const [applyResult, setApplyResult] = useState<{ tripsAffected: number; driversAssigned: number; vehiclesAssigned: number } | null>(null);
+  const [applyResult, setApplyResult] = useState<{
+    tripsAffected: number;
+    driversAssigned: number;
+    vehiclesAssigned: number;
+    pceGate: PceGatePayload | null;
+  } | null>(null);
+  const [applyBlocked, setApplyBlocked] = useState<PceBlockPayload | null>(null);
 
   // Load drivers (for roster) and saved plans list
   const driversRes = useFetchedData<{ id: string; name: string; licenseType: string | null }[]>(
@@ -246,7 +276,7 @@ export default function PlanPage() {
 
   // ── Compute ─────────────────────────────────────────────────────────────
   const compute = async () => {
-    setComputing(true); setError(null); setApplyResult(null);
+    setComputing(true); setError(null); setApplyResult(null); setApplyBlocked(null);
     try {
       const body: Record<string, unknown> = {
         dateFrom, dateTo,
@@ -307,18 +337,22 @@ export default function PlanPage() {
   const apply = async () => {
     if (!plan?.id) return;
     if (!confirm('Apply this plan? The run→driver and block→vehicle assignments will be written back to trip_schedules.')) return;
-    setApplying(true); setError(null);
+    setApplying(true); setError(null); setApplyResult(null); setApplyBlocked(null);
     try {
       const res = await fetch(`/api/bus-ops/plan/${plan.id}/apply`, { method: 'POST' });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(d.error ?? 'Apply failed');
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409 && data?.verdict === 'BLOCK') {
+        // Not an error — a legitimate PCE refusal. Surface it structurally
+        // so the operator can see which trips failed and address them.
+        setApplyBlocked(data as PceBlockPayload);
+        return;
       }
-      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? 'Apply failed');
       setApplyResult({
         tripsAffected: data.tripsAffected,
         driversAssigned: data.driversAssigned,
         vehiclesAssigned: data.vehiclesAssigned,
+        pceGate: (data.pceGate as PceGatePayload | undefined) ?? null,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Apply failed');
@@ -484,8 +518,25 @@ export default function PlanPage() {
               </div>
             </div>
             {applyResult && (
-              <div className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm text-emerald-200 inline-flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4" /> Applied: {applyResult.tripsAffected} trips affected, {applyResult.driversAssigned} drivers, {applyResult.vehiclesAssigned} vehicles.
+              <div className="mb-4 space-y-3">
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm text-emerald-200 inline-flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4" /> Applied: {applyResult.tripsAffected} trips affected, {applyResult.driversAssigned} drivers, {applyResult.vehiclesAssigned} vehicles.
+                </div>
+                {applyResult.pceGate && applyResult.pceGate.verdict !== 'PASS' && (
+                  // Only show the panel when there's something to say. A
+                  // clean PASS gate would otherwise take space to tell the
+                  // operator "no news"; the emerald success line above
+                  // already covers that case.
+                  <PceVerdictPanel body={applyResult.pceGate} />
+                )}
+              </div>
+            )}
+            {applyBlocked && (
+              <div className="mb-4">
+                <PceVerdictPanel body={applyBlocked} />
+                <div className="mt-2 text-xs text-slate-400">
+                  Plan not applied — nothing was written to <code className="rounded bg-slate-800 px-1 py-0.5">trip_schedules</code>. Fix the flagged assignments (or the constraint rules) and re-apply.
+                </div>
               </div>
             )}
 
