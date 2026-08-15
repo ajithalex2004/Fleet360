@@ -181,7 +181,14 @@ const EVALUATORS: Record<string, Evaluator> = {
   ZONE_VEHICLE_RESTRICTION: evalZoneVehicleRestriction,
   PICKUP_TIME_BUFFER: evalPickupTimeBuffer,
   TRIP_MAX_DURATION: evalTripMaxDuration,
-  PASSENGER_MAX_DETOUR: evalPassengerMaxDetour,
+  // PASSENGER_MAX_DETOUR and ROUTE_STOP_DEVIATION_MAX share the same
+  // duration-detour math (merged.duration vs each source.duration). They
+  // exist as separate kinds so ops can author them with different
+  // thresholds and semantics — one for trip-time passenger experience,
+  // one for network-design route deviation — and enable/disable each
+  // independently. See docstring on evalDurationDetour.
+  PASSENGER_MAX_DETOUR: evalDurationDetour,
+  ROUTE_STOP_DEVIATION_MAX: evalDurationDetour,
   MERGED_ARRIVAL_SLA: evalMergedArrivalSla,
   ROUTE_STOP_RESTRICTION: evalRouteStopRestriction,
   VEHICLE_CAPACITY_HARD: evalVehicleCapacityHard,
@@ -379,14 +386,25 @@ function evalTripMaxDuration(rule: PlanningConstraintFacts, facts: PlanFacts): P
 }
 
 /**
- * PASSENGER_MAX_DETOUR — how much extra time can a passenger accept
- * because their trip was merged with another?
+ * Duration-detour math shared by two constraint kinds:
  *
- * Compares each `source` trip's original duration to the merged trip's
- * duration. Threshold is absolute (maxMinutes) or relative (maxPercent);
- * the more restrictive fires. Requires both sources and a merged trip.
+ *   PASSENGER_MAX_DETOUR      — trip-execution context: how much extra
+ *                               travel-time can a merged trip inflict
+ *                               on the passengers of a source trip?
+ *   ROUTE_STOP_DEVIATION_MAX  — network-design context: how much extra
+ *                               traversal-time can a consolidated route
+ *                               add over a source route's typical run?
+ *
+ * The math is identical: for each `source` trip, compare its duration
+ * against the `merged` trip's duration. Threshold is absolute
+ * (maxMinutes) or relative (maxPercent); the more restrictive fires.
+ * Requires both source(s) and a merged trip in the plan facts.
+ *
+ * Kept as one function because the check output uses `rule.kind` as
+ * the code, so the check's identity always reflects which rule
+ * authored it — no branching needed inside the evaluator.
  */
-function evalPassengerMaxDetour(rule: PlanningConstraintFacts, facts: PlanFacts): PlanCheck[] {
+function evalDurationDetour(rule: PlanningConstraintFacts, facts: PlanFacts): PlanCheck[] {
   const params = rule.params as { maxMinutes?: number; maxPercent?: number };
   const merged = facts.trips.find((t) => t.role === 'merged');
   if (!merged) return [];
