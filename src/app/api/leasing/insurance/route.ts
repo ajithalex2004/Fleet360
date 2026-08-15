@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 /**
  * Insurance policies list (GET) + new policy (POST).
@@ -9,10 +11,11 @@ import { prisma } from '@/lib/prisma';
  * surface.
  */
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const { searchParams } = new URL(req.url);
     const contractId = searchParams.get('contractId');
@@ -41,10 +44,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
     if (body.contractId) {
@@ -58,9 +62,11 @@ export async function POST(req: NextRequest) {
     }
     const count = await prisma.leaseInsurancePolicy.count({ where: { tenantId } });
     const policyNo = body.policyNo ?? `INS-${String(count + 1).padStart(5, '0')}`;
-    const policy = await prisma.leaseInsurancePolicy.create({
+    const policy = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseInsurancePolicy.create({
       data: { ...body, tenantId, policyNo },
-    });
+    }),
+    );
     return NextResponse.json(policy, { status: 201 });
   } catch (e) {
     console.error('POST /api/leasing/insurance error:', e);

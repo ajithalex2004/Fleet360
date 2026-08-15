@@ -23,7 +23,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { parseFuelCsv } from '@/lib/fuel-csv';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -41,10 +43,11 @@ interface ImportSummary {
 }
 
 export async function POST(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const form = await req.formData();
     const file = form.get('file');
@@ -175,7 +178,9 @@ export async function POST(req: NextRequest) {
 
     for (const item of toInsert) {
       try {
-        await prisma.leaseFuelLog.create({ data: item.data });
+        await withTenantRls(prisma, tenantId, async (tx) =>
+          tx.leaseFuelLog.create({ data: item.data }),
+        );
         summary.imported += 1;
       } catch (err) {
         summary.importErrors.push({ row: item.rowIndex + 2, reason: err instanceof Error ? err.message : 'Insert failed' });

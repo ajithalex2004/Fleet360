@@ -19,6 +19,7 @@
 
 import { createElement } from 'react';
 import { NextRequest } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { renderPdf } from '@/lib/pdf/render';
 import { CrossBorderPermitPdf, type CrossBorderPermitPdfData } from '@/lib/pdf/templates/cross-border-permit';
@@ -46,6 +47,11 @@ const DESTINATION_LABELS: Record<string, { en: string; ar: string }> = {
 };
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   const { id } = await params;
   const sp = req.nextUrl.searchParams;
   const lang: Lang = sp.get('lang') === 'ar' ? 'ar' : 'en';

@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 
 /**
  * Quotation list (GET) + create (POST).
@@ -10,10 +12,11 @@ import { NextRequest, NextResponse } from 'next/server';
  * `20260627000001_add_tenant_id_to_leasing_tables`.
  */
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const quotations = await prisma.leaseQuotation.findMany({
       where: { tenantId, deletedAt: null },
@@ -39,10 +42,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const tenantId = request.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await request.json();
     // Generate serial quotation number scoped to this tenant
@@ -55,7 +59,8 @@ export async function POST(request: NextRequest) {
       approvalSteps, contracts, ...quotationData
     } = body;
 
-    const quotation = await prisma.leaseQuotation.create({
+    const quotation = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseQuotation.create({
       data: {
         ...quotationData,
         tenantId,
@@ -75,7 +80,8 @@ export async function POST(request: NextRequest) {
         } : {}),
       },
       include: { lineItems: true, vehicles: true },
-    });
+    }),
+    );
 
     return NextResponse.json({
       ...quotation,

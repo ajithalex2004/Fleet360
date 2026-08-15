@@ -5,18 +5,21 @@
  *
  * Note: the Prisma `LeaseAlert` model has no `deletedAt` column (only
  * `status` with values OPEN/ACKNOWLEDGED/RESOLVED). The original route's
- * `where: { deletedAt: null }` filter was a pre-existing type error
+ * `where: { tenantId, deletedAt: null }` filter was a pre-existing type error
  * (KNOWN-TS-001); this rewrite drops the broken filter.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const { searchParams } = new URL(req.url);
     const severity = searchParams.get('severity');
@@ -43,13 +46,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
-    const alert = await prisma.leaseAlert.create({ data: { ...body, tenantId } });
+    const alert = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseAlert.create({ data: { ...body, tenantId } }),
+    );
     return NextResponse.json(alert, { status: 201 });
   } catch (e) {
     console.error(e);

@@ -7,6 +7,7 @@
 
 import { createElement } from 'react';
 import { NextRequest } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { renderPdf } from '@/lib/pdf/render';
 import { ReceiptPdf, type ReceiptPdfData } from '@/lib/pdf/templates/receipt';
@@ -27,6 +28,11 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; paymentId: string }> },
 ) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   const { id: invoiceId, paymentId } = await params;
   const lang: Lang = req.nextUrl.searchParams.get('lang') === 'ar' ? 'ar' : 'en';
   const download = req.nextUrl.searchParams.get('download') === '1';

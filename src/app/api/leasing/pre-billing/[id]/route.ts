@@ -6,13 +6,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const existing = await prisma.leasePreBillingStatement.findFirst({
       where: { id: params.id, tenantId },
@@ -25,10 +28,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const { contract, ...data } = body;
     if (data.status === 'SENT' && !data.sentAt) data.sentAt = new Date();
     if (data.status === 'CONFIRMED' && !data.confirmedAt) data.confirmedAt = new Date();
-    const stmt = await prisma.leasePreBillingStatement.update({
+    const stmt = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leasePreBillingStatement.update({
       where: { id: params.id },
       data,
-    });
+    }),
+    );
     return NextResponse.json(stmt);
   } catch (e) {
     return NextResponse.json({ error: 'Failed' }, { status: 500 });

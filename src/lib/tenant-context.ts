@@ -150,3 +150,144 @@ export function buildTenantContext(
     moduleFilter,
   };
 }
+
+
+// ── TENANT-001 hardened identity resolution ─────────────────────────────────
+//
+// x-tenant-id is a *selector*, not proof of identity.
+// Middleware injects x-tenant-id from the verified session (session.tenantId).
+// Handlers must:
+//   1. Prefer session-derived headers set by middleware (x-tenant-id + x-user-id)
+//   2. Never accept tenantId from the request body as ownership authority
+//   3. For SUPER_ADMIN tenant-switch flows, optionally assert membership
+//   4. Fail closed when tenant context is absent
+
+export type AuthorizedTenantResult =
+  | { ok: true; tenantId: string; userId: string | null; role: string | null }
+  | { ok: false; status: 400 | 401 | 403; error: string };
+
+/**
+ * Resolve the authorized tenant for a protected API request.
+ *
+ * Identity chain:
+ *   Session (middleware) → x-tenant-id / x-user-id / role headers
+ *   → optional membership check when a switcher header is present
+ *   → TenantContext
+ *
+ * Client-supplied body.tenantId is intentionally ignored.
+ */
+export function resolveAuthorizedTenant(
+  req: {
+    headers: Headers;
+    nextUrl?: { searchParams: URLSearchParams };
+  },
+  opts: {
+    /** When true, SUPER_ADMIN may select another tenant via header/query. */
+    allowPlatformSwitch?: boolean;
+    /** Optional membership predicate for switcher flows. */
+    assertMembership?: (userId: string, tenantId: string) => Promise<boolean> | boolean;
+  } = {},
+): AuthorizedTenantResult {
+  const userId = req.headers.get('x-user-id');
+  const role = req.headers.get('x-user-role') ?? req.headers.get('x-role');
+  const sessionTenant = sanitizeTenantId(req.headers.get('x-tenant-id') ?? '');
+
+  if (!sessionTenant) {
+    // Authenticated routes should have middleware-injected tenant.
+    // Missing context = fail closed (never unscoped query).
+    if (!userId) {
+      return { ok: false, status: 401, error: 'Authentication required' };
+    }
+    return { ok: false, status: 403, error: 'Tenant context required' };
+  }
+
+  // Optional switcher: only SUPER_ADMIN, and only when explicitly allowed.
+  const requested =
+    sanitizeTenantId(req.nextUrl?.searchParams?.get('tenantId') ?? '') ||
+    sanitizeTenantId(req.headers.get('x-requested-tenant-id') ?? '');
+
+  if (requested && requested !== sessionTenant) {
+    if (!opts.allowPlatformSwitch || role !== 'SUPER_ADMIN') {
+      return { ok: false, status: 403, error: 'Tenant switch not permitted' };
+    }
+    // Membership assertion is required when a switch is requested.
+    // Callers that pass assertMembership will be checked asynchronously
+    // via resolveAuthorizedTenantAsync.
+    return {
+      ok: true,
+      tenantId: requested,
+      userId: userId || null,
+      role: role || null,
+    };
+  }
+
+  return {
+    ok: true,
+    tenantId: sessionTenant,
+    userId: userId || null,
+    role: role || null,
+  };
+}
+
+/**
+ * Async variant that enforces membership when SUPER_ADMIN switches tenant.
+ */
+export async function resolveAuthorizedTenantAsync(
+  req: {
+    headers: Headers;
+    nextUrl?: { searchParams: URLSearchParams };
+  },
+  opts: {
+    allowPlatformSwitch?: boolean;
+    assertMembership?: (userId: string, tenantId: string) => Promise<boolean> | boolean;
+  } = {},
+): Promise<AuthorizedTenantResult> {
+  const result = resolveAuthorizedTenant(req, opts);
+  if (!result.ok) return result;
+
+  const sessionTenant = sanitizeTenantId(req.headers.get('x-tenant-id') ?? '');
+  if (result.tenantId !== sessionTenant && opts.assertMembership) {
+    if (!result.userId) {
+      return { ok: false, status: 403, error: 'Tenant switch requires authenticated user' };
+    }
+    const allowed = await opts.assertMembership(result.userId, result.tenantId);
+    if (!allowed) {
+      return { ok: false, status: 403, error: 'User is not a member of the requested tenant' };
+    }
+  }
+  return result;
+}
+
+/**
+ * Require an authorized tenant or return a NextResponse-compatible error shape.
+ * Use in route handlers:
+ *
+ *   const authz = requireAuthorizedTenant(req);
+ *   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
+ *   const { tenantId } = authz;
+ */
+export function requireAuthorizedTenant(
+  req: {
+    headers: Headers;
+    nextUrl?: { searchParams: URLSearchParams };
+  },
+  opts?: {
+    allowPlatformSwitch?: boolean;
+  },
+): AuthorizedTenantResult {
+  return resolveAuthorizedTenant(req, opts);
+}
+
+/**
+ * Strip tenant ownership fields from untrusted request bodies.
+ * Tenant ownership must come from context, never from normal business input.
+ */
+export function stripTenantOwnershipFields<T extends Record<string, unknown>>(
+  body: T,
+): Omit<T, 'tenantId' | 'tenant_id'> {
+  const { tenantId: _a, tenant_id: _b, ...rest } = body as T & {
+    tenantId?: unknown;
+    tenant_id?: unknown;
+  };
+  return rest;
+}

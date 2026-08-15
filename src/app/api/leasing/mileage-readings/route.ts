@@ -18,17 +18,20 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
 const DEFAULT_OVERAGE_RATE_AED_PER_KM = 0.50;
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const { searchParams } = new URL(req.url);
     const contractId = searchParams.get('contractId');
@@ -45,10 +48,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
 
@@ -62,9 +66,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Contract not found in this tenant' }, { status: 404 });
     }
 
-    const reading = await prisma.leaseMileageReading.create({
+    const reading = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseMileageReading.create({
       data: { ...body, tenantId },
-    });
+    }),
+    );
 
     // Only RETURN and MONTHLY readings trigger overage calculation.
     if (!['RETURN', 'MONTHLY'].includes(body.readingType)) {

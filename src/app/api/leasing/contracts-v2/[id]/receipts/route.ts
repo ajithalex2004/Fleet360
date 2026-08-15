@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 /**
  * Receipt list for a single contract (GET) + record a receipt against
@@ -11,10 +13,11 @@ import { prisma } from '@/lib/prisma';
  * returns 404 (not 403) to avoid leaking row existence.
  */
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     // Verify the contract belongs to this tenant before listing its
     // receipts — otherwise a cross-tenant contract id would expose
@@ -39,10 +42,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const contract = await prisma.leaseContract2.findFirst({
       where: { id: params.id, tenantId },
@@ -56,7 +60,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const receiptNumber = `RCP-${Date.now().toString().slice(-6)}`;
     const amount = Number(body.amount ?? 0);
 
-    const receipt = await prisma.leaseReceipt.create({
+    const receipt = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseReceipt.create({
       data: {
         tenantId,
         contractId: params.id,
@@ -72,7 +77,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         branchId: body.branchId ?? null,
         notes: body.notes ?? null,
       },
-    });
+    }),
+    );
     return NextResponse.json(receipt, { status: 201 });
   } catch (e) {
     console.error('POST /api/leasing/contracts-v2/[id]/receipts error:', e);

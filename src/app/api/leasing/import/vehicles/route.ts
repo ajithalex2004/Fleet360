@@ -17,7 +17,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import {
   parseCsv,
   commitCsvRows,
@@ -40,10 +42,11 @@ const config = {
 };
 
 export async function POST(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const form = await req.formData();
     const file = form.get('file');
@@ -78,7 +81,8 @@ export async function POST(req: NextRequest) {
       if (existing) {
         throw new Error(`vehicle with licensePlate=${row.licensePlate} already exists`);
       }
-      await prisma.vehicle.create({
+      await withTenantRls(prisma, tenantId, async (tx) =>
+        tx.vehicle.create({
         data: {
           make: row.make,
           model: row.model,
@@ -96,7 +100,8 @@ export async function POST(req: NextRequest) {
           currentMileage: row.currentMileage != null ? BigInt(row.currentMileage) : null,
           tenantId,
         },
-      });
+      }),
+      );
     });
 
     void logAudit({

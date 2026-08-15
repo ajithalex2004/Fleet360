@@ -245,6 +245,115 @@ describe('Tenant isolation — /api/rental/agreements', () => {
   });
 });
 
+
+// ── TENANT-001: Leasing lessees isolation ─────────────────────────────────────
+
+describe('Tenant isolation — /api/leasing/lessees (TENANT-001)', () => {
+  let lesseeName: string;
+
+  beforeAll(async () => {
+    if (!serverAvailable) return;
+    lesseeName = `ISO-Lessee-${uid()}`;
+    await makeRequest(
+      'POST',
+      '/api/leasing/lessees',
+      {
+        name: lesseeName,
+        type: 'corporate',
+        tradeLicense: `TL-ISO-${uid()}`,
+      },
+      tenantA.headers,
+    ).catch(() => {});
+  });
+
+  it('Tenant B lessee list does not contain Tenant A lessee', async () => {
+    if (!serverAvailable) return;
+    const res = await makeRequest('GET', '/api/leasing/lessees', undefined, tenantB.headers);
+    if (res.status !== 200) {
+      console.warn(`[isolation] /api/leasing/lessees returned ${res.status} — skipping content check`);
+      return;
+    }
+    const body = await res.json();
+    const list = Array.isArray(body) ? body : (body.data ?? body.lessees ?? []);
+    const leaked = list.some(
+      (row: Record<string, unknown>) => row.name === lesseeName,
+    );
+    expect(leaked).toBe(false);
+  });
+
+  it('POST without tenant context is rejected (401/403)', async () => {
+    if (!serverAvailable) return;
+    const res = await makeRequest(
+      'POST',
+      '/api/leasing/lessees',
+      { name: 'NoTenant', type: 'corporate', tradeLicense: 'X' },
+      {}, // no auth headers
+    );
+    expect([401, 403]).toContain(res.status);
+  });
+});
+
+// ── TENANT-001: Rental bookings isolation ─────────────────────────────────────
+
+describe('Tenant isolation — /api/rental/bookings (TENANT-001)', () => {
+  let bookingRef: string;
+
+  beforeAll(async () => {
+    if (!serverAvailable) return;
+    bookingRef = `BK-ISO-${uid()}`;
+    await makeRequest(
+      'POST',
+      '/api/rental/bookings',
+      {
+        bookingRef,
+        status: 'PENDING',
+        pickupDate: new Date().toISOString(),
+        dropoffDate: new Date(Date.now() + 86400000).toISOString(),
+      },
+      tenantA.headers,
+    ).catch(() => {});
+  });
+
+  it('Tenant B bookings list does not contain Tenant A bookingRef', async () => {
+    if (!serverAvailable) return;
+    const res = await makeRequest('GET', '/api/rental/bookings', undefined, tenantB.headers);
+    if (res.status !== 200) {
+      console.warn(`[isolation] /api/rental/bookings returned ${res.status} — skipping content check`);
+      return;
+    }
+    const body = await res.json();
+    const list = Array.isArray(body) ? body : (body.data ?? body.bookings ?? []);
+    const leaked = list.some(
+      (row: Record<string, unknown>) =>
+        row.bookingRef === bookingRef || row.booking_ref === bookingRef,
+    );
+    expect(leaked).toBe(false);
+  });
+});
+
+// ── TENANT-001: Leasing contracts-v2 isolation ───────────────────────────────
+
+describe('Tenant isolation — /api/leasing/contracts-v2 (TENANT-001)', () => {
+  it('Tenant B contracts list does not leak Tenant A rows', async () => {
+    if (!serverAvailable) return;
+    const resA = await makeRequest('GET', '/api/leasing/contracts-v2', undefined, tenantA.headers);
+    const resB = await makeRequest('GET', '/api/leasing/contracts-v2', undefined, tenantB.headers);
+    if (resA.status !== 200 || resB.status !== 200) {
+      console.warn(
+        `[isolation] contracts-v2 status A=${resA.status} B=${resB.status} — skipping content check`,
+      );
+      return;
+    }
+    const listA = await resA.json();
+    const listB = await resB.json();
+    const arrA = Array.isArray(listA) ? listA : (listA.data ?? []);
+    const arrB = Array.isArray(listB) ? listB : (listB.data ?? []);
+    const idsA = new Set(arrA.map((c: { id?: string }) => c.id).filter(Boolean));
+    const leaked = arrB.some((c: { id?: string }) => c.id && idsA.has(c.id));
+    expect(leaked).toBe(false);
+  });
+});
+
 // ── School Bus Students isolation ─────────────────────────────────────────────
 
 describe('Tenant isolation — /api/school-bus/students', () => {

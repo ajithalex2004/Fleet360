@@ -6,17 +6,23 @@
  * Channel Manager admin page to give operators a one-glance health view.
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { CHANNELS } from '@/lib/rental-channels';
 
 export const runtime = 'nodejs';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   // Aggregate booking counts per channel.
   const grouped = await prisma.rentalBooking.groupBy({
     by: ['channel'],
-    where: { deletedAt: null },
+    where: { tenantId, deletedAt: null },
     _count: { _all: true },
     _max: { createdAt: true },
   });

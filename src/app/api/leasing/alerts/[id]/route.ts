@@ -9,13 +9,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const existing = await prisma.leaseAlert.findFirst({
       where: { id: params.id, tenantId },
@@ -37,10 +40,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       updateData.resolvedAt = new Date();
     }
 
-    const alert = await prisma.leaseAlert.update({
+    const alert = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseAlert.update({
       where: { id: params.id },
       data: updateData,
-    });
+    }),
+    );
     return NextResponse.json(alert);
   } catch (e) {
     console.error(e);
@@ -49,10 +54,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const existing = await prisma.leaseAlert.findFirst({
       where: { id: params.id, tenantId },
@@ -64,10 +70,12 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     // No deletedAt column — flip to RESOLVED so the alert stops appearing
     // in the OPEN/ACKNOWLEDGED views. (Operations that need a real delete
     // can do it via a DB migration + soft-delete column later.)
-    await prisma.leaseAlert.update({
+    await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseAlert.update({
       where: { id: params.id },
       data: { status: 'RESOLVED', resolvedAt: new Date() },
-    });
+    }),
+    );
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error(e);

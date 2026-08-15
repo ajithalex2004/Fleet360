@@ -7,13 +7,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const contract = await prisma.leaseContract2.findFirst({
       where: { id: params.id, tenantId },
@@ -29,10 +32,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
     // Guarded update — refuses to touch contracts from another tenant.
@@ -43,10 +47,12 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     if (!existing) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
-    const contract = await prisma.leaseContract2.update({
+    const contract = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseContract2.update({
       where: { id: params.id },
       data: body,
-    });
+    }),
+    );
     return NextResponse.json(contract);
   } catch (error) {
     console.error('Error updating contract:', error);
@@ -55,10 +61,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const existing = await prisma.leaseContract2.findFirst({
       where: { id: params.id, tenantId },
@@ -67,10 +74,12 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     if (!existing) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
-    await prisma.leaseContract2.update({
+    await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseContract2.update({
       where: { id: params.id },
       data: { deletedAt: new Date() },
-    });
+    }),
+    );
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting contract:', error);

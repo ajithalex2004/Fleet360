@@ -12,6 +12,7 @@
 
 import { createElement } from 'react';
 import { NextRequest } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { renderPdf } from '@/lib/pdf/render';
 import { ReceiptPdf, type ReceiptPdfData } from '@/lib/pdf/templates/receipt';
@@ -29,8 +30,12 @@ const VENDOR = {
 };
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   const { id } = await params;
-  const tenantId = req.headers.get('x-tenant-id');
   if (!tenantId) {
     return jsonErr('Not authenticated', 401);
   }

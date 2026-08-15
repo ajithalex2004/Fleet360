@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { withAudit } from '@/lib/with-audit';
 import { z } from 'zod';
 
@@ -37,10 +39,11 @@ const individualSchema = baseSchema.extend({
 const lesseeSchema = z.discriminatedUnion('type', [corporateSchema, individualSchema]);
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const lessees = await prisma.lessee.findMany({
       where: { tenantId, deletedAt: null },
@@ -55,10 +58,11 @@ export async function GET(req: NextRequest) {
 
 export const POST = withAudit(
   async (req: NextRequest) => {
-    const tenantId = req.headers.get('x-tenant-id');
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const authz = requireAuthorizedTenant(req);
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
+    const { tenantId } = authz;
     try {
       const body = await req.json();
       const parsed = lesseeSchema.safeParse(body);
@@ -75,7 +79,9 @@ export const POST = withAudit(
         );
       }
 
-      const lessee = await prisma.lessee.create({ data: { ...parsed.data, tenantId } });
+      const lessee = await withTenantRls(prisma, tenantId, async (tx) =>
+        tx.lessee.create({ data: { ...parsed.data, tenantId } }),
+      );
       return NextResponse.json(lessee, { status: 201 });
     } catch (error) {
       console.error('Error creating lessee:', error);

@@ -6,10 +6,11 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 
 async function guardTenant(req: NextRequest, id: string) {
-  const tenantId = req.headers.get('x-tenant-id');
   if (!tenantId) {
     return { tenantId: null, owned: false } as const;
   }
@@ -24,6 +25,11 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   try {
     const { tenantId, owned } = await guardTenant(req, params.id);
     if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -42,6 +48,11 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   try {
     const { tenantId, owned } = await guardTenant(request, params.id);
     if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -63,10 +74,12 @@ export async function PATCH(
     if (body.leaseType    !== undefined) allowed.leaseType    = body.leaseType;
     if (body.durationMonths !== undefined) allowed.durationMonths = body.durationMonths;
 
-    const inquiry = await prisma.leaseInquiry.update({
+    const inquiry = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseInquiry.update({
       where: { id: params.id },
       data: allowed,
-    });
+    }),
+    );
     return NextResponse.json(inquiry);
   } catch (error: any) {
     console.error('PATCH inquiry error:', error);
@@ -82,6 +95,11 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   return PATCH(request, { params });
 }
 
@@ -89,15 +107,22 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   try {
     const { tenantId, owned } = await guardTenant(req, params.id);
     if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     if (!owned) return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
 
-    await prisma.leaseInquiry.update({
+    await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseInquiry.update({
       where: { id: params.id },
       data: { deletedAt: new Date() },
-    });
+    }),
+    );
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('DELETE inquiry error:', error);

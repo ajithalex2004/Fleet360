@@ -7,7 +7,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { sendEmail } from '@/services/email/emailService';
 import {
   generateInternalApprovalEmail,
@@ -17,10 +19,11 @@ import {
 import { quotationEmailHtml } from '@/lib/email-templates/quotation';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
     const { action, approverName, comments, targetStatus: requestedTarget, recipientEmail: customRecipient } = body;
@@ -44,7 +47,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
 
     if (pendingStep) {
-      await prisma.leaseApprovalStep.update({
+      await withTenantRls(prisma, tenantId, async (tx) =>
+        tx.leaseApprovalStep.update({
         where: { id: pendingStep.id },
         data: {
           status: action === 'APPROVE' ? 'APPROVED' : 'REJECTED',
@@ -52,7 +56,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           actionAt: new Date(),
           comments: comments ?? null,
         },
-      });
+      }),
+      );
     }
 
     // Determine next status
@@ -79,10 +84,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       nextStatus = 'REJECTED';
     }
 
-    const updated = await prisma.leaseQuotation.update({
+    const updated = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseQuotation.update({
       where: { id: params.id },
       data: { status: nextStatus, updatedAt: new Date() },
-    });
+    }),
+    );
 
     // ── Side Effects & Notifications ──
     const lesseeName    = quotation.lessee?.name ?? 'Customer';
@@ -148,10 +155,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       // Update inquiry status (also tenant-scoped — refuse to touch inquiries
       // that don't belong to the caller's tenant).
       if (quotation.inquiryId) {
-        await prisma.leaseInquiry.updateMany({
+        await withTenantRls(prisma, tenantId, async (tx) =>
+          tx.leaseInquiry.updateMany({
           where: { id: quotation.inquiryId, tenantId },
           data: { status: 'QUOTATION_SENT' },
-        }).catch(err => console.error('Failed to sync Inquiry status:', err));
+        }),
+        ).catch(err => console.error('Failed to sync Inquiry status:', err));
       }
     }
 

@@ -6,13 +6,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const existing = await prisma.leaseRenewal.findFirst({
       where: { id: params.id, tenantId },
@@ -24,10 +27,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const body = await req.json();
     const { originalContract, ...data } = body;
     if (data.status === 'ACCEPTED' && !data.customerResponseAt) data.customerResponseAt = new Date();
-    const renewal = await prisma.leaseRenewal.update({
+    const renewal = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseRenewal.update({
       where: { id: params.id },
       data: { ...data, updatedAt: new Date() },
-    });
+    }),
+    );
     return NextResponse.json(renewal);
   } catch (e) {
     return NextResponse.json({ error: 'Failed' }, { status: 500 });

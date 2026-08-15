@@ -5,13 +5,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const items = await prisma.leaseTelematics.findMany({
       where: { tenantId },
@@ -24,10 +27,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
 
@@ -41,7 +45,8 @@ export async function POST(req: NextRequest) {
     });
 
     if (existing) {
-      const updated = await prisma.leaseTelematics.update({
+      const updated = await withTenantRls(prisma, tenantId, async (tx) =>
+        tx.leaseTelematics.update({
         where: { id: existing.id },
         data: {
           lastOdometer: body.lastOdometer,
@@ -49,13 +54,16 @@ export async function POST(req: NextRequest) {
           lastLat: body.lastLat,
           lastLng: body.lastLng,
         },
-      });
+      }),
+      );
       return NextResponse.json(updated, { status: 200 });
     }
 
-    const created = await prisma.leaseTelematics.create({
+    const created = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseTelematics.create({
       data: { ...body, tenantId },
-    });
+    }),
+    );
     return NextResponse.json(created, { status: 201 });
   } catch (e) {
     return NextResponse.json({ error: 'Failed' }, { status: 500 });

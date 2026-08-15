@@ -8,13 +8,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
     const { agreementType, openingBranchId, closingBranchId, startDate, lesseeId } = body;
@@ -53,7 +56,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     // Create the contract — stamped with the caller's tenant id so the row
     // satisfies the NOT NULL constraint added by the Layer 2.5 migration.
-    const contract = await prisma.leaseContract2.create({
+    const contract = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseContract2.create({
       data: {
         contractNumber,
         agreementType: agreementType ?? 'INDIVIDUAL',
@@ -74,13 +78,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         driverIncluded: quotation.driverIncluded ?? false,
         tenantId,
       },
-    });
+    }),
+    );
 
     // Create contract vehicles from quotation vehicles.
     // Note: LeaseContractVehicle has no tenant_id column — tenant scope
     // travels via the parent LeaseContract2 row.
     for (const qv of quotation.vehicles) {
-      await prisma.leaseContractVehicle.create({
+      await withTenantRls(prisma, tenantId, async (tx) =>
+        tx.leaseContractVehicle.create({
         data: {
           contractId: contract.id,
           vehicleId: qv.vehicleId ?? null,
@@ -91,7 +97,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           monthlyRate: Number(qv.monthlyRate ?? monthlyRate),
           status: 'ACTIVE',
         },
-      });
+      }),
+      );
     }
 
     // Generate payment schedule.
@@ -113,13 +120,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         tenantId,
       });
     }
-    await prisma.leasePayment2.createMany({ data: payments });
+    await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leasePayment2.createMany({ data: payments }),
+    );
 
     // Scoped quotation update — refuse to touch quotations from another tenant.
-    await prisma.leaseQuotation.update({
+    await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseQuotation.update({
       where: { id: params.id },
       data: { status: 'DELIVERED', updatedAt: new Date() },
-    });
+    }),
+    );
 
     return NextResponse.json({ contract, paymentsCreated: payments.length });
   } catch (e) {

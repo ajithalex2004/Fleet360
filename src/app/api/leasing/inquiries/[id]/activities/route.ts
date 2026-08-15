@@ -9,7 +9,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -18,10 +20,11 @@ export const runtime = 'nodejs';
 const ALLOWED_TYPES = ['NOTE', 'CALL', 'EMAIL', 'MEETING', 'SMS', 'WHATSAPP', 'FOLLOW_UP_DUE'];
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   const inquiry = await prisma.leaseInquiry.findFirst({
     where: { id: params.id, tenantId },
     select: { id: true },
@@ -37,10 +40,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
     const activityType = String(body.activityType ?? '').toUpperCase();
@@ -56,7 +60,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
     }
 
-    const activity = await prisma.leaseInquiryActivity.create({
+    const activity = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseInquiryActivity.create({
       data: {
         inquiryId: params.id,
         activityType,
@@ -69,13 +74,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         followUpAt: body.followUpAt ? new Date(body.followUpAt) : null,
         tenantId,
       },
-    });
+    }),
+    );
 
     if (inquiry.status === 'NEW' && ['CALL', 'EMAIL', 'SMS', 'WHATSAPP', 'MEETING'].includes(activityType)) {
-      await prisma.leaseInquiry.update({
+      await withTenantRls(prisma, tenantId, async (tx) =>
+        tx.leaseInquiry.update({
         where: { id: params.id },
         data: { status: 'CONTACTED' },
-      });
+      }),
+      );
     }
 
     void logAudit({

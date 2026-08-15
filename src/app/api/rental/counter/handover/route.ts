@@ -25,8 +25,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { getStorage } from '@/lib/storage';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -55,6 +57,11 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   try {
     const json = await req.json();
     const parsed = bodySchema.safeParse(json);

@@ -12,12 +12,18 @@
  * body to also transition it to SENT immediately.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { calculateRate, type RateRequest } from '@/lib/rental-rate-engine';
 import { getEventBus }               from '@/events/event-bus';
 import { RENTAL_INVOICE_GENERATED }  from '@/events/registry';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   try {
     const body  = await req.json().catch(() => ({}));
     const { invoiceType = 'STANDARD', autoSend = false, notes } = body;
@@ -208,7 +214,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     // Enqueue finance mirroring via transactional outbox.
     // FinanceRentalInvoiceConsumer calls mirrorRentalInvoiceToFinance() asynchronously.
-    const tenantId = req.headers.get('x-tenant-id');
     if (tenantId) {
       await getEventBus().publish({
         eventType:     RENTAL_INVOICE_GENERATED,

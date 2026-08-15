@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 /**
  * Single-lease-invoice GET / PATCH.
@@ -9,10 +11,11 @@ import { prisma } from '@/lib/prisma';
  * row existence.
  */
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   const inv = await prisma.leaseInvoice.findFirst({
     where: { id: params.id, tenantId },
     include: { lines: true, lessee: true },
@@ -23,10 +26,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     // Verify tenant ownership before update.
     const existing = await prisma.leaseInvoice.findFirst({
@@ -38,10 +42,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const { lines, lessee, ...data } = await req.json();
     if (data.status === 'SENT' && !data.sentAt) data.sentAt = new Date();
     if (data.status === 'PAID' && !data.paidAt) data.paidAt = new Date();
-    const inv = await prisma.leaseInvoice.update({
+    const inv = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseInvoice.update({
       where: { id: params.id },
       data: { ...data, updatedAt: new Date() },
-    });
+    }),
+    );
     return NextResponse.json(inv);
   } catch (e) {
     console.error('PATCH /api/leasing/invoices/[id] error:', e);
