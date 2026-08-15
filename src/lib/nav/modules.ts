@@ -20,7 +20,7 @@ import {
   Shield, CreditCard,   BookOpen, RefreshCw, ArrowLeftRight, Fuel, AlertTriangle,
   GraduationCap, Trophy, Calendar, Workflow, Eye, Bell, Mail, Activity,
   Calculator, Repeat, Wallet, DollarSign, Lock, Network, Sliders, FileSearch,
-  Sparkles, MessageCircle, Tag, History, CheckCircle2, PieChart, Brain,
+  Sparkles, MessageCircle, Tag, History, CheckCircle2, PieChart, Brain, GitMerge,
   Paperclip, Send, Info, Pin, FileMinus, Target, BookText, TrendingUp, Clock,
   CalendarCheck2,
   Gauge,
@@ -164,6 +164,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'Schedule Templates',  href: '/bus-ops/schedule-templates',  icon: Repeat,          group: 'Planning' },
       { label: 'Planning Constraints',href: '/bus-ops/planning-constraints',icon: Shield,          group: 'Planning' },
       { label: 'Planning Optimizer',  href: '/bus-ops/planning-optimizer',  icon: Sparkles,        group: 'Planning' },
+      { label: 'Route Consolidation', href: '/bus-ops/route-consolidation', icon: GitMerge,        group: 'Planning' },
       { label: 'Transport Calendars', href: '/bus-ops/transport-calendars', icon: CalendarCheck2,  group: 'Planning' },
 
       // Operations — day-of-service execution.
