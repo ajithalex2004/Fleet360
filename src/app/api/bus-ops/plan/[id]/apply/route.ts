@@ -24,7 +24,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
-import { evaluatePlanApply, type AssignmentDelta } from '@/lib/planning/apply-gate';
+import { evaluatePlanApply } from '@/lib/planning/apply-gate';
+import {
+  buildAssignmentDeltasFromPlan,
+  loadVehiclePool,
+  type PlanBlock,
+  type PlanRun,
+  type DriverRoster,
+  type VehiclePoolRow,
+} from '@/lib/planning/plan-deltas';
 
 const PLANS_TAG = 'staff-transport-plans';
 const SCHEDULES_TAG = 'bus-ops:schedules';
@@ -38,35 +46,6 @@ function isPceGateEnabled(): boolean {
   return process.env.PCE_APPLY_GATE_ENABLED !== 'false';
 }
 
-interface BlockTrip {
-  tripId: string;
-  routeId?: string;
-}
-interface PlanBlock {
-  id: string;
-  vehicleLabel: string;
-  date: string;
-  tripIds: string[];
-  trips: BlockTrip[];
-}
-interface RunTrip {
-  tripId: string;
-  routeId?: string;
-}
-interface PlanRun {
-  id: string;
-  date: string;
-  tripIds: string[];
-  trips: RunTrip[];
-}
-interface RosterDay {
-  date: string;
-  runIds: string[];
-}
-interface DriverRoster {
-  driverId: string;
-  days: RosterDay[];
-}
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const tenantId = req.headers.get('x-tenant-id') ?? '';
@@ -88,52 +67,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const blocks  = (plan.blocks  as unknown as PlanBlock[]) ?? [];
     const rosters = (plan.rosters as unknown as DriverRoster[]) ?? [];
 
-    // 2. Build the tripId → driverId map from runs + rosters.
-    //    First, from rosters (which carry driverId), if present; else runs
-    //    don't have an assigned driver.
-    const tripToDriver = new Map<string, string>();
-    for (const roster of rosters) {
-      for (const day of roster.days) {
-        for (const runId of day.runIds) {
-          const run = runs.find((r) => r.id === runId);
-          if (!run) continue;
-          for (const tripId of run.tripIds) {
-            if (!tripToDriver.has(tripId)) tripToDriver.set(tripId, roster.driverId);
-          }
-        }
-      }
-    }
-
-    // 3. Build the tripId → vehicleId map from blocks. Pair blocks with
-    //    available vehicles in this tenant (sorted by plate).
-    const tripToVehicle = new Map<string, string>();
-    const vehicles = await withTenantRls(prisma, tenantId, async (tx) => {
-      const rows = await tx.vehicle.findMany({
-        where: { tenantId, isActive: true },
-        orderBy: [{ licensePlate: 'asc' }, { id: 'asc' }],
-        take: 200,
-        select: { id: true, licensePlate: true, registrationNo: true },
-      });
-      // Stable secondary sort
-      return rows.sort((a, b) => {
-        const ak = a.licensePlate ?? a.registrationNo ?? a.id;
-        const bk = b.licensePlate ?? b.registrationNo ?? b.id;
-        return ak.localeCompare(bk);
-      });
-    });
-    let vehicleIdx = 0;
-    for (const block of blocks) {
-      const vehicle = vehicles[vehicleIdx++];
-      if (!vehicle) break; // out of vehicles — remaining blocks get no assignment
-      for (const tripId of block.tripIds) {
-        if (!tripToVehicle.has(tripId)) tripToVehicle.set(tripId, vehicle.id);
-      }
-    }
+    // 2. Build tripId → {driverId, vehicleId} deltas via the shared
+    //    walker (also used by the planning-optimizer to score without
+    //    writing — the two paths agreeing on this walk is what makes
+    //    "the optimizer said PASS but apply now says BLOCK" impossible).
+    const vehicles: VehiclePoolRow[] = await withTenantRls(prisma, tenantId, (tx) =>
+      loadVehiclePool(tx as unknown as typeof prisma, tenantId)
+    );
+    const deltas = buildAssignmentDeltasFromPlan(
+      {
+        runs: runs as PlanRun[],
+        blocks: blocks as PlanBlock[],
+        rosters: rosters as DriverRoster[],
+      },
+      vehicles
+    );
+    const tripToDriver = new Map(deltas.filter((d) => d.newDriverId).map((d) => [d.tripId, d.newDriverId!]));
+    const tripToVehicle = new Map(deltas.filter((d) => d.newVehicleId).map((d) => [d.tripId, d.newVehicleId!]));
 
     // 4. Apply to trip_schedules. Build a single transaction with a
     //    batched update; the SET list includes whichever columns we
     //    actually have a value for.
-    const updates = [...new Set([...tripToDriver.keys(), ...tripToVehicle.keys()])];
+    const updates = deltas.map((d) => d.tripId);
     let appliedDriver = 0;
     let appliedVehicle = 0;
 
@@ -143,11 +98,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // emergency backouts; a bypass leaves an audit trail in the response.
     let gateResult: Awaited<ReturnType<typeof evaluatePlanApply>> | null = null;
     if (isPceGateEnabled() && updates.length > 0) {
-      const deltas: AssignmentDelta[] = updates.map((tripId) => ({
-        tripId,
-        newDriverId: tripToDriver.get(tripId) ?? null,
-        newVehicleId: tripToVehicle.get(tripId) ?? null,
-      }));
       gateResult = await evaluatePlanApply(prisma, { tenantId, deltas });
       if (gateResult.verdict === 'BLOCK') {
         return NextResponse.json(
