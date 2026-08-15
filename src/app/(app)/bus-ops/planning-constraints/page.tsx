@@ -72,8 +72,14 @@ const KIND_META: KindMeta[] = [
   {
     kind: 'PASSENGER_MAX_DETOUR',
     label: 'Passenger max detour',
-    paramsHint: 'maxMinutes and/or maxPercent (more restrictive wins)',
+    paramsHint: 'trip execution — maxMinutes and/or maxPercent (more restrictive wins)',
     paramsTemplate: { maxMinutes: 20, maxPercent: 25 },
+  },
+  {
+    kind: 'ROUTE_STOP_DEVIATION_MAX',
+    label: 'Route stop deviation (design)',
+    paramsHint: 'network design — max deviation of consolidated route vs source route',
+    paramsTemplate: { maxMinutes: 15, maxPercent: 20 },
   },
   {
     kind: 'MERGED_ARRIVAL_SLA',
