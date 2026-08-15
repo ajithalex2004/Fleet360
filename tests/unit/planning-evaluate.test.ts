@@ -328,6 +328,105 @@ describe('PASSENGER_MAX_DETOUR', () => {
   });
 });
 
+// ── ROUTE_STOP_DEVIATION_MAX ─────────────────────────────────────────
+//
+// Shares evalDurationDetour with PASSENGER_MAX_DETOUR — these tests
+// prove that (a) the dispatch entry is wired, (b) rule.kind flows into
+// the check's `code` correctly so callers can tell which rule fired,
+// (c) the params contract behaves identically. Full detour math is
+// covered by the PASSENGER_MAX_DETOUR suite above.
+
+describe('ROUTE_STOP_DEVIATION_MAX', () => {
+  it('BLOCKs when consolidated route exceeds source traversal by more than maxMinutes', () => {
+    const result = evaluatePlan(
+      facts({
+        trips: [
+          trip({
+            id: 'src-route', role: 'source',
+            departureTime: new Date('2026-08-14T06:00:00Z'),
+            arrivalTime: new Date('2026-08-14T06:40:00Z'), // 40min typical run
+          }),
+          trip({
+            id: 'consolidated-route', role: 'merged',
+            departureTime: new Date('2026-08-14T06:00:00Z'),
+            arrivalTime: new Date('2026-08-14T07:00:00Z'), // 60min = 20min deviation
+          }),
+        ],
+        constraints: [rule({ kind: 'ROUTE_STOP_DEVIATION_MAX', params: { maxMinutes: 15 } })],
+      })
+    );
+    expect(result.verdict).toBe('BLOCK');
+    expect(result.checks[0].code).toBe('ROUTE_STOP_DEVIATION_MAX');
+  });
+
+  it('PASSes when deviation is within threshold', () => {
+    const result = evaluatePlan(
+      facts({
+        trips: [
+          trip({ id: 'src', role: 'source',
+            departureTime: new Date('2026-08-14T06:00:00Z'),
+            arrivalTime: new Date('2026-08-14T06:40:00Z') }),
+          trip({ id: 'con', role: 'merged',
+            departureTime: new Date('2026-08-14T06:00:00Z'),
+            arrivalTime: new Date('2026-08-14T06:50:00Z') }), // 10min deviation
+        ],
+        constraints: [rule({ kind: 'ROUTE_STOP_DEVIATION_MAX', params: { maxMinutes: 15 } })],
+      })
+    );
+    expect(result.verdict).toBe('PASS');
+  });
+
+  it('honours percent threshold independently of maxMinutes', () => {
+    const result = evaluatePlan(
+      facts({
+        trips: [
+          trip({ id: 'src', role: 'source',
+            departureTime: new Date('2026-08-14T06:00:00Z'),
+            arrivalTime: new Date('2026-08-14T06:20:00Z') }), // 20min
+          trip({ id: 'con', role: 'merged',
+            departureTime: new Date('2026-08-14T06:00:00Z'),
+            arrivalTime: new Date('2026-08-14T06:30:00Z') }), // 30min = 50% deviation
+        ],
+        constraints: [rule({ kind: 'ROUTE_STOP_DEVIATION_MAX', params: { maxPercent: 25 } })],
+      })
+    );
+    expect(result.verdict).toBe('BLOCK');
+  });
+
+  it('can be authored as WARN independently of the passenger-detour rule', () => {
+    // A tenant might want tight WARN on route deviation for design
+    // review while keeping trip-time PASSENGER_MAX_DETOUR at a laxer
+    // BLOCK threshold. Two separate kinds enable that policy split.
+    const result = evaluatePlan(
+      facts({
+        trips: [
+          trip({ id: 'src', role: 'source',
+            departureTime: new Date('2026-08-14T06:00:00Z'),
+            arrivalTime: new Date('2026-08-14T06:30:00Z') }),
+          trip({ id: 'con', role: 'merged',
+            departureTime: new Date('2026-08-14T06:00:00Z'),
+            arrivalTime: new Date('2026-08-14T06:50:00Z') }), // 20min deviation
+        ],
+        constraints: [
+          rule({ kind: 'ROUTE_STOP_DEVIATION_MAX', action: 'WARN', params: { maxMinutes: 10 } }),
+          rule({ kind: 'PASSENGER_MAX_DETOUR', action: 'BLOCK', params: { maxMinutes: 30 } }),
+        ],
+      })
+    );
+    expect(result.verdict).toBe('WARN'); // route-deviation warns, passenger-detour passes at 30min
+  });
+
+  it('silent when no merged trip present (same as passenger detour)', () => {
+    const result = evaluatePlan(
+      facts({
+        trips: [trip({ id: 'src', role: 'source' })],
+        constraints: [rule({ kind: 'ROUTE_STOP_DEVIATION_MAX', params: { maxMinutes: 5 } })],
+      })
+    );
+    expect(result.checks).toHaveLength(0);
+  });
+});
+
 // ── MERGED_ARRIVAL_SLA ───────────────────────────────────────────────
 
 describe('MERGED_ARRIVAL_SLA', () => {
