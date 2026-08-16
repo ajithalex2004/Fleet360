@@ -1739,6 +1739,14 @@ model BusRoute {
   capacity              Int?           @default(30)
   isActive              Boolean?       @default(true) @map("is_active")
   notes                 String?
+  /// Route Consolidation Phase 2 — retirement fields.
+  /// Set when a route is deactivated as a consolidation source or as an
+  /// archived merged route after revert. `retiredReason` discriminates
+  /// consolidation-driven retirement from other operator-authored reasons
+  /// so cool-down / analysis queries can filter cheaply.
+  retiredReason         String?        @map("retired_reason")
+  retiredAt             DateTime?      @map("retired_at") @db.Timestamptz(6)
+  retiredBy             String?        @map("retired_by")
   stops                 RouteStop[]
   schedules             TripSchedule[]
   headwayRules          HeadwayRule[]
@@ -5507,6 +5515,125 @@ model PlanningConstraint {
   @@index([deletedAt],        map: "idx_planning_constraints_deleted")
   @@index([isEnabled],        map: "idx_planning_constraints_enabled")
   @@map("planning_constraints")
+  @@schema("public")
+}
+
+// ── Route Consolidation Phase 2 — lineage ────────────────────────────────────
+//
+// Relational lineage for the Route Consolidation apply/revert flow.
+// See prisma/migrations/20260816000000_route_consolidation_phase2_schema
+// for the migration + full commentary. Highlights:
+//
+//   - RouteConsolidation                            = parent lineage row
+//     RouteConsolidationSource                      = one row per source route
+//     RouteConsolidationEnrollmentMigration         = one row per moved
+//                                                     enrollment (XOR FK
+//                                                     to RoutePassenger or
+//                                                     TransportEnrollment)
+//
+//   - status = APPLIED | REVERTED. Preview is stateless (nothing persists);
+//     FAILED can't be written inside a rolled-back apply transaction, so
+//     it's not in the persisted enum.
+//
+//   - Hard idempotency: UNIQUE(tenantId, idempotencyKey). Partial UNIQUE
+//     (tenantId, recommendationId) WHERE status='APPLIED' blocks two
+//     concurrent active applies of the same rec while still permitting
+//     re-apply after revert.
+//
+//   - Cool-down for post-consolidation merged routes is derived from
+//     `appliedAt`; no dedicated column added to BusRoute.
+
+model RouteConsolidation {
+  id                     String    @id @default(uuid())
+  tenantId               String    @map("tenant_id")
+  recommendationId       String    @map("recommendation_id")
+  idempotencyKey         String    @map("idempotency_key")
+  mergedRouteId          String?   @map("merged_route_id")
+  status                 String    // APPLIED | REVERTED (CHECK enforced in raw SQL)
+
+  /// JSON evidence — the objective and full recommendation snapshot at
+  /// apply time. Used only for reporting / provenance; do not join to
+  /// these fields for referential integrity.
+  objectiveSnapshot      Json      @default("{}") @map("objective_snapshot")
+  recommendationSnapshot Json      @default("{}") @map("recommendation_snapshot")
+
+  /// Fingerprint of Route M + its stops + migration rows immediately
+  /// after apply commits. Revert-eligibility compares this to the
+  /// current fingerprint; drift blocks the revert.
+  appliedStateHash       String    @map("applied_state_hash")
+
+  appliedAt              DateTime  @map("applied_at") @db.Timestamptz(6)
+  appliedBy              String    @map("applied_by")
+
+  revertedAt             DateTime? @map("reverted_at") @db.Timestamptz(6)
+  revertedBy             String?   @map("reverted_by")
+  revertReason           String?   @map("revert_reason")
+
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sources                RouteConsolidationSource[]
+  enrollmentMigrations   RouteConsolidationEnrollmentMigration[]
+
+  @@unique([tenantId, idempotencyKey], map: "uniq_route_consolidations_tenant_idem")
+  @@index([tenantId, status],          map: "idx_route_consolidations_tenant_status")
+  @@index([tenantId, mergedRouteId],   map: "idx_route_consolidations_tenant_merged_route")
+  @@map("route_consolidations")
+  @@schema("public")
+}
+
+model RouteConsolidationSource {
+  id                     String   @id @default(uuid())
+  tenantId               String   @map("tenant_id")
+  consolidationId        String   @map("consolidation_id")
+  sourceRouteId          String   @map("source_route_id")
+  /// BusRoute.updatedAt snapshot at analyze time. The apply guard
+  /// refuses stale applies when the source has been edited since.
+  sourceRouteUpdatedAt   DateTime? @map("source_route_updated_at") @db.Timestamptz(6)
+  sequence               Int      @default(0)
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  consolidation          RouteConsolidation @relation(fields: [consolidationId], references: [id], onDelete: Cascade)
+
+  @@unique([consolidationId, sourceRouteId], map: "uniq_route_consolidation_sources_pair")
+  @@index([tenantId, sourceRouteId],         map: "idx_route_consolidation_sources_tenant_source")
+  @@index([consolidationId],                 map: "idx_route_consolidation_sources_consolidation")
+  @@map("route_consolidation_sources")
+  @@schema("public")
+}
+
+model RouteConsolidationEnrollmentMigration {
+  id                     String   @id @default(uuid())
+  tenantId               String   @map("tenant_id")
+  consolidationId        String   @map("consolidation_id")
+
+  /// Exactly ONE of these must be set (XOR CHECK enforced in raw SQL).
+  /// Two nullable FKs preserve referential integrity to both target
+  /// tables without a polymorphic TEXT id.
+  /// Note the type asymmetry: RoutePassenger.id is UUID in the DB
+  /// (legacy migration artifact) while TransportEnrollment.id is TEXT.
+  /// FK column types must match the referenced column exactly.
+  routePassengerId       String?  @map("route_passenger_id") @db.Uuid
+  transportEnrollmentId  String?  @map("transport_enrollment_id")
+
+  sourceRouteId          String   @map("source_route_id")
+  targetRouteId          String   @map("target_route_id")
+
+  oldPickupStopId        String?  @map("old_pickup_stop_id")
+  newPickupStopId        String?  @map("new_pickup_stop_id")
+  oldDropoffStopId       String?  @map("old_dropoff_stop_id")
+  newDropoffStopId       String?  @map("new_dropoff_stop_id")
+
+  /// EXACT_STOP | EXACT_PLACE_ID | OPERATOR_RESOLVED (CHECK enforced in raw SQL).
+  mappingMethod          String   @map("mapping_method")
+
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  consolidation          RouteConsolidation @relation(fields: [consolidationId], references: [id], onDelete: Cascade)
+
+  @@index([consolidationId], map: "idx_route_consol_enroll_mig_consolidation")
+  @@index([tenantId],        map: "idx_route_consol_enroll_mig_tenant")
+  @@map("route_consolidation_enrollment_migrations")
   @@schema("public")
 }
 
