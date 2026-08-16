@@ -32,7 +32,9 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'invalid JSON' }, { status: 400 });
   }
-  const parsed = parseApplyBody(raw, tenantId, { requireIdempotencyKey: true, defaultAppliedBy: userId });
+  // appliedBy comes from the authenticated x-user-id header, NEVER
+  // from the request body. The parser rejects any body attempt.
+  const parsed = parseApplyBody(raw, tenantId, { requireIdempotencyKey: true, appliedBy: userId });
   if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   try {

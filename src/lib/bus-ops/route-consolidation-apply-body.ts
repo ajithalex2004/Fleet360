@@ -12,10 +12,25 @@ import type { ApplyConsolidationInput, EnrollmentKey, MergedRouteSpec, OperatorS
 export type ParseOptions = {
   /** Apply requires idempotencyKey; preview does not. */
   requireIdempotencyKey: boolean;
-  /** For apply — fallback appliedBy from the x-user-id header. */
-  defaultAppliedBy?: string;
+  /**
+   * Trusted appliedBy from the x-user-id header. REQUIRED when
+   * requireIdempotencyKey is true (i.e. this is an apply request).
+   * Never sourced from the body — see the appliedBy body-rejection
+   * check below.
+   */
+  appliedBy?: string;
 };
 
+/**
+ * Body parser for /apply/preview and /apply.
+ *
+ * Audit-identity rule (SECURITY): `appliedBy` never comes from the
+ * request body. It comes from the authenticated `x-user-id` header
+ * only, passed through `opts.appliedBy`. A body-supplied `appliedBy`
+ * is rejected LOUDLY with a 400 rather than silently ignored — the
+ * caller learns immediately if they're constructing an unsafe
+ * request. Same principle applies to `tenantId`.
+ */
 export function parseApplyBody(
   raw: unknown,
   tenantId: string,
@@ -23,6 +38,16 @@ export function parseApplyBody(
 ): { input: PreviewApplyInput | ApplyConsolidationInput } | { error: string } {
   if (!raw || typeof raw !== 'object') return { error: 'body must be an object' };
   const b = raw as Record<string, unknown>;
+
+  // SECURITY: reject any attempt to specify audit identity from the body.
+  // A caller passing appliedBy would otherwise mislead the audit trail
+  // even though authentication used a different user.
+  if ('appliedBy' in b) {
+    return { error: 'appliedBy is not accepted from the request body; the authenticated user is used automatically' };
+  }
+  if ('tenantId' in b) {
+    return { error: 'tenantId is not accepted from the request body; the authenticated tenant context is used automatically' };
+  }
 
   if (typeof b.recommendationId !== 'string' || !b.recommendationId) {
     return { error: 'recommendationId (string) is required' };
@@ -64,8 +89,13 @@ export function parseApplyBody(
   if (typeof b.idempotencyKey !== 'string' || !b.idempotencyKey) {
     return { error: 'idempotencyKey (string) is required for apply' };
   }
-  const appliedBy = typeof b.appliedBy === 'string' && b.appliedBy ? b.appliedBy : opts.defaultAppliedBy;
-  if (!appliedBy) return { error: 'appliedBy (string) is required for apply' };
+  // appliedBy comes from opts (trusted header context) only — the body
+  // check above already rejected any client attempt to override.
+  const appliedBy = opts.appliedBy;
+  if (!appliedBy) {
+    // Route handler misuse — appliedBy wasn't passed in from the header.
+    return { error: 'server misconfigured: apply parser invoked without trusted appliedBy' };
+  }
 
   const recommendationSnapshot = b.recommendationSnapshot !== undefined
     ? (typeof b.recommendationSnapshot === 'object' && b.recommendationSnapshot !== null && !Array.isArray(b.recommendationSnapshot)
@@ -134,12 +164,27 @@ function parseFingerprints(raw: unknown): { value?: Record<string, string> } | {
   return { value: out };
 }
 
+/**
+ * UUID v4 (or general 8-4-4-4-12) format check. RoutePassenger.id is
+ * UUID in the DB; the RP: portion of an operatorResolutions key must
+ * match. TE: keys are TEXT (transport_enrollments.id is TEXT), so
+ * they're only length-checked. Prisma parameterises the value, so
+ * this is defence-in-depth clarity, not injection protection.
+ */
+const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const KEY_RE  = /^(RP|TE):(.+)$/;
+
 function parseOperatorResolutions(raw: unknown): { value?: Record<EnrollmentKey, OperatorStopResolution> } | { error: string } {
   if (raw === undefined || raw === null) return { value: undefined };
   if (typeof raw !== 'object' || Array.isArray(raw)) return { error: 'operatorResolutions must be an object' };
   const out: Record<EnrollmentKey, OperatorStopResolution> = {};
   for (const [k, v] of Object.entries(raw)) {
-    if (!/^(RP|TE):.+$/.test(k)) return { error: `operatorResolutions key ${k} must be "RP:<id>" or "TE:<id>"` };
+    const m = KEY_RE.exec(k);
+    if (!m) return { error: `operatorResolutions key ${k} must be "RP:<id>" or "TE:<id>"` };
+    const [, type, id] = m;
+    if (type === 'RP' && !UUID_RE.test(id)) {
+      return { error: `operatorResolutions key ${k}: RoutePassenger id must be a UUID` };
+    }
     if (!v || typeof v !== 'object' || Array.isArray(v)) return { error: `operatorResolutions.${k} must be an object` };
     const rv = v as Record<string, unknown>;
     const resolution: OperatorStopResolution = {};

@@ -33,6 +33,15 @@ export async function POST(req: NextRequest) {
   }
   if (!raw || typeof raw !== 'object') return NextResponse.json({ error: 'body must be an object' }, { status: 400 });
   const b = raw as Record<string, unknown>;
+
+  // SECURITY: revertedBy and tenantId never come from the body. Reject
+  // any client attempt loudly so the mistake surfaces immediately.
+  if ('revertedBy' in b) {
+    return NextResponse.json({ error: 'revertedBy is not accepted from the request body; the authenticated user is used automatically' }, { status: 400 });
+  }
+  if ('tenantId' in b) {
+    return NextResponse.json({ error: 'tenantId is not accepted from the request body; the authenticated tenant context is used automatically' }, { status: 400 });
+  }
   if (typeof b.consolidationId !== 'string' || !b.consolidationId) {
     return NextResponse.json({ error: 'consolidationId (string) is required' }, { status: 400 });
   }
@@ -43,7 +52,7 @@ export async function POST(req: NextRequest) {
   const input: RevertConsolidationInput = {
     tenantId,
     consolidationId: b.consolidationId,
-    revertedBy: typeof b.revertedBy === 'string' && b.revertedBy ? b.revertedBy : userId,
+    revertedBy: userId,  // always the authenticated user
     revertReason: (b.revertReason as string | null) ?? undefined,
   };
 
