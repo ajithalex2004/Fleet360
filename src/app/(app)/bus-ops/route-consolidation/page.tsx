@@ -22,9 +22,11 @@
  */
 
 import React, { useCallback, useState } from 'react';
-import { GitMerge, Play, RefreshCw, Trophy, ChevronDown, ChevronRight, Info } from 'lucide-react';
+import { GitMerge, Play, RefreshCw, Trophy, ChevronDown, ChevronRight, Info, CheckCircle2, History } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
 import PceVerdictPanel, { type PceVerdictBody } from '@/components/bus-ops/PceVerdictPanel';
+import RouteConsolidationApplyModal, { type RecommendationForApply } from '@/components/bus-ops/RouteConsolidationApplyModal';
+import RouteConsolidationHistoryPanel from '@/components/bus-ops/RouteConsolidationHistoryPanel';
 
 // ─── Types matched to /analyze response ─────────────────────────────
 
@@ -83,13 +85,18 @@ interface AnalyzeResponse {
 
 // ─── Page ────────────────────────────────────────────────────────────
 
+type Tab = 'recommendations' | 'history';
+
 export default function RouteConsolidationPage() {
+  const [tab, setTab] = useState<Tab>('recommendations');
   const [objective, setObjective] = useState<Objective>({});
   const [analysing, setAnalysing] = useState(false);
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [showSkipped, setShowSkipped] = useState(false);
+  const [applyingRec, setApplyingRec] = useState<{ rec: Recommendation; recommendationId: string } | null>(null);
+  const [appliedFlash, setAppliedFlash] = useState<string | null>(null);
 
   const analyse = useCallback(async () => {
     setAnalysing(true); setError(null); setResult(null); setExpandedRow(null);
@@ -115,10 +122,45 @@ export default function RouteConsolidationPage() {
     <div className="space-y-8">
       <PageHeader
         title="Route Consolidation"
-        subtitle="Analyse active routes for merge candidates by zone, timing, capacity, and Planning Constraint compliance. Read-only — apply through your standard route management workflow after review."
+        subtitle="Analyse candidate merges, apply recommendations transactionally, and revert within the audit window. All apply/revert actions go through the Planning Constraint gate."
         icon={GitMerge}
         accent="violet"
       />
+
+      {/* Tabs — Recommendations (analyse + apply) | History (revert past applies) */}
+      <div className="flex items-center gap-1 border-b border-slate-800">
+        {(['recommendations', 'history'] as const).map((t) => {
+          const Icon = t === 'recommendations' ? GitMerge : History;
+          return (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm border-b-2 -mb-px transition-colors ${
+                tab === t
+                  ? 'border-violet-500 text-white font-medium'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {t === 'recommendations' ? 'Recommendations' : 'History'}
+            </button>
+          );
+        })}
+      </div>
+
+      {appliedFlash && (
+        <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200 flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4" />
+          Consolidation applied — <span className="font-mono text-xs">{appliedFlash.slice(0, 8)}</span>… — see the History tab to revert if needed.
+        </div>
+      )}
+
+      {tab === 'history' && (
+        <RouteConsolidationHistoryPanel />
+      )}
+
+      {tab === 'recommendations' && (
+        <>
 
       {error && (
         <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</div>
@@ -281,13 +323,26 @@ export default function RouteConsolidationPage() {
                         </tr>
                         {isExpanded && (
                           <tr>
-                            <td colSpan={9} className="bg-slate-900/60 px-6 py-4">
+                            <td colSpan={9} className="bg-slate-900/60 px-6 py-4 space-y-3">
                               <PceVerdictPanel body={{
                                 verdict: rec.verdict,
                                 checks: rec.checks,
                                 totalPenalty: rec.scores.pcePenalty,
                               }} />
                               <RecMetadata rec={rec} />
+                              {rec.feasible && (
+                                <div className="pt-3 border-t border-slate-800 flex items-center justify-end">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setApplyingRec({ rec, recommendationId: key });
+                                    }}
+                                    className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+                                  >
+                                    <CheckCircle2 className="w-4 h-4" /> Apply this consolidation
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         )}
@@ -326,6 +381,24 @@ export default function RouteConsolidationPage() {
           )}
         </section>
       </div>
+        </>
+      )}
+
+      {applyingRec && (
+        <RouteConsolidationApplyModal
+          recommendation={applyingRec.rec as RecommendationForApply}
+          recommendationId={applyingRec.recommendationId}
+          onClose={() => setApplyingRec(null)}
+          onApplied={(consolidationId) => {
+            setApplyingRec(null);
+            setAppliedFlash(consolidationId);
+            // Reset analysis result so the applied pair no longer shows
+            // — the sources are now retired and would fail the next analyse.
+            setResult(null);
+            setTab('history');
+          }}
+        />
+      )}
     </div>
   );
 }
