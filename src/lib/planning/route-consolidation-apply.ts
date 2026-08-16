@@ -28,6 +28,7 @@
  *     "source routes still active" and refuses
  */
 
+import { randomUUID } from 'crypto';
 import type { PrismaClient, Prisma } from '@prisma/client';
 import { evaluatePlan, type PlanFacts, type PlanTripFacts, type PlanCheck } from './evaluate-plan';
 import {
@@ -281,7 +282,48 @@ export async function applyConsolidation(
           });
         }
 
-        // 6. Migrate enrollments. The check-phase plan carries
+        // 6. Pre-generate the consolidation.id so every child row we
+        //    write next can reference it — cleaner than a placeholder
+        //    id + retargeting pattern, and avoids the FK violation
+        //    entirely.
+        const consolidationId = randomUUID();
+        const now = new Date();
+
+        // 6a. Create the RouteConsolidation parent row first with a
+        //     provisional appliedStateHash placeholder. We recompute
+        //     and update it after all the writes so the hash reflects
+        //     the final committed state.
+        await tx.routeConsolidation.create({
+          data: {
+            id: consolidationId,
+            tenantId: input.tenantId,
+            recommendationId: input.recommendationId,
+            idempotencyKey: input.idempotencyKey,
+            mergedRouteId: mergedRoute.id,
+            status: 'APPLIED',
+            objectiveSnapshot: (input.objective ?? {}) as Prisma.InputJsonValue,
+            recommendationSnapshot: (input.recommendationSnapshot ?? {}) as Prisma.InputJsonValue,
+            appliedStateHash: 'pending',
+            appliedAt: now,
+            appliedBy: input.appliedBy,
+          },
+        });
+
+        // 6b. Source lineage rows
+        for (let i = 0; i < sourceRoutes.length; i++) {
+          const r = sourceRoutes[i];
+          await tx.routeConsolidationSource.create({
+            data: {
+              tenantId: input.tenantId,
+              consolidationId,
+              sourceRouteId: r.id,
+              sourceRouteUpdatedAt: r.updatedAt,
+              sequence: i,
+            },
+          });
+        }
+
+        // 7. Migrate enrollments. The check-phase plan carries
         //    newPickupStopId / newDropoffStopId values computed from
         //    the source-route stops we just copied onto the merged
         //    route, so we don't need to re-lookup — the ids are
@@ -309,7 +351,7 @@ export async function applyConsolidation(
           await tx.routeConsolidationEnrollmentMigration.create({
             data: {
               tenantId: input.tenantId,
-              consolidationId: 'placeholder', // filled below after consolidation row
+              consolidationId,
               routePassengerId: plan.enrollmentType === 'ROUTE_PASSENGER' ? plan.enrollmentId : null,
               transportEnrollmentId: plan.enrollmentType === 'TRANSPORT_ENROLLMENT' ? plan.enrollmentId : null,
               sourceRouteId: plan.sourceRouteId,
@@ -318,13 +360,17 @@ export async function applyConsolidation(
               newPickupStopId: plan.newPickupStopId,
               oldDropoffStopId: plan.oldDropoffStopId,
               newDropoffStopId: plan.newDropoffStopId,
-              mappingMethod: plan.pickupMapping.method, // simplified — see note below
+              // Report the pickup mapping method as the row's overall
+              // method. Per-side mapping detail lives in the check-phase
+              // plan; if we later need it per-side, add columns for
+              // dropoffMappingMethod.
+              mappingMethod: plan.pickupMapping.method,
             },
           });
           migrationCount++;
         }
 
-        // 7. Retire source routes
+        // 8. Retire source routes
         await tx.busRoute.updateMany({
           where: { id: { in: input.sourceRouteIds }, tenantId: input.tenantId },
           data: {
@@ -335,49 +381,15 @@ export async function applyConsolidation(
           },
         });
 
-        // 8. Compute applied-state hash for revert-drift detection
+        // 9. Recompute the state hash now that all writes are done and
+        //    stamp it back onto the consolidation row.
         const appliedStateHash = await computeAppliedStateHash(tx as unknown as PrismaClient, mergedRoute.id);
-
-        // 9. Write lineage rows. The consolidation parent must be
-        //    created before the sources/migrations reference it —
-        //    Postgres would flag the FK. We create the parent first
-        //    then re-target the placeholder migration rows.
-        const now = new Date();
-        const consolidation = await tx.routeConsolidation.create({
-          data: {
-            tenantId: input.tenantId,
-            recommendationId: input.recommendationId,
-            idempotencyKey: input.idempotencyKey,
-            mergedRouteId: mergedRoute.id,
-            status: 'APPLIED',
-            objectiveSnapshot: (input.objective ?? {}) as Prisma.InputJsonValue,
-            recommendationSnapshot: (input.recommendationSnapshot ?? {}) as Prisma.InputJsonValue,
-            appliedStateHash,
-            appliedAt: now,
-            appliedBy: input.appliedBy,
-          },
-          select: { id: true },
+        await tx.routeConsolidation.update({
+          where: { id: consolidationId },
+          data: { appliedStateHash },
         });
 
-        for (let i = 0; i < sourceRoutes.length; i++) {
-          const r = sourceRoutes[i];
-          await tx.routeConsolidationSource.create({
-            data: {
-              tenantId: input.tenantId,
-              consolidationId: consolidation.id,
-              sourceRouteId: r.id,
-              sourceRouteUpdatedAt: r.updatedAt,
-              sequence: i,
-            },
-          });
-        }
-
-        // Re-target the placeholder migration rows now that the
-        // consolidation.id is available.
-        await tx.routeConsolidationEnrollmentMigration.updateMany({
-          where: { consolidationId: 'placeholder' },
-          data: { consolidationId: consolidation.id },
-        });
+        const consolidation = { id: consolidationId };
 
         return {
           status: 'APPLIED' as const,
