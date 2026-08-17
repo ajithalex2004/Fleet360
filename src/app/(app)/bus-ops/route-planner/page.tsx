@@ -38,6 +38,15 @@ interface LoadedRoute {
   }>;
 }
 
+/** Lightweight shape for the route picker dropdown. */
+interface RouteOption {
+  id: string;
+  name: string;
+  code?: string | null;
+  isActive?: boolean | null;
+  stopCount: number;
+}
+
 function RoutePlannerInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -55,6 +64,35 @@ function RoutePlannerInner() {
   // origin/destination are set — but the operator can override).
   const [routeName, setRouteName] = useState('');
   const [routeNameManuallyEdited, setRouteNameManuallyEdited] = useState(false);
+
+  // Route picker — populated from /api/bus-ops/routes. Picking a route
+  // navigates to /bus-ops/route-planner?edit=<id> so all the existing
+  // edit-flow logic (fetch + stop conversion + PATCH-on-save) kicks in.
+  const [routeOptions, setRouteOptions] = useState<RouteOption[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/bus-ops/routes', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled || !Array.isArray(data)) return;
+        setRouteOptions(
+          data.map((r: {
+            id: string; name: string; code?: string | null;
+            isActive?: boolean | null; stops?: unknown[]
+          }) => ({
+            id: r.id,
+            name: r.name,
+            code: r.code,
+            isActive: r.isActive,
+            stopCount: Array.isArray(r.stops) ? r.stops.length : 0,
+          })),
+        );
+      } catch { /* silent — picker just stays empty */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Load the route + convert its stops into planner waypoints. First stop
   // becomes origin (sequence 1), last stop becomes destination, everything
@@ -259,6 +297,35 @@ function RoutePlannerInner() {
         </div>
       ) : (
         <>
+          {/* Existing-route picker — pick a route to load its origin, stops
+              and destination into the planner. Selecting a route switches
+              the URL to ?edit=<id> so the existing edit-flow load logic
+              runs (fetch + stops→waypoints + PATCH on save). Choosing the
+              blank option returns to a fresh new-route flow. */}
+          <div className="rounded-2xl bg-slate-800/60 border border-white/10 p-4 space-y-2">
+            <label className="block text-xs text-slate-400 uppercase tracking-wider font-medium">
+              Load existing route
+            </label>
+            <select
+              value={editId ?? ''}
+              onChange={e => {
+                const id = e.target.value;
+                router.push(id ? `/bus-ops/route-planner?edit=${id}` : '/bus-ops/route-planner');
+              }}
+              className="w-full px-4 py-2.5 rounded-xl bg-slate-900/60 border border-white/10 text-white text-sm focus:outline-none focus:border-violet-500"
+            >
+              <option value="">— New route (start blank) —</option>
+              {routeOptions.map(r => (
+                <option key={r.id} value={r.id}>
+                  {r.code ? `[${r.code}] ` : ''}{r.name} · {r.stopCount} stops{r.isActive === false ? ' (inactive)' : ''}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-slate-500">
+              Pick a route to auto-populate origin, stops and destination. Save writes back to the same route.
+            </p>
+          </div>
+
           {/* Route name — required, editable at any time. Suggested from
               origin/destination via the waypoint callback below but the
               operator's typed value takes precedence. */}
