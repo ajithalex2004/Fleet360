@@ -7,6 +7,16 @@ import {
 import { PageHeader } from '@/components/bus-ops/theme';
 import FleetDataGrid, { type DataGridColumn, type KpiTile, type FilterChipDef } from '@/components/ui/FleetDataGrid';
 import RowActionsMenu, { type RowAction } from '@/components/ui/RowActionsMenu';
+import GoogleMapPickerModal, { type PickedLocation } from '@/components/logistics/GoogleMapPickerModal';
+
+/** Existing stop reused across routes — returned by /api/bus-ops/route-stops. */
+interface ExistingStop {
+  name: string;
+  lat: number;
+  lng: number;
+  landmark: string | null;
+  routeName: string;
+}
 
 interface RouteStop { id?: string; stopName: string; sequence: number; estimatedArrivalMins?: number; landmark?: string; gpsLat?: number; gpsLng?: number; }
 interface BusRoute  {
@@ -35,10 +45,32 @@ type NewRouteForm = {
   isActive: boolean;
   assignedVehicleId: string;
   assignedDriverId: string;
-  origin: string;
-  destination: string;
 };
-type NewRouteStop = { stopName: string; time: string };
+type NewRouteStop = {
+  stopName: string;
+  time: string;
+  /** GPS coords when the operator picked from map or from an existing stop. */
+  gpsLat?: number;
+  gpsLng?: number;
+  landmark?: string;
+};
+
+/**
+ * Origin + destination bookend the intermediate stops. On save they become
+ * the first/last RouteStop rows so the DB carries their coords (BusRoute
+ * itself has no origin_lat/lng columns), while their names populate
+ * BusRoute.origin / BusRoute.destination string fields. Same shape the
+ * Route Planner uses.
+ */
+type NewRouteEndpoint = {
+  name: string;
+  gpsLat?: number;
+  gpsLng?: number;
+  landmark?: string;
+};
+
+/** Which slot the Google map picker is currently editing. */
+type MapPickerTarget = 'stop' | 'origin' | 'destination';
 
 const EMPTY_NEW_ROUTE: NewRouteForm = {
   name: '', code: '',
@@ -46,7 +78,6 @@ const EMPTY_NEW_ROUTE: NewRouteForm = {
   departureTime: '07:00', expectedArrivalTime: '',
   capacity: '40', isActive: true,
   assignedVehicleId: '', assignedDriverId: '',
-  origin: '', destination: '',
 };
 
 export default function RoutesPage() {
@@ -70,6 +101,10 @@ export default function RoutesPage() {
   const [newStopDraft,     setNewStopDraft]     = useState<NewRouteStop>({ stopName: '', time: '' });
   const [vehicles,         setVehicles]         = useState<VehicleOption[]>([]);
   const [drivers,          setDrivers]          = useState<DriverOption[]>([]);
+  const [existingStops,    setExistingStops]    = useState<ExistingStop[]>([]);
+  const [mapPickerFor,     setMapPickerFor]     = useState<MapPickerTarget | null>(null);
+  const [newRouteOrigin,   setNewRouteOrigin]   = useState<NewRouteEndpoint>({ name: '' });
+  const [newRouteDest,     setNewRouteDest]     = useState<NewRouteEndpoint>({ name: '' });
 
   const loadRoutes = useCallback(async () => {
     setLoading(true);
@@ -89,33 +124,85 @@ export default function RoutesPage() {
   // opens — no need to pay for these on the initial page render.
   useEffect(() => {
     if (!showNewRoute) return;
-    if (vehicles.length > 0 || drivers.length > 0) return;
+    if (vehicles.length > 0 || drivers.length > 0 || existingStops.length > 0) return;
     void (async () => {
       try {
-        const [vRes, dRes] = await Promise.all([
+        const [vRes, dRes, sRes] = await Promise.all([
           fetch('/api/vehicles'),
           fetch('/api/bus-ops/drivers'),
+          fetch('/api/bus-ops/route-stops'),
         ]);
-        const [vData, dData] = await Promise.all([vRes.json(), dRes.json()]);
+        const [vData, dData, sData] = await Promise.all([vRes.json(), dRes.json(), sRes.json()]);
         setVehicles(Array.isArray(vData) ? vData : (vData?.vehicles ?? []));
         setDrivers(Array.isArray(dData) ? dData : []);
+        setExistingStops(Array.isArray(sData?.stops) ? sData.stops : []);
       } catch {
-        // Non-fatal — the modal renders a warning banner when both lists are empty.
+        // Non-fatal — the modal renders warning banners when lists are empty.
       }
     })();
-  }, [showNewRoute, vehicles.length, drivers.length]);
+  }, [showNewRoute, vehicles.length, drivers.length, existingStops.length]);
+
+  // Pick an existing location from a dropdown → route the pre-fill to the
+  // right slot (stop draft / origin / destination) based on `target`.
+  const pickExistingFor = (target: MapPickerTarget, key: string) => {
+    if (!key) return;
+    const [name, lat, lng] = key.split('|');
+    const match = existingStops.find(s =>
+      s.name === name && s.lat.toFixed(5) === lat && s.lng.toFixed(5) === lng,
+    );
+    if (!match) return;
+    const payload = {
+      name: match.name,
+      gpsLat: match.lat,
+      gpsLng: match.lng,
+      landmark: match.landmark ?? undefined,
+    };
+    if (target === 'stop') {
+      setNewStopDraft(prev => ({ ...prev,
+        stopName: payload.name, gpsLat: payload.gpsLat, gpsLng: payload.gpsLng, landmark: payload.landmark,
+      }));
+    } else if (target === 'origin') {
+      setNewRouteOrigin(payload);
+    } else {
+      setNewRouteDest(payload);
+    }
+  };
+
+  // Map picker returned a location — same target routing.
+  const handleMapPick = (loc: PickedLocation) => {
+    const name = loc.name || loc.address;
+    if (mapPickerFor === 'origin') {
+      setNewRouteOrigin(prev => ({ ...prev, name: name || prev.name, gpsLat: loc.lat, gpsLng: loc.lng }));
+    } else if (mapPickerFor === 'destination') {
+      setNewRouteDest(prev => ({ ...prev, name: name || prev.name, gpsLat: loc.lat, gpsLng: loc.lng }));
+    } else {
+      setNewStopDraft(prev => ({ ...prev,
+        stopName: name || prev.stopName, gpsLat: loc.lat, gpsLng: loc.lng,
+      }));
+    }
+    setMapPickerFor(null);
+  };
 
   const openNewRoute = () => {
     setNewRoute(EMPTY_NEW_ROUTE);
     setNewRouteStops([]);
     setNewStopDraft({ stopName: '', time: '' });
+    setNewRouteOrigin({ name: '' });
+    setNewRouteDest({ name: '' });
+    setMapPickerFor(null);
     setError('');
     setShowNewRoute(true);
   };
 
   const addNewRouteStop = () => {
     if (!newStopDraft.stopName.trim()) return;
-    setNewRouteStops(prev => [...prev, { stopName: newStopDraft.stopName.trim(), time: newStopDraft.time }]);
+    setNewRouteStops(prev => [...prev, {
+      stopName: newStopDraft.stopName.trim(),
+      time: newStopDraft.time,
+      gpsLat: newStopDraft.gpsLat,
+      gpsLng: newStopDraft.gpsLng,
+      landmark: newStopDraft.landmark,
+    }]);
     setNewStopDraft({ stopName: '', time: '' });
   };
   const removeNewRouteStop = (idx: number) =>
@@ -137,14 +224,42 @@ export default function RoutesPage() {
   const submitNewRoute = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRoute.name.trim()) { setError('Route Name is required'); return; }
+    if (!newRouteOrigin.name.trim()) { setError('Origin is required'); return; }
+    if (!newRouteDest.name.trim())   { setError('Destination is required'); return; }
     setCreating(true);
     try {
+      // Prepend origin as first stop, append destination as last stop —
+      // same shape the Route Planner saves so BusRoute.origin/destination
+      // stay in sync with the first/last RouteStop rows.
+      const originStop = {
+        stopName: newRouteOrigin.name.trim(),
+        sequence: 1,
+        gpsLat: newRouteOrigin.gpsLat,
+        gpsLng: newRouteOrigin.gpsLng,
+        landmark: newRouteOrigin.landmark,
+      };
+      const intermediates = newRouteStops.map((s, i) => ({
+        stopName: s.stopName,
+        sequence: i + 2,
+        estimatedArrivalMins: stopOffsetMinutes(newRoute.departureTime, s.time),
+        gpsLat: s.gpsLat,
+        gpsLng: s.gpsLng,
+        landmark: s.landmark,
+      }));
+      const destinationStop = {
+        stopName: newRouteDest.name.trim(),
+        sequence: intermediates.length + 2,
+        gpsLat: newRouteDest.gpsLat,
+        gpsLng: newRouteDest.gpsLng,
+        landmark: newRouteDest.landmark,
+      };
+
       const payload = {
         name: newRoute.name.trim(),
         // Empty code lets the API auto-allocate the next tenant-scoped code.
         code: newRoute.code.trim() || undefined,
-        origin: newRoute.origin.trim() || newRouteStops[0]?.stopName || '',
-        destination: newRoute.destination.trim() || newRouteStops[newRouteStops.length - 1]?.stopName || '',
+        origin: newRouteOrigin.name.trim(),
+        destination: newRouteDest.name.trim(),
         routeType: newRoute.routeType,
         direction: newRoute.direction,
         shiftType: newRoute.shiftType,
@@ -154,11 +269,7 @@ export default function RoutesPage() {
         isActive: newRoute.isActive,
         assignedVehicleId: newRoute.assignedVehicleId || null,
         assignedDriverId:  newRoute.assignedDriverId  || null,
-        stops: newRouteStops.map((s, i) => ({
-          stopName: s.stopName,
-          sequence: i + 1,
-          estimatedArrivalMins: stopOffsetMinutes(newRoute.departureTime, s.time),
-        })),
+        stops: [originStop, ...intermediates, destinationStop],
       };
       const res = await fetch('/api/bus-ops/routes', {
         method: 'POST',
@@ -387,9 +498,17 @@ export default function RoutesPage() {
 
       {/* New Route modal */}
       {showNewRoute && (
+        <>
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-          onClick={() => !creating && setShowNewRoute(false)}
+          onClick={e => {
+            // Only close when the backdrop itself is clicked — not when a
+            // click on a descendant bubbles up. Fixes the map picker (and
+            // any future nested overlay) closing the modal by proxy.
+            if (e.target !== e.currentTarget) return;
+            if (creating) return;
+            setShowNewRoute(false);
+          }}
         >
           <div
             className="w-full max-w-3xl max-h-[92vh] overflow-y-auto bg-slate-900/95 border border-white/10 rounded-2xl shadow-2xl"
@@ -552,36 +671,115 @@ export default function RoutesPage() {
                 )}
               </fieldset>
 
+              {/* Origin */}
+              <EndpointField
+                label="Origin *"
+                target="origin"
+                value={newRouteOrigin}
+                onChange={setNewRouteOrigin}
+                existingStops={existingStops}
+                onPickExisting={key => pickExistingFor('origin', key)}
+                onOpenMap={() => setMapPickerFor('origin')}
+              />
+
               {/* Stop Sequence Engine */}
               <fieldset className="rounded-xl border border-white/10 bg-slate-950/40 px-4 py-4">
-                <legend className="px-2 text-xs uppercase tracking-wider text-slate-400 font-semibold">Stop Sequence Engine</legend>
+                <legend className="px-2 text-xs uppercase tracking-wider text-slate-400 font-semibold">Stop Sequence Engine · Intermediate</legend>
+
+                {/* Added-stops list. Numbered chips + coords indicator so the
+                    operator can see at a glance which stops have GPS pins vs
+                    just names (name-only stops can still be geocoded later in
+                    the Route Planner). */}
                 <div className="space-y-2 mb-3">
                   {newRouteStops.length === 0 && (
-                    <div className="text-xs text-slate-500 py-2">No stops yet. Add one below.</div>
+                    <div className="text-xs text-slate-500 py-2">No stops yet. Pick from existing, plot on the map, or type below.</div>
                   )}
                   {newRouteStops.map((s, i) => (
                     <div key={i} className="flex items-center gap-2 bg-slate-800/50 border border-white/5 rounded-lg px-3 py-2">
                       <span className="w-6 h-6 rounded-full bg-violet-500/20 text-violet-300 text-xs font-bold flex items-center justify-center">{i + 1}</span>
-                      <span className="flex-1 text-sm text-slate-200">{s.stopName}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm text-slate-200 truncate">{s.stopName}</div>
+                        {s.landmark && <div className="text-[10px] text-slate-500 truncate">{s.landmark}</div>}
+                      </div>
+                      {s.gpsLat != null && s.gpsLng != null && (
+                        <span title={`${s.gpsLat.toFixed(5)}, ${s.gpsLng.toFixed(5)}`}
+                          className="text-[10px] text-emerald-300 inline-flex items-center gap-0.5">
+                          <MapPin className="w-3 h-3" /> pinned
+                        </span>
+                      )}
                       {s.time && <span className="text-xs text-slate-400 inline-flex items-center gap-1"><Clock className="w-3 h-3" />{s.time}</span>}
                       <button type="button" onClick={() => removeNewRouteStop(i)}
                         className="text-rose-400 hover:text-rose-300 text-xs px-1">✕</button>
                     </div>
                   ))}
                 </div>
+
+                {/* Pick from existing — de-duplicated across all tenant routes
+                    from /api/bus-ops/route-stops. Choosing a stop pre-fills
+                    the draft below (name + coords + landmark). Operator still
+                    clicks Add so they can set the time first. */}
+                {existingStops.length > 0 && (
+                  <div className="mb-3">
+                    <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">
+                      Pick from existing ({existingStops.length})
+                    </div>
+                    <select
+                      value=""
+                      onChange={e => { pickExistingFor('stop', e.target.value); e.currentTarget.selectedIndex = 0; }}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none"
+                    >
+                      <option value="">— Pick a stop already used on another route —</option>
+                      {existingStops.map(s => {
+                        const key = `${s.name}|${s.lat.toFixed(5)}|${s.lng.toFixed(5)}`;
+                        return (
+                          <option key={key} value={key}>
+                            {s.name}{s.landmark ? ` — ${s.landmark}` : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
+
+                {/* Draft row: name input · time · 📍 Map · + Add. The draft
+                    silently carries gpsLat/gpsLng/landmark if they came from
+                    the picker or map — surfaced as a pinned indicator. */}
                 <div className="flex items-center gap-2">
-                  <input value={newStopDraft.stopName} onChange={e => setNewStopDraft(p => ({ ...p, stopName: e.target.value }))}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addNewRouteStop(); } }}
-                    placeholder="Stop name…"
-                    className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white placeholder-slate-500 text-sm focus:border-violet-500 focus:outline-none" />
+                  <div className="flex-1 relative">
+                    <input value={newStopDraft.stopName} onChange={e => setNewStopDraft(p => ({ ...p, stopName: e.target.value, gpsLat: undefined, gpsLng: undefined, landmark: undefined }))}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addNewRouteStop(); } }}
+                      placeholder="Stop name…"
+                      className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white placeholder-slate-500 text-sm focus:border-violet-500 focus:outline-none pr-16" />
+                    {newStopDraft.gpsLat != null && newStopDraft.gpsLng != null && (
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-emerald-300 inline-flex items-center gap-0.5 pointer-events-none">
+                        <MapPin className="w-3 h-3" /> pinned
+                      </span>
+                    )}
+                  </div>
                   <input type="time" value={newStopDraft.time} onChange={e => setNewStopDraft(p => ({ ...p, time: e.target.value }))}
                     className="w-32 px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none" />
+                  <button type="button" onClick={() => setMapPickerFor('stop')}
+                    title="Plot this stop on the map"
+                    className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700">
+                    <MapPin className="w-3.5 h-3.5" /> Map
+                  </button>
                   <button type="button" onClick={addNewRouteStop}
                     className="inline-flex items-center gap-1 rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-sm text-violet-200 hover:bg-violet-500/20">
                     <Plus className="w-3.5 h-3.5" /> Add
                   </button>
                 </div>
               </fieldset>
+
+              {/* Destination */}
+              <EndpointField
+                label="Destination *"
+                target="destination"
+                value={newRouteDest}
+                onChange={setNewRouteDest}
+                existingStops={existingStops}
+                onPickExisting={key => pickExistingFor('destination', key)}
+                onOpenMap={() => setMapPickerFor('destination')}
+              />
 
               {error && (
                 <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</div>
@@ -600,6 +798,36 @@ export default function RoutesPage() {
             </form>
           </div>
         </div>
+
+        {/* Google Maps picker — sibling of the New Route overlay (NOT a
+            descendant). Its own fixed overlay owns click-outside and z-index;
+            nesting inside the New Route overlay caused Google Places'
+            autocomplete clicks to bubble up and close both. */}
+        {(() => {
+          // Route the picker's initial coords + search query based on which
+          // slot we're editing. Keeps one modal instance serving all three.
+          const src = mapPickerFor === 'origin'
+            ? { name: newRouteOrigin.name, lat: newRouteOrigin.gpsLat, lng: newRouteOrigin.gpsLng }
+            : mapPickerFor === 'destination'
+              ? { name: newRouteDest.name, lat: newRouteDest.gpsLat, lng: newRouteDest.gpsLng }
+              : { name: newStopDraft.stopName, lat: newStopDraft.gpsLat, lng: newStopDraft.gpsLng };
+          const title = mapPickerFor === 'origin' ? 'Plot origin on map'
+            : mapPickerFor === 'destination' ? 'Plot destination on map'
+            : 'Plot stop on map';
+          return (
+            <GoogleMapPickerModal
+              open={mapPickerFor !== null}
+              title={title}
+              initial={src.lat != null && src.lng != null
+                ? { lat: src.lat, lng: src.lng, label: src.name || undefined }
+                : null}
+              initialSearchQuery={src.name || undefined}
+              onClose={() => setMapPickerFor(null)}
+              onPick={handleMapPick}
+            />
+          );
+        })()}
+        </>
       )}
 
       {/* Delete confirmation modal */}
@@ -702,5 +930,83 @@ export default function RoutesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// ── EndpointField ──────────────────────────────────────────────────────────
+// Reusable input row for Origin / Destination inside the New Route modal.
+// Mirrors the Stop Sequence Engine's UX: existing-stops dropdown (with a
+// (N) counter in the label), text input with a 📍 pinned badge when GPS is
+// set, and a Map button that opens the shared GoogleMapPickerModal via the
+// parent's setMapPickerFor callback.
+function EndpointField({
+  label, target, value, onChange, existingStops, onPickExisting, onOpenMap,
+}: {
+  label: string;
+  target: MapPickerTarget;                       // 'origin' | 'destination'
+  value: NewRouteEndpoint;
+  onChange: (next: NewRouteEndpoint) => void;
+  existingStops: ExistingStop[];
+  onPickExisting: (key: string) => void;
+  onOpenMap: () => void;
+}) {
+  return (
+    <fieldset className="rounded-xl border border-white/10 bg-slate-950/40 px-4 py-4">
+      <legend className="px-2 text-xs uppercase tracking-wider text-slate-400 font-semibold">{label}</legend>
+
+      {existingStops.length > 0 && (
+        <div className="mb-3">
+          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">
+            Pick from existing ({existingStops.length})
+          </div>
+          <select
+            value=""
+            onChange={e => { onPickExisting(e.target.value); e.currentTarget.selectedIndex = 0; }}
+            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none"
+          >
+            <option value="">— Pick a location already used on another route —</option>
+            {existingStops.map(s => {
+              const key = `${s.name}|${s.lat.toFixed(5)}|${s.lng.toFixed(5)}`;
+              return (
+                <option key={key} value={key}>
+                  {s.name}{s.landmark ? ` — ${s.landmark}` : ''}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <div className="flex-1 relative">
+          <input
+            value={value.name}
+            onChange={e => onChange({ ...value, name: e.target.value, gpsLat: undefined, gpsLng: undefined, landmark: undefined })}
+            placeholder={target === 'origin' ? 'e.g. AGT HQ' : 'e.g. Sheikh Khalifa Medical City'}
+            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white placeholder-slate-500 text-sm focus:border-violet-500 focus:outline-none pr-16"
+          />
+          {value.gpsLat != null && value.gpsLng != null && (
+            <span
+              title={`${value.gpsLat.toFixed(5)}, ${value.gpsLng.toFixed(5)}`}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-emerald-300 inline-flex items-center gap-0.5 pointer-events-none"
+            >
+              <MapPin className="w-3 h-3" /> pinned
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onOpenMap}
+          title={`Plot the ${target} on the map`}
+          className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700"
+        >
+          <MapPin className="w-3.5 h-3.5" /> Map
+        </button>
+      </div>
+
+      {value.landmark && (
+        <div className="mt-2 text-[11px] text-slate-500">Landmark: {value.landmark}</div>
+      )}
+    </fieldset>
   );
 }
