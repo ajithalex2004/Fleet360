@@ -878,10 +878,10 @@ enum MaintenanceStatus {
   PENDING_ESTIMATION_APPROVAL
   ESTIMATION_APPROVED
   UNDER_MAINTENANCE
-  REPAIR_COMPLETED
+  JOB_COMPLETED
   QUALITY_INSPECTION
   INSPECTION_FAILED
-  READY_FOR_SERVICE
+  READY_FOR_OPERATION
   MAINTENANCE_COMPLETED
   PENDING_INVOICE
   INVOICE_SUBMITTED
@@ -1203,7 +1203,6 @@ model RentalCustomer {
   createdAt        DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
-  tenantId          String                  @map("tenant_id")
   fullName         String    @map("full_name")
   customerType     String?   @default("INDIVIDUAL") @map("customer_type") // INDIVIDUAL|CORPORATE|AIRLINE|INSURANCE
   nationality      String?
@@ -1235,9 +1234,6 @@ model RentalCustomer {
 
   @@index([customerType], map: "idx_rental_customers_customer_type")
   @@index([deletedAt], map: "idx_rental_customers_deleted_at")
-  @@unique([id, tenantId])
-  @@index([tenantId])
-
   @@map("rental_customers")
   @@schema("public")
 }
@@ -1247,8 +1243,7 @@ model RentalBooking {
   createdAt       DateTime?           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime?           @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt       DateTime?           @map("deleted_at") @db.Timestamptz(6)
-  tenantId          String                  @map("tenant_id")
-  bookingRef      String?             @map("booking_ref")
+  bookingRef      String?             @unique @map("booking_ref")
   customerId      String              @map("customer_id")
   vehicleId       String?             @map("vehicle_id")
   vehicleCategory String?             @map("vehicle_category")
@@ -1273,17 +1268,12 @@ model RentalBooking {
   @@index([status], map: "idx_rental_bookings_status")
   @@index([pickupDate], map: "idx_rental_bookings_pickup_date")
   @@index([deletedAt], map: "idx_rental_bookings_deleted_at")
-  @@unique([tenantId, bookingRef])
-  @@unique([id, tenantId])
-  @@index([tenantId])
-
   @@map("rental_bookings")
   @@schema("public")
 }
 
 model VehicleInspection {
   id        String        @id @default(uuid())
-  tenantId          String                  @map("tenant_id")
   createdAt DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
   bookingId String        @map("booking_id")
   type      String // checkin | checkout
@@ -1294,16 +1284,12 @@ model VehicleInspection {
   notes     String?
   booking   RentalBooking @relation(fields: [bookingId], references: [id])
 
-  @@index([tenantId])
-
-
   @@map("vehicle_inspections")
   @@schema("public")
 }
 
 model DamageClaim {
   id               String        @id @default(uuid())
-  tenantId          String                  @map("tenant_id")
   createdAt        DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
   bookingId        String        @map("booking_id")
   description      String?
@@ -1313,9 +1299,6 @@ model DamageClaim {
   insuranceClaim   Boolean?      @default(false) @map("insurance_claim")
   billedToCustomer Boolean?      @default(false) @map("billed_to_customer")
   booking          RentalBooking @relation(fields: [bookingId], references: [id])
-
-  @@index([tenantId])
-
 
   @@map("damage_claims")
   @@schema("public")
@@ -1409,7 +1392,6 @@ model RateEvent {
   createdAt            DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt            DateTime? @map("deleted_at") @db.Timestamptz(6)
-  tenantId          String                  @map("tenant_id")
   eventCode            String    @unique @map("event_code")
   name                 String
   description          String?
@@ -1424,8 +1406,6 @@ model RateEvent {
 
   @@index([isActive, dateFrom, dateTo], map: "idx_rate_events_active_dates")
   @@index([deletedAt], map: "idx_rate_events_deleted_at")
-  @@index([tenantId])
-
   @@map("rate_events")
   @@schema("public")
 }
@@ -1433,7 +1413,6 @@ model RateEvent {
 // Rate quote snapshot -- saved when a booking is created
 model RentalRateQuote {
   id                String    @id @default(uuid())
-  tenantId          String                  @map("tenant_id")
   createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   bookingId         String?   @map("booking_id")
   vehicleCategory   String    @map("vehicle_category")
@@ -1446,9 +1425,7 @@ model RentalRateQuote {
   baseRentalCharge  Decimal   @map("base_rental_charge") @db.Decimal
   insurancePlanCode String?   @map("insurance_plan_code")
   insuranceCharge   Decimal?  @default(0) @map("insurance_charge") @db.Decimal
-  extras            String? // JSON [{name, amount
-  @@index([tenantId])
-}]
+  extras            String? // JSON [{name, amount}]
   discountPct       Decimal?  @default(0) @map("discount_pct") @db.Decimal
   discountAmount    Decimal?  @default(0) @map("discount_amount") @db.Decimal
   taxPct            Decimal?  @default(5) @map("tax_pct") @db.Decimal // UAE VAT
@@ -1464,7 +1441,6 @@ model RentalRateQuote {
 
 model RentalAgreement {
   id              String    @id @default(uuid())
-  tenantId          String                  @map("tenant_id")
   createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   agreementNo     String?   @unique @map("agreement_no")
@@ -1520,8 +1496,6 @@ model RentalAgreement {
   @@index([vehicleId], map: "idx_rental_agreements_vehicle_id")
   @@index([status], map: "idx_rental_agreements_status")
   @@index([openBranchId], map: "idx_rental_agreements_open_branch_id")
-  @@index([tenantId])
-
   @@map("rental_agreements")
   @@schema("public")
 }
@@ -1529,7 +1503,6 @@ model RentalAgreement {
 // Mid-rental vehicle exchange
 model RentalVehicleExchange {
   id                String          @id @default(uuid())
-  tenantId          String                  @map("tenant_id")
   createdAt         DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
   agreementId       String          @map("agreement_id")
   fromVehicleId     String          @map("from_vehicle_id")
@@ -1544,15 +1517,12 @@ model RentalVehicleExchange {
   agreement         RentalAgreement @relation(fields: [agreementId], references: [id])
 
   @@index([agreementId], map: "idx_rental_vehicle_exchanges_agreement_id")
-  @@index([tenantId])
-
   @@map("rental_vehicle_exchanges")
   @@schema("public")
 }
 
 model RentalExtension {
   id              String          @id @default(uuid())
-  tenantId          String                  @map("tenant_id")
   createdAt       DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
   agreementId     String          @map("agreement_id")
   originalEndDate DateTime        @map("original_end_date") @db.Timestamptz(6)
@@ -1564,16 +1534,12 @@ model RentalExtension {
   status          String?         @default("PENDING") // PENDING|APPROVED|REJECTED
   agreement       RentalAgreement @relation(fields: [agreementId], references: [id])
 
-  @@index([tenantId])
-
-
   @@map("rental_extensions")
   @@schema("public")
 }
 
 model RentalPayment {
   id            String          @id @default(uuid())
-  tenantId          String                  @map("tenant_id")
   createdAt     DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
   agreementId   String          @map("agreement_id")
   amount        Decimal         @db.Decimal
@@ -1586,9 +1552,6 @@ model RentalPayment {
   notes         String?
   agreement     RentalAgreement @relation(fields: [agreementId], references: [id])
 
-  @@index([tenantId])
-
-
   @@map("rental_payments")
   @@schema("public")
 }
@@ -1600,7 +1563,6 @@ model RentalAncillary {
   createdAt            DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt            DateTime? @map("deleted_at") @db.Timestamptz(6)
-  tenantId          String                  @map("tenant_id")
   code                 String    @unique
   nameEn               String    @map("name_en")
   nameAr               String?   @map("name_ar")
@@ -1615,15 +1577,12 @@ model RentalAncillary {
   notes                String?
 
   @@index([deletedAt], map: "idx_rental_ancillaries_deleted_at")
-  @@index([tenantId])
-
   @@map("rental_ancillaries")
   @@schema("public")
 }
 
 model RentalAdditionalCharge {
   id               String          @id @default(uuid())
-  tenantId          String                  @map("tenant_id")
   createdAt        DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
   agreementId      String          @map("agreement_id")
   chargeType       String          @map("charge_type") // FUEL|EXTRA_KM|DAMAGE|CLEANING|TRAFFIC_FINE|OTHER
@@ -1633,9 +1592,6 @@ model RentalAdditionalCharge {
   totalAmount      Decimal?        @map("total_amount") @db.Decimal
   billedToCustomer Boolean?        @default(true) @map("billed_to_customer")
   agreement        RentalAgreement @relation(fields: [agreementId], references: [id])
-
-  @@index([tenantId])
-
 
   @@map("rental_additional_charges")
   @@schema("public")
@@ -1647,7 +1603,6 @@ model RentalInvoice {
   createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
-  tenantId          String                  @map("tenant_id")
 
   invoiceNo   String @unique @map("invoice_no")
   agreementId String @map("agreement_id")
@@ -1706,16 +1661,12 @@ model RentalInvoice {
   @@index([dueDate], map: "idx_rental_invoices_due_date")
   @@index([deletedAt], map: "idx_rental_invoices_deleted_at")
   @@index([corporateAccountId], map: "idx_rental_invoices_corporate_account_id")
-  @@unique([id, tenantId])
-  @@index([tenantId])
-
   @@map("rental_invoices")
   @@schema("public")
 }
 
 model RentalInvoiceLineItem {
   id          String        @id @default(uuid())
-  tenantId          String                  @map("tenant_id")
   createdAt   DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
   invoiceId   String        @map("invoice_id")
   lineType    String        @map("line_type")
@@ -1732,8 +1683,6 @@ model RentalInvoiceLineItem {
   invoice     RentalInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@index([invoiceId], map: "idx_rental_invoice_line_items_invoice_id")
-  @@index([tenantId])
-
   @@map("rental_invoice_line_items")
   @@schema("public")
 }
@@ -1741,23 +1690,19 @@ model RentalInvoiceLineItem {
 // Payment receipts against an invoice
 model RentalInvoicePayment {
   id            String        @id @default(uuid())
-  tenantId          String                  @map("tenant_id")
   createdAt     DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
   invoiceId     String        @map("invoice_id")
   amount        Decimal       @db.Decimal
   currency      String?       @default("AED")
   paymentMethod String?       @map("payment_method") // CASH|CARD|BANK|CHEQUE|ONLINE
   referenceNo   String?       @map("reference_no")
-  receiptNo     String?       @map("receipt_no")
+  receiptNo     String?       @unique @map("receipt_no")
   paidAt        DateTime      @map("paid_at") @db.Timestamptz(6)
   receivedBy    String?       @map("received_by")
   notes         String?
   invoice       RentalInvoice @relation(fields: [invoiceId], references: [id])
 
   @@index([invoiceId], map: "idx_rental_invoice_payments_invoice_id")
-    @@unique([tenantId, receiptNo])
-  @@index([tenantId])
-
   @@map("rental_invoice_payments")
   @@schema("public")
 }
@@ -1779,11 +1724,42 @@ model BusRoute {
   origin                String
   destination           String
   routeType             String?        @default("STAFF") @map("route_type") // STAFF|SCHOOL|BOTH
+  /// Vehicle group the route is authored for (BUS | VAN | PICKUP | SUV | ECONOMY | LUXURY …).
+  /// When set, the Resource Validation Engine's V5 check compares this to
+  /// Vehicle.vehicleGroup and BLOCKs mismatches. Null → V5 is a no-op (PASS)
+  /// so tenants without a routing standard aren't false-alarmed.
+  requiredVehicleGroup  String?        @map("required_vehicle_group")
+  /// Minimum driver license category required for the route (LIGHT | HEAVY |
+  /// BUS | MOTORCYCLE). Matches Driver.licenseType. Null → D7 is a no-op.
+  /// Should reflect the most restrictive UAE RTA requirement for the route's
+  /// typical vehicle — a bus route uses BUS, a shuttle van typically LIGHT.
+  requiredLicenseType   String?        @map("required_license_type")
   totalDistanceKm       Float?         @map("total_distance_km")
   estimatedDurationMins Int?           @map("estimated_duration_mins")
   capacity              Int?           @default(30)
   isActive              Boolean?       @default(true) @map("is_active")
   notes                 String?
+  /// Route scheduling metadata authored on the Routes page. When present these
+  /// are the "typical" scheduling for the route — TripSchedule and
+  /// BusOpsScheduleTemplate can still override on a per-trip / per-template
+  /// basis. All nullable so pre-existing rows are unaffected.
+  direction             String?        @map("direction")             // INBOUND | OUTBOUND
+  shiftType             String?        @map("shift_type")            // MORNING | EVENING | NIGHT | SPLIT
+  departureTime         String?        @map("departure_time")        // 'HH:MM' 24h
+  expectedArrivalTime   String?        @map("expected_arrival_time") // 'HH:MM' 24h
+  /// Default vehicle and driver for the route. Not enforced as FK on purpose
+  /// (bus_routes is cross-tenant-referenced in some legacy contexts) — the
+  /// Routes page validates the id belongs to the tenant on write.
+  assignedVehicleId     String?        @map("assigned_vehicle_id")
+  assignedDriverId      String?        @map("assigned_driver_id")
+  /// Route Consolidation Phase 2 — retirement fields.
+  /// Set when a route is deactivated as a consolidation source or as an
+  /// archived merged route after revert. `retiredReason` discriminates
+  /// consolidation-driven retirement from other operator-authored reasons
+  /// so cool-down / analysis queries can filter cheaply.
+  retiredReason         String?        @map("retired_reason")
+  retiredAt             DateTime?      @map("retired_at") @db.Timestamptz(6)
+  retiredBy             String?        @map("retired_by")
   stops                 RouteStop[]
   schedules             TripSchedule[]
   headwayRules          HeadwayRule[]
@@ -1938,37 +1914,6 @@ model RoutePassenger {
   @@index([deletedAt],     map: "idx_route_passengers_deleted")
   @@index([status],        map: "idx_route_passengers_status")
   @@map("route_passengers")
-  @@schema("public")
-}
-
-/// Idempotency record for bulk import endpoints. R10 fix (2026-08-13).
-///
-/// The bulk-import endpoints (route-passengers, and future ones) accept
-/// an optional `?idempotencyKey=…` query param. The first POST with a
-/// given (tenantId, idempotencyKey) runs the import and stores the
-/// result + body hash; subsequent POSTs with the same key (and same
-/// body) return the cached result without re-running. Keys expire
-/// after 24h.
-///
-/// `bodyHash` is the SHA-256 of the canonicalised request body. If a
-/// client reuses a key with a different body, the route returns 409
-/// rather than silently replaying a wrong result.
-model BulkImportJob {
-  id              String   @id @default(uuid())
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  tenantId        String   @map("tenant_id")
-  idempotencyKey  String   @map("idempotency_key")
-  bodyHash        String   @map("body_hash")
-  /// JSON column holding the import result (counts + per-row errors).
-  /// Prisma serialises as Json; the route does explicit casting.
-  result          Json     @map("result")
-  createdBy       String?  @map("created_by")
-  expiresAt       DateTime @map("expires_at") @db.Timestamptz(6)
-
-  @@unique([tenantId, idempotencyKey], map: "uniq_bulk_import_tenant_key")
-  @@index([expiresAt], map: "idx_bulk_import_expires")
-  @@map("bulk_import_jobs")
   @@schema("public")
 }
 
@@ -2138,12 +2083,23 @@ model TripSchedule {
   driverId       String?         @map("driver_id")
   departureTime  DateTime        @map("departure_time") @db.Timestamptz(6)
   arrivalTime    DateTime?       @map("arrival_time") @db.Timestamptz(6)
+  /// Hard "must-arrive-by" deadline used by MERGED_ARRIVAL_SLA in the
+  /// Planning Constraint Engine. `arrivalTime` is an estimate; this is
+  /// the commitment. Nullable — trips without a stated SLA are treated
+  /// as unconstrained.
+  latestArrivalTime DateTime?    @map("latest_arrival_time") @db.Timestamptz(6)
   frequency      String?         @default("DAILY") // DAILY|WEEKLY|ONCE
   shiftType      String?         @map("shift_type") // MORNING|EVENING|NIGHT|SPLIT
   direction      String?         @default("INBOUND") // INBOUND|OUTBOUND
   capacity       Int?            @default(30)
   confirmedCount Int?            @default(0) @map("confirmed_count")
-  status         String?         @default("SCHEDULED") // SCHEDULED|DEPARTED|IN_TRANSIT|COMPLETED|CANCELLED
+  status         String?         @default("SCHEDULED") // SCHEDULED|DEPARTED|IN_TRANSIT|COMPLETED|CANCELLED|MERGED
+  /// Merge lineage — set on source trips when they get merged into a
+  /// new consolidated trip. Points at the merged trip's id. Nullable
+  /// on the common (unmerged) case. Self-relation kept as a plain FK
+  /// column here; the Prisma-level self-relation is deliberately not
+  /// declared to avoid churning include/select shapes across the app.
+  mergedIntoTripId String?       @map("merged_into_trip_id")
   // ── Headway support ──────────────────────────────────────────────────
   // 'TIMEPOINT' (default): the row IS a single timed trip.
   // 'HEADWAY':            the row is a headway template — actual trips are
@@ -3193,8 +3149,6 @@ model LeaseQuotation {
   vehicles            LeaseQuotationVehicle[]
   contracts           LeaseContract2[]
 
-  @@unique([id, tenantId])
-
   @@index([tenantId], map: "idx_lease_quotations_tenant_id")
   @@map("lease_quotations")
   @@schema("public")
@@ -3202,7 +3156,6 @@ model LeaseQuotation {
 
 model LeaseQuotationItem {
   id            String         @id @default(uuid())
-  tenantId          String                  @map("tenant_id")
   quotationId   String         @map("quotation_id")
   itemType      String         @map("item_type") // VEHICLE|ACCESSORY|SERVICE|INSURANCE|MAINTENANCE|DRIVER|OTHER
   description   String
@@ -3214,16 +3167,12 @@ model LeaseQuotationItem {
   notes         String?
   quotation     LeaseQuotation @relation(fields: [quotationId], references: [id])
 
-  @@index([tenantId])
-
-
   @@map("lease_quotation_items")
   @@schema("public")
 }
 
 model LeaseQuotationVehicle {
   id          String         @id @default(uuid())
-  tenantId          String                  @map("tenant_id")
   quotationId String         @map("quotation_id")
   vehicleType String         @map("vehicle_type") // SEDAN|SUV|VAN|BUS|TRUCK|LUXURY
   make        String?
@@ -3233,9 +3182,6 @@ model LeaseQuotationVehicle {
   vehicleId   String?        @map("vehicle_id") // actual vehicle from fleet once allocated
   monthlyRate Decimal?       @map("monthly_rate") @db.Decimal
   quotation   LeaseQuotation @relation(fields: [quotationId], references: [id])
-
-  @@index([tenantId])
-
 
   @@map("lease_quotation_vehicles")
   @@schema("public")
@@ -3296,8 +3242,6 @@ model LeaseContract2 {
   dunningActivities    LeaseDunningActivity[]
   alerts               LeaseAlert[]
 
-  @@unique([id, tenantId])
-
   @@index([tenantId], map: "idx_lease_contracts_v2_tenant_id")
   @@map("lease_contracts_v2")
   @@schema("public")
@@ -3305,7 +3249,6 @@ model LeaseContract2 {
 
 model LeaseContractVehicle {
   id           String         @id @default(uuid())
-  tenantId          String                  @map("tenant_id")
   contractId   String         @map("contract_id")
   vehicleId    String?        @map("vehicle_id")
   vehicleType  String         @map("vehicle_type")
@@ -3320,9 +3263,6 @@ model LeaseContractVehicle {
   mileageStart Int?           @map("mileage_start")
   status       String?        @default("ACTIVE") // ACTIVE|EXCHANGED|RETURNED
   contract     LeaseContract2 @relation(fields: [contractId], references: [id])
-
-  @@index([tenantId])
-
 
   @@map("lease_contract_vehicles")
   @@schema("public")
@@ -3824,8 +3764,6 @@ model LeaseInvoice {
   lessee        Lessee             @relation(fields: [lesseeId], references: [id])
   lines         LeaseInvoiceLine[]
 
-  @@unique([id, tenantId])
-
   @@index([tenantId], map: "idx_lease_invoices_tenant_id")
   @@map("lease_invoices")
   @@schema("public")
@@ -3833,7 +3771,6 @@ model LeaseInvoice {
 
 model LeaseInvoiceLine {
   id          String       @id @default(uuid())
-  tenantId          String                  @map("tenant_id")
   invoiceId   String       @map("invoice_id")
   contractId  String?      @map("contract_id")
   vehicleRef  String?      @map("vehicle_ref")
@@ -3844,9 +3781,6 @@ model LeaseInvoiceLine {
   totalAmount Decimal      @map("total_amount") @db.Decimal
   currency    String?      @default("AED")
   invoice     LeaseInvoice @relation(fields: [invoiceId], references: [id])
-
-  @@index([tenantId])
-
 
   @@map("lease_invoice_lines")
   @@schema("public")
@@ -5552,6 +5486,167 @@ model TransportRequest {
   @@index([status],      map: "idx_transport_requests_status")
   @@index([requestType], map: "idx_transport_requests_type")
   @@map("transport_requests")
+  @@schema("public")
+}
+
+/// Planning Constraint Engine rule row.
+///
+/// Ops-configurable rules that the PCE evaluator dispatches on `kind`.
+/// The `params` JSON column carries kind-specific config so adding a new
+/// rule kind lands with an evaluator function + code — no DDL required.
+/// See prisma/raw/add_planning_constraints.sql for kind → params contracts.
+///
+/// `action`:
+///   BLOCK    — plan infeasible, optimiser must never propose it
+///   WARN     — plan legal but flagged for operator attention
+///   PENALTY  — plan legal but scored (penaltyScore) — future optimiser
+///              picks lowest total; today the evaluator only surfaces it
+model PlanningConstraint {
+  id             String    @id @default(uuid())
+  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId       String    @map("tenant_id")
+
+  name           String
+  kind           String
+  action         String    @default("BLOCK")
+  penaltyScore   Decimal?  @map("penalty_score") @db.Decimal(10, 2)
+
+  params         Json      @default("{}")
+
+  effectiveFrom  DateTime? @map("effective_from") @db.Date
+  effectiveTo    DateTime? @map("effective_to")   @db.Date
+
+  reason         String?
+  isEnabled      Boolean   @default(true) @map("is_enabled")
+  createdBy      String?   @map("created_by")
+  updatedBy      String?   @map("updated_by")
+
+  @@index([tenantId],         map: "idx_planning_constraints_tenant")
+  @@index([tenantId, kind],   map: "idx_planning_constraints_tenant_kind")
+  @@index([deletedAt],        map: "idx_planning_constraints_deleted")
+  @@index([isEnabled],        map: "idx_planning_constraints_enabled")
+  @@map("planning_constraints")
+  @@schema("public")
+}
+
+// ── Route Consolidation Phase 2 — lineage ────────────────────────────────────
+//
+// Relational lineage for the Route Consolidation apply/revert flow.
+// See prisma/migrations/20260816000000_route_consolidation_phase2_schema
+// for the migration + full commentary. Highlights:
+//
+//   - RouteConsolidation                            = parent lineage row
+//     RouteConsolidationSource                      = one row per source route
+//     RouteConsolidationEnrollmentMigration         = one row per moved
+//                                                     enrollment (XOR FK
+//                                                     to RoutePassenger or
+//                                                     TransportEnrollment)
+//
+//   - status = APPLIED | REVERTED. Preview is stateless (nothing persists);
+//     FAILED can't be written inside a rolled-back apply transaction, so
+//     it's not in the persisted enum.
+//
+//   - Hard idempotency: UNIQUE(tenantId, idempotencyKey). Partial UNIQUE
+//     (tenantId, recommendationId) WHERE status='APPLIED' blocks two
+//     concurrent active applies of the same rec while still permitting
+//     re-apply after revert.
+//
+//   - Cool-down for post-consolidation merged routes is derived from
+//     `appliedAt`; no dedicated column added to BusRoute.
+
+model RouteConsolidation {
+  id                     String    @id @default(uuid())
+  tenantId               String    @map("tenant_id")
+  recommendationId       String    @map("recommendation_id")
+  idempotencyKey         String    @map("idempotency_key")
+  mergedRouteId          String?   @map("merged_route_id")
+  status                 String    // APPLIED | REVERTED (CHECK enforced in raw SQL)
+
+  /// JSON evidence — the objective and full recommendation snapshot at
+  /// apply time. Used only for reporting / provenance; do not join to
+  /// these fields for referential integrity.
+  objectiveSnapshot      Json      @default("{}") @map("objective_snapshot")
+  recommendationSnapshot Json      @default("{}") @map("recommendation_snapshot")
+
+  /// Fingerprint of Route M + its stops + migration rows immediately
+  /// after apply commits. Revert-eligibility compares this to the
+  /// current fingerprint; drift blocks the revert.
+  appliedStateHash       String    @map("applied_state_hash")
+
+  appliedAt              DateTime  @map("applied_at") @db.Timestamptz(6)
+  appliedBy              String    @map("applied_by")
+
+  revertedAt             DateTime? @map("reverted_at") @db.Timestamptz(6)
+  revertedBy             String?   @map("reverted_by")
+  revertReason           String?   @map("revert_reason")
+
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sources                RouteConsolidationSource[]
+  enrollmentMigrations   RouteConsolidationEnrollmentMigration[]
+
+  @@unique([tenantId, idempotencyKey], map: "uniq_route_consolidations_tenant_idem")
+  @@index([tenantId, status],          map: "idx_route_consolidations_tenant_status")
+  @@index([tenantId, mergedRouteId],   map: "idx_route_consolidations_tenant_merged_route")
+  @@map("route_consolidations")
+  @@schema("public")
+}
+
+model RouteConsolidationSource {
+  id                     String   @id @default(uuid())
+  tenantId               String   @map("tenant_id")
+  consolidationId        String   @map("consolidation_id")
+  sourceRouteId          String   @map("source_route_id")
+  /// BusRoute.updatedAt snapshot at analyze time. The apply guard
+  /// refuses stale applies when the source has been edited since.
+  sourceRouteUpdatedAt   DateTime? @map("source_route_updated_at") @db.Timestamptz(6)
+  sequence               Int      @default(0)
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  consolidation          RouteConsolidation @relation(fields: [consolidationId], references: [id], onDelete: Cascade)
+
+  @@unique([consolidationId, sourceRouteId], map: "uniq_route_consolidation_sources_pair")
+  @@index([tenantId, sourceRouteId],         map: "idx_route_consolidation_sources_tenant_source")
+  @@index([consolidationId],                 map: "idx_route_consolidation_sources_consolidation")
+  @@map("route_consolidation_sources")
+  @@schema("public")
+}
+
+model RouteConsolidationEnrollmentMigration {
+  id                     String   @id @default(uuid())
+  tenantId               String   @map("tenant_id")
+  consolidationId        String   @map("consolidation_id")
+
+  /// Exactly ONE of these must be set (XOR CHECK enforced in raw SQL).
+  /// Two nullable FKs preserve referential integrity to both target
+  /// tables without a polymorphic TEXT id.
+  /// Note the type asymmetry: RoutePassenger.id is UUID in the DB
+  /// (legacy migration artifact) while TransportEnrollment.id is TEXT.
+  /// FK column types must match the referenced column exactly.
+  routePassengerId       String?  @map("route_passenger_id") @db.Uuid
+  transportEnrollmentId  String?  @map("transport_enrollment_id")
+
+  sourceRouteId          String   @map("source_route_id")
+  targetRouteId          String   @map("target_route_id")
+
+  oldPickupStopId        String?  @map("old_pickup_stop_id")
+  newPickupStopId        String?  @map("new_pickup_stop_id")
+  oldDropoffStopId       String?  @map("old_dropoff_stop_id")
+  newDropoffStopId       String?  @map("new_dropoff_stop_id")
+
+  /// EXACT_STOP | EXACT_PLACE_ID | OPERATOR_RESOLVED (CHECK enforced in raw SQL).
+  mappingMethod          String   @map("mapping_method")
+
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  consolidation          RouteConsolidation @relation(fields: [consolidationId], references: [id], onDelete: Cascade)
+
+  @@index([consolidationId], map: "idx_route_consol_enroll_mig_consolidation")
+  @@index([tenantId],        map: "idx_route_consol_enroll_mig_tenant")
+  @@map("route_consolidation_enrollment_migrations")
   @@schema("public")
 }
 

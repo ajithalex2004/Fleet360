@@ -78,7 +78,8 @@ export type CandidateSkipReason =
   | 'PICKUP_ZONE_INCOMPATIBLE'
   | 'DROPOFF_ZONE_INCOMPATIBLE'
   | 'ZONE_DATA_UNAVAILABLE'
-  | 'INSUFFICIENT_ROUTE_DATA';
+  | 'INSUFFICIENT_ROUTE_DATA'
+  | 'MERGED_EXCEEDS_CAPACITY';
 
 export type SkippedPair = {
   routeIdA: string;
@@ -216,6 +217,23 @@ function passesCheapFilters(
     return { skip: 'DIFFERENT_DIRECTION', detail: `${a.representativeDirection} vs ${b.representativeDirection}` };
   }
 
+  // Cheap seat check. If both routes carry a capacity target and the combined
+  // enrolment blows past the larger of the two, no single vehicle can seat
+  // the merged trip — skip before any zone / PCE work. When either capacity
+  // is unknown, fall through and let VEHICLE_CAPACITY_HARD (which fires on
+  // the synthesized merged trip below) catch violations only if an operator
+  // has configured that rule.
+  if (a.capacity != null && b.capacity != null) {
+    const mergedEnrolled = a.enrolledCount + b.enrolledCount;
+    const largestSeat = Math.max(a.capacity, b.capacity);
+    if (mergedEnrolled > largestSeat) {
+      return {
+        skip: 'MERGED_EXCEEDS_CAPACITY',
+        detail: `${a.enrolledCount}+${b.enrolledCount}=${mergedEnrolled} > max(${a.capacity},${b.capacity})=${largestSeat}`,
+      };
+    }
+  }
+
   const { pickupSideA, pickupSideB, dropoffSideA, dropoffSideB } = pickupAndDropoffSides(a, b);
   const pickupCompat = zoneCompatibility(pickupSideA, pickupSideB, {
     fallbackKm: objective.fallbackKm?.pickup ?? DEFAULT_FALLBACK_KM.PICKUP,
@@ -329,6 +347,17 @@ function synthesizePlanFacts(a: RouteFacts, b: RouteFacts, facts: ConsolidationF
   const mergedDurationMin = Math.max(durA, durB) + extraStops * 2; // ~2min per added stop
   const mergedStopsUnion = dedupeStops([...a.stops, ...b.stops]);
 
+  // Synthesize a vehicle with the largest per-route capacity as its seat
+  // count. Without this, VEHICLE_CAPACITY_HARD short-circuits on the
+  // `!trip.vehicle` guard and the operator's capacity rule (if configured)
+  // never fires against the merged trip. Nulls if neither route has a
+  // capacity — the cheap filter above already skipped the guaranteed-fail
+  // case; a null-seats vehicle here would be a no-op anyway.
+  const largestSeat =
+    a.capacity != null && b.capacity != null
+      ? Math.max(a.capacity, b.capacity)
+      : a.capacity ?? b.capacity ?? null;
+
   const merged: PlanTripFacts = {
     id: 'consolidated',
     role: 'merged',
@@ -345,7 +374,9 @@ function synthesizePlanFacts(a: RouteFacts, b: RouteFacts, facts: ConsolidationF
       lng: s.lng ?? 0,
       sequence: i + 1,
     })),
-    vehicle: null,
+    vehicle: largestSeat != null
+      ? { id: `synth-vehicle-${a.id}-${b.id}`, seatingCapacity: largestSeat, vehicleGroup: null }
+      : null,
   };
 
   return {

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Map as MapIcon, Plus, CheckCircle2, XCircle, MapPin,
+  Map as MapIcon, Plus, CheckCircle2, XCircle, MapPin, AlertTriangle, Clock,
 } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
 import FleetDataGrid, { type DataGridColumn, type KpiTile, type FilterChipDef } from '@/components/ui/FleetDataGrid';
@@ -13,8 +13,41 @@ interface BusRoute  {
   id: string; name: string; code?: string | null; origin: string; destination: string; routeType?: string;
   totalDistanceKm?: number; estimatedDurationMins?: number; capacity?: number;
   isActive?: boolean; notes?: string; stops?: RouteStop[];
+  direction?: string | null; shiftType?: string | null;
+  departureTime?: string | null; expectedArrivalTime?: string | null;
+  assignedVehicleId?: string | null; assignedDriverId?: string | null;
   schedules?: any[]; createdAt?: string;
 }
+
+interface VehicleOption { id: string; licensePlate?: string | null; make?: string | null; model?: string | null; seatingCapacity?: number | null }
+interface DriverOption  { id: string; name: string; licenseType?: string | null }
+
+// ── New Route modal form ───────────────────────────────────────────────────
+type NewRouteForm = {
+  name: string;
+  code: string;
+  direction: 'INBOUND' | 'OUTBOUND';
+  shiftType: 'MORNING' | 'EVENING' | 'NIGHT' | 'SPLIT';
+  routeType: 'STAFF' | 'SCHOOL' | 'BOTH';
+  departureTime: string;
+  expectedArrivalTime: string;
+  capacity: string;
+  isActive: boolean;
+  assignedVehicleId: string;
+  assignedDriverId: string;
+  origin: string;
+  destination: string;
+};
+type NewRouteStop = { stopName: string; time: string };
+
+const EMPTY_NEW_ROUTE: NewRouteForm = {
+  name: '', code: '',
+  direction: 'INBOUND', shiftType: 'MORNING', routeType: 'STAFF',
+  departureTime: '07:00', expectedArrivalTime: '',
+  capacity: '40', isActive: true,
+  assignedVehicleId: '', assignedDriverId: '',
+  origin: '', destination: '',
+};
 
 export default function RoutesPage() {
   const router                        = useRouter();
@@ -29,6 +62,15 @@ export default function RoutesPage() {
   const [deletingId,    setDeletingId]    = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<BusRoute | null>(null);
 
+  // New Route modal state
+  const [showNewRoute,     setShowNewRoute]     = useState(false);
+  const [creating,         setCreating]         = useState(false);
+  const [newRoute,         setNewRoute]         = useState<NewRouteForm>(EMPTY_NEW_ROUTE);
+  const [newRouteStops,    setNewRouteStops]    = useState<NewRouteStop[]>([]);
+  const [newStopDraft,     setNewStopDraft]     = useState<NewRouteStop>({ stopName: '', time: '' });
+  const [vehicles,         setVehicles]         = useState<VehicleOption[]>([]);
+  const [drivers,          setDrivers]          = useState<DriverOption[]>([]);
+
   const loadRoutes = useCallback(async () => {
     setLoading(true);
     try {
@@ -42,6 +84,100 @@ export default function RoutesPage() {
   }, []);
 
   useEffect(() => { loadRoutes(); }, [loadRoutes]);
+
+  // Load vehicle + driver options lazily the first time the New Route modal
+  // opens — no need to pay for these on the initial page render.
+  useEffect(() => {
+    if (!showNewRoute) return;
+    if (vehicles.length > 0 || drivers.length > 0) return;
+    void (async () => {
+      try {
+        const [vRes, dRes] = await Promise.all([
+          fetch('/api/vehicles'),
+          fetch('/api/bus-ops/drivers'),
+        ]);
+        const [vData, dData] = await Promise.all([vRes.json(), dRes.json()]);
+        setVehicles(Array.isArray(vData) ? vData : (vData?.vehicles ?? []));
+        setDrivers(Array.isArray(dData) ? dData : []);
+      } catch {
+        // Non-fatal — the modal renders a warning banner when both lists are empty.
+      }
+    })();
+  }, [showNewRoute, vehicles.length, drivers.length]);
+
+  const openNewRoute = () => {
+    setNewRoute(EMPTY_NEW_ROUTE);
+    setNewRouteStops([]);
+    setNewStopDraft({ stopName: '', time: '' });
+    setError('');
+    setShowNewRoute(true);
+  };
+
+  const addNewRouteStop = () => {
+    if (!newStopDraft.stopName.trim()) return;
+    setNewRouteStops(prev => [...prev, { stopName: newStopDraft.stopName.trim(), time: newStopDraft.time }]);
+    setNewStopDraft({ stopName: '', time: '' });
+  };
+  const removeNewRouteStop = (idx: number) =>
+    setNewRouteStops(prev => prev.filter((_, i) => i !== idx));
+
+  // Convert 'HH:MM' departure + 'HH:MM' stop time → offset minutes for the
+  // RouteStop.estimatedArrivalMins column (stops store an offset, not a wall
+  // clock). Undefined when either side is missing.
+  const stopOffsetMinutes = (departure: string, stopTime: string): number | undefined => {
+    if (!departure || !stopTime) return undefined;
+    const [dH, dM] = departure.split(':').map(Number);
+    const [sH, sM] = stopTime.split(':').map(Number);
+    if ([dH, dM, sH, sM].some(n => !Number.isFinite(n))) return undefined;
+    let diff = (sH * 60 + sM) - (dH * 60 + dM);
+    if (diff < 0) diff += 24 * 60; // stop after midnight
+    return diff;
+  };
+
+  const submitNewRoute = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRoute.name.trim()) { setError('Route Name is required'); return; }
+    setCreating(true);
+    try {
+      const payload = {
+        name: newRoute.name.trim(),
+        // Empty code lets the API auto-allocate the next tenant-scoped code.
+        code: newRoute.code.trim() || undefined,
+        origin: newRoute.origin.trim() || newRouteStops[0]?.stopName || '',
+        destination: newRoute.destination.trim() || newRouteStops[newRouteStops.length - 1]?.stopName || '',
+        routeType: newRoute.routeType,
+        direction: newRoute.direction,
+        shiftType: newRoute.shiftType,
+        departureTime: newRoute.departureTime || null,
+        expectedArrivalTime: newRoute.expectedArrivalTime || null,
+        capacity: parseInt(newRoute.capacity, 10) || 40,
+        isActive: newRoute.isActive,
+        assignedVehicleId: newRoute.assignedVehicleId || null,
+        assignedDriverId:  newRoute.assignedDriverId  || null,
+        stops: newRouteStops.map((s, i) => ({
+          stopName: s.stopName,
+          sequence: i + 1,
+          estimatedArrivalMins: stopOffsetMinutes(newRoute.departureTime, s.time),
+        })),
+      };
+      const res = await fetch('/api/bus-ops/routes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? `HTTP ${res.status}`);
+        return;
+      }
+      setShowNewRoute(false);
+      await loadRoutes();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create route');
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const openStops = (r: BusRoute) => { setSelected(r); setStops(r.stops?.map(s=>({...s}))?? []); setShowStops(true); };
 
@@ -224,7 +360,7 @@ export default function RoutesPage() {
         icon={MapIcon}
         accent="violet"
         actions={
-          <button onClick={() => router.push('/bus-ops/route-planner')} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+          <button onClick={openNewRoute} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
             <Plus className="w-4 h-4" /> New Route
           </button>
         }
@@ -248,6 +384,223 @@ export default function RoutesPage() {
         filterChips={filterChips}
         toolbar={{ title: 'RoutesGrid', exportName: 'bus-ops-routes', sortSelector: true }}
       />
+
+      {/* New Route modal */}
+      {showNewRoute && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => !creating && setShowNewRoute(false)}
+        >
+          <div
+            className="w-full max-w-3xl max-h-[92vh] overflow-y-auto bg-slate-900/95 border border-white/10 rounded-2xl shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 sticky top-0 bg-slate-900/95 backdrop-blur">
+              <h2 className="text-xl font-bold text-white">New Route</h2>
+              <button type="button" onClick={() => setShowNewRoute(false)} disabled={creating}
+                className="text-slate-400 hover:text-white p-1 -m-1" aria-label="Close">✕</button>
+            </div>
+
+            <form onSubmit={submitNewRoute} className="px-6 py-5 space-y-5">
+              {/* Row 1: name + code */}
+              <div className="grid grid-cols-2 gap-4">
+                <label className="block">
+                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Route Name *</div>
+                  <input required value={newRoute.name} onChange={e => setNewRoute(p => ({ ...p, name: e.target.value }))}
+                    placeholder="e.g. Marina Morning Pickup"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white placeholder-slate-500 text-sm focus:border-violet-500 focus:outline-none" />
+                </label>
+                <label className="block">
+                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Route Code</div>
+                  <input value={newRoute.code} onChange={e => setNewRoute(p => ({ ...p, code: e.target.value }))}
+                    placeholder="e.g. RTE-001 (auto-allocated when empty)"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white placeholder-slate-500 text-sm focus:border-violet-500 focus:outline-none" />
+                </label>
+              </div>
+
+              {/* Row 2: direction + shift + route type */}
+              <div className="grid grid-cols-3 gap-4">
+                <label className="block">
+                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Direction</div>
+                  <select value={newRoute.direction} onChange={e => setNewRoute(p => ({ ...p, direction: e.target.value as NewRouteForm['direction'] }))}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none">
+                    <option value="INBOUND">Inbound</option>
+                    <option value="OUTBOUND">Outbound</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Shift Type</div>
+                  <select value={newRoute.shiftType} onChange={e => setNewRoute(p => ({ ...p, shiftType: e.target.value as NewRouteForm['shiftType'] }))}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none">
+                    <option value="MORNING">Morning</option>
+                    <option value="EVENING">Evening</option>
+                    <option value="NIGHT">Night</option>
+                    <option value="SPLIT">Split</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Route Type</div>
+                  <select value={newRoute.routeType} onChange={e => setNewRoute(p => ({ ...p, routeType: e.target.value as NewRouteForm['routeType'] }))}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none">
+                    <option value="STAFF">Staff</option>
+                    <option value="SCHOOL">School</option>
+                    <option value="BOTH">Both</option>
+                  </select>
+                </label>
+              </div>
+
+              {/* Row 3: departure + arrival + capacity + status */}
+              <div className="grid grid-cols-4 gap-4">
+                <label className="block">
+                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Departure Time</div>
+                  <input type="time" value={newRoute.departureTime} onChange={e => setNewRoute(p => ({ ...p, departureTime: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none" />
+                </label>
+                <label className="block">
+                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Expected Arrival</div>
+                  <input type="time" value={newRoute.expectedArrivalTime} onChange={e => setNewRoute(p => ({ ...p, expectedArrivalTime: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none" />
+                </label>
+                <label className="block">
+                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Seat Capacity</div>
+                  <input type="number" min={1} value={newRoute.capacity} onChange={e => setNewRoute(p => ({ ...p, capacity: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none" />
+                </label>
+                <label className="block">
+                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Status</div>
+                  <select value={newRoute.isActive ? 'active' : 'inactive'} onChange={e => setNewRoute(p => ({ ...p, isActive: e.target.value === 'active' }))}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none">
+                    <option value="active">🟢 Active</option>
+                    <option value="inactive">⚪ Inactive</option>
+                  </select>
+                </label>
+              </div>
+
+              {/* Resource Assignment */}
+              <fieldset className="rounded-xl border border-white/10 bg-slate-950/40 px-4 py-4">
+                <legend className="px-2 text-xs uppercase tracking-wider text-slate-400 font-semibold">Resource Assignment</legend>
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="block">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="text-xs uppercase tracking-wider text-slate-400">Vehicle</div>
+                      {(() => {
+                        // Vehicles filtered by seat capacity — count is a helpful
+                        // signal that the dropdown was pruned, not empty because
+                        // the fleet is empty.
+                        const need = parseInt(newRoute.capacity, 10);
+                        if (!Number.isFinite(need) || need <= 0) return null;
+                        const fits = vehicles.filter(v => v.seatingCapacity != null && v.seatingCapacity >= need).length;
+                        return (
+                          <span className="text-[10px] text-slate-500">
+                            {fits} of {vehicles.length} ≥ {need} seats
+                          </span>
+                        );
+                      })()}
+                    </div>
+                    <select value={newRoute.assignedVehicleId} onChange={e => setNewRoute(p => ({ ...p, assignedVehicleId: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none">
+                      <option value="">— Not assigned —</option>
+                      {(() => {
+                        // Filter: only vehicles whose seatingCapacity meets the
+                        // route's seat requirement. Vehicles with unknown
+                        // seatingCapacity are excluded (we can't verify they fit).
+                        // The already-selected vehicle is always shown even if it
+                        // no longer meets the threshold — marked so the operator
+                        // knows to re-pick.
+                        const need = parseInt(newRoute.capacity, 10);
+                        const threshold = Number.isFinite(need) && need > 0 ? need : 0;
+                        return vehicles
+                          .filter(v =>
+                            v.id === newRoute.assignedVehicleId ||
+                            (v.seatingCapacity != null && v.seatingCapacity >= threshold),
+                          )
+                          .map(v => {
+                            const label = v.licensePlate ?? v.id.slice(0, 8);
+                            const model = [v.make, v.model].filter(Boolean).join(' ');
+                            const seats = v.seatingCapacity != null ? `${v.seatingCapacity} seats` : 'seats unknown';
+                            const underCap =
+                              threshold > 0 &&
+                              v.seatingCapacity != null &&
+                              v.seatingCapacity < threshold;
+                            return (
+                              <option key={v.id} value={v.id}>
+                                {label}{model ? ` — ${model}` : ''} · {seats}{underCap ? ' (under capacity)' : ''}
+                              </option>
+                            );
+                          });
+                      })()}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Driver</div>
+                    <select value={newRoute.assignedDriverId} onChange={e => setNewRoute(p => ({ ...p, assignedDriverId: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none">
+                      <option value="">— Not assigned —</option>
+                      {drivers.map(d => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}{d.licenseType ? ` (${d.licenseType})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                {vehicles.length === 0 && drivers.length === 0 && (
+                  <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200 inline-flex items-start gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                    <span>No vehicles or drivers found. Add them in Fleet &amp; Driver Management first.</span>
+                  </div>
+                )}
+              </fieldset>
+
+              {/* Stop Sequence Engine */}
+              <fieldset className="rounded-xl border border-white/10 bg-slate-950/40 px-4 py-4">
+                <legend className="px-2 text-xs uppercase tracking-wider text-slate-400 font-semibold">Stop Sequence Engine</legend>
+                <div className="space-y-2 mb-3">
+                  {newRouteStops.length === 0 && (
+                    <div className="text-xs text-slate-500 py-2">No stops yet. Add one below.</div>
+                  )}
+                  {newRouteStops.map((s, i) => (
+                    <div key={i} className="flex items-center gap-2 bg-slate-800/50 border border-white/5 rounded-lg px-3 py-2">
+                      <span className="w-6 h-6 rounded-full bg-violet-500/20 text-violet-300 text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                      <span className="flex-1 text-sm text-slate-200">{s.stopName}</span>
+                      {s.time && <span className="text-xs text-slate-400 inline-flex items-center gap-1"><Clock className="w-3 h-3" />{s.time}</span>}
+                      <button type="button" onClick={() => removeNewRouteStop(i)}
+                        className="text-rose-400 hover:text-rose-300 text-xs px-1">✕</button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input value={newStopDraft.stopName} onChange={e => setNewStopDraft(p => ({ ...p, stopName: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addNewRouteStop(); } }}
+                    placeholder="Stop name…"
+                    className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white placeholder-slate-500 text-sm focus:border-violet-500 focus:outline-none" />
+                  <input type="time" value={newStopDraft.time} onChange={e => setNewStopDraft(p => ({ ...p, time: e.target.value }))}
+                    className="w-32 px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none" />
+                  <button type="button" onClick={addNewRouteStop}
+                    className="inline-flex items-center gap-1 rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-sm text-violet-200 hover:bg-violet-500/20">
+                    <Plus className="w-3.5 h-3.5" /> Add
+                  </button>
+                </div>
+              </fieldset>
+
+              {error && (
+                <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
+                <button type="button" onClick={() => setShowNewRoute(false)} disabled={creating}
+                  className="px-4 py-2 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 text-sm font-medium disabled:opacity-50">
+                  Cancel
+                </button>
+                <button type="submit" disabled={creating || !newRoute.name.trim()}
+                  className="px-6 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50">
+                  {creating ? 'Creating…' : 'Create Route'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Delete confirmation modal */}
       {deleteConfirm && (
