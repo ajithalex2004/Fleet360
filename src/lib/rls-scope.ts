@@ -8,10 +8,17 @@
  * context from leaking into concurrent work.
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { Prisma } from '@prisma/client';
 
 export interface RlsScope {
   tenantId: string;
   mode: 'tenant' | 'platform';
+  // The interactive tx client owning this scope. Nested $transaction /
+  // $queryRaw / $executeRaw calls made through the client-level monkey-patch
+  // must reuse THIS tx — starting a new one competes for a fresh pool slot,
+  // deadlocks the current tx, and (when app.tenant_id is set with SET LOCAL)
+  // cannot see the tenant scope, so RLS filters everything out.
+  tx?: Prisma.TransactionClient;
 }
 
 const storage = new AsyncLocalStorage<RlsScope>();

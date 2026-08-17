@@ -1,7 +1,8 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, Plus } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Calendar, Plus, Recycle } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+import MergeTripsDialog, { type ScheduleForMerge } from '@/components/bus-ops/MergeTripsDialog';
 
 interface Schedule {
   id: string; tripNumber?: string; routeId: string; route?: { name: string; origin: string; destination: string };
@@ -16,10 +17,11 @@ interface Driver { id: string; name: string; licenseType?: string | null }
 
 const STATUS_COLORS: Record<string,string> = {
   SCHEDULED:  'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  DEPARTED:   'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  IN_TRANSIT: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+  STARTED:   'bg-amber-500/20 text-amber-400 border-amber-500/30',
+  EN_ROUTE: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
   COMPLETED:  'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
   CANCELLED:  'bg-rose-500/20 text-rose-400 border-rose-500/30',
+  MERGED:     'bg-violet-500/20 text-violet-400 border-violet-500/30',
 };
 const SHIFT_TYPES  = ['MORNING','EVENING','NIGHT','SPLIT'];
 const DIRECTIONS   = ['INBOUND','OUTBOUND'];
@@ -37,6 +39,11 @@ export default function SchedulesPage() {
   const [saving, setSaving]         = useState(false);
   const [actionLoading, setActing]  = useState<string | null>(null);
   const [error, setError]           = useState('');
+  // Only SCHEDULED trips are mergeable (backend guard MERGE_SOURCE_NOT_SCHEDULED).
+  // Selection is scoped to this page's current list so filters affect
+  // which trips are eligible to merge together.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showMergeDialog, setShowMergeDialog] = useState(false);
 
   const emptyForm = { routeId:'', vehicleId:'', driverId:'', departureTime:'', arrivalTime:'', frequency:'DAILY', shiftType:'MORNING', direction:'INBOUND', capacity:'30', notes:'' };
   const [formData, setFormData] = useState(emptyForm);
@@ -126,9 +133,50 @@ export default function SchedulesPage() {
 
   const counts = {
     SCHEDULED: schedules.filter(s=>s.status==='SCHEDULED').length,
-    DEPARTED:  schedules.filter(s=>s.status==='DEPARTED').length,
+    STARTED:  schedules.filter(s=>s.status==='STARTED').length,
     COMPLETED: schedules.filter(s=>s.status==='COMPLETED').length,
   };
+
+  // Only SCHEDULED trips visible in the current filter can be selected
+  // for merging. The set is trimmed whenever the visible list changes
+  // so a filter switch never leaves a stale selection referring to a
+  // now-hidden trip.
+  const visibleScheduledIds = useMemo(() =>
+    new Set(schedules.filter(s => (s.status ?? 'SCHEDULED') === 'SCHEDULED').map(s => s.id)),
+    [schedules],
+  );
+  useEffect(() => {
+    setSelectedIds(prev => {
+      const next = new Set<string>();
+      for (const id of prev) if (visibleScheduledIds.has(id)) next.add(id);
+      return next;
+    });
+  }, [visibleScheduledIds]);
+
+  const selectedSources: ScheduleForMerge[] = useMemo(
+    () => schedules
+      .filter(s => selectedIds.has(s.id))
+      .map(s => ({
+        id: s.id,
+        tripNumber: s.tripNumber,
+        routeId: s.routeId,
+        route: s.route ? { name: s.route.name } : undefined,
+        departureTime: s.departureTime,
+        arrivalTime: s.arrivalTime,
+        confirmedCount: s.confirmedCount,
+        capacity: s.capacity,
+      })),
+    [schedules, selectedIds],
+  );
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const clearSelection = () => setSelectedIds(new Set());
 
   if (loading) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading schedules...</div></div>;
 
@@ -136,13 +184,26 @@ export default function SchedulesPage() {
     <div className="space-y-8">
       <PageHeader
         title="Trip Schedules"
-        subtitle={`${schedules.length} trips · ${counts.SCHEDULED} scheduled · ${counts.DEPARTED} departed · ${counts.COMPLETED} completed`}
+        subtitle={`${schedules.length} trips · ${counts.SCHEDULED} scheduled · ${counts.STARTED} started · ${counts.COMPLETED} completed`}
         icon={Calendar}
         accent="violet"
         actions={
-          <button onClick={()=>setShowModal(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
-            <Plus className="w-4 h-4" /> New Trip Schedule
-          </button>
+          <div className="flex items-center gap-2">
+            {selectedIds.size >= 2 && (
+              <button
+                onClick={() => setShowMergeDialog(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-violet-500 bg-violet-500/20 px-4 py-2 text-sm font-semibold text-violet-200 hover:bg-violet-500/30"
+              >
+                <Recycle className="w-4 h-4" /> Merge {selectedIds.size} selected
+              </button>
+            )}
+            {selectedIds.size > 0 && (
+              <button onClick={clearSelection} className="text-sm text-slate-400 hover:text-white">Clear</button>
+            )}
+            <button onClick={()=>setShowModal(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+              <Plus className="w-4 h-4" /> New Trip Schedule
+            </button>
+          </div>
         }
       />
 
@@ -152,7 +213,7 @@ export default function SchedulesPage() {
       <div className="flex gap-4 flex-wrap">
         <select value={statusFilter} onChange={e=>setStatus(e.target.value)}
           className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
-          {['All','SCHEDULED','DEPARTED','IN_TRANSIT','COMPLETED','CANCELLED'].map(s=><option key={s} value={s}>{s}</option>)}
+          {['All','SCHEDULED','STARTED','EN_ROUTE','COMPLETED','CANCELLED'].map(s=><option key={s} value={s}>{s}</option>)}
         </select>
         <input type="date" value={dateFilter} onChange={e=>setDate(e.target.value)}
           className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />
@@ -167,6 +228,17 @@ export default function SchedulesPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/5">
+                <th className="px-4 py-3 w-8" title="Select SCHEDULED trips to merge">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-600 bg-slate-800"
+                    checked={visibleScheduledIds.size > 0 && selectedIds.size === visibleScheduledIds.size}
+                    ref={(el) => {
+                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < visibleScheduledIds.size;
+                    }}
+                    onChange={(e) => setSelectedIds(e.target.checked ? new Set(visibleScheduledIds) : new Set())}
+                  />
+                </th>
                 {['Trip No.','Route','Shift','Direction','Departure','Pax','Status','Actions'].map(h=>(
                   <th key={h} className="px-4 py-3 text-left text-sm font-semibold text-slate-300">{h}</th>
                 ))}
@@ -176,8 +248,20 @@ export default function SchedulesPage() {
               {schedules.map(s => {
                 const status = (s.status ?? 'SCHEDULED').toUpperCase();
                 const isActing = actionLoading?.startsWith(s.id);
+                const isSelected = selectedIds.has(s.id);
+                const canSelect = status === 'SCHEDULED';
                 return (
-                  <tr key={s.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                  <tr key={s.id} className={`border-b border-white/5 hover:bg-white/5 transition-colors ${isSelected ? 'bg-violet-500/5' : ''}`}>
+                    <td className="px-4 py-4">
+                      <input
+                        type="checkbox"
+                        disabled={!canSelect}
+                        checked={isSelected}
+                        onChange={() => toggleSelected(s.id)}
+                        className="h-4 w-4 rounded border-slate-600 bg-slate-800 disabled:opacity-30"
+                        title={canSelect ? 'Select for merge' : `Only SCHEDULED trips can be merged (this trip is ${status})`}
+                      />
+                    </td>
                     <td className="px-4 py-4 text-sm font-medium text-white">{s.tripNumber ?? s.id.slice(0,8)}</td>
                     <td className="px-4 py-4 text-sm text-white">
                       <div>{s.route?.name ?? '-'}</div>
@@ -199,9 +283,9 @@ export default function SchedulesPage() {
                       <div className="flex gap-1 flex-wrap">
                         {status === 'SCHEDULED' && (
                           <button onClick={()=>handleAction(s.id,'depart')} disabled={!!isActing}
-                            className="text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 disabled:opacity-50">Depart</button>
+                            className="text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 disabled:opacity-50">Start</button>
                         )}
-                        {['DEPARTED','IN_TRANSIT','SCHEDULED'].includes(status) && (
+                        {['STARTED','EN_ROUTE','SCHEDULED'].includes(status) && (
                           <button onClick={()=>handleAction(s.id,'complete')} disabled={!!isActing}
                             className="text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 disabled:opacity-50">Complete</button>
                         )}
@@ -333,6 +417,20 @@ export default function SchedulesPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {showMergeDialog && selectedSources.length >= 2 && (
+        <MergeTripsDialog
+          sources={selectedSources}
+          vehicles={vehicles}
+          drivers={drivers}
+          onClose={() => setShowMergeDialog(false)}
+          onApplied={async () => {
+            setShowMergeDialog(false);
+            clearSelection();
+            await loadData();
+          }}
+        />
       )}
     </div>
   );
