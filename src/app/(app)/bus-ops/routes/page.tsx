@@ -3,10 +3,9 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Map as MapIcon, Plus, CheckCircle2, XCircle, MapPin,
-  Sparkles, Trash2, Power, Edit as EditIcon, ListOrdered,
 } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
-import SmartDataGrid, { type SmartDataGridColumn, type KpiTile, type FilterChipDef, type BulkAction } from '@/components/ui/SmartDataGrid';
+import FleetDataGrid, { type DataGridColumn, type KpiTile, type FilterChipDef } from '@/components/ui/FleetDataGrid';
 import RowActionsMenu, { type RowAction } from '@/components/ui/RowActionsMenu';
 
 interface RouteStop { id?: string; stopName: string; sequence: number; estimatedArrivalMins?: number; landmark?: string; gpsLat?: number; gpsLng?: number; }
@@ -105,38 +104,6 @@ export default function RoutesPage() {
     } finally { setDeletingId(null); }
   };
 
-  // ── Bulk helpers ─────────────────────────────────────────────────────────
-  // Fire per-row PATCH/DELETE in parallel and swallow individual errors so the
-  // whole bulk doesn't abort on the first bad row. The final refresh reflects
-  // whatever succeeded; failures surface in the console for debugging.
-  const bulkPatchActive = async (rs: BusRoute[], isActive: boolean) => {
-    await Promise.allSettled(
-      rs.map(r => fetch(`/api/bus-ops/routes/${r.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive }),
-      })),
-    );
-  };
-
-  const bulkDelete = async (rs: BusRoute[]) => {
-    // Server refuses delete for active routes with live schedules — collect
-    // failures so we can surface them after the batch.
-    const results = await Promise.allSettled(
-      rs.map(async r => {
-        const res = await fetch(`/api/bus-ops/routes/${r.id}`, { method: 'DELETE' });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(`${r.name}: ${body.error ?? `HTTP ${res.status}`}`);
-        }
-      }),
-    );
-    const failures = results
-      .map((r, i) => r.status === 'rejected' ? `${rs[i].name}: ${(r.reason as Error).message}` : null)
-      .filter((s): s is string => s !== null);
-    if (failures.length > 0) setError(`${failures.length} delete(s) failed:\n${failures.join('\n')}`);
-  };
-
   // ── Grid config ──────────────────────────────────────────────────────────
 
   const kpis: KpiTile[] = useMemo(() => {
@@ -144,10 +111,10 @@ export default function RoutesPage() {
     const active  = routes.filter(r => r.isActive).length;
     const stopsTotal = routes.reduce((n, r) => n + (r.stops?.length ?? 0), 0);
     return [
-      { label: 'Total Routes',   value: total,           icon: MapIcon,     accent: 'violet'  },
+      { label: 'Total Routes',   value: total,           icon: MapIcon,      accent: 'violet'  },
       { label: 'Active',         value: active,          icon: CheckCircle2, accent: 'emerald' },
-      { label: 'Inactive',       value: total - active,  icon: XCircle,     accent: 'slate'   },
-      { label: 'Stops (total)',  value: stopsTotal,      icon: MapPin,      accent: 'sky'     },
+      { label: 'Inactive',       value: total - active,  icon: XCircle,      accent: 'slate'   },
+      { label: 'Stops (total)',  value: stopsTotal,      icon: MapPin,       accent: 'sky'     },
     ];
   }, [routes]);
 
@@ -172,17 +139,21 @@ export default function RoutesPage() {
     },
   ], [routes]);
 
-  const columns: SmartDataGridColumn<BusRoute>[] = useMemo(() => [
+  const columns: DataGridColumn<BusRoute>[] = useMemo(() => [
     {
       key: 'name', header: 'Route',
       accessor: r => r.name,
       render: r => (
-        <div>
-          <div className="font-medium text-white">{r.name}</div>
-          {r.code && <div className="text-[10px] text-slate-500 font-mono">{r.code}</div>}
+        <div className="flex items-center gap-2 flex-wrap">
+          {r.code && (
+            <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-violet-500/15 text-violet-300 border border-violet-500/30">
+              {r.code}
+            </span>
+          )}
+          <span className="font-medium text-white">{r.name}</span>
         </div>
       ),
-      width: '220px',
+      width: '240px',
     },
     {
       key: 'routeType', header: 'Type',
@@ -225,43 +196,25 @@ export default function RoutesPage() {
       key: 'actions', header: '', filter: false, sortable: false, width: '60px', align: 'right',
       render: r => {
         const actions: RowAction[] = [
-          { key: 'edit',     label: 'Edit',                                 icon: EditIcon,    onClick: () => router.push(`/bus-ops/route-planner?edit=${r.id}`) },
-          { key: 'stops',    label: `Stops (${r.stops?.length ?? 0})`,      icon: ListOrdered, onClick: () => openStops(r) },
-          { key: 'optimize', label: 'Optimize',                             icon: Sparkles,    onClick: () => router.push(`/bus-ops/route-planner?edit=${r.id}&optimize=1`) },
-          { key: 'toggle',   label: r.isActive ? 'Deactivate' : 'Activate', icon: Power,       onClick: () => toggleActive(r) },
+          { label: 'Edit',                                onClick: () => router.push(`/bus-ops/route-planner?edit=${r.id}`) },
+          { label: `Stops (${r.stops?.length ?? 0})`,     onClick: () => openStops(r) },
+          { label: 'Optimize',                            onClick: () => router.push(`/bus-ops/route-planner?edit=${r.id}&optimize=1`) },
+          { label: r.isActive ? 'Deactivate' : 'Activate', onClick: () => toggleActive(r) },
           {
-            key: 'delete',
             label: deletingId === r.id ? 'Deleting…' : 'Delete',
-            icon: Trash2, variant: 'destructive',
+            tone: 'danger',
             disabled: deletingId === r.id || !!r.isActive,
-            disabledReason: r.isActive ? 'Deactivate the route first' : 'Delete in progress',
             onClick: () => openDeleteConfirm(r),
           },
         ];
         return (
           <div className="flex justify-end">
-            <RowActionsMenu actions={actions} triggerLabel={`Actions for ${r.name}`} />
+            <RowActionsMenu actions={actions} label={`Actions for ${r.name}`} />
           </div>
         );
       },
     },
   ], [router, deletingId]);
-
-  const bulkActions: BulkAction<BusRoute>[] = useMemo(() => [
-    {
-      key: 'activate', label: 'Activate', icon: Power,
-      run: async (rs) => { await bulkPatchActive(rs, true); await loadRoutes(); },
-    },
-    {
-      key: 'deactivate', label: 'Deactivate', icon: Power,
-      run: async (rs) => { await bulkPatchActive(rs, false); await loadRoutes(); },
-    },
-    {
-      key: 'delete', label: 'Delete', icon: Trash2, variant: 'destructive',
-      confirm: (rs) => `Soft-delete ${rs.length} route${rs.length === 1 ? '' : 's'}? Active routes with live schedules will be refused.`,
-      run: async (rs) => { await bulkDelete(rs); await loadRoutes(); },
-    },
-  ], [loadRoutes]);
 
   return (
     <div className="space-y-6">
@@ -283,7 +236,8 @@ export default function RoutesPage() {
         </div>
       )}
 
-      <SmartDataGrid<BusRoute>
+      <FleetDataGrid
+        gridName="RoutesGrid"
         rows={routes}
         columns={columns}
         getRowId={r => r.id}
@@ -292,9 +246,7 @@ export default function RoutesPage() {
         initialSort={{ key: 'name', dir: 'asc' }}
         kpis={kpis}
         filterChips={filterChips}
-        bulkActions={bulkActions}
-        onBulkComplete={loadRoutes}
-        toolbar={{ title: 'Routes', exportName: 'bus-ops-routes' }}
+        toolbar={{ title: 'RoutesGrid', exportName: 'bus-ops-routes', sortSelector: true }}
       />
 
       {/* Delete confirmation modal */}
