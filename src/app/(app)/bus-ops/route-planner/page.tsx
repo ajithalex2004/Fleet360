@@ -260,12 +260,10 @@ function RoutePlannerInner() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">
-            {editId ? 'Edit Route' : 'Route Planner'}
-          </h1>
+          <h1 className="text-2xl font-bold text-white">Route Optimization</h1>
           <p className="text-slate-400 text-sm mt-0.5">
             {editId && editingRouteName
-              ? `Editing "${editingRouteName}" — changes save back to the same route.`
+              ? `Optimising "${editingRouteName}" — changes save back to the same route.`
               : 'Plan and optimise pickup routes across multiple zones'}
           </p>
         </div>
@@ -297,50 +295,47 @@ function RoutePlannerInner() {
         </div>
       ) : (
         <>
-          {/* Existing-route picker — pick a route to load its origin, stops
-              and destination into the planner. Selecting a route switches
-              the URL to ?edit=<id> so the existing edit-flow load logic
-              runs (fetch + stops→waypoints + PATCH on save). Choosing the
-              blank option returns to a fresh new-route flow. */}
-          <div className="rounded-2xl bg-slate-800/60 border border-white/10 p-4 space-y-2">
-            <label className="block text-xs text-slate-400 uppercase tracking-wider font-medium">
-              Load existing route
-            </label>
-            <select
-              value={editId ?? ''}
-              onChange={e => {
-                const id = e.target.value;
-                router.push(id ? `/bus-ops/route-planner?edit=${id}` : '/bus-ops/route-planner');
-              }}
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-900/60 border border-white/10 text-white text-sm focus:outline-none focus:border-violet-500"
-            >
-              <option value="">— New route (start blank) —</option>
-              {routeOptions.map(r => (
-                <option key={r.id} value={r.id}>
-                  {r.code ? `[${r.code}] ` : ''}{r.name} · {r.stopCount} stops{r.isActive === false ? ' (inactive)' : ''}
-                </option>
-              ))}
-            </select>
-            <p className="text-[11px] text-slate-500">
-              Pick a route to auto-populate origin, stops and destination. Save writes back to the same route.
-            </p>
-          </div>
-
-          {/* Route name — required, editable at any time. Suggested from
-              origin/destination via the waypoint callback below but the
-              operator's typed value takes precedence. */}
+          {/* Route Name — required, editable at any time. Also serves as the
+              existing-route picker via a native datalist + a dedicated
+              "Pick existing" select on the right. Choosing an existing route
+              switches the URL to ?edit=<id> so the load effect (fetch +
+              stops→waypoints + PATCH on save) kicks in. */}
           <div className="rounded-2xl bg-slate-800/60 border border-white/10 p-4 space-y-2">
             <label className="block text-xs text-slate-400 uppercase tracking-wider font-medium">
               Route name <span className="text-rose-400">*</span>
             </label>
-            <input
-              type="text"
-              value={routeName}
-              onChange={e => { setRouteName(e.target.value); setRouteNameManuallyEdited(true); }}
-              placeholder="e.g. AAT HQ Morning Shift"
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-900/60 border border-white/10 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-violet-500"
-            />
-            <p className="text-[11px] text-slate-500">Auto-suggested from your origin and destination. Edit to give it a memorable name.</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                list="rp-existing-routes"
+                value={routeName}
+                onChange={e => { setRouteName(e.target.value); setRouteNameManuallyEdited(true); }}
+                placeholder="Type a new name or pick from existing…"
+                className="flex-1 px-4 py-2.5 rounded-xl bg-slate-900/60 border border-white/10 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-violet-500"
+              />
+              <datalist id="rp-existing-routes">
+                {routeOptions.map(r => <option key={r.id} value={r.name} />)}
+              </datalist>
+              <select
+                value={editId ?? ''}
+                onChange={e => {
+                  const id = e.target.value;
+                  router.push(id ? `/bus-ops/route-planner?edit=${id}` : '/bus-ops/route-planner');
+                }}
+                title="Load an existing route to optimize"
+                className="w-56 px-3 py-2.5 rounded-xl bg-slate-900/60 border border-white/10 text-white text-sm focus:outline-none focus:border-violet-500"
+              >
+                <option value="">— Pick existing route —</option>
+                {routeOptions.map(r => (
+                  <option key={r.id} value={r.id}>
+                    {r.code ? `[${r.code}] ` : ''}{r.name} · {r.stopCount} stops{r.isActive === false ? ' (inactive)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Auto-suggested from origin and destination. Pick from the dropdown to load an existing route's stops.
+            </p>
           </div>
 
           <RouteOptimizerPanel

@@ -1,40 +1,38 @@
 'use client';
-/**
- * RowActionsMenu — kebab (⋯) trigger that opens a popover of row actions.
- *
- * Designed for the trailing "actions" cell of a data grid where a fat button
- * strip (Edit / Stops / Optimize / Deactivate / Delete) crowds the row. The
- * kebab keeps the row visually clean; the popover surfaces the same set with
- * icons and disabled-with-reason tooltips.
- *
- * Positioning: anchors to the trigger's viewport rect via `position: fixed`,
- * so it doesn't get clipped by the grid's overflow-x-auto. Closes on outside
- * click, Escape, and window scroll/resize.
- */
+
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MoreHorizontal } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 
-export interface RowAction {
-  key: string;
+export type RowAction = {
   label: string;
-  icon?: LucideIcon;
   onClick: () => void;
-  variant?: 'default' | 'destructive';
+  tone?: 'default' | 'danger';
   disabled?: boolean;
-  /** Tooltip shown on hover when disabled. */
-  disabledReason?: string;
-}
+};
 
-interface RowActionsMenuProps {
+/**
+ * Compact ⋯ menu for FleetDataGrid action columns.
+ *
+ * Positioning: the popover uses `position: fixed` anchored to the trigger's
+ * viewport rect (via getBoundingClientRect). This escapes ancestor clipping
+ * — FleetDataGrid wraps rows in overflow-hidden + overflow-x-auto, so an
+ * absolutely-positioned menu was getting cropped at the grid edges.
+ *
+ * Auto-flips above the trigger when there isn't room below.
+ * Auto-shifts left when it would overflow the right viewport edge.
+ * Closes on outside click, Escape, scroll (capture — catches nested
+ * scrollers), and resize.
+ */
+export default function RowActionsMenu({
+  actions,
+  label = 'Row actions',
+  width = 176,
+}: {
   actions: RowAction[];
-  /** Menu width in px; default 176. */
+  label?: string;
+  /** Menu width in px; default 176 (10rem). */
   width?: number;
-  /** aria-label for the trigger button. Include row context so screen readers can distinguish rows. */
-  triggerLabel?: string;
-}
-
-export default function RowActionsMenu({ actions, width = 176, triggerLabel = 'Row actions' }: RowActionsMenuProps) {
+}) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -44,11 +42,12 @@ export default function RowActionsMenu({ actions, width = 176, triggerLabel = 'R
     const btn = triggerRef.current;
     if (!btn) return;
     const rect = btn.getBoundingClientRect();
-    // Anchor top edge to bottom of trigger, right-align with trigger.
-    // If the menu would overflow the bottom, flip above.
-    const menuH = actions.length * 34 + 8; // approx
+    // Approximate menu height so we know whether to flip. ~34px per action
+    // + 8px vertical padding matches the py-2 button + py-1 container below.
+    const menuH = actions.length * 34 + 8;
     const spaceBelow = window.innerHeight - rect.bottom;
-    const top = spaceBelow >= menuH + 8 ? rect.bottom + 4 : rect.top - menuH - 4;
+    const top = spaceBelow >= menuH + 8 ? rect.bottom + 4 : Math.max(8, rect.top - menuH - 4);
+    // Right-align the menu with the trigger, clamped inside the viewport.
     const left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.right - width));
     setPos({ top, left });
   }, [actions.length, width]);
@@ -56,79 +55,67 @@ export default function RowActionsMenu({ actions, width = 176, triggerLabel = 'R
   useEffect(() => {
     if (!open) return;
     place();
-    const onClickOutside = (e: MouseEvent) => {
+    const onDown = (e: MouseEvent) => {
       if (menuRef.current?.contains(e.target as Node)) return;
       if (triggerRef.current?.contains(e.target as Node)) return;
       setOpen(false);
     };
-    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
     const close = () => setOpen(false);
-    document.addEventListener('mousedown', onClickOutside);
-    document.addEventListener('keydown', onEsc);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    // `capture` picks up scroll on nested scrollers (e.g. the grid's
+    // overflow-x-auto region) — otherwise the menu would drift with the
+    // row instead of closing.
     window.addEventListener('scroll', close, true);
     window.addEventListener('resize', close);
     return () => {
-      document.removeEventListener('mousedown', onClickOutside);
-      document.removeEventListener('keydown', onEsc);
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
       window.removeEventListener('scroll', close, true);
       window.removeEventListener('resize', close);
     };
   }, [open, place]);
-
-  const runAction = (action: RowAction) => {
-    if (action.disabled) return;
-    setOpen(false);
-    action.onClick();
-  };
 
   return (
     <>
       <button
         ref={triggerRef}
         type="button"
-        onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
+        aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={triggerLabel}
-        className={`inline-flex items-center justify-center rounded-lg border w-8 h-8 transition-colors ${
-          open
-            ? 'border-violet-500/40 bg-violet-500/10 text-violet-200'
-            : 'border-white/10 text-slate-400 hover:bg-white/5 hover:text-white'
-        }`}
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
       >
-        <MoreHorizontal className="w-4 h-4" />
+        <MoreHorizontal className="h-4 w-4" />
       </button>
 
       {open && pos && (
         <div
           ref={menuRef}
           role="menu"
-          onClick={e => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
           style={{ position: 'fixed', top: pos.top, left: pos.left, width }}
-          className="z-50 rounded-xl border border-white/10 bg-slate-900 shadow-2xl p-1"
+          className="z-50 rounded-xl border border-white/10 bg-slate-950 py-1 shadow-2xl"
         >
-          {actions.map(action => {
-            const Icon = action.icon;
-            const destructive = action.variant === 'destructive';
-            return (
-              <button
-                key={action.key}
-                type="button"
-                role="menuitem"
-                disabled={action.disabled}
-                title={action.disabled ? action.disabledReason : undefined}
-                onClick={() => runAction(action)}
-                className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                  destructive
-                    ? 'text-rose-300 hover:bg-rose-500/10 disabled:hover:bg-transparent'
-                    : 'text-slate-200 hover:bg-white/5 disabled:hover:bg-transparent'
-                }`}
-              >
-                {Icon && <Icon className={`w-3.5 h-3.5 shrink-0 ${destructive ? 'text-rose-400' : 'text-slate-400'}`} />}
-                <span className="flex-1">{action.label}</span>
-              </button>
-            );
-          })}
+          {actions.map((a) => (
+            <button
+              key={a.label}
+              type="button"
+              role="menuitem"
+              disabled={a.disabled}
+              onClick={() => {
+                setOpen(false);
+                a.onClick();
+              }}
+              className={`block w-full px-3 py-2 text-left text-sm disabled:opacity-40 disabled:cursor-not-allowed ${
+                a.tone === 'danger' ? 'text-rose-300 hover:bg-rose-500/10' : 'text-slate-200 hover:bg-white/5'
+              }`}
+            >
+              {a.label}
+            </button>
+          ))}
         </div>
       )}
     </>

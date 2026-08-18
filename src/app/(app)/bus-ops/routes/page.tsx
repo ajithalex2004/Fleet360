@@ -96,6 +96,10 @@ export default function RoutesPage() {
   // New Route modal state
   const [showNewRoute,     setShowNewRoute]     = useState(false);
   const [creating,         setCreating]         = useState(false);
+  /** Id of the route being edited. null = create mode. Switching this + opening
+   *  the modal replays the form fields from the row so PATCH targets the same
+   *  record; on save we branch on editingRouteId to POST vs PATCH. */
+  const [editingRouteId,   setEditingRouteId]   = useState<string | null>(null);
   const [newRoute,         setNewRoute]         = useState<NewRouteForm>(EMPTY_NEW_ROUTE);
   const [newRouteStops,    setNewRouteStops]    = useState<NewRouteStop[]>([]);
   const [newStopDraft,     setNewStopDraft]     = useState<NewRouteStop>({ stopName: '', time: '' });
@@ -184,11 +188,81 @@ export default function RoutesPage() {
   };
 
   const openNewRoute = () => {
+    setEditingRouteId(null);
     setNewRoute(EMPTY_NEW_ROUTE);
     setNewRouteStops([]);
     setNewStopDraft({ stopName: '', time: '' });
     setNewRouteOrigin({ name: '' });
     setNewRouteDest({ name: '' });
+    setMapPickerFor(null);
+    setError('');
+    setShowNewRoute(true);
+  };
+
+  /**
+   * Open the modal in EDIT mode — populate every form field from an existing
+   * route, plus split its stops back into { origin, intermediates[], destination }
+   * so the modal reads the same way it was authored. On save the modal will
+   * PATCH this id (see submitNewRoute).
+   */
+  const openEditRoute = (r: BusRoute) => {
+    setEditingRouteId(r.id);
+    setNewRoute({
+      name: r.name,
+      code: r.code ?? '',
+      direction: (r.direction as NewRouteForm['direction']) ?? 'INBOUND',
+      shiftType: (r.shiftType as NewRouteForm['shiftType']) ?? 'MORNING',
+      routeType: (r.routeType as NewRouteForm['routeType']) ?? 'STAFF',
+      departureTime: r.departureTime ?? '07:00',
+      expectedArrivalTime: r.expectedArrivalTime ?? '',
+      capacity: String(r.capacity ?? 40),
+      isActive: r.isActive !== false,
+      assignedVehicleId: r.assignedVehicleId ?? '',
+      assignedDriverId: r.assignedDriverId ?? '',
+    });
+    // Stops are stored as [origin(seq=1), ...intermediates, destination(seq=N)].
+    // Split back into the modal's three buckets. If the route has ≤1 stop, we
+    // treat it as an empty-stops edit and fall back to the route.origin/
+    // .destination strings for the endpoint names (coords unknown).
+    const sortedStops = (r.stops ?? []).slice().sort((a, b) => a.sequence - b.sequence);
+    if (sortedStops.length >= 2) {
+      const first = sortedStops[0];
+      const last = sortedStops[sortedStops.length - 1];
+      const middle = sortedStops.slice(1, -1);
+      setNewRouteOrigin({
+        name: first.stopName || r.origin,
+        gpsLat: first.gpsLat, gpsLng: first.gpsLng,
+        landmark: first.landmark,
+      });
+      setNewRouteDest({
+        name: last.stopName || r.destination,
+        gpsLat: last.gpsLat, gpsLng: last.gpsLng,
+        landmark: last.landmark,
+      });
+      // Convert estimatedArrivalMins offset back to an HH:MM time using the
+      // route's departure — inverse of stopOffsetMinutes on save.
+      const dep = r.departureTime ?? '07:00';
+      const offsetToTime = (offset?: number) => {
+        if (offset == null || !dep) return '';
+        const [dH, dM] = dep.split(':').map(Number);
+        if (!Number.isFinite(dH) || !Number.isFinite(dM)) return '';
+        const total = dH * 60 + dM + offset;
+        const h = Math.floor((total % (24 * 60)) / 60);
+        const m = total % 60;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      };
+      setNewRouteStops(middle.map(s => ({
+        stopName: s.stopName,
+        time: offsetToTime(s.estimatedArrivalMins),
+        gpsLat: s.gpsLat, gpsLng: s.gpsLng,
+        landmark: s.landmark,
+      })));
+    } else {
+      setNewRouteOrigin({ name: r.origin });
+      setNewRouteDest({ name: r.destination });
+      setNewRouteStops([]);
+    }
+    setNewStopDraft({ stopName: '', time: '' });
     setMapPickerFor(null);
     setError('');
     setShowNewRoute(true);
@@ -271,11 +345,14 @@ export default function RoutesPage() {
         assignedDriverId:  newRoute.assignedDriverId  || null,
         stops: [originStop, ...intermediates, destinationStop],
       };
-      const res = await fetch('/api/bus-ops/routes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      const res = await fetch(
+        editingRouteId ? `/api/bus-ops/routes/${editingRouteId}` : '/api/bus-ops/routes',
+        {
+          method: editingRouteId ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+      );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         setError(body.error ?? `HTTP ${res.status}`);
@@ -443,7 +520,7 @@ export default function RoutesPage() {
       key: 'actions', header: '', filter: false, sortable: false, width: '60px', align: 'right',
       render: r => {
         const actions: RowAction[] = [
-          { label: 'Edit',                                onClick: () => router.push(`/bus-ops/route-planner?edit=${r.id}`) },
+          { label: 'Edit',                                onClick: () => openEditRoute(r) },
           { label: `Stops (${r.stops?.length ?? 0})`,     onClick: () => openStops(r) },
           { label: 'Optimize',                            onClick: () => router.push(`/bus-ops/route-planner?edit=${r.id}&optimize=1`) },
           { label: r.isActive ? 'Deactivate' : 'Activate', onClick: () => toggleActive(r) },
@@ -515,7 +592,7 @@ export default function RoutesPage() {
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 sticky top-0 bg-slate-900/95 backdrop-blur">
-              <h2 className="text-xl font-bold text-white">New Route</h2>
+              <h2 className="text-xl font-bold text-white">{editingRouteId ? 'Edit Route' : 'New Route'}</h2>
               <button type="button" onClick={() => setShowNewRoute(false)} disabled={creating}
                 className="text-slate-400 hover:text-white p-1 -m-1" aria-label="Close">✕</button>
             </div>
@@ -792,7 +869,7 @@ export default function RoutesPage() {
                 </button>
                 <button type="submit" disabled={creating || !newRoute.name.trim()}
                   className="px-6 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50">
-                  {creating ? 'Creating…' : 'Create Route'}
+                  {creating ? (editingRouteId ? 'Saving…' : 'Creating…') : (editingRouteId ? 'Save Changes' : 'Create Route')}
                 </button>
               </div>
             </form>
