@@ -160,6 +160,7 @@ export const MODULES: ModuleDef[] = [
       // Planning — design-time network (what the service *looks like*).
       { label: 'Routes',              href: '/bus-ops/routes',              icon: Route,           group: 'Planning' },
       { label: 'Route Optimization',  href: '/bus-ops/route-planner',       icon: Route,           group: 'Planning' },
+      { label: 'Fleet Optimizer',     href: '/bus-ops/fleet-optimizer',     icon: Route,           group: 'Planning' },
       { label: 'Schedules',           href: '/bus-ops/schedules',           icon: Calendar,        group: 'Planning' },
       { label: 'Schedule Templates',  href: '/bus-ops/schedule-templates',  icon: Repeat,          group: 'Planning' },
       { label: 'Transport Calendars', href: '/bus-ops/transport-calendars', icon: CalendarCheck2,  group: 'Planning' },
