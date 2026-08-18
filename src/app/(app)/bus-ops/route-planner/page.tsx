@@ -99,7 +99,20 @@ function RoutePlannerInner() {
   // between is a stop. Stops without gpsLat/gpsLng are skipped — the planner
   // needs coords to place a marker; the operator can re-pick those.
   useEffect(() => {
-    if (!editId) return;
+    // Reset panel state on every editId change — including editId → null
+    // (user picked "— Pick existing route —"). Clearing initialWaypoints
+    // stops the panel from remounting with the previous route's data during
+    // the async fetch window.
+    if (!editId) {
+      setLoadingRoute(false);
+      setInitialWaypoints([]);
+      setEditingRouteName(null);
+      setRouteName('');
+      setRouteNameManuallyEdited(false);
+      return;
+    }
+    setLoadingRoute(true);
+    setInitialWaypoints(null);
     let cancelled = false;
     (async () => {
       try {
@@ -339,6 +352,14 @@ function RoutePlannerInner() {
           </div>
 
           <RouteOptimizerPanel
+            // Force a fresh mount every time the loaded route changes.
+            // RouteOptimizerPanel reads initialWaypoints only in its
+            // useState initializer — later prop updates were being
+            // silently ignored, so picking a different route from the
+            // dropdown loaded the data but the map / stops list stayed on
+            // the previous route. Re-keying on editId cleanly rebuilds
+            // internal waypoint state from the fresh initialWaypoints.
+            key={editId ?? 'new'}
             mode="staff"
             vehicleType="bus"
             onSave={handleSave}

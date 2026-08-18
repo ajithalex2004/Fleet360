@@ -43,18 +43,50 @@ export async function PATCH(req: NextRequest, { params }: IdCtx) {
     const existing = await prisma.busRoute.findFirst({ where: { id, tenantId, deletedAt: null }, select: { id: true } });
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const body = await req.json();
-    const { stops, schedules, ...data } = body;
-    const route = await prisma.busRoute.update({
-      where: { id },
-      data: { ...data, updatedAt: new Date() },
-      include: { stops: { orderBy: { sequence: 'asc' } } },
-    });
+    // `schedules` on the route is a computed relation — never accept it on write.
+    // `stops` is handled separately below; it stays out of the top-level update.
+    const { stops, schedules: _schedules, ...data } = body;
+
+    // Stops are a 1:N replace-set: when the client sends a stops array, treat
+    // it as the new complete list. Delete existing rows in the same tx and
+    // recreate from the payload so the DB matches what the operator saved in
+    // the modal / planner. Skip when stops is undefined (e.g. Deactivate,
+    // rename-only edits — no stop churn intended).
+    const route = Array.isArray(stops)
+      ? await prisma.$transaction(async (tx) => {
+          await tx.routeStop.deleteMany({ where: { routeId: id } });
+          return tx.busRoute.update({
+            where: { id },
+            data: {
+              ...data,
+              updatedAt: new Date(),
+              stops: stops.length > 0 ? {
+                create: stops.map((s: Record<string, unknown>, i: number) => ({
+                  stopName:             (s.stopName as string) ?? '',
+                  sequence:             (s.sequence as number | undefined) ?? i + 1,
+                  gpsLat:               (s.gpsLat  as number | null | undefined) ?? null,
+                  gpsLng:               (s.gpsLng  as number | null | undefined) ?? null,
+                  landmark:             (s.landmark as string | null | undefined) ?? null,
+                  estimatedArrivalMins: (s.estimatedArrivalMins as number | null | undefined) ?? null,
+                })),
+              } : undefined,
+            },
+            include: { stops: { orderBy: { sequence: 'asc' } } },
+          });
+        })
+      : await prisma.busRoute.update({
+          where: { id },
+          data: { ...data, updatedAt: new Date() },
+          include: { stops: { orderBy: { sequence: 'asc' } } },
+        });
+
     // Bust the list cache so the next GET reflects this write immediately.
     // Without this, the operator would see Deactivate silently "fail" for up
     // to 30 s because the cached list still says isActive: true.
     revalidateCache([CACHE_TAG]);
     return NextResponse.json(route);
   } catch (error) {
+    console.error('[bus-ops/routes/[id].PATCH]', error);
     return NextResponse.json({ error: 'Failed to update' }, { status: 500 });
   }
 }
