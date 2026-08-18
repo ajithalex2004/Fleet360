@@ -23,6 +23,8 @@ import type {
   GoogleOptimizeToursResponse,
   RouteMatrixRequest,
   RouteMatrixElement,
+  ComputeRoutesRequest,
+  ComputeRoutesResponse,
 } from './types';
 
 // ── Config ──────────────────────────────────────────────────────────────────
@@ -223,6 +225,42 @@ export async function computeRouteMatrix(
     .split('\n')
     .filter(Boolean)
     .map(line => JSON.parse(line) as RouteMatrixElement);
+}
+
+/**
+ * Routes API v2 — computeRoutes. Single trip with optional waypoint
+ * optimization. Used by the single-route optimizer (replacing Mapbox).
+ *
+ * Requires `X-Goog-FieldMask` — the field list controls both the response
+ * shape AND the billed API tier. We ask for the minimum: distance,
+ * duration, polyline, leg summaries, and the optimized index when applicable.
+ */
+export async function computeRoutes(
+  req: ComputeRoutesRequest,
+): Promise<ComputeRoutesResponse> {
+  const token = await getAccessToken(SCOPE_ROUTES);
+  const url = `${ROUTES_HOST}/directions/v2:computeRoutes`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'X-Goog-FieldMask':
+        'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,' +
+        'routes.legs.distanceMeters,routes.legs.duration,routes.legs.startLocation,routes.legs.endLocation,' +
+        'routes.optimizedIntermediateWaypointIndex',
+    },
+    body: JSON.stringify(req),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new GoogleApiError(
+      `computeRoutes failed (${res.status})`,
+      res.status,
+      text,
+    );
+  }
+  return JSON.parse(text) as ComputeRoutesResponse;
 }
 
 /**

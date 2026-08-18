@@ -214,3 +214,43 @@ export interface RouteMatrixElement {
   duration?: string;                    // e.g. '600s'
   condition?: 'ROUTE_EXISTS' | 'ROUTE_NOT_FOUND';
 }
+
+// ── Google Routes API v2 — computeRoutes (single trip, optional waypoint
+//    optimization). Used by the single-route optimizer that replaced Mapbox.
+
+export interface ComputeRoutesLocation {
+  location: { latLng: { latitude: number; longitude: number } };
+}
+
+export interface ComputeRoutesRequest {
+  origin:         ComputeRoutesLocation;
+  destination:    ComputeRoutesLocation;
+  intermediates?: ComputeRoutesLocation[];
+  travelMode:     'DRIVE' | 'BICYCLE' | 'WALK' | 'TWO_WHEELER';
+  routingPreference?: 'TRAFFIC_UNAWARE' | 'TRAFFIC_AWARE' | 'TRAFFIC_AWARE_OPTIMAL';
+  /** When true, Google reorders `intermediates` for shortest total travel.
+   *  Origin + destination stay fixed (matches Mapbox's constraint model). */
+  optimizeWaypointOrder?: boolean;
+  departureTime?: string;                // ISO-8601 — required for traffic-aware
+  polylineEncoding?: 'ENCODED_POLYLINE' | 'GEO_JSON_LINESTRING';
+}
+
+export interface ComputeRoutesLeg {
+  distanceMeters?: number;
+  duration?: string;
+  startLocation?: ComputeRoutesLocation['location'];
+  endLocation?:   ComputeRoutesLocation['location'];
+}
+
+export interface ComputeRoutesResponse {
+  routes?: Array<{
+    distanceMeters?: number;
+    duration?: string;
+    polyline?: { encodedPolyline?: string };
+    legs?: ComputeRoutesLeg[];
+    /** Present when the request had optimizeWaypointOrder=true.
+     *  Length = intermediates.length. Value at index i = original index of
+     *  the intermediate now at position i in the optimized route. */
+    optimizedIntermediateWaypointIndex?: number[];
+  }>;
+}

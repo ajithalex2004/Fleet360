@@ -1,15 +1,34 @@
 /**
  * src/lib/mapbox.ts
- * Server-side Mapbox utility — NEVER import this in client components.
- * Token stays server-side for Optimization & Directions API calls.
- * The public map-rendering token (NEXT_PUBLIC_MAPBOX_TOKEN) is separate
- * and safe to expose to the browser (Mapbox pk. tokens are domain-restricted).
+ *
+ * Historically-named routing helper. All three routing calls (optimize,
+ * directions, geocode) now go through Google — Mapbox was swapped out.
+ * The filename is a legacy artifact; ~15 files across the codebase import
+ * from `@/lib/mapbox`, so keeping the path avoids incidental churn. The
+ * exported interface (Waypoint / OptimizedRoute / RouteLeg / GeocodeResult /
+ * estimateFuelCost) is preserved so every caller works unchanged.
+ *
+ * The Google auth machinery + fetch wrappers live in
+ * `src/lib/planning/fleet-routing/google-client.ts` — placed there
+ * because Fleet Routing shipped first. Fine as-is; renaming that folder
+ * (say to `src/lib/google/`) is a purely cosmetic follow-up.
+ *
+ * Server-only. Never import into a client component — Google Cloud
+ * credentials must stay server-side.
  */
 
-export const MAPBOX_TOKEN = process.env.MAPBOX_TOKEN ?? '';
+import { computeRoutes, computeRouteMatrix as _computeRouteMatrix } from '@/lib/planning/fleet-routing/google-client';
+import { decodePolyline } from '@/lib/planning/fleet-routing/polyline';
+import type { ComputeRoutesLocation } from '@/lib/planning/fleet-routing/types';
+
 export const GOOGLE_MAPS_KEY = process.env.GOOGLE_MAPS_API_KEY ?? '';
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// Silence lint on the legacy re-export — kept for callers still reading the
+// env var name from this module. New code should read GOOGLE_MAPS_API_KEY
+// directly.
+export const MAPBOX_TOKEN = '';
+
+// ── Types (preserved for backward compat) ───────────────────────────────────
 
 export interface Waypoint {
   id: string;
@@ -17,14 +36,14 @@ export interface Waypoint {
   lng: number;
   lat: number;
   type: 'origin' | 'stop' | 'destination';
-  metadata?: Record<string, string>; // e.g. { studentName, stopTime, cargoDesc }
+  metadata?: Record<string, string>;
 }
 
 export interface OptimizedRoute {
-  orderedWaypoints: Waypoint[];  // Re-ordered for optimal travel
+  orderedWaypoints: Waypoint[];    // Re-ordered for optimal travel
   totalDistanceKm: number;
   totalDurationMin: number;
-  geometry: GeoJSON.LineString;  // Route polyline for map rendering
+  geometry: GeoJSON.LineString;    // Route polyline for map rendering
   legs: RouteLeg[];
 }
 
@@ -39,132 +58,109 @@ export interface GeocodeResult {
   label: string;
   lng: number;
   lat: number;
+  /** 'google' only now that the Mapbox fallback is retired. Union kept so
+   *  callers that pattern-match on this field don't need a type update. */
   source: 'google' | 'mapbox';
 }
 
-// ── Mapbox Optimization API ───────────────────────────────────────────────────
-// Calls the Mapbox Optimized Trips v1 API to reorder intermediate stops.
-// Origin and destination are fixed; only intermediate stops are reordered.
+// ── Route optimization — Google Routes API v2 with optimizeWaypointOrder ───
+//
+// Origin (first) and destination (last) stay fixed; only intermediate stops
+// are reordered. Matches the Mapbox constraint model this replaced, so the
+// solver's "savings" numbers stay directly comparable to historical runs.
 
 export async function optimizeRoute(waypoints: Waypoint[]): Promise<OptimizedRoute> {
   if (waypoints.length < 2) {
     throw new Error('At least 2 waypoints (origin + destination) required.');
   }
-  if (!MAPBOX_TOKEN) {
-    throw new Error('MAPBOX_TOKEN is not configured in environment variables.');
-  }
 
-  const coords = waypoints.map(w => `${w.lng},${w.lat}`).join(';');
-  const params = new URLSearchParams({
-    access_token: MAPBOX_TOKEN,
-    source: 'first',
-    destination: 'last',
-    roundtrip: 'false',
-    geometries: 'geojson',
-    overview: 'full',
-    steps: 'false',
+  const asLoc = (w: Waypoint): ComputeRoutesLocation => ({
+    location: { latLng: { latitude: w.lat, longitude: w.lng } },
   });
-
-  // Use driving-traffic for real-time, traffic-aware route optimization
-  const url = `https://api.mapbox.com/optimized-trips/v1/mapbox/driving-traffic/${coords}?${params}`;
-  const res = await fetch(url, { next: { revalidate: 0 } });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Mapbox Optimization API error ${res.status}: ${err}`);
-  }
-
-  const data = await res.json() as {
-    code: string;
-    trips: Array<{
-      geometry: GeoJSON.LineString;
-      distance: number;   // metres
-      duration: number;   // seconds
-      legs: Array<{ distance: number; duration: number }>;
-    }>;
-    waypoints: Array<{
-      waypoint_index: number;
-      trips_index: number;
-    }>;
+  const intermediates = waypoints.slice(1, -1);
+  const req = {
+    origin:        asLoc(waypoints[0]),
+    destination:   asLoc(waypoints[waypoints.length - 1]),
+    intermediates: intermediates.length > 0 ? intermediates.map(asLoc) : undefined,
+    travelMode:    'DRIVE' as const,
+    routingPreference: 'TRAFFIC_AWARE' as const,
+    optimizeWaypointOrder: intermediates.length > 1,
   };
 
-  if (data.code !== 'Ok' || !data.trips?.length) {
-    throw new Error(`Mapbox returned: ${data.code}`);
+  const data = await computeRoutes(req);
+  const route = data.routes?.[0];
+  if (!route) throw new Error('Google Routes returned no routes.');
+
+  // Reconstruct the ordered waypoints. When Google reordered the
+  // intermediates it returns optimizedIntermediateWaypointIndex — value at
+  // position i is the ORIGINAL index of the intermediate now at position i
+  // in the optimized route. Origin stays first, destination stays last.
+  let ordered: Waypoint[];
+  if (route.optimizedIntermediateWaypointIndex?.length) {
+    const reorderedIntermediates = route.optimizedIntermediateWaypointIndex
+      .map(originalIdx => intermediates[originalIdx])
+      .filter(Boolean);
+    ordered = [waypoints[0], ...reorderedIntermediates, waypoints[waypoints.length - 1]];
+  } else {
+    // No reordering happened (0 or 1 intermediates → nothing to permute).
+    ordered = [...waypoints];
   }
 
-  const trip = data.trips[0];
+  // GeoJSON LineString from Google's encoded polyline — matches the shape
+  // the old Mapbox response carried, so map renderers don't change.
+  const points = decodePolyline(route.polyline?.encodedPolyline ?? '');
+  const geometry: GeoJSON.LineString = {
+    type: 'LineString',
+    coordinates: points.map(p => [p.lng, p.lat] as [number, number]),
+  };
 
-  // Re-order original waypoints according to Mapbox's optimal sequence
-  const indexMap = data.waypoints.map((w, i) => ({ original: i, optimal: w.waypoint_index }));
-  indexMap.sort((a, b) => a.optimal - b.optimal);
-  const orderedWaypoints = indexMap.map(m => waypoints[m.original]);
-
-  // Build per-leg summary
-  const legs: RouteLeg[] = trip.legs.map((leg, i) => ({
-    from: orderedWaypoints[i]?.label ?? `Stop ${i + 1}`,
-    to:   orderedWaypoints[i + 1]?.label ?? `Stop ${i + 2}`,
-    distanceKm:  Math.round((leg.distance / 1000) * 10) / 10,
-    durationMin: Math.round(leg.duration / 60),
+  const legs: RouteLeg[] = (route.legs ?? []).map((leg, i) => ({
+    from:        ordered[i]?.label ?? `Stop ${i + 1}`,
+    to:          ordered[i + 1]?.label ?? `Stop ${i + 2}`,
+    distanceKm:  metersToKm(leg.distanceMeters),
+    durationMin: durationToMin(leg.duration),
   }));
 
   return {
-    orderedWaypoints,
-    totalDistanceKm:  Math.round((trip.distance / 1000) * 10) / 10,
-    totalDurationMin: Math.round(trip.duration / 60),
-    geometry: trip.geometry,
+    orderedWaypoints:  ordered,
+    totalDistanceKm:   metersToKm(route.distanceMeters),
+    totalDurationMin:  durationToMin(route.duration),
+    geometry,
     legs,
   };
 }
 
-// ── Mapbox Directions API (2-point, fast) ─────────────────────────────────────
+// ── Directions (2-point) — same computeRoutes call, no intermediates ───────
 
 export async function getDirections(
   from: Pick<Waypoint, 'lng' | 'lat'>,
-  to: Pick<Waypoint, 'lng' | 'lat'>,
+  to:   Pick<Waypoint, 'lng' | 'lat'>,
 ): Promise<{ distanceKm: number; durationMin: number; geometry: GeoJSON.LineString }> {
-  if (!MAPBOX_TOKEN) throw new Error('MAPBOX_TOKEN not configured');
-
-  const coords = `${from.lng},${from.lat};${to.lng},${to.lat}`;
-  const params = new URLSearchParams({
-    access_token: MAPBOX_TOKEN,
-    geometries: 'geojson',
-    overview: 'full',
+  const data = await computeRoutes({
+    origin:        { location: { latLng: { latitude: from.lat, longitude: from.lng } } },
+    destination:   { location: { latLng: { latitude: to.lat,   longitude: to.lng   } } },
+    travelMode:    'DRIVE',
+    routingPreference: 'TRAFFIC_AWARE',
   });
-
-  // driving-traffic = real-time traffic awareness
-  const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${coords}?${params}`;
-  const res = await fetch(url, { next: { revalidate: 0 } });
-  if (!res.ok) throw new Error(`Mapbox Directions error ${res.status}`);
-
-  const data = await res.json() as {
-    routes: Array<{ distance: number; duration: number; geometry: GeoJSON.LineString }>;
-  };
-
-  const route = data.routes[0];
+  const route = data.routes?.[0];
+  if (!route) throw new Error('Google Routes returned no route for directions request.');
+  const points = decodePolyline(route.polyline?.encodedPolyline ?? '');
   return {
-    distanceKm:  Math.round((route.distance / 1000) * 10) / 10,
-    durationMin: Math.round(route.duration / 60),
-    geometry:    route.geometry,
+    distanceKm:  metersToKm(route.distanceMeters),
+    durationMin: durationToMin(route.duration),
+    geometry: {
+      type: 'LineString',
+      coordinates: points.map(p => [p.lng, p.lat] as [number, number]),
+    },
   };
 }
 
-// ── Geocoding ─────────────────────────────────────────────────────────────────
-// Primary: Google Geocoding API (best UAE address accuracy)
-// Fallback: Mapbox Geocoding API
+// ── Geocoding — Google only (Mapbox fallback retired) ──────────────────────
 
 export async function geocodeAddress(address: string): Promise<GeocodeResult[]> {
-  // Try Google first
-  if (GOOGLE_MAPS_KEY) {
-    try {
-      const results = await geocodeGoogle(address);
-      if (results.length) return results;
-    } catch { /* fall through to Mapbox */ }
+  if (!GOOGLE_MAPS_KEY) {
+    throw new Error('GOOGLE_MAPS_API_KEY is not configured — geocoding is unavailable.');
   }
-  // Fallback to Mapbox
-  return geocodeMapbox(address);
-}
-
-async function geocodeGoogle(address: string): Promise<GeocodeResult[]> {
   const params = new URLSearchParams({ address, region: 'ae', key: GOOGLE_MAPS_KEY });
   const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?${params}`);
   const data = await res.json() as {
@@ -174,9 +170,7 @@ async function geocodeGoogle(address: string): Promise<GeocodeResult[]> {
       geometry: { location: { lat: number; lng: number } };
     }>;
   };
-
   if (data.status !== 'OK') return [];
-
   return data.results.slice(0, 5).map(r => ({
     label:  r.formatted_address,
     lng:    r.geometry.location.lng,
@@ -185,32 +179,7 @@ async function geocodeGoogle(address: string): Promise<GeocodeResult[]> {
   }));
 }
 
-async function geocodeMapbox(address: string): Promise<GeocodeResult[]> {
-  if (!MAPBOX_TOKEN) return [];
-  const query = encodeURIComponent(address);
-  const params = new URLSearchParams({
-    access_token: MAPBOX_TOKEN,
-    country: 'ae',
-    language: 'en',
-    limit: '5',
-  });
-  const res = await fetch(
-    `https://api.mapbox.com/geocoding/v5/mapbox.places/${query}.json?${params}`,
-  );
-  const data = await res.json() as {
-    features: Array<{ place_name: string; center: [number, number] }>;
-  };
-
-  return (data.features ?? []).map(f => ({
-    label:  f.place_name,
-    lng:    f.center[0],
-    lat:    f.center[1],
-    source: 'mapbox' as const,
-  }));
-}
-
-// ── Fuel estimate ─────────────────────────────────────────────────────────────
-// Rough estimate: UAE average 10L/100km for vans/trucks, AED 3.00/L (approx)
+// ── Fuel estimate (unchanged — pure heuristic, no vendor call) ─────────────
 
 export function estimateFuelCost(distanceKm: number, vehicleType: 'van' | 'truck' | 'bus' = 'van') {
   const consumption = vehicleType === 'truck' ? 15 : vehicleType === 'bus' ? 18 : 10; // L/100km
@@ -218,4 +187,25 @@ export function estimateFuelCost(distanceKm: number, vehicleType: 'van' | 'truck
   const litres = (distanceKm / 100) * consumption;
   const cost   = litres * pricePerLitre;
   return { litres: Math.round(litres * 10) / 10, costAED: Math.round(cost) };
+}
+
+/**
+ * Distance-matrix passthrough — some callers used mapbox.ts as their
+ * one-stop routing shim. Re-export the Google Routes matrix caller
+ * for backward-compat imports; new code should hit the fleet-routing
+ * matrix cache directly for read-through caching.
+ */
+export const computeRouteMatrix = _computeRouteMatrix;
+
+// ── Internals ──────────────────────────────────────────────────────────────
+
+function metersToKm(m: number | undefined): number {
+  if (typeof m !== 'number') return 0;
+  return Math.round((m / 1000) * 10) / 10;
+}
+function durationToMin(d: string | undefined): number {
+  if (!d) return 0;
+  const secs = Number(d.replace(/s$/, ''));
+  if (!Number.isFinite(secs)) return 0;
+  return Math.round(secs / 60);
 }
