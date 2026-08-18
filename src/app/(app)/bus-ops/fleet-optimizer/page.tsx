@@ -12,7 +12,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Recycle, RefreshCw, Play, XCircle, CheckCircle2, AlertTriangle, Clock, Ban } from 'lucide-react';
+import { Recycle, RefreshCw, Play, XCircle, CheckCircle2, AlertTriangle, Clock, Ban, Send, History } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
 import FleetOptimizerMap, { type FleetMapRoute, type FleetMapUnassigned } from '@/components/bus-ops/FleetOptimizerMap';
 
@@ -104,6 +104,9 @@ export default function FleetOptimizerPage() {
   const [run, setRun] = useState<Run | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishConfirm, setPublishConfirm] = useState(false);
+  const [history, setHistory] = useState<Array<{ id: string; status: RunStatus; targetDate: string; createdAt: string; publishedAt: string | null; metrics: Run['metrics'] }>>([]);
 
   // Load fleet on mount.
   useEffect(() => {
@@ -168,6 +171,49 @@ export default function FleetOptimizerPage() {
       setError(e instanceof Error ? e.message : 'Cancel failed');
     }
   }, [run]);
+
+  // Load recent runs on mount + after any status transition on the active run.
+  const loadHistory = useCallback(async () => {
+    try {
+      const res = await fetch('/api/bus-ops/fleet-optimizer/runs?limit=10');
+      const data = await res.json();
+      if (Array.isArray(data.items)) setHistory(data.items);
+    } catch { /* silent */ }
+  }, []);
+  useEffect(() => { void loadHistory(); }, [loadHistory]);
+  useEffect(() => {
+    if (run && TERMINAL_STATES.has(run.status)) void loadHistory();
+  }, [run?.status, loadHistory, run]);
+
+  const openRun = async (runId: string) => {
+    setError(null);
+    try {
+      const res = await fetch(`/api/bus-ops/fleet-optimizer/runs/${runId}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setRun(await res.json() as Run);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to open run');
+    }
+  };
+
+  const publish = async () => {
+    if (!run) return;
+    setPublishing(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/bus-ops/fleet-optimizer/runs/${run.id}/publish`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      setPublishConfirm(false);
+      // Reload the run to see status=PUBLISHED
+      const fresh = await fetch(`/api/bus-ops/fleet-optimizer/runs/${run.id}`);
+      if (fresh.ok) setRun(await fresh.json() as Run);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Publish failed');
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   const toggleVehicle = (id: string) => {
     setSelectedVehicleIds(prev => {
@@ -270,6 +316,42 @@ export default function FleetOptimizerPage() {
               </button>
             )}
           </div>
+
+          {/* Recent runs */}
+          {history.length > 0 && (
+            <div className="rounded-2xl bg-slate-800/60 border border-white/10 p-4">
+              <div className="flex items-center gap-2 mb-3 text-xs uppercase tracking-wider text-slate-400 font-medium">
+                <History className="w-3.5 h-3.5" /> Recent runs ({history.length})
+              </div>
+              <div className="space-y-1 max-h-72 overflow-y-auto">
+                {history.map(h => {
+                  const cfg = statusStyle(h.status);
+                  const active = run?.id === h.id;
+                  return (
+                    <button
+                      key={h.id}
+                      type="button"
+                      onClick={() => openRun(h.id)}
+                      className={`w-full text-left px-2 py-1.5 rounded-lg text-xs transition-colors ${
+                        active ? 'bg-violet-500/20 border border-violet-500/40' : 'hover:bg-white/5 border border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <cfg.Icon className={`w-3 h-3 shrink-0`} />
+                        <span className="flex-1 truncate text-slate-200">{h.targetDate.slice(0, 10)}</span>
+                        {h.publishedAt && <span className="text-[9px] text-violet-300 uppercase">Published</span>}
+                      </div>
+                      <div className="text-[10px] text-slate-500 truncate ml-5">
+                        {h.status}
+                        {h.metrics?.totalDistanceKm != null ? ` · ${h.metrics.totalDistanceKm} km` : ''}
+                        {h.metrics?.unassignedCount != null && h.metrics.unassignedCount > 0 ? ` · ${h.metrics.unassignedCount} unassigned` : ''}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right — results */}
@@ -284,6 +366,28 @@ export default function FleetOptimizerPage() {
             <>
               <StatusHeader run={run} />
               <MetricsHeader run={run} />
+
+              {run.status === 'SUCCESS' && !run.publishedAt && (
+                <div className="flex items-center justify-between rounded-2xl border border-violet-500/40 bg-violet-500/10 px-4 py-3">
+                  <div className="text-sm text-violet-100">
+                    Ready to publish {run.routes.length} route{run.routes.length === 1 ? '' : 's'} as TripSchedules for {new Date(run.targetDate).toLocaleDateString()}.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPublishConfirm(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+                  >
+                    <Send className="w-4 h-4" /> Publish to Schedules
+                  </button>
+                </div>
+              )}
+
+              {run.publishedAt && (
+                <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+                  <CheckCircle2 className="inline w-4 h-4 mr-1" />
+                  Published to Trip Schedules on {new Date(run.publishedAt).toLocaleString()}. View them on the Schedules page.
+                </div>
+              )}
               {run.routes.length > 0 && (
                 <div className="rounded-2xl bg-slate-800/60 border border-white/10 overflow-hidden">
                   <div className="px-4 py-2 border-b border-white/5 text-xs uppercase tracking-wider text-slate-400 font-medium">
@@ -306,6 +410,47 @@ export default function FleetOptimizerPage() {
           )}
         </div>
       </div>
+
+      {/* Publish confirmation modal */}
+      {publishConfirm && run && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={e => { if (e.target === e.currentTarget && !publishing) setPublishConfirm(false); }}
+        >
+          <div className="w-full max-w-md rounded-2xl border border-violet-500/40 bg-slate-900/95 shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-white/10 flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-violet-500/15 border border-violet-500/40 flex items-center justify-center shrink-0">
+                <Send className="w-5 h-5 text-violet-300" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-bold text-white">Publish to Trip Schedules?</h3>
+                <p className="text-sm text-slate-400 mt-0.5">
+                  Creates {run.routes.length} TripSchedule row{run.routes.length === 1 ? '' : 's'} for {new Date(run.targetDate).toLocaleDateString()}.
+                </p>
+              </div>
+            </div>
+            <div className="px-5 py-4 space-y-2 text-sm text-slate-300">
+              <p>
+                Each solver-route becomes one scheduled trip. The parent route is picked by
+                most-common-passenger — this is a heuristic, not an exact match.
+              </p>
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                Existing schedules for the same date are <span className="font-semibold">not</span> cancelled automatically. Review the Schedules page after publish and cancel any duplicates manually.
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t border-white/10 flex items-center justify-end gap-2">
+              <button type="button" onClick={() => setPublishConfirm(false)} disabled={publishing}
+                className="px-4 py-2 rounded-lg border border-white/10 text-slate-300 hover:bg-white/5 text-sm font-medium disabled:opacity-50">
+                Cancel
+              </button>
+              <button type="button" onClick={publish} disabled={publishing}
+                className="px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-1.5">
+                {publishing ? <><RefreshCw className="w-4 h-4 animate-spin" /> Publishing…</> : <><Send className="w-4 h-4" /> Publish</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
