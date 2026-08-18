@@ -12,7 +12,9 @@
  */
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Route as RouteIcon, Users } from 'lucide-react';
 import RouteOptimizerPanel from '@/components/route-optimizer/RouteOptimizerPanel';
+import FleetPlanner from '@/components/bus-ops/FleetPlanner';
 
 interface RouteResult {
   summary: { stops: number; distanceKm: number; durationMin: number; durationHuman: string; fuelCostAED: number };
@@ -47,11 +49,26 @@ interface RouteOption {
   stopCount: number;
 }
 
+type Mode = 'single' | 'fleet';
+
 function RoutePlannerInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams?.get('edit') ?? null;
   const autoOptimize = searchParams?.get('optimize') === '1';
+  const mode: Mode = searchParams?.get('mode') === 'fleet' ? 'fleet' : 'single';
+
+  const switchMode = (next: Mode) => {
+    // Preserve editId only in single mode — fleet planner is fleet-wide.
+    const params = new URLSearchParams();
+    if (next === 'fleet') {
+      params.set('mode', 'fleet');
+    } else if (editId) {
+      params.set('edit', editId);
+    }
+    const qs = params.toString();
+    router.replace(`/bus-ops/route-planner${qs ? '?' + qs : ''}`);
+  };
 
   const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -275,15 +292,48 @@ function RoutePlannerInner() {
         <div>
           <h1 className="text-2xl font-bold text-white">Route Optimization</h1>
           <p className="text-slate-400 text-sm mt-0.5">
-            {editId && editingRouteName
-              ? `Optimising "${editingRouteName}" — changes save back to the same route.`
-              : 'Plan and optimise pickup routes across multiple zones'}
+            {mode === 'fleet'
+              ? 'Whole-fleet VRPTW solve — reassign passengers across vehicles to minimise total distance.'
+              : editId && editingRouteName
+                ? `Optimising "${editingRouteName}" — changes save back to the same route.`
+                : 'Plan and optimise the stop order of a single route.'}
           </p>
         </div>
         <div className="flex items-center gap-1.5 text-xs text-purple-400 bg-purple-500/10 border border-purple-500/20 px-3 py-1.5 rounded-full">
           🗺️ Hybrid Routing
         </div>
       </div>
+
+      {/* Mode toggle — Single Route (TSP + Mapbox) vs Fleet Planner (VRPTW + Google) */}
+      <div className="inline-flex rounded-xl bg-slate-800/60 border border-white/10 p-1">
+        <button
+          type="button"
+          onClick={() => switchMode('single')}
+          className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            mode === 'single'
+              ? 'bg-violet-500/20 text-violet-100 border border-violet-500/40'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <RouteIcon className="w-4 h-4" /> Single Route
+        </button>
+        <button
+          type="button"
+          onClick={() => switchMode('fleet')}
+          className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            mode === 'fleet'
+              ? 'bg-violet-500/20 text-violet-100 border border-violet-500/40'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Users className="w-4 h-4" /> Fleet Planner
+        </button>
+      </div>
+
+      {mode === 'fleet' ? (
+        <FleetPlanner />
+      ) : (
+        <>
 
       {saved && (
         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
@@ -374,6 +424,8 @@ function RoutePlannerInner() {
               if (o && d) setRouteName(`${o.label.slice(0, 25)} → ${d.label.slice(0, 25)}`);
             }}
           />
+        </>
+      )}
         </>
       )}
     </div>

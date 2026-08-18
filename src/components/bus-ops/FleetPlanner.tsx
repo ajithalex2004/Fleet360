@@ -1,19 +1,17 @@
 'use client';
 /**
- * /bus-ops/fleet-optimizer — VRPTW solver against the tenant's live data.
+ * FleetPlanner — whole-fleet VRPTW solver as a reusable component.
  *
- * Two-panel layout:
- *   Left  — inputs (date, vehicles, timeout) + Solve button
- *   Right — status pill, metrics header, per-route accordion, unassigned
- *           list, map with per-vehicle polylines.
+ * Extracted from the former /bus-ops/fleet-optimizer page so it can be
+ * embedded as one mode of the Route Optimization page (mode toggle
+ * switches between Single Route + Fleet Planner).
  *
  * The solve is async: POST /solve returns a runId, we poll GET /runs/:id
  * every 2s until status transitions to a terminal state.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Recycle, RefreshCw, Play, XCircle, CheckCircle2, AlertTriangle, Clock, Ban, Send, History } from 'lucide-react';
-import { PageHeader } from '@/components/bus-ops/theme';
+import { RefreshCw, Play, XCircle, CheckCircle2, AlertTriangle, Clock, Ban, Send, History } from 'lucide-react';
 import FleetOptimizerMap, { type FleetMapRoute, type FleetMapUnassigned } from '@/components/bus-ops/FleetOptimizerMap';
 
 // ── Types (mirror the API response shape) ──────────────────────────────────
@@ -88,7 +86,7 @@ interface Vehicle {
 const TERMINAL_STATES = new Set<RunStatus>(['SUCCESS', 'INFEASIBLE', 'FAILED', 'CANCELLED', 'PUBLISHED']);
 const POLL_INTERVAL_MS = 2_000;
 
-export default function FleetOptimizerPage() {
+export default function FleetPlanner() {
   // Inputs
   const [targetDate, setTargetDate] = useState<string>(() => {
     const d = new Date();
@@ -237,13 +235,6 @@ export default function FleetOptimizerPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Fleet Optimizer"
-        subtitle="Whole-fleet VRPTW solve — Google Cloud Route Optimization."
-        icon={Recycle}
-        accent="violet"
-      />
-
       {error && (
         <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">
           {error}
