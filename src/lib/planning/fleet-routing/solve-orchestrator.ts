@@ -29,7 +29,13 @@ import type { RunStatus } from './types';
 export interface StartSolveInput {
   tenantId:    string;
   createdBy:   string;
+  /** Anchor date for the solve — the day the solver plans against. */
   targetDate:  Date;
+  /** Optional publish-range end. When set, the publish flow expands the
+   *  single solved plan into one TripSchedule per weekday in
+   *  [targetDate, effectiveTo]. Stashed in inputSnapshot; publish reads
+   *  it back. */
+  effectiveTo?: Date;
   vehicleIds?: string[];
   /** Optional solver wall-clock budget. Default '30s'. */
   timeout?:    string;
@@ -51,6 +57,9 @@ export async function startSolve(input: StartSolveInput): Promise<{ runId: strin
       inputSnapshot: {
         requestedVehicleIds: input.vehicleIds ?? null,
         timeout: input.timeout ?? '30s',
+        // Persist the range so the publish endpoint can loop over it later.
+        effectiveFrom: input.targetDate.toISOString().slice(0, 10),
+        effectiveTo: (input.effectiveTo ?? input.targetDate).toISOString().slice(0, 10),
       },
     },
     select: { id: true },

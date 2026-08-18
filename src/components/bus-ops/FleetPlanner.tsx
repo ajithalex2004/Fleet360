@@ -87,13 +87,33 @@ const TERMINAL_STATES = new Set<RunStatus>(['SUCCESS', 'INFEASIBLE', 'FAILED', '
 const POLL_INTERVAL_MS = 2_000;
 
 export default function FleetPlanner() {
-  // Inputs
-  const [targetDate, setTargetDate] = useState<string>(() => {
+  // Inputs — solve anchors on effectiveFrom; publish loops over weekdays
+  // in [effectiveFrom, effectiveTo]. Default effectiveTo = effectiveFrom
+  // (single-day, matches the pre-range behaviour).
+  const [effectiveFrom, setEffectiveFrom] = useState<string>(() => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   });
+  const [effectiveTo, setEffectiveTo] = useState<string>(effectiveFrom);
+  // Keep effectiveTo in sync when the operator advances effectiveFrom past it.
+  useEffect(() => {
+    if (effectiveTo < effectiveFrom) setEffectiveTo(effectiveFrom);
+  }, [effectiveFrom, effectiveTo]);
+  // How many weekdays the publish will fan out to — hint for the operator.
+  const weekdaysInRange = React.useMemo(() => {
+    if (!effectiveFrom || !effectiveTo) return 0;
+    const from = new Date(effectiveFrom);
+    const to   = new Date(effectiveTo);
+    if (isNaN(from.getTime()) || isNaN(to.getTime()) || to < from) return 0;
+    let count = 0;
+    for (const d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+      const dow = d.getDay();
+      if (dow !== 0 && dow !== 6) count += 1;
+    }
+    return count;
+  }, [effectiveFrom, effectiveTo]);
   const [timeout, setTimeoutSec] = useState<string>('30');
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [selectedVehicleIds, setSelectedVehicleIds] = useState<Set<string>>(new Set());
@@ -139,7 +159,8 @@ export default function FleetPlanner() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          targetDate,
+          targetDate: effectiveFrom,
+          effectiveTo,
           vehicleIds: selectedVehicleIds.size > 0 ? [...selectedVehicleIds] : undefined,
           timeout: `${timeout}s`,
         }),
@@ -245,11 +266,22 @@ export default function FleetPlanner() {
         {/* Left — inputs */}
         <div className="space-y-4">
           <div className="rounded-2xl bg-slate-800/60 border border-white/10 p-4 space-y-4">
-            <label className="block">
-              <div className="text-[11px] uppercase tracking-wider text-slate-400 font-medium mb-1.5">Target date</div>
-              <input type="date" value={targetDate} onChange={e => setTargetDate(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-slate-900/60 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none" />
-            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block">
+                <div className="text-[11px] uppercase tracking-wider text-slate-400 font-medium mb-1.5">Effective from</div>
+                <input type="date" value={effectiveFrom} onChange={e => setEffectiveFrom(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900/60 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none" />
+              </label>
+              <label className="block">
+                <div className="text-[11px] uppercase tracking-wider text-slate-400 font-medium mb-1.5">Effective to</div>
+                <input type="date" value={effectiveTo} min={effectiveFrom} onChange={e => setEffectiveTo(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900/60 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none" />
+              </label>
+            </div>
+            <div className="text-[10px] text-slate-500 -mt-2">
+              Solver plans against <span className="font-mono">{effectiveFrom}</span>. Publish will fan the plan out to
+              {' '}<span className="text-violet-300 font-semibold">{weekdaysInRange}</span> weekday{weekdaysInRange === 1 ? '' : 's'} (Sat/Sun skipped).
+            </div>
 
             <label className="block">
               <div className="text-[11px] uppercase tracking-wider text-slate-400 font-medium mb-1.5">Solver timeout (seconds)</div>
@@ -292,7 +324,7 @@ export default function FleetPlanner() {
             <button
               type="button"
               onClick={solve}
-              disabled={starting || !!isRunning || !targetDate}
+              disabled={starting || !!isRunning || !effectiveFrom || !effectiveTo || weekdaysInRange === 0}
               className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {starting || isRunning
@@ -361,7 +393,7 @@ export default function FleetPlanner() {
               {run.status === 'SUCCESS' && !run.publishedAt && (
                 <div className="flex items-center justify-between rounded-2xl border border-violet-500/40 bg-violet-500/10 px-4 py-3">
                   <div className="text-sm text-violet-100">
-                    Ready to publish {run.routes.length} route{run.routes.length === 1 ? '' : 's'} as TripSchedules for {new Date(run.targetDate).toLocaleDateString()}.
+                    Ready to publish {run.routes.length} route{run.routes.length === 1 ? '' : 's'} as TripSchedules — fanned out to every weekday in the effective range.
                   </div>
                   <button
                     type="button"
@@ -416,7 +448,7 @@ export default function FleetPlanner() {
               <div className="flex-1 min-w-0">
                 <h3 className="text-lg font-bold text-white">Publish to Trip Schedules?</h3>
                 <p className="text-sm text-slate-400 mt-0.5">
-                  Creates {run.routes.length} TripSchedule row{run.routes.length === 1 ? '' : 's'} for {new Date(run.targetDate).toLocaleDateString()}.
+                  Creates one TripSchedule per (solved-route × weekday) in the effective range from {new Date(run.targetDate).toLocaleDateString()}. Weekends skipped.
                 </p>
               </div>
             </div>

@@ -84,6 +84,29 @@ export async function POST(req: NextRequest, { params }: IdCtx) {
   // — better than failing the whole publish.
   const anyRouteId = passengerRows[0]?.routeId ?? null;
 
+  // Read the effective range the operator set at solve time (stashed in
+  // inputSnapshot by the orchestrator). Defaults to targetDate for
+  // backward compatibility with runs created before the range feature.
+  const snapshot = (run.inputSnapshot as Record<string, unknown> | null) ?? {};
+  const effectiveFromStr = String(snapshot.effectiveFrom ?? run.targetDate.toISOString().slice(0, 10));
+  const effectiveToStr   = String(snapshot.effectiveTo   ?? effectiveFromStr);
+  const effectiveFrom = new Date(effectiveFromStr);
+  const effectiveTo   = new Date(effectiveToStr);
+  // Expand to weekday-only calendar days in [effectiveFrom, effectiveTo].
+  // Skip Sat/Sun so staff transport schedules don't accidentally get
+  // published for the weekend. Non-weekday-service tenants can adjust
+  // later by removing the filter (or exposing an "include weekends" flag).
+  const publishDates: Date[] = [];
+  for (let d = new Date(effectiveFrom); d <= effectiveTo; d.setDate(d.getDate() + 1)) {
+    const dow = d.getDay(); // 0 = Sunday, 6 = Saturday
+    if (dow !== 0 && dow !== 6) publishDates.push(new Date(d));
+  }
+  if (publishDates.length === 0) {
+    return NextResponse.json({
+      error: `No weekdays in the effective range ${effectiveFromStr} → ${effectiveToStr}. Nothing to publish.`,
+    }, { status: 409 });
+  }
+
   // Build each TripSchedule spec + reject early if we can't pick a parent
   // route (would happen only when NO passengers on ANY solver-route can be
   // resolved to a routeId — unusual but worth failing loudly).
@@ -109,13 +132,20 @@ export async function POST(req: NextRequest, { params }: IdCtx) {
         error: `Solver-route ${r.sequenceInRun} has no resolvable parent route (no passengers mapped to any BusRoute).`,
       }, { status: 409 });
     }
-    specs.push({
-      routeId:       winner,
-      vehicleId:     r.vehicleId,
-      departureTime: r.startTime,
-      arrivalTime:   r.endTime,
-      notes:         `Published by Fleet Optimizer run ${run.id.slice(0, 8)} on ${new Date().toISOString().slice(0, 10)} — ${r.totalDistanceKm} km, ${r.totalPassengers} pax.`,
-    });
+    // Fan out: one spec per (solver-route × weekday in range). Shift the
+    // solver's absolute start/end timestamps to each publish date while
+    // preserving the wall-clock time (the solver's plan was anchored to
+    // effectiveFrom; we just move it forward day-by-day).
+    for (const day of publishDates) {
+      const shift = day.getTime() - effectiveFrom.getTime();
+      specs.push({
+        routeId:       winner,
+        vehicleId:     r.vehicleId,
+        departureTime: new Date(r.startTime.getTime() + shift),
+        arrivalTime:   new Date(r.endTime.getTime()   + shift),
+        notes:         `Published by Fleet Optimizer run ${run.id.slice(0, 8)} on ${new Date().toISOString().slice(0, 10)} — ${r.totalDistanceKm} km, ${r.totalPassengers} pax (day ${day.toISOString().slice(0, 10)}).`,
+      });
+    }
   }
 
   // Transactional publish. Either everything lands or nothing changes —
@@ -143,12 +173,17 @@ export async function POST(req: NextRequest, { params }: IdCtx) {
       where: { id: run.id },
       data: {
         status:       'PUBLISHED' satisfies RunStatus,
-        statusReason: `Published ${created.length} trip schedule(s) at ${new Date().toISOString()}`,
+        statusReason: `Published ${created.length} trip schedule(s) across ${publishDates.length} weekday(s) at ${new Date().toISOString()}`,
         publishedAt:  new Date(),
         publishedBy,
       },
     });
-    return { publishedCount: created.length, tripScheduleIds: created };
+    return {
+      publishedCount:  created.length,
+      dayCount:        publishDates.length,
+      routesPerDay:    run.routes.length,
+      tripScheduleIds: created,
+    };
   });
 
   return NextResponse.json(result);

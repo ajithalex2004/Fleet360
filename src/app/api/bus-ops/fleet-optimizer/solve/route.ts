@@ -15,9 +15,14 @@ import { startSolve } from '@/lib/planning/fleet-routing/solve-orchestrator';
 export const runtime = 'nodejs';
 
 interface SolveBody {
-  targetDate?: string;     // 'YYYY-MM-DD'
-  vehicleIds?: string[];
-  timeout?:    string;     // e.g. '30s', '60s'
+  /** Anchor / start of the effective range. 'YYYY-MM-DD'. */
+  targetDate?:   string;
+  /** Optional end of the effective range. When set, publish loops over
+   *  every weekday in [targetDate, effectiveTo]. When omitted, same as
+   *  targetDate (single-day behaviour, unchanged). */
+  effectiveTo?:  string;
+  vehicleIds?:   string[];
+  timeout?:      string;   // e.g. '30s', '60s'
 }
 
 export async function POST(req: NextRequest) {
@@ -32,6 +37,13 @@ export async function POST(req: NextRequest) {
   const targetDate = new Date(body.targetDate);
   if (isNaN(targetDate.getTime())) return NextResponse.json({ error: 'targetDate must be a valid date' }, { status: 400 });
 
+  let effectiveTo: Date | undefined;
+  if (body.effectiveTo) {
+    effectiveTo = new Date(body.effectiveTo);
+    if (isNaN(effectiveTo.getTime())) return NextResponse.json({ error: 'effectiveTo must be a valid date' }, { status: 400 });
+    if (effectiveTo < targetDate) return NextResponse.json({ error: 'effectiveTo must be on or after targetDate' }, { status: 400 });
+  }
+
   if (body.vehicleIds !== undefined) {
     if (!Array.isArray(body.vehicleIds) || body.vehicleIds.some(v => typeof v !== 'string')) {
       return NextResponse.json({ error: 'vehicleIds must be an array of strings' }, { status: 400 });
@@ -43,6 +55,7 @@ export async function POST(req: NextRequest) {
       tenantId,
       createdBy:  req.headers.get('x-user-id') ?? 'unknown',
       targetDate,
+      effectiveTo,
       vehicleIds: body.vehicleIds,
       timeout:    body.timeout,
     });
