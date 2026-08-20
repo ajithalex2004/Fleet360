@@ -36,6 +36,7 @@ import { prisma } from '@/lib/prisma';
 import { loadConsolidationFacts } from '@/lib/planning/route-consolidation-facts';
 import { analyzeConsolidations, type ConsolidationObjective } from '@/lib/planning/route-consolidation';
 import { resolveEligibilityPolicy } from '@/lib/planning/route-consolidation-eligibility-policy';
+import { refineRecommendationsWithMatrix } from '@/lib/planning/route-consolidation-matrix';
 
 export async function POST(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id');
@@ -81,6 +82,23 @@ export async function POST(req: NextRequest) {
       maxArrivalTimeDiffMinutes: eligibilityPolicy.maxArrivalTimeDiffMinutes,
     };
     const result = analyzeConsolidations(facts, resolvedObjective);
+
+    // Stage 2 matrix refinement — real road distance/duration for each
+    // surviving candidate, batched against Google's Routes API. Doesn't
+    // touch scoring/PCE yet (Stage 3/4); attaches matrixRefinement onto
+    // each recommendation for the next stage to consume. Non-fatal: a
+    // refinement failure shouldn't take down an otherwise-successful
+    // analysis, so recommendations still return with matrixRefinement
+    // left unset if this throws.
+    try {
+      const routesById = new Map(facts.routes.map(r => [r.id, r]));
+      result.recommendations = await refineRecommendationsWithMatrix(
+        prisma, tenantId, result.recommendations, routesById,
+      );
+    } catch (e) {
+      console.warn('[route-consolidation.analyze] matrix refinement failed (non-fatal):', e);
+    }
+
     return NextResponse.json(result);
   } catch (e) {
     console.error('[route-consolidation.analyze]', e);

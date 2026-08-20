@@ -151,6 +151,18 @@ export type ConsolidationRecommendation = {
   /** True when PCE verdict is not BLOCK. Infeasible recs sink to the bottom. */
   feasible: boolean;
   /**
+   * Real road distance/duration for this candidate's endpoint pairings,
+   * filled in by route-consolidation-matrix.ts after analyzeConsolidations
+   * returns (this function itself stays DB/API-free — see its docstring).
+   * null until that refinement pass runs; the Stage 4 scorer is what
+   * will actually consume these numbers instead of the coordinate-distance
+   * estimate scoreCandidate() uses today.
+   */
+  matrixRefinement?: {
+    pickupToPickup: { distanceKm: number; durationMin: number } | null;
+    dropoffToDropoff: { distanceKm: number; durationMin: number } | null;
+  } | null;
+  /**
    * Vehicle reuse analysis: can the consolidated vehicle complete this
    * trip and still make a return trip from the destination back to origin
    * (or serve another outbound route) within the turnaround window?
@@ -338,19 +350,30 @@ function passesCheapFilters(
  * list still drives the PCE deviation check.
  */
 function pickupAndDropoffSides(a: RouteFacts, b: RouteFacts) {
-  const first = (r: RouteFacts) => r.stops[0];
-  const last = (r: RouteFacts) => r.stops[r.stops.length - 1];
   const toPoint = (s: { placeId: string | null; lat: number | null; lng: number | null }) => ({
     placeId: s.placeId,
     lat: s.lat,
     lng: s.lng,
   });
   return {
-    pickupSideA: [toPoint(first(a))],
-    pickupSideB: [toPoint(first(b))],
-    dropoffSideA: [toPoint(last(a))],
-    dropoffSideB: [toPoint(last(b))],
+    pickupSideA: [toPoint(routePickupStop(a))],
+    pickupSideB: [toPoint(routePickupStop(b))],
+    dropoffSideA: [toPoint(routeDropoffStop(a))],
+    dropoffSideB: [toPoint(routeDropoffStop(b))],
   };
+}
+
+/**
+ * Same first/last-stop convention as pickupAndDropoffSides, exported as
+ * plain lat/lng so route-consolidation-matrix.ts can build endpoint
+ * pairings without duplicating (or importing the whole zone-compat
+ * point shape for) this simplification.
+ */
+export function routePickupStop(r: RouteFacts) {
+  return r.stops[0];
+}
+export function routeDropoffStop(r: RouteFacts) {
+  return r.stops[r.stops.length - 1];
 }
 
 // ─── Scoring (PCE evaluation + savings arithmetic) ──────────────────
