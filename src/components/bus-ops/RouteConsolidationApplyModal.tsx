@@ -90,7 +90,6 @@ interface PreviewApplyResult {
 export type RecommendationForApply = {
   routeA: { id: string; name: string };
   routeB: { id: string; name: string };
-  scores: { fleetSavingsPerWeek: number; totalScore: number };
 };
 
 // ─── Component ──────────────────────────────────────────────────────

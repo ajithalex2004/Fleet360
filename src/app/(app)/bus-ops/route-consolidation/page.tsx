@@ -38,6 +38,33 @@ type ZoneCompatKind =
 
 type ZoneCompatResult = { kind: ZoneCompatKind; sharedPlaceId?: string; distanceKm?: number };
 
+interface MatrixPairingResult { distanceKm: number; durationMin: number }
+interface ResourceRelease {
+  routeEliminated: boolean;
+  serviceResourceReleased: boolean;
+  redeploymentStatus: 'CONFIRMED' | 'POTENTIAL' | 'NOT_AVAILABLE' | 'UNVERIFIED';
+  survivingResourceSlackStatus: 'SUFFICIENT' | 'LIMITED' | 'INSUFFICIENT' | 'UNVERIFIED';
+}
+interface ScoreComponents {
+  detourMinutes: number;
+  detourKm: number;
+  passengerImpactMinutes: number;
+  netDistanceSavedKm: number;
+  netTimeSavedMinutes: number;
+  resourceRelease: ResourceRelease;
+  pcePenalty: number;
+}
+interface EstimatedSavings {
+  weeklyAmount: number;
+  fuelCostPerKm: number;
+  fuelPriceSource: 'fleet-log' | 'default';
+  distanceSavedKmPerDay: number;
+  durationSavedMinutesPerDay: number;
+  vehicleDaysSavedPerWeek: number;
+  operatingDaysPerWeek: number;
+  calculationVersion: string;
+}
+
 interface Recommendation {
   routeA: { id: string; name: string };
   routeB: { id: string; name: string };
@@ -46,8 +73,12 @@ interface Recommendation {
   demand: { routeAEnrolled: number; routeBEnrolled: number; combined: number };
   verdict: 'PASS' | 'WARN' | 'BLOCK';
   checks: PceVerdictBody['checks'];
-  scores: { fleetSavingsPerWeek: number; pcePenalty: number; totalScore: number };
   feasible: boolean;
+  matrixRefinement: { pickupToPickup: MatrixPairingResult | null; dropoffToDropoff: MatrixPairingResult | null };
+  components: ScoreComponents;
+  rankingCost: number;
+  operatorScore: number;
+  estimatedSavings: EstimatedSavings;
 }
 
 type SkipReason =
@@ -81,6 +112,7 @@ interface Objective {
 
 interface AnalyzeResponse {
   objective: Objective;
+  scoringPolicy: { id: string | null; name: string; calculationVersion: string };
   recommendations: Recommendation[];
   skipped: SkippedPair[];
   totals: {
@@ -283,7 +315,7 @@ export default function RouteConsolidationPage() {
                 — top: <span className="font-semibold text-emerald-400">{winner.routeA.name}</span>
                 {' + '}
                 <span className="font-semibold text-emerald-400">{winner.routeB.name}</span>
-                {' '}({fmtMoney(-winner.scores.totalScore)}/week net saving)
+                {' '}(AED {fmtMoney(winner.estimatedSavings.weeklyAmount)}/week est. · score {winner.operatorScore}/100)
               </span>
             )}
           </SectionHeading>
@@ -314,7 +346,7 @@ export default function RouteConsolidationPage() {
                     <th className="px-3 py-2 text-right">Demand</th>
                     <th className="px-3 py-2 text-right">Savings/wk</th>
                     <th className="px-3 py-2 text-right">Penalty</th>
-                    <th className="px-3 py-2 text-right">Net</th>
+                    <th className="px-3 py-2 text-right">Score</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
@@ -352,14 +384,14 @@ export default function RouteConsolidationPage() {
                             <div>{rec.demand.combined}</div>
                             <div className="text-[10px] text-slate-500">{rec.demand.routeAEnrolled} + {rec.demand.routeBEnrolled}</div>
                           </td>
-                          <td className="px-3 py-3 text-right text-emerald-300">{fmtMoney(rec.scores.fleetSavingsPerWeek)}</td>
+                          <td className="px-3 py-3 text-right text-emerald-300">{fmtMoney(rec.estimatedSavings.weeklyAmount)}</td>
                           <td className="px-3 py-3 text-right">
-                            {rec.scores.pcePenalty > 0
-                              ? <span className="text-violet-300">{rec.scores.pcePenalty}</span>
+                            {rec.components.pcePenalty > 0
+                              ? <span className="text-violet-300">{rec.components.pcePenalty}</span>
                               : <span className="text-slate-500">—</span>}
                           </td>
-                          <td className={`px-3 py-3 text-right font-semibold ${rec.scores.totalScore < 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
-                            {fmtMoney(-rec.scores.totalScore)}
+                          <td className={`px-3 py-3 text-right font-semibold ${rec.operatorScore >= 50 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                            {rec.operatorScore}
                           </td>
                         </tr>
                         {isExpanded && (
@@ -368,7 +400,7 @@ export default function RouteConsolidationPage() {
                               <PceVerdictPanel body={{
                                 verdict: rec.verdict,
                                 checks: rec.checks,
-                                totalPenalty: rec.scores.pcePenalty,
+                                totalPenalty: rec.components.pcePenalty,
                               }} />
                               <RecMetadata rec={rec} />
                               {rec.feasible && (
@@ -485,15 +517,48 @@ function FunnelRow({ label, value, muted, accent }: { label: string; value: numb
   );
 }
 
+/**
+ * Component-first breakdown — deliberately shows every raw number instead
+ * of collapsing into one figure, so an operator can see *why* a candidate
+ * ranked where it did. estimatedSavings is explicitly "Estimated Direct
+ * Operating Saving", not "total benefit" — only fuel + vehicle-day costs
+ * are dollarized; maintenance/tyres/depreciation/driver-hours/tolls
+ * aren't modeled yet.
+ */
 function RecMetadata({ rec }: { rec: Recommendation }) {
+  const { components: c, estimatedSavings: s } = rec;
   return (
-    <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-400">
-      <div><span className="text-slate-500">Pickup zone:</span> {formatZone(rec.zoneCompat.pickup)}</div>
-      <div><span className="text-slate-500">Dropoff zone:</span> {formatZone(rec.zoneCompat.dropoff)}</div>
-      <div><span className="text-slate-500">Combined demand:</span> {rec.demand.combined} passengers</div>
-      <div><span className="text-slate-500">Fleet savings/week:</span> {fmtMoney(rec.scores.fleetSavingsPerWeek)}</div>
+    <div className="mt-3 space-y-3 text-xs text-slate-400">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+        <div><span className="text-slate-500">Pickup zone:</span> {formatZone(rec.zoneCompat.pickup)}</div>
+        <div><span className="text-slate-500">Dropoff zone:</span> {formatZone(rec.zoneCompat.dropoff)}</div>
+        <div><span className="text-slate-500">Combined demand:</span> {rec.demand.combined} passengers</div>
+        <div><span className="text-slate-500">Overall rank score:</span> <span className={rec.operatorScore >= 50 ? 'text-emerald-300' : 'text-rose-300'}>{rec.operatorScore}/100</span></div>
+      </div>
+      <div className="border-t border-slate-800 pt-2 grid grid-cols-2 gap-x-6 gap-y-1">
+        <div><span className="text-slate-500">Route eliminated:</span> {c.resourceRelease.routeEliminated ? 'Yes' : 'No'}</div>
+        <div><span className="text-slate-500">Vehicle+driver released:</span> {c.resourceRelease.serviceResourceReleased ? 'Yes' : 'No'}</div>
+        <div><span className="text-slate-500">Released resource redeployable today:</span> {formatStatus(c.resourceRelease.redeploymentStatus)}</div>
+        <div><span className="text-slate-500">Surviving vehicle remaining-day slack:</span> {formatStatus(c.resourceRelease.survivingResourceSlackStatus)}</div>
+      </div>
+      <div className="border-t border-slate-800 pt-2 grid grid-cols-2 gap-x-6 gap-y-1">
+        <div><span className="text-slate-500">Net distance saved/day:</span> {c.netDistanceSavedKm} km</div>
+        <div><span className="text-slate-500">Net time saved/day:</span> {c.netTimeSavedMinutes} min</div>
+        <div><span className="text-slate-500">Added passenger-minutes:</span> {Math.round(c.passengerImpactMinutes)}</div>
+        <div><span className="text-slate-500">Detour (added ride time):</span> {c.detourMinutes} min</div>
+      </div>
+      <div className="border-t border-slate-800 pt-2 grid grid-cols-2 gap-x-6 gap-y-1">
+        <div><span className="text-slate-500">Estimated direct operating saving:</span> AED {fmtMoney(s.weeklyAmount)}/week</div>
+        <div><span className="text-slate-500">Fuel price used:</span> AED {s.fuelCostPerKm}/km ({s.fuelPriceSource === 'fleet-log' ? "fleet's fuel log" : 'default rate'})</div>
+        <div><span className="text-slate-500">Vehicle-days saved/week:</span> {s.vehicleDaysSavedPerWeek} of {s.operatingDaysPerWeek}</div>
+        <div><span className="text-slate-500">Calculation version:</span> {s.calculationVersion}</div>
+      </div>
     </div>
   );
+}
+
+function formatStatus(status: string): string {
+  return status.charAt(0) + status.slice(1).toLowerCase().replace(/_/g, ' ');
 }
 
 const inputCls = 'w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500';
@@ -564,9 +629,12 @@ function describeSkipReason(reason: SkipReason): string {
     case 'DIFFERENT_ROUTE_TYPE':      return 'Routes have incompatible routeType (STAFF vs SCHOOL). BOTH is compatible with either.';
     case 'DIFFERENT_SHIFT':           return 'Representative TripSchedule shifts differ (e.g. MORNING vs EVENING).';
     case 'DIFFERENT_DIRECTION':      return 'Representative TripSchedule directions differ (INBOUND vs OUTBOUND).';
+    case 'DEPARTURE_TIME_TOO_FAR':    return 'Routes\' departure times are further apart than the tenant\'s departure-proximity threshold.';
+    case 'ARRIVAL_TIME_TOO_FAR':      return 'Routes leave close together but their arrival times are further apart than the tenant\'s arrival-proximity threshold — likely very different trip durations.';
     case 'PICKUP_ZONE_INCOMPATIBLE':  return 'Pickup ends are in different spatial zones, or too far apart under the distance fallback.';
     case 'DROPOFF_ZONE_INCOMPATIBLE': return 'Dropoff ends are in different spatial zones, or too far apart under the distance fallback.';
     case 'ZONE_DATA_UNAVAILABLE':     return 'Neither placeId nor GPS coords are usable on at least one route end. Backfill spatial.places or stop coordinates.';
     case 'INSUFFICIENT_ROUTE_DATA':   return 'Route has fewer than 2 stops — can\'t determine pickup vs dropoff ends.';
+    case 'MERGED_EXCEEDS_CAPACITY':   return 'Combined enrolment across both routes exceeds the larger route\'s declared vehicle capacity.';
   }
 }

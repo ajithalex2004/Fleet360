@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { applyConsolidation, type ApplyConsolidationInput } from '@/lib/planning/route-consolidation-apply';
 import { parseApplyBody } from '@/lib/bus-ops/route-consolidation-apply-body';
+import { resolveScoringPolicy } from '@/lib/planning/route-consolidation-scoring-policy';
 
 export async function POST(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id');
@@ -37,8 +38,30 @@ export async function POST(req: NextRequest) {
   const parsed = parseApplyBody(raw, tenantId, { requireIdempotencyKey: true, appliedBy: userId });
   if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
+  // Snapshot the scoring policy INTO objectiveSnapshot here, server-side,
+  // rather than trusting whatever the client sent — the apply-time
+  // policy must be authoritative for reproducibility, and re-resolving
+  // it fresh (rather than accepting client-submitted weights) means a
+  // tampered request body can't silently rewrite what gets audited.
+  // Analyse itself never persists this; only Apply does.
+  const scoringPolicy = await resolveScoringPolicy(prisma, tenantId).catch(() => null);
+  const input = parsed.input as ApplyConsolidationInput;
+  if (scoringPolicy) {
+    input.objective = {
+      ...(input.objective ?? {}),
+      scoringPolicy: {
+        id: scoringPolicy.id,
+        name: scoringPolicy.name,
+        calculationVersion: scoringPolicy.calculationVersion,
+        references: scoringPolicy.references,
+        benefitWeights: scoringPolicy.benefitWeights,
+        impactWeights: scoringPolicy.impactWeights,
+      },
+    };
+  }
+
   try {
-    const result = await applyConsolidation(prisma, parsed.input as ApplyConsolidationInput);
+    const result = await applyConsolidation(prisma, input);
     if (result.status === 'APPLIED')       return NextResponse.json(result, { status: 201 });
     if (result.status === 'ALREADY_APPLIED') return NextResponse.json(result, { status: 200 });
     return NextResponse.json(result, { status: 409 }); // BLOCKED

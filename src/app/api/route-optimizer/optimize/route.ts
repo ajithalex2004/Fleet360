@@ -6,7 +6,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { optimizeRoute, estimateFuelCost, type Waypoint } from '@/lib/mapbox';
+import { optimizeRoute, estimateFuelCost, DEFAULT_FUEL_PRICE_AED, type Waypoint } from '@/lib/mapbox';
+import { prisma } from '@/lib/prisma';
+import { getLatestFuelPrice } from '@/lib/fleet/fuel-price';
 
 export async function POST(req: NextRequest) {
   try {
@@ -35,11 +37,15 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await optimizeRoute(waypoints);
-    const fuel   = estimateFuelCost(result.totalDistanceKm, vehicleType);
+
+    const tenantId = req.headers.get('x-tenant-id');
+    const latestFuel = tenantId ? await getLatestFuelPrice(prisma, tenantId).catch(() => null) : null;
+    const fuel = estimateFuelCost(result.totalDistanceKm, vehicleType, latestFuel?.price ?? DEFAULT_FUEL_PRICE_AED);
+    const fuelPriceSource = latestFuel ? 'fleet-log' as const : 'default' as const;
 
     return NextResponse.json({
       ...result,
-      fuel,
+      fuel: { ...fuel, source: fuelPriceSource, asOf: latestFuel?.asOf ?? null },
       summary: {
         stops:        waypoints.length,
         distanceKm:   result.totalDistanceKm,
@@ -47,6 +53,8 @@ export async function POST(req: NextRequest) {
         durationHuman: formatDuration(result.totalDurationMin),
         fuelLitres:   fuel.litres,
         fuelCostAED:  fuel.costAED,
+        fuelPricePerLitre: fuel.pricePerLitreAED,
+        fuelPriceSource,
       },
     });
   } catch (err) {

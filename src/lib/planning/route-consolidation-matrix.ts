@@ -1,17 +1,22 @@
 /**
- * Route Consolidation — Stage 2 matrix refinement.
+ * Route Consolidation — Stage 2 matrix batching.
  *
  * Runs after the cheap Stage 1 filters (shift/direction/timing/zone/
- * capacity) have already cut candidates down, and — for now — before PCE
- * (PCE-after-matrix reordering is Stage 3/4). Computes real road distance
- * + travel duration for each surviving candidate's endpoint pairings via
- * Google's Routes API matrix, batched to respect the API's hard 625-element
- * (origins × destinations) cap, and maps results back onto the
- * `ConsolidationRecommendation.matrixRefinement` field.
+ * capacity) have already cut candidates down, and before PCE (Stage 3
+ * evaluates using these real numbers instead of a coordinate estimate —
+ * see synthesizePlanFacts in route-consolidation.ts). Computes real road
+ * distance + travel duration for each surviving candidate's endpoint
+ * pairings via Google's Routes API matrix, batched to respect the API's
+ * hard 625-element (origins × destinations) cap.
  *
- * `analyzeConsolidations()` itself stays synchronous and DB/API-free —
- * this module is the async, billed-API-touching layer that wraps it,
- * called from the API route the same way resolveEligibilityPolicy() is.
+ * Exports only the pure building blocks (buildCase1Pairings,
+ * resolveMatrixPairings, pairingKey) — the top-level orchestrator lives
+ * in route-consolidation.ts's analyzeConsolidations(), which calls these
+ * directly rather than through a wrapper here, to avoid a circular
+ * import (this module and route-consolidation.ts would otherwise need
+ * each other's types). Stop-endpoint helpers (routePickupStop/
+ * routeDropoffStop) live in route-consolidation-facts.ts for the same
+ * reason — a neutral lower-level module both sides can import from.
  *
  * Endpoint-pairing abstraction is deliberately explicit and not "compare
  * these two routes" — today's simultaneous-merge model only ever needs
@@ -24,8 +29,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { getRouteMatrix } from './fleet-routing/matrix-cache';
 import type { RouteFacts } from './route-consolidation-facts';
-import type { ConsolidationRecommendation } from './route-consolidation';
-import { routePickupStop, routeDropoffStop } from './route-consolidation';
+import { routePickupStop, routeDropoffStop } from './route-consolidation-facts';
 
 // ── Public shapes ────────────────────────────────────────────────────────────
 
@@ -49,9 +53,7 @@ export interface MatrixPairingResult {
   durationMin: number;
 }
 
-/** Google's hard per-request cap: origins.length × destinations.length ≤ 625 (TRAFFIC_AWARE, non-transit). */
-const MAX_MATRIX_ELEMENTS = 625;
-/** sqrt(625) — cluster chunk side length so a square chunk never exceeds the cap. */
+/** sqrt(625) — cluster chunk side length so a square chunk never exceeds Google's hard 625-element (origins × destinations, TRAFFIC_AWARE, non-transit) per-request cap. */
 const MAX_CHUNK_SIDE = 25;
 
 // ── Building pairings (Case 1: same-side comparisons only) ──────────────────
@@ -235,45 +237,4 @@ export async function resolveMatrixPairings(
 
 export function pairingKey(type: MatrixPairingType, routeIdA: string, routeIdB: string): string {
   return `${type}:${routeIdA}:${routeIdB}`;
-}
-
-// ── Orchestrator — called from the analyze API route ────────────────────────
-
-/**
- * Enrich already-computed recommendations with real matrix data. Doesn't
- * touch scoring/PCE — analyzeConsolidations() has already run and produced
- * `recommendations` by the time this is called; this only attaches
- * `matrixRefinement` onto each one. Threading the numbers into actual
- * scoring math is Stage 3/4.
- */
-export async function refineRecommendationsWithMatrix(
-  prisma: PrismaClient,
-  tenantId: string,
-  recommendations: ConsolidationRecommendation[],
-  routesById: Map<string, RouteFacts>,
-): Promise<ConsolidationRecommendation[]> {
-  if (recommendations.length === 0) return recommendations;
-
-  const candidateInputs = recommendations
-    .map(r => {
-      const a = routesById.get(r.routeA.id);
-      const b = routesById.get(r.routeB.id);
-      return a && b ? { routeIdA: r.routeA.id, routeIdB: r.routeB.id, a, b } : null;
-    })
-    .filter((c): c is { routeIdA: string; routeIdB: string; a: RouteFacts; b: RouteFacts } => c !== null);
-
-  const pairings = buildCase1Pairings(candidateInputs);
-  const resolved = await resolveMatrixPairings(prisma, tenantId, pairings);
-
-  return recommendations.map(r => {
-    const pickup = resolved.get(pairingKey('PICKUP_TO_PICKUP', r.routeA.id, r.routeB.id)) ?? null;
-    const dropoff = resolved.get(pairingKey('DROPOFF_TO_DROPOFF', r.routeA.id, r.routeB.id)) ?? null;
-    return {
-      ...r,
-      matrixRefinement: {
-        pickupToPickup: pickup,
-        dropoffToDropoff: dropoff,
-      },
-    };
-  });
 }

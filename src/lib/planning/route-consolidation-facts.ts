@@ -36,13 +36,19 @@ export type RouteFacts = {
   /** Number of ACTIVE enrolments — proxy for demand. */
   enrolledCount: number;
   /**
-   * Representative schedule shape. Populated from the most recent
-   * non-cancelled TripSchedule for this route; null if the route has
-   * never been scheduled. Used only for compat filters (shift, direction)
-   * — the engine doesn't need per-trip data.
+   * Representative schedule shape. Primarily the route's own declared
+   * departureTime/expectedArrivalTime/shiftType/direction (BusRoute is the
+   * source of truth for the intended schedule); falls back to the most
+   * recent non-cancelled TripSchedule only when the route itself has no
+   * value set (e.g. legacy routes created before those columns existed).
+   * null if neither source has a value. Used only for compat filters
+   * (shift, direction, departure-time proximity) — the engine doesn't
+   * need per-trip data.
    */
   representativeShift: string | null;      // MORNING | EVENING | NIGHT | SPLIT
   representativeDirection: string | null;  // INBOUND | OUTBOUND
+  representativeDepartureTime: string | null;  // HH:MM 24h format
+  representativeArrivalTime: string | null;    // HH:MM 24h format (for turnaround calc)
 };
 
 export type ConsolidationFacts = {
@@ -75,6 +81,7 @@ export async function loadConsolidationFacts(
       select: {
         id: true, name: true, routeType: true, requiredVehicleGroup: true,
         totalDistanceKm: true, estimatedDurationMins: true, capacity: true,
+        departureTime: true, expectedArrivalTime: true, shiftType: true, direction: true,
         stops: {
           select: { placeId: true, gpsLat: true, gpsLng: true, sequence: true },
           orderBy: { sequence: 'asc' },
@@ -86,7 +93,7 @@ export async function loadConsolidationFacts(
       where: { tenantId: input.tenantId, deletedAt: null, status: 'ACTIVE' },
       _count: { _all: true },
     }),
-    // Most recent non-cancelled schedule per route — used to infer shift + direction.
+    // Most recent non-cancelled schedule per route — used to infer shift + direction + times.
     // `distinct` on routeId with a descending departure order gives us the
     // freshest single row per route without loading the full schedule set.
     prisma.tripSchedule.findMany({
@@ -96,7 +103,7 @@ export async function loadConsolidationFacts(
         status: { not: 'CANCELLED' },
         ...(input.routeIds ? { routeId: { in: input.routeIds } } : {}),
       },
-      select: { routeId: true, shiftType: true, direction: true, departureTime: true },
+      select: { routeId: true, shiftType: true, direction: true, departureTime: true, arrivalTime: true },
       orderBy: { departureTime: 'desc' },
       distinct: ['routeId'],
     }),
@@ -107,6 +114,13 @@ export async function loadConsolidationFacts(
 
   const enrolmentByRoute = new Map(enrolmentRows.map((r) => [r.routeId, r._count._all]));
   const scheduleByRoute = new Map(scheduleRows.map((r) => [r.routeId, r]));
+
+  const formatTime = (date: Date | null): string | null => {
+    if (!date) return null;
+    const h = date.getHours();
+    const m = date.getMinutes();
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
 
   const routeFacts: RouteFacts[] = routes.map((r) => {
     const rep = scheduleByRoute.get(r.id);
@@ -125,8 +139,10 @@ export async function loadConsolidationFacts(
         sequence: s.sequence,
       })),
       enrolledCount: enrolmentByRoute.get(r.id) ?? 0,
-      representativeShift: rep?.shiftType ?? null,
-      representativeDirection: rep?.direction ?? null,
+      representativeShift: r.shiftType ?? rep?.shiftType ?? null,
+      representativeDirection: r.direction ?? rep?.direction ?? null,
+      representativeDepartureTime: r.departureTime ?? formatTime(rep?.departureTime ?? null),
+      representativeArrivalTime: r.expectedArrivalTime ?? formatTime(rep?.arrivalTime ?? null),
     };
   });
 
@@ -151,4 +167,19 @@ export async function loadConsolidationFacts(
     constraints,
     tenantTimezone: input.tenantTimezone ?? 'Asia/Dubai',
   };
+}
+
+/**
+ * Pickup/dropoff-end convention shared by route-consolidation.ts (zone
+ * compat, PCE facts synthesis) and route-consolidation-matrix.ts (Stage 2
+ * pairing endpoints). Lives here rather than in either of those two
+ * modules so importing it doesn't create a circular dependency between
+ * them. Simplification: first stop is the pickup-end, last stop is the
+ * dropoff-end.
+ */
+export function routePickupStop(r: RouteFacts) {
+  return r.stops[0];
+}
+export function routeDropoffStop(r: RouteFacts) {
+  return r.stops[r.stops.length - 1];
 }

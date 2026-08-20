@@ -1,5 +1,5 @@
 /**
- * Route Consolidation Engine — Phase 1 (analytical, read-only).
+ * Route Consolidation Engine.
  *
  * Answers the customer's network-design question:
  *   "Which pairs of active routes should be consolidated into one?"
@@ -8,46 +8,72 @@
  * (`src/lib/bus-ops/merge-trips.ts`), which operates on scheduled
  * trip rows for a given date. This engine operates on the ROUTE
  * network itself and produces recommendations the operator reviews —
- * nothing is mutated. Applying a recommendation is Phase 2.
+ * nothing is mutated. Applying a recommendation is a separate step.
  *
- * Algorithm (Phase 1, deliberately simple):
+ * Four-stage pipeline (each stage landed as its own reviewable change):
  *
- *   1. Pairwise O(N²) candidate generation over the tenant's active
- *      routes. Each pair passes through cheap filters first (shared
- *      shift, shared direction, pickup zone compat, dropoff zone
- *      compat, passenger-group compat) before a PCE evaluation. This
- *      is fine for the typical N ≤ 50; k-way clustering + heuristic
- *      search is a Phase-N upgrade.
+ *   Stage 1 — cheap eligibility filters (passesCheapFilters): shift,
+ *     direction, departure buffer, arrival buffer, zone compatibility,
+ *     capacity pre-check. Pure, in-memory, no DB/API access. Order
+ *     matters — cheapest/most-selective first, so nothing expensive
+ *     runs on a pair a nickel-and-dime filter would reject anyway.
  *
- *   2. Each surviving candidate gets scored: fleet-savings estimate
- *      minus (λ × PCE penalty). Lower total = better (matches the
- *      ranking optimizer's sign convention).
+ *   Stage 2 — real road distance/duration for survivors, batched
+ *     against Google's Routes API matrix (route-consolidation-matrix.ts).
  *
- *   3. Ranked ascending. Infeasible candidates (PCE verdict BLOCK)
- *      sink to the bottom regardless of score — same convention as
- *      the ranking optimizer, same reason: operators can't apply
- *      what PCE won't accept.
+ *   Stage 3 — PCE evaluation, once per candidate, using Stage 2's real
+ *     distances instead of a coordinate estimate.
+ *
+ *   Stage 4 — component scoring (route-consolidation-scoring.ts):
+ *     detour, passenger impact, distance/time saving, resource release,
+ *     PCE penalty, combined into a bounded rankingCost.
+ *
+ * `analyzeConsolidations()` is therefore no longer DB/API-free — it
+ * orchestrates all four stages, including the async matrix + fuel-price
+ * lookups. The pure arithmetic (filtering, PCE-facts synthesis,
+ * component scoring, ranking) still lives in ordinary synchronous
+ * functions/modules so it stays easy to test in isolation; only the
+ * top-level orchestrator touches Prisma.
  *
  * Pluggable via PlanningConstraint rows (esp. ROUTE_STOP_DEVIATION_MAX,
- * VEHICLE_CAPACITY_HARD, ZONE_VEHICLE_RESTRICTION) — the customer's
+ * VEHICLE_CAPACITY_HARD, ZONE_VEHICLE_RESTRICTION, and — since Stage 2 —
+ * DEPARTURE_TIME_PROXIMITY / ARRIVAL_TIME_PROXIMITY) — the customer's
  * "acceptable detour", "combined capacity", and "planning constraints"
  * requirements all funnel through the existing PCE evaluator instead
  * of being re-encoded here.
  *
- * TODO: passenger-group segregation is out-of-scope for Phase 1 (no
- * data model exists). This engine currently treats all passengers as
- * compatible. Extension point: `passengerGroupsCompatible()` — layer
- * a segregation-rule check in there when the requirement lands.
+ * TODO: passenger-group segregation is out-of-scope (no data model
+ * exists). This engine currently treats all passengers as compatible.
+ * Extension point: `passengerGroupsCompatible()` — layer a
+ * segregation-rule check in there when the requirement lands.
  */
 
+import type { PrismaClient } from '@prisma/client';
 import { evaluatePlan, type PlanFacts, type PlanCheck, type PlanTripFacts } from './evaluate-plan';
 import type { ConsolidationFacts, RouteFacts } from './route-consolidation-facts';
+import { routePickupStop, routeDropoffStop } from './route-consolidation-facts';
 import {
   zoneCompatibility,
   isCompatPassing,
   DEFAULT_FALLBACK_KM,
   type ZoneCompatResult,
 } from './zone-compat';
+import {
+  buildCase1Pairings,
+  resolveMatrixPairings,
+  pairingKey,
+  type MatrixPairingResult,
+} from './route-consolidation-matrix';
+import {
+  computeScoreComponents,
+  rankCandidate,
+  computeEstimatedSavings,
+  type ScoreComponents,
+  type EstimatedSavings,
+} from './route-consolidation-scoring';
+import type { ScoringPolicy } from './route-consolidation-scoring-policy';
+import { getLatestFuelPrice } from '@/lib/fleet/fuel-price';
+import { DEFAULT_FUEL_PRICE_AED } from '@/lib/mapbox';
 
 // ─── Objective ──────────────────────────────────────────────────────
 
@@ -137,31 +163,21 @@ export type ConsolidationRecommendation = {
   };
   verdict: 'PASS' | 'WARN' | 'BLOCK';
   checks: PlanCheck[];
-  scores: {
-    /** Estimated per-week cost saved by removing one operating vehicle. */
-    fleetSavingsPerWeek: number;
-    /** Sum of PCE penalty across the candidate evaluation. */
-    pcePenalty: number;
-    /**
-     * `pcePenalty × λ - fleetSavingsPerWeek`. Lower = better.
-     * Sign convention matches the ranking optimizer's totalCost.
-     */
-    totalScore: number;
-  };
   /** True when PCE verdict is not BLOCK. Infeasible recs sink to the bottom. */
   feasible: boolean;
-  /**
-   * Real road distance/duration for this candidate's endpoint pairings,
-   * filled in by route-consolidation-matrix.ts after analyzeConsolidations
-   * returns (this function itself stays DB/API-free — see its docstring).
-   * null until that refinement pass runs; the Stage 4 scorer is what
-   * will actually consume these numbers instead of the coordinate-distance
-   * estimate scoreCandidate() uses today.
-   */
-  matrixRefinement?: {
-    pickupToPickup: { distanceKm: number; durationMin: number } | null;
-    dropoffToDropoff: { distanceKm: number; durationMin: number } | null;
-  } | null;
+  /** Real road distance/duration for this candidate's endpoint pairings (Stage 2/3), null for a pairing the matrix couldn't resolve. */
+  matrixRefinement: {
+    pickupToPickup: MatrixPairingResult | null;
+    dropoffToDropoff: MatrixPairingResult | null;
+  };
+  /** Stage 4 component breakdown — shown to operators instead of one opaque number. */
+  components: ScoreComponents;
+  /** impactScore - benefitScore, bounded [-1,+1], lower = better. Internal sorting key — matches the PCE-stack convention, not shown to operators directly. */
+  rankingCost: number;
+  /** 50 x (1 - rankingCost), 0-100, higher = better. Display-only presentation of rankingCost. */
+  operatorScore: number;
+  /** "Estimated Direct Operating Saving" — only fuel + vehicle-day costs are dollarized; see route-consolidation-scoring.ts. */
+  estimatedSavings: EstimatedSavings;
   /**
    * Vehicle reuse analysis: can the consolidated vehicle complete this
    * trip and still make a return trip from the destination back to origin
@@ -180,6 +196,8 @@ export type ConsolidationRecommendation = {
 
 export type ConsolidationAnalysis = {
   objective: ConsolidationObjective;
+  /** Resolved policy this run scored against — id null when serving DEFAULT_SCORING_POLICY (no tenant row saved yet). Not persisted here; only snapshotted into RouteConsolidation.objectiveSnapshot at Apply time. */
+  scoringPolicy: { id: string | null; name: string; calculationVersion: string };
   recommendations: ConsolidationRecommendation[];
   skipped: SkippedPair[];
   /** Sanity counts for the UI header. */
@@ -195,20 +213,25 @@ export type ConsolidationAnalysis = {
 // ─── Public entry point ─────────────────────────────────────────────
 
 /**
- * Analyze all pairs across `facts.routes` and return ranked
- * recommendations plus the reasons for skipped pairs. Pure over facts:
- * no DB access, no Prisma, no writes.
+ * Run all four stages over `facts.routes` and return ranked
+ * recommendations plus the reasons for skipped pairs. Orchestrates the
+ * async Stage 2 (matrix) + fuel-price lookups; the actual filtering/
+ * scoring math stays in ordinary synchronous helpers below. Analyse
+ * itself is stateless — nothing is written; the resolved scoringPolicy
+ * is only persisted by the caller if/when a recommendation is applied.
  */
-export function analyzeConsolidations(
+export async function analyzeConsolidations(
+  prisma: PrismaClient,
+  tenantId: string,
   facts: ConsolidationFacts,
-  objective: ConsolidationObjective = {}
-): ConsolidationAnalysis {
+  objective: ConsolidationObjective,
+  scoringPolicy: ScoringPolicy,
+): Promise<ConsolidationAnalysis> {
+  // Stage 1 — cheap eligibility filters.
   const skipped: SkippedPair[] = [];
-  const recommendations: ConsolidationRecommendation[] = [];
+  const survivors: Array<{ a: RouteFacts; b: RouteFacts; zoneCompat: { pickup: ZoneCompatResult; dropoff: ZoneCompatResult } }> = [];
 
   let pairsConsidered = 0;
-  let pairsSurvivingFilters = 0;
-
   for (let i = 0; i < facts.routes.length; i++) {
     for (let j = i + 1; j < facts.routes.length; j++) {
       pairsConsidered++;
@@ -220,22 +243,48 @@ export function analyzeConsolidations(
         skipped.push({ routeIdA: a.id, routeIdB: b.id, reason: filterResult.skip, detail: filterResult.detail });
         continue;
       }
-      pairsSurvivingFilters++;
-
-      recommendations.push(scoreCandidate(a, b, filterResult.zoneCompat, facts, objective));
+      survivors.push({ a, b, zoneCompat: filterResult.zoneCompat });
     }
   }
+
+  // Stage 2 — real distance/duration for survivors, batched. Resolved
+  // once for the whole run, not per pair inside the loop below.
+  const pairings = buildCase1Pairings(
+    survivors.map(({ a, b }) => ({ routeIdA: a.id, routeIdB: b.id, a, b })),
+  );
+  const matrixResults = await resolveMatrixPairings(prisma, tenantId, pairings);
+
+  // Fuel price — same real-pump-price source as Single Route/Fleet
+  // Planner, resolved once for the batch (it's a tenant-wide value, not
+  // per-candidate).
+  const latestFuel = await getLatestFuelPrice(prisma, tenantId).catch(() => null);
+  const fuelPricePerLitreAED = latestFuel?.price ?? DEFAULT_FUEL_PRICE_AED;
+  const fuelPriceSource: 'fleet-log' | 'default' = latestFuel ? 'fleet-log' : 'default';
+
+  // Stage 3 (PCE, using Stage 2's real distances) + Stage 4 (component
+  // scoring) — both happen inside scoreCandidate per surviving pair.
+  const recommendations = survivors.map(({ a, b, zoneCompat }) => {
+    const matrixRefinement = {
+      pickupToPickup: matrixResults.get(pairingKey('PICKUP_TO_PICKUP', a.id, b.id)) ?? null,
+      dropoffToDropoff: matrixResults.get(pairingKey('DROPOFF_TO_DROPOFF', a.id, b.id)) ?? null,
+    };
+    return scoreCandidate(a, b, zoneCompat, facts, objective, scoringPolicy, matrixRefinement, {
+      fuelPricePerLitreAED,
+      fuelPriceSource,
+    });
+  });
 
   recommendations.sort(rankRecommendations);
 
   return {
     objective,
+    scoringPolicy: { id: scoringPolicy.id, name: scoringPolicy.name, calculationVersion: scoringPolicy.calculationVersion },
     recommendations,
     skipped,
     totals: {
       routesAnalysed: facts.routes.length,
       pairsConsidered,
-      pairsSurvivingFilters,
+      pairsSurvivingFilters: survivors.length,
       pairsRecommended: recommendations.filter((r) => r.feasible).length,
       pairsInfeasible: recommendations.filter((r) => !r.feasible).length,
     },
@@ -363,19 +412,6 @@ function pickupAndDropoffSides(a: RouteFacts, b: RouteFacts) {
   };
 }
 
-/**
- * Same first/last-stop convention as pickupAndDropoffSides, exported as
- * plain lat/lng so route-consolidation-matrix.ts can build endpoint
- * pairings without duplicating (or importing the whole zone-compat
- * point shape for) this simplification.
- */
-export function routePickupStop(r: RouteFacts) {
-  return r.stops[0];
-}
-export function routeDropoffStop(r: RouteFacts) {
-  return r.stops[r.stops.length - 1];
-}
-
 // ─── Scoring (PCE evaluation + savings arithmetic) ──────────────────
 
 function scoreCandidate(
@@ -383,20 +419,33 @@ function scoreCandidate(
   b: RouteFacts,
   zoneCompat: { pickup: ZoneCompatResult; dropoff: ZoneCompatResult },
   facts: ConsolidationFacts,
-  objective: ConsolidationObjective
+  objective: ConsolidationObjective,
+  scoringPolicy: ScoringPolicy,
+  matrixRefinement: { pickupToPickup: MatrixPairingResult | null; dropoffToDropoff: MatrixPairingResult | null },
+  fuelContext: { fuelPricePerLitreAED: number; fuelPriceSource: 'fleet-log' | 'default' },
 ): ConsolidationRecommendation {
-  const planFacts = synthesizePlanFacts(a, b, facts);
+  // Stage 3 — PCE, using Stage 2's real distances when the matrix
+  // resolved this pair (falls back to the coordinate-based estimate
+  // inside synthesizePlanFacts otherwise — a matrix miss shouldn't sink
+  // the whole candidate).
+  const planFacts = synthesizePlanFacts(a, b, facts, matrixRefinement);
   const evalResult = evaluatePlan(planFacts);
 
-  const costPerDay = objective.costPerVehicleDay ?? 100;
-  const daysPerWeek = objective.operatingDaysPerWeek ?? 5;
-  // Rough model: consolidating two routes into one saves one vehicle-day.
-  // Real fleet savings depend on utilisation, deadhead, driver assignment
-  // — proper accounting is Phase-N. This lets the ranking still order
-  // "obviously cheaper" pairs correctly.
-  const fleetSavingsPerWeek = costPerDay * daysPerWeek;
-  const lambda = objective.penaltyLambda ?? 1;
-  const totalScore = lambda * evalResult.totalPenalty - fleetSavingsPerWeek;
+  // Stage 4 — component scoring + bounded ranking + dollarized savings.
+  const components = computeScoreComponents({
+    sourceA: { totalDistanceKm: a.totalDistanceKm, estimatedDurationMins: a.estimatedDurationMins, enrolledCount: a.enrolledCount },
+    sourceB: { totalDistanceKm: b.totalDistanceKm, estimatedDurationMins: b.estimatedDurationMins, enrolledCount: b.enrolledCount },
+    matrixRefinement,
+    pcePenalty: evalResult.totalPenalty,
+  });
+  const { rankingCost, operatorScore } = rankCandidate(components, scoringPolicy);
+  const estimatedSavings = computeEstimatedSavings(components, {
+    fuelPricePerLitreAED: fuelContext.fuelPricePerLitreAED,
+    fuelPriceSource: fuelContext.fuelPriceSource,
+    vehicleCostPerDay: objective.costPerVehicleDay ?? 100,
+    operatingDaysPerWeek: objective.operatingDaysPerWeek ?? 5,
+    calculationVersion: scoringPolicy.calculationVersion,
+  });
 
   // Calculate departure time difference for display
   const timeDiffMinutes =
@@ -423,12 +472,12 @@ function scoreCandidate(
     },
     verdict: evalResult.verdict,
     checks: evalResult.checks,
-    scores: {
-      fleetSavingsPerWeek,
-      pcePenalty: evalResult.totalPenalty,
-      totalScore,
-    },
     feasible: evalResult.verdict !== 'BLOCK',
+    matrixRefinement,
+    components,
+    rankingCost,
+    operatorScore,
+    estimatedSavings,
     vehicleReuse,
   };
 }
@@ -438,11 +487,19 @@ function scoreCandidate(
  *   - Each source route → a `source` PlanTrip (representative traversal)
  *   - The consolidated route → a `merged` PlanTrip
  *
- * Duration estimate for the merged trip: max(a.duration, b.duration) +
- * a small overhead per extra stop. Crude but honest — the PCE evaluator
- * only compares durations, so directional error dominates precision.
+ * Merged-trip duration: when the Stage 2 matrix resolved this pair's
+ * endpoint pairings, mergedDurationMin = max(durA,durB) + real detour
+ * minutes (pickupToPickup + dropoffToDropoff duration) — precise.
+ * Otherwise falls back to the old coordinate-free estimate (~2min per
+ * added stop) so a matrix miss degrades gracefully instead of blocking
+ * the candidate.
  */
-function synthesizePlanFacts(a: RouteFacts, b: RouteFacts, facts: ConsolidationFacts): PlanFacts {
+function synthesizePlanFacts(
+  a: RouteFacts,
+  b: RouteFacts,
+  facts: ConsolidationFacts,
+  matrixRefinement: { pickupToPickup: MatrixPairingResult | null; dropoffToDropoff: MatrixPairingResult | null },
+): PlanFacts {
   const now = new Date();
   const anchor = new Date(now.getTime());
 
@@ -451,8 +508,10 @@ function synthesizePlanFacts(a: RouteFacts, b: RouteFacts, facts: ConsolidationF
 
   const durA = a.estimatedDurationMins ?? computeDurationProxyMin(a);
   const durB = b.estimatedDurationMins ?? computeDurationProxyMin(b);
-  const extraStops = Math.max(0, b.stops.length - 1); // adding B's stops beyond the shared endpoint
-  const mergedDurationMin = Math.max(durA, durB) + extraStops * 2; // ~2min per added stop
+  const hasMatrixData = matrixRefinement.pickupToPickup != null || matrixRefinement.dropoffToDropoff != null;
+  const mergedDurationMin = hasMatrixData
+    ? Math.max(durA, durB) + (matrixRefinement.pickupToPickup?.durationMin ?? 0) + (matrixRefinement.dropoffToDropoff?.durationMin ?? 0)
+    : Math.max(durA, durB) + Math.max(0, b.stops.length - 1) * 2; // ~2min per added stop — pre-matrix fallback estimate
   const mergedStopsUnion = dedupeStops([...a.stops, ...b.stops]);
 
   // Synthesize a vehicle with the largest per-route capacity as its seat
@@ -554,9 +613,9 @@ function rankRecommendations(
 ): number {
   // Feasible-first (same as ranking optimizer).
   if (x.feasible !== y.feasible) return x.feasible ? -1 : 1;
-  // Ascending totalScore. Ties broken by combined-demand descending so
-  // higher-impact ties surface first.
-  if (x.scores.totalScore !== y.scores.totalScore) return x.scores.totalScore - y.scores.totalScore;
+  // Ascending rankingCost (lower = better). Ties broken by combined-demand
+  // descending so higher-impact ties surface first.
+  if (x.rankingCost !== y.rankingCost) return x.rankingCost - y.rankingCost;
   return y.demand.combined - x.demand.combined;
 }
 

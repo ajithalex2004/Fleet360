@@ -24,11 +24,17 @@
  * back to a hardcoded default only if no such row exists. An explicit
  * value in the request body always wins over both.
  *
- * Response 200:
- *   { objective, recommendations[], skipped[], totals }
+ * Scoring weights (distance/time saving, resource release, passenger
+ * impact, detour, PCE penalty) similarly resolve from the tenant's
+ * RouteConsolidationScoringPolicy (active row, else DEFAULT_SCORING_POLICY)
+ * via resolveScoringPolicy() — see route-consolidation-scoring-policy.ts.
+ * Analyse never writes that policy anywhere; only Apply snapshots it.
  *
- * Nothing is written. Applying a recommendation is Phase 2 (needs
- * schema for merged-route lineage + enrollment migration write path).
+ * Response 200:
+ *   { objective, scoringPolicy, recommendations[], skipped[], totals }
+ *
+ * Nothing is written. Applying a recommendation persists a
+ * RouteConsolidation row (see .../apply/route.ts).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -36,7 +42,7 @@ import { prisma } from '@/lib/prisma';
 import { loadConsolidationFacts } from '@/lib/planning/route-consolidation-facts';
 import { analyzeConsolidations, type ConsolidationObjective } from '@/lib/planning/route-consolidation';
 import { resolveEligibilityPolicy } from '@/lib/planning/route-consolidation-eligibility-policy';
-import { refineRecommendationsWithMatrix } from '@/lib/planning/route-consolidation-matrix';
+import { resolveScoringPolicy } from '@/lib/planning/route-consolidation-scoring-policy';
 
 export async function POST(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id');
@@ -69,36 +75,20 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const [facts, eligibilityPolicy] = await Promise.all([
+    const [facts, eligibilityPolicy, scoringPolicy] = await Promise.all([
       loadConsolidationFacts(prisma, { tenantId, routeIds }),
       resolveEligibilityPolicy(prisma, tenantId, {
         maxDepartureTimeDiffMinutes: objective.maxDepartureTimeDiffMinutes,
         maxArrivalTimeDiffMinutes: objective.maxArrivalTimeDiffMinutes,
       }),
+      resolveScoringPolicy(prisma, tenantId),
     ]);
     const resolvedObjective: ConsolidationObjective = {
       ...objective,
       maxDepartureTimeDiffMinutes: eligibilityPolicy.maxDepartureTimeDiffMinutes,
       maxArrivalTimeDiffMinutes: eligibilityPolicy.maxArrivalTimeDiffMinutes,
     };
-    const result = analyzeConsolidations(facts, resolvedObjective);
-
-    // Stage 2 matrix refinement — real road distance/duration for each
-    // surviving candidate, batched against Google's Routes API. Doesn't
-    // touch scoring/PCE yet (Stage 3/4); attaches matrixRefinement onto
-    // each recommendation for the next stage to consume. Non-fatal: a
-    // refinement failure shouldn't take down an otherwise-successful
-    // analysis, so recommendations still return with matrixRefinement
-    // left unset if this throws.
-    try {
-      const routesById = new Map(facts.routes.map(r => [r.id, r]));
-      result.recommendations = await refineRecommendationsWithMatrix(
-        prisma, tenantId, result.recommendations, routesById,
-      );
-    } catch (e) {
-      console.warn('[route-consolidation.analyze] matrix refinement failed (non-fatal):', e);
-    }
-
+    const result = await analyzeConsolidations(prisma, tenantId, facts, resolvedObjective, scoringPolicy);
     return NextResponse.json(result);
   } catch (e) {
     console.error('[route-consolidation.analyze]', e);
