@@ -100,6 +100,18 @@ const KIND_META: KindMeta[] = [
     paramsHint: 'no params — always compares confirmedCount vs seats',
     paramsTemplate: {},
   },
+  {
+    kind: 'DEPARTURE_TIME_PROXIMITY',
+    label: 'Route Consolidation — departure buffer',
+    paramsHint: 'maxMinutes — routes whose departure times differ by more than this are not considered for merging',
+    paramsTemplate: { maxMinutes: 60 },
+  },
+  {
+    kind: 'ARRIVAL_TIME_PROXIMITY',
+    label: 'Route Consolidation — arrival buffer',
+    paramsHint: 'maxMinutes — catches same-departure pairs whose arrival times differ too much (very different trip durations)',
+    paramsTemplate: { maxMinutes: 45 },
+  },
 ];
 
 const KIND_BY_ID = new Map(KIND_META.map((k) => [k.kind, k]));
@@ -611,6 +623,13 @@ function validateConstraintForm(form: FormState): ValidationResult {
     }
     case 'VEHICLE_CAPACITY_HARD':
       break;
+    case 'DEPARTURE_TIME_PROXIMITY':
+    case 'ARRIVAL_TIME_PROXIMITY': {
+      const m = num('maxMinutes');
+      if (m == null) return { ok: false, error: 'Max minutes apart is required' };
+      if (Number.isNaN(m) || m <= 0) return { ok: false, error: 'Max minutes apart must be > 0' };
+      break;
+    }
     default:
       break;
   }
@@ -1020,6 +1039,20 @@ function ParamsFields({
         <p className="text-sm text-slate-400 rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2">
           No parameters. Compares passenger count to vehicle seating capacity automatically.
         </p>
+      );
+
+    case 'DEPARTURE_TIME_PROXIMITY':
+      return (
+        <Field label="Max departure time diff (minutes)" hint="routes further apart than this are not considered for merging">
+          <input type="number" className={inputCls} value={numParam(params, 'maxMinutes')} onChange={(e) => setNum('maxMinutes', e.target.value)} placeholder="60" />
+        </Field>
+      );
+
+    case 'ARRIVAL_TIME_PROXIMITY':
+      return (
+        <Field label="Max arrival time diff (minutes)" hint="catches same-departure pairs whose arrival times differ too much (very different trip durations)">
+          <input type="number" className={inputCls} value={numParam(params, 'maxMinutes')} onChange={(e) => setNum('maxMinutes', e.target.value)} placeholder="45" />
+        </Field>
       );
 
     default:
