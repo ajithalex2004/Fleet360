@@ -200,6 +200,10 @@ const EVALUATORS: Record<string, Evaluator> = {
   // and show as a spurious WARN on every merge.
   DEPARTURE_TIME_PROXIMITY: () => [],
   ARRIVAL_TIME_PROXIMITY: () => [],
+  // Same reasoning — VEHICLE_MIN_TURNAROUND is pure config (minBufferMin)
+  // read by resolveVehicleTurnaroundMinutes() for Stage 4's
+  // analyzeVehicleReuse(), not a PCE check.
+  VEHICLE_MIN_TURNAROUND: () => [],
 };
 
 // ─── Shared helpers ─────────────────────────────────────────────────

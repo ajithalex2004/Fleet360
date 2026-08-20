@@ -254,7 +254,7 @@ export default function RouteConsolidationPage() {
                       onChange={(e) => setObjective({ ...objective, maxArrivalTimeDiffMinutes: emptyToUndef(e.target.value) })}
                       placeholder="45" className={inputCls} />
                   </Field>
-                  <Field label="Vehicle turnaround (min)" hint="default 30 — min time between arrival and next trip">
+                  <Field label="Vehicle turnaround (min)" hint="tenant default, else 30 — min time between arrival and next trip before the vehicle is reusable">
                     <input type="number" step="1" value={objective.vehicleTurnaroundMinutes ?? ''}
                       onChange={(e) => setObjective({ ...objective, vehicleTurnaroundMinutes: emptyToUndef(e.target.value) })}
                       placeholder="30" className={inputCls} />

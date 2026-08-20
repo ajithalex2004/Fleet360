@@ -112,6 +112,12 @@ const KIND_META: KindMeta[] = [
     paramsHint: 'maxMinutes — catches same-departure pairs whose arrival times differ too much (very different trip durations)',
     paramsTemplate: { maxMinutes: 45 },
   },
+  {
+    kind: 'VEHICLE_MIN_TURNAROUND',
+    label: 'Route Consolidation — vehicle turnaround',
+    paramsHint: 'minBufferMin — minimum minutes between a consolidated trip\'s arrival and a return trip\'s departure before the same vehicle is treated as reusable',
+    paramsTemplate: { minBufferMin: 30 },
+  },
 ];
 
 const KIND_BY_ID = new Map(KIND_META.map((k) => [k.kind, k]));
@@ -630,6 +636,12 @@ function validateConstraintForm(form: FormState): ValidationResult {
       if (Number.isNaN(m) || m <= 0) return { ok: false, error: 'Max minutes apart must be > 0' };
       break;
     }
+    case 'VEHICLE_MIN_TURNAROUND': {
+      const b = num('minBufferMin');
+      if (b == null) return { ok: false, error: 'Min turnaround (minutes) is required' };
+      if (Number.isNaN(b) || b < 0 || b > 24 * 60) return { ok: false, error: 'Min turnaround must be 0–1440 minutes' };
+      break;
+    }
     default:
       break;
   }
@@ -1052,6 +1064,13 @@ function ParamsFields({
       return (
         <Field label="Max arrival time diff (minutes)" hint="catches same-departure pairs whose arrival times differ too much (very different trip durations)">
           <input type="number" className={inputCls} value={numParam(params, 'maxMinutes')} onChange={(e) => setNum('maxMinutes', e.target.value)} placeholder="45" />
+        </Field>
+      );
+
+    case 'VEHICLE_MIN_TURNAROUND':
+      return (
+        <Field label="Min turnaround (minutes)" hint="minimum gap between a consolidated trip's arrival and a return trip's departure to treat the vehicle as reusable">
+          <input type="number" className={inputCls} value={numParam(params, 'minBufferMin')} onChange={(e) => setNum('minBufferMin', e.target.value)} placeholder="30" />
         </Field>
       );
 
