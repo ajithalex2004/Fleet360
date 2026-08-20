@@ -30,7 +30,10 @@ import type {
 // ── Config ──────────────────────────────────────────────────────────────────
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
-const ROUTE_OPT_HOST = 'https://cloudoptimization.googleapis.com';
+// 'cloudoptimization.googleapis.com' was the old "Cloud Fleet Routing" host —
+// discontinued Q2 2024 in favour of the Route Optimization API rename. The
+// old host 404s at the domain level (no ESP behind it), not a per-call error.
+const ROUTE_OPT_HOST = 'https://routeoptimization.googleapis.com';
 const ROUTES_HOST = 'https://routes.googleapis.com';
 
 /** Route Optimization scope — grants optimizeTours calls. */
