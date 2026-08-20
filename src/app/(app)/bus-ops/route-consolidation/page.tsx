@@ -248,11 +248,11 @@ export default function RouteConsolidationPage() {
         }
       />
 
-      {/* Tabs — Recommendations (Case 1: merge, analyse + apply) | Vehicle Reuse (Case 2: sequential reuse, advisory-only) | History (revert past applies) */}
+      {/* Tabs — Recommendations (Case 1: merge, analyse + apply) | Vehicle/Resource Utilization (Case 2: sequential reuse, advisory-only) | History (revert past applies) */}
       <div className="flex items-center gap-1 border-b border-slate-800">
         {(['recommendations', 'vehicle-reuse', 'history'] as const).map((t) => {
           const Icon = t === 'recommendations' ? GitMerge : t === 'vehicle-reuse' ? Repeat : History;
-          const label = t === 'recommendations' ? 'Recommendations' : t === 'vehicle-reuse' ? 'Vehicle Reuse' : 'History';
+          const label = t === 'recommendations' ? 'Recommendations' : t === 'vehicle-reuse' ? 'Vehicle/Resource Utilization' : 'History';
           return (
             <button
               key={t}
@@ -621,7 +621,7 @@ function VehicleReuseTab({
         </aside>
 
         <section className="lg:col-span-2 space-y-3">
-          <SectionHeading>Vehicle Reuse Opportunities</SectionHeading>
+          <SectionHeading>Vehicle/Resource Utilization Opportunities</SectionHeading>
 
           {!result ? (
             <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-10 text-center text-slate-400">
