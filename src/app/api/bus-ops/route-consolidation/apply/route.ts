@@ -20,10 +20,13 @@ import { prisma } from '@/lib/prisma';
 import { applyConsolidation, type ApplyConsolidationInput } from '@/lib/planning/route-consolidation-apply';
 import { parseApplyBody } from '@/lib/bus-ops/route-consolidation-apply-body';
 import { resolveScoringPolicy } from '@/lib/planning/route-consolidation-scoring-policy';
+import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
 export async function POST(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id');
   if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const permError = requireBusOpsAdminAccess(req, 'route-consolidation');
+  if (permError) return permError;
   const userId = req.headers.get('x-user-id');
   if (!userId) return NextResponse.json({ error: 'x-user-id required for apply' }, { status: 401 });
 

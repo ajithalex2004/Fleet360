@@ -23,6 +23,7 @@ import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 
 import Link from 'next/link';
 import { Shield, Plus, Edit2, Trash2, RefreshCw, X, GitMerge, ArrowRight } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+import RequireTenantAdmin from '@/components/bus-ops/RequireTenantAdmin';
 
 // ─── Types (mirror the /api/bus-ops/planning-constraints response) ──
 
@@ -149,6 +150,14 @@ const ACTION_PILL: Record<string, string> = {
 // ─── Page ────────────────────────────────────────────────────────────
 
 export default function PlanningConstraintsPage() {
+  return (
+    <RequireTenantAdmin resource="planning-constraints">
+      <PlanningConstraintsPageInner />
+    </RequireTenantAdmin>
+  );
+}
+
+function PlanningConstraintsPageInner() {
   const [rows, setRows] = useState<PlanningConstraint[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<PlanningConstraint | 'new' | null>(null);

@@ -24,6 +24,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
+import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
 const PLANS_TAG = 'staff-transport-plans';
 const SCHEDULES_TAG = 'bus-ops:schedules';
@@ -63,6 +64,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!tenantId) {
     return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   }
+  const permError = requireBusOpsAdminAccess(req, 'planning-core');
+  if (permError) return permError;
 
   try {
     const { id } = await params;

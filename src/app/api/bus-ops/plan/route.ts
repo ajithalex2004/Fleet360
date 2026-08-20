@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { cacheRead, publicCacheControl, revalidateCache } from '@/lib/server-cache';
+import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
 const CACHE_TAG = 'staff-transport-plans';
 
@@ -60,6 +61,8 @@ export async function GET(req: NextRequest) {
   if (!tenantId) {
     return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   }
+  const permError = requireBusOpsAdminAccess(req, 'planning-core');
+  if (permError) return permError;
   try {
     const plans = await getPlanList(tenantId);
     return NextResponse.json(plans, {
@@ -97,6 +100,8 @@ export async function POST(req: NextRequest) {
   if (!tenantId) {
     return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   }
+  const permError = requireBusOpsAdminAccess(req, 'planning-core');
+  if (permError) return permError;
   try {
     const body = await req.json() as {
       name?: string;
@@ -161,6 +166,8 @@ export async function DELETE(req: NextRequest) {
   if (!tenantId) {
     return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   }
+  const permError = requireBusOpsAdminAccess(req, 'planning-core');
+  if (permError) return permError;
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');

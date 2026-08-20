@@ -53,10 +53,13 @@ import { analyzeConsolidations, type ConsolidationObjective } from '@/lib/planni
 import { resolveEligibilityPolicy } from '@/lib/planning/route-consolidation-eligibility-policy';
 import { resolveScoringPolicy } from '@/lib/planning/route-consolidation-scoring-policy';
 import { resolveZoneFallbackKm } from '@/lib/planning/zone-compat-policy';
+import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
 export async function POST(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id');
   if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const permError = requireBusOpsAdminAccess(req, 'route-consolidation');
+  if (permError) return permError;
 
   let body: unknown = {};
   try {

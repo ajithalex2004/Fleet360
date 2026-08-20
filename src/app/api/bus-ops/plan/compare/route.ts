@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
 interface PlanSummary {
   runCount: number;
@@ -88,6 +89,8 @@ export async function POST(req: NextRequest) {
   if (!tenantId) {
     return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   }
+  const permError = requireBusOpsAdminAccess(req, 'planning-core');
+  if (permError) return permError;
   try {
     // Accept both {leftId, rightId} (internal) and {planIdA, planIdB} (test/UI).
     const body = (await req.json()) as {

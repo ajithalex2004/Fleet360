@@ -25,6 +25,7 @@ import Link from 'next/link';
 import React, { useCallback, useState } from 'react';
 import { Repeat, RefreshCw, ChevronDown, ChevronRight, Info, AlertTriangle, GitMerge, ArrowRight } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+import RequireTenantAdmin from '@/components/bus-ops/RequireTenantAdmin';
 
 // ─── Types matched to /vehicle-reuse response ───────────────────────
 
@@ -82,6 +83,14 @@ interface VehicleReuseResponse {
 // ─── Page ────────────────────────────────────────────────────────────
 
 export default function VehicleResourceOptimizationPage() {
+  return (
+    <RequireTenantAdmin resource="vehicle-resource-optimization">
+      <VehicleResourceOptimizationPageInner />
+    </RequireTenantAdmin>
+  );
+}
+
+function VehicleResourceOptimizationPageInner() {
   const [analysing, setAnalysing] = useState(false);
   const [result, setResult] = useState<VehicleReuseResponse | null>(null);
   const [error, setError] = useState<string | null>(null);

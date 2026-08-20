@@ -22,10 +22,13 @@ import {
   type ScoringPolicyInput,
 } from '@/lib/planning/route-consolidation-scoring-policy';
 import { hasPermission, buildPermissionKey, SYSTEM_ROLES } from '@/lib/permissions';
+import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
 export async function GET(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id');
   if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const permError = requireBusOpsAdminAccess(req, 'route-consolidation');
+  if (permError) return permError;
 
   try {
     const policy = await resolveScoringPolicy(prisma, tenantId);

@@ -30,6 +30,7 @@ import PceVerdictPanel, { type PceVerdictBody } from '@/components/bus-ops/PceVe
 import RouteConsolidationApplyModal, { type RecommendationForApply } from '@/components/bus-ops/RouteConsolidationApplyModal';
 import RouteConsolidationHistoryPanel from '@/components/bus-ops/RouteConsolidationHistoryPanel';
 import RouteConsolidationScoringPolicyPanel from '@/components/bus-ops/RouteConsolidationScoringPolicyPanel';
+import RequireTenantAdmin from '@/components/bus-ops/RequireTenantAdmin';
 
 // ─── Types matched to /analyze response ─────────────────────────────
 
@@ -129,6 +130,14 @@ interface AnalyzeResponse {
 type Tab = 'recommendations' | 'history';
 
 export default function RouteConsolidationPage() {
+  return (
+    <RequireTenantAdmin resource="route-consolidation">
+      <RouteConsolidationPageInner />
+    </RequireTenantAdmin>
+  );
+}
+
+function RouteConsolidationPageInner() {
   const [tab, setTab] = useState<Tab>('recommendations');
   const [objective, setObjective] = useState<Objective>({});
   const [analysing, setAnalysing] = useState(false);

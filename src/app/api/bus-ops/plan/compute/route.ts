@@ -30,6 +30,7 @@ import { revalidateCache } from '@/lib/server-cache';
 import { runcut, type PlanTrip, DEFAULT_WORK_RULES, type WorkRules } from '@/lib/plan/runcut';
 import { block, type BlockOptions } from '@/lib/plan/block';
 import { roster, type RosterPattern, type RosterDriver } from '@/lib/plan/roster';
+import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
 const CACHE_TAG = 'staff-transport-plans';
 
@@ -39,6 +40,8 @@ export async function POST(req: NextRequest) {
     if (!tenantId) {
       return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
     }
+    const permError = requireBusOpsAdminAccess(req, 'planning-core');
+    if (permError) return permError;
 
     const body = await req.json();
     const {

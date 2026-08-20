@@ -38,10 +38,13 @@ import {
   resolveMaxVehicleReuseWindowMinutes,
 } from '@/lib/planning/route-consolidation-vehicle-reuse-policy';
 import { resolveZoneFallbackKm } from '@/lib/planning/zone-compat-policy';
+import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
 export async function POST(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id');
   if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const permError = requireBusOpsAdminAccess(req, 'vehicle-resource-optimization');
+  if (permError) return permError;
 
   let body: unknown = {};
   try {

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
 import { useFetchedData, fetchOnce } from '@/hooks/useFetchedData';
+import RequireTenantAdmin from '@/components/bus-ops/RequireTenantAdmin';
 
 // ── Types (mirror lib/plan/*) ───────────────────────────────────────────────
 
@@ -194,6 +195,14 @@ function fmtMoney(n: number): string {
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function PlanPage() {
+  return (
+    <RequireTenantAdmin resource="planning-core">
+      <PlanPageInner />
+    </RequireTenantAdmin>
+  );
+}
+
+function PlanPageInner() {
   // Date range: today → today+6 by default
   const [dateFrom, setDateFrom] = useState(todayIso());
   const [dateTo,   setDateTo]   = useState(addDays(todayIso(), 6));
