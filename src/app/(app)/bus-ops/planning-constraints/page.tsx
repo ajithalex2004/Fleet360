@@ -197,7 +197,7 @@ export default function PlanningConstraintsPage() {
   return (
     <div className="space-y-8">
       <PageHeader
-        title="Planning Constraints"
+        title="Planning Constraints Engine"
         subtitle={`${rows.length} defined · ${enabledCount} enabled · ${blockCount} BLOCK-active — evaluated on every plan apply and every merge`}
         icon={Shield}
         accent="violet"

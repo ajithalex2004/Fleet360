@@ -24,7 +24,7 @@ import Link from 'next/link';
  */
 
 import React, { useCallback, useState } from 'react';
-import { GitMerge, Play, RefreshCw, Trophy, ChevronDown, ChevronRight, Info, CheckCircle2, History, Shield, Repeat, AlertTriangle } from 'lucide-react';
+import { GitMerge, Play, RefreshCw, Trophy, ChevronDown, ChevronRight, Info, CheckCircle2, History, Shield } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
 import PceVerdictPanel, { type PceVerdictBody } from '@/components/bus-ops/PceVerdictPanel';
 import RouteConsolidationApplyModal, { type RecommendationForApply } from '@/components/bus-ops/RouteConsolidationApplyModal';
@@ -124,56 +124,9 @@ interface AnalyzeResponse {
   };
 }
 
-// ─── Types matched to /vehicle-reuse response ("Case 2") ────────────
-
-type VehicleReuseFeasibility = 'STRONG' | 'FEASIBLE' | 'TIGHT' | 'NOT_FEASIBLE';
-type AssignmentComparisonStatus = 'SAME' | 'DIFFERENT' | 'UNASSIGNED';
-
-interface VehicleReuseOpportunity {
-  firstRouteId: string;
-  firstRouteName: string;
-  secondRouteId: string;
-  secondRouteName: string;
-  firstArrivalTime: string;
-  secondDepartureTime: string;
-  availableGapMinutes: number;
-  minimumTurnaroundMinutes: number;
-  repositionDistanceMeters: number;
-  repositionDurationMinutes: number;
-  requiredGapMinutes: number;
-  remainingSlackMinutes: number;
-  dropoffPickupZoneCompatibility: ZoneCompatResult;
-  feasibility: VehicleReuseFeasibility;
-  vehicleAssignmentStatus: AssignmentComparisonStatus;
-  driverAssignmentStatus: AssignmentComparisonStatus;
-  warnings: string[];
-}
-
-type VehicleReuseSkipReason =
-  | 'MISSING_TIMING_DATA'
-  | 'NOT_SEQUENTIAL'
-  | 'OUTSIDE_REUSE_WINDOW'
-  | 'ZONE_DATA_UNAVAILABLE'
-  | 'ZONE_INCOMPATIBLE'
-  | 'INSUFFICIENT_ROUTE_DATA';
-
-interface SkippedReusePair {
-  firstRouteId: string;
-  secondRouteId: string;
-  reason: VehicleReuseSkipReason;
-  detail?: string;
-}
-
-interface VehicleReuseResponse {
-  policy: { minimumTurnaroundMinutes: number; maxReuseWindowMinutes: number };
-  opportunities: VehicleReuseOpportunity[];
-  skipped: SkippedReusePair[];
-  totals: { routesAnalysed: number; orderedPairsConsidered: number; opportunitiesFound: number };
-}
-
 // ─── Page ────────────────────────────────────────────────────────────
 
-type Tab = 'recommendations' | 'vehicle-reuse' | 'history';
+type Tab = 'recommendations' | 'history';
 
 export default function RouteConsolidationPage() {
   const [tab, setTab] = useState<Tab>('recommendations');
@@ -185,30 +138,6 @@ export default function RouteConsolidationPage() {
   const [showSkipped, setShowSkipped] = useState(false);
   const [applyingRec, setApplyingRec] = useState<{ rec: Recommendation; recommendationId: string } | null>(null);
   const [appliedFlash, setAppliedFlash] = useState<string | null>(null);
-
-  const [reuseAnalysing, setReuseAnalysing] = useState(false);
-  const [reuseResult, setReuseResult] = useState<VehicleReuseResponse | null>(null);
-  const [reuseError, setReuseError] = useState<string | null>(null);
-  const [expandedReuseRow, setExpandedReuseRow] = useState<string | null>(null);
-  const [showReuseSkipped, setShowReuseSkipped] = useState(false);
-
-  const analyseReuse = useCallback(async () => {
-    setReuseAnalysing(true); setReuseError(null); setReuseResult(null); setExpandedReuseRow(null);
-    try {
-      const res = await fetch('/api/bus-ops/route-consolidation/vehicle-reuse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: '{}',
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
-      setReuseResult(data as VehicleReuseResponse);
-    } catch (e) {
-      setReuseError(e instanceof Error ? e.message : 'Analysis failed');
-    } finally {
-      setReuseAnalysing(false);
-    }
-  }, []);
 
   const analyse = useCallback(async () => {
     setAnalysing(true); setError(null); setResult(null); setExpandedRow(null);
@@ -233,7 +162,7 @@ export default function RouteConsolidationPage() {
   return (
     <div className="space-y-8">
       <PageHeader
-        title="Route Consolidation"
+        title="Route Consolidation Engine"
         subtitle="Analyse candidate merges, apply recommendations transactionally, and revert within the audit window. All apply/revert actions go through the Planning Constraint gate."
         icon={GitMerge}
         accent="violet"
@@ -248,11 +177,11 @@ export default function RouteConsolidationPage() {
         }
       />
 
-      {/* Tabs — Recommendations (Case 1: merge, analyse + apply) | Vehicle/Resource Utilization (Case 2: sequential reuse, advisory-only) | History (revert past applies) */}
+      {/* Tabs — Recommendations (analyse + apply) | History (revert past applies) */}
       <div className="flex items-center gap-1 border-b border-slate-800">
-        {(['recommendations', 'vehicle-reuse', 'history'] as const).map((t) => {
-          const Icon = t === 'recommendations' ? GitMerge : t === 'vehicle-reuse' ? Repeat : History;
-          const label = t === 'recommendations' ? 'Recommendations' : t === 'vehicle-reuse' ? 'Vehicle/Resource Utilization' : 'History';
+        {(['recommendations', 'history'] as const).map((t) => {
+          const Icon = t === 'recommendations' ? GitMerge : History;
+          const label = t === 'recommendations' ? 'Recommendations' : 'History';
           return (
             <button
               key={t}
@@ -279,19 +208,6 @@ export default function RouteConsolidationPage() {
 
       {tab === 'history' && (
         <RouteConsolidationHistoryPanel />
-      )}
-
-      {tab === 'vehicle-reuse' && (
-        <VehicleReuseTab
-          analysing={reuseAnalysing}
-          result={reuseResult}
-          error={reuseError}
-          onAnalyse={analyseReuse}
-          expandedRow={expandedReuseRow}
-          setExpandedRow={setExpandedReuseRow}
-          showSkipped={showReuseSkipped}
-          setShowSkipped={setShowReuseSkipped}
-        />
       )}
 
       {tab === 'recommendations' && (
@@ -557,242 +473,6 @@ export default function RouteConsolidationPage() {
 }
 
 // ─── Building blocks ────────────────────────────────────────────────
-
-/**
- * Case 2 — sequential vehicle reuse, advisory only. Deliberately kept
- * visually and structurally distinct from the Recommendations tab: no
- * "Apply" button, no scoring-policy language, no route/stop merging UI.
- * Nothing about either route changes here — this only tells ops "these
- * two trips could share a vehicle," and the actual reassignment happens
- * manually on the Schedules/Dispatch screens.
- */
-function VehicleReuseTab({
-  analysing, result, error, onAnalyse, expandedRow, setExpandedRow, showSkipped, setShowSkipped,
-}: {
-  analysing: boolean;
-  result: VehicleReuseResponse | null;
-  error: string | null;
-  onAnalyse: () => void;
-  expandedRow: string | null;
-  setExpandedRow: React.Dispatch<React.SetStateAction<string | null>>;
-  showSkipped: boolean;
-  setShowSkipped: React.Dispatch<React.SetStateAction<boolean>>;
-}) {
-  return (
-    <>
-      {error && (
-        <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</div>
-      )}
-
-      <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-sm text-blue-200 flex items-start gap-2">
-        <Info className="w-4 h-4 mt-0.5 shrink-0" />
-        <span>
-          Advisory only — no route changes are made here. Route A and Route B stay exactly as they are;
-          this only flags when the same vehicle + driver could serve both back-to-back. Complete the
-          actual assignment on the <Link href="/bus-ops/schedules" className="underline hover:text-blue-100">Schedules</Link> screen.
-        </span>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <aside className="space-y-3">
-          <SectionHeading>Analysis</SectionHeading>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-4">
-            <button onClick={onAnalyse} disabled={analysing}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50">
-              {analysing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Repeat className="w-4 h-4" />}
-              {analysing ? 'Analysing…' : 'Find reuse opportunities'}
-            </button>
-          </div>
-
-          {result && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-              <div className="flex items-center gap-2 mb-3 text-xs text-slate-400">
-                <Info className="w-3.5 h-3.5" /> <span className="uppercase tracking-wider">Funnel</span>
-              </div>
-              <FunnelRow label="Routes analysed" value={result.totals.routesAnalysed} />
-              <FunnelRow label="Ordered pairs considered" value={result.totals.orderedPairsConsidered} />
-              <FunnelRow label="Opportunities found" value={result.totals.opportunitiesFound} accent="emerald" />
-              <div className="mt-3 pt-3 border-t border-slate-800 text-[11px] text-slate-500 space-y-0.5">
-                <div>Min turnaround: {result.policy.minimumTurnaroundMinutes} min</div>
-                <div>Max reuse window: {result.policy.maxReuseWindowMinutes} min</div>
-              </div>
-            </div>
-          )}
-        </aside>
-
-        <section className="lg:col-span-2 space-y-3">
-          <SectionHeading>Vehicle/Resource Utilization Opportunities</SectionHeading>
-
-          {!result ? (
-            <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-10 text-center text-slate-400">
-              <Repeat className="mx-auto h-10 w-10 text-slate-600 mb-3" />
-              <p>Click <b>Find reuse opportunities</b> to look for sequential trips the same vehicle could serve.</p>
-              <p className="mt-1 text-xs text-slate-500">Checked in both directions — A finishing in time for B, and B finishing in time for A.</p>
-            </div>
-          ) : result.opportunities.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-10 text-center text-slate-400">
-              <p>No reuse opportunities found.</p>
-              <p className="mt-1 text-xs text-slate-500">
-                {result.skipped.length > 0 ? `${result.skipped.length} pair${result.skipped.length === 1 ? '' : 's'} skipped — expand the breakdown below to see why.` : 'No pairs were even considered — check that you have ≥ 2 active routes in this tenant.'}
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-900/80 text-left text-xs uppercase tracking-wider text-slate-400">
-                  <tr>
-                    <th className="w-8 px-3 py-2"></th>
-                    <th className="px-3 py-2">Route A</th>
-                    <th className="px-3 py-2">Arrives</th>
-                    <th className="px-3 py-2">Route B</th>
-                    <th className="px-3 py-2">Departs</th>
-                    <th className="px-3 py-2 text-right">Gap</th>
-                    <th className="px-3 py-2 text-right">Reposition</th>
-                    <th className="px-3 py-2 text-right">Usable Slack</th>
-                    <th className="px-3 py-2">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800">
-                  {result.opportunities.map((o) => {
-                    const key = `${o.firstRouteId}-${o.secondRouteId}`;
-                    const isExpanded = expandedRow === key;
-                    return (
-                      <React.Fragment key={key}>
-                        <tr
-                          className="text-slate-200 cursor-pointer hover:bg-slate-800/40"
-                          onClick={() => setExpandedRow(isExpanded ? null : key)}
-                        >
-                          <td className="px-3 py-3 text-slate-500">
-                            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                          </td>
-                          <td className="px-3 py-3 font-medium">{o.firstRouteName}</td>
-                          <td className="px-3 py-3 text-xs text-slate-400">{o.firstArrivalTime}</td>
-                          <td className="px-3 py-3 font-medium">{o.secondRouteName}</td>
-                          <td className="px-3 py-3 text-xs text-slate-400">{o.secondDepartureTime}</td>
-                          <td className="px-3 py-3 text-right">{o.availableGapMinutes}m</td>
-                          <td className="px-3 py-3 text-right text-xs text-slate-400">{o.repositionDurationMinutes}m</td>
-                          <td className={`px-3 py-3 text-right font-semibold ${o.remainingSlackMinutes >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
-                            {o.remainingSlackMinutes >= 0 ? '+' : ''}{o.remainingSlackMinutes}m
-                          </td>
-                          <td className="px-3 py-3">
-                            <FeasibilityBadge feasibility={o.feasibility} />
-                            {o.warnings.length > 0 && (
-                              <AlertTriangle className="inline-block w-3.5 h-3.5 ml-1.5 text-amber-400" />
-                            )}
-                          </td>
-                        </tr>
-                        {isExpanded && (
-                          <tr>
-                            <td colSpan={9} className="bg-slate-900/60 px-6 py-4">
-                              <ReuseOpportunityDetail o={o} />
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {result && result.skipped.length > 0 && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/40">
-              <button
-                onClick={() => setShowSkipped((s) => !s)}
-                className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-slate-300 hover:bg-slate-800/40"
-              >
-                <span>Skipped pairs ({result.skipped.length})</span>
-                {showSkipped ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-              </button>
-              {showSkipped && (
-                <div className="border-t border-slate-800 divide-y divide-slate-800">
-                  {groupSkippedReuse(result.skipped).map(([reason, pairs]) => (
-                    <div key={reason} className="px-4 py-3">
-                      <div className="flex items-baseline justify-between">
-                        <div className="font-mono text-xs text-slate-300">{reason}</div>
-                        <div className="text-xs text-slate-500">{pairs.length} pair{pairs.length === 1 ? '' : 's'}</div>
-                      </div>
-                      <div className="mt-1 text-xs text-slate-500">{describeReuseSkipReason(reason as VehicleReuseSkipReason)}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-      </div>
-    </>
-  );
-}
-
-function ReuseOpportunityDetail({ o }: { o: VehicleReuseOpportunity }) {
-  return (
-    <div className="space-y-3 text-xs text-slate-400">
-      <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-        <div><span className="text-slate-500">Available gap:</span> {o.availableGapMinutes} min</div>
-        <div><span className="text-slate-500">Minimum turnaround:</span> {o.minimumTurnaroundMinutes} min</div>
-        <div><span className="text-slate-500">Reposition:</span> {(o.repositionDistanceMeters / 1000).toFixed(2)} km, {o.repositionDurationMinutes} min</div>
-        <div><span className="text-slate-500">Required gap:</span> {o.requiredGapMinutes} min (turnaround + reposition)</div>
-        <div><span className="text-slate-500">Usable slack:</span> <span className={o.remainingSlackMinutes >= 0 ? 'text-emerald-300' : 'text-rose-300'}>{o.remainingSlackMinutes >= 0 ? '+' : ''}{o.remainingSlackMinutes} min</span></div>
-        <div><span className="text-slate-500">Dropoff → pickup zone:</span> {formatZone(o.dropoffPickupZoneCompatibility)}</div>
-      </div>
-      <div className="border-t border-slate-800 pt-2 grid grid-cols-2 gap-x-6 gap-y-1">
-        <div><span className="text-slate-500">Vehicle assignment:</span> <AssignmentStatusLabel status={o.vehicleAssignmentStatus} /></div>
-        <div><span className="text-slate-500">Driver assignment:</span> <AssignmentStatusLabel status={o.driverAssignmentStatus} /></div>
-      </div>
-      {o.warnings.length > 0 && (
-        <div className="border-t border-slate-800 pt-2 space-y-1">
-          {o.warnings.map((w, i) => (
-            <div key={i} className="flex items-start gap-1.5 text-amber-300">
-              <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              <span>{w}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="border-t border-slate-800 pt-2 text-slate-500">
-        Advisory only — assign this vehicle/driver manually on the <Link href="/bus-ops/schedules" className="underline hover:text-slate-300">Schedules</Link> screen.
-      </div>
-    </div>
-  );
-}
-
-function FeasibilityBadge({ feasibility }: { feasibility: VehicleReuseFeasibility }) {
-  const cls =
-    feasibility === 'STRONG' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-    : feasibility === 'FEASIBLE' ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-    : feasibility === 'TIGHT' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-    : 'bg-rose-500/20 text-rose-300 border-rose-500/40';
-  return <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${cls}`}>{feasibility}</span>;
-}
-
-function AssignmentStatusLabel({ status }: { status: AssignmentComparisonStatus }) {
-  if (status === 'SAME') return <span className="text-emerald-300">same</span>;
-  if (status === 'DIFFERENT') return <span className="text-amber-300">differ</span>;
-  return <span className="text-slate-500">unassigned</span>;
-}
-
-function groupSkippedReuse(skipped: SkippedReusePair[]): Array<[string, SkippedReusePair[]]> {
-  const map = new Map<string, SkippedReusePair[]>();
-  for (const s of skipped) {
-    const list = map.get(s.reason) ?? [];
-    list.push(s);
-    map.set(s.reason, list);
-  }
-  return [...map.entries()].sort((a, b) => b[1].length - a[1].length);
-}
-
-function describeReuseSkipReason(reason: VehicleReuseSkipReason): string {
-  switch (reason) {
-    case 'MISSING_TIMING_DATA':   return 'One or both routes lack a parseable arrival/departure time.';
-    case 'NOT_SEQUENTIAL':        return 'Route B departs before (or at the same time as) Route A arrives — not a sequential candidate.';
-    case 'OUTSIDE_REUSE_WINDOW':  return 'The gap between arrival and departure is wider than the tenant\'s max reuse window — not a meaningful back-to-back candidate.';
-    case 'ZONE_DATA_UNAVAILABLE': return 'Neither placeId nor GPS coords are usable on Route A\'s dropoff or Route B\'s pickup.';
-    case 'ZONE_INCOMPATIBLE':     return 'Route A\'s dropoff and Route B\'s pickup are in different zones, or too far apart under the distance fallback.';
-    case 'INSUFFICIENT_ROUTE_DATA': return 'One of the routes has no stops.';
-  }
-}
 
 function ZoneBadge({ side, compat }: { side: string; compat: ZoneCompatResult }) {
   const cls =
