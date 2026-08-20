@@ -133,6 +133,7 @@ describe('analyzeVehicleReuseOpportunities — eligibility funnel', () => {
     const result = await analyzeVehicleReuseOpportunities(fakePrisma, 't1', facts([a, b]), {
       minimumTurnaroundMinutes: 30,
       maxReuseWindowMinutes: 180,
+      zoneFallbackKm: 3,
     });
     expect(result.opportunities).toHaveLength(0);
     expect(result.skipped.some((s) => s.reason === 'MISSING_TIMING_DATA')).toBe(true);
@@ -144,6 +145,7 @@ describe('analyzeVehicleReuseOpportunities — eligibility funnel', () => {
     const result = await analyzeVehicleReuseOpportunities(fakePrisma, 't1', facts([a, b]), {
       minimumTurnaroundMinutes: 30,
       maxReuseWindowMinutes: 180,
+      zoneFallbackKm: 3,
     });
     expect(result.opportunities).toHaveLength(0);
     expect(result.skipped.find((s) => s.firstRouteId === 'a' && s.secondRouteId === 'b')?.reason).toBe('NOT_SEQUENTIAL');
@@ -155,6 +157,7 @@ describe('analyzeVehicleReuseOpportunities — eligibility funnel', () => {
     const result = await analyzeVehicleReuseOpportunities(fakePrisma, 't1', facts([a, b]), {
       minimumTurnaroundMinutes: 30,
       maxReuseWindowMinutes: 180,
+      zoneFallbackKm: 3,
     });
     expect(result.opportunities).toHaveLength(0);
     expect(result.skipped.find((s) => s.firstRouteId === 'a' && s.secondRouteId === 'b')?.reason).toBe('OUTSIDE_REUSE_WINDOW');
@@ -166,6 +169,7 @@ describe('analyzeVehicleReuseOpportunities — eligibility funnel', () => {
     const result = await analyzeVehicleReuseOpportunities(fakePrisma, 't1', facts([a, b]), {
       minimumTurnaroundMinutes: 30,
       maxReuseWindowMinutes: 180,
+      zoneFallbackKm: 3,
     });
     expect(result.opportunities).toHaveLength(0);
     expect(result.skipped.find((s) => s.firstRouteId === 'a' && s.secondRouteId === 'b')?.reason).toBe('ZONE_INCOMPATIBLE');
@@ -178,6 +182,7 @@ describe('analyzeVehicleReuseOpportunities — eligibility funnel', () => {
     const result = await analyzeVehicleReuseOpportunities(fakePrisma, 't1', facts([a, b]), {
       minimumTurnaroundMinutes: 10,
       maxReuseWindowMinutes: 180,
+      zoneFallbackKm: 3,
     });
     expect(result.totals.orderedPairsConsidered).toBe(2); // (a,b) and (b,a)
     expect(result.opportunities).toHaveLength(1);
@@ -197,6 +202,7 @@ describe('analyzeVehicleReuseOpportunities — feasible opportunity, zero reposi
     const result = await analyzeVehicleReuseOpportunities(fakePrisma, 't1', facts([a, b]), {
       minimumTurnaroundMinutes: 30,
       maxReuseWindowMinutes: 180,
+      zoneFallbackKm: 3,
     });
     expect(result.opportunities).toHaveLength(1);
     const opp = result.opportunities[0];
@@ -216,6 +222,7 @@ describe('analyzeVehicleReuseOpportunities — feasible opportunity, zero reposi
     const result = await analyzeVehicleReuseOpportunities(fakePrisma, 't1', facts([a, b]), {
       minimumTurnaroundMinutes: 30,
       maxReuseWindowMinutes: 180,
+      zoneFallbackKm: 3,
     });
     const opp = result.opportunities[0];
     expect(opp.vehicleAssignmentStatus).toBe('DIFFERENT');

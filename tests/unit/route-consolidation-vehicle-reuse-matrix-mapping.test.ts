@@ -74,6 +74,7 @@ describe('analyzeVehicleReuseOpportunities — matrix result mapping', () => {
     const result = await analyzeVehicleReuseOpportunities(fakePrisma, 't1', facts([a, b]), {
       minimumTurnaroundMinutes: 20,
       maxReuseWindowMinutes: 180,
+      zoneFallbackKm: 3,
     });
     expect(result.opportunities).toHaveLength(1);
     const opp = result.opportunities[0];

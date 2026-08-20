@@ -18,10 +18,15 @@
  *     routeIds?: string[],   // subset to analyse; defaults to all active
  *     minimumTurnaroundMinutes?: number,  // override; else PlanningConstraint kind VEHICLE_MIN_TURNAROUND, else 30
  *     maxReuseWindowMinutes?: number,     // override; else PlanningConstraint kind MAX_VEHICLE_REUSE_WINDOW, else 180
+ *     zoneFallbackKm?: number,            // override; else PlanningConstraint kind PICKUP_ZONE_FALLBACK_KM, else 3.0
  *   }
  *
+ * zoneFallbackKm only matters when Route A's dropoff and Route B's pickup
+ * don't share a spatial.places id — zoneCompatibility() always prefers a
+ * shared place match over distance (see zone-compat-policy.ts).
+ *
  * Response 200:
- *   { policy: { minimumTurnaroundMinutes, maxReuseWindowMinutes }, opportunities[], skipped[], totals }
+ *   { policy: { minimumTurnaroundMinutes, maxReuseWindowMinutes, zoneFallbackKm }, opportunities[], skipped[], totals }
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -32,6 +37,7 @@ import {
   resolveVehicleTurnaroundMinutes,
   resolveMaxVehicleReuseWindowMinutes,
 } from '@/lib/planning/route-consolidation-vehicle-reuse-policy';
+import { resolveZoneFallbackKm } from '@/lib/planning/zone-compat-policy';
 
 export async function POST(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id');
@@ -57,26 +63,29 @@ export async function POST(req: NextRequest) {
     routeIds = b.routeIds as string[];
   }
 
-  for (const key of ['minimumTurnaroundMinutes', 'maxReuseWindowMinutes'] as const) {
+  for (const key of ['minimumTurnaroundMinutes', 'maxReuseWindowMinutes', 'zoneFallbackKm'] as const) {
     if (b[key] !== undefined && (typeof b[key] !== 'number' || !Number.isFinite(b[key]))) {
       return NextResponse.json({ error: `${key} must be a finite number` }, { status: 400 });
     }
   }
 
   try {
-    const [facts, minimumTurnaroundMinutes, maxReuseWindowMinutes] = await Promise.all([
+    const [facts, minimumTurnaroundMinutes, maxReuseWindowMinutes, zoneFallback] = await Promise.all([
       loadConsolidationFacts(prisma, { tenantId, routeIds }),
       resolveVehicleTurnaroundMinutes(prisma, tenantId, b.minimumTurnaroundMinutes as number | undefined),
       resolveMaxVehicleReuseWindowMinutes(prisma, tenantId, b.maxReuseWindowMinutes as number | undefined),
+      resolveZoneFallbackKm(prisma, tenantId, { pickup: b.zoneFallbackKm as number | undefined }),
     ]);
+    const zoneFallbackKm = zoneFallback.pickup;
 
     const result = await analyzeVehicleReuseOpportunities(prisma, tenantId, facts, {
       minimumTurnaroundMinutes,
       maxReuseWindowMinutes,
+      zoneFallbackKm,
     });
 
     return NextResponse.json({
-      policy: { minimumTurnaroundMinutes, maxReuseWindowMinutes },
+      policy: { minimumTurnaroundMinutes, maxReuseWindowMinutes, zoneFallbackKm },
       ...result,
     });
   } catch (e) {

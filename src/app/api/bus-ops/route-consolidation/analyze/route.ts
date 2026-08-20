@@ -23,6 +23,12 @@
  * back to a hardcoded default only if no such row exists. An explicit
  * value in the request body always wins over both.
  *
+ * fallbackKm.pickup / fallbackKm.dropoff resolve the same way via
+ * resolveZoneFallbackKm() (kinds PICKUP_ZONE_FALLBACK_KM /
+ * DROPOFF_ZONE_FALLBACK_KM) — see zone-compat-policy.ts. These only
+ * matter when neither route side has (or shares) a spatial.places id;
+ * zoneCompatibility() always prefers a shared place match over distance.
+ *
  * Vehicle-reuse-across-sequential-trips ("Case 2") is a separate resource
  * model from this route-merge analysis — see POST .../vehicle-reuse
  * instead (route-consolidation-vehicle-reuse.ts).
@@ -46,6 +52,7 @@ import { loadConsolidationFacts } from '@/lib/planning/route-consolidation-facts
 import { analyzeConsolidations, type ConsolidationObjective } from '@/lib/planning/route-consolidation';
 import { resolveEligibilityPolicy } from '@/lib/planning/route-consolidation-eligibility-policy';
 import { resolveScoringPolicy } from '@/lib/planning/route-consolidation-scoring-policy';
+import { resolveZoneFallbackKm } from '@/lib/planning/zone-compat-policy';
 
 export async function POST(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id');
@@ -78,18 +85,23 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const [facts, eligibilityPolicy, scoringPolicy] = await Promise.all([
+    const [facts, eligibilityPolicy, scoringPolicy, zoneFallbackKm] = await Promise.all([
       loadConsolidationFacts(prisma, { tenantId, routeIds }),
       resolveEligibilityPolicy(prisma, tenantId, {
         maxDepartureTimeDiffMinutes: objective.maxDepartureTimeDiffMinutes,
         maxArrivalTimeDiffMinutes: objective.maxArrivalTimeDiffMinutes,
       }),
       resolveScoringPolicy(prisma, tenantId),
+      resolveZoneFallbackKm(prisma, tenantId, {
+        pickup: objective.fallbackKm?.pickup,
+        dropoff: objective.fallbackKm?.dropoff,
+      }),
     ]);
     const resolvedObjective: ConsolidationObjective = {
       ...objective,
       maxDepartureTimeDiffMinutes: eligibilityPolicy.maxDepartureTimeDiffMinutes,
       maxArrivalTimeDiffMinutes: eligibilityPolicy.maxArrivalTimeDiffMinutes,
+      fallbackKm: zoneFallbackKm,
     };
     const result = await analyzeConsolidations(prisma, tenantId, facts, resolvedObjective, scoringPolicy);
     return NextResponse.json(result);

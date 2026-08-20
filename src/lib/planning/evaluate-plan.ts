@@ -210,6 +210,11 @@ const EVALUATORS: Record<string, Evaluator> = {
   // Case 1 candidate show a spurious ENGINE_UNKNOWN_KIND WARN too.
   VEHICLE_MIN_TURNAROUND: () => [],
   MAX_VEHICLE_REUSE_WINDOW: () => [],
+  // Same reasoning again — pure config (maxKm) read by
+  // resolveZoneFallbackKm() (zone-compat-policy.ts) for both Case 1 and
+  // Case 2's zone-compatibility distance fallback, not a PCE check.
+  PICKUP_ZONE_FALLBACK_KM: () => [],
+  DROPOFF_ZONE_FALLBACK_KM: () => [],
 };
 
 // ─── Shared helpers ─────────────────────────────────────────────────

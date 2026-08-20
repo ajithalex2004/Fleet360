@@ -124,6 +124,18 @@ const KIND_META: KindMeta[] = [
     paramsHint: 'maxMinutes — ceiling on that same gap; beyond this the two trips are unrelated rather than a meaningful back-to-back reuse candidate',
     paramsTemplate: { maxMinutes: 180 },
   },
+  {
+    kind: 'PICKUP_ZONE_FALLBACK_KM',
+    label: 'Zone compatibility — pickup fallback distance',
+    paramsHint: 'maxKm — used only when neither side has a matching spatial.places id; a shared place always wins over distance',
+    paramsTemplate: { maxKm: 3.0 },
+  },
+  {
+    kind: 'DROPOFF_ZONE_FALLBACK_KM',
+    label: 'Zone compatibility — dropoff fallback distance',
+    paramsHint: 'maxKm — stricter than the pickup fallback by default; a dropoff mismatch strands a rider further from their actual destination',
+    paramsTemplate: { maxKm: 1.5 },
+  },
 ];
 
 const KIND_BY_ID = new Map(KIND_META.map((k) => [k.kind, k]));
@@ -654,6 +666,13 @@ function validateConstraintForm(form: FormState): ValidationResult {
       if (Number.isNaN(m) || m <= 0) return { ok: false, error: 'Max reuse window must be > 0' };
       break;
     }
+    case 'PICKUP_ZONE_FALLBACK_KM':
+    case 'DROPOFF_ZONE_FALLBACK_KM': {
+      const km = num('maxKm');
+      if (km == null) return { ok: false, error: 'Max distance (km) is required' };
+      if (Number.isNaN(km) || km <= 0) return { ok: false, error: 'Max distance must be > 0' };
+      break;
+    }
     default:
       break;
   }
@@ -1090,6 +1109,20 @@ function ParamsFields({
       return (
         <Field label="Max reuse window (minutes)" hint="ceiling on the arrival-to-departure gap; beyond this two trips aren't a meaningful back-to-back reuse candidate">
           <input type="number" className={inputCls} value={numParam(params, 'maxMinutes')} onChange={(e) => setNum('maxMinutes', e.target.value)} placeholder="180" />
+        </Field>
+      );
+
+    case 'PICKUP_ZONE_FALLBACK_KM':
+      return (
+        <Field label="Max distance (km)" hint="only used when neither side has a matching spatial.places id — a shared place always wins over distance">
+          <input type="number" step="0.1" className={inputCls} value={numParam(params, 'maxKm')} onChange={(e) => setNum('maxKm', e.target.value)} placeholder="3.0" />
+        </Field>
+      );
+
+    case 'DROPOFF_ZONE_FALLBACK_KM':
+      return (
+        <Field label="Max distance (km)" hint="only used when neither side has a matching spatial.places id — a shared place always wins over distance">
+          <input type="number" step="0.1" className={inputCls} value={numParam(params, 'maxKm')} onChange={(e) => setNum('maxKm', e.target.value)} placeholder="1.5" />
         </Field>
       );
 

@@ -42,7 +42,7 @@ import type { ConsolidationFacts, RouteFacts } from './route-consolidation-facts
 import { routePickupStop, routeDropoffStop } from './route-consolidation-facts';
 import type { MatrixPairing, MatrixPairingResult } from './route-consolidation-matrix';
 import { resolveMatrixPairings, pairingKey } from './route-consolidation-matrix';
-import { zoneCompatibility, isCompatPassing, DEFAULT_FALLBACK_KM, type ZoneCompatResult } from './zone-compat';
+import { zoneCompatibility, isCompatPassing, type ZoneCompatResult } from './zone-compat';
 
 // ─── Public shapes ──────────────────────────────────────────────────
 
@@ -98,6 +98,8 @@ export interface VehicleReuseAnalysis {
 export interface VehicleReusePolicy {
   minimumTurnaroundMinutes: number;
   maxReuseWindowMinutes: number;
+  /** km — reuses the tenant's pickup-side zone-compat threshold (see zone-compat-policy.ts); this is a "shared handoff point" question, not a dropoff-precision one. */
+  zoneFallbackKm: number;
 }
 
 // ─── Pure feasibility math (no I/O — unit-testable in isolation) ────
@@ -208,7 +210,7 @@ export async function analyzeVehicleReuseOpportunities(
       const zoneCompat = zoneCompatibility(
         [{ placeId: dropoffA?.placeId ?? null, lat: dropoffA?.lat ?? null, lng: dropoffA?.lng ?? null }],
         [{ placeId: pickupB?.placeId ?? null, lat: pickupB?.lat ?? null, lng: pickupB?.lng ?? null }],
-        { fallbackKm: DEFAULT_FALLBACK_KM.PICKUP },
+        { fallbackKm: policy.zoneFallbackKm },
       );
       if (zoneCompat.kind === 'UNKNOWN') {
         skipped.push({ firstRouteId: a.id, secondRouteId: b.id, reason: 'ZONE_DATA_UNAVAILABLE' });

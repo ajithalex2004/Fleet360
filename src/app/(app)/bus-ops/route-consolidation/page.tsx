@@ -343,12 +343,12 @@ export default function RouteConsolidationPage() {
                 <div className="border-t border-slate-700 my-3 pt-3">
                   <p className="text-xs uppercase tracking-wider text-slate-400 mb-3">Zone Fallback Thresholds</p>
                   <div className="grid grid-cols-2 gap-3">
-                    <Field label="Pickup fallback km" hint="default 3.0">
+                    <Field label="Pickup fallback km" hint="tenant default, else 3.0">
                       <input type="number" step="0.1" value={objective.fallbackKm?.pickup ?? ''}
                         onChange={(e) => setObjective({ ...objective, fallbackKm: { ...objective.fallbackKm, pickup: emptyToUndef(e.target.value) } })}
                         placeholder="3.0" className={inputCls} />
                     </Field>
-                    <Field label="Dropoff fallback km" hint="default 1.5">
+                    <Field label="Dropoff fallback km" hint="tenant default, else 1.5">
                       <input type="number" step="0.1" value={objective.fallbackKm?.dropoff ?? ''}
                         onChange={(e) => setObjective({ ...objective, fallbackKm: { ...objective.fallbackKm, dropoff: emptyToUndef(e.target.value) } })}
                         placeholder="1.5" className={inputCls} />
