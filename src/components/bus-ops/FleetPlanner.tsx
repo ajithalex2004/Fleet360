@@ -417,7 +417,7 @@ export default function FleetPlanner() {
                     Routes ({run.routes.length})
                   </div>
                   <div className="divide-y divide-white/5">
-                    {run.routes.map((r, i) => <RouteCard key={r.id} route={r} index={i} />)}
+                    {run.routes.map((r, i) => <RouteCard key={r.id} route={r} index={i} vehicles={vehicles} />)}
                   </div>
                 </div>
               )}
@@ -517,15 +517,16 @@ function MetricsHeader({ run }: { run: Run }) {
   );
 }
 
-function RouteCard({ route, index }: { route: RunRoute; index: number }) {
+function RouteCard({ route, index, vehicles }: { route: RunRoute; index: number; vehicles: Vehicle[] }) {
   const colors = ['bg-violet-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-sky-500', 'bg-pink-500'];
   const dot = colors[index % colors.length];
+  const vehicleLabel = vehicles.find(v => v.id === route.vehicleId)?.licensePlate ?? route.vehicleId.slice(0, 8);
   return (
     <details className="group">
       <summary className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-white/5">
         <span className={`w-3 h-3 rounded-full ${dot}`} />
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium text-white">Vehicle {route.vehicleId.slice(0, 8)}</div>
+          <div className="text-sm font-medium text-white">Vehicle {vehicleLabel}</div>
           <div className="text-[11px] text-slate-500">
             {route.stops.length} stops · {route.totalPassengers} pax · {route.totalDistanceKm} km · {route.totalDurationMin} min
           </div>
