@@ -136,7 +136,7 @@ export interface GoogleOptimizeToursResponse {
   skippedShipments?: GoogleSkippedShipment[];
   metrics?: {
     aggregatedRouteMetrics?: {
-      totalDistanceMeters?: number;
+      travelDistanceMeters?: number;
       totalDuration?: string;
       travelDuration?: string;
     };
@@ -153,7 +153,7 @@ export interface GoogleRoute {
   visits?: GoogleVisit[];
   routePolyline?: { points?: string };  // encoded polyline
   metrics?: {
-    totalDistanceMeters?: number;
+    travelDistanceMeters?: number;
     totalDuration?: string;
     travelDuration?: string;
   };

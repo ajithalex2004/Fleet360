@@ -91,7 +91,7 @@ export function parseSuccess(
     routes,
     unassigned,
     metrics: {
-      totalDistanceKm:  metersToKmRounded(raw.metrics?.aggregatedRouteMetrics?.totalDistanceMeters),
+      totalDistanceKm:  metersToKmRounded(raw.metrics?.aggregatedRouteMetrics?.travelDistanceMeters),
       totalDurationMin: durationToMinRounded(raw.metrics?.aggregatedRouteMetrics?.totalDuration),
       unassignedCount:  unassigned.length,
       solveSec,
@@ -180,7 +180,7 @@ function parseRoute(
     vehicleId:        vehicleInfo.vehicleId,
     driverId:         vehicleDriverLookup.get(vehicleInfo.vehicleId) ?? null,
     sequenceInRun:    fallbackIdx + 1,
-    totalDistanceKm:  metersToKmRounded(r.metrics?.totalDistanceMeters),
+    totalDistanceKm:  metersToKmRounded(r.metrics?.travelDistanceMeters),
     totalDurationMin: durationToMinRounded(r.metrics?.totalDuration),
     totalPassengers,
     encodedPolyline:  r.routePolyline?.points ?? '',
