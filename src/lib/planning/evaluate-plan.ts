@@ -192,6 +192,14 @@ const EVALUATORS: Record<string, Evaluator> = {
   MERGED_ARRIVAL_SLA: evalMergedArrivalSla,
   ROUTE_STOP_RESTRICTION: evalRouteStopRestriction,
   VEHICLE_CAPACITY_HARD: evalVehicleCapacityHard,
+  // DEPARTURE_TIME_PROXIMITY / ARRIVAL_TIME_PROXIMITY aren't PCE checks —
+  // they're pure config (maxMinutes) read directly by
+  // resolveEligibilityPolicy() during Stage 1 filtering, before a
+  // candidate ever reaches PCE. Registered here as explicit no-ops so an
+  // enabled row of either kind doesn't fall through to ENGINE_UNKNOWN_KIND
+  // and show as a spurious WARN on every merge.
+  DEPARTURE_TIME_PROXIMITY: () => [],
+  ARRIVAL_TIME_PROXIMITY: () => [],
 };
 
 // ─── Shared helpers ─────────────────────────────────────────────────
