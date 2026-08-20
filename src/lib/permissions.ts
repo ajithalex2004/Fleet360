@@ -145,6 +145,7 @@ export const ALL_PERMISSIONS: readonly AppPermission[] = [
   { module: 'bus-ops', action: 'create',  resource: 'incidents', label: 'Log Incidents' },
   { module: 'bus-ops', action: 'approve', resource: 'incidents', label: 'Resolve Incidents' },
   { module: 'bus-ops', action: 'export',  resource: '*',         label: 'Export Transport Data' },
+  { module: 'bus-ops', action: 'edit',    resource: 'route-consolidation-scoring-policy', label: 'Edit Route Consolidation Scoring Policy' },
 
   // ── FLEET ──────────────────────────────────────────────────────────────
   { module: 'fleet', action: 'view',    resource: '*',       label: 'View Fleet Module' },

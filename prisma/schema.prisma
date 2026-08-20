@@ -1771,6 +1771,7 @@ model BusRoute {
   /// Named direction variants (Morning→Office, Evening→Residence, …).
   /// Phase 1 of route versioning — see FOLLOWUP_ROUTE_VERSIONING.md.
   variants              BusRouteVariant[]
+  passengers            RoutePassenger[]
 
   @@map("bus_routes")
   @@schema("public")
@@ -1919,6 +1920,8 @@ model RoutePassenger {
   latestPickup        String? @map("latest_pickup")          // window end override
   requiredArrivalTime String? @map("required_arrival_time")  // hard workplace-arrival override
   pickupBufferMin     Int?    @map("pickup_buffer_min")
+
+  route BusRoute @relation(fields: [routeId], references: [id])
 
   @@index([tenantId],      map: "idx_route_passengers_tenant")
   @@index([routeId],       map: "idx_route_passengers_route")
@@ -5574,6 +5577,59 @@ model PlanningConstraint {
 //
 //   - Cool-down for post-consolidation merged routes is derived from
 //     `appliedAt`; no dedicated column added to BusRoute.
+
+// ─── Route Consolidation scoring policy ─────────────────────────────────────
+//
+// Tenant-editable weights/reference values feeding the Stage 4 scorer
+// (rankingCost = impactScore - benefitScore, bounded [-1,+1], lower = better).
+// Versioned by effective-dating rather than destructive edits: activating a
+// new policy sets isActive=false + effectiveTo=now() on the previous active
+// row instead of overwriting it, so `RouteConsolidation.objectiveSnapshot`
+// (captured at apply time) always refers to a policy shape that still
+// exists historically, even after weights change.
+//
+// distanceWeight + timeWeight + resourceReleaseWeight must sum to 1.0.
+// passengerImpactWeight + detourWeight + pcePenaltyWeight must sum to 1.0.
+// Enforced at the application layer (resolver / API validation), not via a
+// DB CHECK — summing floats to exactly 1.0 in SQL is unreliable.
+model RouteConsolidationScoringPolicy {
+  id                 String    @id @default(uuid())
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId           String    @map("tenant_id")
+
+  name               String
+  calculationVersion String    @map("calculation_version")
+
+  // ── Normalization references ──────────────────────────────────────────────
+  distanceReferenceKm             Float @map("distance_reference_km")
+  timeReferenceMinutes            Float @map("time_reference_minutes")
+  passengerImpactReferenceMinutes Float @map("passenger_impact_reference_minutes")
+  detourReferenceMinutes          Float @map("detour_reference_minutes")
+  pcePenaltyReference             Float @map("pce_penalty_reference")
+
+  // ── Benefit weights (sum to 1.0) ───────────────────────────────────────────
+  distanceWeight        Float @map("distance_weight")
+  timeWeight             Float @map("time_weight")
+  resourceReleaseWeight  Float @map("resource_release_weight")
+
+  // ── Impact weights (sum to 1.0) — pcePenaltyWeight absorbs the old λ ───────
+  passengerImpactWeight Float @map("passenger_impact_weight")
+  detourWeight          Float @map("detour_weight")
+  pcePenaltyWeight      Float @map("pce_penalty_weight")
+
+  isActive      Boolean   @default(true) @map("is_active")
+  effectiveFrom DateTime  @default(now()) @map("effective_from") @db.Timestamptz(6)
+  effectiveTo   DateTime? @map("effective_to") @db.Timestamptz(6)
+
+  createdBy String? @map("created_by")
+  updatedBy String? @map("updated_by")
+
+  @@index([tenantId],             map: "idx_rc_scoring_policy_tenant")
+  @@index([tenantId, isActive],   map: "idx_rc_scoring_policy_tenant_active")
+  @@map("route_consolidation_scoring_policies")
+  @@schema("public")
+}
 
 model RouteConsolidation {
   id                     String    @id @default(uuid())

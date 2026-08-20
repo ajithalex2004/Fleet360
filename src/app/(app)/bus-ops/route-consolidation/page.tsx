@@ -29,6 +29,7 @@ import { PageHeader } from '@/components/bus-ops/theme';
 import PceVerdictPanel, { type PceVerdictBody } from '@/components/bus-ops/PceVerdictPanel';
 import RouteConsolidationApplyModal, { type RecommendationForApply } from '@/components/bus-ops/RouteConsolidationApplyModal';
 import RouteConsolidationHistoryPanel from '@/components/bus-ops/RouteConsolidationHistoryPanel';
+import RouteConsolidationScoringPolicyPanel from '@/components/bus-ops/RouteConsolidationScoringPolicyPanel';
 
 // ─── Types matched to /analyze response ─────────────────────────────
 
@@ -70,6 +71,8 @@ interface Objective {
   costPerVehicleDay?: number;
   operatingDaysPerWeek?: number;
   fallbackKm?: { pickup?: number; dropoff?: number };
+  maxDepartureTimeDiffMinutes?: number;
+  vehicleTurnaroundMinutes?: number;
 }
 
 interface AnalyzeResponse {
@@ -203,23 +206,41 @@ export default function RouteConsolidationPage() {
                     onChange={(e) => setObjective({ ...objective, operatingDaysPerWeek: emptyToUndef(e.target.value) })}
                     placeholder="5" className={inputCls} />
                 </Field>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Pickup fallback km" hint="default 3.0">
-                    <input type="number" step="0.1" value={objective.fallbackKm?.pickup ?? ''}
-                      onChange={(e) => setObjective({ ...objective, fallbackKm: { ...objective.fallbackKm, pickup: emptyToUndef(e.target.value) } })}
-                      placeholder="3.0" className={inputCls} />
+                <div className="border-t border-slate-700 my-3 pt-3">
+                  <p className="text-xs uppercase tracking-wider text-slate-400 mb-3">Time Buffers</p>
+                  <Field label="Max departure time diff (min)" hint="default 60 — routes beyond this are skipped">
+                    <input type="number" step="1" value={objective.maxDepartureTimeDiffMinutes ?? ''}
+                      onChange={(e) => setObjective({ ...objective, maxDepartureTimeDiffMinutes: emptyToUndef(e.target.value) })}
+                      placeholder="60" className={inputCls} />
                   </Field>
-                  <Field label="Dropoff fallback km" hint="default 1.5">
-                    <input type="number" step="0.1" value={objective.fallbackKm?.dropoff ?? ''}
-                      onChange={(e) => setObjective({ ...objective, fallbackKm: { ...objective.fallbackKm, dropoff: emptyToUndef(e.target.value) } })}
-                      placeholder="1.5" className={inputCls} />
+                  <Field label="Vehicle turnaround (min)" hint="default 30 — min time between arrival and next trip">
+                    <input type="number" step="1" value={objective.vehicleTurnaroundMinutes ?? ''}
+                      onChange={(e) => setObjective({ ...objective, vehicleTurnaroundMinutes: emptyToUndef(e.target.value) })}
+                      placeholder="30" className={inputCls} />
                   </Field>
+                </div>
+                <div className="border-t border-slate-700 my-3 pt-3">
+                  <p className="text-xs uppercase tracking-wider text-slate-400 mb-3">Zone Fallback Thresholds</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Pickup fallback km" hint="default 3.0">
+                      <input type="number" step="0.1" value={objective.fallbackKm?.pickup ?? ''}
+                        onChange={(e) => setObjective({ ...objective, fallbackKm: { ...objective.fallbackKm, pickup: emptyToUndef(e.target.value) } })}
+                        placeholder="3.0" className={inputCls} />
+                    </Field>
+                    <Field label="Dropoff fallback km" hint="default 1.5">
+                      <input type="number" step="0.1" value={objective.fallbackKm?.dropoff ?? ''}
+                        onChange={(e) => setObjective({ ...objective, fallbackKm: { ...objective.fallbackKm, dropoff: emptyToUndef(e.target.value) } })}
+                        placeholder="1.5" className={inputCls} />
+                    </Field>
+                  </div>
                 </div>
                 <p className="text-[11px] text-slate-500">
                   Zones from <code>spatial.places</code> take precedence over distance thresholds when available.
                 </p>
               </div>
             </details>
+
+            <RouteConsolidationScoringPolicyPanel />
 
             <button onClick={analyse} disabled={analysing}
               className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50">
