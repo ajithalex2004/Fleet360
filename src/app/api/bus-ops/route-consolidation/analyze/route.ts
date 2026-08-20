@@ -11,9 +11,18 @@
  *     routeIds?: string[],           // subset to analyse; defaults to all active
  *     objective?: {
  *       penaltyLambda?, costPerVehicleDay?, operatingDaysPerWeek?,
- *       fallbackKm?: { pickup?, dropoff? }
+ *       fallbackKm?: { pickup?, dropoff? },
+ *       maxDepartureTimeDiffMinutes?, maxArrivalTimeDiffMinutes?,
+ *       vehicleTurnaroundMinutes?
  *     }
  *   }
+ *
+ * maxDepartureTimeDiffMinutes / maxArrivalTimeDiffMinutes, when omitted,
+ * are NOT hardcoded here — resolveEligibilityPolicy() resolves them from
+ * the tenant's PlanningConstraint rows (kind DEPARTURE_TIME_PROXIMITY /
+ * ARRIVAL_TIME_PROXIMITY, editable on the "Edit PCE rules" page), falling
+ * back to a hardcoded default only if no such row exists. An explicit
+ * value in the request body always wins over both.
  *
  * Response 200:
  *   { objective, recommendations[], skipped[], totals }
@@ -26,6 +35,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { loadConsolidationFacts } from '@/lib/planning/route-consolidation-facts';
 import { analyzeConsolidations, type ConsolidationObjective } from '@/lib/planning/route-consolidation';
+import { resolveEligibilityPolicy } from '@/lib/planning/route-consolidation-eligibility-policy';
 
 export async function POST(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id');
@@ -58,8 +68,19 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const facts = await loadConsolidationFacts(prisma, { tenantId, routeIds });
-    const result = analyzeConsolidations(facts, objective);
+    const [facts, eligibilityPolicy] = await Promise.all([
+      loadConsolidationFacts(prisma, { tenantId, routeIds }),
+      resolveEligibilityPolicy(prisma, tenantId, {
+        maxDepartureTimeDiffMinutes: objective.maxDepartureTimeDiffMinutes,
+        maxArrivalTimeDiffMinutes: objective.maxArrivalTimeDiffMinutes,
+      }),
+    ]);
+    const resolvedObjective: ConsolidationObjective = {
+      ...objective,
+      maxDepartureTimeDiffMinutes: eligibilityPolicy.maxDepartureTimeDiffMinutes,
+      maxArrivalTimeDiffMinutes: eligibilityPolicy.maxArrivalTimeDiffMinutes,
+    };
+    const result = analyzeConsolidations(facts, resolvedObjective);
     return NextResponse.json(result);
   } catch (e) {
     console.error('[route-consolidation.analyze]', e);
@@ -73,7 +94,10 @@ function parseObjective(raw: unknown): ConsolidationObjective | string {
   const o = raw as Record<string, unknown>;
   const out: ConsolidationObjective = {};
 
-  for (const key of ['penaltyLambda', 'costPerVehicleDay', 'operatingDaysPerWeek'] as const) {
+  for (const key of [
+    'penaltyLambda', 'costPerVehicleDay', 'operatingDaysPerWeek',
+    'maxDepartureTimeDiffMinutes', 'maxArrivalTimeDiffMinutes', 'vehicleTurnaroundMinutes',
+  ] as const) {
     if (o[key] === undefined) continue;
     if (typeof o[key] !== 'number' || !Number.isFinite(o[key])) {
       return `objective.${key} must be a finite number`;

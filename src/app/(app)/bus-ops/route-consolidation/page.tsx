@@ -54,10 +54,13 @@ type SkipReason =
   | 'DIFFERENT_ROUTE_TYPE'
   | 'DIFFERENT_SHIFT'
   | 'DIFFERENT_DIRECTION'
+  | 'DEPARTURE_TIME_TOO_FAR'
+  | 'ARRIVAL_TIME_TOO_FAR'
   | 'PICKUP_ZONE_INCOMPATIBLE'
   | 'DROPOFF_ZONE_INCOMPATIBLE'
   | 'ZONE_DATA_UNAVAILABLE'
-  | 'INSUFFICIENT_ROUTE_DATA';
+  | 'INSUFFICIENT_ROUTE_DATA'
+  | 'MERGED_EXCEEDS_CAPACITY';
 
 interface SkippedPair {
   routeIdA: string;
@@ -72,6 +75,7 @@ interface Objective {
   operatingDaysPerWeek?: number;
   fallbackKm?: { pickup?: number; dropoff?: number };
   maxDepartureTimeDiffMinutes?: number;
+  maxArrivalTimeDiffMinutes?: number;
   vehicleTurnaroundMinutes?: number;
 }
 
@@ -208,10 +212,15 @@ export default function RouteConsolidationPage() {
                 </Field>
                 <div className="border-t border-slate-700 my-3 pt-3">
                   <p className="text-xs uppercase tracking-wider text-slate-400 mb-3">Time Buffers</p>
-                  <Field label="Max departure time diff (min)" hint="default 60 — routes beyond this are skipped">
+                  <Field label="Max departure time diff (min)" hint="tenant default, else 60 — routes beyond this are skipped">
                     <input type="number" step="1" value={objective.maxDepartureTimeDiffMinutes ?? ''}
                       onChange={(e) => setObjective({ ...objective, maxDepartureTimeDiffMinutes: emptyToUndef(e.target.value) })}
                       placeholder="60" className={inputCls} />
+                  </Field>
+                  <Field label="Max arrival time diff (min)" hint="tenant default, else 45 — catches same-departure pairs with very different durations">
+                    <input type="number" step="1" value={objective.maxArrivalTimeDiffMinutes ?? ''}
+                      onChange={(e) => setObjective({ ...objective, maxArrivalTimeDiffMinutes: emptyToUndef(e.target.value) })}
+                      placeholder="45" className={inputCls} />
                   </Field>
                   <Field label="Vehicle turnaround (min)" hint="default 30 — min time between arrival and next trip">
                     <input type="number" step="1" value={objective.vehicleTurnaroundMinutes ?? ''}
