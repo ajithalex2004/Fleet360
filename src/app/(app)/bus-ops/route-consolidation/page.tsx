@@ -34,9 +34,10 @@ import RouteConsolidationScoringPolicyPanel from '@/components/bus-ops/RouteCons
 // ─── Types matched to /analyze response ─────────────────────────────
 
 type ZoneCompatKind =
-  | 'ZONE_MATCH' | 'ZONE_DIFFERENT' | 'FALLBACK_DISTANCE' | 'FALLBACK_TOO_FAR' | 'UNKNOWN';
+  | 'SAME_ZONE' | 'WITHIN_FALLBACK' | 'DIFFERENT_ZONES' | 'OUTSIDE_FALLBACK' | 'UNKNOWN';
 
-type ZoneCompatResult = { kind: ZoneCompatKind; sharedPlaceId?: string; distanceKm?: number };
+/** Matches zone-compat.ts's real ZoneCompatResult exactly — this page's kind/field names previously drifted from it (ZONE_MATCH/FALLBACK_DISTANCE/sharedPlaceId never existed on the wire), so ZoneBadge/formatZone silently fell through to "unknown" for every response. */
+type ZoneCompatResult = { kind: ZoneCompatKind; distanceKm: number | null; reason: string };
 
 interface MatrixPairingResult { distanceKm: number; durationMin: number }
 interface ResourceRelease {
@@ -474,16 +475,16 @@ export default function RouteConsolidationPage() {
 
 function ZoneBadge({ side, compat }: { side: string; compat: ZoneCompatResult }) {
   const cls =
-    compat.kind === 'ZONE_MATCH' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-    : compat.kind === 'FALLBACK_DISTANCE' ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-    : compat.kind === 'ZONE_DIFFERENT' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-    : compat.kind === 'FALLBACK_TOO_FAR' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+    compat.kind === 'SAME_ZONE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+    : compat.kind === 'WITHIN_FALLBACK' ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+    : compat.kind === 'DIFFERENT_ZONES' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+    : compat.kind === 'OUTSIDE_FALLBACK' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
     : 'bg-slate-500/20 text-slate-300 border-slate-500/40';
   const label =
-    compat.kind === 'ZONE_MATCH' ? 'ZONE'
-    : compat.kind === 'FALLBACK_DISTANCE' ? `${compat.distanceKm?.toFixed(1) ?? '?'}km`
-    : compat.kind === 'ZONE_DIFFERENT' ? 'DIFF'
-    : compat.kind === 'FALLBACK_TOO_FAR' ? `${compat.distanceKm?.toFixed(1) ?? '?'}km`
+    compat.kind === 'SAME_ZONE' ? 'ZONE'
+    : compat.kind === 'WITHIN_FALLBACK' ? `${compat.distanceKm?.toFixed(1) ?? '?'}km`
+    : compat.kind === 'DIFFERENT_ZONES' ? 'DIFF'
+    : compat.kind === 'OUTSIDE_FALLBACK' ? `${compat.distanceKm?.toFixed(1) ?? '?'}km`
     : '—';
   return (
     <span className="inline-flex items-center gap-1 text-[10px]">
@@ -600,12 +601,9 @@ function stripEmpty<T extends Record<string, unknown>>(obj: T): Partial<T> {
   return out;
 }
 
+/** The backend already produces a well-formed human-readable reason per kind (zone-compat.ts) — reuse it directly rather than reconstructing our own formatting from distanceKm. */
 function formatZone(z: ZoneCompatResult): string {
-  if (z.kind === 'ZONE_MATCH') return `matched (${z.sharedPlaceId?.slice(0, 8) ?? '?'})`;
-  if (z.kind === 'FALLBACK_DISTANCE') return `distance ${z.distanceKm?.toFixed(2) ?? '?'}km (fallback)`;
-  if (z.kind === 'ZONE_DIFFERENT') return 'different zones';
-  if (z.kind === 'FALLBACK_TOO_FAR') return `${z.distanceKm?.toFixed(2) ?? '?'}km apart`;
-  return 'unknown';
+  return z.reason || 'unknown';
 }
 
 function groupSkipped(skipped: SkippedPair[]): Array<[string, SkippedPair[]]> {
