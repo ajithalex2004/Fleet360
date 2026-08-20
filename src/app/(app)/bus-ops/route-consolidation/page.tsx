@@ -107,7 +107,6 @@ interface Objective {
   fallbackKm?: { pickup?: number; dropoff?: number };
   maxDepartureTimeDiffMinutes?: number;
   maxArrivalTimeDiffMinutes?: number;
-  vehicleTurnaroundMinutes?: number;
 }
 
 interface AnalyzeResponse {
@@ -253,11 +252,6 @@ export default function RouteConsolidationPage() {
                     <input type="number" step="1" value={objective.maxArrivalTimeDiffMinutes ?? ''}
                       onChange={(e) => setObjective({ ...objective, maxArrivalTimeDiffMinutes: emptyToUndef(e.target.value) })}
                       placeholder="45" className={inputCls} />
-                  </Field>
-                  <Field label="Vehicle turnaround (min)" hint="tenant default, else 30 — min time between arrival and next trip before the vehicle is reusable">
-                    <input type="number" step="1" value={objective.vehicleTurnaroundMinutes ?? ''}
-                      onChange={(e) => setObjective({ ...objective, vehicleTurnaroundMinutes: emptyToUndef(e.target.value) })}
-                      placeholder="30" className={inputCls} />
                   </Field>
                 </div>
                 <div className="border-t border-slate-700 my-3 pt-3">

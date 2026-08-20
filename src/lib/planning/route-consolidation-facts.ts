@@ -49,6 +49,9 @@ export type RouteFacts = {
   representativeDirection: string | null;  // INBOUND | OUTBOUND
   representativeDepartureTime: string | null;  // HH:MM 24h format
   representativeArrivalTime: string | null;    // HH:MM 24h format (for turnaround calc)
+  /** Current default vehicle/driver on the route (BusRoute.assignedVehicleId/assignedDriverId) — used by the Case 2 vehicle-reuse analysis to flag when two routes are already on different vehicles/drivers. Not enforced as FK (see BusRoute schema comment); read-only here. */
+  assignedVehicleId: string | null;
+  assignedDriverId: string | null;
 };
 
 export type ConsolidationFacts = {
@@ -82,6 +85,7 @@ export async function loadConsolidationFacts(
         id: true, name: true, routeType: true, requiredVehicleGroup: true,
         totalDistanceKm: true, estimatedDurationMins: true, capacity: true,
         departureTime: true, expectedArrivalTime: true, shiftType: true, direction: true,
+        assignedVehicleId: true, assignedDriverId: true,
         stops: {
           select: { placeId: true, gpsLat: true, gpsLng: true, sequence: true },
           orderBy: { sequence: 'asc' },
@@ -143,6 +147,8 @@ export async function loadConsolidationFacts(
       representativeDirection: r.direction ?? rep?.direction ?? null,
       representativeDepartureTime: r.departureTime ?? formatTime(rep?.departureTime ?? null),
       representativeArrivalTime: r.expectedArrivalTime ?? formatTime(rep?.arrivalTime ?? null),
+      assignedVehicleId: r.assignedVehicleId,
+      assignedDriverId: r.assignedDriverId,
     };
   });
 

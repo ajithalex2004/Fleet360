@@ -114,9 +114,15 @@ const KIND_META: KindMeta[] = [
   },
   {
     kind: 'VEHICLE_MIN_TURNAROUND',
-    label: 'Route Consolidation — vehicle turnaround',
-    paramsHint: 'minBufferMin — minimum minutes between a consolidated trip\'s arrival and a return trip\'s departure before the same vehicle is treated as reusable',
+    label: 'Vehicle reuse — minimum turnaround',
+    paramsHint: 'minBufferMin — minimum minutes between one route\'s arrival and another\'s departure, before real reposition time, for the same vehicle to serve both sequentially',
     paramsTemplate: { minBufferMin: 30 },
+  },
+  {
+    kind: 'MAX_VEHICLE_REUSE_WINDOW',
+    label: 'Vehicle reuse — maximum window',
+    paramsHint: 'maxMinutes — ceiling on that same gap; beyond this the two trips are unrelated rather than a meaningful back-to-back reuse candidate',
+    paramsTemplate: { maxMinutes: 180 },
   },
 ];
 
@@ -642,6 +648,12 @@ function validateConstraintForm(form: FormState): ValidationResult {
       if (Number.isNaN(b) || b < 0 || b > 24 * 60) return { ok: false, error: 'Min turnaround must be 0–1440 minutes' };
       break;
     }
+    case 'MAX_VEHICLE_REUSE_WINDOW': {
+      const m = num('maxMinutes');
+      if (m == null) return { ok: false, error: 'Max reuse window (minutes) is required' };
+      if (Number.isNaN(m) || m <= 0) return { ok: false, error: 'Max reuse window must be > 0' };
+      break;
+    }
     default:
       break;
   }
@@ -1069,8 +1081,15 @@ function ParamsFields({
 
     case 'VEHICLE_MIN_TURNAROUND':
       return (
-        <Field label="Min turnaround (minutes)" hint="minimum gap between a consolidated trip's arrival and a return trip's departure to treat the vehicle as reusable">
+        <Field label="Min turnaround (minutes)" hint="minimum gap between one route's arrival and another's departure, before reposition time, for the same vehicle to serve both">
           <input type="number" className={inputCls} value={numParam(params, 'minBufferMin')} onChange={(e) => setNum('minBufferMin', e.target.value)} placeholder="30" />
+        </Field>
+      );
+
+    case 'MAX_VEHICLE_REUSE_WINDOW':
+      return (
+        <Field label="Max reuse window (minutes)" hint="ceiling on the arrival-to-departure gap; beyond this two trips aren't a meaningful back-to-back reuse candidate">
+          <input type="number" className={inputCls} value={numParam(params, 'maxMinutes')} onChange={(e) => setNum('maxMinutes', e.target.value)} placeholder="180" />
         </Field>
       );
 

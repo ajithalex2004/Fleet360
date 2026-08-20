@@ -114,13 +114,6 @@ export type ConsolidationObjective = {
    * PlanningConstraint kind ARRIVAL_TIME_PROXIMITY, fallback 45 minutes).
    */
   maxArrivalTimeDiffMinutes?: number;
-  /**
-   * Turnaround time buffer (in minutes) for vehicle reuse analysis.
-   * When checking if a vehicle can do a return trip, this is the minimum
-   * time required between arrival at destination and next departure.
-   * Default: 30 minutes.
-   */
-  vehicleTurnaroundMinutes?: number;
 };
 
 // ─── Result shapes ──────────────────────────────────────────────────
@@ -178,20 +171,6 @@ export type ConsolidationRecommendation = {
   operatorScore: number;
   /** "Estimated Direct Operating Saving" — only fuel + vehicle-day costs are dollarized; see route-consolidation-scoring.ts. */
   estimatedSavings: EstimatedSavings;
-  /**
-   * Vehicle reuse analysis: can the consolidated vehicle complete this
-   * trip and still make a return trip from the destination back to origin
-   * (or serve another outbound route) within the turnaround window?
-   */
-  vehicleReuse: {
-    canReuseForReturn: boolean;
-    returnTripCandidates: Array<{
-      routeId: string;
-      routeName: string;
-      departureTime: string;
-      availableMinutes: number;
-    }>;
-  } | null;
 };
 
 export type ConsolidationAnalysis = {
@@ -453,9 +432,6 @@ function scoreCandidate(
       ? parseTimeDifference(a.representativeDepartureTime, b.representativeDepartureTime)
       : null;
 
-  // Analyze vehicle reuse: can this vehicle do a return trip?
-  const vehicleReuse = analyzeVehicleReuse(a, b, facts, objective);
-
   return {
     routeA: { id: a.id, name: a.name },
     routeB: { id: b.id, name: b.name },
@@ -478,7 +454,6 @@ function scoreCandidate(
     rankingCost,
     operatorScore,
     estimatedSavings,
-    vehicleReuse,
   };
 }
 
@@ -648,103 +623,13 @@ function parseTimeDifference(timeA: string, timeB: string): number {
 }
 
 /**
- * Analyze vehicle reuse opportunity: after completing the consolidated
- * inbound trip (A+B), can the same vehicle serve an outbound trip back
- * from the destination to the origin zone within the turnaround window?
- *
- * This detects "round-trip" savings where one vehicle can do:
- *   Morning: accommodation → workplace (OUTBOUND)
- *   Evening: workplace → accommodation (INBOUND, consolidated A+B)
- *   Next morning: accommodation → workplace again
- *
- * Returns null if either route lacks timing data.
+ * Vehicle-reuse-across-sequential-trips ("Case 2") used to be an
+ * afterthought attached to each Case 1 candidate here — a coordinate-only
+ * heuristic (stopsAreNearby, opposite-direction requirement) checked only
+ * for pairs that had already survived Case 1's filters. It's now a
+ * standalone all-route-pairs analysis with real matrix distances — see
+ * route-consolidation-vehicle-reuse.ts / POST .../vehicle-reuse. Case 1
+ * and Case 2 are different resource models (route elimination vs. vehicle
+ * reuse across unchanged routes) and don't share eligibility rules, so
+ * folding one into the other's recommendation object was the wrong shape.
  */
-function analyzeVehicleReuse(
-  a: RouteFacts,
-  b: RouteFacts,
-  facts: ConsolidationFacts,
-  objective: ConsolidationObjective
-): ConsolidationRecommendation['vehicleReuse'] {
-  // Need arrival time for the consolidated trip to calculate turnaround
-  const laterRoute = getLaterRoute(a, b);
-  if (!laterRoute?.representativeArrivalTime) return null;
-
-  const arrivalMinutes = parseTimeToMinutes(laterRoute.representativeArrivalTime);
-  if (arrivalMinutes === null) return null;
-
-  const turnaroundMinutes = objective.vehicleTurnaroundMinutes ?? 30;
-  const earliestDepartureMinutes = (arrivalMinutes + turnaroundMinutes) % 1440;
-
-  // Look for OUTBOUND routes from the consolidated destination back to
-  // the origin zone (reverse direction).
-  const destStop = laterRoute.stops[laterRoute.stops.length - 1];
-  const originStop = laterRoute.stops[0];
-
-  const returnCandidates = facts.routes
-    .filter((r) => {
-      // Must be opposite direction
-      if (r.representativeDirection !== getOppositeDirection(laterRoute.representativeDirection)) {
-        return false;
-      }
-      // Must depart from near the consolidated trip's destination
-      if (r.stops.length < 2) return false;
-      const rOrigin = r.stops[0];
-      if (!stopsAreNearby(destStop, rOrigin)) return false;
-      // Must go to near the consolidated trip's origin
-      const rDest = r.stops[r.stops.length - 1];
-      if (!stopsAreNearby(originStop, rDest)) return false;
-      // Must have a departure time
-      if (!r.representativeDepartureTime) return false;
-      return true;
-    })
-    .map((r) => {
-      const depMinutes = parseTimeToMinutes(r.representativeDepartureTime!);
-      if (depMinutes === null) return null;
-      // Calculate available time (how long the vehicle waits before this trip)
-      let availableMinutes = depMinutes - earliestDepartureMinutes;
-      if (availableMinutes < 0) availableMinutes += 1440; // wrap midnight
-      return {
-        routeId: r.id,
-        routeName: r.name,
-        departureTime: r.representativeDepartureTime!,
-        availableMinutes,
-      };
-    })
-    .filter((c): c is NonNullable<typeof c> => c !== null)
-    .filter((c) => c.availableMinutes >= 0 && c.availableMinutes <= 180) // within 3 hours
-    .sort((x, y) => x.availableMinutes - y.availableMinutes); // closest first
-
-  return {
-    canReuseForReturn: returnCandidates.length > 0,
-    returnTripCandidates: returnCandidates,
-  };
-}
-
-function getLaterRoute(a: RouteFacts, b: RouteFacts): RouteFacts | null {
-  if (!a.representativeDepartureTime || !b.representativeDepartureTime) return null;
-  const minA = parseTimeToMinutes(a.representativeDepartureTime);
-  const minB = parseTimeToMinutes(b.representativeDepartureTime);
-  if (minA === null || minB === null) return null;
-  return minA >= minB ? a : b;
-}
-
-function getOppositeDirection(direction: string | null): string | null {
-  if (direction === 'INBOUND') return 'OUTBOUND';
-  if (direction === 'OUTBOUND') return 'INBOUND';
-  return null;
-}
-
-function stopsAreNearby(
-  s1: { placeId: string | null; lat: number | null; lng: number | null },
-  s2: { placeId: string | null; lat: number | null; lng: number | null }
-): boolean {
-  // Same placeId = same location
-  if (s1.placeId && s2.placeId && s1.placeId === s2.placeId) return true;
-  // Within 2km (approx 0.018 degrees at UAE latitude)
-  if (s1.lat != null && s1.lng != null && s2.lat != null && s2.lng != null) {
-    const dLat = Math.abs(s1.lat - s2.lat);
-    const dLng = Math.abs(s1.lng - s2.lng);
-    return dLat < 0.018 && dLng < 0.018;
-  }
-  return false;
-}

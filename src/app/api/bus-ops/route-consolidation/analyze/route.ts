@@ -12,8 +12,7 @@
  *     objective?: {
  *       penaltyLambda?, costPerVehicleDay?, operatingDaysPerWeek?,
  *       fallbackKm?: { pickup?, dropoff? },
- *       maxDepartureTimeDiffMinutes?, maxArrivalTimeDiffMinutes?,
- *       vehicleTurnaroundMinutes?
+ *       maxDepartureTimeDiffMinutes?, maxArrivalTimeDiffMinutes?
  *     }
  *   }
  *
@@ -24,11 +23,9 @@
  * back to a hardcoded default only if no such row exists. An explicit
  * value in the request body always wins over both.
  *
- * vehicleTurnaroundMinutes resolves the same way via
- * resolveVehicleTurnaroundMinutes() (kind VEHICLE_MIN_TURNAROUND) — see
- * route-consolidation-vehicle-reuse-policy.ts. It isn't an eligibility
- * filter; it only shapes the vehicleReuse detail on already-recommended
- * pairs (analyzeVehicleReuse() in route-consolidation.ts).
+ * Vehicle-reuse-across-sequential-trips ("Case 2") is a separate resource
+ * model from this route-merge analysis — see POST .../vehicle-reuse
+ * instead (route-consolidation-vehicle-reuse.ts).
  *
  * Scoring weights (distance/time saving, resource release, passenger
  * impact, detour, PCE penalty) similarly resolve from the tenant's
@@ -49,7 +46,6 @@ import { loadConsolidationFacts } from '@/lib/planning/route-consolidation-facts
 import { analyzeConsolidations, type ConsolidationObjective } from '@/lib/planning/route-consolidation';
 import { resolveEligibilityPolicy } from '@/lib/planning/route-consolidation-eligibility-policy';
 import { resolveScoringPolicy } from '@/lib/planning/route-consolidation-scoring-policy';
-import { resolveVehicleTurnaroundMinutes } from '@/lib/planning/route-consolidation-vehicle-reuse-policy';
 
 export async function POST(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id');
@@ -82,20 +78,18 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const [facts, eligibilityPolicy, scoringPolicy, vehicleTurnaroundMinutes] = await Promise.all([
+    const [facts, eligibilityPolicy, scoringPolicy] = await Promise.all([
       loadConsolidationFacts(prisma, { tenantId, routeIds }),
       resolveEligibilityPolicy(prisma, tenantId, {
         maxDepartureTimeDiffMinutes: objective.maxDepartureTimeDiffMinutes,
         maxArrivalTimeDiffMinutes: objective.maxArrivalTimeDiffMinutes,
       }),
       resolveScoringPolicy(prisma, tenantId),
-      resolveVehicleTurnaroundMinutes(prisma, tenantId, objective.vehicleTurnaroundMinutes),
     ]);
     const resolvedObjective: ConsolidationObjective = {
       ...objective,
       maxDepartureTimeDiffMinutes: eligibilityPolicy.maxDepartureTimeDiffMinutes,
       maxArrivalTimeDiffMinutes: eligibilityPolicy.maxArrivalTimeDiffMinutes,
-      vehicleTurnaroundMinutes,
     };
     const result = await analyzeConsolidations(prisma, tenantId, facts, resolvedObjective, scoringPolicy);
     return NextResponse.json(result);
@@ -113,7 +107,7 @@ function parseObjective(raw: unknown): ConsolidationObjective | string {
 
   for (const key of [
     'penaltyLambda', 'costPerVehicleDay', 'operatingDaysPerWeek',
-    'maxDepartureTimeDiffMinutes', 'maxArrivalTimeDiffMinutes', 'vehicleTurnaroundMinutes',
+    'maxDepartureTimeDiffMinutes', 'maxArrivalTimeDiffMinutes',
   ] as const) {
     if (o[key] === undefined) continue;
     if (typeof o[key] !== 'number' || !Number.isFinite(o[key])) {

@@ -200,10 +200,16 @@ const EVALUATORS: Record<string, Evaluator> = {
   // and show as a spurious WARN on every merge.
   DEPARTURE_TIME_PROXIMITY: () => [],
   ARRIVAL_TIME_PROXIMITY: () => [],
-  // Same reasoning — VEHICLE_MIN_TURNAROUND is pure config (minBufferMin)
-  // read by resolveVehicleTurnaroundMinutes() for Stage 4's
-  // analyzeVehicleReuse(), not a PCE check.
+  // Same reasoning — VEHICLE_MIN_TURNAROUND / MAX_VEHICLE_REUSE_WINDOW are
+  // pure config read by route-consolidation-vehicle-reuse-policy.ts for
+  // the standalone Case 2 vehicle-reuse analysis, not PCE checks. Case 2
+  // itself never calls evaluatePlan() (it doesn't synthesize a merged
+  // trip), but Case 1's evaluatePlan() call scans every enabled
+  // PlanningConstraint row tenant-wide regardless of kind relevance — so
+  // without these two entries, enabling either kind would make every
+  // Case 1 candidate show a spurious ENGINE_UNKNOWN_KIND WARN too.
   VEHICLE_MIN_TURNAROUND: () => [],
+  MAX_VEHICLE_REUSE_WINDOW: () => [],
 };
 
 // ─── Shared helpers ─────────────────────────────────────────────────
