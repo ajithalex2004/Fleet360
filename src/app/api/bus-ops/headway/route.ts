@@ -26,7 +26,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
+import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 import { expandHeadway, daysToMask, maskToDays } from '@/lib/headway/service';
+
+/**
+ * Every method is gated on bus-ops:admin:headway. Headway rules define the
+ * published service frequency and each one can bind to a CBA rule-set via
+ * cbaRuleSetId, so an unguarded write here reshapes the timetable and can
+ * repoint it at different pay rules. Shipped with no RBAC gate at all;
+ * matches the planning-constraints pattern now.
+ */
+const HEADWAY_RESOURCE = 'headway';
 
 const CACHE_TAG = 'bus-ops:headway';
 
@@ -61,6 +71,8 @@ function shapeRule(r: RuleRow) {
 export async function GET(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id') ?? '';
   if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
+  const permError = requireBusOpsAdminAccess(req, HEADWAY_RESOURCE);
+  if (permError) return permError;
   const sp = new URL(req.url).searchParams;
   const routeId = sp.get('routeId');
   const from    = sp.get('from');
@@ -96,6 +108,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id') ?? '';
   if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
+  const permError = requireBusOpsAdminAccess(req, HEADWAY_RESOURCE);
+  if (permError) return permError;
   try {
     const body = await req.json() as {
       routeId: string;
@@ -138,6 +152,8 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id') ?? '';
   if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
+  const permError = requireBusOpsAdminAccess(req, HEADWAY_RESOURCE);
+  if (permError) return permError;
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
   try {
