@@ -9,11 +9,17 @@
  *   - "Apply runs":  every trip in every run gets driverId = run.assignedDriverId.
  *                    If the run doesn't have an assigned driver yet (e.g.
  *                    rostering wasn't computed), this pass is skipped.
- *   - "Apply blocks": every trip in every block gets vehicleId = block.assignedVehicleId.
- *                    We use a deterministic vehicle assignment — take the
- *                    first N available active vehicles in the tenant,
- *                    sorted by license-plate, and pair them with blocks in
- *                    order. The user can later re-assign vehicles manually.
+ *   - "Apply blocks": every trip in every block gets vehicleId = the block's
+ *                    best-fit vehicle, via assignVehiclesToBlocks() —
+ *                    gated on seating capacity and vehicle-type match,
+ *                    ranked by proximity to the block's first pickup (see
+ *                    lib/plan/assign-vehicles.ts for the full algorithm).
+ *                    Capacity/type/route data is re-queried fresh at
+ *                    Apply time (not read from the saved plan JSON), so
+ *                    it reflects current bookings, not whatever they were
+ *                    when the plan was computed. A block with no eligible
+ *                    vehicle is left unassigned and reported in
+ *                    vehicleAssignmentIssues rather than force-fit.
  *
  *   The two passes are independent — applying a plan that has only runs
  *   (no blocks) just sets drivers. Applying a plan that has only blocks
@@ -25,6 +31,12 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
+import {
+  assignVehiclesToBlocks,
+  VEHICLE_GROUP_CONFLICT,
+  type BlockVehicleRequirement,
+  type VehicleCandidate,
+} from '@/lib/plan/assign-vehicles';
 
 const PLANS_TAG = 'staff-transport-plans';
 const SCHEDULES_TAG = 'bus-ops:schedules';
@@ -97,29 +109,98 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
-    // 3. Build the tripId → vehicleId map from blocks. Pair blocks with
-    //    available vehicles in this tenant (sorted by plate).
+    // 3. Smart vehicle assignment — capacity, vehicle-type, and proximity
+    //    to each block's first pickup. Re-query trips/routes/vehicles
+    //    fresh (not the saved plan JSON) so this reflects current
+    //    bookings and the current fleet, not a stale snapshot.
     const tripToVehicle = new Map<string, string>();
-    const vehicles = await withTenantRls(prisma, tenantId, async (tx) => {
-      const rows = await tx.vehicle.findMany({
-        where: { tenantId, isActive: true },
-        orderBy: [{ licensePlate: 'asc' }, { id: 'asc' }],
+    const vehicleAssignmentIssues: Array<{ blockId: string; vehicleLabel: string; reason: string }> = [];
+    const allTripIds = [...new Set(blocks.flatMap((b) => b.tripIds))];
+
+    const [tripFacts, vehicleCandidates] = await withTenantRls(prisma, tenantId, async (tx) => {
+      const tripRows = await tx.tripSchedule.findMany({
+        where: { id: { in: allTripIds }, tenantId },
+        select: {
+          id: true,
+          confirmedCount: true,
+          route: {
+            select: {
+              requiredVehicleGroup: true,
+              zoneId: true,
+              stops: { select: { gpsLat: true, gpsLng: true, sequence: true }, orderBy: { sequence: 'asc' }, take: 1 },
+            },
+          },
+        },
+      });
+
+      // Proximity uses the vehicle's home depot. There's also a live
+      // current_lat/current_lng/current_location_at on the vehicles
+      // table, but those columns were never added to schema.prisma (DB
+      // has them, the Prisma model doesn't) — pre-existing schema drift,
+      // out of scope here. Depot coordinates are properly declared and
+      // typed, and are a reasonable proxy for "where this vehicle starts
+      // its day" even without a live GPS feed.
+      const vehicleRows = await tx.vehicle.findMany({
+        where: { tenantId, isActive: true, deletedAt: null },
         take: 200,
-        select: { id: true, licensePlate: true, registrationNo: true },
+        select: {
+          id: true, licensePlate: true, seatingCapacity: true, vehicleGroup: true, zoneId: true,
+          homeDepot: { select: { centerLat: true, centerLng: true } },
+        },
       });
-      // Stable secondary sort
-      return rows.sort((a, b) => {
-        const ak = a.licensePlate ?? a.registrationNo ?? a.id;
-        const bk = b.licensePlate ?? b.registrationNo ?? b.id;
-        return ak.localeCompare(bk);
-      });
+      const candidates: VehicleCandidate[] = vehicleRows.map((v) => ({
+        id: v.id,
+        licensePlate: v.licensePlate,
+        seatingCapacity: v.seatingCapacity,
+        vehicleGroup: v.vehicleGroup,
+        zoneId: v.zoneId,
+        lat: v.homeDepot?.centerLat ?? null,
+        lng: v.homeDepot?.centerLng ?? null,
+      }));
+      return [tripRows, candidates] as const;
     });
-    let vehicleIdx = 0;
-    for (const block of blocks) {
-      const vehicle = vehicles[vehicleIdx++];
-      if (!vehicle) break; // out of vehicles — remaining blocks get no assignment
-      for (const tripId of block.tripIds) {
-        if (!tripToVehicle.has(tripId)) tripToVehicle.set(tripId, vehicle.id);
+
+    const tripFactsById = new Map(tripFacts.map((t) => [t.id, t]));
+
+    const blockRequirements: BlockVehicleRequirement[] = blocks.map((b) => {
+      const relevantTrips = b.tripIds
+        .map((tid) => tripFactsById.get(tid))
+        .filter((t): t is NonNullable<typeof t> => !!t);
+      const maxPassengers = relevantTrips.reduce((m, t) => Math.max(m, t.confirmedCount ?? 0), 0);
+      const requiredGroups = new Set(
+        relevantTrips.map((t) => t.route.requiredVehicleGroup).filter((g): g is string => !!g),
+      );
+      const requiredVehicleGroup =
+        requiredGroups.size === 0 ? null
+        : requiredGroups.size === 1 ? [...requiredGroups][0]
+        : VEHICLE_GROUP_CONFLICT;
+      // Zone is soft (see assign-vehicles.ts) — unlike requiredVehicleGroup,
+      // a block whose trips disagree on zone doesn't need a conflict
+      // sentinel, it just falls back to null (no zone-match bonus for
+      // this block, ranking drops straight to proximity).
+      const zones = new Set(relevantTrips.map((t) => t.route.zoneId).filter((z): z is string => !!z));
+      const zoneId = zones.size === 1 ? [...zones][0] : null;
+      const firstTripId = b.trips[0]?.tripId;
+      const firstStop = firstTripId ? tripFactsById.get(firstTripId)?.route.stops[0] : undefined;
+      return {
+        blockId: b.id,
+        maxPassengers,
+        requiredVehicleGroup,
+        zoneId,
+        pickupPoint: { lat: firstStop?.gpsLat ?? null, lng: firstStop?.gpsLng ?? null },
+      };
+    });
+
+    const vehicleAssignments = assignVehiclesToBlocks(blockRequirements, vehicleCandidates);
+    for (const a of vehicleAssignments) {
+      const b = blocks.find((bl) => bl.id === a.blockId);
+      if (!b) continue;
+      if (a.vehicleId) {
+        for (const tripId of b.tripIds) {
+          if (!tripToVehicle.has(tripId)) tripToVehicle.set(tripId, a.vehicleId);
+        }
+      } else {
+        vehicleAssignmentIssues.push({ blockId: a.blockId, vehicleLabel: b.vehicleLabel, reason: a.reason ?? 'UNKNOWN' });
       }
     }
 
@@ -155,8 +236,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       tripsAffected: updates.length,
       driversAssigned: appliedDriver,
       vehiclesAssigned: appliedVehicle,
-      vehiclePoolSize: vehicles.length,
+      vehiclePoolSize: vehicleCandidates.length,
       rostersApplied: rosters.length,
+      vehicleAssignmentIssues,
     });
   } catch (e) {
     console.error('[plan apply]', e);
