@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 /**
  * Lease receipt list (GET) + record (POST).
@@ -10,10 +12,11 @@ import { prisma } from '@/lib/prisma';
  * `20260627000001_add_tenant_id_to_leasing_tables`.
  */
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const { searchParams } = new URL(req.url);
     const contractId = searchParams.get('contractId');
@@ -34,10 +37,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
 
@@ -57,7 +61,8 @@ export async function POST(req: NextRequest) {
     const receiptNumber = `RCP-${Date.now().toString().slice(-6)}`;
     const amount = Number(body.amount ?? 0);
 
-    const receipt = await prisma.leaseReceipt.create({
+    const receipt = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseReceipt.create({
       data: {
         tenantId,
         contractId: body.contractId,
@@ -73,7 +78,8 @@ export async function POST(req: NextRequest) {
         branchId: body.branchId ?? null,
         notes: body.notes ?? null,
       },
-    });
+    }),
+    );
     return NextResponse.json(receipt, { status: 201 });
   } catch (e) {
     console.error('POST /api/leasing/receipts error:', e);

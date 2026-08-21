@@ -9,6 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { LEAD_CHANNELS } from '@/lib/leasing-lead-channels';
 
@@ -25,10 +26,11 @@ const PREFIX_BY_KEY: Record<string, string> = {
 };
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   const inquiries = await prisma.leaseInquiry.findMany({
     where: { tenantId, deletedAt: null, inquiryNumber: { not: null } },
     select: { inquiryNumber: true, createdAt: true },

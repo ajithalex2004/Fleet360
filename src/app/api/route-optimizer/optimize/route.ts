@@ -6,7 +6,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { optimizeRoute, estimateFuelCost, type Waypoint } from '@/lib/mapbox';
+import { optimizeRoute, estimateFuelCost, DEFAULT_FUEL_PRICE_AED, type Waypoint } from '@/lib/mapbox';
+import { prisma } from '@/lib/prisma';
+import { getLatestFuelPrice } from '@/lib/fleet/fuel-price';
 
 export async function POST(req: NextRequest) {
   try {
@@ -35,11 +37,15 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await optimizeRoute(waypoints);
-    const fuel   = estimateFuelCost(result.totalDistanceKm, vehicleType);
+
+    const tenantId = req.headers.get('x-tenant-id');
+    const latestFuel = tenantId ? await getLatestFuelPrice(prisma, tenantId).catch(() => null) : null;
+    const fuel = estimateFuelCost(result.totalDistanceKm, vehicleType, latestFuel?.price ?? DEFAULT_FUEL_PRICE_AED);
+    const fuelPriceSource = latestFuel ? 'fleet-log' as const : 'default' as const;
 
     return NextResponse.json({
       ...result,
-      fuel,
+      fuel: { ...fuel, source: fuelPriceSource, asOf: latestFuel?.asOf ?? null },
       summary: {
         stops:        waypoints.length,
         distanceKm:   result.totalDistanceKm,
@@ -47,13 +53,19 @@ export async function POST(req: NextRequest) {
         durationHuman: formatDuration(result.totalDurationMin),
         fuelLitres:   fuel.litres,
         fuelCostAED:  fuel.costAED,
+        fuelPricePerLitre: fuel.pricePerLitreAED,
+        fuelPriceSource,
       },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
 
-    // If Mapbox isn't configured yet, return a mock result for UI dev
-    if (message.includes('MAPBOX_TOKEN is not configured')) {
+    // If Google Cloud credentials aren't configured, return a mock result
+    // so the UI still renders (helps first-time setup + local dev without
+    // a GCP account). The old Mapbox fallback checked MAPBOX_TOKEN; the
+    // Google client raises with GOOGLE_CLOUD_SA_KEY when the SA key
+    // isn't set.
+    if (message.includes('GOOGLE_CLOUD_SA_KEY') || message.includes('GOOGLE_CLOUD_PROJECT_ID')) {
       return NextResponse.json({
         orderedWaypoints: [],
         totalDistanceKm: 0,
@@ -62,7 +74,7 @@ export async function POST(req: NextRequest) {
         legs: [],
         fuel: { litres: 0, costAED: 0 },
         summary: { stops: 0, distanceKm: 0, durationMin: 0, durationHuman: '—', fuelLitres: 0, fuelCostAED: 0 },
-        _warning: 'MAPBOX_TOKEN not set — add it to .env.local to enable route optimization.',
+        _warning: 'Google Cloud not configured — set GOOGLE_CLOUD_SA_KEY + GOOGLE_CLOUD_PROJECT_ID in .env.local to enable route optimization.',
       });
     }
 

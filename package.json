@@ -33,13 +33,14 @@
         "smoke:marketplace": "node scripts/smoke-marketplace-live.js",
         "test:isolation:unit": "vitest run tests/unit/tenant-rls-helpers.test.ts",
         "test:isolation:integration": "vitest run tests/integration/tenant-isolation-rls.test.ts",
-        "test:isolation": "npm run test:isolation:unit && npm run test:isolation:integration",
+        "test:isolation": "npm run test:isolation:unit && npm run test:isolation:integration && npm run test:isolation:tenant001",
         "test:all": "vitest run tests/unit && vitest run tests/integration && playwright test",
         "cap:sync:ios": "npm run build:driver && npx cap sync ios",
         "cap:sync:android": "npm run build:driver && npx cap sync android",
         "cap:sync": "npm run build:driver && npx cap sync",
         "cap:open:ios": "npx cap open ios",
-        "cap:open:android": "npx cap open android"
+        "cap:open:android": "npx cap open android",
+        "test:isolation:tenant001": "vitest run tests/unit/tenant-authorized-context.test.ts tests/integration/tenant-001-leasing-rental-isolation.test.ts"
     },
     "dependencies": {
         "@capacitor-community/sqlite": "^8.1.1",

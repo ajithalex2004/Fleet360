@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Staff Transportation — User Journeys</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #f7f5f0;
+    --card: #ffffff;
+    --line: #e9e3d6;
+    --line-soft: #f0ebde;
+    --ink: #14171e;
+    --ink-2: #3a4256;
+    --muted: #7c7a72;
+    --accent: #2f6f5e;
+    --accent-soft: rgba(47, 111, 94, 0.08);
+    --warn: #c97b3f;
+    --warn-soft: rgba(201, 123, 63, 0.10);
+    --danger: #b06367;
+    --danger-soft: rgba(176, 99, 103, 0.10);
+    --serif: 'DM Serif Display', serif;
+    --sans: 'Outfit', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    background-image:
+      radial-gradient(circle at 0% 0%, rgba(47, 111, 94, 0.04) 0%, transparent 40%),
+      radial-gradient(circle at 100% 100%, rgba(201, 123, 63, 0.04) 0%, transparent 40%);
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 80px 32px 120px; }
+
+  /* Hero */
+  .hero { margin-bottom: 88px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 28px;
+    height: 1px;
+    background: var(--accent);
+    opacity: 0.5;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 56px;
+    line-height: 1.05;
+    letter-spacing: -0.01em;
+    margin-bottom: 24px;
+    max-width: 900px;
+  }
+  h1 em {
+    font-style: italic;
+    color: var(--accent);
+  }
+  .hero-lead {
+    font-size: 19px;
+    line-height: 1.55;
+    color: var(--ink-2);
+    max-width: 720px;
+    margin-bottom: 36px;
+  }
+  .meta {
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+    padding: 20px 0;
+    border-top: 1px dashed var(--line);
+    border-bottom: 1px dashed var(--line);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .meta-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .meta-item strong { color: var(--ink); font-weight: 600; }
+
+  /* Section header */
+  .section { margin-top: 96px; }
+  .section:first-of-type { margin-top: 0; }
+  .section-num {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  h2 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 38px;
+    line-height: 1.1;
+    letter-spacing: -0.005em;
+    margin-bottom: 16px;
+  }
+  .section-lead {
+    font-size: 17px;
+    color: var(--ink-2);
+    margin-bottom: 40px;
+    max-width: 780px;
+  }
+
+  /* Journey overview cards */
+  .journey-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 64px;
+  }
+  .journey-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px 22px 20px;
+    text-decoration: none;
+    color: inherit;
+    display: block;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+  .journey-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px -8px rgba(20, 23, 30, 0.08);
+  }
+  .journey-card .badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    margin-bottom: 10px;
+  }
+  .journey-card h3 {
+    font-family: var(--serif);
+    font-size: 21px;
+    font-weight: 400;
+    line-height: 1.2;
+    margin-bottom: 8px;
+  }
+  .journey-card p {
+    font-size: 13.5px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .journey-card .steps {
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .journey-card .steps::before {
+    content: "";
+    width: 16px;
+    height: 1px;
+    background: var(--line);
+  }
+
+  /* Journey detail */
+  .journey {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 44px 44px 40px;
+    margin-bottom: 32px;
+  }
+  .journey-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    margin-bottom: 8px;
+    padding-bottom: 24px;
+    border-bottom: 1px dashed var(--line);
+  }
+  .journey-header h3 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 30px;
+    line-height: 1.15;
+    letter-spacing: -0.005em;
+  }
+  .actor-chip {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-2);
+    background: var(--accent-soft);
+    padding: 6px 12px;
+    border-radius: 999px;
+    white-space: nowrap;
+    margin-top: 8px;
+  }
+  .journey-purpose {
+    font-size: 16px;
+    color: var(--ink-2);
+    margin: 16px 0 28px;
+    line-height: 1.55;
+  }
+
+  /* Mermaid container */
+  .diagram {
+    background: #fbfaf6;
+    border: 1px solid var(--line-soft);
+    border-radius: 12px;
+    padding: 28px 20px;
+    margin: 24px 0 28px;
+    overflow-x: auto;
+  }
+  .mermaid {
+    display: flex;
+    justify-content: center;
+    font-family: var(--sans) !important;
+  }
+
+  /* Callouts */
+  .callouts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+    margin-top: 8px;
+  }
+  .callout {
+    border-left: 3px solid var(--accent);
+    padding: 12px 16px 12px 18px;
+    background: var(--accent-soft);
+    border-radius: 0 8px 8px 0;
+  }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .callout.danger { border-left-color: var(--danger); background: var(--danger-soft); }
+  .callout .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .callout strong {
+    font-size: 14px;
+    color: var(--ink);
+    font-weight: 600;
+    display: block;
+    margin-bottom: 4px;
+  }
+  .callout p {
+    font-size: 13px;
+    color: var(--ink-2);
+    line-height: 1.5;
+  }
+
+  /* Key data row */
+  .data-row {
+    display: flex;
+    gap: 32px;
+    padding: 18px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    margin: 24px 0 8px;
+    flex-wrap: wrap;
+  }
+  .data-item .num {
+    font-family: var(--serif);
+    font-size: 28px;
+    color: var(--accent);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .data-item .lbl {
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+  }
+
+  /* Closing section */
+  .closing {
+    margin-top: 96px;
+    padding: 48px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+  }
+  .closing h2 { margin-bottom: 24px; }
+  .closing-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 18px;
+    margin-top: 24px;
+  }
+  .closing-item {
+    padding: 18px 20px;
+    background: var(--bg);
+    border-radius: 10px;
+    border: 1px solid var(--line-soft);
+  }
+  .closing-item .badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    margin-bottom: 6px;
+    letter-spacing: 0.06em;
+  }
+  .closing-item p {
+    font-size: 14px;
+    color: var(--ink-2);
+    line-height: 1.5;
+  }
+
+  /* Footer */
+  footer {
+    margin-top: 80px;
+    padding-top: 32px;
+    border-top: 1px dashed var(--line);
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  @media (max-width: 768px) {
+    .container { padding: 48px 20px 80px; }
+    h1 { font-size: 38px; }
+    h2 { font-size: 28px; }
+    .journey { padding: 28px 20px; }
+    .journey-header { flex-direction: column; }
+    .hero-lead { font-size: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HERO -->
+  <header class="hero">
+    <div class="eyebrow">Fleet360 · Bus Ops · Test Inventory</div>
+    <h1>Five user journeys that explain <em>everything</em> the Staff Transportation module does.</h1>
+    <p class="hero-lead">Every screen, API, table, and rule in <code style="font-family: var(--mono); font-size: 16px; background: var(--accent-soft); padding: 2px 6px; border-radius: 4px;">bus-ops</code> exists to serve one of these five journeys. If a piece of code doesn't protect one of them, it's dead weight.</p>
+    <div class="meta">
+      <div class="meta-item"><strong>Module:</strong> bus-ops</div>
+      <div class="meta-item"><strong>Surface:</strong> 36 admin pages · 70 admin routes · 26 driver routes · 24 Prisma models</div>
+      <div class="meta-item"><strong>Scope:</strong> Tenant-scoped via RLS, retried via outbox</div>
+    </div>
+  </header>
+
+  <!-- JOURNEY OVERVIEW GRID -->
+  <section class="section">
+    <div class="section-num">00 / OVERVIEW</div>
+    <h2>The five journeys at a glance</h2>
+    <p class="section-lead">Each journey has one actor, one goal, and a flow that ties together APIs, database rows, and business rules. Click any card to jump to its detail.</p>
+
+    <div class="journey-grid">
+      <a class="journey-card" href="#j1">
+        <div class="badge">JOURNEY 01</div>
+        <h3>Staff / Passenger</h3>
+        <p>Ride the bus. Submit absence requests. Board via BLE tag or QR. Get off at the right stop.</p>
+        <div class="steps">6 STEPS</div>
+      </a>
+      <a class="journey-card" href="#j2">
+        <div class="badge">JOURNEY 02</div>
+        <h3>Driver (Mobile App)</h3>
+        <p>Enrol biometric. Pre-shift inspection. Start trip. Stream telemetry. Record fuel. End trip.</p>
+        <div class="steps">8 STEPS</div>
+      </a>
+      <a class="journey-card" href="#j3">
+        <div class="badge">JOURNEY 03</div>
+        <h3>Admin / Dispatcher</h3>
+        <p>Build routes, schedule templates, roster staff, watch dispatch, close out trips financially.</p>
+        <div class="steps">11 STEPS</div>
+      </a>
+      <a class="journey-card" href="#j4">
+        <div class="badge">JOURNEY 04</div>
+        <h3>Cross-Tenant Isolation</h3>
+        <p>Tenant A's admin must never see Tenant B's data — even though they share one database.</p>
+        <div class="steps">4 STEPS</div>
+      </a>
+      <a class="journey-card" href="#j5">
+        <div class="badge">JOURNEY 05</div>
+        <h3>Idempotent Retry</h3>
+        <p>Operator pastes the same CSV twice by accident. Second paste must be a no-op, not duplicates.</p>
+        <div class="steps">4 STEPS</div>
+      </a>
+    </div>
+
+    <div class="data-row">
+      <div class="data-item"><div class="num">5</div><div class="lbl">Journeys</div></div>
+      <div class="data-item"><div class="num">33</div><div class="lbl">Journey steps total</div></div>
+      <div class="data-item"><div class="num">~60</div><div class="lbl">Business rules they exercise</div></div>
+      <div class="data-item"><div class="num">~70%</div><div class="lbl">Of the module's surface area</div></div>
+    </div>
+  </section>
+
+  <!-- JOURNEY 1: STAFF / PASSENGER -->
+  <section class="section" id="j1">
+    <div class="section-num">JOURNEY 01</div>
+    <article class="journey">
+      <div class="journey-header">
+        <div>
+          <h3>Staff / Passenger</h3>
+        </div>
+        <div class="actor-chip">ACTOR: REGULAR EMPLOYEE</div>
+      </div>
+      <p class="journey-purpose">The staff member's day from wake-up to alighting. They mostly interact through the staff portal at <code style="font-family: var(--mono); font-size: 14px; background: var(--accent-soft); padding: 2px 6px; border-radius: 4px;">/bus-ops/passenger/*</code> — no admin access, no driver app. The journey's power move is the absence request → seat-freed → waitlist-promoted chain.</p>
+
+      <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+    A[Enrol via<br/>staff portal] --> B{See today's<br/>trip}
+    B --> C[Board the bus]
+    C -->|BLE passive| D[BoardingEvent<br/>source=BLE]
+    C -->|QR scan| E[BoardingEvent<br/>source=QR]
+    C -->|Geofence| F[BoardingEvent<br/>source=GEOFENCE]
+    B -.->|sick day| G[Submit ABSENCE<br/>request]
+    G --> H[Overnight sweep<br/>cron fires]
+    H -->|Phase 1| I[CONFIRMED → ABSENT<br/>+ request FULFILLED]
+    I -->|Phase 2| J[Oldest WAITLISTED<br/>→ CONFIRMED]
+    D --> K[End at stop<br/>BOARDED → ALIGHTED]
+    E --> K
+    F --> K
+    J --> K
+    style I fill:#c97b3f,color:#fff
+    style J fill:#2f6f5e,color:#fff
+    style H fill:#14171e,color:#fff
+</pre>
+      </div>
+
+      <div class="callouts">
+        <div class="callout">
+          <div class="label">NO-OP FOR STAFF</div>
+          <strong>BLE boarding is passive</strong>
+          <p>Staff member walks up. Their tag's RSSI crosses -75 dBm with 3+ samples in window. They never tap, scan, or press anything. Trip just gets recorded.</p>
+        </div>
+        <div class="callout warn">
+          <div class="label">THE ABSENCE CHAIN</div>
+          <strong>Sweep unlocks the seat</strong>
+          <p>Without Phase 1, the sick staff member's seat stays reserved and the bus leaves with a free seat someone on the waitlist could've taken. Two-phase sweep fixes this.</p>
+        </div>
+        <div class="callout">
+          <div class="label">SAME ENDPOINT, 3 PATHS</div>
+          <strong>BoardingEvent.source field</strong>
+          <p>BLE, QR, and geofence all write to the same table. The <code style="font-family: var(--mono);">source</code> field is the only difference. The state machine doesn't care which path you came from.</p>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <!-- JOURNEY 2: DRIVER -->
+  <section class="section" id="j2">
+    <div class="section-num">JOURNEY 02</div>
+    <article class="journey">
+      <div class="journey-header">
+        <div>
+          <h3>Driver (Mobile App)</h3>
+        </div>
+        <div class="actor-chip">ACTOR: DRIVER (CAPACITOR APK)</div>
+      </div>
+      <p class="journey-purpose">The driver lives in the Fleet360 Driver app on their phone. The app is a Capacitor shell wrapping a PWA that hits <code style="font-family: var(--mono); font-size: 14px; background: var(--accent-soft); padding: 2px 6px; border-radius: 4px;">/api/driver-app/*</code>. The journey's climax is the trip-end → outbox event → finance mirror — money flows from the dispatch board into the books automatically.</p>
+
+      <div class="diagram">
+<pre class="mermaid">
+flowchart TD
+    A[Login w/ biometric] --> B[Pre-shift DVIR<br/>checklist walk]
+    B --> C[Open today's<br/>assignments]
+    C --> D[Start trip<br/>SCHEDULED → DEPARTED]
+    D -->|every 30s| E[Heartbeat<br/>GPS + alive]
+    D -->|on sensor| F[Behavior events<br/>harsh brake / speed]
+    D -->|on enter| G[Geofence transitions]
+    E --> H[End trip<br/>DEPARTED → COMPLETED]
+    F --> H
+    G --> H
+    D -.->|mid-shift| I[Fuel entry]
+    I -.-> H
+    H --> J[Write trip.completed<br/>to event_outbox]
+    J -->|cron tick| K[finance-trip-completed<br/>consumer runs]
+    K --> L[DRAFT JE to GL 5145<br/>Bus Op Expense]
+    K --> M[AR invoice GL 4500<br/>if farePerHead > 0]
+    L --> N[End shift<br/>DriverShift COMPLETED]
+    M --> N
+    style J fill:#14171e,color:#fff
+    style K fill:#2f6f5e,color:#fff
+    style L fill:#2f6f5e,color:#fff
+    style M fill:#2f6f5e,color:#fff
+</pre>
+      </div>
+
+      <div class="callouts">
+        <div class="callout warn">
+          <div class="label">MONEY MOMENT</div>
+          <strong>Trip-end fires the outbox</strong>
+          <p>The dispatch board shows COMPLETED, but the GL entry is async. If the consumer fails, the outbox row stays unpublished and is retried up to 10 times. Money doesn't get lost — it gets delayed.</p>
+        </div>
+        <div class="callout">
+          <div class="label">IDEMPOTENT BY DESIGN</div>
+          <strong>Replay-safe consumers</strong>
+          <p>Both bridge functions are idempotent on <code style="font-family: var(--mono);">expense_no = 'FUEL-{id}'</code> and <code style="font-family: var(--mono);">(BUS_OPERATIONS, BUS_TRIP, scheduleId)</code>. A redelivered event returns the same row, not a duplicate.</p>
+        </div>
+        <div class="callout">
+          <div class="label">CONTINUOUS</div>
+          <strong>Heartbeat every ~30s</strong>
+          <p>Driver app posts GPS + alive signal while a trip is active. The dispatch board's live map is just the latest heartbeat per vehicle.</p>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <!-- JOURNEY 3: ADMIN / DISPATCHER -->
+  <section class="section" id="j3">
+    <div class="section-num">JOURNEY 03</div>
+    <article class="journey">
+      <div class="journey-header">
+        <div>
+          <h3>Admin / Dispatcher</h3>
+        </div>
+        <div class="actor-chip">ACTOR: TRANSPORT MANAGER</div>
+      </div>
+      <p class="journey-purpose">The longest journey — eleven steps from an empty calendar to a closed-out trip. The admin uses the full web UI at <code style="font-family: var(--mono); font-size: 14px; background: var(--accent-soft); padding: 2px 6px; border-radius: 4px;">/bus-ops/*</code>. Most of the work is setup; the dramatic moments are the live dispatch view and the bulk-import preview-then-commit flow.</p>
+
+      <div class="diagram">
+<pre class="mermaid">
+flowchart TD
+    S1[Build BusRoute<br/>+ ordered RouteStops] --> S2[Configure Headway<br/>+ TransportCalendar]
+    S2 --> S3[Create BusOpsScheduleTemplate<br/>recurring rule]
+    S3 --> S4[POST .../generate<br/>materialise TripSchedules]
+    S4 --> S5[Seed StaffMembers<br/>+ tag them BLE/RFID]
+    S5 -->|one-by-one| S6a[POST route-passengers]
+    S5 -->|bulk paste| S6b[?dryRun=true<br/>preview first]
+    S6b -->|review| S6c[?idempotencyKey<br/>commit]
+    S6a --> S7[Pre-trip check<br/>BusPreTripCheck + Defects]
+    S6c --> S7
+    S7 --> S8[Dispatch board live<br/>GPS pings + status pills]
+    S8 -->|depart| S9[Status DEPARTED<br/>CONFIRMED → NO_SHOW for absentees]
+    S8 -->|complete| S10[Status COMPLETED<br/>emit trip.completed]
+    S10 -->|outbox| S11[Finance mirror via cron]
+    S11 --> S12[Analytics: cost-breakdown<br/>+ demand-forecast + Power BI]
+    style S6b fill:#c97b3f,color:#fff
+    style S6c fill:#c97b3f,color:#fff
+    style S10 fill:#14171e,color:#fff
+    style S11 fill:#2f6f5e,color:#fff
+</pre>
+      </div>
+
+      <div class="callouts">
+        <div class="callout warn">
+          <div class="label">R10 FIX</div>
+          <strong>Dry-run before commit</strong>
+          <p>Operator pastes a 200-row CSV. <code style="font-family: var(--mono);">?dryRun=true</code> returns counts with zero writes. They fix the 3 bad rows. Then <code style="font-family: var(--mono);">?idempotencyKey=op-paste-...</code> commits. Same key twice = replay, not duplicate.</p>
+        </div>
+        <div class="callout">
+          <div class="label">DEPART GHOST PASSENGERS</div>
+          <strong>NO_SHOW is the silent passenger</strong>
+          <p>When status moves to DEPARTED, every CONFIRMED passenger who didn't board gets flipped to NO_SHOW. Not ABSENT (per-stop miss) — NO_SHOW is the whole-trip-no-show.</p>
+        </div>
+        <div class="callout">
+          <div class="label">TRIP COMPLETION</div>
+          <strong>The money flows after</strong>
+          <p>Trip status → COMPLETED is instant on the dispatch board. The GL entry to 5145 Bus Op Expense is async via the outbox. Dispatcher never waits for finance to be ready.</p>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <!-- JOURNEY 4: CROSS-TENANT ISOLATION -->
+  <section class="section" id="j4">
+    <div class="section-num">JOURNEY 04</div>
+    <article class="journey">
+      <div class="journey-header">
+        <div>
+          <h3>Cross-Tenant Isolation</h3>
+        </div>
+        <div class="actor-chip">ACTOR: MULTI-TENANT SYSTEM</div>
+      </div>
+      <p class="journey-purpose">Two companies share one database. Tenant A's admin must never see, mutate, or be billed for Tenant B's data. This is enforced at the Postgres RLS layer — not at the Prisma client — so it's a hard physical barrier, not a "please don't" comment.</p>
+
+      <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+    subgraph T1[Tenant A admin session]
+        A1[x-tenant-id = A]
+        A2[GET /api/bus-ops/routes]
+        A3[Result: only A's routes]
+        A1 --> A2 --> A3
+    end
+    subgraph T2[Tenant B admin session]
+        B1[x-tenant-id = B]
+        B2[GET /api/bus-ops/routes]
+        B3[Result: only B's routes]
+        B1 --> B2 --> B3
+    end
+    subgraph CRON[Platform cron path]
+        C1[No x-tenant-id<br/>valid CRON_SECRET]
+        C2[withSystemJob<br/>opts out of RLS]
+        C3[Result: all tenants<br/>legitimately touched]
+        C1 --> C2 --> C3
+    end
+    DB[(Postgres<br/>bus_routes, staff, ...)] -.->|RLS policy<br/>enforces tenant_id| T1
+    DB -.->|RLS policy<br/>enforces tenant_id| T2
+    DB -.->|RLS bypassed<br/>explicit| CRON
+    style C2 fill:#c97b3f,color:#fff
+</pre>
+      </div>
+
+      <div class="callouts">
+        <div class="callout">
+          <div class="label">PHYSICAL BARRIER</div>
+          <strong>Postgres RLS, not Prisma filter</strong>
+          <p><code style="font-family: var(--mono);">withRequestRls</code> in <code style="font-family: var(--mono);">src/lib/prisma.ts</code> sets <code style="font-family: var(--mono);">app.tenant_id</code> via <code style="font-family: var(--mono);">SELECT set_config(..., true)</code>. The RLS policy is in Postgres, not the app — a buggy route handler can't accidentally bypass it.</p>
+        </div>
+        <div class="callout warn">
+          <div class="label">CRON IS DIFFERENT</div>
+          <strong>Platform-wide by design</strong>
+          <p>The auto-close-trips and outbox-publish cron jobs legitimately need to touch every tenant. They use <code style="font-family: var(--mono);">withSystemJob</code> which explicitly opts out of the RLS wrapper. The waitlist sweep can pass <code style="font-family: var(--mono);">?tenantId=</code> to scope down if needed.</p>
+        </div>
+        <div class="callout">
+          <div class="label">BLAST-RADIUS TEST</div>
+          <strong>What a Tenant A test should prove</strong>
+          <p>Seed two tenants with overlapping employee IDs and route names. As A, query for the conflicting rows. Expect 404s (RLS hides B's rows from the SELECT). PATCH B's row id from A's session — expect 404, not 200.</p>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <!-- JOURNEY 5: IDEMPOTENT RETRY -->
+  <section class="section" id="j5">
+    <div class="section-num">JOURNEY 05</div>
+    <article class="journey">
+      <div class="journey-header">
+        <div>
+          <h3>Idempotent Retry</h3>
+        </div>
+        <div class="actor-chip">ACTOR: OPS TEAM (HR PASTE)</div>
+      </div>
+      <p class="journey-purpose">An operator pastes a 200-row CSV from HR into the bulk-import route. They hit submit twice by accident (double-click, network timeout, browser refresh). The second paste must be a no-op — not 200 duplicates of the same row. The contract: same key + same body = replay; same key + different body = 409.</p>
+
+      <div class="diagram">
+<pre class="mermaid">
+flowchart TD
+    P1[1st paste<br/>key = op-paste-2026-08-14-08h<br/>body = 200 rows] --> Q1{Hash body<br/>bodyHash}
+    Q1 -->|not found| R1[Run import<br/>200 rows processed]
+    R1 --> S1[Store result + bodyHash<br/>in bulk_import_jobs<br/>expiresAt = now + 24h]
+    S1 --> T1[Return 200<br/>+ idempotencyKey echoed]
+
+    P2[2nd paste<br/>same key<br/>same body] --> Q2{Hash body<br/>bodyHash}
+    Q2 -->|matches stored| T2[Return 200<br/>idempotencyReplay: true<br/>SKIP the import]
+
+    P3[3rd paste<br/>same key<br/>DIFFERENT body] --> Q3{Hash body<br/>bodyHash}
+    Q3 -->|mismatch| T3[Return 409<br/>error: 'key reused<br/>with different body']
+
+    P4[4th paste<br/>after 24h] --> Q4{Check expiresAt}
+    Q4 -->|expired| T4[Treat as never seen<br/>run import fresh]
+
+    style T2 fill:#2f6f5e,color:#fff
+    style T3 fill:#b06367,color:#fff
+    style T4 fill:#c97b3f,color:#fff
+</pre>
+      </div>
+
+      <div class="callouts">
+        <div class="callout">
+          <div class="label">THE EXPLICIT MEMO</div>
+          <strong>bulk_import_jobs is the contract</strong>
+          <p>Instead of relying on a DB-level unique constraint (which would 500 on duplicates), the route stores an explicit memo: "For this (tenant, key) pair, I owe this result for 24h." Cleaner UX, structured error, replay support.</p>
+        </div>
+        <div class="callout warn">
+          <div class="label">THE 409 IS A FEATURE</div>
+          <strong>Reused key + different body = 409</strong>
+          <p>If the operator pastes the wrong CSV under one key, then the right CSV under the same key, the second call gets 409 — not silent overwrite. They have to generate a fresh key, which makes the wrong-data scenario explicit instead of letting it propagate.</p>
+        </div>
+        <div class="callout">
+          <div class="label">24H TTL</div>
+          <strong>Key expires</strong>
+          <p><code style="font-family: var(--mono);">IDEMPOTENCY_TTL_HOURS = 24</code>. After 24h the key is treated as never seen. Long enough to cover a workday's worth of double-clicks and retries. Short enough to not let stale keys leak forever.</p>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <!-- CLOSING -->
+  <section class="closing">
+    <div class="section-num">CLOSING</div>
+    <h2>What this means for testing</h2>
+    <p style="color: var(--ink-2); font-size: 16px; max-width: 720px;">If a new test doesn't protect one of these five journeys, it's testing the wrong thing. Every test in the repo should be reachable from this index.</p>
+
+    <div class="closing-grid">
+      <div class="closing-item">
+        <div class="badge">COVERAGE GAP</div>
+        <p>J1-J5 cover ~70% of the surface. The remaining 30% (CBAs, geofence geometry, route optimisation, headway timezone) is *not* yet covered end-to-end.</p>
+      </div>
+      <div class="closing-item">
+        <div class="badge">TEST-FIRST ENTRY POINT</div>
+        <p>For a new rule, find the journey in this page. Write the test as a step in the flow. The path from the test back to the rule should be a single click in the inventory.</p>
+      </div>
+      <div class="closing-item">
+        <div class="badge">WHAT'S VERIFIED TODAY</div>
+        <p>Existing tests cover: gateway signature (BR-BLE-01..03), trip-completed consumer (BR-FIN-01/02), WebAuthn (BR-WA-01..06), bulk-import (BR-IMP-01..14), waitlist tenant scoping (BR-SW-07). 8 of 60+ business rules.</p>
+      </div>
+      <div class="closing-item">
+        <div class="badge">WHAT'S NEXT</div>
+        <p>Highest leverage: trip-lifecycle E2E (BR-TRIP-01..10 + state machine + DB trigger), detectTransitions truth table (BR-BLE-04..08), cross-tenant blast-radius test (J4).</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div>Fleet360 · bus-ops · Test Inventory v1</div>
+    <div>Source: <code style="font-family: var(--mono);">docs/testing/staff-transportation-test-inventory.md</code></div>
+  </footer>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      fontFamily: 'Outfit, system-ui, sans-serif',
+      fontSize: '13px',
+      primaryColor: '#ffffff',
+      primaryTextColor: '#14171e',
+      primaryBorderColor: '#e9e3d6',
+      lineColor: '#7c7a72',
+      secondaryColor: '#f0ebde',
+      tertiaryColor: '#fbfaf6',
+      mainBkg: '#ffffff',
+      nodeBorder: '#e9e3d6',
+      clusterBkg: '#fbfaf6',
+      clusterBorder: '#e9e3d6',
+      titleColor: '#14171e',
+      edgeLabelBackground: '#fbfaf6'
+    },
+    flowchart: {
+      useMaxWidth: true,
+      htmlLabels: true,
+      curve: 'basis',
+      padding: 12
+    }
+  });
+</script>
+</body>
+</html>

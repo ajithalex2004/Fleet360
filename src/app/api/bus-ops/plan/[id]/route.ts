@@ -6,12 +6,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const tenantId = req.headers.get('x-tenant-id') ?? '';
   if (!tenantId) {
     return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   }
+  const permError = requireBusOpsAdminAccess(req, 'planning-core');
+  if (permError) return permError;
   try {
     const { id } = await params;
     const plan = await withTenantRls(prisma, tenantId, async (tx) => {

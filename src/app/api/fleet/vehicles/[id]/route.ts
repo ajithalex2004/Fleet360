@@ -23,9 +23,11 @@ export async function GET(
               vt.vehicle_class,
               vt.num_passengers,
               vt.fuel_type,
-              vt.transmission_type
+              vt.transmission_type,
+              z.name AS zone_name
        FROM vehicles v
        LEFT JOIN vehicle_types vt ON vt.id = v.vehicle_type_id
+       LEFT JOIN spatial.places z ON z.id = v.zone_id
        WHERE v.id = $1 AND v.deleted_at IS NULL`,
       id,
     );
@@ -72,6 +74,7 @@ export async function PUT(
       hierarchyName: 'hierarchy_name',
       branchId: 'branch_id',
       branchName: 'branch_name',
+      zoneId: 'zone_id',
       deviceId: 'device_id',
       simCardNo: 'sim_card_no',
       stopModeCommFrequency: 'stop_mode_comm_frequency',
@@ -87,7 +90,11 @@ export async function PUT(
     };
 
     const setClauses: string[] = [];
-    const queryParams: unknown[] = [new Date().toISOString()];
+    // Pass a Date object, not an ISO string — $queryRawUnsafe sends string
+    // params as TEXT, which Postgres refuses to implicitly cast into a
+    // timestamptz column (42804). A Date object lets the pg driver encode
+    // it correctly, same fix already applied to the POST handler.
+    const queryParams: unknown[] = [new Date()];
     setClauses.push(`updated_at = $1`);
 
     for (const [camelKey, snakeKey] of Object.entries(fieldMap)) {

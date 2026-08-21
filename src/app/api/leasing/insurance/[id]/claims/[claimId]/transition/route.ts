@@ -15,7 +15,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import {
   canTransitionClaim,
   type ClaimStatus,
@@ -29,10 +31,11 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string; claimId: string } },
 ) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
     const to = body?.to as ClaimStatus | undefined;
@@ -77,10 +80,12 @@ export async function POST(
         .filter(Boolean).join('\n');
     }
 
-    const updated = await prisma.leaseInsuranceClaim.update({
+    const updated = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseInsuranceClaim.update({
       where: { id: params.claimId },
       data: updates,
-    });
+    }),
+    );
 
     void logAudit({
       tenantId,

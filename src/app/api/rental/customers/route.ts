@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
 
 const CACHE_TAG = 'rental:customers';
@@ -7,7 +9,7 @@ const CACHE_TAG = 'rental:customers';
 const getCustomers = cacheRead(
   async (tenantId: string) => {
     return prisma.rentalCustomer.findMany({
-      where: { deletedAt: null },
+      where: { tenantId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
   },
@@ -16,8 +18,13 @@ const getCustomers = cacheRead(
 );
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({headers: req.headers, nextUrl: req.nextUrl});
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
-    const tenantId = req.headers.get('x-tenant-id') ?? 'unknown';
     const customers = await getCustomers(tenantId);
     return NextResponse.json(customers, {
       headers: { 'Cache-Control': privateCacheControl(30, 120) },
@@ -29,9 +36,18 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({headers: req.headers, nextUrl: req.nextUrl});
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
-    const body = await req.json();
-    const customer = await prisma.rentalCustomer.create({ data: body });
+    const bodyRaw = await req.json();
+    const body = { ...stripTenantOwnershipFields((bodyRaw && typeof bodyRaw === 'object' ? bodyRaw : {}) as Record<string, unknown>), tenantId };
+    const customer = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.rentalCustomer.create({ data: body }),
+    );
     revalidateCache([CACHE_TAG]);
     return NextResponse.json(customer, { status: 201 });
   } catch (error) {

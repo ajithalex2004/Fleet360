@@ -13,6 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { classifyDamage } from '@/lib/agents/damage-classifier/agent';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -23,6 +24,11 @@ export const maxDuration = 90;
 const MAX_BYTES = 12 * 1024 * 1024; // 12 MB per image
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   try {
     const form = await req.formData();
     const single = form.get('photo');

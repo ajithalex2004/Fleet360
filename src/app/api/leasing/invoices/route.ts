@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { withAudit } from '@/lib/with-audit';
 
 /**
@@ -11,10 +13,11 @@ import { withAudit } from '@/lib/with-audit';
  * `20260627000001_add_tenant_id_to_leasing_tables`.
  */
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const { searchParams } = new URL(req.url);
     const lesseeId = searchParams.get('lesseeId');
@@ -37,10 +40,11 @@ export async function GET(req: NextRequest) {
 
 export const POST = withAudit(
   async (req: NextRequest) => {
-    const tenantId = req.headers.get('x-tenant-id');
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const authz = requireAuthorizedTenant(req);
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
+    const { tenantId } = authz;
     try {
       const body = await req.json();
       const { lines = [], ...invoiceData } = body;
@@ -52,7 +56,8 @@ export const POST = withAudit(
       const vatPct   = parseFloat(invoiceData.vatPct ?? '5');
       const vatAmount = subTotal * (vatPct / 100);
       const totalAmount = subTotal + vatAmount;
-      const invoice = await prisma.leaseInvoice.create({
+      const invoice = await withTenantRls(prisma, tenantId, async (tx) =>
+        tx.leaseInvoice.create({
         data: {
           ...invoiceData,
           tenantId,
@@ -63,7 +68,8 @@ export const POST = withAudit(
           lines: { create: lines },
         },
         include: { lines: true, lessee: { select: { name: true } } },
-      });
+      }),
+      );
       return NextResponse.json(invoice, { status: 201 });
     } catch (e) {
       console.error('POST /api/leasing/invoices error:', e);

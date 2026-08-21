@@ -3,6 +3,10 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Calendar, Plus, Recycle } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
 import MergeTripsDialog, { type ScheduleForMerge } from '@/components/bus-ops/MergeTripsDialog';
+import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
+import RowActionsMenu from '@/components/ui/RowActionsMenu';
+import { usePollingRefresh } from '@/hooks/usePollingRefresh';
+import { useRealtimeChannel } from '@/hooks/useRealtimeChannel';
 
 interface Schedule {
   id: string; tripNumber?: string; routeId: string; route?: { name: string; origin: string; destination: string };
@@ -33,7 +37,14 @@ export default function SchedulesPage() {
   const [vehicles, setVehicles]     = useState<Vehicle[]>([]);
   const [drivers, setDrivers]       = useState<Driver[]>([]);
   const [statusFilter, setStatus]   = useState('All');
-  const [dateFilter, setDate]       = useState('');
+  // Default date filter to today (local time). Lazy init runs once — first paint
+  // shows today's date and the load below hits the API with ?date=<today> so the
+  // grid opens focused on the operator's current day.
+  const [dateFilter, setDate]       = useState<string>(() => {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  });
   const [showModal, setShowModal]   = useState(false);
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
@@ -51,8 +62,12 @@ export default function SchedulesPage() {
   // auto-calculator (Departure + Route.estimatedDurationMins) doesn't stomp it.
   const [arrivalTouched, setArrivalTouched] = useState(false);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (opts?: { silent?: boolean }) => {
+    if (opts?.silent) {
+      /* quiet background refresh — no full-page spinner */
+    } else {
+      setLoading(true);
+    }
     try {
       const params = new URLSearchParams();
       if (statusFilter !== 'All') params.set('status', statusFilter);
@@ -79,6 +94,18 @@ export default function SchedulesPage() {
   }, [statusFilter, dateFilter]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  usePollingRefresh(loadData, {
+    intervalMs: 20_000,
+    pause: showModal || showMergeDialog,
+  });
+  // Push updates (SSE default; WebSocket if NEXT_PUBLIC_REALTIME_WS_URL is set)
+  useRealtimeChannel(
+    ['bus-ops:schedules'],
+    () => { void loadData({ silent: true }); },
+    { enabled: !(showModal || showMergeDialog) },
+  );
+
 
   // Auto-calc Expected Arrival = Departure + Route.estimatedDurationMins.
   // Skipped once the operator has manually touched the field.
@@ -178,6 +205,108 @@ export default function SchedulesPage() {
   };
   const clearSelection = () => setSelectedIds(new Set());
 
+
+  const scheduleColumns: DataGridColumn<Schedule>[] = useMemo(() => [
+    {
+      key: 'select',
+      header: '',
+      sortable: false,
+      filter: false,
+      width: '44px',
+      render: (s) => {
+        const status = s.status ?? 'SCHEDULED';
+        const canSelect = status === 'SCHEDULED';
+        return (
+          <input
+            type="checkbox"
+            disabled={!canSelect}
+            checked={selectedIds.has(s.id)}
+            onChange={() => canSelect && toggleSelected(s.id)}
+            onClick={(e) => e.stopPropagation()}
+            title={canSelect ? 'Select for merge' : `Only SCHEDULED can be merged (${status})`}
+            className="accent-violet-500 disabled:opacity-30"
+          />
+        );
+      },
+    },
+    {
+      key: 'trip',
+      header: 'Trip No.',
+      accessor: (s) => s.tripNumber ?? s.id.slice(0, 8),
+    },
+    {
+      key: 'route',
+      header: 'Route',
+      accessor: (s) => s.route?.name ?? '—',
+      render: (s) => (
+        <div>
+          <div className="font-medium text-white">{s.route?.name ?? '—'}</div>
+          <div className="text-xs text-slate-500">{s.route?.origin} → {s.route?.destination}</div>
+        </div>
+      ),
+    },
+    { key: 'shift', header: 'Shift', accessor: (s) => s.shiftType ?? '—', filter: 'select' },
+    { key: 'direction', header: 'Direction', accessor: (s) => s.direction ?? '—', filter: 'select' },
+    {
+      key: 'departure',
+      header: 'Departure',
+      accessor: (s) => s.departureTime,
+      render: (s) => new Date(s.departureTime).toLocaleString(),
+    },
+    {
+      key: 'pax',
+      header: 'Pax',
+      accessor: (s) => s.confirmedCount ?? 0,
+      align: 'right',
+      render: (s) => `${s.confirmedCount ?? 0}/${s.capacity ?? 30}`,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      accessor: (s) => s.status ?? 'SCHEDULED',
+      filter: 'select',
+      render: (s) => {
+        const status = s.status ?? 'SCHEDULED';
+        return (
+          <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLORS[status] ?? STATUS_COLORS.SCHEDULED}`}>
+            {status.replace(/_/g, ' ')}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      sortable: false,
+      filter: false,
+      render: (s) => {
+        const status = s.status ?? 'SCHEDULED';
+        const busy = !!actionLoading;
+        const actions: { label: string; onClick: () => void; tone?: 'default' | 'danger'; disabled?: boolean }[] = [];
+        if (status === 'SCHEDULED') {
+          actions.push({ label: 'Start', disabled: busy, onClick: () => handleAction(s.id, 'depart') });
+        }
+        if (['DEPARTED', 'IN_TRANSIT', 'STARTED', 'EN_ROUTE', 'SCHEDULED'].includes(status) && status !== 'COMPLETED') {
+          if (status !== 'SCHEDULED') {
+            actions.push({ label: 'Complete', disabled: busy, onClick: () => handleAction(s.id, 'complete') });
+          }
+        }
+        if (!['COMPLETED', 'CANCELLED', 'MERGED'].includes(status)) {
+          actions.push({
+            label: 'Cancel',
+            tone: 'danger',
+            disabled: busy,
+            onClick: () => {
+              if (confirm('Cancel this trip?')) handleAction(s.id, 'cancel', { reason: 'User requested' });
+            },
+          });
+        }
+        if (!actions.length) return <span className="text-slate-600 text-xs">—</span>;
+        return <RowActionsMenu actions={actions} />;
+      },
+    },
+  ], [selectedIds, actionLoading]);
+
   if (loading) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading schedules...</div></div>;
 
   return (
@@ -213,97 +342,25 @@ export default function SchedulesPage() {
       <div className="flex gap-4 flex-wrap">
         <select value={statusFilter} onChange={e=>setStatus(e.target.value)}
           className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
-          {['All','SCHEDULED','DEPARTED','IN_TRANSIT','COMPLETED','CANCELLED'].map(s=><option key={s} value={s}>{s}</option>)}
+          <option value="All">All Status</option>
+          {['SCHEDULED','DEPARTED','IN_TRANSIT','COMPLETED','CANCELLED'].map(s=><option key={s} value={s}>{s}</option>)}
         </select>
         <input type="date" value={dateFilter} onChange={e=>setDate(e.target.value)}
           className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />
         {dateFilter && <button onClick={()=>setDate('')} className="text-sm text-slate-400 hover:text-white">Clear date</button>}
       </div>
 
-      {/* Schedules Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
-        {schedules.length === 0 ? (
-          <div className="text-center text-slate-400 py-12">No trips found</div>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-white/5">
-                <th className="px-4 py-3 w-8" title="Select SCHEDULED trips to merge">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-slate-600 bg-slate-800"
-                    checked={visibleScheduledIds.size > 0 && selectedIds.size === visibleScheduledIds.size}
-                    ref={(el) => {
-                      if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < visibleScheduledIds.size;
-                    }}
-                    onChange={(e) => setSelectedIds(e.target.checked ? new Set(visibleScheduledIds) : new Set())}
-                  />
-                </th>
-                {['Trip No.','Route','Shift','Direction','Departure','Pax','Status','Actions'].map(h=>(
-                  <th key={h} className="px-4 py-3 text-left text-sm font-semibold text-slate-300">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {schedules.map(s => {
-                const status = (s.status ?? 'SCHEDULED').toUpperCase();
-                const isActing = actionLoading?.startsWith(s.id);
-                const isSelected = selectedIds.has(s.id);
-                const canSelect = status === 'SCHEDULED';
-                return (
-                  <tr key={s.id} className={`border-b border-white/5 hover:bg-white/5 transition-colors ${isSelected ? 'bg-violet-500/5' : ''}`}>
-                    <td className="px-4 py-4">
-                      <input
-                        type="checkbox"
-                        disabled={!canSelect}
-                        checked={isSelected}
-                        onChange={() => toggleSelected(s.id)}
-                        className="h-4 w-4 rounded border-slate-600 bg-slate-800 disabled:opacity-30"
-                        title={canSelect ? 'Select for merge' : `Only SCHEDULED trips can be merged (this trip is ${status})`}
-                      />
-                    </td>
-                    <td className="px-4 py-4 text-sm font-medium text-white">{s.tripNumber ?? s.id.slice(0,8)}</td>
-                    <td className="px-4 py-4 text-sm text-white">
-                      <div>{s.route?.name ?? '-'}</div>
-                      <div className="text-xs text-slate-300">{s.route?.origin} → {s.route?.destination}</div>
-                    </td>
-                    <td className="px-4 py-4 text-sm text-white">{s.shiftType ?? '-'}</td>
-                    <td className="px-4 py-4 text-sm text-white">{s.direction ?? '-'}</td>
-                    <td className="px-4 py-4 text-sm text-slate-200">
-                      <div>{new Date(s.departureTime).toLocaleDateString()}</div>
-                      <div className="text-xs">{new Date(s.departureTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
-                    </td>
-                    <td className="px-4 py-4 text-sm text-white font-medium">
-                      {s.confirmedCount ?? s.passengers?.length ?? 0}/{s.capacity ?? 30}
-                    </td>
-                    <td className="px-4 py-4">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLORS[status] ?? STATUS_COLORS.SCHEDULED}`}>{status}</span>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex gap-1 flex-wrap">
-                        {status === 'SCHEDULED' && (
-                          <button onClick={()=>handleAction(s.id,'depart')} disabled={!!isActing}
-                            className="text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 disabled:opacity-50">Depart</button>
-                        )}
-                        {['DEPARTED','IN_TRANSIT','SCHEDULED'].includes(status) && (
-                          <button onClick={()=>handleAction(s.id,'complete')} disabled={!!isActing}
-                            className="text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 disabled:opacity-50">Complete</button>
-                        )}
-                        {!['COMPLETED','CANCELLED'].includes(status) && (
-                          <button onClick={()=>{ if(confirm('Cancel this trip?')) handleAction(s.id,'cancel',{reason:'User requested'}); }} disabled={!!isActing}
-                            className="text-xs px-2 py-1 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-rose-500/30 disabled:opacity-50">Cancel</button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {/* SchedulesGrid */}
+      <FleetDataGrid
+        gridName="Schedules"
+        rows={schedules}
+        getRowId={(r) => r.id}
+        loading={false}
+        emptyMessage="No trips found"
+        columns={scheduleColumns}
+        toolbar={{ exportName: 'schedules', title: 'Schedules' }}
+      />
 
-      {/* New Trip Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-800/95 border border-white/10 rounded-2xl p-8">

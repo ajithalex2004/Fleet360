@@ -3,6 +3,7 @@
  * Tracks rental leads before booking is confirmed
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 
 const INIT = `
@@ -49,6 +50,11 @@ async function nextNo(): Promise<string> {
 }
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   await ensureSchema();
   const sp = req.nextUrl.searchParams;
   const status = sp.get('status');
@@ -71,6 +77,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   await ensureSchema();
   const body = await req.json();
   const inquiryNo = await nextNo();
@@ -96,6 +107,11 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   await ensureSchema();
   const body = await req.json();
   const { id, ...fields } = body;

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   BusFront, Map as MapIcon, Calendar, Clock as ClockIcon, Users, AlertTriangle, FileText, ArrowRight, Sparkles,
-  Timer, Scale, BarChart3, Layers, Smartphone,
+  Timer, Scale, BarChart3, Layers, Smartphone, Shield, GitMerge, Repeat,
 } from 'lucide-react';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/bus-ops/theme';
 import { useFetchedData } from '@/hooks/useFetchedData';
@@ -17,6 +17,8 @@ export default function BusOpsDashboard() {
   const { data: staffRaw,     loading: staffLoading }     = useFetchedData<any[]>('/api/bus-ops/staff');
   const { data: incidentsRaw, loading: incidentsLoading } = useFetchedData<any[]>('/api/bus-ops/incidents');
   const { data: requestsRaw,  loading: requestsLoading }  = useFetchedData<any[]>('/api/bus-ops/transport-requests');
+  const { data: me } = useFetchedData<{ role?: string }>('/api/auth/me');
+  const isTenantAdmin = me?.role === 'TENANT_ADMIN' || me?.role === 'SUPER_ADMIN';
 
   const routes    = Array.isArray(routesRaw)    ? routesRaw    : [];
   const schedules = Array.isArray(schedulesRaw) ? schedulesRaw : [];
@@ -120,10 +122,68 @@ export default function BusOpsDashboard() {
           )}
         </Panel>
 
+
+        {isTenantAdmin && (
+          <Panel title="Planning" icon={Shield} accent="violet">
+            <p className="text-xs text-slate-500 mb-3">
+              Author PCE rules first, then analyse and apply route consolidations. Constraints gate every apply.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {[
+                {
+                  label: 'Planning Constraints (PCE)',
+                  href: '/bus-ops/planning-constraints',
+                  icon: Shield,
+                  desc: 'BLOCK / WARN / PENALTY rules for plans & merges',
+                },
+                {
+                  label: 'Route Consolidation',
+                  href: '/bus-ops/route-consolidation',
+                  icon: GitMerge,
+                  desc: 'Analyse pairs, apply merges, history & revert',
+                },
+                {
+                  label: 'Planning Core',
+                  href: '/bus-ops/plan',
+                  icon: Sparkles,
+                  desc: 'Runcutting / blocking / roster plans',
+                },
+                {
+                  label: 'Vehicle/Resource Optimization',
+                  href: '/bus-ops/vehicle-resource-optimization',
+                  icon: Repeat,
+                  desc: 'Sequential vehicle reuse opportunities — advisory only',
+                },
+              ].map((link) => {
+                const Icon = link.icon;
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="flex items-start gap-3 p-3 rounded-xl bg-slate-800/40 border border-white/5 hover:border-violet-500/30 hover:bg-slate-800/60 transition-all"
+                  >
+                    <Icon className="w-4 h-4 text-violet-300 shrink-0 mt-0.5" strokeWidth={1.75} />
+                    <div className="min-w-0">
+                      <div className="text-xs font-medium text-white">{link.label}</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">{link.desc}</div>
+                    </div>
+                    <ArrowRight className="w-3.5 h-3.5 text-slate-600 shrink-0 mt-0.5 ml-auto" />
+                  </Link>
+                );
+              })}
+            </div>
+          </Panel>
+        )}
+
         <Panel title="Quick Actions" icon={Sparkles} accent="violet">
           <div className="grid grid-cols-2 gap-2">
             {[
-              { label: 'Planning Core',     href: '/bus-ops/plan',         icon: Sparkles,      accent: 'violet' as const, badge: 'P0' },
+              ...(isTenantAdmin ? [
+                { label: 'Planning Core',     href: '/bus-ops/plan',         icon: Sparkles,      accent: 'violet' as const, badge: 'P0' },
+                { label: 'PCE Constraints',   href: '/bus-ops/planning-constraints', icon: Shield, accent: 'violet' as const },
+                { label: 'Route Consolidation', href: '/bus-ops/route-consolidation', icon: GitMerge, accent: 'violet' as const },
+                { label: 'Vehicle/Resource Optimization', href: '/bus-ops/vehicle-resource-optimization', icon: Repeat, accent: 'violet' as const },
+              ] : []),
               { label: 'Headway Mgmt',      href: '/bus-ops/headway',      icon: Timer,         accent: 'cyan' as const,   badge: 'P1' },
               { label: 'CBA Rule Engine',   href: '/bus-ops/cba-rules',    icon: Scale,         accent: 'amber' as const,  badge: 'P1' },
               { label: 'Power BI Connector',href: '/bus-ops/powerbi',      icon: BarChart3,     accent: 'emerald' as const,badge: 'P1' },

@@ -762,6 +762,15 @@ model Vehicle {
   homeDepotId     String?  @map("home_depot_id")
   homeDepot       Place?   @relation("VehicleHomeDepot", fields: [homeDepotId], references: [id], onDelete: SetNull)
 
+  // Optional FK to spatial.places(id) with type=OPERATIONAL_ZONE — the
+  // broad zone this vehicle is based in. Used as a soft ranking signal by
+  // Planning Core's smart vehicle matching (lib/plan/assign-vehicles.ts):
+  // same-zone vehicles rank above cross-zone ones, but zone is never a
+  // hard eligibility filter — an untagged vehicle is still assignable,
+  // just not zone-preferred.
+  zoneId          String?  @map("zone_id")
+  zone            Place?   @relation("VehicleZone", fields: [zoneId], references: [id], onDelete: SetNull)
+
   // -- Fleet extended fields (used by Fleet raw-SQL queries) ----------------
   vehicleCode     String?   @map("vehicle_code")
   vehicleTypeId   String?   @map("vehicle_type_id")
@@ -878,10 +887,10 @@ enum MaintenanceStatus {
   PENDING_ESTIMATION_APPROVAL
   ESTIMATION_APPROVED
   UNDER_MAINTENANCE
-  REPAIR_COMPLETED
+  JOB_COMPLETED
   QUALITY_INSPECTION
   INSPECTION_FAILED
-  READY_FOR_SERVICE
+  READY_FOR_OPERATION
   MAINTENANCE_COMPLETED
   PENDING_INVOICE
   INVOICE_SUBMITTED
@@ -1734,11 +1743,36 @@ model BusRoute {
   /// Should reflect the most restrictive UAE RTA requirement for the route's
   /// typical vehicle — a bus route uses BUS, a shuttle van typically LIGHT.
   requiredLicenseType   String?        @map("required_license_type")
+  /// FK to spatial.places(id) with type=OPERATIONAL_ZONE — the zone this
+  /// route serves. Explicit tagging (not derived from stop geometry) —
+  /// point-in-polygon zone inference is a possible later upgrade, not
+  /// implemented yet. Used the same way as Vehicle.zoneId: a soft ranking
+  /// signal for smart vehicle matching, never a hard eligibility filter.
+  zoneId                String?        @map("zone_id")
+  zone                  Place?         @relation("RouteZone", fields: [zoneId], references: [id], onDelete: SetNull)
   totalDistanceKm       Float?         @map("total_distance_km")
   estimatedDurationMins Int?           @map("estimated_duration_mins")
   capacity              Int?           @default(30)
   isActive              Boolean?       @default(true) @map("is_active")
   notes                 String?
+  /// Route scheduling metadata authored on the Routes page. When present these
+  /// are the "typical" scheduling for the route — TripSchedule and
+  /// BusOpsScheduleTemplate can still override on a per-trip / per-template
+  /// basis. All nullable so pre-existing rows are unaffected.
+  direction             String?        @map("direction")             // INBOUND | OUTBOUND
+  shiftType             String?        @map("shift_type")            // MORNING | EVENING | NIGHT | SPLIT
+  departureTime         String?        @map("departure_time")        // 'HH:MM' 24h
+  expectedArrivalTime   String?        @map("expected_arrival_time") // 'HH:MM' 24h
+  /// Default vehicle and driver for the route. Not enforced as FK on purpose
+  /// (bus_routes is cross-tenant-referenced in some legacy contexts) — the
+  /// Routes page validates the id belongs to the tenant on write.
+  assignedVehicleId     String?        @map("assigned_vehicle_id")
+  assignedDriverId      String?        @map("assigned_driver_id")
+  /// Fleet routing / VRPTW — buffer (minutes) around this route's
+  /// departureTime that individual pickups may slide within, letting the
+  /// solver consolidate nearby stops onto one bus. Falls back to the
+  /// tenant default when null. See src/lib/planning/fleet-routing/window-resolver.ts.
+  pickupBufferMin       Int?           @map("pickup_buffer_min")
   /// Route Consolidation Phase 2 — retirement fields.
   /// Set when a route is deactivated as a consolidation source or as an
   /// archived merged route after revert. `retiredReason` discriminates
@@ -1753,6 +1787,7 @@ model BusRoute {
   /// Named direction variants (Morning→Office, Evening→Residence, …).
   /// Phase 1 of route versioning — see FOLLOWUP_ROUTE_VERSIONING.md.
   variants              BusRouteVariant[]
+  passengers            RoutePassenger[]
 
   @@map("bus_routes")
   @@schema("public")
@@ -1894,6 +1929,15 @@ model RoutePassenger {
   status        String    @default("ACTIVE") // ACTIVE | INACTIVE
   notes         String?
   createdBy     String?   @map("created_by")
+  /// Fleet routing / VRPTW — per-enrollment overrides. All 'HH:MM' 24h
+  /// strings to match pickupTime / dropoffTime convention above. Nullable
+  /// so the resolver falls through to BusRoute / Tenant defaults.
+  earliestPickup      String? @map("earliest_pickup")        // window start override
+  latestPickup        String? @map("latest_pickup")          // window end override
+  requiredArrivalTime String? @map("required_arrival_time")  // hard workplace-arrival override
+  pickupBufferMin     Int?    @map("pickup_buffer_min")
+
+  route BusRoute @relation(fields: [routeId], references: [id])
 
   @@index([tenantId],      map: "idx_route_passengers_tenant")
   @@index([routeId],       map: "idx_route_passengers_route")
@@ -2649,6 +2693,8 @@ model Place {
   garages         Garage[]  @relation("GaragePlace")
   routeStops      RouteStop[] @relation("RouteStopPlace")
   vehiclesHomedAt Vehicle[] @relation("VehicleHomeDepot")
+  vehiclesInZone  Vehicle[] @relation("VehicleZone")
+  routesInZone    BusRoute[] @relation("RouteZone")
 
   @@index([tenantId],            map: "idx_places_tenant_id")
   @@index([tenantId, type],      map: "idx_places_tenant_type")
@@ -3906,6 +3952,13 @@ model Tenant {
   scimTokens         ScimToken[]
   ipAllowlists       IpAllowlist[]
   subscription       Subscription?
+
+  /// Fleet routing / VRPTW org-wide defaults. Bottom of the sourcing
+  /// hierarchy (RoutePassenger → BusRoute → Tenant). Nullable so the
+  /// resolver can fall through to compiled-in constants if the tenant
+  /// hasn't configured them.
+  defaultPickupBufferMin      Int?    @map("default_pickup_buffer_min")
+  defaultRequiredArrivalTime  String? @map("default_required_arrival_time") // 'HH:MM' 24h
 
   @@map("tenants")
   @@schema("public")
@@ -5543,6 +5596,59 @@ model PlanningConstraint {
 //   - Cool-down for post-consolidation merged routes is derived from
 //     `appliedAt`; no dedicated column added to BusRoute.
 
+// ─── Route Consolidation scoring policy ─────────────────────────────────────
+//
+// Tenant-editable weights/reference values feeding the Stage 4 scorer
+// (rankingCost = impactScore - benefitScore, bounded [-1,+1], lower = better).
+// Versioned by effective-dating rather than destructive edits: activating a
+// new policy sets isActive=false + effectiveTo=now() on the previous active
+// row instead of overwriting it, so `RouteConsolidation.objectiveSnapshot`
+// (captured at apply time) always refers to a policy shape that still
+// exists historically, even after weights change.
+//
+// distanceWeight + timeWeight + resourceReleaseWeight must sum to 1.0.
+// passengerImpactWeight + detourWeight + pcePenaltyWeight must sum to 1.0.
+// Enforced at the application layer (resolver / API validation), not via a
+// DB CHECK — summing floats to exactly 1.0 in SQL is unreliable.
+model RouteConsolidationScoringPolicy {
+  id                 String    @id @default(uuid())
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId           String    @map("tenant_id")
+
+  name               String
+  calculationVersion String    @map("calculation_version")
+
+  // ── Normalization references ──────────────────────────────────────────────
+  distanceReferenceKm             Float @map("distance_reference_km")
+  timeReferenceMinutes            Float @map("time_reference_minutes")
+  passengerImpactReferenceMinutes Float @map("passenger_impact_reference_minutes")
+  detourReferenceMinutes          Float @map("detour_reference_minutes")
+  pcePenaltyReference             Float @map("pce_penalty_reference")
+
+  // ── Benefit weights (sum to 1.0) ───────────────────────────────────────────
+  distanceWeight        Float @map("distance_weight")
+  timeWeight             Float @map("time_weight")
+  resourceReleaseWeight  Float @map("resource_release_weight")
+
+  // ── Impact weights (sum to 1.0) — pcePenaltyWeight absorbs the old λ ───────
+  passengerImpactWeight Float @map("passenger_impact_weight")
+  detourWeight          Float @map("detour_weight")
+  pcePenaltyWeight      Float @map("pce_penalty_weight")
+
+  isActive      Boolean   @default(true) @map("is_active")
+  effectiveFrom DateTime  @default(now()) @map("effective_from") @db.Timestamptz(6)
+  effectiveTo   DateTime? @map("effective_to") @db.Timestamptz(6)
+
+  createdBy String? @map("created_by")
+  updatedBy String? @map("updated_by")
+
+  @@index([tenantId],             map: "idx_rc_scoring_policy_tenant")
+  @@index([tenantId, isActive],   map: "idx_rc_scoring_policy_tenant_active")
+  @@map("route_consolidation_scoring_policies")
+  @@schema("public")
+}
+
 model RouteConsolidation {
   id                     String    @id @default(uuid())
   tenantId               String    @map("tenant_id")
@@ -5634,6 +5740,151 @@ model RouteConsolidationEnrollmentMigration {
   @@index([consolidationId], map: "idx_route_consol_enroll_mig_consolidation")
   @@index([tenantId],        map: "idx_route_consol_enroll_mig_tenant")
   @@map("route_consolidation_enrollment_migrations")
+  @@schema("public")
+}
+
+// ── Fleet Routing (VRPTW via Google Cloud Route Optimization) ─────────────
+//
+// Whole-fleet optimization models. See src/lib/planning/fleet-routing/ for
+// the input builder, matrix cache, response parser, and the solve endpoint.
+//
+// Naming: "run" = one solve attempt; "route" = the solver's assignment of
+// stops to one vehicle; "stop" = one visit on that route; "unassigned" =
+// a shipment the solver couldn't fit into any route with the given constraints.
+
+/// Cached Google Routes API computeRouteMatrix responses. Same origin/destination
+/// set + same routing conditions = same matrix; reuse instead of re-billing.
+/// cacheKey is sha256 over every axis that affects the returned matrix.
+model FleetRouteMatrixCache {
+  id               String    @id @default(uuid())
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId         String    @map("tenant_id")
+  /// Deterministic hash over ALL of: originsHash, destinationsHash,
+  /// routingMode, trafficBucket, routeModifiers, apiVersion.
+  /// Missing any of these = silently serving stale data to the solver.
+  cacheKey         String    @map("cache_key")
+  originsHash      String    @map("origins_hash")      // sha256 of sorted [{lat, lng}] @ 5dp
+  destinationsHash String    @map("destinations_hash")
+  routingMode      String    @map("routing_mode")      // DRIVE | TWO_WHEELER | BICYCLE | WALK
+  trafficBucket    String    @map("traffic_bucket")    // off-peak | am-peak | midday | pm-peak | evening
+  routeModifiers   String    @map("route_modifiers")   // JSON string
+  apiVersion       String    @map("api_version")
+  origins          Json      // decoded [{id, lat, lng}] for debugging
+  destinations     Json
+  matrix           Json      // raw Google Routes API response
+  computedAt       DateTime  @default(now()) @map("computed_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, cacheKey], map: "uniq_fleet_route_matrix_tenant_key")
+  @@index([computedAt],          map: "idx_fleet_route_matrix_computed")
+  @@map("fleet_route_matrix_cache")
+  @@schema("public")
+}
+
+/// One solve attempt against the Route Optimization API. Lifecycle:
+///
+///   PENDING → VALIDATING → SOLVING → SUCCESS | INFEASIBLE | FAILED | CANCELLED
+///                                       ↓
+///                                    PUBLISHED (SUCCESS committed to TripSchedules)
+///
+/// INFEASIBLE vs FAILED distinction matters for operator remediation:
+///   INFEASIBLE = problem valid, no solution exists (relax constraints)
+///   FAILED     = API/network/auth error (retry or fix credentials)
+model FleetOptimizationRun {
+  id             String    @id @default(uuid())
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId       String    @map("tenant_id")
+  createdBy      String    @map("created_by")
+  status         String    // PENDING | VALIDATING | SOLVING | SUCCESS | INFEASIBLE | FAILED | CANCELLED | PUBLISHED
+  statusReason   String?   @map("status_reason")     // human explanation
+  targetDate     DateTime  @map("target_date") @db.Date
+  inputSnapshot  Json      @map("input_snapshot")    // frozen input at solve time
+  rawResponse    Json?     @map("raw_response")      // Google's raw response — traceability
+  metrics        Json?     // { totalDistanceKm, totalDurationMin, unassignedCount, solveSec, costEstimate }
+  errorMessage   String?   @map("error_message")
+  publishedAt    DateTime? @map("published_at") @db.Timestamptz(6)
+  publishedBy    String?   @map("published_by")
+  routes         FleetOptimizationRunRoute[]
+  unassigned     FleetOptimizationRunUnassigned[]
+
+  @@index([tenantId],   map: "idx_fleet_opt_run_tenant")
+  @@index([targetDate], map: "idx_fleet_opt_run_target_date")
+  @@index([status],     map: "idx_fleet_opt_run_status")
+  @@map("fleet_optimization_runs")
+  @@schema("public")
+}
+
+/// One vehicle's assignment inside a solved run. Structured (not JSON) so
+/// operators can query "every route bus DXB-A-12345 was assigned to this
+/// month" as SQL, not JSON traversal.
+model FleetOptimizationRunRoute {
+  id                String    @id @default(uuid())
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId          String    @map("tenant_id")
+  runId             String    @map("run_id")
+  vehicleId         String    @map("vehicle_id")
+  driverId          String?   @map("driver_id")
+  sequenceInRun     Int       @map("sequence_in_run") // 1-based
+  totalDistanceKm   Float     @map("total_distance_km")
+  totalDurationMin  Int       @map("total_duration_min")
+  totalPassengers   Int       @map("total_passengers")
+  encodedPolyline   String    @map("encoded_polyline") // from Routes API computeRoutes
+  startTime         DateTime  @map("start_time") @db.Timestamptz(6)
+  endTime           DateTime  @map("end_time") @db.Timestamptz(6)
+  run               FleetOptimizationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stops             FleetOptimizationRunStop[]
+
+  @@index([runId],                map: "idx_fleet_opt_run_route_run")
+  @@index([tenantId, vehicleId],  map: "idx_fleet_opt_run_route_vehicle")
+  @@map("fleet_optimization_run_routes")
+  @@schema("public")
+}
+
+/// One visit within a solved route. Ordered by `sequence` (1..N).
+model FleetOptimizationRunStop {
+  id              String    @id @default(uuid())
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId        String    @map("tenant_id")
+  runRouteId      String    @map("run_route_id")
+  sequence        Int
+  /// FK to RouteStop when the pickup matches an existing stop, null when
+  /// the solver picked a fresh coord that doesn't correspond to a stored stop.
+  stopId          String?   @map("stop_id")
+  lat             Float
+  lng             Float
+  label           String
+  arrivalTime     DateTime  @map("arrival_time") @db.Timestamptz(6)
+  departureTime   DateTime  @map("departure_time") @db.Timestamptz(6)
+  passengerCount  Int       @map("passenger_count")
+  /// string[] of RoutePassenger ids picked up here — Json because Prisma
+  /// doesn't support String[] on this schema's provider without hassle.
+  passengerIds    Json      @map("passenger_ids")
+  runRoute        FleetOptimizationRunRoute @relation(fields: [runRouteId], references: [id], onDelete: Cascade)
+
+  @@index([runRouteId, sequence], map: "idx_fleet_opt_run_stop_route_seq")
+  @@map("fleet_optimization_run_stops")
+  @@schema("public")
+}
+
+/// Shipments the solver couldn't fit into any route. Surfaced to operators
+/// so they know WHY (usually: capacity or window infeasibility). One row
+/// per unassigned passenger.
+model FleetOptimizationRunUnassigned {
+  id            String    @id @default(uuid())
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId      String    @map("tenant_id")
+  runId         String    @map("run_id")
+  passengerId   String?   @map("passenger_id") // FK to RoutePassenger, null if solver picked a fresh coord
+  stopLat       Float     @map("stop_lat")
+  stopLng       Float     @map("stop_lng")
+  stopLabel     String    @map("stop_label")
+  /// Machine-readable reason so the UI can render targeted remediation copy.
+  reason        String    // NO_VEHICLE_HAS_CAPACITY | OUTSIDE_ALL_TIME_WINDOWS | CANNOT_MEET_REQUIRED_ARRIVAL | WOULD_BREAK_MAX_DRIVE_TIME | INFEASIBLE_OTHER
+  reasonDetail  String?   @map("reason_detail")
+  run           FleetOptimizationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId], map: "idx_fleet_opt_run_unassigned_run")
+  @@map("fleet_optimization_run_unassigned")
   @@schema("public")
 }
 

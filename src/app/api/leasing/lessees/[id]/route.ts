@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 /**
  * Single-lessee GET/PATCH/DELETE.
@@ -15,10 +17,11 @@ import { prisma } from '@/lib/prisma';
  * the lessee's quotations → contracts2 chain.
  */
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const lessee = await prisma.lessee.findFirst({
       where: { id: params.id, tenantId },
@@ -42,10 +45,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const { quotations, creditAssessments, invoices, directDebits, ...data } = await req.json();
     // Verify tenant ownership before update (defense-in-depth — findUnique
@@ -56,10 +60,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     });
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const lessee = await prisma.lessee.update({
+    const lessee = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.lessee.update({
       where: { id: params.id },
       data: { ...data, updatedAt: new Date() },
-    });
+    }),
+    );
     return NextResponse.json(lessee);
   } catch (e) {
     console.error('PATCH /api/leasing/lessees/[id] error:', e);
@@ -68,17 +74,20 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const existing = await prisma.lessee.findFirst({
       where: { id: params.id, tenantId },
       select: { id: true },
     });
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    await prisma.lessee.update({ where: { id: params.id }, data: { deletedAt: new Date() } });
+    await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.lessee.update({ where: { id: params.id }, data: { deletedAt: new Date() } }),
+    );
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error('DELETE /api/leasing/lessees/[id] error:', e);

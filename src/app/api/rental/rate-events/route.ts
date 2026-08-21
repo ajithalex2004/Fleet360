@@ -4,8 +4,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { withAudit } from '@/lib/with-audit';
 import { captureException } from '@/lib/sentry';
 
@@ -26,6 +28,11 @@ const bodySchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   try {
     const sp = req.nextUrl.searchParams;
     const from = sp.get('from');
@@ -47,6 +54,11 @@ export async function GET(req: NextRequest) {
 
 export const POST = withAudit(
   async (req: NextRequest) => {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
     try {
       const body = await req.json();
       const parsed = bodySchema.safeParse(body);
@@ -66,7 +78,8 @@ export const POST = withAudit(
         return NextResponse.json({ error: 'dateTo must be on or after dateFrom' }, { status: 400 });
       }
 
-      const event = await prisma.rateEvent.upsert({
+      const event = await withTenantRls(prisma, tenantId, async (tx) =>
+        tx.rateEvent.upsert({
         where: { eventCode: parsed.data.eventCode },
         update: {
           name: parsed.data.name,
@@ -93,7 +106,8 @@ export const POST = withAudit(
           isActive: parsed.data.isActive ?? true,
           notes: parsed.data.notes ?? null,
         },
-      });
+      }),
+      );
       return NextResponse.json(event, { status: 201 });
     } catch (err) {
       captureException(err, { context: 'rental.rate-events.POST' });

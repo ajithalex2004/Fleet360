@@ -73,7 +73,7 @@ export const MODULES = [
 ] as const satisfies readonly Module[];
 
 export const ACTIONS = [
-  'view', 'create', 'edit', 'delete', 'approve', 'export',
+  'view', 'create', 'edit', 'delete', 'approve', 'export', 'admin',
 ] as const;
 
 export type Action = typeof ACTIONS[number];
@@ -145,6 +145,21 @@ export const ALL_PERMISSIONS: readonly AppPermission[] = [
   { module: 'bus-ops', action: 'create',  resource: 'incidents', label: 'Log Incidents' },
   { module: 'bus-ops', action: 'approve', resource: 'incidents', label: 'Resolve Incidents' },
   { module: 'bus-ops', action: 'export',  resource: '*',         label: 'Export Transport Data' },
+  { module: 'bus-ops', action: 'edit',    resource: 'route-consolidation-scoring-policy', label: 'Edit Route Consolidation Scoring Policy' },
+  // Tenant-Admin-only planning/optimization engines. Deliberately a
+  // distinct 'admin' action (not 'view') — the existing
+  // { action: 'view', resource: '*' } row above is already granted to
+  // Transport Manager/Operator, and hasPermission()'s resource-wildcard
+  // match (`bus-ops:view:*`) would silently defeat a same-action
+  // resource-specific row. 'admin' has no wildcard row anywhere, so
+  // these are exclusively opt-in per role. Still explicitly excluded
+  // from Transport Manager/Operator below as a second, explicit layer —
+  // don't rely on the action-naming trick alone to keep this working if
+  // someone reworks those filters later.
+  { module: 'bus-ops', action: 'admin', resource: 'planning-core', label: 'Access Planning Core (runcutting/blocking/roster)' },
+  { module: 'bus-ops', action: 'admin', resource: 'route-consolidation', label: 'Access Route Consolidation Engine' },
+  { module: 'bus-ops', action: 'admin', resource: 'planning-constraints', label: 'Access Planning Constraints Engine (PCE)' },
+  { module: 'bus-ops', action: 'admin', resource: 'vehicle-resource-optimization', label: 'Access Vehicle/Resource Optimization Engine' },
 
   // ── FLEET ──────────────────────────────────────────────────────────────
   { module: 'fleet', action: 'view',    resource: '*',       label: 'View Fleet Module' },
@@ -205,6 +220,20 @@ export const ALL_PERMISSIONS: readonly AppPermission[] = [
 // Helper: all modules view only permissions
 const ALL_MODULES_VIEW_ONLY = MODULES.map(m => ({ module: m as string, action: 'view', resource: '*' }));
 
+/**
+ * bus-ops resources carved out of Transport Manager/Operator's otherwise-
+ * blanket module grant below — currently empty, meaning Planning Core,
+ * Route Consolidation (+ its scoring policy), Planning Constraints (PCE),
+ * and Vehicle/Resource Optimization are open to Transport Manager and
+ * Transport Operator, same as every other bus-ops resource. Re-add a
+ * resource name here (see git history for the original 5-entry list) to
+ * scope it back to Tenant Admin / Super Admin only — the bus-ops:admin:*
+ * permission rows above and requireBusOpsAdminAccess() server-side checks
+ * stay in place either way, so restoring the restriction is a one-line
+ * change with no other code to touch.
+ */
+const BUS_OPS_ADMIN_ONLY_RESOURCES: string[] = [];
+
 // ── System roles ────────────────────────────────────────────────────────────
 
 export const SYSTEM_ROLES: {
@@ -260,17 +289,23 @@ export const SYSTEM_ROLES: {
   {
     code: 'TRANSPORT_MANAGER',
     name: 'Transport Manager',
-    description: 'Full staff transportation module access',
+    description: 'Full staff transportation module access, including Planning Core, Route Consolidation, Planning Constraints (PCE), and Vehicle/Resource Optimization',
     permissions: [
-      ...ALL_PERMISSIONS.filter(p => p.module === 'bus-ops').map(p => ({ module: p.module, action: p.action, resource: p.resource })),
+      ...ALL_PERMISSIONS.filter(p => p.module === 'bus-ops' && !BUS_OPS_ADMIN_ONLY_RESOURCES.includes(p.resource)).map(p => ({ module: p.module, action: p.action, resource: p.resource })),
       { module: 'reports', action: 'view', resource: '*' },
     ],
   },
   {
     code: 'TRANSPORT_OPERATOR',
     name: 'Transport Operator',
-    description: 'Create and edit transport records, can depart/complete trips',
-    permissions: ALL_PERMISSIONS.filter(p => p.module === 'bus-ops' && ['view','create','edit','approve'].includes(p.action)).map(p => ({ module: p.module, action: p.action, resource: p.resource })),
+    description: 'Create and edit transport records, can depart/complete trips, including Planning Core, Route Consolidation, Planning Constraints (PCE), and Vehicle/Resource Optimization',
+    // 'admin' included alongside view/create/edit/approve so the
+    // bus-ops:admin:<resource> rows (Planning Core, Route Consolidation,
+    // Planning Constraints, Vehicle/Resource Optimization) are covered —
+    // without it, this whitelist-by-action filter would silently drop
+    // access to those 4 features even after removing their resource
+    // names from BUS_OPS_ADMIN_ONLY_RESOURCES above.
+    permissions: ALL_PERMISSIONS.filter(p => p.module === 'bus-ops' && ['view','create','edit','approve','admin'].includes(p.action) && !BUS_OPS_ADMIN_ONLY_RESOURCES.includes(p.resource)).map(p => ({ module: p.module, action: p.action, resource: p.resource })),
   },
   {
     code: 'FLEET_MANAGER',

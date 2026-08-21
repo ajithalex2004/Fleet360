@@ -42,13 +42,27 @@ export async function withTenantRls<T>(
   fn: (tx: TxClient) => Promise<T>,
   opts: { timeoutMs?: number } = {},
 ): Promise<T> {
-  if (!tenantId || /[^a-zA-Z0-9_-]/.test(tenantId)) {
-    throw new Error('withTenantRls: tenantId must be a non-empty alphanumeric/uuid string');
+  if (!tenantId || typeof tenantId !== 'string' || !String(tenantId).trim()) {
+    throw new Error('withTenantRls: tenantId is required');
+  }
+  if (/[^a-zA-Z0-9_-]/.test(tenantId)) {
+    throw new Error('withTenantRls: invalid tenantId format');
   }
   const timeout = opts.timeoutMs ?? 30_000;
   return prisma.$transaction(async (tx) => {
-    await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', $1, true)`, tenantId);
-    return runWithRlsScope({ tenantId, mode: 'tenant' }, () => fn(tx));
+    // set_config returns the new value — use that as the source of truth.
+    // (Avoid separate current_setting() round-trip; some drivers mishandle it.)
+    const safeId = String(tenantId).replace(/'/g, "''");
+    const _set = await tx.$queryRawUnsafe<Array<{ v: string | null }>>(
+      `SELECT set_config('app.tenant_id', '${safeId}', true) AS v`,
+    );
+    if (!_set[0]?.v || _set[0].v !== tenantId) {
+      throw new Error(
+        `withTenantRls: set_config returned '${_set[0]?.v ?? 'null'}' (expected '${tenantId}'). ` +
+          `Check DATABASE_URL is direct (no -pooler), role is fleet360_app, and not Prisma Accelerate.`,
+      );
+    }
+    return runWithRlsScope({ tenantId, mode: 'tenant', tx }, () => fn(tx));
   }, { timeout, maxWait: 5_000 });
 }
 
@@ -80,7 +94,7 @@ export async function withPlatformAdmin<T>(
   // (161 tables) and bulk creates (hundreds of rows).
   return prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', '*', true)`);
-    return runWithRlsScope({ tenantId: '*', mode: 'platform' }, () => fn(tx));
+    return runWithRlsScope({ tenantId: '*', mode: 'platform', tx }, () => fn(tx));
   }, { timeout: opts.timeoutMs ?? 60_000, maxWait: 10_000 });
 }
 

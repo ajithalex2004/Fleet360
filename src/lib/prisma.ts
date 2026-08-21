@@ -116,6 +116,14 @@ function isPrimaryConnectionError(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   if (err instanceof DbConnectionError) return true;
   const code = 'code' in err ? String((err as { code?: unknown }).code ?? '') : '';
+  // P2028 is a Prisma Transaction API error ("Unable to start a transaction
+  // in the given time"), NOT a database-unavailable condition. Retrying it
+  // opens more transactions competing for the same pool and amplifies the
+  // problem — a single failed request can spin into 30+ seconds of retries.
+  // Fail fast so the caller sees an honest 500 without piling on connection
+  // pressure. Real network failures (P1000..P1017 + the socket-level kind:
+  // markers below) remain retryable.
+  if (code === 'P2028') return false;
   const message = err instanceof Error ? err.message : String(err);
   const cause = 'cause' in err ? (err as { cause?: unknown }).cause : undefined;
   return (
@@ -239,6 +247,16 @@ async function withPrimaryConnectionRetry<T>(run: () => Promise<T>): Promise<T> 
       return await run();
     } catch (err) {
       lastError = err;
+      // Defense in depth on top of isPrimaryConnectionError(): P2028 is a
+      // Prisma Transaction API error, NOT a connection failure. Replaying
+      // it opens more transactions competing for the same pool slot and
+      // compounds the problem. Fail fast — one honest P2028 → one 500.
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2028'
+      ) {
+        throw err;
+      }
       if (!isPrimaryConnectionError(err) || attempt >= DB_OPERATION_RETRIES) break;
       primaryConnected = false;
       await wait(250 * (attempt + 1));
@@ -285,6 +303,25 @@ const prismaClientSingleton = () => {
   });
 
   const originalTransaction = client.$transaction.bind(client);
+  // Capture pristine references BEFORE the raw-method monkey-patch below.
+  // Prisma's tx client forwards $executeRawUnsafe/$queryRawUnsafe through the
+  // main client instance, so assigning a wrapper to `client.$executeRawUnsafe`
+  // also intercepts `tx.$executeRawUnsafe`. If the wrapper's own SET LOCAL
+  // (issued to set app.tenant_id) hits its own wrapper, we recurse: another
+  // originalTransaction opens, needs another pool slot, times out with P2028,
+  // and every layer adds ~10s. Use these pristine references (called with
+  // .call(tx, ...) so Prisma routes through the tx-bound engine) for every
+  // internal SET LOCAL below.
+  const originalExecuteRawUnsafe = client.$executeRawUnsafe as (
+    this: unknown,
+    ...args: unknown[]
+  ) => Promise<unknown>;
+  const originalRawMethods: Record<string, (this: unknown, ...args: unknown[]) => Promise<unknown>> = {
+    $executeRawUnsafe: client.$executeRawUnsafe as never,
+    $queryRawUnsafe: client.$queryRawUnsafe as never,
+    $queryRaw: client.$queryRaw as never,
+    $executeRaw: client.$executeRaw as never,
+  };
 
   /**
    * Every ORM/raw query originating from an authenticated operator request is
@@ -310,9 +347,9 @@ const prismaClientSingleton = () => {
     }
 
     return originalTransaction(async (tx) => {
-      await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', $1, true)`, tenantId);
-      return runWithRlsScope({ tenantId, mode: 'tenant' }, () => operation(tx));
-    }, { timeout: 30_000, maxWait: 5_000 });
+      await originalExecuteRawUnsafe.call(tx, `SELECT set_config('app.tenant_id', $1, true)`, tenantId);
+      return runWithRlsScope({ tenantId, mode: 'tenant', tx }, () => operation(tx));
+    }, { maxWait: 10_000, timeout: 15_000 });
   }
 
   // Dual-write middleware — mirrors every write to local DB automatically.
@@ -361,29 +398,49 @@ const prismaClientSingleton = () => {
       (...args: unknown[]) => withPrimaryConnectionRetry(async () => {
         if (method === '$transaction') {
           const callback = args[0];
-          if (typeof callback !== 'function' || activeRlsScope()) return original(...args);
+          if (typeof callback !== 'function') return original(...args);
+          const scope = activeRlsScope();
+          // Nested $transaction inside an active RLS scope: reuse the existing
+          // tx client. Starting a new interactive tx here would grab another
+          // pool slot while the outer tx still holds one, deadlocking under
+          // load and cascading into P2028 amplification. Prisma tx clients
+          // don't support savepoints via $transaction anyway — passing the
+          // parent tx gives the caller a working handle that participates in
+          // the parent's atomicity.
+          if (scope?.tx) {
+            return (callback as (transaction: Prisma.TransactionClient) => Promise<unknown>)(scope.tx);
+          }
           const tenantId = await requestTenantId();
           if (!tenantId) return original(...args);
           const options = args[1] as { timeout?: number; maxWait?: number } | undefined;
           return originalTransaction(async (tx) => {
-            await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', $1, true)`, tenantId);
-            return runWithRlsScope({ tenantId, mode: 'tenant' }, () =>
+            await originalExecuteRawUnsafe.call(tx, `SELECT set_config('app.tenant_id', $1, true)`, tenantId);
+            return runWithRlsScope({ tenantId, mode: 'tenant', tx }, () =>
               (callback as (transaction: Prisma.TransactionClient) => Promise<unknown>)(tx),
             );
           }, options);
         }
 
-        if (activeRlsScope()) return original(...args);
+        // Raw $queryRaw* / $executeRaw* inside an active RLS scope: run on
+        // the existing tx client so SET LOCAL app.tenant_id is visible and
+        // RLS doesn't filter the caller's rows to empty. `original` is the
+        // client-level pristine method, which would grab a fresh connection
+        // that never saw the SET LOCAL — silently wrong, not just slow.
+        const scope = activeRlsScope();
+        if (scope?.tx) {
+          // Use pristine method .call(scope.tx, ...) so Prisma's tx delegation
+          // through the client doesn't re-enter this wrapper.
+          return originalRawMethods[method].call(scope.tx, ...args);
+        }
         const tenantId = await requestTenantId();
         if (!tenantId) return original(...args);
 
         return originalTransaction(async (tx) => {
-          await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', $1, true)`, tenantId);
-          return runWithRlsScope({ tenantId, mode: 'tenant' }, () => {
-            const txMethod = tx[method] as unknown as (...innerArgs: unknown[]) => Promise<unknown>;
-            return txMethod(...args);
-          });
-        }, { timeout: 30_000, maxWait: 5_000 });
+          await originalExecuteRawUnsafe.call(tx, `SELECT set_config('app.tenant_id', $1, true)`, tenantId);
+          return runWithRlsScope({ tenantId, mode: 'tenant', tx }, () =>
+            originalRawMethods[method].call(tx, ...args),
+          );
+        }, { maxWait: 10_000, timeout: 15_000 });
       });
   }
 

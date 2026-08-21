@@ -1,121 +1,146 @@
 /**
- * Zone compatibility — polygons-first with haversine fallback.
+ * Zone-compatibility helper for the Route Consolidation engine.
  *
- * Used by the Route Consolidation Engine to decide whether two routes'
- * pickup ends (or dropoff ends) are close enough to be candidates for
- * consolidation. The polygon path is authoritative when available
- * because operationally-close-but-geographically-separated locations
- * (highways, gates, industrial boundaries, restricted roads) get
- * modelled as different zones — a raw distance test alone would say
- * "these are 500m apart, consolidate" even when a truck can't cross
- * between them.
+ * Two candidate routes can only be merged if their pickup ends and their
+ * dropoff ends live in "compatible" zones — otherwise the merged route
+ * would drag riders across the city. Compatibility is a two-tier decision:
  *
- * The hierarchy encoded here:
- *   1. Both sides have spatial.places → shared placeId = ZONE_MATCH
- *      no shared placeId              = ZONE_DIFFERENT (fail hard)
- *   2. Missing places, both have coords → haversine test with fallback
- *      distance ≤ threshold           = FALLBACK_DISTANCE (pass)
- *      distance > threshold           = FALLBACK_TOO_FAR (fail)
- *   3. No coords either side          = UNKNOWN (excluded from candidates)
+ *   1. Place-id match (preferred). Both sides resolved a `spatial.places`
+ *      row and the ids agree → SAME_ZONE.
+ *   2. Coordinate fallback. If either side lacks a placeId, fall back to
+ *      haversine distance between coord centroids and compare against a
+ *      per-side threshold (default 3 km pickup / 1.5 km dropoff — the
+ *      values surfaced on the "Objective & thresholds" analysis form).
  *
- * Tenant-configurable thresholds are Phase 2. For now a system-level
- * default lives in DEFAULT_FALLBACK_KM.
+ * The engine uses `isCompatPassing` to gate candidates before scoring.
+ * `UNKNOWN` (missing data on either side) is neither pass nor fail — the
+ * candidate is reported to the operator as "ZONE_DATA_UNAVAILABLE" so
+ * they know to enrich the underlying route data.
  */
 
-import { haversineMeters } from './zone';
-
-export type ZoneCompatKind =
-  | 'ZONE_MATCH'         // Both sides declared, and they share at least one placeId
-  | 'ZONE_DIFFERENT'     // Both sides declared, no overlap — fail
-  | 'FALLBACK_DISTANCE'  // Coord fallback within threshold — pass
-  | 'FALLBACK_TOO_FAR'   // Coord fallback outside threshold — fail
-  | 'UNKNOWN';           // Neither placeIds nor coords available
-
-export type ZoneCompatResult = {
-  kind: ZoneCompatKind;
-  /** The placeId that matched, when kind === 'ZONE_MATCH'. */
-  sharedPlaceId?: string;
-  /** Minimum inter-side distance, when a distance was computed. */
-  distanceKm?: number;
-};
-
-export type PointRef = {
-  /** Optional spatial.places id — the authoritative zone identity. */
-  placeId?: string | null;
-  lat?: number | null;
-  lng?: number | null;
-};
-
-/** System-level fallback distance thresholds. Moved to tenant policy later. */
-export const DEFAULT_FALLBACK_KM = {
-  /** Pickup ends can be a bit further apart — passengers walk to the stop. */
-  PICKUP: 3.0,
-  /** Dropoff ends must be closer — workplace clusters are tight. */
-  DROPOFF: 1.5,
-};
-
-export type CompatOptions = {
-  /** Override the DEFAULT_FALLBACK_KM value for this specific comparison. */
-  fallbackKm?: number;
-};
-
-/**
- * Check whether two sides (each a set of PointRef candidates) are
- * compatible. A "side" is typically all of one route's pickup stops
- * (or all of one route's dropoff stops) — passing multiple candidates
- * per side means "any match on either side counts as compatible".
- *
- * The two sides don't have to be symmetrical in how they specify
- * points: side A may have placeIds while side B has only coords. The
- * result tier reflects the weakest evidence used — a mixed comparison
- * degrades to FALLBACK_DISTANCE, never ZONE_MATCH.
- */
-export function zoneCompatibility(
-  sideA: PointRef[],
-  sideB: PointRef[],
-  opts: CompatOptions = {}
-): ZoneCompatResult {
-  const fallbackKm = opts.fallbackKm ?? DEFAULT_FALLBACK_KM.PICKUP;
-
-  // Tier 1: authoritative match by placeId.
-  const placesA = new Set(sideA.map((p) => p.placeId).filter((id): id is string => !!id));
-  const placesB = new Set(sideB.map((p) => p.placeId).filter((id): id is string => !!id));
-  if (placesA.size > 0 && placesB.size > 0) {
-    for (const id of placesA) {
-      if (placesB.has(id)) {
-        return { kind: 'ZONE_MATCH', sharedPlaceId: id };
-      }
-    }
-    // Both sides have place data but no overlap. This is the strongest
-    // possible "different zone" signal — don't demote to distance fallback.
-    return { kind: 'ZONE_DIFFERENT' };
-  }
-
-  // Tier 2: haversine fallback. Compute minimum inter-side distance.
-  const coordsA = sideA.filter((p) => typeof p.lat === 'number' && typeof p.lng === 'number');
-  const coordsB = sideB.filter((p) => typeof p.lat === 'number' && typeof p.lng === 'number');
-  if (coordsA.length === 0 || coordsB.length === 0) {
-    return { kind: 'UNKNOWN' };
-  }
-
-  let minMeters = Number.POSITIVE_INFINITY;
-  for (const a of coordsA) {
-    for (const b of coordsB) {
-      const d = haversineMeters(
-        { lat: a.lat as number, lng: a.lng as number },
-        { lat: b.lat as number, lng: b.lng as number }
-      );
-      if (d < minMeters) minMeters = d;
-    }
-  }
-  const distanceKm = minMeters / 1000;
-
-  return distanceKm <= fallbackKm
-    ? { kind: 'FALLBACK_DISTANCE', distanceKm }
-    : { kind: 'FALLBACK_TOO_FAR', distanceKm };
+/** One endpoint of a route side — either the pickup end or the dropoff end. */
+export interface ZonePoint {
+  placeId: string | null;
+  lat: number | null;
+  lng: number | null;
 }
 
-/** Whether a compat result should let a candidate proceed to scoring. */
-export function isCompatPassing(r: ZoneCompatResult): boolean {
-  return r.kind === 'ZONE_MATCH' || r.kind === 'FALLBACK_DISTANCE';
+export type ZoneCompatKind =
+  | 'SAME_ZONE'          // both sides share the same spatial.places id
+  | 'WITHIN_FALLBACK'    // no shared place, coord distance ≤ fallback
+  | 'DIFFERENT_ZONES'    // both sides have place ids, ids differ
+  | 'OUTSIDE_FALLBACK'   // coord distance > fallback and no shared place
+  | 'UNKNOWN';           // one or both sides have neither placeId nor coords
+
+export interface ZoneCompatResult {
+  kind: ZoneCompatKind;
+  /** Distance in km used when kind is *_FALLBACK. Null when placeId path was taken. */
+  distanceKm: number | null;
+  /** Explanation surfaced to the operator when the candidate is skipped. */
+  reason: string;
+}
+
+export const DEFAULT_FALLBACK_KM = {
+  PICKUP: 3.0,
+  DROPOFF: 1.5,
+} as const;
+
+export interface ZoneCompatOptions {
+  /** Threshold (km) below which coord-fallback compatibility passes. */
+  fallbackKm: number;
+}
+
+/**
+ * Decide whether two route sides are in compatible zones. Each side is an
+ * array of endpoint points; in the current caller (`pickupAndDropoffSides`)
+ * these are one-element arrays, but the shape accepts multi-stop sides
+ * for future segmented-route support.
+ *
+ * Rules — first match wins:
+ *   • Any shared placeId across the two sides           → SAME_ZONE
+ *   • Both sides have at least one placeId, none shared → DIFFERENT_ZONES
+ *   • Both sides have coords, min-pair distance ≤ km    → WITHIN_FALLBACK
+ *   • Both sides have coords, distance > km             → OUTSIDE_FALLBACK
+ *   • Otherwise                                         → UNKNOWN
+ */
+export function zoneCompatibility(
+  sideA: ZonePoint[],
+  sideB: ZonePoint[],
+  opts: ZoneCompatOptions,
+): ZoneCompatResult {
+  const placeIdsA = new Set(sideA.map(p => p.placeId).filter((v): v is string => !!v));
+  const placeIdsB = new Set(sideB.map(p => p.placeId).filter((v): v is string => !!v));
+
+  // 1. Shared spatial.places match — the strongest signal.
+  for (const id of placeIdsA) {
+    if (placeIdsB.has(id)) {
+      return { kind: 'SAME_ZONE', distanceKm: null, reason: `shared place ${id}` };
+    }
+  }
+
+  // 2. Both sides carry place ids but none overlap.
+  if (placeIdsA.size > 0 && placeIdsB.size > 0) {
+    return {
+      kind: 'DIFFERENT_ZONES',
+      distanceKm: null,
+      reason: `A={${[...placeIdsA].join(',')}} vs B={${[...placeIdsB].join(',')}}`,
+    };
+  }
+
+  // 3. Coord fallback — need coords on both sides.
+  const coordsA = sideA.filter(hasCoords);
+  const coordsB = sideB.filter(hasCoords);
+  if (coordsA.length === 0 || coordsB.length === 0) {
+    return { kind: 'UNKNOWN', distanceKm: null, reason: 'missing placeId and coords on at least one side' };
+  }
+
+  // Minimum pairwise distance — if any pair falls within the fallback the
+  // sides are considered compatible. Sides are small (usually 1 point).
+  let minKm = Infinity;
+  for (const a of coordsA) {
+    for (const b of coordsB) {
+      const km = haversineKm(a.lat!, a.lng!, b.lat!, b.lng!);
+      if (km < minKm) minKm = km;
+    }
+  }
+  const distanceKm = Math.round(minKm * 100) / 100;
+  if (minKm <= opts.fallbackKm) {
+    return {
+      kind: 'WITHIN_FALLBACK',
+      distanceKm,
+      reason: `${distanceKm} km ≤ ${opts.fallbackKm} km fallback`,
+    };
+  }
+  return {
+    kind: 'OUTSIDE_FALLBACK',
+    distanceKm,
+    reason: `${distanceKm} km > ${opts.fallbackKm} km fallback`,
+  };
+}
+
+/**
+ * True when the compatibility result gates the pair through to scoring.
+ * `UNKNOWN` deliberately fails this check — the engine surfaces those as
+ * "ZONE_DATA_UNAVAILABLE" so the data gap is visible to the operator.
+ */
+export function isCompatPassing(result: ZoneCompatResult): boolean {
+  return result.kind === 'SAME_ZONE' || result.kind === 'WITHIN_FALLBACK';
+}
+
+// ─── Internals ──────────────────────────────────────────────────────────────
+
+function hasCoords(p: ZonePoint): p is ZonePoint & { lat: number; lng: number } {
+  return typeof p.lat === 'number' && typeof p.lng === 'number';
+}
+
+const EARTH_RADIUS_KM = 6_371;
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(a)));
 }

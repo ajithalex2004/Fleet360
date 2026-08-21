@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { runcut, type PlanTrip } from '@/lib/plan/runcut';
+import { runcut, type PlanTrip, type TripZonePoint } from '@/lib/plan/runcut';
 import { block } from '@/lib/plan/block';
 
 function trip(opts: {
@@ -13,6 +13,8 @@ function trip(opts: {
   departure: string;
   durationMins: number;
   origin?: string;
+  pickupPoint?: TripZonePoint;
+  dropoffPoint?: TripZonePoint;
 }): PlanTrip {
   const dep = new Date(opts.departure);
   const arr = new Date(dep.getTime() + opts.durationMins * 60_000);
@@ -28,6 +30,8 @@ function trip(opts: {
     distanceKm: 10,
     shiftType: 'MORNING',
     vehicleId: null,
+    pickupPoint: opts.pickupPoint,
+    dropoffPoint: opts.dropoffPoint,
   };
 }
 
@@ -108,6 +112,70 @@ describe('block — basic behaviour', () => {
     expect(t3Block!.tripIds).toContain('t2');
     expect(t3Block!.tripIds).not.toContain('t1');
     expect(t3Block!.deadheadMins).toBe(10);
+  });
+});
+
+describe('block — minTurnaroundMins (hard floor)', () => {
+  it('rejects a gap tighter than the floor even though it is within maxDeadheadMins', () => {
+    const r = block([
+      trip({ id: 't1', departure: '2026-08-04T06:00:00Z', durationMins: 60 }),
+      trip({ id: 't2', departure: '2026-08-04T07:05:00Z', durationMins: 60 }), // 5 min gap
+    ], { maxDeadheadMins: 60, minTurnaroundMins: 30 });
+    expect(r.blocks).toHaveLength(2);
+  });
+
+  it('accepts a gap that clears the floor', () => {
+    const r = block([
+      trip({ id: 't1', departure: '2026-08-04T06:00:00Z', durationMins: 60 }),
+      trip({ id: 't2', departure: '2026-08-04T07:30:00Z', durationMins: 60 }), // 30 min gap
+    ], { maxDeadheadMins: 60, minTurnaroundMins: 30 });
+    expect(r.blocks).toHaveLength(1);
+  });
+
+  it('defaults to 0 (no floor) when unset, preserving prior behaviour', () => {
+    const r = block([
+      trip({ id: 't1', departure: '2026-08-04T06:00:00Z', durationMins: 60 }),
+      trip({ id: 't2', departure: '2026-08-04T06:00:00Z', durationMins: 60 }), // 0 min gap
+    ], { maxDeadheadMins: 60 });
+    expect(r.blocks).toHaveLength(1);
+  });
+});
+
+describe('block — zoneFallbackKm (geography gate)', () => {
+  const NEAR_A: TripZonePoint = { placeId: null, lat: 25.10, lng: 55.20 };
+  const NEAR_B: TripZonePoint = { placeId: null, lat: 25.101, lng: 55.201 }; // ~130m from NEAR_A
+  const FAR:    TripZonePoint = { placeId: null, lat: 25.30, lng: 55.50 };  // tens of km away
+
+  it('rejects a pairing outside the fallback distance even within the deadhead window', () => {
+    const r = block([
+      trip({ id: 't1', departure: '2026-08-04T06:00:00Z', durationMins: 60, dropoffPoint: FAR }),
+      trip({ id: 't2', departure: '2026-08-04T07:00:00Z', durationMins: 60, pickupPoint: NEAR_A }), // 60 min gap, within maxDeadheadMins
+    ], { maxDeadheadMins: 60, zoneFallbackKm: 3 });
+    expect(r.blocks).toHaveLength(2);
+  });
+
+  it('accepts a pairing within the fallback distance', () => {
+    const r = block([
+      trip({ id: 't1', departure: '2026-08-04T06:00:00Z', durationMins: 60, dropoffPoint: NEAR_A }),
+      trip({ id: 't2', departure: '2026-08-04T07:00:00Z', durationMins: 60, pickupPoint: NEAR_B }),
+    ], { maxDeadheadMins: 60, zoneFallbackKm: 3 });
+    expect(r.blocks).toHaveLength(1);
+  });
+
+  it('fails closed (rejects) when coordinate data is missing on either side, same as Case 2', () => {
+    const r = block([
+      trip({ id: 't1', departure: '2026-08-04T06:00:00Z', durationMins: 60 }), // no dropoffPoint
+      trip({ id: 't2', departure: '2026-08-04T07:00:00Z', durationMins: 60, pickupPoint: NEAR_A }),
+    ], { maxDeadheadMins: 60, zoneFallbackKm: 3 });
+    expect(r.blocks).toHaveLength(2);
+  });
+
+  it('is disabled by default (undefined) — missing coords do not fragment blocks', () => {
+    const r = block([
+      trip({ id: 't1', departure: '2026-08-04T06:00:00Z', durationMins: 60 }),
+      trip({ id: 't2', departure: '2026-08-04T07:00:00Z', durationMins: 60 }),
+    ], { maxDeadheadMins: 60 }); // no zoneFallbackKm passed
+    expect(r.blocks).toHaveLength(1);
   });
 });
 

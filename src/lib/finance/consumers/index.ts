@@ -21,6 +21,10 @@
 import type { PrismaClient } from '@prisma/client';
 import { register } from '../../outbox/registry.ts';
 import { handleFuelExpenseEvent, FuelExpenseEventSchema } from './fuel-expense-consumer.ts';
+import {
+  handleTripCompletedEvent,
+  TripCompletedEventSchema,
+} from './trip-completed-consumer.ts';
 
 // ── finance.fuelExpense ─────────────────────────────────────────
 // Fleet emits this when a fuel transaction is recorded. Finance
@@ -50,5 +54,25 @@ register('finance.fuelExpense', {
         `Fuel expense consumer failed: ${result.code} — ${result.message}`,
       );
     }
+  },
+});
+
+// ── trip.completed (R5 fix 2026-08-13) ────────────────────────────
+// Bus-ops emits this when a TripSchedule transitions to COMPLETED.
+// Finance consumes it to mirror operating costs (DRAFT JE on
+// 5145 Bus Operations Expense) and (when farePerHead > 0) the
+// revenue side (AR invoice). The dispatch is durable and retried
+// via the outbox publisher — a failed finance mirror no longer
+// leaks the trip from the books.
+register('trip.completed', {
+  consumerName: 'finance-trip-completed',
+  async handle(event, prisma: PrismaClient) {
+    const parsed = TripCompletedEventSchema.safeParse(event.payload);
+    if (!parsed.success) {
+      throw new Error(
+        `Invalid trip.completed event payload: ${parsed.error.message}`,
+      );
+    }
+    await handleTripCompletedEvent(parsed.data, prisma);
   },
 });

@@ -6,13 +6,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const { searchParams } = new URL(req.url);
     const lesseeId = searchParams.get('lesseeId');
@@ -33,10 +36,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
     const lessee = await prisma.lessee.findFirst({
@@ -46,9 +50,11 @@ export async function POST(req: NextRequest) {
     if (!lessee) {
       return NextResponse.json({ error: 'Lessee not found' }, { status: 404 });
     }
-    const item = await prisma.leaseCreditAssessment.create({
+    const item = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseCreditAssessment.create({
       data: { ...body, tenantId },
-    });
+    }),
+    );
     return NextResponse.json(item, { status: 201 });
   } catch (e) {
     return NextResponse.json({ error: 'Failed' }, { status: 500 });

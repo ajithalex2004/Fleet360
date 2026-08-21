@@ -11,17 +11,20 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
 
   // Confirm the contract belongs to the caller's tenant before exposing
   // allocation history (otherwise we'd leak other tenants' driver mappings).
@@ -54,10 +57,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
 
   try {
     const body = await req.json();
@@ -116,10 +120,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // is scoped via the parent contract (already verified above) so no
     // extra tenant filter is needed.
     if (contractVehicleId) {
-      await prisma.leaseContractVehicle.update({
+      await withTenantRls(prisma, tenantId, async (tx) =>
+        tx.leaseContractVehicle.update({
         where: { id: contractVehicleId },
         data: { driverId },
-      });
+      }),
+      );
     }
 
     void logAudit({

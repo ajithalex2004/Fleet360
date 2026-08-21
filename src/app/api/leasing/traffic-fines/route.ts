@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 /**
  * Traffic fines list (GET) + record (POST).
@@ -9,10 +11,11 @@ import { prisma } from '@/lib/prisma';
  * surface.
  */
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const { searchParams } = new URL(req.url);
     const contractId = searchParams.get('contractId');
@@ -34,10 +37,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
 
@@ -56,9 +60,11 @@ export async function POST(req: NextRequest) {
     const count = await prisma.leaseTrafficFine.count({ where: { tenantId } });
     const fineNo = body.fineNo ?? `TF-${String(count + 1).padStart(6, '0')}`;
     const finalAmount = body.finalAmount ?? (parseFloat(body.fineAmount) - parseFloat(body.discountAmount || '0'));
-    const fine = await prisma.leaseTrafficFine.create({
+    const fine = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseTrafficFine.create({
       data: { ...body, tenantId, fineNo, finalAmount },
-    });
+    }),
+    );
     return NextResponse.json(fine, { status: 201 });
   } catch (e) {
     console.error('POST /api/leasing/traffic-fines error:', e);

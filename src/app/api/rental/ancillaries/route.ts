@@ -4,8 +4,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { withAudit } from '@/lib/with-audit';
 import { captureException } from '@/lib/sentry';
 
@@ -27,10 +29,15 @@ const bodySchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   try {
     const cat = req.nextUrl.searchParams.get('category');
     const items = await prisma.rentalAncillary.findMany({
-      where: { deletedAt: null, ...(cat ? { category: cat } : {}) },
+      where: { tenantId, deletedAt: null, ...(cat ? { category: cat } : {}) },
       orderBy: [{ sortOrder: 'asc' }, { nameEn: 'asc' }],
     });
     return NextResponse.json(items);
@@ -42,6 +49,11 @@ export async function GET(req: NextRequest) {
 
 export const POST = withAudit(
   async (req: NextRequest) => {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
     try {
       const body = await req.json();
       const parsed = bodySchema.safeParse(body);
@@ -54,7 +66,8 @@ export const POST = withAudit(
           { status: 400 },
         );
       }
-      const item = await prisma.rentalAncillary.upsert({
+      const item = await withTenantRls(prisma, tenantId, async (tx) =>
+        tx.rentalAncillary.upsert({
         where: { code: parsed.data.code },
         update: {
           nameEn: parsed.data.nameEn,
@@ -83,7 +96,8 @@ export const POST = withAudit(
           sortOrder: parsed.data.sortOrder ?? 0,
           notes: parsed.data.notes ?? null,
         },
-      });
+      }),
+      );
       return NextResponse.json(item, { status: 201 });
     } catch (err) {
       captureException(err, { context: 'rental.ancillaries.POST' });

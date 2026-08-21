@@ -12,6 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { computeRentalAnalytics } from '@/lib/rental-analytics';
 import { captureException } from '@/lib/sentry';
@@ -19,6 +20,11 @@ import { captureException } from '@/lib/sentry';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   try {
     const sp = req.nextUrl.searchParams;
     const fromParam = sp.get('from');
@@ -52,7 +58,7 @@ export async function GET(req: NextRequest) {
     });
 
     const vehiclesRaw = await prisma.vehicle.findMany({
-      where: { deletedAt: null },
+      where: { tenantId, deletedAt: null },
       select: { id: true, type: true, status: true },
     });
 

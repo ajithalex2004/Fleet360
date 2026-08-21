@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   try {
     const claim = await prisma.damageClaim.findUnique({
       where: { id: params.id },
@@ -15,10 +22,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
     const { booking, ...data } = body;
-    const claim = await prisma.damageClaim.update({ where: { id: params.id }, data });
+    const claim = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.damageClaim.update({ where: { id: params.id }, data }),
+    );
     return NextResponse.json(claim);
   } catch (error) {
     return NextResponse.json({ error: 'Failed to update' }, { status: 500 });
@@ -26,8 +40,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   try {
-    await prisma.damageClaim.delete({ where: { id: params.id } });
+    await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.damageClaim.delete({ where: { id: params.id } }),
+    );
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to delete' }, { status: 500 });

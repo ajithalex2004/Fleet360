@@ -11,25 +11,55 @@
  *     routeIds?: string[],           // subset to analyse; defaults to all active
  *     objective?: {
  *       penaltyLambda?, costPerVehicleDay?, operatingDaysPerWeek?,
- *       fallbackKm?: { pickup?, dropoff? }
+ *       fallbackKm?: { pickup?, dropoff? },
+ *       maxDepartureTimeDiffMinutes?, maxArrivalTimeDiffMinutes?
  *     }
  *   }
  *
- * Response 200:
- *   { objective, recommendations[], skipped[], totals }
+ * maxDepartureTimeDiffMinutes / maxArrivalTimeDiffMinutes, when omitted,
+ * are NOT hardcoded here — resolveEligibilityPolicy() resolves them from
+ * the tenant's PlanningConstraint rows (kind DEPARTURE_TIME_PROXIMITY /
+ * ARRIVAL_TIME_PROXIMITY, editable on the "Edit PCE rules" page), falling
+ * back to a hardcoded default only if no such row exists. An explicit
+ * value in the request body always wins over both.
  *
- * Nothing is written. Applying a recommendation is Phase 2 (needs
- * schema for merged-route lineage + enrollment migration write path).
+ * fallbackKm.pickup / fallbackKm.dropoff resolve the same way via
+ * resolveZoneFallbackKm() (kinds PICKUP_ZONE_FALLBACK_KM /
+ * DROPOFF_ZONE_FALLBACK_KM) — see zone-compat-policy.ts. These only
+ * matter when neither route side has (or shares) a spatial.places id;
+ * zoneCompatibility() always prefers a shared place match over distance.
+ *
+ * Vehicle-reuse-across-sequential-trips ("Case 2") is a separate resource
+ * model from this route-merge analysis — see POST .../vehicle-reuse
+ * instead (route-consolidation-vehicle-reuse.ts).
+ *
+ * Scoring weights (distance/time saving, resource release, passenger
+ * impact, detour, PCE penalty) similarly resolve from the tenant's
+ * RouteConsolidationScoringPolicy (active row, else DEFAULT_SCORING_POLICY)
+ * via resolveScoringPolicy() — see route-consolidation-scoring-policy.ts.
+ * Analyse never writes that policy anywhere; only Apply snapshots it.
+ *
+ * Response 200:
+ *   { objective, scoringPolicy, recommendations[], skipped[], totals }
+ *
+ * Nothing is written. Applying a recommendation persists a
+ * RouteConsolidation row (see .../apply/route.ts).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { loadConsolidationFacts } from '@/lib/planning/route-consolidation-facts';
 import { analyzeConsolidations, type ConsolidationObjective } from '@/lib/planning/route-consolidation';
+import { resolveEligibilityPolicy } from '@/lib/planning/route-consolidation-eligibility-policy';
+import { resolveScoringPolicy } from '@/lib/planning/route-consolidation-scoring-policy';
+import { resolveZoneFallbackKm } from '@/lib/planning/zone-compat-policy';
+import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
 export async function POST(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id');
   if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const permError = requireBusOpsAdminAccess(req, 'route-consolidation');
+  if (permError) return permError;
 
   let body: unknown = {};
   try {
@@ -58,8 +88,25 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const facts = await loadConsolidationFacts(prisma, { tenantId, routeIds });
-    const result = analyzeConsolidations(facts, objective);
+    const [facts, eligibilityPolicy, scoringPolicy, zoneFallbackKm] = await Promise.all([
+      loadConsolidationFacts(prisma, { tenantId, routeIds }),
+      resolveEligibilityPolicy(prisma, tenantId, {
+        maxDepartureTimeDiffMinutes: objective.maxDepartureTimeDiffMinutes,
+        maxArrivalTimeDiffMinutes: objective.maxArrivalTimeDiffMinutes,
+      }),
+      resolveScoringPolicy(prisma, tenantId),
+      resolveZoneFallbackKm(prisma, tenantId, {
+        pickup: objective.fallbackKm?.pickup,
+        dropoff: objective.fallbackKm?.dropoff,
+      }),
+    ]);
+    const resolvedObjective: ConsolidationObjective = {
+      ...objective,
+      maxDepartureTimeDiffMinutes: eligibilityPolicy.maxDepartureTimeDiffMinutes,
+      maxArrivalTimeDiffMinutes: eligibilityPolicy.maxArrivalTimeDiffMinutes,
+      fallbackKm: zoneFallbackKm,
+    };
+    const result = await analyzeConsolidations(prisma, tenantId, facts, resolvedObjective, scoringPolicy);
     return NextResponse.json(result);
   } catch (e) {
     console.error('[route-consolidation.analyze]', e);
@@ -73,7 +120,10 @@ function parseObjective(raw: unknown): ConsolidationObjective | string {
   const o = raw as Record<string, unknown>;
   const out: ConsolidationObjective = {};
 
-  for (const key of ['penaltyLambda', 'costPerVehicleDay', 'operatingDaysPerWeek'] as const) {
+  for (const key of [
+    'penaltyLambda', 'costPerVehicleDay', 'operatingDaysPerWeek',
+    'maxDepartureTimeDiffMinutes', 'maxArrivalTimeDiffMinutes',
+  ] as const) {
     if (o[key] === undefined) continue;
     if (typeof o[key] !== 'number' || !Number.isFinite(o[key])) {
       return `objective.${key} must be a finite number`;

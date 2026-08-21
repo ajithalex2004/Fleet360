@@ -4,6 +4,7 @@
  * GET ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&branchName=X
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 
 type Row = Record<string, unknown>;
@@ -14,6 +15,11 @@ function safe(val: unknown, fallback = 0): number {
 }
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   const sp = req.nextUrl.searchParams;
   const startDate = sp.get('startDate') || new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
   const endDate   = sp.get('endDate')   || new Date().toISOString().slice(0, 10);

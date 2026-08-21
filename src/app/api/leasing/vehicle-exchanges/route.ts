@@ -7,13 +7,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const { searchParams } = new URL(req.url);
     const contractId = searchParams.get('contractId');
@@ -36,10 +39,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
     const contract = await prisma.leaseContract2.findFirst({
@@ -49,7 +53,8 @@ export async function POST(req: NextRequest) {
     if (!contract) {
       return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
     }
-    const exchange = await prisma.leaseVehicleExchange.create({
+    const exchange = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseVehicleExchange.create({
       data: {
         contractId: body.contractId,
         outgoingVehicleId: body.outgoingVehicleId ?? null,
@@ -62,7 +67,8 @@ export async function POST(req: NextRequest) {
         notes: body.notes ?? null,
         tenantId,
       },
-    });
+    }),
+    );
     return NextResponse.json(exchange, { status: 201 });
   } catch (e) {
     console.error(e);

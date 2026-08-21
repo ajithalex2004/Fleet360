@@ -9,7 +9,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
@@ -18,10 +20,11 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string; activityId: string } },
 ) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   const a = await prisma.leaseInquiryActivity.findFirst({
     where: { id: params.activityId, tenantId, inquiryId: params.id },
   });
@@ -35,10 +38,12 @@ export async function POST(
     return NextResponse.json({ error: 'Follow-up already marked done' }, { status: 409 });
   }
 
-  const updated = await prisma.leaseInquiryActivity.update({
+  const updated = await withTenantRls(prisma, tenantId, async (tx) =>
+    tx.leaseInquiryActivity.update({
     where: { id: params.activityId },
     data: { followUpDone: true },
-  });
+  }),
+  );
 
   void logAudit({
     tenantId,

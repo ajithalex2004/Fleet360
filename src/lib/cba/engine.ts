@@ -16,6 +16,7 @@ import type { CbaRules, CbaRule, CbaRuleCategory } from './types';
 import { findRule, getRuleValue, DEFAULT_CBA_RULES } from './types';
 import type { WorkRules } from '@/lib/plan/runcut';
 import { DEFAULT_WORK_RULES } from '@/lib/plan/runcut';
+import type { PrismaClient } from '@prisma/client';
 
 function n(v: number | undefined, fallback: number): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
@@ -44,6 +45,27 @@ export function cbaToWorkRules(rules: CbaRules): WorkRules {
     deadheadMinsBetweenTrips: n(enforced('MIN_DEADHEAD_BETWEEN_TRIPS'), DEFAULT_WORK_RULES.deadheadMinsBetweenTrips),
     maxTripsPerRun:         n(enforced('MAX_TRIPS_PER_RUN'),         DEFAULT_WORK_RULES.maxTripsPerRun),
   };
+}
+
+/**
+ * Resolve the tenant's default CBA rule-set (if any) into WorkRules.
+ * Returns null when the tenant has no default rule-set — callers should
+ * fall back to DEFAULT_WORK_RULES in that case, same as when no CBA
+ * exists at all. This is the one place that was previously missing: the
+ * Planning Core's compute endpoint built WorkRules purely from the
+ * request body / DEFAULT_WORK_RULES and never consulted CbaRuleSet,
+ * despite cbaToWorkRules() existing specifically for this.
+ */
+export async function resolveCbaWorkRules(
+  prisma: PrismaClient,
+  tenantId: string,
+): Promise<WorkRules | null> {
+  const ruleSet = await prisma.cbaRuleSet.findFirst({
+    where: { tenantId, isDefault: true, deletedAt: null },
+    select: { rulesJson: true },
+  });
+  if (!ruleSet?.rulesJson) return null;
+  return cbaToWorkRules(ruleSet.rulesJson as unknown as CbaRules);
 }
 
 /** Look up a rule's display value — number, or a stringValue if set. */

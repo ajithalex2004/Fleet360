@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { paginate, paginatedResponse } from '@/lib/pagination';
 import { pricingRuleToRow, rowToCamel } from '@/lib/pricing-rule-helpers';
 
 // GET  /api/rental/rates  — list pricing rules (paginated, filterable)
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   try {
     const sp = req.nextUrl.searchParams;
     const vehicleCategory = sp.get('vehicleCategory') ?? '';
@@ -45,6 +51,11 @@ export async function GET(req: NextRequest) {
 
 // POST /api/rental/rates  — create a pricing rule
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
 

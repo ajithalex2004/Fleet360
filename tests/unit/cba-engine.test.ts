@@ -4,10 +4,17 @@
  * Unit tests for the CBA engine (lib/cba/engine.ts).
  */
 
-import { describe, expect, it } from 'vitest';
-import { cbaToWorkRules, cbaAudit, ruleDisplayValue, freshCbaRules } from '@/lib/cba/engine';
+import { describe, expect, it, vi } from 'vitest';
+import { cbaToWorkRules, cbaAudit, ruleDisplayValue, freshCbaRules, resolveCbaWorkRules } from '@/lib/cba/engine';
 import { DEFAULT_CBA_RULES, type CbaRules } from '@/lib/cba/types';
 import { DEFAULT_WORK_RULES } from '@/lib/plan/runcut';
+import type { PrismaClient } from '@prisma/client';
+
+function fakePrisma(findFirstResult: unknown): PrismaClient {
+  return {
+    cbaRuleSet: { findFirst: vi.fn().mockResolvedValue(findFirstResult) },
+  } as unknown as PrismaClient;
+}
 
 describe('cba engine — cbaToWorkRules', () => {
   it('returns the defaults for an empty rule set', () => {
@@ -135,5 +142,40 @@ describe('cba engine — ruleDisplayValue', () => {
   });
   it('uses stringValue when set', () => {
     expect(ruleDisplayValue({ id: 'r', name: 'x', category: 'WEEKLY_PATTERN', value: 0, unit: 'COUNT', enforced: true, stringValue: '5/2' })).toBe('5/2');
+  });
+});
+
+describe('cba engine — resolveCbaWorkRules', () => {
+  it('returns null when the tenant has no default rule-set', async () => {
+    const wr = await resolveCbaWorkRules(fakePrisma(null), 'tenant-a');
+    expect(wr).toBeNull();
+  });
+
+  it('converts the tenant default rule-set into WorkRules', async () => {
+    const rulesJson: CbaRules = {
+      schemaVersion: 1,
+      rules: [
+        { id: 'r1', name: 'Max', category: 'MAX_WORK_HOURS_PER_DAY', value: 10, unit: 'HOURS', enforced: true },
+      ],
+    };
+    const wr = await resolveCbaWorkRules(fakePrisma({ rulesJson }), 'tenant-a');
+    expect(wr).not.toBeNull();
+    expect(wr!.maxWorkHoursPerDay).toBe(10);
+    // Unset categories still fall back to DEFAULT_WORK_RULES via cbaToWorkRules.
+    expect(wr!.overtimeRate).toBe(DEFAULT_WORK_RULES.overtimeRate);
+  });
+
+  it('queries with isDefault: true and deletedAt: null, scoped to the tenant', async () => {
+    const prisma = fakePrisma(null);
+    await resolveCbaWorkRules(prisma, 'tenant-b');
+    expect(prisma.cbaRuleSet.findFirst).toHaveBeenCalledWith({
+      where: { tenantId: 'tenant-b', isDefault: true, deletedAt: null },
+      select: { rulesJson: true },
+    });
+  });
+
+  it('returns null when the matched row has no rulesJson', async () => {
+    const wr = await resolveCbaWorkRules(fakePrisma({ rulesJson: null }), 'tenant-a');
+    expect(wr).toBeNull();
   });
 });

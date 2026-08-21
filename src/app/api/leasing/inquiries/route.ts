@@ -7,13 +7,16 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const inquiries = await prisma.leaseInquiry.findMany({
       where: { tenantId, deletedAt: null },
@@ -30,10 +33,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const tenantId = request.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await request.json();
 
@@ -42,13 +46,15 @@ export async function POST(request: NextRequest) {
     const count = await prisma.leaseInquiry.count({ where: { tenantId } });
     const inquiryNumber = `INQ-${String(count + 1).padStart(6, '0')}`;
 
-    const inquiry = await prisma.leaseInquiry.create({
+    const inquiry = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseInquiry.create({
       data: {
         ...body,
         inquiryNumber,
         tenantId,
       },
-    });
+    }),
+    );
 
     return NextResponse.json(inquiry, { status: 201 });
   } catch (error) {

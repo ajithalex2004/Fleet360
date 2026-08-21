@@ -10,15 +10,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { paginate, paginatedResponse } from '@/lib/pagination';
 import { assertCanWrite } from '@/lib/access-control';
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const sp = req.nextUrl.searchParams;
     const status = sp.get('status');
@@ -50,16 +53,19 @@ export async function POST(req: NextRequest) {
   const guard = assertCanWrite(req, 'leasing');
   if (guard) return guard;
 
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
 
   try {
     const body = await req.json();
-    const contract = await prisma.leaseContract2.create({
+    const contract = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseContract2.create({
       data: { ...body, tenantId },
-    });
+    }),
+    );
     return NextResponse.json(contract, { status: 201 });
   } catch (error) {
     console.error('Error creating contract:', error);

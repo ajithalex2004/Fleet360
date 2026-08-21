@@ -19,7 +19,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { sendEmail } from '@/lib/email';
 import { sendWhatsApp } from '@/lib/whatsapp';
 import { logAudit } from '@/lib/audit';
@@ -28,10 +30,11 @@ import { captureException } from '@/lib/sentry';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
     const channel = String(body?.channel ?? '').toUpperCase();
@@ -79,7 +82,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     // Append a timeline entry — outbound contact is part of the audit trail.
-    const activity = await prisma.leaseInquiryActivity.create({
+    const activity = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseInquiryActivity.create({
       data: {
         inquiryId: params.id,
         activityType: channel === 'WHATSAPP' ? 'WHATSAPP' : 'EMAIL',
@@ -92,14 +96,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         followUpAt: body?.followUpAt ? new Date(body.followUpAt) : null,
         tenantId,
       },
-    });
+    }),
+    );
 
     // Auto-bump status NEW → CONTACTED on first outbound contact.
     if (inquiry.status === 'NEW') {
-      await prisma.leaseInquiry.update({
+      await withTenantRls(prisma, tenantId, async (tx) =>
+        tx.leaseInquiry.update({
         where: { id: params.id },
         data: { status: 'CONTACTED' },
-      });
+      }),
+      );
     }
 
     void logAudit({

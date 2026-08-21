@@ -7,13 +7,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     // Verify contract ownership before exposing exchange history.
     const contract = await prisma.leaseContract2.findFirst({
@@ -35,10 +38,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
 
@@ -50,7 +54,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    const exchange = await prisma.leaseVehicleExchange.create({
+    const exchange = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseVehicleExchange.create({
       data: {
         ...body,
         contractId: params.id,
@@ -58,17 +63,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         status: body.status ?? 'PENDING',
         tenantId,
       },
-    });
+    }),
+    );
 
     // If incoming vehicle provided, update the contract vehicle record.
     // LeaseContractVehicle has no tenant_id column (scoped only via the
     // parent contract), so the contractId + ownership check above is
     // sufficient guard.
     if (body.incomingVehicleId && body.outgoingVehicleId) {
-      await prisma.leaseContractVehicle.updateMany({
+      await withTenantRls(prisma, tenantId, async (tx) =>
+        tx.leaseContractVehicle.updateMany({
         where: { contractId: params.id, vehicleId: body.outgoingVehicleId },
         data: { vehicleId: body.incomingVehicleId, status: 'EXCHANGED' },
-      });
+      }),
+      );
     }
 
     return NextResponse.json(exchange, { status: 201 });

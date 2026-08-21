@@ -4,10 +4,16 @@
  * a full price breakdown using the best-matching PricingRule.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { calculateRate, type RateRequest } from '@/lib/rental-rate-engine';
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
     const {

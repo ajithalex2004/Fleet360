@@ -7,13 +7,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status');
@@ -32,10 +35,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
     const contract = await prisma.leaseContract2.findFirst({
@@ -47,9 +51,11 @@ export async function POST(req: NextRequest) {
     }
     const count = await prisma.leaseRenewal.count({ where: { tenantId } });
     const renewalNo = `RNW-${String(count + 1).padStart(5, '0')}`;
-    const renewal = await prisma.leaseRenewal.create({
+    const renewal = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseRenewal.create({
       data: { ...body, renewalNo, tenantId },
-    });
+    }),
+    );
     return NextResponse.json(renewal, { status: 201 });
   } catch (e) {
     return NextResponse.json({ error: 'Failed' }, { status: 500 });

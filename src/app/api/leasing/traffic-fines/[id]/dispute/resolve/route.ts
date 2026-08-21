@@ -13,7 +13,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -23,10 +25,11 @@ const RESOLUTIONS = ['UPHELD', 'OVERTURNED', 'PARTIAL'] as const;
 type Resolution = typeof RESOLUTIONS[number];
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await req.json();
     const resolution = String(body?.resolution ?? '').toUpperCase() as Resolution;
@@ -71,10 +74,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     ].filter(Boolean);
     updates.notes = noteParts.join('\n');
 
-    const updated = await prisma.leaseTrafficFine.update({
+    const updated = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseTrafficFine.update({
       where: { id: params.id },
       data: updates,
-    });
+    }),
+    );
 
     void logAudit({
       tenantId,

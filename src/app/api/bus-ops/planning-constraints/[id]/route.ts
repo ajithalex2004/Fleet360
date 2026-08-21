@@ -10,12 +10,15 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
 const ACTIONS = new Set(['BLOCK', 'WARN', 'PENALTY']);
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const tenantId = req.headers.get('x-tenant-id');
   if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const permError = requireBusOpsAdminAccess(req, 'planning-constraints');
+  if (permError) return permError;
   const { id } = await ctx.params;
 
   const row = await prisma.planningConstraint.findFirst({
@@ -28,6 +31,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const tenantId = req.headers.get('x-tenant-id');
   if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const permError = requireBusOpsAdminAccess(req, 'planning-constraints');
+  if (permError) return permError;
   const updatedBy = req.headers.get('x-user-id') ?? null;
   const { id } = await ctx.params;
 
@@ -79,6 +84,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const tenantId = req.headers.get('x-tenant-id');
   if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const permError = requireBusOpsAdminAccess(req, 'planning-constraints');
+  if (permError) return permError;
   const { id } = await ctx.params;
 
   const existing = await prisma.planningConstraint.findFirst({

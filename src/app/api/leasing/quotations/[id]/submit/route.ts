@@ -7,15 +7,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import nodemailer from 'nodemailer';
 import { quotationEmailHtml, quotationEmailText } from '@/lib/email-templates/quotation';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     // 1. Fetch full quotation with lessee (tenant-scoped).
     const quotation = await prisma.leaseQuotation.findFirst({
@@ -35,10 +38,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     // 2. Update status to SENT_TO_CUSTOMER (tenant-scoped via updateMany so
     //    we refuse to flip a row that doesn't belong to this tenant).
-    const upd = await prisma.leaseQuotation.updateMany({
+    const upd = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseQuotation.updateMany({
       where: { id: params.id, tenantId },
       data:  { status: 'SENT_TO_CUSTOMER', updatedAt: new Date() },
-    });
+    }),
+    );
     if (upd.count === 0) {
       return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
     }

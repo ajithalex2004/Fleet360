@@ -12,7 +12,9 @@
  */
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Route as RouteIcon, Users } from 'lucide-react';
 import RouteOptimizerPanel from '@/components/route-optimizer/RouteOptimizerPanel';
+import FleetPlanner from '@/components/bus-ops/FleetPlanner';
 
 interface RouteResult {
   summary: { stops: number; distanceKm: number; durationMin: number; durationHuman: string; fuelCostAED: number };
@@ -38,11 +40,35 @@ interface LoadedRoute {
   }>;
 }
 
+/** Lightweight shape for the route picker dropdown. */
+interface RouteOption {
+  id: string;
+  name: string;
+  code?: string | null;
+  isActive?: boolean | null;
+  stopCount: number;
+}
+
+type Mode = 'single' | 'fleet';
+
 function RoutePlannerInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams?.get('edit') ?? null;
   const autoOptimize = searchParams?.get('optimize') === '1';
+  const mode: Mode = searchParams?.get('mode') === 'fleet' ? 'fleet' : 'single';
+
+  const switchMode = (next: Mode) => {
+    // Preserve editId only in single mode — fleet planner is fleet-wide.
+    const params = new URLSearchParams();
+    if (next === 'fleet') {
+      params.set('mode', 'fleet');
+    } else if (editId) {
+      params.set('edit', editId);
+    }
+    const qs = params.toString();
+    router.replace(`/bus-ops/route-planner${qs ? '?' + qs : ''}`);
+  };
 
   const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -56,12 +82,54 @@ function RoutePlannerInner() {
   const [routeName, setRouteName] = useState('');
   const [routeNameManuallyEdited, setRouteNameManuallyEdited] = useState(false);
 
+  // Route picker — populated from /api/bus-ops/routes. Picking a route
+  // navigates to /bus-ops/route-planner?edit=<id> so all the existing
+  // edit-flow logic (fetch + stop conversion + PATCH-on-save) kicks in.
+  const [routeOptions, setRouteOptions] = useState<RouteOption[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/bus-ops/routes', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled || !Array.isArray(data)) return;
+        setRouteOptions(
+          data.map((r: {
+            id: string; name: string; code?: string | null;
+            isActive?: boolean | null; stops?: unknown[]
+          }) => ({
+            id: r.id,
+            name: r.name,
+            code: r.code,
+            isActive: r.isActive,
+            stopCount: Array.isArray(r.stops) ? r.stops.length : 0,
+          })),
+        );
+      } catch { /* silent — picker just stays empty */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // Load the route + convert its stops into planner waypoints. First stop
   // becomes origin (sequence 1), last stop becomes destination, everything
   // between is a stop. Stops without gpsLat/gpsLng are skipped — the planner
   // needs coords to place a marker; the operator can re-pick those.
   useEffect(() => {
-    if (!editId) return;
+    // Reset panel state on every editId change — including editId → null
+    // (user picked "— Pick existing route —"). Clearing initialWaypoints
+    // stops the panel from remounting with the previous route's data during
+    // the async fetch window.
+    if (!editId) {
+      setLoadingRoute(false);
+      setInitialWaypoints([]);
+      setEditingRouteName(null);
+      setRouteName('');
+      setRouteNameManuallyEdited(false);
+      return;
+    }
+    setLoadingRoute(true);
+    setInitialWaypoints(null);
     let cancelled = false;
     (async () => {
       try {
@@ -222,19 +290,50 @@ function RoutePlannerInner() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">
-            {editId ? 'Edit Route' : 'Route Planner'}
-          </h1>
+          <h1 className="text-2xl font-bold text-white">Route Optimization</h1>
           <p className="text-slate-400 text-sm mt-0.5">
-            {editId && editingRouteName
-              ? `Editing "${editingRouteName}" — changes save back to the same route.`
-              : 'Plan and optimise pickup routes across multiple zones'}
+            {mode === 'fleet'
+              ? 'Whole-fleet VRPTW solve — reassign passengers across vehicles to minimise total distance.'
+              : editId && editingRouteName
+                ? `Optimising "${editingRouteName}" — changes save back to the same route.`
+                : 'Plan and optimise the stop order of a single route.'}
           </p>
         </div>
         <div className="flex items-center gap-1.5 text-xs text-purple-400 bg-purple-500/10 border border-purple-500/20 px-3 py-1.5 rounded-full">
           🗺️ Hybrid Routing
         </div>
       </div>
+
+      {/* Mode toggle — Single Route (TSP + Mapbox) vs Fleet Planner (VRPTW + Google) */}
+      <div className="inline-flex rounded-xl bg-slate-800/60 border border-white/10 p-1">
+        <button
+          type="button"
+          onClick={() => switchMode('single')}
+          className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            mode === 'single'
+              ? 'bg-violet-500/20 text-violet-100 border border-violet-500/40'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <RouteIcon className="w-4 h-4" /> Single Route
+        </button>
+        <button
+          type="button"
+          onClick={() => switchMode('fleet')}
+          className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            mode === 'fleet'
+              ? 'bg-violet-500/20 text-violet-100 border border-violet-500/40'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Users className="w-4 h-4" /> Fleet Planner
+        </button>
+      </div>
+
+      {mode === 'fleet' ? (
+        <FleetPlanner />
+      ) : (
+        <>
 
       {saved && (
         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
@@ -259,24 +358,58 @@ function RoutePlannerInner() {
         </div>
       ) : (
         <>
-          {/* Route name — required, editable at any time. Suggested from
-              origin/destination via the waypoint callback below but the
-              operator's typed value takes precedence. */}
+          {/* Route Name — required, editable at any time. Also serves as the
+              existing-route picker via a native datalist + a dedicated
+              "Pick existing" select on the right. Choosing an existing route
+              switches the URL to ?edit=<id> so the load effect (fetch +
+              stops→waypoints + PATCH on save) kicks in. */}
           <div className="rounded-2xl bg-slate-800/60 border border-white/10 p-4 space-y-2">
             <label className="block text-xs text-slate-400 uppercase tracking-wider font-medium">
               Route name <span className="text-rose-400">*</span>
             </label>
-            <input
-              type="text"
-              value={routeName}
-              onChange={e => { setRouteName(e.target.value); setRouteNameManuallyEdited(true); }}
-              placeholder="e.g. AAT HQ Morning Shift"
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-900/60 border border-white/10 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-violet-500"
-            />
-            <p className="text-[11px] text-slate-500">Auto-suggested from your origin and destination. Edit to give it a memorable name.</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                list="rp-existing-routes"
+                value={routeName}
+                onChange={e => { setRouteName(e.target.value); setRouteNameManuallyEdited(true); }}
+                placeholder="Type a new name or pick from existing…"
+                className="flex-1 px-4 py-2.5 rounded-xl bg-slate-900/60 border border-white/10 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-violet-500"
+              />
+              <datalist id="rp-existing-routes">
+                {routeOptions.map(r => <option key={r.id} value={r.name} />)}
+              </datalist>
+              <select
+                value={editId ?? ''}
+                onChange={e => {
+                  const id = e.target.value;
+                  router.push(id ? `/bus-ops/route-planner?edit=${id}` : '/bus-ops/route-planner');
+                }}
+                title="Load an existing route to optimize"
+                className="w-56 px-3 py-2.5 rounded-xl bg-slate-900/60 border border-white/10 text-white text-sm focus:outline-none focus:border-violet-500"
+              >
+                <option value="">— Pick existing route —</option>
+                {routeOptions.map(r => (
+                  <option key={r.id} value={r.id}>
+                    {r.code ? `[${r.code}] ` : ''}{r.name} · {r.stopCount} stops{r.isActive === false ? ' (inactive)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Auto-suggested from origin and destination. Pick from the dropdown to load an existing route's stops.
+            </p>
           </div>
 
           <RouteOptimizerPanel
+            // Force a fresh mount every time the loaded route changes.
+            // RouteOptimizerPanel reads initialWaypoints only in its
+            // useState initializer — later prop updates were being
+            // silently ignored, so picking a different route from the
+            // dropdown loaded the data but the map / stops list stayed on
+            // the previous route. Re-keying on editId cleanly rebuilds
+            // internal waypoint state from the fresh initialWaypoints.
+            key={editId ?? 'new'}
             mode="staff"
             vehicleType="bus"
             onSave={handleSave}
@@ -291,6 +424,8 @@ function RoutePlannerInner() {
               if (o && d) setRouteName(`${o.label.slice(0, 25)} → ${d.label.slice(0, 25)}`);
             }}
           />
+        </>
+      )}
         </>
       )}
     </div>

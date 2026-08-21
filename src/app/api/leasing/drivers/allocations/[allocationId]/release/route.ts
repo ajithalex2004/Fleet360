@@ -15,7 +15,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -25,10 +27,11 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { allocationId: string } },
 ) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const body = await req.json().catch(() => ({}));
     const allocation = await prisma.leaseDriverAllocation.findFirst({
@@ -41,7 +44,8 @@ export async function POST(
       return NextResponse.json({ error: 'Allocation is already released' }, { status: 409 });
     }
 
-    const updated = await prisma.leaseDriverAllocation.update({
+    const updated = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseDriverAllocation.update({
       where: { id: params.allocationId },
       data: {
         status: 'RELEASED',
@@ -49,19 +53,22 @@ export async function POST(
         releasedBy: req.headers.get('x-user-id') ?? null,
         releaseReason: body?.reason ?? 'Manually released',
       },
-    });
+    }),
+    );
 
     if (allocation.contractVehicleId) {
       // LeaseContractVehicle is scoped via the parent contract (already
       // owned by this tenant via the allocation), no tenant column on
       // the model itself.
-      await prisma.leaseContractVehicle.updateMany({
+      await withTenantRls(prisma, tenantId, async (tx) =>
+        tx.leaseContractVehicle.updateMany({
         where: {
           id: allocation.contractVehicleId,
           driverId: allocation.driverId,
         },
         data: { driverId: null },
-      });
+      }),
+      );
     }
 
     void logAudit({

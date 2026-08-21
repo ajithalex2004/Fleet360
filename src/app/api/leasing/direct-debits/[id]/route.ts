@@ -6,13 +6,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   try {
     const existing = await prisma.leaseDirectDebit.findFirst({
       where: { id: params.id, tenantId },
@@ -23,10 +26,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
     const { lessee, ...data } = await req.json();
     if (data.status === 'ACTIVE' && !data.activatedAt) data.activatedAt = new Date();
-    const dd = await prisma.leaseDirectDebit.update({
+    const dd = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseDirectDebit.update({
       where: { id: params.id },
       data: { ...data, updatedAt: new Date() },
-    });
+    }),
+    );
     return NextResponse.json(dd);
   } catch (e) {
     return NextResponse.json({ error: 'Failed' }, { status: 500 });
@@ -34,10 +39,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
   const existing = await prisma.leaseDirectDebit.findFirst({
     where: { id: params.id, tenantId },
     select: { id: true },
@@ -45,6 +51,8 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (!existing) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
-  await prisma.leaseDirectDebit.delete({ where: { id: params.id } });
+  await withTenantRls(prisma, tenantId, async (tx) =>
+    tx.leaseDirectDebit.delete({ where: { id: params.id } }),
+  );
   return NextResponse.json({ success: true });
 }

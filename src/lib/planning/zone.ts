@@ -1,107 +1,117 @@
 /**
- * Zone membership helpers for the Planning Constraint Engine.
+ * Zone geometry helpers for the Planning Constraint Engine (PCE).
  *
- * A "zone" is a `spatial.places` row of shape POLYGON or CIRCLE. Zone-scoped
- * rules ask: does this trip's route touch this zone?  Answered by testing
- * every stop of the trip (and optionally departure/arrival points) against
- * the zone geometry using ray-casting for polygons and haversine for circles.
+ * Zones are pre-loaded from `spatial.places` into a `ZoneShape` — either a
+ * closed POLYGON of lat/lng vertices, or a CIRCLE (center + radius in meters).
+ * `pathTouchesZone` returns true if any of the given path points fall inside
+ * the zone, which is the check the ZONE_RESTRICTION evaluator uses to gate
+ * trips whose route stops enter a restricted area.
  *
- * Runs in-process — no PostGIS dependency. Fast enough for the O(stops×zones)
- * evaluation loop in Phase 1; if that changes, migrate the geometry column to
- * PostGIS and let the DB do it.
+ * Kept dependency-free (no turf, no geolib) — a small haversine + a ray-cast
+ * point-in-polygon is enough for route granularity where stops are frequent.
  */
 
-export type LatLng = { lat: number; lng: number };
+export interface LatLng {
+  lat: number;
+  lng: number;
+}
 
 export type ZoneShape =
   | { shape: 'POLYGON'; polygon: LatLng[] }
   | { shape: 'CIRCLE'; centerLat: number; centerLng: number; radiusM: number };
 
-/**
- * Point-in-polygon test (ray-casting).
- *
- * Correct for arbitrary simple polygons in lat/lng space. Not correct for
- * polygons that cross the antimeridian — Fleet360 operates in the UAE so
- * that's not a concern here; guard callers explicitly if that changes.
- * Boundary points may flip depending on floating-point rounding; treat as
- * a rule the operator authored, not a legal cadastral boundary.
- */
-export function pointInPolygon(point: LatLng, polygon: LatLng[]): boolean {
-  if (polygon.length < 3) return false;
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i].lng;
-    const yi = polygon[i].lat;
-    const xj = polygon[j].lng;
-    const yj = polygon[j].lat;
-    const intersect =
-      yi > point.lat !== yj > point.lat &&
-      point.lng < ((xj - xi) * (point.lat - yi)) / (yj - yi) + xi;
-    if (intersect) inside = !inside;
-  }
-  return inside;
-}
+// ─── Polygon JSON parsing ───────────────────────────────────────────────────
 
 /**
- * Haversine distance in metres between two lat/lng points. Standard formula;
- * accurate to ~0.5% at 100km which is plenty for zone membership tests.
- */
-export function haversineMeters(a: LatLng, b: LatLng): number {
-  const R = 6_371_000;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const lat1 = toRad(a.lat);
-  const lat2 = toRad(b.lat);
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
-  return 2 * R * Math.asin(Math.sqrt(s));
-}
-
-/**
- * Does the point fall inside the zone? Delegates to the correct geometry
- * primitive by shape. Returns false for POINT-typed places — a zone must
- * enclose area to have "inside" semantics.
- */
-export function pointInZone(point: LatLng, zone: ZoneShape): boolean {
-  if (zone.shape === 'POLYGON') {
-    return pointInPolygon(point, zone.polygon);
-  }
-  const d = haversineMeters(point, { lat: zone.centerLat, lng: zone.centerLng });
-  return d <= zone.radiusM;
-}
-
-/**
- * Does any point of a path (typically a trip's ordered stops) enter the
- * zone?  Used by ZONE_VEHICLE_RESTRICTION — the ban fires if the trip
- * *routes through* the zone, not just endpoints.
- *
- * Segment-crosses-polygon is intentionally NOT modelled: stops are dense
- * enough on the routes we operate that a segment cannot fully skip a zone
- * without at least one endpoint being inside. If that becomes false (very
- * long segments across a small ban zone), upgrade the test with a segment
- * intersection check.
- */
-export function pathTouchesZone(path: LatLng[], zone: ZoneShape): boolean {
-  return path.some((p) => pointInZone(p, zone));
-}
-
-/**
- * Parse a spatial.places row's `polygon` JSON into typed vertices. The
- * column stores `[{lat, lng}, ...]` — see comment on the Place model.
- * Returns null when the payload is malformed so evaluators can skip the
- * rule cleanly rather than throw.
+ * Parse a polygon out of an arbitrary JSON value. Accepts the two shapes we
+ * ingest from `spatial.places.polygon`:
+ *   1. GeoJSON-style: [ [lng, lat], [lng, lat], ... ]
+ *   2. Object array:  [ { lat, lng }, { lat, lng }, ... ]
+ * Returns null when the value isn't a valid polygon with >= 3 points.
+ * De-duplicates a trailing closing vertex if present.
  */
 export function parsePolygonJson(raw: unknown): LatLng[] | null {
-  if (!Array.isArray(raw)) return null;
-  const out: LatLng[] = [];
-  for (const v of raw) {
-    if (!v || typeof v !== 'object') return null;
-    const lat = (v as Record<string, unknown>).lat;
-    const lng = (v as Record<string, unknown>).lng;
-    if (typeof lat !== 'number' || typeof lng !== 'number') return null;
-    out.push({ lat, lng });
+  if (!Array.isArray(raw) || raw.length < 3) return null;
+
+  const points: LatLng[] = [];
+  for (const p of raw) {
+    if (Array.isArray(p) && p.length >= 2 && typeof p[0] === 'number' && typeof p[1] === 'number') {
+      // GeoJSON order: [lng, lat]
+      points.push({ lat: p[1] as number, lng: p[0] as number });
+    } else if (p && typeof p === 'object') {
+      const o = p as Record<string, unknown>;
+      const lat = typeof o.lat === 'number' ? o.lat : typeof o.latitude === 'number' ? o.latitude : null;
+      const lng = typeof o.lng === 'number' ? o.lng : typeof o.longitude === 'number' ? o.longitude : null;
+      if (lat == null || lng == null) return null;
+      points.push({ lat, lng });
+    } else {
+      return null;
+    }
   }
-  return out.length >= 3 ? out : null;
+
+  // Strip trailing closing vertex — ray-cast works on either, but a duplicate
+  // vertex breaks some edge iterators.
+  if (points.length >= 4) {
+    const first = points[0];
+    const last = points[points.length - 1];
+    if (first.lat === last.lat && first.lng === last.lng) points.pop();
+  }
+
+  return points.length >= 3 ? points : null;
+}
+
+// ─── Membership test ────────────────────────────────────────────────────────
+
+/**
+ * True if any point on `path` falls inside `zone`. Point-membership is what
+ * the ZONE_RESTRICTION evaluator needs — stops are dense enough that a route
+ * crossing a zone will always have a stop inside it.
+ */
+export function pathTouchesZone(path: LatLng[], zone: ZoneShape): boolean {
+  if (path.length === 0) return false;
+  if (zone.shape === 'CIRCLE') {
+    for (const p of path) {
+      if (haversineMeters(p.lat, p.lng, zone.centerLat, zone.centerLng) <= zone.radiusM) return true;
+    }
+    return false;
+  }
+  // POLYGON
+  for (const p of path) {
+    if (pointInPolygon(p, zone.polygon)) return true;
+  }
+  return false;
+}
+
+// ─── Internals ──────────────────────────────────────────────────────────────
+
+const EARTH_RADIUS_M = 6_371_000;
+
+/** Pure geometry helper. Exported so callers (and tests) can measure
+ *  raw distance without going through a ZoneShape. Takes scalars rather
+ *  than LatLng pairs — the hot paths here already have loose coords. */
+export function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/**
+ * Ray-casting point-in-polygon. Treats the polygon vertices as planar
+ * lat/lng — accurate at UAE latitudes for the ~km-scale zones we use.
+ */
+export function pointInPolygon(pt: LatLng, poly: LatLng[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].lng, yi = poly[i].lat;
+    const xj = poly[j].lng, yj = poly[j].lat;
+    const intersects =
+      (yi > pt.lat) !== (yj > pt.lat) &&
+      pt.lng < ((xj - xi) * (pt.lat - yi)) / (yj - yi + Number.EPSILON) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
 }

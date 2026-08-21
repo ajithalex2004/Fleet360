@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { paginate, paginatedResponse } from '@/lib/pagination';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
 
@@ -29,13 +31,16 @@ const getClaims = cacheRead(
 );
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   try {
     const sp = req.nextUrl.searchParams;
     const status = sp.get('status');
     const bookingId = sp.get('bookingId');
     const { take, skip, page, limit } = paginate(sp);
-    const tenantId = req.headers.get('x-tenant-id') ?? 'unknown';
-
     const data = await getClaims(tenantId, status, bookingId, take, skip, page, limit);
     return NextResponse.json(data, {
       headers: { 'Cache-Control': privateCacheControl(30, 120) },
@@ -47,9 +52,17 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
   try {
-    const body = await req.json();
-    const damageClaim = await prisma.damageClaim.create({ data: body });
+    const bodyRaw = await req.json();
+    const body = { ...stripTenantOwnershipFields((bodyRaw && typeof bodyRaw === 'object' ? bodyRaw : {}) as Record<string, unknown>), tenantId };
+    const damageClaim = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.damageClaim.create({ data: body }),
+    );
     revalidateCache([CACHE_TAG]);
     return NextResponse.json(damageClaim, { status: 201 });
   } catch (error) {

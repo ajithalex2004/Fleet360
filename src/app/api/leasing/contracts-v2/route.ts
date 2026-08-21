@@ -1,98 +1,118 @@
+/**
+ * Lease contracts v2 list/create — TENANT-001 hardened.
+ *
+ * - Tenant identity from middleware-injected session headers (not body)
+ * - Application where: { tenantId } + withTenantRls (defence in depth)
+ * - Ownership fields stripped from untrusted body
+ */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withAudit } from '@/lib/with-audit';
+import { withTenantRls } from '@/lib/rls';
+import {
+  requireAuthorizedTenant,
+  stripTenantOwnershipFields,
+} from '@/lib/tenant-context';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
-    const contracts = await (prisma as any).leaseContract.findMany({
-      where: { deletedAt: null },
-      include: { vehicles: true, lessee: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    const contracts = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.leaseContract2.findMany({
+        where: { tenantId, deletedAt: null },
+        include: { vehicles: true, lessee: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+    );
+
     return NextResponse.json(
-      contracts.map((c: any) => ({
+      contracts.map((c) => ({
         id: c.id,
         contractNumber: c.contractNumber,
         agreementType: c.agreementType ?? 'INDIVIDUAL',
-        lessee: c.lessee?.companyName ?? c.lessee?.fullName ?? c.lesseeId ?? 'Unknown',
+        lessee:
+          (c as { lessee?: { name?: string | null } }).lessee?.name ??
+          c.lesseeId ??
+          'Unknown',
         leaseType: c.leaseType ?? 'LONG_TERM',
-        vehicleCount: Array.isArray(c.vehicles) ? c.vehicles.length : (c.vehicleCount ?? 0),
-        durationMonths: c.durationMonths ?? null,
-        startDate: c.startDate ? new Date(c.startDate).toISOString().split('T')[0] : '',
+        vehicleCount: Array.isArray(
+          (c as { vehicles?: unknown[] }).vehicles,
+        )
+          ? (c as { vehicles: unknown[] }).vehicles.length
+          : 0,
+        startDate: c.startDate
+          ? new Date(c.startDate).toISOString().split('T')[0]
+          : '',
         endDate: c.endDate ? new Date(c.endDate).toISOString().split('T')[0] : '',
-        monthlyRate: c.monthlyRate ?? 0,
-        totalValue: c.totalValue ?? 0,
-        insurance: c.insuranceIncluded ?? false,
-        maintenance: c.maintenanceIncluded ?? false,
-        driver: c.driverIncluded ?? false,
         status: c.status ?? 'Draft',
-        branch: c.branch ?? '',
-        vehicles: (c.vehicles ?? []).map((v: any) => ({
-          id: v.id,
-          type: v.vehicleType ?? v.type ?? '',
-          make: v.make ?? '',
-          model: v.model ?? '',
-          licensePlate: v.licensePlate ?? v.plateNumber ?? '',
-          driver: v.driverName ?? v.driver ?? '',
-          monthlyRate: v.monthlyRate ?? 0,
-          status: v.status ?? 'Active',
-        })),
-      }))
+      })),
     );
-  } catch (e: any) {
-    console.error('GET /api/leasing/contracts-v2 error:', e?.message);
-    return NextResponse.json([], { status: 200 });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'unknown';
+    console.error('GET /api/leasing/contracts-v2 error:', message);
+    return NextResponse.json({ error: 'Failed to load contracts' }, { status: 500 });
   }
 }
 
-export const POST = withAudit(
-  async (request: NextRequest) => {
-    try {
-      const body = await request.json();
-      const {
-        lessee, lesseeId, agreementType, leaseType, durationMonths, startDate, endDate,
-        monthlyRate, currency, securityDeposit, mileageCap, branch, vehicles,
-        insuranceIncluded, maintenanceIncluded, driverIncluded, notes, quotationId,
-      } = body;
+export const POST = withAudit(async (request: NextRequest) => {
+  const authz = requireAuthorizedTenant(request);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
 
-      const contractNumber = `LC-${Date.now().toString().slice(-6)}`;
+  try {
+    const raw = await request.json();
+    const body = stripTenantOwnershipFields(
+      (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>,
+    );
 
-      const contract = await (prisma as any).leaseContract.create({
+    const lesseeId = body.lesseeId as string | undefined;
+    if (!lesseeId) {
+      return NextResponse.json({ error: 'lesseeId is required' }, { status: 400 });
+    }
+
+    const contractNumber =
+      (body.contractNumber as string | undefined) ??
+      `LC-${Date.now().toString().slice(-6)}`;
+
+    const contract = await withTenantRls(prisma, tenantId, async (tx) => {
+      // Ensure lessee belongs to the same tenant (relational attack defence)
+      const lessee = await tx.lessee.findFirst({
+        where: { id: lesseeId, tenantId, deletedAt: null },
+      });
+      if (!lessee) {
+        throw Object.assign(new Error('Lessee not found in tenant'), { status: 404 });
+      }
+
+      return tx.leaseContract2.create({
         data: {
+          tenantId,
           contractNumber,
-          agreementType: agreementType ?? 'INDIVIDUAL',
-          leaseType: leaseType ?? 'LONG_TERM',
-          durationMonths: durationMonths ? parseInt(durationMonths) : null,
-          startDate: startDate ? new Date(startDate) : null,
-          endDate: endDate ? new Date(endDate) : null,
-          monthlyRate: monthlyRate ? parseFloat(monthlyRate) : 0,
-          currency: currency ?? 'AED',
-          securityDeposit: securityDeposit ? parseFloat(securityDeposit) : null,
-          mileageCap: mileageCap ? parseInt(mileageCap) : null,
-          branch: branch ?? null,
-          insuranceIncluded: insuranceIncluded ?? false,
-          maintenanceIncluded: maintenanceIncluded ?? false,
-          driverIncluded: driverIncluded ?? false,
-          notes: notes ?? null,
-          status: 'Draft',
-          lesseeId: lesseeId ?? null,
-          ...(quotationId ? { quotationId } : {}),
+          agreementType: (body.agreementType as string) ?? 'INDIVIDUAL',
+          leaseType: (body.leaseType as string) ?? 'LONG_TERM',
+          startDate: body.startDate ? new Date(String(body.startDate)) : new Date(),
+          endDate: body.endDate
+            ? new Date(String(body.endDate))
+            : new Date(Date.now() + 365 * 24 * 3600 * 1000),
+          monthlyRate: body.monthlyRate != null ? Number(body.monthlyRate) : 0,
+          lesseeId,
+          status: 'DRAFT',
+          quotationId: (body.quotationId as string) ?? null,
         },
       });
+    });
 
-      return NextResponse.json(contract, { status: 201 });
-    } catch (e: any) {
-      console.error('POST /api/leasing/contracts-v2 error:', e?.message);
-      return NextResponse.json({ error: e?.message ?? 'Failed to create contract' }, { status: 500 });
-    }
-  },
-  {
-    entityType: 'LeaseContract2',
-    action: 'CREATE',
-    extractEntity: (body) => ({ id: body?.id, name: body?.contractNumber }),
-    describe: (_req, body) =>
-      body?.contractNumber
-        ? `Created lease contract ${body.contractNumber} (${body.agreementType ?? 'INDIVIDUAL'}, monthly ${body.monthlyRate ?? 0} ${body.currency ?? 'AED'})`
-        : undefined,
-  },
-);
+    return NextResponse.json(contract, { status: 201 });
+  } catch (e: unknown) {
+    const status = (e as { status?: number })?.status ?? 500;
+    const message = e instanceof Error ? e.message : 'Failed to create contract';
+    console.error('POST /api/leasing/contracts-v2 error:', message);
+    return NextResponse.json({ error: message }, { status });
+  }
+});
