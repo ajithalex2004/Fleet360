@@ -33,6 +33,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import * as crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { allowedTripTransitions, type TripScheduleStatus } from '@/lib/bus-ops/state-machines';
@@ -97,12 +98,16 @@ beforeAll(async () => {
   // Seed route + vehicle + in-progress schedule under tenant B directly,
   // so the fixture doesn't depend on the create endpoints' own validation.
   await withPlatformAdmin(prisma, async (tx) => {
-    const stamp = Date.now();
+    // Derived from a UUID rather than Date.now(): license_plate carries a
+    // @unique constraint, so two files seeding in the same millisecond
+    // would collide. Matches the identity pattern the rest of the harness
+    // already uses (see createTestTenant/createTestUser in tests/setup.ts).
+    const runId = crypto.randomUUID();
 
     const route = await tx.busRoute.create({
       data: {
         tenantId: tenantB!.tenant.id,
-        name: `ISO-COMPLETE-${stamp}`,
+        name: `ISO-COMPLETE-${runId}`,
         origin: 'Origin',
         destination: 'Destination',
         routeType: 'STAFF',
@@ -118,7 +123,7 @@ beforeAll(async () => {
         tenantId:        tenantB!.tenant.id,
         make:            'ISO',
         model:           'Fixture',
-        licensePlate:    `ISO-${stamp}`,
+        licensePlate:    `ISO-${runId}`,
         seatingCapacity: 30,
         currentMileage:  BigInt(VEHICLE_START_KM),
         odometerReading: BigInt(VEHICLE_START_KM),
