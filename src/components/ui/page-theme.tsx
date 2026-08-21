@@ -191,3 +191,106 @@ export function StatusPill({ status, label }: { status?: string; label?: string 
     </span>
   );
 }
+
+/* ── Tab strip ──────────────────────────────────────────────────────────── */
+
+export interface TabDef {
+  /** Stable id — also the ?tab= querystring value, so keep it URL-safe. */
+  id: string;
+  label: string;
+  icon?: LucideIcon;
+  /** Optional right-hand hint, e.g. a count or a "P1" badge. */
+  badge?: string;
+}
+
+interface TabStripProps {
+  tabs: TabDef[];
+  activeId: string;
+  onChange: (id: string) => void;
+  accent?: PageAccent;
+  /** Accessible name for the tablist, e.g. "Planning Engine sections". */
+  label: string;
+}
+
+/**
+ * Horizontal tab strip.
+ *
+ * Deliberately a plain button list rather than a headless-UI dependency —
+ * nothing else in the app had tabs when this landed, and one screen isn't
+ * worth a new package. Callers own the active id so it can be driven from
+ * the querystring (deep-linkable) rather than local state.
+ *
+ * Panels are the caller's responsibility. Render exactly one at a time and
+ * give it `role="tabpanel"` + `id={`panel-${activeId}`}` so the
+ * aria-controls wiring below resolves.
+ *
+ * Keyboard: Left/Right move between tabs, Home/End jump to the ends —
+ * the roving-focus behaviour the tablist role implies. Without this,
+ * keyboard users would tab through every trigger one at a time.
+ */
+export function TabStrip({ tabs, activeId, onChange, accent = 'violet', label }: TabStripProps) {
+  const a = ACCENTS[accent] ?? ACCENTS.default;
+
+  const move = (dir: 1 | -1 | 'first' | 'last') => {
+    const i = tabs.findIndex(t => t.id === activeId);
+    if (i < 0) return;
+    const next =
+      dir === 'first' ? 0
+      : dir === 'last' ? tabs.length - 1
+      : (i + dir + tabs.length) % tabs.length;
+    onChange(tabs[next].id);
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    switch (e.key) {
+      case 'ArrowRight': e.preventDefault(); move(1); break;
+      case 'ArrowLeft':  e.preventDefault(); move(-1); break;
+      case 'Home':       e.preventDefault(); move('first'); break;
+      case 'End':        e.preventDefault(); move('last'); break;
+      default: break;
+    }
+  };
+
+  return (
+    <div
+      role="tablist"
+      aria-label={label}
+      onKeyDown={onKeyDown}
+      className="flex items-center gap-1 border-b border-white/5 -mb-px overflow-x-auto"
+    >
+      {tabs.map(t => {
+        const isActive = t.id === activeId;
+        const Icon = t.icon;
+        return (
+          <button
+            key={t.id}
+            role="tab"
+            type="button"
+            id={`tab-${t.id}`}
+            aria-selected={isActive}
+            aria-controls={`panel-${t.id}`}
+            // Roving tabindex: only the active tab is in the tab order.
+            tabIndex={isActive ? 0 : -1}
+            onClick={() => onChange(t.id)}
+            className={[
+              'group inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium',
+              'rounded-t-lg border-b-2 whitespace-nowrap transition-colors',
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-0',
+              isActive
+                ? `${a.text} border-current ${a.bg}`
+                : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-white/5',
+            ].join(' ')}
+          >
+            {Icon && <Icon className="w-4 h-4" strokeWidth={1.75} />}
+            {t.label}
+            {t.badge && (
+              <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white/10 text-slate-300">
+                {t.badge}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
