@@ -5,9 +5,18 @@ import { TRIP_COMPLETED }  from '@/events/registry';
 import { assertTripTransition, TripTransitionError, type TripScheduleStatus } from '@/lib/bus-ops/state-machines';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  // Tenant-scope the lookup. Without this, any authenticated caller could
+  // complete a trip belonging to another tenant by supplying its id — the
+  // handler then read schedule.tenantId off whatever row it found and
+  // emitted TRIP_COMPLETED against that tenant. The sibling depart and
+  // cancel routes already scope this way; complete was the outlier. A
+  // cross-tenant id now returns 404 exactly as a non-existent one does,
+  // so the response can't be used to probe for ids in other tenants.
+  const tenantId = req.headers.get('x-tenant-id');
+  if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
     const body = await req.json();
-    const schedule = await prisma.tripSchedule.findUnique({ where: { id: params.id } });
+    const schedule = await prisma.tripSchedule.findFirst({ where: { id: params.id, tenantId } });
     if (!schedule) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     try {
       // State machine: only DEPARTED / IN_TRANSIT can COMPLETE. Previously
