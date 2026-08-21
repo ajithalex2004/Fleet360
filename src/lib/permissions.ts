@@ -160,6 +160,13 @@ export const ALL_PERMISSIONS: readonly AppPermission[] = [
   { module: 'bus-ops', action: 'admin', resource: 'route-consolidation', label: 'Access Route Consolidation Engine' },
   { module: 'bus-ops', action: 'admin', resource: 'planning-constraints', label: 'Access Planning Constraints Engine (PCE)' },
   { module: 'bus-ops', action: 'admin', resource: 'vehicle-resource-optimization', label: 'Access Vehicle/Resource Optimization Engine' },
+  // CBA rule-sets drive pay and hours-of-service, and headway rules bind to
+  // them via HeadwayRule.cbaRuleSetId. Both screens and both APIs shipped
+  // with no RBAC gate at all — any authenticated user in the tenant could
+  // read and rewrite them. Kept as separate resources rather than folded
+  // into planning-core so the two can be granted independently later.
+  { module: 'bus-ops', action: 'admin', resource: 'cba-rules', label: 'Manage CBA / Union Rule Sets' },
+  { module: 'bus-ops', action: 'admin', resource: 'headway',   label: 'Manage Headway Rules' },
 
   // ── FLEET ──────────────────────────────────────────────────────────────
   { module: 'fleet', action: 'view',    resource: '*',       label: 'View Fleet Module' },
@@ -289,7 +296,7 @@ export const SYSTEM_ROLES: {
   {
     code: 'TRANSPORT_MANAGER',
     name: 'Transport Manager',
-    description: 'Full staff transportation module access, including Planning Core, Route Consolidation, Planning Constraints (PCE), and Vehicle/Resource Optimization',
+    description: 'Full staff transportation module access, including Planning Core, Route Consolidation, Planning Constraints (PCE), Vehicle/Resource Optimization, CBA rule-sets, and Headway rules',
     permissions: [
       ...ALL_PERMISSIONS.filter(p => p.module === 'bus-ops' && !BUS_OPS_ADMIN_ONLY_RESOURCES.includes(p.resource)).map(p => ({ module: p.module, action: p.action, resource: p.resource })),
       { module: 'reports', action: 'view', resource: '*' },
@@ -298,10 +305,11 @@ export const SYSTEM_ROLES: {
   {
     code: 'TRANSPORT_OPERATOR',
     name: 'Transport Operator',
-    description: 'Create and edit transport records, can depart/complete trips, including Planning Core, Route Consolidation, Planning Constraints (PCE), and Vehicle/Resource Optimization',
+    description: 'Create and edit transport records, can depart/complete trips, including Planning Core, Route Consolidation, Planning Constraints (PCE), Vehicle/Resource Optimization, CBA rule-sets, and Headway rules',
     // 'admin' included alongside view/create/edit/approve so the
     // bus-ops:admin:<resource> rows (Planning Core, Route Consolidation,
-    // Planning Constraints, Vehicle/Resource Optimization) are covered —
+    // Planning Constraints, Vehicle/Resource Optimization, CBA rule-sets,
+    // Headway rules) are covered —
     // without it, this whitelist-by-action filter would silently drop
     // access to those 4 features even after removing their resource
     // names from BUS_OPS_ADMIN_ONLY_RESOURCES above.

@@ -17,9 +17,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
+import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 import { CBA_SCHEMA_VERSION, freshCbaRules, type CbaRules } from '@/lib/cba/types';
 
 const CACHE_TAG = 'bus-ops:cba';
+
+/**
+ * Every method is gated on bus-ops:admin:cba-rules. These rule-sets carry
+ * pay rates and hours-of-service limits, and they feed Planning Core's
+ * WorkRules (via cbaToWorkRules) plus every HeadwayRule that binds to one —
+ * so both reads and writes are restricted, same as planning-constraints.
+ *
+ * Coupling note: the Planning Core page pre-fills WorkRules by calling
+ * GET ?default=true. Today Tenant Admin / Transport Manager / Transport
+ * Operator all hold both bus-ops:admin:planning-core and
+ * bus-ops:admin:cba-rules, so that call succeeds for anyone who can reach
+ * the page. If those two are ever granted separately, the pre-fill will
+ * 403 silently — grant cba-rules alongside planning-core, or relax this
+ * GET, rather than letting the plan fall back to DEFAULT_RULES unnoticed.
+ *
+ * The driver-facing read path is a different route (/api/driver-app/cba)
+ * and is unaffected by this gate.
+ */
+const CBA_RESOURCE = 'cba-rules';
 
 interface RuleSetRow {
   id: string;
@@ -54,6 +74,8 @@ function shape(r: RuleSetRow) {
 export async function GET(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id') ?? '';
   if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
+  const permError = requireBusOpsAdminAccess(req, CBA_RESOURCE);
+  if (permError) return permError;
   const sp = new URL(req.url).searchParams;
   const id      = sp.get('id');
   const getDefault = sp.get('default') === 'true';
@@ -92,6 +114,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id') ?? '';
   if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
+  const permError = requireBusOpsAdminAccess(req, CBA_RESOURCE);
+  if (permError) return permError;
   try {
     const body = await req.json() as {
       name: string;
@@ -127,6 +151,8 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id') ?? '';
   if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
+  const permError = requireBusOpsAdminAccess(req, CBA_RESOURCE);
+  if (permError) return permError;
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
   try {
@@ -165,6 +191,8 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const tenantId = req.headers.get('x-tenant-id') ?? '';
   if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
+  const permError = requireBusOpsAdminAccess(req, CBA_RESOURCE);
+  if (permError) return permError;
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
   try {
