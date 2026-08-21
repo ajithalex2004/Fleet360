@@ -36,6 +36,7 @@ import {
   resolveMaxVehicleReuseWindowMinutes,
 } from '@/lib/planning/route-consolidation-vehicle-reuse-policy';
 import { resolveZoneFallbackKm } from '@/lib/planning/zone-compat-policy';
+import { resolveCbaWorkRules } from '@/lib/cba/engine';
 
 const CACHE_TAG = 'staff-transport-plans';
 
@@ -76,12 +77,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'dateTo must be after dateFrom' }, { status: 400 });
     }
 
-    const rules: WorkRules = { ...DEFAULT_WORK_RULES, ...(workRules ?? {}) };
-
     // 1. Load trips in the date range (scoped to this tenant) and resolve
-    //    the PCE-driven blocking thresholds in parallel — neither depends
-    //    on the other, and the PCE lookups are cheap tenant-level reads.
-    const [trips, minTurnaroundMins, resolvedMaxDeadheadMins, zoneFallbackKm] = await Promise.all([
+    //    the PCE-driven blocking thresholds + the tenant's default CBA
+    //    work rules in parallel — none of these depend on each other,
+    //    and the lookups are cheap tenant-level reads.
+    const [trips, minTurnaroundMins, resolvedMaxDeadheadMins, zoneFallbackKm, cbaWorkRules] = await Promise.all([
       withTenantRls(prisma, tenantId, async (tx) => {
         const rows = await tx.tripSchedule.findMany({
           where: {
@@ -136,7 +136,19 @@ export async function POST(req: NextRequest) {
       // Geography gate threshold — Case 2 reuses the pickup-side fallback
       // for this exact "A.dropoff vs B.pickup" comparison; match it.
       resolveZoneFallbackKm(prisma, tenantId).then((z) => z.pickup),
+      // Tenant's default CBA rule-set, converted to WorkRules. null when
+      // no default rule-set exists — falls back to DEFAULT_WORK_RULES
+      // below, same as before this was wired in.
+      resolveCbaWorkRules(prisma, tenantId),
     ]);
+
+    // CBA is the tenant-level default layer, same precedence pattern as
+    // maxDeadheadMins above — an explicit request-body value still wins
+    // (the Planning Core page pre-fills its form from this same CBA
+    // resolution client-side, so by the time a value reaches here as an
+    // explicit override it reflects a deliberate edit, not a stale
+    // hardcoded default silently beating the tenant's CBA).
+    const rules: WorkRules = { ...DEFAULT_WORK_RULES, ...(cbaWorkRules ?? {}), ...(workRules ?? {}) };
 
     const blockOpts: BlockOptions = {
       ...(blockOptions ?? {}),

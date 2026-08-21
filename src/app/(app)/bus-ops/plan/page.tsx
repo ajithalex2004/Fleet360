@@ -20,6 +20,8 @@ import {
 import { PageHeader } from '@/components/bus-ops/theme';
 import { useFetchedData, fetchOnce } from '@/hooks/useFetchedData';
 import RequireTenantAdmin from '@/components/bus-ops/RequireTenantAdmin';
+import { cbaToWorkRules } from '@/lib/cba/engine';
+import type { CbaRules } from '@/lib/cba/types';
 
 // ── Types (mirror lib/plan/*) ───────────────────────────────────────────────
 
@@ -208,6 +210,14 @@ function PlanPageInner() {
   const [dateTo,   setDateTo]   = useState(addDays(todayIso(), 6));
 
   const [workRules, setWorkRules] = useState<WorkRules>(DEFAULT_RULES);
+  // True once the user has edited any Operator Pay Rules field — once set,
+  // the CBA pre-fill effect below stops overwriting their edits.
+  const [workRulesTouched, setWorkRulesTouched] = useState(false);
+  const [cbaSourceName, setCbaSourceName] = useState<string | null>(null);
+  const updateWorkRule = (patch: Partial<WorkRules>) => {
+    setWorkRulesTouched(true);
+    setWorkRules((p) => ({ ...p, ...patch }));
+  };
   const [blockOptions, setBlockOptions] = useState<BlockOptions>(DEFAULT_BLOCK);
 
   // Roster config
@@ -240,6 +250,18 @@ function PlanPageInner() {
   );
   const drivers = useMemo(() => Array.isArray(driversRes.data) ? driversRes.data : [], [driversRes.data]);
   const driversLite = useMemo(() => drivers.map((d) => ({ id: d.id, name: d.name })), [drivers]);
+
+  // Pre-fill Operator Pay Rules from the tenant's default CBA rule-set,
+  // same conversion (cbaToWorkRules) the compute endpoint uses server-side
+  // — so what the form shows on load matches what an unedited compute
+  // call would actually apply. Only runs before the user edits anything;
+  // see workRulesTouched / updateWorkRule above.
+  const cbaDefaultRes = useFetchedData<{ name: string; rules: CbaRules } | null>('/api/bus-ops/cba?default=true');
+  useEffect(() => {
+    if (workRulesTouched || !cbaDefaultRes.data) return;
+    setWorkRules({ ...DEFAULT_RULES, ...cbaToWorkRules(cbaDefaultRes.data.rules) });
+    setCbaSourceName(cbaDefaultRes.data.name);
+  }, [cbaDefaultRes.data, workRulesTouched]);
 
   const plansListRes = useFetchedData<SavedPlanSummary[]>('/api/bus-ops/plan');
   useEffect(() => {
@@ -400,24 +422,31 @@ function PlanPageInner() {
 
         {/* Work rules */}
         <div className="rounded-2xl bg-slate-800/50 border border-white/10 p-5">
-          <h3 className="text-sm font-bold text-white mb-3">Operator Pay Rules</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-white">Operator Pay Rules</h3>
+            {cbaSourceName && !workRulesTouched && (
+              <span className="text-[10px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-2 py-0.5">
+                From CBA: {cbaSourceName}
+              </span>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-2 text-[11px]">
             <NumberField label="Max work hrs/day" value={workRules.maxWorkHoursPerDay} step="0.5"
-              onChange={(v) => setWorkRules({ ...workRules, maxWorkHoursPerDay: v })} />
+              onChange={(v) => updateWorkRule({ maxWorkHoursPerDay: v })} />
             <NumberField label="Max spread hrs/day" value={workRules.maxSpreadHoursPerDay} step="0.5"
-              onChange={(v) => setWorkRules({ ...workRules, maxSpreadHoursPerDay: v })} />
+              onChange={(v) => updateWorkRule({ maxSpreadHoursPerDay: v })} />
             <NumberField label="OT threshold (hrs)" value={workRules.overtimeThresholdHours} step="0.5"
-              onChange={(v) => setWorkRules({ ...workRules, overtimeThresholdHours: v })} />
+              onChange={(v) => updateWorkRule({ overtimeThresholdHours: v })} />
             <NumberField label="OT rate (×)" value={workRules.overtimeRate} step="0.1"
-              onChange={(v) => setWorkRules({ ...workRules, overtimeRate: v })} />
+              onChange={(v) => updateWorkRule({ overtimeRate: v })} />
             <NumberField label="Hourly rate (AED)" value={workRules.hourlyRate} step="1"
-              onChange={(v) => setWorkRules({ ...workRules, hourlyRate: v })} />
+              onChange={(v) => updateWorkRule({ hourlyRate: v })} />
             <NumberField label="Min break (min)" value={workRules.minBreakBetweenTripsMins} step="5"
-              onChange={(v) => setWorkRules({ ...workRules, minBreakBetweenTripsMins: v })} />
+              onChange={(v) => updateWorkRule({ minBreakBetweenTripsMins: v })} />
             <NumberField label="Report (min)" value={workRules.reportTimeMins} step="5"
-              onChange={(v) => setWorkRules({ ...workRules, reportTimeMins: v })} />
+              onChange={(v) => updateWorkRule({ reportTimeMins: v })} />
             <NumberField label="Wrap (min)" value={workRules.wrapTimeMins} step="5"
-              onChange={(v) => setWorkRules({ ...workRules, wrapTimeMins: v })} />
+              onChange={(v) => updateWorkRule({ wrapTimeMins: v })} />
           </div>
         </div>
 
