@@ -762,6 +762,15 @@ model Vehicle {
   homeDepotId     String?  @map("home_depot_id")
   homeDepot       Place?   @relation("VehicleHomeDepot", fields: [homeDepotId], references: [id], onDelete: SetNull)
 
+  // Optional FK to spatial.places(id) with type=OPERATIONAL_ZONE — the
+  // broad zone this vehicle is based in. Used as a soft ranking signal by
+  // Planning Core's smart vehicle matching (lib/plan/assign-vehicles.ts):
+  // same-zone vehicles rank above cross-zone ones, but zone is never a
+  // hard eligibility filter — an untagged vehicle is still assignable,
+  // just not zone-preferred.
+  zoneId          String?  @map("zone_id")
+  zone            Place?   @relation("VehicleZone", fields: [zoneId], references: [id], onDelete: SetNull)
+
   // -- Fleet extended fields (used by Fleet raw-SQL queries) ----------------
   vehicleCode     String?   @map("vehicle_code")
   vehicleTypeId   String?   @map("vehicle_type_id")
@@ -1734,6 +1743,13 @@ model BusRoute {
   /// Should reflect the most restrictive UAE RTA requirement for the route's
   /// typical vehicle — a bus route uses BUS, a shuttle van typically LIGHT.
   requiredLicenseType   String?        @map("required_license_type")
+  /// FK to spatial.places(id) with type=OPERATIONAL_ZONE — the zone this
+  /// route serves. Explicit tagging (not derived from stop geometry) —
+  /// point-in-polygon zone inference is a possible later upgrade, not
+  /// implemented yet. Used the same way as Vehicle.zoneId: a soft ranking
+  /// signal for smart vehicle matching, never a hard eligibility filter.
+  zoneId                String?        @map("zone_id")
+  zone                  Place?         @relation("RouteZone", fields: [zoneId], references: [id], onDelete: SetNull)
   totalDistanceKm       Float?         @map("total_distance_km")
   estimatedDurationMins Int?           @map("estimated_duration_mins")
   capacity              Int?           @default(30)
@@ -2677,6 +2693,8 @@ model Place {
   garages         Garage[]  @relation("GaragePlace")
   routeStops      RouteStop[] @relation("RouteStopPlace")
   vehiclesHomedAt Vehicle[] @relation("VehicleHomeDepot")
+  vehiclesInZone  Vehicle[] @relation("VehicleZone")
+  routesInZone    BusRoute[] @relation("RouteZone")
 
   @@index([tenantId],            map: "idx_places_tenant_id")
   @@index([tenantId, type],      map: "idx_places_tenant_type")

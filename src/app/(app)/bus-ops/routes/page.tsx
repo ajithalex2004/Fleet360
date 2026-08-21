@@ -2,12 +2,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Map as MapIcon, Plus, CheckCircle2, XCircle, MapPin, AlertTriangle, Clock,
+  Map as MapIcon, Plus, CheckCircle2, XCircle, MapPin, AlertTriangle, Clock, Upload,
 } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
 import FleetDataGrid, { type DataGridColumn, type KpiTile, type FilterChipDef } from '@/components/ui/FleetDataGrid';
 import RowActionsMenu, { type RowAction } from '@/components/ui/RowActionsMenu';
 import GoogleMapPickerModal, { type PickedLocation } from '@/components/logistics/GoogleMapPickerModal';
+import RoutesBulkImportModal from '@/components/bus-ops/RoutesBulkImportModal';
 
 /** Existing stop reused across routes — returned by /api/bus-ops/route-stops. */
 interface ExistingStop {
@@ -26,11 +27,13 @@ interface BusRoute  {
   direction?: string | null; shiftType?: string | null;
   departureTime?: string | null; expectedArrivalTime?: string | null;
   assignedVehicleId?: string | null; assignedDriverId?: string | null;
+  zoneId?: string | null;
   schedules?: any[]; createdAt?: string;
 }
 
 interface VehicleOption { id: string; licensePlate?: string | null; make?: string | null; model?: string | null; seatingCapacity?: number | null }
 interface DriverOption  { id: string; name: string; licenseType?: string | null }
+interface ZoneOption    { id: string; name: string }
 
 // ── New Route modal form ───────────────────────────────────────────────────
 type NewRouteForm = {
@@ -45,6 +48,7 @@ type NewRouteForm = {
   isActive: boolean;
   assignedVehicleId: string;
   assignedDriverId: string;
+  zoneId: string;
 };
 type NewRouteStop = {
   stopName: string;
@@ -78,6 +82,7 @@ const EMPTY_NEW_ROUTE: NewRouteForm = {
   departureTime: '07:00', expectedArrivalTime: '',
   capacity: '40', isActive: true,
   assignedVehicleId: '', assignedDriverId: '',
+  zoneId: '',
 };
 
 export default function RoutesPage() {
@@ -95,6 +100,7 @@ export default function RoutesPage() {
 
   // New Route modal state
   const [showNewRoute,     setShowNewRoute]     = useState(false);
+  const [showImport,       setShowImport]       = useState(false);
   const [creating,         setCreating]         = useState(false);
   /** Id of the route being edited. null = create mode. Switching this + opening
    *  the modal replays the form fields from the row so PATCH targets the same
@@ -105,6 +111,7 @@ export default function RoutesPage() {
   const [newStopDraft,     setNewStopDraft]     = useState<NewRouteStop>({ stopName: '', time: '' });
   const [vehicles,         setVehicles]         = useState<VehicleOption[]>([]);
   const [drivers,          setDrivers]          = useState<DriverOption[]>([]);
+  const [zoneOptions,      setZoneOptions]      = useState<ZoneOption[]>([]);
   const [existingStops,    setExistingStops]    = useState<ExistingStop[]>([]);
   const [mapPickerFor,     setMapPickerFor]     = useState<MapPickerTarget | null>(null);
   const [newRouteOrigin,   setNewRouteOrigin]   = useState<NewRouteEndpoint>({ name: '' });
@@ -131,15 +138,17 @@ export default function RoutesPage() {
     if (vehicles.length > 0 || drivers.length > 0 || existingStops.length > 0) return;
     void (async () => {
       try {
-        const [vRes, dRes, sRes] = await Promise.all([
+        const [vRes, dRes, sRes, zRes] = await Promise.all([
           fetch('/api/vehicles'),
           fetch('/api/bus-ops/drivers'),
           fetch('/api/bus-ops/route-stops'),
+          fetch('/api/places?type=OPERATIONAL_ZONE'),
         ]);
-        const [vData, dData, sData] = await Promise.all([vRes.json(), dRes.json(), sRes.json()]);
+        const [vData, dData, sData, zData] = await Promise.all([vRes.json(), dRes.json(), sRes.json(), zRes.json()]);
         setVehicles(Array.isArray(vData) ? vData : (vData?.vehicles ?? []));
         setDrivers(Array.isArray(dData) ? dData : []);
         setExistingStops(Array.isArray(sData?.stops) ? sData.stops : []);
+        setZoneOptions(Array.isArray(zData) ? zData : []);
       } catch {
         // Non-fatal — the modal renders warning banners when lists are empty.
       }
@@ -219,6 +228,7 @@ export default function RoutesPage() {
       isActive: r.isActive !== false,
       assignedVehicleId: r.assignedVehicleId ?? '',
       assignedDriverId: r.assignedDriverId ?? '',
+      zoneId: r.zoneId ?? '',
     });
     // Stops are stored as [origin(seq=1), ...intermediates, destination(seq=N)].
     // Split back into the modal's three buckets. If the route has ≤1 stop, we
@@ -343,6 +353,7 @@ export default function RoutesPage() {
         isActive: newRoute.isActive,
         assignedVehicleId: newRoute.assignedVehicleId || null,
         assignedDriverId:  newRoute.assignedDriverId  || null,
+        zoneId:            newRoute.zoneId            || null,
         stops: [originStop, ...intermediates, destinationStop],
       };
       const res = await fetch(
@@ -548,9 +559,17 @@ export default function RoutesPage() {
         icon={MapIcon}
         accent="violet"
         actions={
-          <button onClick={openNewRoute} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
-            <Plus className="w-4 h-4" /> New Route
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowImport(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm font-semibold text-slate-100 hover:bg-slate-700"
+            >
+              <Upload className="w-4 h-4" /> Import
+            </button>
+            <button onClick={openNewRoute} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+              <Plus className="w-4 h-4" /> New Route
+            </button>
+          </div>
         }
       />
 
@@ -675,7 +694,7 @@ export default function RoutesPage() {
               {/* Resource Assignment */}
               <fieldset className="rounded-xl border border-white/10 bg-slate-950/40 px-4 py-4">
                 <legend className="px-2 text-xs uppercase tracking-wider text-slate-400 font-semibold">Resource Assignment</legend>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <label className="block">
                     <div className="flex items-center justify-between mb-1.5">
                       <div className="text-xs uppercase tracking-wider text-slate-400">Vehicle</div>
@@ -736,6 +755,16 @@ export default function RoutesPage() {
                         <option key={d.id} value={d.id}>
                           {d.name}{d.licenseType ? ` (${d.licenseType})` : ''}
                         </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Zone</div>
+                    <select value={newRoute.zoneId} onChange={e => setNewRoute(p => ({ ...p, zoneId: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none">
+                      <option value="">— unassigned —</option>
+                      {zoneOptions.map(z => (
+                        <option key={z.id} value={z.id}>{z.name}</option>
                       ))}
                     </select>
                   </label>
@@ -1005,6 +1034,13 @@ export default function RoutesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showImport && (
+        <RoutesBulkImportModal
+          onClose={() => setShowImport(false)}
+          onImported={() => { void loadRoutes(); }}
+        />
       )}
     </div>
   );

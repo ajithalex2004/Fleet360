@@ -25,6 +25,8 @@ interface Vehicle {
   hierarchyName: string;
   branchId: string;
   branchName: string;
+  zoneId: string;
+  zoneName: string;
   deviceId: string;
   simCardNo: string;
   lifecycleStage: string;
@@ -41,6 +43,7 @@ interface Vehicle {
 }
 
 interface VehicleType { id: string; code: string; name: string; }
+interface ZonePlace { id: string; name: string; }
 
 const EMPTY_VEHICLE: Partial<Vehicle> = {
   vehicleCode: '', make: '', model: '', year: new Date().getFullYear(),
@@ -110,11 +113,13 @@ const statusColor: Record<string, string> = {
 export default function VehiclesPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
+  const [zones, setZones] = useState<ZonePlace[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [usageFilter, setUsageFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [zoneFilter, setZoneFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Vehicle | null>(null);
   const [form, setForm] = useState<Partial<Vehicle>>(EMPTY_VEHICLE);
@@ -136,6 +141,7 @@ export default function VehiclesPage() {
     if (statusFilter) params.set('status', statusFilter);
     if (usageFilter) params.set('vehicleUsage', usageFilter);
     if (categoryFilter) params.set('category', categoryFilter);
+    if (zoneFilter) params.set('zoneId', zoneFilter);
     try {
       const [vRes, vtRes] = await Promise.all([
         fetch('/api/fleet/vehicles?' + params),
@@ -150,9 +156,18 @@ export default function VehiclesPage() {
       setVehicleTypes(vtArr);
     } catch { setError('Failed to load data'); }
     finally { setLoading(false); }
-  }, [search, statusFilter, usageFilter, categoryFilter, page]);
+  }, [search, statusFilter, usageFilter, categoryFilter, zoneFilter, page]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Zones list is independent of vehicle filters — fetch once, not on
+  // every keystroke/filter change like fetchData does.
+  useEffect(() => {
+    fetch('/api/places?type=OPERATIONAL_ZONE')
+      .then(r => r.json())
+      .then(d => setZones(Array.isArray(d) ? d : []))
+      .catch(() => setZones([]));
+  }, []);
 
   // Auto-detect vehicle info whenever Make or Model changes
   useEffect(() => {
@@ -238,6 +253,11 @@ export default function VehiclesPage() {
           className="bg-slate-800/60 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50">
           <option value="">All Segments</option>
           {VEHICLE_SEGMENTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+        </select>
+        <select value={zoneFilter} onChange={e => { setZoneFilter(e.target.value); setPage(1); }}
+          className="bg-slate-800/60 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50">
+          <option value="">All Zones</option>
+          {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
         </select>
       </div>
 
@@ -581,6 +601,15 @@ export default function VehiclesPage() {
                         <input value={form.branchName ?? ''} onChange={e => f('branchName', e.target.value)}
                           placeholder="e.g. Dubai Airport"
                           className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1.5">Zone</label>
+                        <select value={form.zoneId ?? ''} onChange={e => f('zoneId', e.target.value)}
+                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50">
+                          <option value="">— unassigned —</option>
+                          {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
+                        </select>
+                        <p className="text-[11px] text-slate-500 mt-1">Used by Planning Core to prefer same-zone vehicles when assigning trips — not a hard restriction.</p>
                       </div>
                       <div>
                         <label className="block text-xs text-slate-400 mb-1.5">Assigned Driver ID</label>

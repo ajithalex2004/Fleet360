@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
     const branchId = sp.get('branchId');
     const lifecycleStage = sp.get('lifecycleStage');
     const vehicleTypeId = sp.get('vehicleTypeId');
+    const zoneId = sp.get('zoneId');
     const { take, skip, page, limit } = paginate(sp);
 
     const conditions: string[] = ['v.deleted_at IS NULL'];
@@ -46,6 +47,10 @@ export async function GET(req: NextRequest) {
       params.push(vehicleTypeId);
       conditions.push(`v.vehicle_type_id = $${params.length}`);
     }
+    if (zoneId) {
+      params.push(zoneId);
+      conditions.push(`v.zone_id = $${params.length}`);
+    }
 
     const where = conditions.join(' AND ');
     const countParams = [...params];
@@ -61,9 +66,11 @@ export async function GET(req: NextRequest) {
         ...countParams,
       ),
       prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
-        `SELECT v.*, vt.name AS vehicle_type_name, vt.vehicle_group, vt.vehicle_class
+        `SELECT v.*, vt.name AS vehicle_type_name, vt.vehicle_group, vt.vehicle_class,
+                z.name AS zone_name
          FROM vehicles v
          LEFT JOIN vehicle_types vt ON vt.id::text = v.vehicle_type_id
+         LEFT JOIN spatial.places z ON z.id = v.zone_id
          WHERE ${where}
          ORDER BY v.created_at DESC
          LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`,
@@ -118,7 +125,7 @@ export async function POST(req: NextRequest) {
     const record = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
       `INSERT INTO vehicles (
         id, tenant_id, vehicle_code, make, model, type, year, vin, chassis_no, color,
-        seating_capacity,
+        seating_capacity, zone_id,
         license_plate, registration_no, plate_number,
         plate_code, plate_category, emirate, vehicle_type_id, vehicle_usage,
         hierarchy_id, hierarchy_name, branch_id, branch_name, device_id,
@@ -127,13 +134,13 @@ export async function POST(req: NextRequest) {
         status, notes, category, created_at, updated_at
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11,
-        $12, $13, $14,
-        $15, $16, $17, $18, $19,
-        $20, $21, $22, $23, $24,
-        $25, $26, $27::timestamptz,
-        $28, $29, $30, $31,
-        $32, $33, $34, $35::timestamptz, $36::timestamptz
+        $11, $12,
+        $13, $14, $15,
+        $16, $17, $18, $19, $20,
+        $21, $22, $23, $24, $25,
+        $26, $27, $28::timestamptz,
+        $29, $30, $31, $32,
+        $33, $34, $35, $36::timestamptz, $37::timestamptz
       ) RETURNING *`,
       id,
       tenantId,
@@ -146,6 +153,7 @@ export async function POST(req: NextRequest) {
       body.chassisNo ?? null,
       body.color ?? null,
       body.seatingCapacity ?? body.seating_capacity ?? null,
+      body.zoneId ?? body.zone_id ?? null,
       body.licensePlate || null,  // unique — convert '' to null to avoid constraint collision
       body.registrationNo ?? null,
       body.plateNumber ?? null,
