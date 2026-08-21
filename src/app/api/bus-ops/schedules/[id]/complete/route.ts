@@ -10,7 +10,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const schedule = await prisma.tripSchedule.findUnique({ where: { id: params.id } });
     if (!schedule) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     try {
-      // State machine: only DEPARTED / IN_TRANSIT can COMPLETE. Previously
+      // State machine: only STARTED / EN_ROUTE can COMPLETE. Previously
       // allowed SCHEDULED too — that skipped no-show marking and audit
       // trail; blocked now (audit risk closed).
       assertTripTransition((schedule.status ?? 'SCHEDULED') as TripScheduleStatus, 'COMPLETED');

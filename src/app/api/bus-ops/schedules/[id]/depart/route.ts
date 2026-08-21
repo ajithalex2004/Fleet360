@@ -20,7 +20,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const schedule = await prisma.tripSchedule.findFirst({ where: { id: params.id, tenantId } });
     if (!schedule) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     try {
-      assertTripTransition((schedule.status ?? 'SCHEDULED') as TripScheduleStatus, 'DEPARTED');
+      assertTripTransition((schedule.status ?? 'SCHEDULED') as TripScheduleStatus, 'STARTED');
     } catch (e) {
       if (e instanceof TripTransitionError) return NextResponse.json({ error: e.message }, { status: 409 });
       throw e;
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const [updated, tripLog, noShowResult] = await prisma.$transaction([
       prisma.tripSchedule.update({
         where: { id: params.id },
-        data: { status: 'DEPARTED', updatedAt: new Date() },
+        data: { status: 'STARTED', updatedAt: new Date() },
       }),
       prisma.tripLog.create({
         data: {
