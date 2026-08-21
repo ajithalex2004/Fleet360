@@ -181,9 +181,19 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult[]> 
 
 // ── Fuel estimate (unchanged — pure heuristic, no vendor call) ─────────────
 
+/**
+ * Fallback pump price (AED/litre), used when no real fuel-log price is
+ * available. Route Consolidation imports this for exactly that fallback
+ * (see fuelPricePerLitreAED in route-consolidation.ts) — the import was
+ * already committed against this module, but the constant itself only
+ * existed in uncommitted local work, leaving a broken import on the
+ * branch. Value matches the literal previously inlined below.
+ */
+export const DEFAULT_FUEL_PRICE_AED = 3.0;
+
 export function estimateFuelCost(distanceKm: number, vehicleType: 'van' | 'truck' | 'bus' = 'van') {
   const consumption = vehicleType === 'truck' ? 15 : vehicleType === 'bus' ? 18 : 10; // L/100km
-  const pricePerLitre = 3.0; // AED
+  const pricePerLitre = DEFAULT_FUEL_PRICE_AED; // AED
   const litres = (distanceKm / 100) * consumption;
   const cost   = litres * pricePerLitre;
   return { litres: Math.round(litres * 10) / 10, costAED: Math.round(cost) };
