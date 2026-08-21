@@ -24,6 +24,12 @@
  *   The two passes are independent — applying a plan that has only runs
  *   (no blocks) just sets drivers. Applying a plan that has only blocks
  *   just sets vehicles.
+ *
+ *   - "PCE apply-gate": once both maps are built, the resulting
+ *                    assignment deltas are evaluated against the
+ *                    tenant's planning constraints. A BLOCK verdict
+ *                    aborts the whole apply with a 409 before anything
+ *                    is written — see evaluatePlanApply / apply-gate.ts.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -31,6 +37,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
+import { evaluatePlanApply } from '@/lib/planning/apply-gate';
 import {
   assignVehiclesToBlocks,
   VEHICLE_GROUP_CONFLICT,
@@ -40,6 +47,15 @@ import {
 
 const PLANS_TAG = 'staff-transport-plans';
 const SCHEDULES_TAG = 'bus-ops:schedules';
+
+/**
+ * Feature flag for the PCE apply-gate. Default ON — matches RVE's
+ * RESOURCE_VALIDATION_ENABLED pattern. Set PCE_APPLY_GATE_ENABLED='false'
+ * to bypass in emergencies (should be followed by a fix, not left off).
+ */
+function isPceGateEnabled(): boolean {
+  return process.env.PCE_APPLY_GATE_ENABLED !== 'false';
+}
 
 interface BlockTrip {
   tripId: string;
@@ -211,6 +227,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     let appliedDriver = 0;
     let appliedVehicle = 0;
 
+    // 4a. PCE apply-gate — evaluate the resulting assignment deltas
+    //     against the tenant's planning constraints BEFORE writing
+    //     anything. A BLOCK verdict aborts the entire apply with a 409;
+    //     PASS/WARN fall through and the verdict is echoed in the
+    //     success payload so the UI can surface warnings.
+    let gateResult: Awaited<ReturnType<typeof evaluatePlanApply>> | null = null;
+    if (isPceGateEnabled() && updates.length > 0) {
+      const deltas = updates.map((tripId) => ({
+        tripId,
+        newDriverId: tripToDriver.get(tripId) ?? null,
+        newVehicleId: tripToVehicle.get(tripId) ?? null,
+      }));
+      gateResult = await evaluatePlanApply(prisma, { tenantId, deltas });
+      if (gateResult.verdict === 'BLOCK') {
+        return NextResponse.json(
+          {
+            error: 'Plan apply blocked by planning constraints.',
+            planId: id,
+            verdict: 'BLOCK',
+            blockedTripIds: gateResult.blockedTripIds,
+            trips: gateResult.trips.filter((t) => t.verdict !== 'PASS'),
+            totalPenalty: gateResult.totalPenalty,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     await withTenantRls(prisma, tenantId, async (tx) => {
       for (const tripId of updates) {
         const newDriver  = tripToDriver.get(tripId) ?? null;
@@ -239,6 +283,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       vehiclePoolSize: vehicleCandidates.length,
       rostersApplied: rosters.length,
       vehicleAssignmentIssues,
+      // Gate diagnostic: absent when disabled by flag, present otherwise.
+      // WARN verdicts include warningTripIds so the UI can surface them;
+      // PASS is included too so downstream tooling can key on "gate ran".
+      pceGate: gateResult
+        ? {
+            verdict: gateResult.verdict,
+            totalPenalty: gateResult.totalPenalty,
+            warningTripIds: gateResult.warningTripIds,
+            trips: gateResult.trips.filter((t) => t.verdict !== 'PASS'),
+          }
+        : { verdict: 'DISABLED' as const },
     });
   } catch (e) {
     console.error('[plan apply]', e);

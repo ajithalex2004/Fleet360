@@ -21,6 +21,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
+import { applyDriverTelemetryLimit } from '@/lib/rate-limit-scope';
 
 const EventSchema = z.object({
   id: z.string().uuid(),
@@ -87,6 +88,15 @@ function computeScoreFromRows(rows: Array<{ type: string; occurred_at: Date; val
 export async function POST(req: NextRequest) {
   const ctx = await requireDriverSession(req);
   if (ctx instanceof NextResponse) return ctx;
+
+  // R2: per-driver telemetry rate limit. See src/lib/rate-limit-scope.ts
+  // for the design rationale — one driver's flood of events can't block
+  // any other driver, other categories, or the tenant's normal API traffic.
+  const rl = await applyDriverTelemetryLimit(
+    req.nextUrl.pathname,
+    { tenantId: ctx.tenantId, userId: ctx.userId },
+  );
+  if (rl) return rl;
 
   const json = await req.json().catch(() => null);
   const parsed = PostBodySchema.safeParse(json);

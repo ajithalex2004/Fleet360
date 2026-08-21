@@ -9,7 +9,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { RateLimiter } from '@/lib/rate-limiter';
 import { verifySession } from '@/lib/tenant-session';
 import { proxyToGoBackend } from '@/lib/api-shim';
 import { API_VERSION_HEADER, CURRENT_API_VERSION } from '@/lib/api-version';
@@ -18,9 +17,12 @@ import {
   PUBLIC_PREFIXES,
   PROTECTED_UI_PREFIXES,
 } from '@/lib/auth-route-policies';
+import { computeRateLimit, getRateLimiter } from '@/lib/rate-limit-scope';
 
-// ── Rate limiter singleton (module scope = shared across requests) ────────────
-const rateLimiter = new RateLimiter({ windowMs: 60_000, maxRequests: 1_000 });
+// ── Rate limiter singleton (shared with driver-app telemetry handlers) ───────
+// Owned by @/lib/rate-limit-scope so both middleware and the route-handler
+// helper count against the same bucket instance.
+const rateLimiter = getRateLimiter();
 
 // Cleanup every 5 minutes to prevent unbounded memory growth.
 //
@@ -46,6 +48,16 @@ function isPublicRoute(pathname: string): boolean {
   if (PUBLIC_EXACT.includes(pathname)) return true;
   return PUBLIC_PREFIXES.some(prefix => pathname.startsWith(prefix));
 }
+
+// Rate-limit routing (per-tenant/path for normal APIs, per-driver
+// telemetry buckets for the fixed telemetry paths) lives in
+// @/lib/rate-limit-scope. See that file for the full design rationale.
+//
+// Middleware only applies computeRateLimit() to the tenant/session
+// path here — driver-app telemetry paths are in PUBLIC_PREFIXES so
+// they bypass middleware entirely; the route handlers themselves call
+// applyDriverTelemetryLimit() from rate-limit-scope, using the SAME
+// TELEMETRY_CATEGORIES table so the two accounting paths never drift.
 
 function isProtectedUiRoute(pathname: string): boolean {
   return PROTECTED_UI_PREFIXES.some(prefix => pathname.startsWith(prefix));
@@ -99,10 +111,11 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     return NextResponse.next();
   }
 
-  // 4. Rate limiting — per-tenant + per-path
-  const rateLimitKey = `${session.tenantId}:${pathname}`;
-  const planLimit = RateLimiter.getLimitForPlan(session.plan);
-  const { allowed, remaining, resetMs } = await rateLimiter.check(rateLimitKey, planLimit);
+  // 4. Rate limiting — routed to per-tenant/path OR per-driver-telemetry
+  //    bucket depending on the path. See TELEMETRY_CATEGORIES above.
+  const { key: rateLimitKey, limit: effectiveLimit, scope: rateLimitScope } =
+    computeRateLimit(pathname, session);
+  const { allowed, remaining, resetMs } = await rateLimiter.check(rateLimitKey, effectiveLimit);
 
   if (!allowed) {
     const retryAfterSec = Math.ceil((resetMs - Date.now()) / 1000);
@@ -111,14 +124,16 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         error: 'Too Many Requests',
         message: `Rate limit exceeded. Retry after ${retryAfterSec}s`,
         retryAfter: retryAfterSec,
+        scope: rateLimitScope,   // 'telemetry' | 'tenant-path' — helps clients diagnose
       },
       {
         status: 429,
         headers: {
           'Retry-After': String(retryAfterSec),
-          'X-RateLimit-Limit': String(planLimit),
+          'X-RateLimit-Limit': String(effectiveLimit),
           'X-RateLimit-Remaining': '0',
           'X-RateLimit-Reset': String(Math.ceil(resetMs / 1000)),
+          'X-RateLimit-Scope': rateLimitScope,
         },
       }
     );
@@ -148,9 +163,10 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const shim = await proxyToGoBackend(request, requestHeaders);
   if (shim.proxied && shim.response) {
     // Surface shim identity + rate-limit info on the response too.
-    shim.response.headers.set('X-RateLimit-Limit',     String(planLimit));
+    shim.response.headers.set('X-RateLimit-Limit',     String(effectiveLimit));
     shim.response.headers.set('X-RateLimit-Remaining', String(remaining));
     shim.response.headers.set('X-RateLimit-Reset',     String(Math.ceil(resetMs / 1000)));
+    shim.response.headers.set('X-RateLimit-Scope',     rateLimitScope);
     return shim.response;
   }
 
@@ -158,9 +174,10 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const response = NextResponse.next({ request: { headers: requestHeaders } });
 
   // Expose rate limit + API version info in response headers
-  response.headers.set('X-RateLimit-Limit',     String(planLimit));
+  response.headers.set('X-RateLimit-Limit',     String(effectiveLimit));
   response.headers.set('X-RateLimit-Remaining', String(remaining));
   response.headers.set('X-RateLimit-Reset',     String(Math.ceil(resetMs / 1000)));
+  response.headers.set('X-RateLimit-Scope',     rateLimitScope);
   response.headers.set(API_VERSION_HEADER,       String(CURRENT_API_VERSION));
 
   return response;

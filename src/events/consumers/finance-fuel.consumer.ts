@@ -36,8 +36,11 @@ export class FinanceFuelConsumer extends BaseEventConsumer<FuelFilledPayload> {
     );
 
     if (result === null) {
-      // Bridge returned null: zero-amount or already mirrored — not an error
-      console.log(`[finance-fuel] fuelLog ${data.fuelLogId} — skipped (zero amount or already mirrored)`);
+      // Bridge returned null: zero-amount write (legitimate skip). Real
+      // failures now throw FinanceBridgeError (R5, 2026-08-14) so this
+      // branch no longer masks errors — a rejected await naturally
+      // propagates to the outbox for retry.
+      console.log(`[finance-fuel] fuelLog ${data.fuelLogId} — skipped (zero amount)`);
       return;
     }
 
