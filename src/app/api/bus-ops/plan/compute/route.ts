@@ -31,6 +31,11 @@ import { runcut, type PlanTrip, DEFAULT_WORK_RULES, type WorkRules } from '@/lib
 import { block, type BlockOptions } from '@/lib/plan/block';
 import { roster, type RosterPattern, type RosterDriver } from '@/lib/plan/roster';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
+import {
+  resolveVehicleTurnaroundMinutes,
+  resolveMaxVehicleReuseWindowMinutes,
+} from '@/lib/planning/route-consolidation-vehicle-reuse-policy';
+import { resolveZoneFallbackKm } from '@/lib/planning/zone-compat-policy';
 
 const CACHE_TAG = 'staff-transport-plans';
 
@@ -72,45 +77,73 @@ export async function POST(req: NextRequest) {
     }
 
     const rules: WorkRules = { ...DEFAULT_WORK_RULES, ...(workRules ?? {}) };
-    const blockOpts: BlockOptions = { ...(blockOptions ?? {}) };
 
-    // 1. Load trips in the date range, scoped to this tenant
-    const trips = await withTenantRls(prisma, tenantId, async (tx) => {
-      const rows = await tx.tripSchedule.findMany({
-        where: {
-          tenantId,
-          deletedAt: null,
-          status: { not: 'CANCELLED' },
-          departureTime: {
-            gte: new Date(`${dateFrom}T00:00:00Z`),
-            lte: new Date(`${dateTo}T23:59:59Z`),
+    // 1. Load trips in the date range (scoped to this tenant) and resolve
+    //    the PCE-driven blocking thresholds in parallel — neither depends
+    //    on the other, and the PCE lookups are cheap tenant-level reads.
+    const [trips, minTurnaroundMins, resolvedMaxDeadheadMins, zoneFallbackKm] = await Promise.all([
+      withTenantRls(prisma, tenantId, async (tx) => {
+        const rows = await tx.tripSchedule.findMany({
+          where: {
+            tenantId,
+            deletedAt: null,
+            status: { not: 'CANCELLED' },
+            departureTime: {
+              gte: new Date(`${dateFrom}T00:00:00Z`),
+              lte: new Date(`${dateTo}T23:59:59Z`),
+            },
           },
-        },
-        include: {
-          route: { select: { name: true, origin: true, destination: true, estimatedDurationMins: true, totalDistanceKm: true } },
-        },
-        orderBy: { departureTime: 'asc' },
-      });
-      return rows.map((t) => {
-        const depMs = t.departureTime.getTime();
-        const arr = t.arrivalTime ?? new Date(depMs + (t.route.estimatedDurationMins ?? 60) * 60_000);
-        const durationMins = Math.max(15, Math.round((arr.getTime() - depMs) / 60_000));
-        const planTrip: PlanTrip = {
-          id: t.id,
-          routeId: t.routeId,
-          routeName: t.route.name,
-          routeOrigin: t.route.origin,
-          routeDestination: t.route.destination,
-          departureTime: t.departureTime.toISOString(),
-          arrivalTime: arr.toISOString(),
-          durationMins,
-          distanceKm: t.route.totalDistanceKm,
-          shiftType: (t.shiftType as 'MORNING' | 'EVENING' | 'NIGHT' | 'SPLIT' | null) ?? 'MORNING',
-          vehicleId: t.vehicleId,
-        };
-        return planTrip;
-      });
-    });
+          include: {
+            route: {
+              select: {
+                name: true, origin: true, destination: true, estimatedDurationMins: true, totalDistanceKm: true,
+                stops: { select: { placeId: true, gpsLat: true, gpsLng: true, sequence: true }, orderBy: { sequence: 'asc' } },
+              },
+            },
+          },
+          orderBy: { departureTime: 'asc' },
+        });
+        return rows.map((t) => {
+          const depMs = t.departureTime.getTime();
+          const arr = t.arrivalTime ?? new Date(depMs + (t.route.estimatedDurationMins ?? 60) * 60_000);
+          const durationMins = Math.max(15, Math.round((arr.getTime() - depMs) / 60_000));
+          const stops = t.route.stops;
+          const pickupStop = stops[0];
+          const dropoffStop = stops[stops.length - 1];
+          const planTrip: PlanTrip = {
+            id: t.id,
+            routeId: t.routeId,
+            routeName: t.route.name,
+            routeOrigin: t.route.origin,
+            routeDestination: t.route.destination,
+            departureTime: t.departureTime.toISOString(),
+            arrivalTime: arr.toISOString(),
+            durationMins,
+            distanceKm: t.route.totalDistanceKm,
+            shiftType: (t.shiftType as 'MORNING' | 'EVENING' | 'NIGHT' | 'SPLIT' | null) ?? 'MORNING',
+            vehicleId: t.vehicleId,
+            pickupPoint: pickupStop ? { placeId: pickupStop.placeId, lat: pickupStop.gpsLat, lng: pickupStop.gpsLng } : undefined,
+            dropoffPoint: dropoffStop ? { placeId: dropoffStop.placeId, lat: dropoffStop.gpsLat, lng: dropoffStop.gpsLng } : undefined,
+          };
+          return planTrip;
+        });
+      }),
+      // Hard floor — never overridable from the request body (see
+      // BlockOptions.minTurnaroundMins doc in block.ts for why).
+      resolveVehicleTurnaroundMinutes(prisma, tenantId),
+      // Business-tradeoff ceiling — PCE default, per-run override allowed.
+      resolveMaxVehicleReuseWindowMinutes(prisma, tenantId, blockOptions?.maxDeadheadMins),
+      // Geography gate threshold — Case 2 reuses the pickup-side fallback
+      // for this exact "A.dropoff vs B.pickup" comparison; match it.
+      resolveZoneFallbackKm(prisma, tenantId).then((z) => z.pickup),
+    ]);
+
+    const blockOpts: BlockOptions = {
+      ...(blockOptions ?? {}),
+      maxDeadheadMins: resolvedMaxDeadheadMins,
+      minTurnaroundMins,
+      zoneFallbackKm,
+    };
 
     if (trips.length === 0) {
       return NextResponse.json({

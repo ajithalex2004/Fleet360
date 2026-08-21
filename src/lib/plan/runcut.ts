@@ -28,6 +28,15 @@
 
 export type ShiftType = 'MORNING' | 'EVENING' | 'NIGHT' | 'SPLIT';
 
+/** A trip endpoint for zone-compatibility checks — mirrors ZonePoint in
+ *  lib/planning/zone-compat.ts (kept as a separate type so this module
+ *  doesn't need to import the planning layer just for a shape). */
+export interface TripZonePoint {
+  placeId: string | null;
+  lat: number | null;
+  lng: number | null;
+}
+
 export interface PlanTrip {
   id: string;
   routeId: string;
@@ -40,6 +49,13 @@ export interface PlanTrip {
   distanceKm: number | null;
   shiftType: ShiftType | null;
   vehicleId: string | null;    // for blocking compatibility
+  /** First/last stop coordinates — used by block.ts's optional zone-
+   *  compatibility gate (only enforced when BlockOptions.zoneFallbackKm
+   *  is set). Undefined here resolves to UNKNOWN in zoneCompatibility(),
+   *  which fails the gate just like Case 2 (Vehicle/Resource
+   *  Optimization) does — missing data doesn't get a free pass. */
+  pickupPoint?: TripZonePoint;
+  dropoffPoint?: TripZonePoint;
 }
 
 export interface WorkRules {

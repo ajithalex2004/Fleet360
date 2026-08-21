@@ -24,8 +24,9 @@
  * this for a CP-SAT solver.
  */
 
-import type { PlanTrip } from './runcut';
+import type { PlanTrip, TripZonePoint } from './runcut';
 import { DEFAULT_WORK_RULES, type WorkRules } from './runcut';
+import { zoneCompatibility, isCompatPassing, type ZonePoint } from '../planning/zone-compat';
 
 export interface BlockTrip {
   tripId: string;
@@ -37,6 +38,7 @@ export interface BlockTrip {
   arrivalTime: string | null;  // ISO
   durationMins: number;
   deadheadMinsBefore: number;  // 0 for the first trip on the block
+  dropoffPoint?: TripZonePoint; // carried through for the zone gate on the *next* candidate trip
 }
 
 export interface Block {
@@ -67,20 +69,43 @@ export interface BlockResult {
 
 export interface BlockOptions {
   /** Max gap (minutes) between previous trip arrival and next trip departure
-   *  on the same block. Default 60 = 1 hour. */
+   *  on the same block. Default 60 = 1 hour. Caller (compute/route.ts)
+   *  resolves this from the tenant's PCE MAX_VEHICLE_REUSE_WINDOW rule by
+   *  default, but it's a business-tradeoff ceiling, not a physical
+   *  constraint — a per-run override is fine here. */
   maxDeadheadMins?: number;
+  /** Hard floor (minutes) on the same gap — a vehicle/driver needs at
+   *  least this long to actually turn around, regardless of how generous
+   *  maxDeadheadMins is. Default 0 (no floor, preserves pre-existing
+   *  behaviour for callers that don't set it). Unlike maxDeadheadMins,
+   *  callers should resolve this from the tenant's PCE
+   *  VEHICLE_MIN_TURNAROUND rule and NOT let a request body override it
+   *  — it's a physical constraint, not a scenario-analysis knob. */
+  minTurnaroundMins?: number;
   /** Max block duration in minutes (sum of trip durations on the block).
    *  Default: maxWorkHoursPerDay * 60 from the work rules. */
   maxBlockWorkMins?: number;
   /** Min block work minutes — a block with less than this is flagged as
    *  "under-utilised" but still returned. Default 60. */
   minBlockWorkMins?: number;
+  /** Fallback distance (km) for the geography feasibility gate between
+   *  the previous trip's dropoff and the next candidate trip's pickup —
+   *  same "shared handoff point" threshold Case 2 (Vehicle/Resource
+   *  Optimization) uses (the pickup-side PCE fallback, not dropoff —
+   *  see zone-compat-policy.ts's own reasoning for why). Undefined
+   *  (default) disables the gate entirely — opt-in, not required, since
+   *  many trips/routes may not have stop coordinates loaded. When set,
+   *  a pairing with missing coordinate data resolves to zoneCompatibility's
+   *  UNKNOWN kind, which fails the gate — same fail-closed behaviour as
+   *  Case 2, not a free pass for incomplete data. */
+  zoneFallbackKm?: number;
 }
 
-const DEFAULT_OPTS: Required<BlockOptions> = {
+const DEFAULT_OPTS: Required<Pick<BlockOptions, 'maxDeadheadMins' | 'maxBlockWorkMins' | 'minBlockWorkMins' | 'minTurnaroundMins'>> = {
   maxDeadheadMins: 60,
   maxBlockWorkMins: DEFAULT_WORK_RULES.maxWorkHoursPerDay * 60,
   minBlockWorkMins: 60,
+  minTurnaroundMins: 0,
 };
 
 function ymd(iso: string): string { return iso.slice(0, 10); }
@@ -93,11 +118,16 @@ export function block(
   opts: BlockOptions = {},
   rules: WorkRules = DEFAULT_WORK_RULES,
 ): BlockResult {
-  const o: Required<BlockOptions> = {
+  const o = {
     maxDeadheadMins: opts.maxDeadheadMins ?? DEFAULT_OPTS.maxDeadheadMins,
     maxBlockWorkMins: opts.maxBlockWorkMins ?? (rules.maxWorkHoursPerDay * 60),
     minBlockWorkMins: opts.minBlockWorkMins ?? DEFAULT_OPTS.minBlockWorkMins,
+    minTurnaroundMins: opts.minTurnaroundMins ?? DEFAULT_OPTS.minTurnaroundMins,
   };
+  // Opt-in gate — undefined disables it entirely rather than defaulting
+  // to a magic number, so callers/tests that don't pass it see no change.
+  const zoneFallbackKm = opts.zoneFallbackKm;
+  const asZonePoint = (p?: TripZonePoint): ZonePoint => p ?? { placeId: null, lat: null, lng: null };
 
   // 1. Defensive sort by departure time
   const sorted = [...trips].sort(
@@ -130,7 +160,25 @@ export function block(
       const lastArr = last.arrivalTime ?? last.departureTime;
       const deadhead = minsBetween(lastArr, trip.departureTime);
 
+      // Usable window: minTurnaroundMins ≤ gap ≤ maxDeadheadMins. Too
+      // tight is as disqualifying as too wide — a vehicle can't
+      // physically turn around in less than the floor, regardless of
+      // how generous the ceiling is.
       if (deadhead > o.maxDeadheadMins) continue;
+      if (deadhead < o.minTurnaroundMins) continue;
+
+      // Geography feasibility gate (opt-in — see zoneFallbackKm doc).
+      // Missing coordinate data on either side resolves to UNKNOWN,
+      // which fails the gate — same fail-closed posture as Case 2.
+      if (zoneFallbackKm !== undefined) {
+        const compat = zoneCompatibility(
+          [asZonePoint(last.dropoffPoint)],
+          [asZonePoint(trip.pickupPoint)],
+          { fallbackKm: zoneFallbackKm },
+        );
+        if (!isCompatPassing(compat)) continue;
+      }
+
       if (deadhead < bestDeadhead) {
         bestDeadhead = deadhead;
         bestIdx = i;
@@ -149,6 +197,7 @@ export function block(
         arrivalTime: arrival,
         durationMins: tripDur,
         deadheadMinsBefore: bestDeadhead,
+        dropoffPoint: trip.dropoffPoint,
       };
       b.trips.push(newTrip);
       b.workMins += tripDur;
@@ -166,6 +215,7 @@ export function block(
         arrivalTime: arrival,
         durationMins: tripDur,
         deadheadMinsBefore: 0,
+        dropoffPoint: trip.dropoffPoint,
       };
       open.push({ date: tripDate, trips: [firstTrip], workMins: tripDur });
     }
