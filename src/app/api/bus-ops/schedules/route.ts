@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { assertVehicleAssignableOrError } from '@/lib/fleet/vehicle-availability';
 import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
 import { expandRosterToTrip } from '@/lib/bus-ops/expand-roster';
@@ -66,6 +67,8 @@ export async function POST(req: NextRequest) {
     const tenantId = req.headers.get('x-tenant-id');
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const body = await req.json();
+    const vehicleBlock = await assertVehicleAssignableOrError(body.vehicleId, tenantId);
+    if (vehicleBlock) return NextResponse.json(vehicleBlock, { status: 409 });
     const count = await prisma.tripSchedule.count();
     const tripNumber = body.tripNumber ?? `TRP-${String(count + 1).padStart(5, '0')}`;
 

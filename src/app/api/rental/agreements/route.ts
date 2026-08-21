@@ -18,7 +18,6 @@ export async function GET(req: NextRequest) {
     const customerId = sp.get('customerId');
     const { take, skip, page, limit } = paginate(sp);
     const where = {
-      tenantId,
       ...(status ? { status } : {}),
       ...(customerId ? { customerId } : {}),
     };
@@ -60,16 +59,13 @@ export async function POST(req: NextRequest) {
 
   try {
     const bodyRaw = await req.json();
-    const body = {
-      ...stripTenantOwnershipFields(
+    const body = stripTenantOwnershipFields(
         (bodyRaw && typeof bodyRaw === 'object' ? bodyRaw : {}) as Record<string, unknown>,
-      ),
-      tenantId,
-    };
-    const count = await prisma.rentalAgreement.count({ where: { tenantId } });
+      );
+    const count = await prisma.rentalAgreement.count({});
     const agreementNo = (body as any).agreementNo ?? `AGR-${String(count + 1).padStart(5, '0')}`;
     const agreement = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.rentalAgreement.create({ data: { ...stripTenantOwnershipFields((body && typeof body === "object" ? body : {}) as Record<string, unknown>), tenantId,  agreementNo } as any,
+      tx.rentalAgreement.create({ data: { ...stripTenantOwnershipFields((body && typeof body === "object" ? body : {}) as Record<string, unknown>), agreementNo } as any,
     }),
     );
     return NextResponse.json(agreement, { status: 201 });

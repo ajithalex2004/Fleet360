@@ -201,7 +201,7 @@ export default function DriverProfilesPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-800/60 border-b border-white/10">
               <tr>
-                {['Name', 'License No.', 'Type', 'Status', 'License', 'Emirates ID', 'Passport', 'Visa', 'Vehicle', ''].map(h => (
+                {['Name', 'License No.', 'Type', 'Status', 'License', 'Dallas ID', 'Contact Number', 'Hierarchy', 'Vehicle', ''].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -228,12 +228,21 @@ export default function DriverProfilesPage() {
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded-lg text-xs font-semibold ${statusColor[d.status] ?? 'bg-slate-700 text-slate-300'}`}>{d.status}</span>
                   </td>
-                  {/* Doc compliance icons */}
-                  {([d.compliance.license, d.compliance.emiratesId, d.compliance.passport, d.compliance.visa] as string[]).map((st, i) => (
-                    <td key={i} className="px-4 py-3 text-center">
-                      <span className={`font-bold text-base ${docCls[st] ?? docCls.missing}`}>{docIcon[st] ?? '—'}</span>
-                    </td>
-                  ))}
+                  {/* License compliance only */}
+                  <td className="px-4 py-3 text-center">
+                    <span className={`font-bold text-base ${docCls[d.compliance.license] ?? docCls.missing}`}>
+                      {docIcon[d.compliance.license] ?? '—'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-300">
+                    {d.dallasId?.trim() ? d.dallasId : <span className="text-slate-600">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-300 whitespace-nowrap">
+                    {d.contactNumber?.trim() ? d.contactNumber : <span className="text-slate-600">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-300">
+                    {d.hierarchy?.trim() ? d.hierarchy : <span className="text-slate-600">—</span>}
+                  </td>
                   <td className="px-4 py-3">
                     {d.assignedVehicle ? (
                       <div>

@@ -64,24 +64,44 @@ export async function GET(req: NextRequest) {
         });
     const nameById = new Map(routeNames.map((r) => [r.id, r]));
 
-    const items = rows.map((r) => ({
-      id: r.id,
-      status: r.status,
-      recommendationId: r.recommendationId,
-      appliedAt: r.appliedAt,
-      appliedBy: r.appliedBy,
-      revertedAt: r.revertedAt,
-      revertedBy: r.revertedBy,
-      revertReason: r.revertReason,
-      mergedRoute: r.mergedRouteId
-        ? { id: r.mergedRouteId, name: nameById.get(r.mergedRouteId)?.name ?? null, retiredReason: nameById.get(r.mergedRouteId)?.retiredReason ?? null }
-        : null,
-      sources: r.sources.map((s) => ({
-        id: s.sourceRouteId,
-        name: nameById.get(s.sourceRouteId)?.name ?? null,
-        sequence: s.sequence,
-      })),
-    }));
+    // Resolve user names for appliedBy + revertedBy (batch query)
+    const userIds = new Set<string>();
+    for (const r of rows) {
+      if (r.appliedBy) userIds.add(r.appliedBy);
+      if (r.revertedBy) userIds.add(r.revertedBy);
+    }
+    const users = userIds.size === 0
+      ? []
+      : await prisma.user.findMany({
+          where: { id: { in: [...userIds] } },
+          select: { id: true, firstName: true, lastName: true, email: true },
+        });
+    const userById = new Map(users.map((u) => [u.id, u]));
+
+    const items = rows.map((r) => {
+      const appliedUser = userById.get(r.appliedBy);
+      const revertedUser = r.revertedBy ? userById.get(r.revertedBy) : undefined;
+      const formatUser = (u: typeof appliedUser) =>
+        u ? [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email : null;
+      return {
+        id: r.id,
+        status: r.status,
+        recommendationId: r.recommendationId,
+        appliedAt: r.appliedAt,
+        appliedBy: formatUser(appliedUser) || r.appliedBy,
+        revertedAt: r.revertedAt,
+        revertedBy: formatUser(revertedUser) || r.revertedBy,
+        revertReason: r.revertReason,
+        mergedRoute: r.mergedRouteId
+          ? { id: r.mergedRouteId, name: nameById.get(r.mergedRouteId)?.name ?? null, retiredReason: nameById.get(r.mergedRouteId)?.retiredReason ?? null }
+          : null,
+        sources: r.sources.map((s) => ({
+          id: s.sourceRouteId,
+          name: nameById.get(s.sourceRouteId)?.name ?? null,
+          sequence: s.sequence,
+        })),
+      };
+    });
 
     return NextResponse.json({ items });
   } catch (e) {

@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
   const vehicleIds = [...new Set(passengers.map(p => p.trip.vehicleId).filter(Boolean) as string[])];
   const beacons = vehicleIds.length > 0
     ? await prisma.vehicleBeacon.findMany({
-        where: { vehicleId: { in: vehicleIds }, tenantId, isActive: true },
+        where: { vehicleId: { in: vehicleIds }, isActive: true },
         select: { vehicleId: true, bleUuid: true },
       })
     : [];

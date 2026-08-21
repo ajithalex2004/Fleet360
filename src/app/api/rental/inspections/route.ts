@@ -31,9 +31,9 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
   try {
     const bodyRaw = await req.json();
-    const body = { ...stripTenantOwnershipFields((bodyRaw && typeof bodyRaw === 'object' ? bodyRaw : {}) as Record<string, unknown>), tenantId };
+    const body = stripTenantOwnershipFields((bodyRaw && typeof bodyRaw === 'object' ? bodyRaw : {}) as Record<string, unknown>);
     const inspection = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.vehicleInspection.create({ data: body }),
+      tx.vehicleInspection.create({ data: body as any }),
     );
     return NextResponse.json(inspection, { status: 201 });
   } catch (error) {

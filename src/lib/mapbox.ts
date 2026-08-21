@@ -179,24 +179,28 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult[]> 
   }));
 }
 
-// ── Fuel estimate (unchanged — pure heuristic, no vendor call) ─────────────
+// ── Fuel estimate ────────────────────────────────────────────────────────
+// Consumption rate is still a per-vehicle-type heuristic (no per-vehicle MPG
+// data to draw on). Price is no longer hardcoded — callers pass the fleet's
+// own most-recent pump price (see getLatestFuelPrice in the optimize route);
+// DEFAULT_FUEL_PRICE_AED is only the fallback when no fuel log exists yet.
 
 /**
  * Fallback pump price (AED/litre), used when no real fuel-log price is
  * available. Route Consolidation imports this for exactly that fallback
- * (see fuelPricePerLitreAED in route-consolidation.ts) — the import was
- * already committed against this module, but the constant itself only
- * existed in uncommitted local work, leaving a broken import on the
- * branch. Value matches the literal previously inlined below.
+ * (see fuelPricePerLitreAED in route-consolidation.ts).
  */
 export const DEFAULT_FUEL_PRICE_AED = 3.0;
 
-export function estimateFuelCost(distanceKm: number, vehicleType: 'van' | 'truck' | 'bus' = 'van') {
+export function estimateFuelCost(
+  distanceKm: number,
+  vehicleType: 'van' | 'truck' | 'bus' = 'van',
+  pricePerLitreAED: number = DEFAULT_FUEL_PRICE_AED,
+) {
   const consumption = vehicleType === 'truck' ? 15 : vehicleType === 'bus' ? 18 : 10; // L/100km
-  const pricePerLitre = DEFAULT_FUEL_PRICE_AED; // AED
   const litres = (distanceKm / 100) * consumption;
-  const cost   = litres * pricePerLitre;
-  return { litres: Math.round(litres * 10) / 10, costAED: Math.round(cost) };
+  const cost   = litres * pricePerLitreAED;
+  return { litres: Math.round(litres * 10) / 10, costAED: Math.round(cost), pricePerLitreAED };
 }
 
 /**

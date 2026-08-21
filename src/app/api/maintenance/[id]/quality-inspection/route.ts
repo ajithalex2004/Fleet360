@@ -35,7 +35,7 @@ export async function GET(
 //   overallResult: 'PASS' | 'FAIL' | 'PENDING'
 //
 // Side-effect: advances MaintenanceRequest.status:
-//   PASS  → READY_FOR_SERVICE
+//   PASS  → READY_FOR_OPERATION
 //   FAIL  → INSPECTION_FAILED
 export async function POST(
     request: Request,
@@ -63,7 +63,7 @@ export async function POST(
         // Advance request status based on result + publish inspection event
         if (overallResult === 'PASS' || overallResult === 'FAIL') {
             const nextStatus = overallResult === 'PASS'
-                ? 'READY_FOR_SERVICE'
+                ? 'READY_FOR_OPERATION'
                 : 'INSPECTION_FAILED';
 
             const mr = await prisma.maintenanceRequest.update({

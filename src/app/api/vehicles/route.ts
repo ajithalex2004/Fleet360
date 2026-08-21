@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { VEHICLE_UNASSIGNABLE_STATUSES } from '@/lib/fleet/vehicle-availability';
 
 function serialize(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj;
@@ -36,6 +37,20 @@ export async function GET(request: NextRequest) {
     const where: any = { deletedAt: null };
     if (status)       where.status       = status;
     if (vehicleUsage) where.vehicleUsage = vehicleUsage;
+
+    // Bus Ops / schedules assignment lists: exclude vehicles in maintenance
+    const forAssignment = sp.get('forAssignment') === '1' || sp.get('assignable') === '1';
+    if (forAssignment && !status) {
+      where.AND = [
+        ...(where.AND ?? []),
+        {
+          OR: [
+            { status: null },
+            { status: { notIn: Array.from(VEHICLE_UNASSIGNABLE_STATUSES), mode: 'insensitive' } },
+          ],
+        },
+      ];
+    }
     if (search) {
       where.OR = [
         { make: { contains: search, mode: 'insensitive' } },

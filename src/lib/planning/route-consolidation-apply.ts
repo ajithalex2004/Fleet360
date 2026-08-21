@@ -241,10 +241,27 @@ export async function applyConsolidation(
         const mergedOrigin = sourceRoutes[0]?.origin ?? 'Consolidated';
         const mergedDestination = sourceRoutes[0]?.destination ?? 'Consolidated';
 
+        // Route code CON-{1st source code}-{2nd source code}, order taken
+        // from input.sourceRouteIds (the caller's submitted order — first
+        // route = A, second = B) rather than sourceRoutes' findMany result
+        // order, which Prisma doesn't guarantee matches `id: { in: [...] }`.
+        // Deterministic per source pair, so a repeat merge of the exact
+        // same pair (e.g. revert then re-apply) could collide on the
+        // tenant-unique code index — resolveUniqueRouteCode disambiguates.
+        const sourceRoutesById = new Map(sourceRoutes.map((r) => [r.id, r]));
+        const baseMergedCode = buildConsolidatedRouteCode(
+          input.sourceRouteIds.map((id) => sourceRoutesById.get(id)?.code ?? null),
+          input.sourceRouteIds,
+        );
+        const mergedCode = baseMergedCode
+          ? await resolveUniqueRouteCode(tx, input.tenantId, baseMergedCode)
+          : null;
+
         const mergedRoute = await tx.busRoute.create({
           data: {
             tenantId: input.tenantId,
             name: mergedName,
+            code: mergedCode,
             origin: mergedOrigin,
             destination: mergedDestination,
             routeType: sourceRoutes[0]?.routeType,
@@ -976,6 +993,43 @@ function makeSyntheticTrip(
 function readRevertWindowMs(): number {
   const hrs = Number(process.env.RC_REVERT_WINDOW_HOURS);
   return (Number.isFinite(hrs) && hrs > 0 ? hrs : 24) * 3600_000;
+}
+
+/**
+ * CON-{1st source code}-{2nd source code}. `codes` is exactly
+ * [codeA, codeB] in the caller's submitted sourceRouteIds order. A source
+ * lacking a code (BusRoute.code is optional) falls back to a short id
+ * prefix so the merged code stays deterministic and readable even for
+ * routes that were never manually coded. Returns null only if there are
+ * fewer than 2 usable segments (shouldn't happen — apply always has
+ * exactly 2 sources — but the merged route is still valid with no code,
+ * same as before this feature existed).
+ */
+function buildConsolidatedRouteCode(codes: Array<string | null>, routeIds?: string[]): string | null {
+  const segments = codes.map((c, i) => c ?? (routeIds?.[i] ? routeIds[i].slice(0, 8).toUpperCase() : null));
+  const usable = segments.filter((s): s is string => !!s);
+  if (usable.length < 2) return null;
+  return `CON-${usable[0]}-${usable[1]}`;
+}
+
+/**
+ * The merged code is deterministic per source pair, so re-merging the
+ * exact same pair (e.g. revert then re-apply during testing) would
+ * collide on uniq_bus_routes_tenant_code. Disambiguate with a numeric
+ * suffix rather than fail the whole apply transaction over a cosmetic
+ * code — a real duplicate is not a correctness problem for anything that
+ * reads BusRoute.code today (display-only).
+ */
+async function resolveUniqueRouteCode(tx: Prisma.TransactionClient, tenantId: string, baseCode: string): Promise<string> {
+  const existing = await tx.busRoute.findMany({
+    where: { tenantId, deletedAt: null, code: { startsWith: baseCode } },
+    select: { code: true },
+  });
+  const taken = new Set(existing.map((r) => r.code));
+  if (!taken.has(baseCode)) return baseCode;
+  let n = 2;
+  while (taken.has(`${baseCode}-${n}`)) n++;
+  return `${baseCode}-${n}`;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

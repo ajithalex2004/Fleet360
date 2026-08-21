@@ -117,3 +117,4 @@ next-env.d.ts
 /ios/
 /mobile-app/
 
+patches/

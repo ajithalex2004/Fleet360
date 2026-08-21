@@ -33,8 +33,8 @@
  */
 
 import type { PrismaClient } from '@prisma/client';
-import type { OutboxEvent, TickOptions, TickResult } from './types.ts';
-import { get as getConsumer } from './registry.ts';
+import type { OutboxEvent, TickOptions, TickResult } from './types';
+import { get as getConsumer } from './registry';
 
 const DEFAULT_BATCH_SIZE = 50;
 const DEFAULT_MAX_RETRIES = 10;

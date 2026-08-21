@@ -44,7 +44,7 @@ interface RouteResult {
   totalDurationMin: number;
   geometry: GeoJSON.LineString;
   legs: Array<{ from: string; to: string; distanceKm: number; durationMin: number }>;
-  fuel: { litres: number; costAED: number };
+  fuel: { litres: number; costAED: number; pricePerLitreAED?: number; source?: 'fleet-log' | 'default'; asOf?: string | null };
   summary: {
     stops: number;
     distanceKm: number;
@@ -52,6 +52,8 @@ interface RouteResult {
     durationHuman: string;
     fuelLitres: number;
     fuelCostAED: number;
+    fuelPricePerLitre?: number;
+    fuelPriceSource?: 'fleet-log' | 'default';
   };
   _warning?: string;
 }
@@ -150,6 +152,7 @@ function AddressSearch({
   const [loading, setLoading] = useState(false);
   const [open,    setOpen]    = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const search = useCallback((q: string) => {
     if (q.length < 3) { setResults([]); setOpen(false); return; }
@@ -166,6 +169,32 @@ function AddressSearch({
     }, 400);
   }, []);
 
+  const closeDropdown = useCallback(() => {
+    setOpen(false);
+  }, []);
+
+  const cancelBlurClose = useCallback(() => {
+    if (blurTimer.current) {
+      clearTimeout(blurTimer.current);
+      blurTimer.current = null;
+    }
+  }, []);
+
+  // Close when focus leaves the field. Short delay so a mousedown/click on a
+  // suggestion still fires before open is cleared.
+  const handleBlur = useCallback(() => {
+    cancelBlurClose();
+    blurTimer.current = setTimeout(() => {
+      closeDropdown();
+      blurTimer.current = null;
+    }, 150);
+  }, [cancelBlurClose, closeDropdown]);
+
+  const handleFocus = useCallback(() => {
+    cancelBlurClose();
+    if (results.length > 0 && query.length >= 3) setOpen(true);
+  }, [cancelBlurClose, results.length, query.length]);
+
   return (
     <div className="relative">
       <div className="flex items-center gap-2 bg-slate-800/60 border border-white/10 rounded-xl px-3 py-2.5 focus-within:border-white/30 transition-colors">
@@ -174,16 +203,27 @@ function AddressSearch({
           type="text"
           value={query}
           onChange={e => { setQuery(e.target.value); search(e.target.value); }}
+          onBlur={handleBlur}
+          onFocus={handleFocus}
           placeholder={placeholder}
           className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none"
+          autoComplete="off"
         />
         {loading && <span className="w-3 h-3 border border-slate-500 border-t-white rounded-full animate-spin" />}
       </div>
       {open && results.length > 0 && (
-        <div className="absolute z-50 left-0 right-0 mt-1 bg-slate-800 border border-white/10 rounded-xl shadow-xl overflow-hidden">
+        <div
+          className="absolute z-50 left-0 right-0 mt-1 bg-slate-800 border border-white/10 rounded-xl shadow-xl overflow-hidden"
+          // Keep focus management predictable: selecting an item must not
+          // race with input blur. onMouseDown preventDefault keeps focus
+          // until onClick runs.
+          onMouseDown={(e) => e.preventDefault()}
+        >
           {results.map((r, i) => (
             <button key={i}
+              type="button"
               onClick={() => {
+                cancelBlurClose();
                 onSelect(r);
                 // `clearOnSelect` on the stops search — makes "add another zone"
                 // a natural next action instead of having to erase the previous
@@ -191,6 +231,7 @@ function AddressSearch({
                 // the user has confirmation of what they picked.
                 setQuery(clearOnSelect ? '' : r.label);
                 setOpen(false);
+                if (clearOnSelect) setResults([]);
               }}
               className="w-full text-left px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-700 transition-colors border-b border-white/5 last:border-0">
               <span className="block truncate">{r.label}</span>
@@ -326,7 +367,13 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
       // Reorder displayed waypoints to match optimized order
       if (data.orderedWaypoints?.length) setWaypoints(data.orderedWaypoints);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Optimization failed');
+      const msg =
+        e instanceof Error
+          ? e.message
+          : typeof e === 'string'
+            ? e
+            : 'Optimization failed';
+      setError(msg);
     } finally {
       setOptimizing(false);
     }
@@ -363,7 +410,7 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
   const canOptimize    = hasOrigin && hasDestination;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 h-full min-h-0 flex flex-col">
       {/* Header */}
       <div className="flex items-center gap-3">
         <span className="text-3xl">{cfg.icon}</span>
@@ -377,9 +424,9 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
           breathe instead of stopping at a fixed 520 px and leaving a blank
           strip below. The min-h calc backs off ~200 px for the page chrome
           (h1 + route-name input + panel header). */}
-      <div className="grid grid-cols-1 xl:grid-cols-5 gap-5 min-h-[calc(100vh-260px)]">
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-5 min-h-[calc(100dvh-14rem)] xl:h-[calc(100dvh-14rem)]">
         {/* ── Left panel: waypoint editor ─── */}
-        <div className="xl:col-span-2 space-y-4">
+        <div className="xl:col-span-2 space-y-4 overflow-y-auto min-h-0 pr-1">
 
           {/* Origin — search box + Google Map picker button. Either fills
               the origin slot via addWaypoint('origin', …). */}
@@ -557,7 +604,8 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
 
           {/* Optimize button */}
           <button
-            onClick={optimize}
+            type="button"
+            onClick={() => { void optimize(); }}
             disabled={!canOptimize || optimizing}
             className={`w-full py-3 rounded-xl font-semibold text-sm transition-all ${cfg.btnBg} disabled:opacity-30 disabled:cursor-not-allowed`}>
             {optimizing
@@ -589,6 +637,15 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
                   </div>
                 ))}
               </div>
+
+              {routeResult.summary.fuelPricePerLitre != null && (
+                <p className="text-[11px] text-slate-500">
+                  ⛽ AED {routeResult.summary.fuelPricePerLitre.toFixed(2)}/L —{' '}
+                  {routeResult.summary.fuelPriceSource === 'fleet-log'
+                    ? "from your fleet's latest fuel log"
+                    : 'default rate — no recent fuel log on file'}
+                </p>
+              )}
 
               {/* Leg details toggle */}
               <button onClick={() => setShowLegs(p => !p)}
@@ -626,7 +683,7 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
 
               {/* Save / Dispatch */}
               {onSave && (
-                <button onClick={handleSave} disabled={saved}
+                <button type="button" onClick={() => { handleSave(); }} disabled={saved}
                   className={`w-full py-2.5 rounded-xl font-semibold text-sm transition-all ${
                     saved
                       ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 cursor-default'
@@ -645,12 +702,12 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
             flex container. That eliminates the empty stripe below the map
             when the left column is longer than the map's fixed height.
             min-h ensures usability on short viewports. */}
-        <div className="xl:col-span-3 flex flex-col min-h-[480px]">
+        <div className="xl:col-span-3 flex flex-col h-full min-h-[320px]">
           <MapView
             waypoints={waypoints}
             routeGeometry={routeResult?.geometry ?? null}
             mode={mode}
-            className="flex-1 min-h-[480px]"
+            className="flex-1 h-full min-h-[320px] rounded-2xl overflow-hidden"
           />
           {waypoints.length === 0 && (
             <p className="text-center text-xs text-slate-600 mt-2">

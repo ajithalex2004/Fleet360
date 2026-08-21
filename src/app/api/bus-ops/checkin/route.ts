@@ -66,8 +66,11 @@ export async function POST(req: NextRequest) {
       scheduleId = verify.scheduleId!;
       identifier = token;
       // Caller may pass either staffMemberId OR staffEmployeeId.
+      // StaffMember now has tenant-scoped (tenantId, employeeId) unique constraint.
+      // This endpoint doesn't enforce tenant isolation (public boarding endpoint),
+      // so we filter by employeeId alone to find the staff member across tenants.
       if (!staffMemberId && body?.staffEmployeeId) {
-        const m = await prisma.staffMember.findUnique({
+        const m = await prisma.staffMember.findFirst({
           where: { employeeId: String(body.staffEmployeeId) },
           select: { id: true },
         });

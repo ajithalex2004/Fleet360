@@ -157,7 +157,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       if (quotation.inquiryId) {
         await withTenantRls(prisma, tenantId, async (tx) =>
           tx.leaseInquiry.updateMany({
-          where: { id: quotation.inquiryId, tenantId },
+          where: { id: quotation.inquiryId!, tenantId },
           data: { status: 'QUOTATION_SENT' },
         }),
         ).catch(err => console.error('Failed to sync Inquiry status:', err));

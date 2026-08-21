@@ -55,7 +55,6 @@ export async function POST(req: NextRequest) {
       async ({ tx, tenantId }) => {
         const bookings = await tx.rentalBooking.findMany({
           where: {
-            tenantId,
             deletedAt: null,
             status: { in: ['PENDING', 'CONFIRMED', 'ACTIVE'] },
           },
@@ -90,8 +89,8 @@ export async function POST(req: NextRequest) {
 
         if (dryRun) {
           for (const a of assessments) {
-            if (a.action === 'NO_SHOW') counts.noShow += 1;
-            else if (a.action === 'LATE_RETURN') counts.lateReturn += 1;
+            if (a.kind === 'NO_SHOW') counts.noShow += 1;
+            else if (a.kind === 'LATE_RETURN') counts.lateReturn += 1;
             else counts.skipped += 1;
           }
           return {
@@ -104,23 +103,22 @@ export async function POST(req: NextRequest) {
 
         for (const a of assessments) {
           try {
-            if (a.action === 'SKIP' || !a.action) {
+            if (!a.kind) {
               counts.skipped += 1;
               continue;
             }
 
-            const chargeType = chargeTypeFor(a.action);
-            const amount = a.amount ?? 0;
+            const chargeType = chargeTypeFor(a.kind);
+            const amount = a.feeAmount ?? 0;
             const noteFingerprint = `${chargeType}:${a.bookingId}:${today.toISOString().slice(0, 10)}`;
 
             const agreement = await tx.rentalAgreement.findFirst({
-              where: { tenantId, bookingId: a.bookingId } as any,
+              where: { bookingId: a.bookingId } as any,
               select: { id: true },
             });
 
             const existingCharge = await tx.rentalAdditionalCharge.findFirst({
               where: {
-                tenantId,
                 notes: { contains: noteFingerprint },
                 createdAt: { gte: today },
               } as any,
@@ -129,24 +127,23 @@ export async function POST(req: NextRequest) {
             if (!existingCharge && amount > 0) {
               await tx.rentalAdditionalCharge.create({
                 data: {
-                  tenantId,
                   bookingId: a.bookingId,
                   agreementId: agreement?.id ?? null,
                   chargeType,
                   amount,
-                  currency: a.currency ?? 'AED',
+                  currency: a.feeCurrency ?? 'AED',
                   notes: noteFingerprint,
                 } as any,
               });
             }
 
-            if (a.action === 'NO_SHOW') {
+            if (a.kind === 'NO_SHOW') {
               await tx.rentalBooking.updateMany({
-                where: { id: a.bookingId, tenantId } as any,
+                where: { id: a.bookingId } as any,
                 data: { status: 'NO_SHOW' },
               });
               counts.noShow += 1;
-            } else if (a.action === 'LATE_RETURN') {
+            } else if (a.kind === 'LATE_RETURN') {
               counts.lateReturn += 1;
             }
           } catch (err) {

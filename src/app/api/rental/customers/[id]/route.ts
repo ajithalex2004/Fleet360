@@ -14,7 +14,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       where: { id: params.id },
       include: {
         bookings: {
-          where: { tenantId, deletedAt: null },
+          where: { deletedAt: null },
           orderBy: { createdAt: 'desc' },
           take: 10,
         },

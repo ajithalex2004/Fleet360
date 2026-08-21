@@ -17,14 +17,18 @@
 
 // ── Types (minimal — we only touch what we use to avoid a huge @types dep) ──
 
+/** Opaque event-listener handle returned by addListener/addListenerOnce. */
+export interface GMapsEventListener { remove(): void }
+
 interface GMapsLatLng { lat(): number; lng(): number }
 interface GMapsLatLngLiteral { lat: number; lng: number }
 
 export interface GMapsMap {
-  addListener(event: string, cb: (e: { latLng?: GMapsLatLng }) => void): void;
+  addListener(event: string, cb: (e: { latLng?: GMapsLatLng }) => void): GMapsEventListener;
   panTo(pos: GMapsLatLngLiteral): void;
   setZoom(z: number): void;
   fitBounds(bounds: GMapsLatLngBounds, padding?: number | { top: number; right: number; bottom: number; left: number }): void;
+  setOptions(opts: object): void;
 }
 export interface GMapsMarker {
   setPosition(pos: GMapsLatLngLiteral): void;
@@ -34,6 +38,7 @@ export interface GMapsMarker {
 }
 export interface GMapsLatLngBounds {
   extend(pos: GMapsLatLngLiteral): void;
+  isEmpty(): boolean;
 }
 export interface GMapsPolyline {
   setMap(map: GMapsMap | null): void;
@@ -85,18 +90,16 @@ export interface GoogleCtors {
   Marker: new (opts: object) => GMapsMarker;
   Geocoder: new () => GMapsGeocoder;
   LatLngBounds: new () => GMapsLatLngBounds;
+  LatLng: new (lat: number, lng: number) => GMapsLatLng;
   Polyline: new (opts: object) => GMapsPolyline;
   Autocomplete: new (el: HTMLInputElement, opts?: object) => GMapsAutocomplete;
   /** Decode a Google encoded polyline string to lat/lng points. */
   decodePath: (encoded: string) => GMapsLatLng[];
-  // Drawing-manager set — used by the Geofence Management page. Circle and
-  // Polygon ctors also work as standalone overlays for rendering existing
-  // geofences (they aren't only reachable through the manager).
+  /** Symbol path constants for custom markers */
+  SymbolPath: { CIRCLE: number; FORWARD_CLOSED_ARROW: number; FORWARD_OPEN_ARROW: number; BACKWARD_CLOSED_ARROW: number; BACKWARD_OPEN_ARROW: number };
+  // Circle and Polygon ctors for rendering geofences and custom drawing
   Circle: new (opts: object) => GMapsCircle;
   Polygon: new (opts: object) => GMapsPolygon;
-  DrawingManager: new (opts?: object) => GMapsDrawingManager;
-  /** google.maps.drawing.OverlayType enum — 'circle' | 'polygon' | null etc. */
-  OverlayType: { CIRCLE: string; POLYGON: string; MARKER: string; POLYLINE: string; RECTANGLE: string };
 }
 
 interface GoogleMapsBootstrap {
@@ -104,13 +107,12 @@ interface GoogleMapsBootstrap {
   // into sub-libraries when they introduced the async loader. Destructuring
   // it from 'maps' (which we used to do) throws
   // `google.maps.LatLngBounds is not a constructor`.
-  importLibrary(name: 'core'):      Promise<{ LatLngBounds: GoogleCtors['LatLngBounds'] }>;
+  importLibrary(name: 'core'):      Promise<{ LatLngBounds: GoogleCtors['LatLngBounds']; LatLng: GoogleCtors['LatLng']; SymbolPath: GoogleCtors['SymbolPath'] }>;
   importLibrary(name: 'maps'):      Promise<{ Map: GoogleCtors['Map']; Polyline: GoogleCtors['Polyline']; Circle: GoogleCtors['Circle']; Polygon: GoogleCtors['Polygon'] }>;
   importLibrary(name: 'marker'):    Promise<{ Marker: GoogleCtors['Marker'] }>;
   importLibrary(name: 'geocoding'): Promise<{ Geocoder: GoogleCtors['Geocoder'] }>;
   importLibrary(name: 'places'):    Promise<{ Autocomplete: GoogleCtors['Autocomplete'] }>;
   importLibrary(name: 'geometry'):  Promise<{ encoding: { decodePath: (encoded: string) => GMapsLatLng[] } }>;
-  importLibrary(name: 'drawing'):   Promise<{ DrawingManager: GoogleCtors['DrawingManager']; OverlayType: GoogleCtors['OverlayType'] }>;
 }
 
 declare global {
@@ -186,14 +188,13 @@ export function loadGoogleMaps(): Promise<GoogleCtors> {
         'Google Maps bootstrap missing after install — check the Network tab for the maps.googleapis.com request and the browser Console for a specific …MapError from Google.',
       );
     }
-    const [coreLib, mapsLib, markerLib, geocodingLib, placesLib, geometryLib, drawingLib] = await Promise.all([
+    const [coreLib, mapsLib, markerLib, geocodingLib, placesLib, geometryLib] = await Promise.all([
       bootstrap.importLibrary('core'),
       bootstrap.importLibrary('maps'),
       bootstrap.importLibrary('marker'),
       bootstrap.importLibrary('geocoding'),
       bootstrap.importLibrary('places'),
       bootstrap.importLibrary('geometry'),
-      bootstrap.importLibrary('drawing'),
     ]);
     return {
       Map:            mapsLib.Map,
@@ -201,12 +202,12 @@ export function loadGoogleMaps(): Promise<GoogleCtors> {
       Circle:         mapsLib.Circle,
       Polygon:        mapsLib.Polygon,
       LatLngBounds:   coreLib.LatLngBounds,   // ← 'core', not 'maps'
+      LatLng:         coreLib.LatLng,
+      SymbolPath:     coreLib.SymbolPath,
       Marker:         markerLib.Marker,
       Geocoder:       geocodingLib.Geocoder,
       Autocomplete:   placesLib.Autocomplete,
       decodePath:     geometryLib.encoding.decodePath,
-      DrawingManager: drawingLib.DrawingManager,
-      OverlayType:    drawingLib.OverlayType,
     };
   })();
 

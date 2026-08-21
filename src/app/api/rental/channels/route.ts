@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   // Aggregate booking counts per channel.
   const grouped = await prisma.rentalBooking.groupBy({
     by: ['channel'],
-    where: { tenantId, deletedAt: null },
+    where: { deletedAt: null },
     _count: { _all: true },
     _max: { createdAt: true },
   });
@@ -38,8 +38,8 @@ export async function GET(req: NextRequest) {
       supportsOutboundSync: c.supportsOutboundSync,
       configured: c.secretEnvVar ? Boolean(process.env[c.secretEnvVar]) : true,
       description: c.description,
-      bookingCount: stat?._count._all ?? 0,
-      lastBookingAt: stat?._max.createdAt ?? null,
+      bookingCount: stat?._count?._all ?? 0,
+      lastBookingAt: stat?._max?.createdAt ?? null,
     };
   });
 

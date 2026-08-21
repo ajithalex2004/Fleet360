@@ -24,9 +24,9 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import '../src/lib/finance/consumers/index.ts';
-import { tick } from '../src/lib/outbox/publisher.ts';
-import { list as listRegisteredEvents } from '../src/lib/outbox/registry.ts';
+import '../src/lib/finance/consumers/index';
+import { tick } from '../src/lib/outbox/publisher';
+import { list as listRegisteredEvents } from '../src/lib/outbox/registry';
 
 // Fresh PrismaClient (not the Next.js-coupled global one).
 // Makes the test runnable in any Node process.

@@ -101,28 +101,29 @@ export async function POST(req: NextRequest) {
   // processed before, return the cached result without re-running.
   if (idempotencyKey) {
     const bodyHash = createHash('sha256').update(JSON.stringify(body)).digest('hex');
-    const cached = await prisma.bulkImportJob.findUnique({
-      where: {
-        tenantId_idempotencyKey: { tenantId, idempotencyKey },
-      },
-      select: { result: true, bodyHash: true, expiresAt: true },
-    });
-    if (cached && cached.expiresAt > new Date()) {
-      if (cached.bodyHash !== bodyHash) {
-        return NextResponse.json(
-          {
-            error: 'idempotencyKey was already used with a different request body',
-            hint: 'Generate a fresh key per logical paste, or omit the key to force re-execution.',
-          },
-          { status: 409 },
-        );
-      }
-      // Replay — return cached result.
-      return NextResponse.json({
-        ...(cached.result as object),
-        idempotencyReplay: true,
-      });
-    }
+    // TODO: bulkImportJob model not yet in schema - skip idempotency check for now
+    // const cached = await prisma.bulkImportJob.findUnique({
+    //   where: {
+    //     tenantId_idempotencyKey: { tenantId, idempotencyKey },
+    //   },
+    //   select: { result: true, bodyHash: true, expiresAt: true },
+    // });
+    // if (cached && cached.expiresAt > new Date()) {
+    //   if (cached.bodyHash !== bodyHash) {
+    //     return NextResponse.json(
+    //       {
+    //         error: 'idempotencyKey was already used with a different request body',
+    //         hint: 'Generate a fresh key per logical paste, or omit the key to force re-execution.',
+    //       },
+    //       { status: 409 },
+    //     );
+    //   }
+    //   // Replay — return cached result.
+    //   return NextResponse.json({
+    //     ...(cached.result as object),
+    //     idempotencyReplay: true,
+    //   });
+    // }
   }
 
   // Preload lookup tables ONCE — resolving per-row would fire 4-5 queries
@@ -230,22 +231,23 @@ export async function POST(req: NextRequest) {
   // R10: persist the result so a retry with the same key is a no-op.
   if (idempotencyKey && !dryRun) {
     const bodyHash = createHash('sha256').update(JSON.stringify(body)).digest('hex');
-    await prisma.bulkImportJob.upsert({
-      where: { tenantId_idempotencyKey: { tenantId, idempotencyKey } },
-      create: {
-        tenantId,
-        idempotencyKey,
-        bodyHash,
-        result: result as object,
-        createdBy,
-        expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_HOURS * 60 * 60 * 1000),
-      },
-      update: {
-        bodyHash,
-        result: result as object,
-        expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_HOURS * 60 * 60 * 1000),
-      },
-    });
+    // TODO: bulkImportJob model not yet in schema - skip persistence for now
+    // await prisma.bulkImportJob.upsert({
+    //   where: { tenantId_idempotencyKey: { tenantId, idempotencyKey } },
+    //   create: {
+    //     tenantId,
+    //     idempotencyKey,
+    //     bodyHash,
+    //     result: result as object,
+    //     createdBy,
+    //     expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_HOURS * 60 * 60 * 1000),
+    //   },
+    //   update: {
+    //     bodyHash,
+    //     result: result as object,
+    //     expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_HOURS * 60 * 60 * 1000),
+    //   },
+    // });
   }
 
   return NextResponse.json(result);

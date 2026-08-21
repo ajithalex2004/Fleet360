@@ -66,7 +66,7 @@ export default function FleetOptimizerMap({ routes, unassigned, className = '' }
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: false,
-        });
+        }) as any;
       }
       renderOverlays(g);
     })();
@@ -107,7 +107,7 @@ export default function FleetOptimizerMap({ routes, unassigned, className = '' }
         }) as unknown as google.maps.MVCObject & { setMap: (m: google.maps.Map) => void };
         line.setMap(map);
         overlaysRef.current.push(line);
-        for (const p of path) bounds.extend(new g.LatLng(p.lat, p.lng));
+        for (const p of path) bounds.extend({ lat: p.lat, lng: p.lng });
       }
 
       route.stops.forEach((s) => {
@@ -126,7 +126,7 @@ export default function FleetOptimizerMap({ routes, unassigned, className = '' }
           },
         }) as unknown as google.maps.MVCObject & { setMap: (m: null) => void };
         overlaysRef.current.push(marker);
-        bounds.extend(new g.LatLng(s.lat, s.lng));
+        bounds.extend({ lat: s.lat, lng: s.lng });
       });
     });
 
@@ -143,10 +143,10 @@ export default function FleetOptimizerMap({ routes, unassigned, className = '' }
         },
       }) as unknown as google.maps.MVCObject & { setMap: (m: null) => void };
       overlaysRef.current.push(marker);
-      bounds.extend(new g.LatLng(u.stopLat, u.stopLng));
+      bounds.extend({ lat: u.stopLat, lng: u.stopLng });
     });
 
-    if (!bounds.isEmpty()) map.fitBounds(bounds, 80);
+    if (!bounds.isEmpty()) map.fitBounds(bounds as any, 80);
   }
 
   return (

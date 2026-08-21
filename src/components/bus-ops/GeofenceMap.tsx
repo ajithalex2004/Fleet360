@@ -1,14 +1,15 @@
 'use client';
 /**
- * GeofenceMap — Google Map + DrawingManager for the Geofence Management page.
+ * GeofenceMap — Google Map with custom drawing tools for the Geofence Management page.
  *
  * Renders every existing geofence as either a Circle (metres-accurate — the
  * radius scales with the map, unlike Google's icon circles) or a Polygon
- * coloured by type. When the operator picks a drawing tool, DrawingManager
- * takes over; on completion we lift the geometry off the overlay and hand it
- * up via onDraw so the parent can pop the metadata modal. We immediately
- * remove the DrawingManager's own overlay because the parent will re-render
- * from the freshly-created row (single source of truth).
+ * coloured by type. When the operator picks a drawing tool, we use custom
+ * click handlers to capture shapes. On completion we lift the geometry and hand it
+ * up via onDraw so the parent can pop the metadata modal.
+ *
+ * NOTE: Google Maps DrawingManager was deprecated in v3.65, so we implement
+ * custom drawing with map click listeners.
  *
  * ssr:false is REQUIRED — loadGoogleMaps touches window.
  */
@@ -18,7 +19,7 @@ import {
   type GMapsMap,
   type GMapsCircle,
   type GMapsPolygon,
-  type GMapsDrawingManager,
+  type GMapsEventListener,
 } from '@/lib/google-maps-loader';
 
 export type GeofenceType = 'STOP' | 'GARAGE' | 'ORIGIN_DESTINATION' | 'BASE_CAMP' | 'ACCOMMODATION';
@@ -63,12 +64,17 @@ export default function GeofenceMap({
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef       = useRef<GMapsMap | null>(null);
-  const drawingRef   = useRef<GMapsDrawingManager | null>(null);
   // Overlays keyed by geofence id so we can dispose/replace individually.
   const overlaysRef  = useRef<Map<string, GMapsCircle | GMapsPolygon>>(new Map());
   const ctorsRef     = useRef<Awaited<ReturnType<typeof loadGoogleMaps>> | null>(null);
   const [error, setError]     = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Drawing state
+  const drawingCircleRef = useRef<GMapsCircle | null>(null);
+  const drawingPolygonRef = useRef<GMapsPolygon | null>(null);
+  const polygonPointsRef = useRef<Array<{ lat: number; lng: number }>>([]);
+  const clickListenerRef = useRef<GMapsEventListener | null>(null);
 
   // One-time map + drawing-manager bootstrap.
   useEffect(() => {
@@ -149,52 +155,140 @@ export default function GeofenceMap({
     if (hasAny) map.fitBounds(bounds, 60);
   }, [geofences, selectedId, onSelect]);
 
-  // Drawing-mode toggle. Lazy-create the DrawingManager the first time it's
-  // needed to keep the initial map render fast for read-only viewing.
+  // Drawing-mode toggle with custom drawing implementation
   useEffect(() => {
     const ctors = ctorsRef.current;
     const map = mapRef.current;
     if (!ctors || !map) return;
 
-    if (!drawingRef.current) {
-      drawingRef.current = new ctors.DrawingManager({
-        drawingMode: null,
-        drawingControl: false, // we drive the mode from the sidebar buttons
-        circleOptions:  { strokeColor: '#8b5cf6', fillColor: '#8b5cf6', fillOpacity: 0.25, editable: false, clickable: false },
-        polygonOptions: { strokeColor: '#8b5cf6', fillColor: '#8b5cf6', fillOpacity: 0.25, editable: false, clickable: false },
-      });
-      drawingRef.current.setMap(map);
+    // Clean up previous drawing state
+    if (clickListenerRef.current) {
+      clickListenerRef.current.remove();
+      clickListenerRef.current = null;
+    }
+    if (drawingCircleRef.current) {
+      drawingCircleRef.current.setMap(null);
+      drawingCircleRef.current = null;
+    }
+    if (drawingPolygonRef.current) {
+      drawingPolygonRef.current.setMap(null);
+      drawingPolygonRef.current = null;
+    }
+    polygonPointsRef.current = [];
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      drawingRef.current.addListener('circlecomplete', (circle: any) => {
-        const centre = circle.getCenter();
-        const result: DrawResult = {
-          shape: 'CIRCLE',
-          centerLat: centre.lat(),
-          centerLng: centre.lng(),
-          radiusM: Math.round(circle.getRadius()),
-        };
-        circle.setMap(null); // parent will re-render from the created row
-        drawingRef.current?.setDrawingMode(null);
-        onDraw(result);
-      });
+    if (!drawMode) return;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      drawingRef.current.addListener('polygoncomplete', (polygon: any) => {
-        const path = polygon.getPath().getArray().map((p: { lat(): number; lng(): number }) => ({
-          lat: p.lat(), lng: p.lng(),
-        }));
-        polygon.setMap(null);
-        drawingRef.current?.setDrawingMode(null);
-        onDraw({ shape: 'POLYGON', polygon: path });
+    // Set cursor style
+    if (map.setOptions) {
+      map.setOptions({ draggableCursor: 'crosshair' });
+    }
+
+    if (drawMode === 'CIRCLE') {
+      let centerPoint: { lat: number; lng: number } | null = null;
+
+      clickListenerRef.current = map.addListener('click', (e: any) => {
+        const clickPos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+
+        if (!centerPoint) {
+          // First click - set center
+          centerPoint = clickPos;
+          drawingCircleRef.current = new ctors.Circle({
+            map,
+            center: centerPoint,
+            radius: 100, // Initial 100m radius
+            strokeColor: '#8b5cf6',
+            strokeWeight: 2,
+            strokeOpacity: 0.9,
+            fillColor: '#8b5cf6',
+            fillOpacity: 0.25,
+            editable: true,
+          });
+
+          // Listen for radius changes
+          drawingCircleRef.current.addListener('radius_changed', () => {
+            // Radius is being adjusted
+          });
+
+          // Double-click or second click to finish
+          const finishListener = map.addListener('click', () => {
+            if (drawingCircleRef.current && centerPoint) {
+              const center = drawingCircleRef.current.getCenter();
+              const radius = drawingCircleRef.current.getRadius();
+
+              const result: DrawResult = {
+                shape: 'CIRCLE',
+                centerLat: center?.lat() ?? centerPoint.lat,
+                centerLng: center?.lng() ?? centerPoint.lng,
+                radiusM: Math.round(radius),
+              };
+
+              drawingCircleRef.current.setMap(null);
+              drawingCircleRef.current = null;
+              centerPoint = null;
+              finishListener.remove();
+
+              onDraw(result);
+            }
+          });
+        }
+      });
+    } else if (drawMode === 'POLYGON') {
+      clickListenerRef.current = map.addListener('click', (e: any) => {
+        const clickPos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+        polygonPointsRef.current.push(clickPos);
+
+        if (drawingPolygonRef.current) {
+          drawingPolygonRef.current.setMap(null);
+        }
+
+        drawingPolygonRef.current = new ctors.Polygon({
+          map,
+          paths: polygonPointsRef.current,
+          strokeColor: '#8b5cf6',
+          strokeWeight: 2,
+          strokeOpacity: 0.9,
+          fillColor: '#8b5cf6',
+          fillOpacity: 0.25,
+          editable: false,
+          clickable: false,
+        });
+
+        // Double-click to finish (at least 3 points)
+        if (polygonPointsRef.current.length >= 3) {
+          const dblClickListener = map.addListener('dblclick', () => {
+            if (drawingPolygonRef.current && polygonPointsRef.current.length >= 3) {
+              const result: DrawResult = {
+                shape: 'POLYGON',
+                polygon: [...polygonPointsRef.current],
+              };
+
+              drawingPolygonRef.current.setMap(null);
+              drawingPolygonRef.current = null;
+              polygonPointsRef.current = [];
+              dblClickListener.remove();
+
+              onDraw(result);
+            }
+          });
+        }
       });
     }
 
-    const mode =
-      drawMode === 'CIRCLE'  ? ctors.OverlayType.CIRCLE :
-      drawMode === 'POLYGON' ? ctors.OverlayType.POLYGON :
-      null;
-    drawingRef.current.setDrawingMode(mode);
+    // Cleanup on unmount or mode change
+    return () => {
+      if (clickListenerRef.current) {
+        google.maps.event.removeListener(clickListenerRef.current);
+      }
+      if (drawingCircleRef.current) {
+        drawingCircleRef.current.setMap(null);
+      }
+      if (drawingPolygonRef.current) {
+        drawingPolygonRef.current.setMap(null);
+      }
+      if (map.setOptions) {
+        map.setOptions({ draggableCursor: null });
+      }
+    };
   }, [drawMode, onDraw]);
 
   return (
@@ -208,6 +302,22 @@ export default function GeofenceMap({
       {error && (
         <div className="absolute inset-0 flex items-center justify-center text-xs text-rose-300 bg-rose-500/10 p-4 text-center">
           {error}
+        </div>
+      )}
+      {drawMode && !loading && !error && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-800 border border-violet-500/50 rounded-lg px-4 py-2 text-xs text-slate-200 shadow-lg z-10">
+          {drawMode === 'CIRCLE' && (
+            <div>
+              <span className="font-semibold text-violet-300">Drawing Circle:</span>
+              <span className="ml-2">Click to set center, click again to finish (adjust radius by dragging circle edge)</span>
+            </div>
+          )}
+          {drawMode === 'POLYGON' && (
+            <div>
+              <span className="font-semibold text-violet-300">Drawing Polygon:</span>
+              <span className="ml-2">Click to add points, double-click to finish (minimum 3 points)</span>
+            </div>
+          )}
         </div>
       )}
     </div>

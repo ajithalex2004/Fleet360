@@ -38,6 +38,8 @@ import {
 } from '@/lib/bus-gps';
 import { sendWhatsApp } from '@/lib/whatsapp';
 import { upsertFleetPosition } from '@/app/api/bus-ops/fleet-positions/route';
+import { evaluateTelemetryTripTransitions } from '@/lib/bus-ops/telemetry-trip-transitions';
+import { getTelemetrySettings, applyTelemetrySettingsToEnv } from '@/lib/bus-ops/telemetry-settings';
 
 export const runtime = 'nodejs';
 
@@ -50,6 +52,8 @@ interface SinglePingBody {
   headingDeg?: number | null;
   accuracyM?: number | null;
   source?: string | null;
+  /** Optional ignition flag from tracker / CAN bus */
+  ignitionOn?: boolean | null;
 }
 
 interface BatchBody {
@@ -217,6 +221,36 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
+    // Telemetry auto Start / Complete (shadow by default — see TELEMETRY_TRIP_MODE)
+    try {
+      const latest = rawPings[rawPings.length - 1] ?? body;
+      // Tenant UI settings → process env (only keys not already set by host env)
+      const tenantTel = await getTelemetrySettings(prisma, tenantId).catch(() => null);
+      if (tenantTel) applyTelemetrySettingsToEnv(tenantTel);
+      const tel = await evaluateTelemetryTripTransitions(prisma, {
+        tenantId,
+        vehicleId,
+        latitude: Number(latest.latitude),
+        longitude: Number(latest.longitude),
+        speedKmh: latest.speedKmh ?? body.speedKmh ?? null,
+        ignitionOn: latest.ignitionOn ?? body.ignitionOn ?? null,
+        accuracyM: latest.accuracyM ?? body.accuracyM ?? null,
+        scheduleId: scheduleId ?? body.scheduleId ?? null,
+        occurredAt: latest.occurredAt ? new Date(latest.occurredAt) : new Date(),
+      });
+      if (tel.action !== 'NONE') {
+        console.info('[bus-ops/location] telemetry', {
+          mode: tel.mode,
+          action: tel.action,
+          applied: tel.applied,
+          scheduleId: 'scheduleId' in tel ? tel.scheduleId : undefined,
+          reason: tel.reason,
+        });
+      }
+    } catch (err) {
+      console.warn('[bus-ops/location] telemetry transition failed', err);
+    }
+
     // Live-map feed — best-effort. Any failure here is logged and swallowed
     // so it can never break the actual GPS ingest.
     try {
@@ -239,7 +273,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // fallback, so vehicles on scheduled-but-not-departed trips lit up
       // on the map as en-route. Fixed by treating SCHEDULED explicitly.
       const baseStatus =
-        schedule.status === 'DEPARTED' || schedule.status === 'IN_TRANSIT' ? 'EN_ROUTE' :
+        schedule.status === 'STARTED' || schedule.status === 'EN_ROUTE' ? 'EN_ROUTE' :
         'IDLE';
       const atStopRows = await prisma.$queryRawUnsafe<Array<{ stop_id: string }>>(
         `SELECT stop_id FROM trip_stop_visits

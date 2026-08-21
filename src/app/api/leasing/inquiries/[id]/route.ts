@@ -11,6 +11,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 
 async function guardTenant(req: NextRequest, id: string) {
+  const authz = requireAuthorizedTenant(req);
+  const tenantId = authz.ok ? authz.tenantId : null;
   if (!tenantId) {
     return { tenantId: null, owned: false } as const;
   }

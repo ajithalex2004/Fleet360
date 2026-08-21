@@ -11,10 +11,10 @@ export enum MaintenanceStatus {
     PENDING_MAINTENANCE_APPROVAL = 'Pending Maintenance Approval',
     REJECTED_BY_MAINTENANCE = 'Rejected By Maintenance',
     UNDER_MAINTENANCE = 'Under Maintenance',
-    REPAIR_COMPLETED = 'Repair Completed',       // Garage marks repair done
+    JOB_COMPLETED = 'Job Completed',       // Garage marks repair done
     QUALITY_INSPECTION = 'Quality Inspection',   // Fleet QC inspector reviews
     INSPECTION_FAILED = 'Inspection Failed',     // QC failed — vehicle returned to garage
-    READY_FOR_SERVICE = 'Ready For Service',     // QC passed — vehicle cleared for use
+    READY_FOR_OPERATION = 'Ready For Operation',     // QC passed — vehicle cleared for use
     MAINTENANCE_COMPLETED = 'Maintenance Completed',
     COMPLETED = 'Completed',
     PENDING_INVOICE = 'Pending Invoice',
@@ -1253,9 +1253,9 @@ export type SLAPhaseName =
     | 'DIAGNOSIS'   // Accepted → Under Estimation / Under Maintenance
     | 'ESTIMATION'  // Under Estimation → Pending Estimation Approval
     | 'APPROVAL'    // Pending Estimation Approval → Estimation Approved
-    | 'REPAIR'      // Under Maintenance → Repair Completed
-    | 'COMPLETION'  // Repair Completed → Maintenance Completed
-    | 'VENDOR';     // Accepted → Repair Completed (end-to-end vendor SLA)
+    | 'REPAIR'      // Under Maintenance → Job Completed
+    | 'COMPLETION'  // Job Completed → Maintenance Completed
+    | 'VENDOR';     // Accepted → Job Completed (end-to-end vendor SLA)
 
 export type SLATier = 'CRITICAL' | 'HIGH' | 'NORMAL';
 

@@ -148,10 +148,10 @@ export function computeSLASnapshot(
         },
         REPAIR: {
             start: getTs(tl, MaintenanceStatus.UNDER_MAINTENANCE),
-            end:   getTs(tl, MaintenanceStatus.REPAIR_COMPLETED),
+            end:   getTs(tl, MaintenanceStatus.JOB_COMPLETED),
         },
         COMPLETION: {
-            start: getTs(tl, MaintenanceStatus.REPAIR_COMPLETED),
+            start: getTs(tl, MaintenanceStatus.JOB_COMPLETED),
             end:   getTs(tl,
                 MaintenanceStatus.MAINTENANCE_COMPLETED,
                 MaintenanceStatus.COMPLETED,
@@ -160,7 +160,7 @@ export function computeSLASnapshot(
         VENDOR: {
             // Vendor SLA: from when the garage was engaged (ACCEPTED) to repair done.
             start: getTs(tl, MaintenanceStatus.ACCEPTED),
-            end:   getTs(tl, MaintenanceStatus.REPAIR_COMPLETED),
+            end:   getTs(tl, MaintenanceStatus.JOB_COMPLETED),
         },
     };
 

@@ -10,6 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { assertVehicleAssignableOrError } from '@/lib/fleet/vehicle-availability';
 import { prisma } from '@/lib/prisma';
 
 const VALID_WEEK_TYPES = new Set(['SUN_THU', 'MON_FRI', 'SAT_WED', 'CUSTOM']);
@@ -67,6 +68,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
+    const vehicleBlock = await assertVehicleAssignableOrError(body.vehicleId, tenantId);
+    if (vehicleBlock) return NextResponse.json(vehicleBlock, { status: 409 });
     const err = validateShape(body);
     if (err) return NextResponse.json({ error: err }, { status: 400 });
 

@@ -9,7 +9,7 @@ const CACHE_TAG = 'rental:customers';
 const getCustomers = cacheRead(
   async (tenantId: string) => {
     return prisma.rentalCustomer.findMany({
-      where: { tenantId, deletedAt: null },
+      where: { deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
   },
@@ -44,9 +44,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const bodyRaw = await req.json();
-    const body = { ...stripTenantOwnershipFields((bodyRaw && typeof bodyRaw === 'object' ? bodyRaw : {}) as Record<string, unknown>), tenantId };
+    const body = stripTenantOwnershipFields((bodyRaw && typeof bodyRaw === 'object' ? bodyRaw : {}) as Record<string, unknown>);
     const customer = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.rentalCustomer.create({ data: body }),
+      tx.rentalCustomer.create({ data: body as any }),
     );
     revalidateCache([CACHE_TAG]);
     return NextResponse.json(customer, { status: 201 });

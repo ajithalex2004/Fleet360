@@ -1,7 +1,10 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { AlertTriangle, Plus } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
+import { usePollingRefresh } from '@/hooks/usePollingRefresh';
+import { useRealtimeChannel } from '@/hooks/useRealtimeChannel';
 
 interface Incident {
   id: string; incidentNo?: string; scheduleId?: string; routeId?: string; vehicleId?: string; driverId?: string;
@@ -42,8 +45,12 @@ export default function IncidentsPage() {
   const emptyForm = { scheduleId:'', routeId:'', vehicleId:'', driverId:'', incidentDate:'', incidentType:'BREAKDOWN', severity:'LOW', location:'', description:'', injuriesReported:false, policeReport:false, policeReportNo:'', actionTaken:'' };
   const [formData, setFormData] = useState(emptyForm);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (opts?: { silent?: boolean }) => {
+    if (opts?.silent) {
+      /* quiet background refresh — no full-page spinner */
+    } else {
+      setLoading(true);
+    }
     try {
       const params = new URLSearchParams();
       if (statusFilter !== 'All') params.set('status', statusFilter);
@@ -68,6 +75,18 @@ export default function IncidentsPage() {
   }, [statusFilter, sevFilter]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  usePollingRefresh(loadData, {
+    intervalMs: 20_000,
+    pause: showModal,
+  });
+  // Push updates (SSE default; WebSocket if NEXT_PUBLIC_REALTIME_WS_URL is set)
+  useRealtimeChannel(
+    ['bus-ops:incidents'],
+    () => { void loadData({ silent: true }); },
+    { enabled: !(showModal) },
+  );
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,6 +122,63 @@ export default function IncidentsPage() {
   const openCount = incidents.filter(i=>i.status==='OPEN').length;
   const critCount = incidents.filter(i=>i.severity==='CRITICAL').length;
 
+
+  const incidentColumns: DataGridColumn<Incident>[] = useMemo(() => [
+    {
+      key: 'no',
+      header: 'Incident #',
+      accessor: (r) => r.incidentNo ?? r.id.slice(0, 8),
+    },
+    { key: 'type', header: 'Type', accessor: (r) => r.incidentType ?? '—', filter: 'select' },
+    {
+      key: 'severity',
+      header: 'Severity',
+      accessor: (r) => r.severity ?? '—',
+      filter: 'select',
+      render: (r) => (
+        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium border ${SEV_COLORS[r.severity ?? ''] ?? ''}`}>
+          {r.severity}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      accessor: (r) => r.status ?? '—',
+      filter: 'select',
+      render: (r) => (
+        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLORS[r.status ?? ''] ?? ''}`}>
+          {r.status}
+        </span>
+      ),
+    },
+    { key: 'location', header: 'Location', accessor: (r) => r.location ?? '—' },
+    {
+      key: 'date',
+      header: 'Date',
+      accessor: (r) => r.incidentDate ?? '',
+      render: (r) => (r.incidentDate ? new Date(r.incidentDate).toLocaleString() : '—'),
+    },
+    {
+      key: 'actions',
+      header: '',
+      sortable: false,
+      filter: false,
+      render: (r) => (
+        <select
+          value={r.status ?? 'OPEN'}
+          onChange={(e) => updateStatus(r.id, e.target.value)}
+          onClick={(e) => e.stopPropagation()}
+          className="rounded-lg bg-slate-800 border border-white/10 text-xs text-white px-2 py-1"
+        >
+          {['OPEN', 'INVESTIGATING', 'RESOLVED', 'CLOSED'].map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+      ),
+    },
+  ], []);
+
   if (loading) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading incidents...</div></div>;
 
   return (
@@ -137,42 +213,17 @@ export default function IncidentsPage() {
         {incidents.length === 0 ? (
           <div className="text-center text-slate-400 py-12">No incidents found</div>
         ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-white/5">
-                {['Incident No.','Date','Type','Severity','Location','Description','Injuries','Status','Actions'].map(h=>(
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-400">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {incidents.map(inc=>(
-                <tr key={inc.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-3 text-sm font-medium text-white">{inc.incidentNo}</td>
-                  <td className="px-4 py-3 text-sm text-slate-200">{new Date(inc.incidentDate).toLocaleDateString()}</td>
-                  <td className="px-4 py-3 text-sm text-white">{inc.incidentType}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${SEV_COLORS[inc.severity ?? 'LOW']}`}>{inc.severity ?? 'LOW'}</span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-white">{inc.location ?? '-'}</td>
-                  <td className="px-4 py-3 text-sm text-white max-w-xs truncate">{inc.description ?? '-'}</td>
-                  <td className="px-4 py-3 text-sm">{inc.injuriesReported ? <span className="text-rose-400">Yes</span> : <span className="text-slate-300">No</span>}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLORS[inc.status ?? 'OPEN']}`}>{inc.status ?? 'OPEN'}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <select value={inc.status ?? 'OPEN'} onChange={e=>updateStatus(inc.id, e.target.value)}
-                      className="text-xs px-2 py-1 rounded bg-slate-700 border border-white/10 text-white focus:outline-none">
-                      <option value="OPEN">OPEN</option>
-                      <option value="INVESTIGATING">INVESTIGATING</option>
-                      <option value="RESOLVED">RESOLVED</option>
-                      <option value="CLOSED">CLOSED</option>
-                    </select>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          
+      <FleetDataGrid
+        gridName="IncidentsGrid"
+        rows={incidents}
+        getRowId={(r) => r.id}
+        loading={false}
+        emptyMessage="No incidents found"
+        columns={incidentColumns}
+        toolbar={{ exportName: 'incidents', title: 'IncidentsGrid' }}
+      />
+
         )}
       </div>
 

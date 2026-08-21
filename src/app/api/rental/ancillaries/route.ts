@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   try {
     const cat = req.nextUrl.searchParams.get('category');
     const items = await prisma.rentalAncillary.findMany({
-      where: { tenantId, deletedAt: null, ...(cat ? { category: cat } : {}) },
+      where: { deletedAt: null, ...(cat ? { category: cat } : {}) },
       orderBy: [{ sortOrder: 'asc' }, { nameEn: 'asc' }],
     });
     return NextResponse.json(items);

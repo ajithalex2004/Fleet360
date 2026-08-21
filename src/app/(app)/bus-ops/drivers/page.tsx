@@ -1,8 +1,11 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { Trophy, RotateCw } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
+import { usePollingRefresh } from '@/hooks/usePollingRefresh';
+import { useRealtimeChannel } from '@/hooks/useRealtimeChannel';
 
 interface PerfRow {
   driverId: string;
@@ -45,8 +48,9 @@ export default function DriverPerformancePage() {
   const [recomputing, setRecomputing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true); setError(null);
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`/api/bus-ops/driver-performance?month=${month}`);
       const json = await res.json();
@@ -60,6 +64,17 @@ export default function DriverPerformancePage() {
   }, [month]);
 
   useEffect(() => { load(); }, [load]);
+
+  usePollingRefresh(load, {
+    intervalMs: 60_000,
+  });
+  // Push updates (SSE default; WebSocket if NEXT_PUBLIC_REALTIME_WS_URL is set)
+  useRealtimeChannel(
+    ['bus-ops:drivers'],
+    () => { void load({ silent: true }); },
+    { enabled: true },
+  );
+
 
   const recompute = async () => {
     setRecomputing(true); setError(null);
@@ -80,6 +95,83 @@ export default function DriverPerformancePage() {
 
   const drivers = data?.drivers ?? [];
   const scoredCount = drivers.filter(d => d.score != null).length;
+
+
+  const driverColumns: DataGridColumn<PerfRow>[] = useMemo(() => [
+    {
+      key: 'name',
+      header: 'Driver',
+      accessor: (d) => d.name ?? '',
+      render: (d) => (
+        <div>
+          <div className="font-medium text-white">{d.name ?? '—'}</div>
+          <div className="text-xs text-slate-400">{d.status ?? '—'}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'license',
+      header: 'License',
+      accessor: (d) => d.licenseNumber ?? '',
+      render: (d) => (
+        <div>
+          <div className="font-mono text-white">{d.licenseNumber ?? '—'}</div>
+          <div className="text-xs text-slate-400">{d.licenseType ?? ''}</div>
+        </div>
+      ),
+    },
+    { key: 'trips', header: 'Trips', accessor: (d) => d.totalTrips ?? 0, align: 'right' },
+    {
+      key: 'km',
+      header: 'KM',
+      accessor: (d) => d.totalKm ?? 0,
+      align: 'right',
+      render: (d) => Math.round(d.totalKm ?? 0).toLocaleString(),
+    },
+    {
+      key: 'ontime',
+      header: 'On-time %',
+      accessor: (d) => d.onTimePct ?? 0,
+      align: 'right',
+      render: (d) => (
+        <span className={(d.onTimePct ?? 0) >= 90 ? 'text-emerald-400' : (d.onTimePct ?? 0) >= 75 ? 'text-amber-400' : 'text-rose-400'}>
+          {(d.onTimePct ?? 0).toFixed(1)}%
+        </span>
+      ),
+    },
+    { key: 'incidents', header: 'Incidents', accessor: (d) => d.incidentCount ?? 0, align: 'right' },
+    {
+      key: 'fuel',
+      header: 'Fuel km/L',
+      accessor: (d) => d.fuelEfficiency ?? 0,
+      align: 'right',
+      render: (d) => (d.fuelEfficiency ?? 0).toFixed(2),
+    },
+    {
+      key: 'score',
+      header: 'Score',
+      accessor: (d) => d.score ?? -1,
+      align: 'right',
+      render: (d) =>
+        d.score != null ? (
+          <span className="font-bold text-white">{d.score.toFixed(1)}</span>
+        ) : (
+          <span className="text-xs italic text-slate-500">insufficient</span>
+        ),
+    },
+    {
+      key: 'grade',
+      header: 'Grade',
+      accessor: (d) => d.grade,
+      filter: 'select',
+      render: (d) => (
+        <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold border ${GRADE_BG[d.grade] ?? ''}`}>
+          {d.grade}
+        </span>
+      ),
+    },
+  ], []);
+
 
   return (
     <div className="space-y-8">
@@ -109,48 +201,18 @@ export default function DriverPerformancePage() {
             No performance data for {month}. Tap <strong className="text-violet-300">Recompute</strong> to run the scoring engine.
           </div>
         ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-white/5">
-                {['Driver', 'Licence', 'Trips', 'KM', 'On-time %', 'Incidents', 'Fuel km/L', 'Score', 'Grade'].map(h => (
-                  <th key={h} className={`px-4 py-3 text-xs font-semibold text-slate-400 ${['Trips','KM','On-time %','Incidents','Fuel km/L','Score'].includes(h) ? 'text-right' : 'text-left'}`}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {drivers.map(d => (
-                <tr key={d.driverId} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-3 text-sm">
-                    <div className="font-medium text-white">{d.name ?? '—'}</div>
-                    <div className="text-xs text-slate-300">{d.status ?? '—'}</div>
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    <div className="font-mono text-white">{d.licenseNumber ?? '—'}</div>
-                    <div className="text-xs text-slate-300">{d.licenseType ?? ''}</div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-right text-white">{d.totalTrips ?? 0}</td>
-                  <td className="px-4 py-3 text-sm text-right text-white">{Math.round(d.totalKm ?? 0).toLocaleString()}</td>
-                  <td className={`px-4 py-3 text-sm text-right font-medium ${(d.onTimePct ?? 0) >= 90 ? 'text-emerald-400' : (d.onTimePct ?? 0) >= 75 ? 'text-amber-400' : 'text-rose-400'}`}>
-                    {(d.onTimePct ?? 0).toFixed(1)}%
-                  </td>
-                  <td className={`px-4 py-3 text-sm text-right font-medium ${(d.incidentCount ?? 0) === 0 ? 'text-emerald-400' : (d.incidentCount ?? 0) <= 2 ? 'text-amber-400' : 'text-rose-400'}`}>
-                    {d.incidentCount ?? 0}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-right text-white">{(d.fuelEfficiency ?? 0).toFixed(2)}</td>
-                  <td className="px-4 py-3 text-sm text-right">
-                    {d.score != null
-                      ? <span className="text-white font-bold text-base">{d.score.toFixed(1)}</span>
-                      : <span className="text-slate-400 text-xs italic">insufficient</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold border ${GRADE_BG[d.grade]}`}>
-                      {d.grade}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          
+      <FleetDataGrid
+        gridName="BusOpsDriversGrid"
+        rows={drivers}
+        getRowId={(r) => r.driverId}
+        loading={loading}
+        emptyMessage="No driver performance data for this period"
+        columns={driverColumns}
+        toolbar={{ exportName: 'bus-ops-drivers', title: 'BusOpsDriversGrid' }}
+        initialSort={{ key: 'score', dir: 'desc' }}
+      />
+
         )}
       </div>
 

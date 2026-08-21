@@ -19,7 +19,7 @@
  *     toggle rules more often than they edit them.
  */
 
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Shield, Plus, Edit2, Trash2, RefreshCw, X, GitMerge, ArrowRight } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
@@ -707,90 +707,33 @@ function MultiSelectChecklist({
   label?: string;
 }) {
   const listId = useId();
-  const listRef = useRef<HTMLDivElement>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
+  // Defensive: dedupe by value. If upstream ever produces duplicates,
+  // a single toggle would look like "all matching duplicates flipped"
+  // because `selected.has(o.value)` is true for every row sharing that value.
+  const uniqueOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: GroupOption[] = [];
+    for (const o of options) {
+      if (!o || typeof o.value !== 'string' || seen.has(o.value)) continue;
+      seen.add(o.value);
+      out.push(o);
+    }
+    return out;
+  }, [options]);
+
   const selected = useMemo(() => new Set(value), [value]);
 
-  const optionId = (index: number) => `${listId}-opt-${index}`;
-
-  const toggle = (v: string) => {
+  const toggleOne = (v: string, checked: boolean) => {
     const next = new Set(selected);
-    if (next.has(v)) next.delete(v);
-    else next.add(v);
+    if (checked) next.add(v);
+    else next.delete(v);
     onChange(Array.from(next));
   };
 
-  const selectAll = () => onChange(options.map((o) => o.value));
+  const selectAll = () => onChange(uniqueOptions.map((o) => o.value));
   const clearAll = () => onChange([]);
 
-  // Keep active index in range when options change
-  React.useEffect(() => {
-    if (!options.length) return;
-    setActiveIndex((i) => Math.min(Math.max(0, i), options.length - 1));
-  }, [options.length]);
-
-  const moveActive = (nextIndex: number) => {
-    if (!options.length) return;
-    const i = Math.min(Math.max(0, nextIndex), options.length - 1);
-    setActiveIndex(i);
-    // Scroll active option into view
-    const el = document.getElementById(optionId(i));
-    el?.scrollIntoView({ block: 'nearest' });
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!options.length) return;
-    const max = options.length - 1;
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        moveActive(activeIndex + 1);
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        moveActive(activeIndex - 1);
-        break;
-      case 'Home':
-        e.preventDefault();
-        moveActive(0);
-        break;
-      case 'End':
-        e.preventDefault();
-        moveActive(max);
-        break;
-      case ' ':
-      case 'Enter':
-        e.preventDefault();
-        if (options[activeIndex]) toggle(options[activeIndex].value);
-        break;
-      case 'a':
-      case 'A':
-        if (e.ctrlKey || e.metaKey) {
-          e.preventDefault();
-          if (value.length === options.length) clearAll();
-          else selectAll();
-        }
-        break;
-      default:
-        // Type-ahead: jump to first option starting with typed letter
-        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-          const ch = e.key.toLowerCase();
-          const from = activeIndex + 1;
-          const ordered = options.map((o, i) => ({ o, i })).slice(from).concat(
-            options.map((o, i) => ({ o, i })).slice(0, from),
-          );
-          const hit = ordered.find(({ o }) => o.label.toLowerCase().startsWith(ch));
-          if (hit) {
-            e.preventDefault();
-            moveActive(hit.i);
-          }
-        }
-        break;
-    }
-  };
-
-  if (!options.length) {
+  if (!uniqueOptions.length) {
     return (
       <div className="rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2 text-sm text-slate-500">
         {emptyLabel}
@@ -798,83 +741,60 @@ function MultiSelectChecklist({
     );
   }
 
-  const activeId = optionId(activeIndex);
-
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={selectAll}
-          className="text-[11px] text-violet-300 hover:text-violet-200 underline-offset-2 hover:underline"
-        >
-          Select all
-        </button>
-        <span className="text-slate-600">·</span>
-        <button
-          type="button"
-          onClick={clearAll}
-          className="text-[11px] text-slate-400 hover:text-slate-200 underline-offset-2 hover:underline"
-        >
-          Clear
-        </button>
-        <span className="text-[11px] text-slate-500 ml-auto">
-          {value.length === 0 ? 'Any group' : `${value.length} selected`}
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-slate-500">
+          {value.length === 0 ? 'Any group' : `${value.length} of ${uniqueOptions.length} selected`}
         </span>
       </div>
 
       <div
-        ref={listRef}
         id={listId}
-        role="listbox"
+        role="group"
         aria-label={label}
-        aria-multiselectable="true"
-        aria-activedescendant={activeId}
-        tabIndex={0}
-        onKeyDown={onKeyDown}
-        className="max-h-40 overflow-y-auto rounded-lg border border-slate-700 bg-slate-900/60 p-2 space-y-1 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+        className="max-h-40 overflow-y-auto rounded-lg border border-slate-700 bg-slate-900/60 p-2 space-y-1"
       >
-        {options.map((o, index) => {
+        {uniqueOptions.map((o) => {
           const isSelected = selected.has(o.value);
-          const isActive = index === activeIndex;
+          const rowId = `${listId}-${o.value}`;
           return (
-            <div
+            <label
               key={o.value}
-              id={optionId(index)}
-              role="option"
-              aria-selected={isSelected}
-              onClick={() => {
-                setActiveIndex(index);
-                toggle(o.value);
-              }}
-              onMouseEnter={() => setActiveIndex(index)}
+              htmlFor={rowId}
               className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer select-none ${
-                isActive ? 'ring-1 ring-violet-500/60' : ''
-              } ${
-                isSelected
-                  ? 'bg-violet-500/15 text-violet-100'
-                  : 'text-slate-200 hover:bg-slate-800/80'
+                isSelected ? 'bg-violet-500/15 text-violet-100' : 'text-slate-200 hover:bg-slate-800/80'
               }`}
             >
-              <span
-                aria-hidden
-                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] ${
-                  isSelected
-                    ? 'border-violet-400 bg-violet-500 text-white'
-                    : 'border-slate-600 bg-slate-800 text-transparent'
-                }`}
-              >
-                ✓
-              </span>
+              <input
+                id={rowId}
+                type="checkbox"
+                checked={isSelected}
+                onChange={(e) => toggleOne(o.value, e.currentTarget.checked)}
+                className="h-4 w-4 shrink-0 rounded border-slate-600 bg-slate-800 accent-violet-500"
+              />
               <span>{o.label}</span>
-            </div>
+            </label>
           );
         })}
       </div>
 
-      <p className="text-[10px] text-slate-600">
-        ↑↓ move · Space select · Home/End · Ctrl+A all
-      </p>
+      <div className="flex items-center gap-3 pt-0.5">
+        <button
+          type="button"
+          onClick={selectAll}
+          className="text-[11px] text-slate-500 hover:text-violet-300 underline-offset-2 hover:underline"
+        >
+          Select all
+        </button>
+        <button
+          type="button"
+          onClick={clearAll}
+          className="text-[11px] text-slate-500 hover:text-slate-200 underline-offset-2 hover:underline"
+        >
+          Clear
+        </button>
+      </div>
 
       {value.length > 0 && (
         <div className="flex flex-wrap gap-1.5" aria-label="Selected groups">
@@ -882,7 +802,7 @@ function MultiSelectChecklist({
             <button
               key={v}
               type="button"
-              onClick={() => toggle(v)}
+              onClick={() => toggleOne(v, false)}
               className="inline-flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[11px] text-violet-200 hover:bg-violet-500/20"
               title="Remove"
             >

@@ -68,8 +68,13 @@ export async function GET(request: NextRequest) {
     const search   = sp.get('search');
     const expiring = sp.get('expiring'); // 'true' → only compliance-issue drivers
 
+    const tenantId = request.headers.get('x-tenant-id');
+    if (!tenantId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const where: any = { deletedAt: null };
+    const where: any = { deletedAt: null, tenantId };
     if (status) where.status     = status;
     if (type)   where.driverType = type;
     if (search) {
@@ -136,10 +141,14 @@ export async function POST(request: Request) {
       ?? [body.firstName, body.lastName].filter(Boolean).join(' ')
       ?? null;
 
+    const tenantId = request.headers.get('x-tenant-id');
+    if (!tenantId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const driver = await prisma.driver.create({
       data: {
-        // TODO: read tenantId from request headers via getTenantContext()
-        tenantId:              '',
+        tenantId,
         // Identity
         name:                  fullName,
         firstName:             body.firstName              ?? null,

@@ -21,8 +21,8 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import '../src/lib/finance/consumers/index.ts';
-import { run } from '../src/lib/outbox/publisher.ts';
+import '../src/lib/finance/consumers/index';
+import { run } from '../src/lib/outbox/publisher';
 
 const prisma = new PrismaClient();
 

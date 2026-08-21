@@ -53,16 +53,16 @@ const STATUS_TRANSITIONS: Record<MaintenanceStatus, MaintenanceStatus[]> = {
     [MaintenanceStatus.REJECTED_BY_MAINTENANCE]: [
         MaintenanceStatus.ACCEPTED // Retry path
     ],
-    [MaintenanceStatus.UNDER_MAINTENANCE]: [MaintenanceStatus.REPAIR_COMPLETED],
-    [MaintenanceStatus.REPAIR_COMPLETED]: [MaintenanceStatus.QUALITY_INSPECTION],
+    [MaintenanceStatus.UNDER_MAINTENANCE]: [MaintenanceStatus.JOB_COMPLETED],
+    [MaintenanceStatus.JOB_COMPLETED]: [MaintenanceStatus.QUALITY_INSPECTION],
     [MaintenanceStatus.QUALITY_INSPECTION]: [
-        MaintenanceStatus.READY_FOR_SERVICE,   // QC passed
+        MaintenanceStatus.READY_FOR_OPERATION,   // QC passed
         MaintenanceStatus.INSPECTION_FAILED    // QC failed — return to garage
     ],
     [MaintenanceStatus.INSPECTION_FAILED]: [
         MaintenanceStatus.UNDER_MAINTENANCE    // Garage re-opens the repair
     ],
-    [MaintenanceStatus.READY_FOR_SERVICE]: [MaintenanceStatus.MAINTENANCE_COMPLETED],
+    [MaintenanceStatus.READY_FOR_OPERATION]: [MaintenanceStatus.MAINTENANCE_COMPLETED],
     [MaintenanceStatus.MAINTENANCE_COMPLETED]: [
         MaintenanceStatus.COMPLETED,
         MaintenanceStatus.PENDING_INVOICE
@@ -112,13 +112,13 @@ export function getStatusColor(status: MaintenanceStatus): string {
             return 'bg-yellow-100 text-yellow-700 border-yellow-300';
         case MaintenanceStatus.UNDER_MAINTENANCE:
             return 'bg-purple-100 text-purple-700 border-purple-300';
-        case MaintenanceStatus.REPAIR_COMPLETED:
+        case MaintenanceStatus.JOB_COMPLETED:
             return 'bg-amber-100 text-amber-700 border-amber-300';
         case MaintenanceStatus.QUALITY_INSPECTION:
             return 'bg-indigo-100 text-indigo-700 border-indigo-300';
         case MaintenanceStatus.INSPECTION_FAILED:
             return 'bg-red-100 text-red-700 border-red-300';
-        case MaintenanceStatus.READY_FOR_SERVICE:
+        case MaintenanceStatus.READY_FOR_OPERATION:
             return 'bg-green-100 text-green-700 border-green-300';
         case MaintenanceStatus.MAINTENANCE_COMPLETED:
         case MaintenanceStatus.PENDING_INVOICE:
@@ -212,7 +212,7 @@ async function handleStatusChange(
             await sendWorkOrderConfirmation(request);
             break;
 
-        case MaintenanceStatus.REPAIR_COMPLETED:
+        case MaintenanceStatus.JOB_COMPLETED:
             await notifyInspectionRequired(request, tenantId);
             break;
 
@@ -224,7 +224,7 @@ async function handleStatusChange(
             await notifyGarageInspectionFailed(request, tenantId);
             break;
 
-        case MaintenanceStatus.READY_FOR_SERVICE:
+        case MaintenanceStatus.READY_FOR_OPERATION:
             await notifyVehicleReadyForService(request, tenantId);
             break;
 
@@ -413,9 +413,9 @@ export function getWorkflowProgress(status: MaintenanceStatus): number {
         MaintenanceStatus.UNDER_ESTIMATION,
         MaintenanceStatus.PENDING_ESTIMATION_APPROVAL,
         MaintenanceStatus.UNDER_MAINTENANCE,
-        MaintenanceStatus.REPAIR_COMPLETED,
+        MaintenanceStatus.JOB_COMPLETED,
         MaintenanceStatus.QUALITY_INSPECTION,
-        MaintenanceStatus.READY_FOR_SERVICE,
+        MaintenanceStatus.READY_FOR_OPERATION,
         MaintenanceStatus.MAINTENANCE_COMPLETED,
         MaintenanceStatus.PENDING_INVOICE,
         MaintenanceStatus.INVOICE_SUBMITTED,
@@ -438,9 +438,9 @@ export function getWorkflowStage(status: MaintenanceStatus): string {
     if ([MaintenanceStatus.UNDER_ESTIMATION, MaintenanceStatus.PENDING_ESTIMATION_APPROVAL].includes(status)) {
         return 'Estimation';
     }
-    if ([MaintenanceStatus.UNDER_MAINTENANCE, MaintenanceStatus.REPAIR_COMPLETED,
+    if ([MaintenanceStatus.UNDER_MAINTENANCE, MaintenanceStatus.JOB_COMPLETED,
          MaintenanceStatus.QUALITY_INSPECTION, MaintenanceStatus.INSPECTION_FAILED,
-         MaintenanceStatus.READY_FOR_SERVICE, MaintenanceStatus.MAINTENANCE_COMPLETED].includes(status)) {
+         MaintenanceStatus.READY_FOR_OPERATION, MaintenanceStatus.MAINTENANCE_COMPLETED].includes(status)) {
         return 'Execution';
     }
     if ([MaintenanceStatus.PENDING_INVOICE, MaintenanceStatus.INVOICE_SUBMITTED, MaintenanceStatus.CLOSED].includes(status)) {

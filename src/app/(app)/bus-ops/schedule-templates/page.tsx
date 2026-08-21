@@ -16,6 +16,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarClock, Plus, Edit, Trash2, X, Play } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
+import RowActionsMenu from '@/components/ui/RowActionsMenu';
+import { usePollingRefresh } from '@/hooks/usePollingRefresh';
+import { useRealtimeChannel } from '@/hooks/useRealtimeChannel';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -135,8 +139,8 @@ export default function ScheduleTemplatesPage() {
     if (dRes.ok) setDrivers(await dRes.json());
   }, []);
 
-  const loadTemplates = useCallback(async () => {
-    setLoading(true);
+  const loadTemplates = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const params = new URLSearchParams();
       if (statusFilter !== 'ALL') params.set('status', statusFilter);
@@ -150,6 +154,18 @@ export default function ScheduleTemplatesPage() {
 
   useEffect(() => { loadRefData(); }, [loadRefData]);
   useEffect(() => { loadTemplates(); }, [loadTemplates]);
+
+  usePollingRefresh(loadTemplates, {
+    intervalMs: 60_000,
+    pause: edit != null || genTemplateId != null,
+  });
+  // Push updates (SSE default; WebSocket if NEXT_PUBLIC_REALTIME_WS_URL is set)
+  useRealtimeChannel(
+    ['bus-ops:schedule-templates'],
+    () => { void loadTemplates({ silent: true }); },
+    { enabled: !(edit != null || genTemplateId != null) },
+  );
+
 
   // Fast lookups for table + auto-fill.
   const routeById = useMemo(() => new Map(routes.map(r => [r.id, r])), [routes]);
@@ -287,6 +303,45 @@ export default function ScheduleTemplatesPage() {
     } finally { setGenerating(false); }
   };
 
+
+  const templateColumns: DataGridColumn<Template>[] = useMemo(() => [
+    { key: 'name', header: 'Template', accessor: (t) => t.name },
+    {
+      key: 'route',
+      header: 'Route',
+      accessor: (t) => routes.find((x) => x.id === t.routeId)?.name ?? t.routeId,
+      render: (t) => {
+        const r = routes.find((x) => x.id === t.routeId);
+        return (
+          <div>
+            <div className="font-medium text-white">{r?.name ?? '—'}</div>
+            <div className="text-xs text-slate-500 font-mono">{r?.code ?? ''}</div>
+          </div>
+        );
+      },
+    },
+    { key: 'session', header: 'Session', accessor: (t) => t.session ?? '—', filter: 'select' },
+    { key: 'direction', header: 'Direction', accessor: (t) => t.direction ?? '—', filter: 'select' },
+    { key: 'weekType', header: 'Week type', accessor: (t) => t.weekType ?? '—', filter: 'select' },
+    { key: 'status', header: 'Status', accessor: (t) => t.status ?? '—', filter: 'select' },
+    {
+      key: 'actions',
+      header: '',
+      sortable: false,
+      filter: false,
+      render: (t) => (
+        <RowActionsMenu
+          actions={[
+            { label: 'Edit', onClick: () => openEdit(t) },
+            { label: 'Generate trips', onClick: () => openGenerate(t.id) },
+            { label: 'Delete', onClick: () => remove(t.id), tone: 'danger' },
+          ]}
+        />
+      ),
+    },
+  ], [routes]);
+
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -325,59 +380,17 @@ export default function ScheduleTemplatesPage() {
             No templates yet. Click <strong className="text-violet-300">New Schedule Template</strong> to define one.
           </div>
         ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-white/5">
-                {['Name', 'Route', 'Vehicle', 'Driver', 'Days', 'Session', 'Departure', 'Direction', 'From', 'To', 'Status', 'Actions'].map(h => (
-                  <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-slate-400 whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {templates.map(t => {
-                const r = routeById.get(t.routeId);
-                const v = t.vehicleId ? vehById.get(t.vehicleId) : null;
-                const d = t.driverId  ? drvById.get(t.driverId)  : null;
-                const daysStr = t.activeDays.map(x => DAY_LABELS[x]).join(' ');
-                return (
-                  <tr key={t.id} className="border-b border-white/5 hover:bg-white/5">
-                    <td className="px-3 py-3 text-sm text-white font-medium">{t.name}</td>
-                    <td className="px-3 py-3 text-sm text-slate-200">
-                      {r?.name ?? <span className="text-slate-500 italic">(deleted)</span>}
-                      {r?.code && <span className="ml-1 text-[10px] font-mono text-slate-500">[{r.code}]</span>}
-                    </td>
-                    <td className="px-3 py-3 text-sm text-slate-200">{v?.licensePlate ?? '—'}</td>
-                    <td className="px-3 py-3 text-sm text-slate-200">{d?.name ?? '—'}</td>
-                    <td className="px-3 py-3 text-xs text-slate-300 whitespace-nowrap">{daysStr}</td>
-                    <td className="px-3 py-3 text-xs text-slate-300">{t.session}</td>
-                    <td className="px-3 py-3 text-xs font-mono text-slate-200">{t.departureTime}{t.arrivalTime ? `→${t.arrivalTime}` : ''}</td>
-                    <td className="px-3 py-3 text-xs text-slate-300">{t.direction}</td>
-                    <td className="px-3 py-3 text-xs text-slate-300 whitespace-nowrap">{fmtDate(t.effectiveFrom)}</td>
-                    <td className="px-3 py-3 text-xs text-slate-300 whitespace-nowrap">{t.effectiveTo ? fmtDate(t.effectiveTo) : <span className="text-slate-500">open</span>}</td>
-                    <td className="px-3 py-3">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_PILL[t.status]}`}>{t.status}</span>
-                    </td>
-                    <td className="px-3 py-3">
-                      <div className="flex gap-1">
-                        <button onClick={() => openGenerate(t.id)} title="Generate trips"
-                          className="p-1.5 rounded border border-white/10 text-emerald-300 hover:border-emerald-500/40 hover:bg-emerald-500/10">
-                          <Play className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => openEdit(t)} title="Edit"
-                          className="p-1.5 rounded border border-white/10 text-slate-300 hover:border-violet-500/40 hover:text-white">
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => remove(t.id)} title="Delete"
-                          className="p-1.5 rounded border border-white/10 text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          
+      <FleetDataGrid
+        gridName="ScheduleTemplatesGrid"
+        rows={templates}
+        getRowId={(t) => t.id}
+        loading={loading}
+        emptyMessage="No schedule templates"
+        columns={templateColumns}
+        toolbar={{ exportName: 'schedule-templates', title: 'ScheduleTemplatesGrid' }}
+      />
+
         )}
       </div>
 

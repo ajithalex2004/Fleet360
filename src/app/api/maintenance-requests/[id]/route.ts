@@ -157,7 +157,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
                     }).catch(err => console.warn('[maintenance] work_order_started publish failed:', err));
                     break;
 
-                case 'REPAIR_COMPLETED':
+                case 'JOB_COMPLETED':
                     publishRepairCompleted(params.id, tenantId, {
                         requestId:     params.id,
                         vehicleId:     req.vehicleId       ?? '',
@@ -207,7 +207,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
             }
         } else if (newStatus && ['APPROVED','REJECTED','QUOTATION_REQUESTED','QUOTATION_RECEIVED',
                                   'ESTIMATION_APPROVED','WORK_ORDER_CREATED','IN_PROGRESS',
-                                  'REPAIR_COMPLETED','INVOICE_SUBMITTED','CLOSED'].includes(newStatus)) {
+                                  'JOB_COMPLETED','INVOICE_SUBMITTED','CLOSED'].includes(newStatus)) {
             console.warn(`[maintenance] outbox publish skipped: tenantId missing on MR ${params.id}`);
         }
 

@@ -63,7 +63,7 @@ export async function POST(
       await withTenantRls(prisma, tenantId, async (tx) =>
         tx.leaseContractVehicle.updateMany({
         where: {
-          id: allocation.contractVehicleId,
+          id: allocation.contractVehicleId!,
           driverId: allocation.driverId,
         },
         data: { driverId: null },

@@ -7,6 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { assertVehicleAssignableOrError } from '@/lib/fleet/vehicle-availability';
 import { prisma } from '@/lib/prisma';
 
 const VALID_WEEK_TYPES = new Set(['SUN_THU', 'MON_FRI', 'SAT_WED', 'CUSTOM']);
@@ -37,6 +38,10 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
   try {
     const body = await req.json();
+    if (body.vehicleId) {
+      const vehicleBlock = await assertVehicleAssignableOrError(body.vehicleId, tenantId);
+      if (vehicleBlock) return NextResponse.json(vehicleBlock, { status: 409 });
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const patch: any = {};
     if (typeof body.name === 'string' && body.name.trim()) patch.name = body.name.trim();

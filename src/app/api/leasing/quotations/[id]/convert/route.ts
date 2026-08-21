@@ -102,7 +102,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     // Generate payment schedule.
-    const payments = [];
+    const payments: Array<{
+      contractId: string;
+      dueDate: Date;
+      amount: number;
+      vatAmount: number;
+      totalAmount: number;
+      status: string;
+      periodMonth: number;
+      periodYear: number;
+      currency: string;
+      tenantId: string;
+    }> = [];
     for (let i = 0; i < durationMonths; i++) {
       const dueDate = new Date(start);
       dueDate.setMonth(dueDate.getMonth() + i);

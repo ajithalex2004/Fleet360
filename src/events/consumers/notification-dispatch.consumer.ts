@@ -24,7 +24,7 @@ import { prisma }                   from '@/lib/prisma';
  * operators configure in the NotificationRule table.
  */
 const DOMAIN_TO_NOTIF_EVENT: Record<string, string> = {
-    'maintenance.repair_completed':           'REPAIR_COMPLETED',
+    'maintenance.repair_completed':           'JOB_COMPLETED',
     'maintenance.quality_inspection_started': 'QUALITY_INSPECTION_STARTED',
     'maintenance.inspection_failed':          'INSPECTION_FAILED',
     'maintenance.vehicle_ready_for_service':  'VEHICLE_READY_FOR_SERVICE',

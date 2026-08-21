@@ -11,13 +11,13 @@ import { Building2, ExternalLink } from 'lucide-react';
 const MOCK_ASSIGNMENTS = [
   { workOrder: 'WO-2026-001', vehicle: 'Toyota Hilux – DXB-A-12345', garage: 'Autopro Service Centre', status: 'UNDER_MAINTENANCE', since: '2026-08-09' },
   { workOrder: 'WO-2026-002', vehicle: 'Ford F-150 – SHJ-B-67890', garage: 'ProFix Auto Workshop', status: 'QUALITY_INSPECTION', since: '2026-08-10' },
-  { workOrder: 'WO-2026-003', vehicle: 'Mitsubishi Canter – AUH-C-11111', garage: 'Gulf Motors Garage', status: 'REPAIR_COMPLETED', since: '2026-08-11' },
+  { workOrder: 'WO-2026-003', vehicle: 'Mitsubishi Canter – AUH-C-11111', garage: 'Gulf Motors Garage', status: 'JOB_COMPLETED', since: '2026-08-11' },
 ];
 
 const statusColor: Record<string, string> = {
   UNDER_MAINTENANCE: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
   QUALITY_INSPECTION: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-  REPAIR_COMPLETED:   'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+  JOB_COMPLETED:   'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
 };
 
 export default function GarageAssignmentsPage() {

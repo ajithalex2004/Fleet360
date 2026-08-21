@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { assertVehicleAssignableOrError } from '@/lib/fleet/vehicle-availability';
 import { prisma } from '@/lib/prisma';
 import { validateResourceAssignment } from '@/lib/bus-ops/validate-assignment';
 import { isValidationEnabled, withAssignmentLocks } from '@/lib/bus-ops/assignment-txn';
@@ -63,6 +64,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const body = await req.json();
+    if (body.vehicleId) {
+      const vehicleBlock = await assertVehicleAssignableOrError(body.vehicleId, tenantId);
+      if (vehicleBlock) return NextResponse.json(vehicleBlock, { status: 409 });
+    }
     const { route, passengers, tripLogs, ...data } = body;
 
     // Only revalidate when an assignment-affecting field was actually

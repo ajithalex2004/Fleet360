@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { notifySchedulesChanged } from '@/lib/realtime/publish';
 import { prisma }          from '@/lib/prisma';
 import { getEventBus }     from '@/events/event-bus';
 import { TRIP_CANCELLED }  from '@/events/registry';
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       },
     }).catch(err => console.warn('[bus-ops cancel] outbox publish failed:', err));
 
+        try { notifySchedulesChanged(tenantId, { action: 'cancel' }); } catch { /* realtime best-effort */ }
     return NextResponse.json(updated);
   } catch (error) {
     return NextResponse.json({ error: 'Failed to cancel' }, { status: 500 });

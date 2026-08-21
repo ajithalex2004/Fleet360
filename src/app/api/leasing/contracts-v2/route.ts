@@ -115,4 +115,9 @@ export const POST = withAudit(async (request: NextRequest) => {
     console.error('POST /api/leasing/contracts-v2 error:', message);
     return NextResponse.json({ error: message }, { status });
   }
+}, {
+  entityType: 'LeaseContract2',
+  action: 'CREATE',
+  describe: (req, res) => `Created contract ${res?.contractNumber}`,
+  extractEntity: (res) => ({ id: res?.id, name: res?.contractNumber }),
 });
