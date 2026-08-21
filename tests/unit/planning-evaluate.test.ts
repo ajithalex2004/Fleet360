@@ -632,7 +632,9 @@ describe('zone helpers', () => {
 
   it('haversineMeters: known short distance', async () => {
     const { haversineMeters } = await import('@/lib/planning/zone');
-    const d = haversineMeters({ lat: 25.20, lng: 55.27 }, { lat: 25.20, lng: 55.28 });
+    // Signature takes scalars (lat1, lng1, lat2, lng2) rather than two
+    // LatLng objects — same computation, same expected distance.
+    const d = haversineMeters(25.20, 55.27, 25.20, 55.28);
     // ~1km per 0.01° at UAE latitude
     expect(d).toBeGreaterThan(900);
     expect(d).toBeLessThan(1100);

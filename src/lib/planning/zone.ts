@@ -86,7 +86,10 @@ export function pathTouchesZone(path: LatLng[], zone: ZoneShape): boolean {
 
 const EARTH_RADIUS_M = 6_371_000;
 
-function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+/** Pure geometry helper. Exported so callers (and tests) can measure
+ *  raw distance without going through a ZoneShape. Takes scalars rather
+ *  than LatLng pairs — the hot paths here already have loose coords. */
+export function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const toRad = (d: number) => (d * Math.PI) / 180;
   const dLat = toRad(lat2 - lat1);
   const dLng = toRad(lng2 - lng1);
@@ -100,7 +103,7 @@ function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number)
  * Ray-casting point-in-polygon. Treats the polygon vertices as planar
  * lat/lng — accurate at UAE latitudes for the ~km-scale zones we use.
  */
-function pointInPolygon(pt: LatLng, poly: LatLng[]): boolean {
+export function pointInPolygon(pt: LatLng, poly: LatLng[]): boolean {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
     const xi = poly[i].lng, yi = poly[i].lat;
