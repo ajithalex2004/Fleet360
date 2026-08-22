@@ -188,7 +188,7 @@ export default function BusOpsDashboard() {
                 { label: 'Route Consolidation', href: '/bus-ops/route-consolidation',      icon: GitMerge, accent: 'violet' as const },
                 { label: 'Vehicle/Resource Optimization', href: '/bus-ops/vehicle-resource-optimization', icon: Repeat, accent: 'violet' as const },
                 { label: 'Headway Mgmt',      href: '/bus-ops/planning-engine?tab=headway', icon: Timer,   accent: 'cyan' as const,   badge: 'P1' },
-                { label: 'CBA Rule Engine',   href: '/bus-ops/planning-engine?tab=cba',     icon: Scale,   accent: 'amber' as const,  badge: 'P1' },
+                { label: 'Operational Rules Engine', href: '/bus-ops/planning-engine?tab=cba', icon: Scale, accent: 'amber' as const,  badge: 'P1' },
               ] : []),
               { label: 'Power BI Connector',href: '/bus-ops/powerbi',      icon: BarChart3,     accent: 'emerald' as const,badge: 'P1' },
               { label: 'Multilayer GIS',    href: '/bus-ops/gis',          icon: Layers,        accent: 'rose' as const,   badge: 'P1' },
