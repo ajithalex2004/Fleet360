@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Bluetooth, RefreshCw, Key, Copy, Check, X } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
 
 interface Gateway {
   id: string;
@@ -49,6 +50,7 @@ export default function GatewaysAdminPage() {
   const [rotating, setRotating] = useState<string | null>(null);
   const [rotateResult, setRotateResult] = useState<RotateResult | null>(null);
   const [copied, setCopied] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const rotate = async (id: string, gatewayId: string) => {
     if (!confirm(
@@ -102,6 +104,39 @@ export default function GatewaysAdminPage() {
   const onlineCount = gateways.filter(g => g.health === 'ONLINE').length;
   const offlineCount = gateways.filter(g => g.health === 'OFFLINE').length;
 
+  const gatewayColumns: DataGridColumn<Gateway>[] = [
+    { key: 'gatewayId', header: 'Gateway ID', accessor: g => g.gatewayId,
+      render: g => <span className="font-mono text-white">{g.gatewayId}</span> },
+    { key: 'vehicleId', header: 'Vehicle', accessor: g => g.vehicleId,
+      render: g => <span className="font-mono text-white">{g.vehicleId.slice(0, 8)}</span> },
+    { key: 'model', header: 'Model', accessor: g => g.model },
+    { key: 'rssi', header: 'RSSI / Grace', accessor: g => g.rssiThresholdDbm, filter: false,
+      render: g => <span className="text-white">{g.rssiThresholdDbm} dBm · {g.presenceGraceSeconds}s</span> },
+    { key: 'lastSeen', header: 'Last heartbeat', accessor: g => g.lastSeenSecondsAgo,
+      render: g => <span className="text-white">{fmtSecondsAgo(g.lastSeenSecondsAgo)}</span> },
+    { key: 'lastEvent', header: 'Last event', accessor: g => g.lastEventSecondsAgo,
+      render: g => <span className="text-white">{fmtSecondsAgo(g.lastEventSecondsAgo)}</span> },
+    { key: 'health', header: 'Health', accessor: g => g.health, filter: 'select',
+      render: g => (
+        <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${HEALTH_PILL[g.health]}`}>
+          {g.health}
+        </span>
+      ) },
+    { key: 'secret', header: 'Secret', filter: false,
+      render: g => g.secretRotatedAt
+        ? <span className="text-emerald-300 text-xs">rotated {new Date(g.secretRotatedAt).toLocaleDateString('en-AE')}</span>
+        : <span className="text-amber-300 text-xs">using env fallback</span> },
+    { key: 'actions', header: 'Actions', align: 'right', filter: false, sortable: false,
+      render: g => (
+        <button onClick={() => rotate(g.id, g.gatewayId)} disabled={rotating === g.id}
+          title="Rotate HMAC secret"
+          className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-violet-500/40 bg-violet-500/10 text-violet-200 hover:bg-violet-500/20 disabled:opacity-50">
+          <Key className="w-3 h-3" />
+          {rotating === g.id ? 'Rotating…' : 'Rotate'}
+        </button>
+      ) },
+  ];
+
   if (loading && gateways.length === 0) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading gateways...</div></div>;
 
   return (
@@ -124,65 +159,31 @@ export default function GatewaysAdminPage() {
         </div>
       )}
 
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
-        {gateways.length === 0 ? (
-          <div className="text-center text-slate-400 py-12">
-            No gateways registered yet. Use{' '}
-            <code className="text-slate-300">PUT /api/bus-ops/vehicles/{'{id}'}/gateway</code>{' '}
-            with{' '}
-            <code className="text-slate-300">{'{ gatewayId, model? }'}</code>{' '}
-            to register a device.
-          </div>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-white/5">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Gateway ID</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Vehicle</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Model</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">RSSI / Grace</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Last heartbeat</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Last event</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Health</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Secret</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {gateways.map(g => (
-                <tr key={g.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-3 text-sm font-mono text-white">{g.gatewayId}</td>
-                  <td className="px-4 py-3 text-sm font-mono text-white">{g.vehicleId.slice(0, 8)}</td>
-                  <td className="px-4 py-3 text-sm text-white">{g.model ?? '—'}</td>
-                  <td className="px-4 py-3 text-sm text-white">
-                    {g.rssiThresholdDbm} dBm · {g.presenceGraceSeconds}s
-                  </td>
-                  <td className="px-4 py-3 text-sm text-white">{fmtSecondsAgo(g.lastSeenSecondsAgo)}</td>
-                  <td className="px-4 py-3 text-sm text-white">{fmtSecondsAgo(g.lastEventSecondsAgo)}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${HEALTH_PILL[g.health]}`}>
-                      {g.health}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-400">
-                    {g.secretRotatedAt
-                      ? <span className="text-emerald-300">rotated {new Date(g.secretRotatedAt).toLocaleDateString('en-AE')}</span>
-                      : <span className="text-amber-300">using env fallback</span>}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button onClick={() => rotate(g.id, g.gatewayId)} disabled={rotating === g.id}
-                      title="Rotate HMAC secret"
-                      className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-violet-500/40 bg-violet-500/10 text-violet-200 hover:bg-violet-500/20 disabled:opacity-50">
-                      <Key className="w-3 h-3" />
-                      {rotating === g.id ? 'Rotating…' : 'Rotate'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <FleetDataGrid
+        gridName="Gateways"
+        rows={gateways}
+        getRowId={g => g.id}
+        loading={false}
+        emptyMessage="No gateways registered yet. Use PUT /api/bus-ops/vehicles/{id}/gateway with { gatewayId, model? } to register a device."
+        columns={gatewayColumns}
+        numbered
+        selectable
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
+        toolbar={{
+          exportName: 'gateways',
+          title: 'BLE Gateways',
+          actions: selectedIds.size > 0 ? (
+            <span className="inline-flex items-center gap-2 text-xs text-violet-300">
+              {selectedIds.size} selected
+              <button type="button" onClick={() => setSelectedIds(new Set())}
+                className="text-slate-400 hover:text-white underline underline-offset-2">
+                Clear
+              </button>
+            </span>
+          ) : undefined,
+        }}
+      />
 
       {/* One-time reveal modal for rotate result */}
       {rotateResult && (

@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Trophy, RotateCw } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
 
 interface PerfRow {
   driverId: string;
@@ -38,12 +39,62 @@ function currentMonthArg(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+const perfColumns: DataGridColumn<PerfRow>[] = [
+  {
+    key: 'driver', header: 'Driver', accessor: d => d.name,
+    render: d => (
+      <div>
+        <div className="font-medium text-white">{d.name ?? '—'}</div>
+        <div className="text-xs text-slate-300">{d.status ?? '—'}</div>
+      </div>
+    ),
+  },
+  {
+    key: 'licence', header: 'Licence', accessor: d => d.licenseNumber,
+    render: d => (
+      <div>
+        <div className="font-mono text-white">{d.licenseNumber ?? '—'}</div>
+        <div className="text-xs text-slate-300">{d.licenseType ?? ''}</div>
+      </div>
+    ),
+  },
+  { key: 'totalTrips', header: 'Trips', accessor: d => d.totalTrips, align: 'right',
+    render: d => <span className="text-white">{d.totalTrips ?? 0}</span> },
+  { key: 'totalKm', header: 'KM', accessor: d => d.totalKm, align: 'right',
+    render: d => <span className="text-white">{Math.round(d.totalKm ?? 0).toLocaleString()}</span> },
+  { key: 'onTimePct', header: 'On-time %', accessor: d => d.onTimePct, align: 'right',
+    render: d => (
+      <span className={`font-medium ${(d.onTimePct ?? 0) >= 90 ? 'text-emerald-400' : (d.onTimePct ?? 0) >= 75 ? 'text-amber-400' : 'text-rose-400'}`}>
+        {(d.onTimePct ?? 0).toFixed(1)}%
+      </span>
+    ) },
+  { key: 'incidentCount', header: 'Incidents', accessor: d => d.incidentCount, align: 'right',
+    render: d => (
+      <span className={`font-medium ${(d.incidentCount ?? 0) === 0 ? 'text-emerald-400' : (d.incidentCount ?? 0) <= 2 ? 'text-amber-400' : 'text-rose-400'}`}>
+        {d.incidentCount ?? 0}
+      </span>
+    ) },
+  { key: 'fuelEfficiency', header: 'Fuel km/L', accessor: d => d.fuelEfficiency, align: 'right',
+    render: d => <span className="text-white">{(d.fuelEfficiency ?? 0).toFixed(2)}</span> },
+  { key: 'score', header: 'Score', accessor: d => d.score, align: 'right',
+    render: d => d.score != null
+      ? <span className="text-white font-bold text-base">{d.score.toFixed(1)}</span>
+      : <span className="text-slate-400 text-xs italic">insufficient</span> },
+  { key: 'grade', header: 'Grade', accessor: d => d.grade, filter: 'select',
+    render: d => (
+      <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold border ${GRADE_BG[d.grade]}`}>
+        {d.grade}
+      </span>
+    ) },
+];
+
 export default function DriverPerformancePage() {
   const [month, setMonth] = useState(() => currentMonthArg());
   const [data, setData] = useState<PerfResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [recomputing, setRecomputing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -103,57 +154,31 @@ export default function DriverPerformancePage() {
 
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
 
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
-        {drivers.length === 0 ? (
-          <div className="text-center text-slate-400 py-12">
-            No performance data for {month}. Tap <strong className="text-violet-300">Recompute</strong> to run the scoring engine.
-          </div>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-white/5">
-                {['Driver', 'Licence', 'Trips', 'KM', 'On-time %', 'Incidents', 'Fuel km/L', 'Score', 'Grade'].map(h => (
-                  <th key={h} className={`px-4 py-3 text-xs font-semibold text-slate-400 ${['Trips','KM','On-time %','Incidents','Fuel km/L','Score'].includes(h) ? 'text-right' : 'text-left'}`}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {drivers.map(d => (
-                <tr key={d.driverId} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-3 text-sm">
-                    <div className="font-medium text-white">{d.name ?? '—'}</div>
-                    <div className="text-xs text-slate-300">{d.status ?? '—'}</div>
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    <div className="font-mono text-white">{d.licenseNumber ?? '—'}</div>
-                    <div className="text-xs text-slate-300">{d.licenseType ?? ''}</div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-right text-white">{d.totalTrips ?? 0}</td>
-                  <td className="px-4 py-3 text-sm text-right text-white">{Math.round(d.totalKm ?? 0).toLocaleString()}</td>
-                  <td className={`px-4 py-3 text-sm text-right font-medium ${(d.onTimePct ?? 0) >= 90 ? 'text-emerald-400' : (d.onTimePct ?? 0) >= 75 ? 'text-amber-400' : 'text-rose-400'}`}>
-                    {(d.onTimePct ?? 0).toFixed(1)}%
-                  </td>
-                  <td className={`px-4 py-3 text-sm text-right font-medium ${(d.incidentCount ?? 0) === 0 ? 'text-emerald-400' : (d.incidentCount ?? 0) <= 2 ? 'text-amber-400' : 'text-rose-400'}`}>
-                    {d.incidentCount ?? 0}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-right text-white">{(d.fuelEfficiency ?? 0).toFixed(2)}</td>
-                  <td className="px-4 py-3 text-sm text-right">
-                    {d.score != null
-                      ? <span className="text-white font-bold text-base">{d.score.toFixed(1)}</span>
-                      : <span className="text-slate-400 text-xs italic">insufficient</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold border ${GRADE_BG[d.grade]}`}>
-                      {d.grade}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
+      <FleetDataGrid
+        gridName="DriverPerformance"
+        rows={drivers}
+        getRowId={d => d.driverId}
+        loading={false}
+        emptyMessage={`No performance data for ${month}. Tap Recompute to run the scoring engine.`}
+        columns={perfColumns}
+        numbered
+        selectable
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
+        toolbar={{
+          exportName: 'driver-performance',
+          title: 'Driver Performance',
+          actions: selectedIds.size > 0 ? (
+            <span className="inline-flex items-center gap-2 text-xs text-violet-300">
+              {selectedIds.size} selected
+              <button type="button" onClick={() => setSelectedIds(new Set())}
+                className="text-slate-400 hover:text-white underline underline-offset-2">
+                Clear
+              </button>
+            </span>
+          ) : undefined,
+        }}
+      />
     </div>
   );
 }
