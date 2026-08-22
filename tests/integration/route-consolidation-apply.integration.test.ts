@@ -210,6 +210,12 @@ describe('scenario 1: apply is atomic', () => {
     const mergedStops = await prisma.routeStop.count({ where: { routeId: r.mergedRouteId } });
     expect(mergedStops).toBe(3);
 
+    // A consolidated route is a first-class BusRoute — ops need to find
+    // it by code the same way as any manually- or bulk-created route.
+    // Previously null: this create had no `code` field at all.
+    expect(merged?.code).toBeTruthy();
+    expect(merged?.code).toMatch(/^[A-Z]+-\d{4}$/);
+
     // Sources retired
     const sources = await prisma.busRoute.findMany({
       where: { id: { in: [fx.sourceA, fx.sourceB] } },

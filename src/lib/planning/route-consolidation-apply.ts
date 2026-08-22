@@ -31,6 +31,7 @@
 import { randomUUID } from 'crypto';
 import type { PrismaClient, Prisma } from '@prisma/client';
 import { evaluatePlan, type PlanFacts, type PlanTripFacts, type PlanCheck } from './evaluate-plan';
+import { allocateNextRouteCode } from '@/lib/bus-ops/allocate-route-code';
 import {
   computeAppliedStateHash,
   resolveEnrollmentStopMapping,
@@ -241,10 +242,24 @@ export async function applyConsolidation(
         const mergedOrigin = sourceRoutes[0]?.origin ?? 'Consolidated';
         const mergedDestination = sourceRoutes[0]?.destination ?? 'Consolidated';
 
+        // A consolidated route is still a first-class BusRoute — ops need
+        // to find it the same way as any manually- or bulk-created one.
+        // Was previously left null here (this create had no `code` field
+        // at all), the only one of the three route-creation paths that
+        // doesn't allocate one; bulk-import always has, manual create
+        // never has. Allocated inside this transaction, at Serializable
+        // isolation, so a same-tenant collision with a concurrent apply
+        // surfaces as a transaction failure rather than a silently wrong
+        // duplicate — same non-retry-and-surface handling the rest of
+        // this function already applies to every failure except the one
+        // specifically-expected idempotency-key race above.
+        const mergedRouteCode = await allocateNextRouteCode(tx, input.tenantId, sourceRoutes[0]?.routeType);
+
         const mergedRoute = await tx.busRoute.create({
           data: {
             tenantId: input.tenantId,
             name: mergedName,
+            code: mergedRouteCode,
             origin: mergedOrigin,
             destination: mergedDestination,
             routeType: sourceRoutes[0]?.routeType,
