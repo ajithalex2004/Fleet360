@@ -17,7 +17,7 @@ import React, { useMemo, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   ArrowUp, ArrowDown, ChevronsUpDown, Search as SearchIcon, Columns3, Download,
-  Rows3, Filter, X, ArrowUpDown,
+  Rows3, Filter, X, ArrowUpDown, ChevronRight, ChevronDown,
 } from 'lucide-react';
 
 export type SortDir = 'asc' | 'desc';
@@ -136,6 +136,17 @@ interface DataGridProps<T> {
    * Return '' to opt a specific row back into "no special background".
    */
   rowClassName?: (row: T) => string;
+  /**
+   * Per-row detail panel — when this returns a node for a given row, that
+   * row gets a leading chevron and becomes expandable; clicking the
+   * chevron (or the row itself, when `onRowClick` isn't also set) inserts
+   * the returned content as a full-width row beneath it. Return null/
+   * undefined/false to make a specific row non-expandable while the
+   * feature is still on for the rest. Uncontrolled and single-open, like
+   * an accordion — expanding one row collapses whichever was open before.
+   * Not a fit for pages needing multiple rows open at once.
+   */
+  expandable?: (row: T) => React.ReactNode | null | undefined | false;
 }
 
 const KPI_ACCENTS: Record<KpiAccent, { bg: string; text: string }> = {
@@ -162,6 +173,7 @@ export default function FleetDataGrid<T>({
   rows, columns, getRowId, onRowClick, selectedId, loading, emptyMessage = 'No rows',
   initialSort, toolbar = {}, kpis, filterChips, className = '', gridName = 'FleetDataGrid',
   numbered = false, numberRender, selectable = false, selectedIds, onSelectionChange, rowClassName,
+  expandable,
 }: DataGridProps<T>) {
   const tb = { search: true, columns: true, density: true, filters: true, exportCsv: true, sortSelector: false, ...toolbar };
 
@@ -173,6 +185,7 @@ export default function FleetDataGrid<T>({
   const [showFilters, setShowFilters] = useState(true);
   const [colMenuOpen, setColMenuOpen] = useState(false);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   /** Multi-value chip state: chip.key -> set of active option values. */
   const [chipValues, setChipValues] = useState<Record<string, Set<string>>>({});
 
@@ -308,10 +321,14 @@ export default function FleetDataGrid<T>({
     if (el) el.indeterminate = someVisibleSelected;
   };
 
-  // Both extra columns are prepended before the caller's own columns, so
+  const toggleExpanded = (id: string) => {
+    setExpandedId(prev => (prev === id ? null : id));
+  };
+
+  // All extra columns are prepended before the caller's own columns, so
   // colSpan for the loading-skeleton and empty-state rows (which each
   // render one <td> spanning every column) needs to account for them.
-  const leadingColCount = (numbered ? 1 : 0) + (selectable ? 1 : 0);
+  const leadingColCount = (expandable ? 1 : 0) + (numbered ? 1 : 0) + (selectable ? 1 : 0);
   const totalColCount = visibleColumns.length + leadingColCount;
 
   const exportCsv = () => {
@@ -509,6 +526,9 @@ export default function FleetDataGrid<T>({
         <table className="w-full text-sm" style={{ tableLayout: 'auto' }}>
           <thead>
             <tr className="border-b border-white/10 text-slate-500 text-[11px] uppercase tracking-wider bg-slate-900/40">
+              {expandable && (
+                <th className="px-3 py-2.5 w-8" />
+              )}
               {numbered && (
                 <th className="px-3 py-2.5 font-medium text-left w-10">#</th>
               )}
@@ -547,6 +567,7 @@ export default function FleetDataGrid<T>({
 
             {showFilters && (
               <tr className="border-b border-white/10 bg-slate-950/40">
+                {expandable && <th className="px-2 py-1.5" />}
                 {numbered && <th className="px-2 py-1.5" />}
                 {selectable && <th className="px-2 py-1.5" />}
                 {visibleColumns.map(c => {
@@ -581,31 +602,49 @@ export default function FleetDataGrid<T>({
             ) : processed.map((row, i) => {
               const id = getRowId(row);
               const isSelected = selection.has(id);
+              const detail = expandable?.(row);
+              const isExpandableRow = !!expandable && detail != null && detail !== false;
+              const isExpanded = isExpandableRow && expandedId === id;
+              const rowClickHandler = onRowClick
+                ? () => onRowClick(row)
+                : isExpandableRow ? () => toggleExpanded(id) : undefined;
               return (
-                <tr key={id} onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  className={`${onRowClick ? 'cursor-pointer' : ''} transition-colors ${
-                    rowClassName ? rowClassName(row) : (selectedId === id ? 'bg-violet-500/10' : isSelected ? 'bg-violet-500/5' : 'hover:bg-white/[0.03]')
-                  }`}>
-                  {numbered && (
-                    <td className={`px-3 ${pad} text-left text-slate-500 tabular-nums`}>{numberRender ? numberRender(row, i + 1) : i + 1}</td>
+                <React.Fragment key={id}>
+                  <tr onClick={rowClickHandler}
+                    className={`${rowClickHandler ? 'cursor-pointer' : ''} transition-colors ${
+                      rowClassName ? rowClassName(row) : (selectedId === id ? 'bg-violet-500/10' : isSelected ? 'bg-violet-500/5' : 'hover:bg-white/[0.03]')
+                    }`}>
+                    {expandable && (
+                      <td className={`px-3 ${pad} text-slate-500`} onClick={isExpandableRow ? e => { e.stopPropagation(); toggleExpanded(id); } : undefined}>
+                        {isExpandableRow && (isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />)}
+                      </td>
+                    )}
+                    {numbered && (
+                      <td className={`px-3 ${pad} text-left text-slate-500 tabular-nums`}>{numberRender ? numberRender(row, i + 1) : i + 1}</td>
+                    )}
+                    {selectable && (
+                      <td className={`px-3 ${pad}`} onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleRow(id)}
+                          aria-label={`Select row ${i + 1}`}
+                          className="accent-violet-500 w-3.5 h-3.5"
+                        />
+                      </td>
+                    )}
+                    {visibleColumns.map(c => (
+                      <td key={c.key} className={`px-3 ${pad} ${alignClass(c.align)} ${c.cellClassName ?? 'text-slate-300'}`}>
+                        {c.render ? c.render(row) : (() => { const v = c.accessor?.(row); return v == null || v === '' ? '—' : String(v); })()}
+                      </td>
+                    ))}
+                  </tr>
+                  {isExpanded && (
+                    <tr>
+                      <td colSpan={totalColCount} className="bg-slate-900/60 px-6 py-4">{detail}</td>
+                    </tr>
                   )}
-                  {selectable && (
-                    <td className={`px-3 ${pad}`} onClick={e => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleRow(id)}
-                        aria-label={`Select row ${i + 1}`}
-                        className="accent-violet-500 w-3.5 h-3.5"
-                      />
-                    </td>
-                  )}
-                  {visibleColumns.map(c => (
-                    <td key={c.key} className={`px-3 ${pad} ${alignClass(c.align)} ${c.cellClassName ?? 'text-slate-300'}`}>
-                      {c.render ? c.render(row) : (() => { const v = c.accessor?.(row); return v == null || v === '' ? '—' : String(v); })()}
-                    </td>
-                  ))}
-                </tr>
+                </React.Fragment>
               );
             })}
           </tbody>
