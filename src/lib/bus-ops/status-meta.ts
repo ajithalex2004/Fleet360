@@ -8,7 +8,7 @@
  *
  * Palette conventions match what shipped on Trip Monitor first
  * (dispatch/page.tsx) and were mirrored to Live Fleet Map's Trip
- * Status pill: blue Scheduled, amber Departed, orange In Transit,
+ * Status pill: blue Scheduled, amber Started, orange En Route,
  * emerald Completed, red Cancelled.
  */
 
@@ -26,8 +26,8 @@ export interface StatusMeta {
 
 export const TRIP_STATUS_META: Record<TripScheduleStatus, StatusMeta> = {
   SCHEDULED:  { label: 'Scheduled',  text: 'text-blue-300',    bg: 'bg-blue-500/15',    border: 'border-blue-500/30',    dot: 'bg-blue-400'    },
-  DEPARTED:   { label: 'Departed',   text: 'text-amber-300',   bg: 'bg-amber-500/15',   border: 'border-amber-500/30',   dot: 'bg-amber-400'   },
-  IN_TRANSIT: { label: 'In Transit', text: 'text-orange-300',  bg: 'bg-orange-500/15',  border: 'border-orange-500/30',  dot: 'bg-orange-400'  },
+  STARTED:    { label: 'Started',    text: 'text-amber-300',   bg: 'bg-amber-500/15',   border: 'border-amber-500/30',   dot: 'bg-amber-400'   },
+  EN_ROUTE:   { label: 'En Route',   text: 'text-orange-300',  bg: 'bg-orange-500/15',  border: 'border-orange-500/30',  dot: 'bg-orange-400'  },
   COMPLETED:  { label: 'Completed',  text: 'text-emerald-300', bg: 'bg-emerald-500/15', border: 'border-emerald-500/30', dot: 'bg-emerald-400' },
   CANCELLED:  { label: 'Cancelled',  text: 'text-red-300',     bg: 'bg-red-500/15',     border: 'border-red-500/30',     dot: 'bg-red-400'     },
 };

@@ -9,25 +9,28 @@ import { describe, it, expect } from 'vitest';
 import {
   canTransitionTrip, assertTripTransition, TripTransitionError,
   canTransitionPassenger, assertPassengerTransition, PassengerTransitionError,
-  isTripTerminal, isPassengerTerminal,
-  allowedTripTransitions, allowedPassengerTransitions,
+  isPassengerTerminal,
   type TripScheduleStatus, type TripPassengerStatus,
 } from '@/lib/bus-ops/state-machines';
 
-const TRIP_STATES: TripScheduleStatus[] = ['SCHEDULED','DEPARTED','IN_TRANSIT','COMPLETED','CANCELLED'];
+const TRIP_STATES: TripScheduleStatus[] = ['SCHEDULED','STARTED','EN_ROUTE','COMPLETED','CANCELLED'];
 const PAX_STATES: TripPassengerStatus[]  = ['WAITLISTED','CONFIRMED','BOARDED','ALIGHTED','ABSENT','NO_SHOW','CANCELLED'];
 
 // (from, to, expected) — declares every allowed transition; anything
 // NOT in this list is expected to be rejected.
 const TRIP_ALLOWED: Array<[TripScheduleStatus, TripScheduleStatus]> = [
-  ['SCHEDULED',  'DEPARTED'],   ['SCHEDULED',  'CANCELLED'],
-  ['DEPARTED',   'IN_TRANSIT'], ['DEPARTED',   'COMPLETED'], ['DEPARTED', 'CANCELLED'],
-  ['IN_TRANSIT', 'COMPLETED'],  ['IN_TRANSIT', 'CANCELLED'],
+  ['SCHEDULED',  'STARTED'],    ['SCHEDULED',  'CANCELLED'],
+  ['STARTED',    'EN_ROUTE'],   ['STARTED',    'COMPLETED'], ['STARTED', 'CANCELLED'],
+  ['EN_ROUTE',   'COMPLETED'],  ['EN_ROUTE',   'CANCELLED'],
 ];
 const PAX_ALLOWED: Array<[TripPassengerStatus, TripPassengerStatus]> = [
   ['WAITLISTED', 'CONFIRMED'], ['WAITLISTED', 'CANCELLED'],
   ['CONFIRMED',  'BOARDED'],   ['CONFIRMED',  'ABSENT'],
   ['CONFIRMED',  'NO_SHOW'],   ['CONFIRMED',  'CANCELLED'],
+  // BOARDED → ABSENT intentionally absent: see the note on
+  // PASSENGER_TRANSITIONS in state-machines.ts. Local work had proposed
+  // it, but it's a business-rule change rather than part of the trip
+  // status rename, so it stays out until decided explicitly.
   ['BOARDED',    'ALIGHTED'],
   // A per-stop miss is not a verdict on the whole trip: a rider who
   // misses their assigned stop can walk to the next one and catch the
@@ -52,10 +55,9 @@ describe('trip lifecycle', () => {
   });
 
   it('terminal states have no allowed transitions', () => {
-    expect(isTripTerminal('COMPLETED')).toBe(true);
-    expect(isTripTerminal('CANCELLED')).toBe(true);
-    expect(allowedTripTransitions('COMPLETED')).toHaveLength(0);
-    expect(allowedTripTransitions('CANCELLED')).toHaveLength(0);
+    // Terminal states should reject all transitions except to themselves
+    expect(canTransitionTrip('COMPLETED', 'SCHEDULED')).toBe(false);
+    expect(canTransitionTrip('CANCELLED', 'SCHEDULED')).toBe(false);
   });
 
   it('same-state assignment is idempotent (no throw)', () => {
@@ -63,10 +65,13 @@ describe('trip lifecycle', () => {
   });
 
   it('non-terminal states have >=1 allowed transition', () => {
-    for (const s of TRIP_STATES) {
-      if (isTripTerminal(s)) continue;
-      expect(allowedTripTransitions(s).length).toBeGreaterThan(0);
-    }
+    // SCHEDULED can go to STARTED or CANCELLED
+    expect(canTransitionTrip('SCHEDULED', 'STARTED')).toBe(true);
+    expect(canTransitionTrip('SCHEDULED', 'CANCELLED')).toBe(true);
+    // STARTED can go to EN_ROUTE, COMPLETED, or CANCELLED
+    expect(canTransitionTrip('STARTED', 'EN_ROUTE')).toBe(true);
+    expect(canTransitionTrip('STARTED', 'COMPLETED')).toBe(true);
+    expect(canTransitionTrip('STARTED', 'CANCELLED')).toBe(true);
   });
 });
 

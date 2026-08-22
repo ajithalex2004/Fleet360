@@ -35,9 +35,9 @@ interface Schedule {
 // ── Stage config ──────────────────────────────────────────────────────────────
 
 const STAGES = [
-  { status: 'SCHEDULED',  label: 'Scheduled',   icon: '📅', color: 'text-blue-400',    bg: 'bg-blue-500/5',   headerBg: 'bg-blue-500/10 border-blue-500/20',   nextStatus: 'DEPARTED',   nextLabel: 'Depart' },
-  { status: 'DEPARTED',   label: 'Departed',    icon: '🚌', color: 'text-amber-400',   bg: 'bg-amber-500/5',  headerBg: 'bg-amber-500/10 border-amber-500/20',  nextStatus: 'IN_TRANSIT', nextLabel: 'In Transit' },
-  { status: 'IN_TRANSIT', label: 'In Transit',  icon: '🛣️', color: 'text-orange-400',  bg: 'bg-orange-500/5', headerBg: 'bg-orange-500/10 border-orange-500/20', nextStatus: 'COMPLETED',  nextLabel: 'Complete' },
+  { status: 'SCHEDULED',  label: 'Scheduled',   icon: '📅', color: 'text-blue-400',    bg: 'bg-blue-500/5',   headerBg: 'bg-blue-500/10 border-blue-500/20',   nextStatus: 'STARTED',   nextLabel: 'Start' },
+  { status: 'STARTED',   label: 'Started',    icon: '🚌', color: 'text-amber-400',   bg: 'bg-amber-500/5',  headerBg: 'bg-amber-500/10 border-amber-500/20',  nextStatus: 'EN_ROUTE', nextLabel: 'En Route' },
+  { status: 'EN_ROUTE', label: 'En Route',  icon: '🛣️', color: 'text-orange-400',  bg: 'bg-orange-500/5', headerBg: 'bg-orange-500/10 border-orange-500/20', nextStatus: 'COMPLETED',  nextLabel: 'Complete' },
   { status: 'COMPLETED',  label: 'Completed',   icon: '✅', color: 'text-emerald-400', bg: 'bg-emerald-500/5',headerBg: 'bg-emerald-500/10 border-emerald-500/20',nextStatus: undefined,    nextLabel: undefined },
   { status: 'CANCELLED',  label: 'Cancelled',   icon: '❌', color: 'text-red-400',     bg: 'bg-red-500/5',    headerBg: 'bg-red-500/10 border-red-500/20',      nextStatus: undefined,    nextLabel: undefined },
 ];
@@ -286,7 +286,7 @@ export default function BusOpsDispatchPage() {
     try {
       // Route each action through its dedicated endpoint so domain events are
       // published server-side via the outbox — no client-side notifications needed.
-      if (status === 'DEPARTED') {
+      if (status === 'STARTED') {
         await fetch(`/api/bus-ops/schedules/${id}/depart`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
         });
@@ -337,7 +337,7 @@ export default function BusOpsDispatchPage() {
   const cancelledCount = displayed.filter(s => s.status === 'CANCELLED').length;
 
   // KPIs
-  const inTransit    = schedules.filter(s => ['DEPARTED','IN_TRANSIT'].includes(s.status ?? '')).length;
+  const inTransit    = schedules.filter(s => ['STARTED','EN_ROUTE'].includes(s.status ?? '')).length;
   const completed    = schedules.filter(s => s.status === 'COMPLETED').length;
   const totalPax     = schedules.reduce((s, t) => s + (t.confirmedCount ?? 0), 0);
   const unassigned   = schedules.filter(s => s.status === 'SCHEDULED' && !s.vehicleId).length;
@@ -389,7 +389,7 @@ export default function BusOpsDispatchPage() {
         <div className="grid grid-cols-4 gap-3">
           {[
             { label: 'Scheduled',  value: schedules.filter(s => s.status === 'SCHEDULED').length, color: 'text-blue-400' },
-            { label: 'In Transit', value: inTransit,  color: 'text-amber-400' },
+            { label: 'En Route', value: inTransit,  color: 'text-amber-400' },
             { label: 'Completed',  value: completed,   color: 'text-emerald-400' },
             { label: 'Passengers', value: totalPax,    color: 'text-purple-400' },
           ].map(k => (

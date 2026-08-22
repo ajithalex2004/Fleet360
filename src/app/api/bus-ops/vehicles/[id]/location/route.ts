@@ -267,7 +267,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // fallback, so vehicles on scheduled-but-not-departed trips lit up
       // on the map as en-route. Fixed by treating SCHEDULED explicitly.
       const baseStatus =
-        schedule.status === 'DEPARTED' || schedule.status === 'IN_TRANSIT' ? 'EN_ROUTE' :
+        schedule.status === 'STARTED' || schedule.status === 'EN_ROUTE' ? 'EN_ROUTE' :
         'IDLE';
       const atStopRows = await prisma.$queryRawUnsafe<Array<{ stop_id: string }>>(
         `SELECT stop_id FROM trip_stop_visits
