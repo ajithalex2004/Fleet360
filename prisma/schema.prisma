@@ -5458,6 +5458,10 @@ enum BoardingEventType {
   BOARDED
   ALIGHTED
   NO_SHOW
+  // Postgres type is boarding_event_type — without @@map Prisma emits
+  // public."BoardingEventType", which does not exist. Same defect that
+  // TripPassengerStatus carried.
+  @@map("boarding_event_type")
   @@schema("public")
 }
 
@@ -5468,6 +5472,8 @@ enum BoardingSource {
   DRIVER
   MANUAL
   DISPATCHER
+  // See BoardingEventType above — Postgres type is boarding_source.
+  @@map("boarding_source")
   @@schema("public")
 }
 
@@ -5495,6 +5501,12 @@ enum TripPassengerStatus {
   NO_SHOW
   CANCELLED
   WAITLISTED
+  // The Postgres type is trip_passenger_status. Without this @@map,
+  // Prisma emitted public."TripPassengerStatus" and every write that
+  // set a status failed with 42704 type does not exist — including the
+  // BLE gateway's tripPassenger.update({ status: 'BOARDED' }), which is
+  // the second half of why BLE boarding never worked.
+  @@map("trip_passenger_status")
   @@schema("public")
 }
 
