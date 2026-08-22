@@ -484,8 +484,8 @@ export function PlanningCorePanel({ cbaRevision = 0, onEditPceRules }: PlanningC
       {cbaStale && (
         <div className="flex items-start justify-between gap-4 flex-wrap rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
           <p className="text-sm text-amber-200">
-            CBA rule-sets changed on the <strong>CBA / Union Rules</strong> tab. Your edited pay
-            rules were kept — reload to replace them with the new defaults.
+            CBA rule-sets changed on the <strong>Operational Rules Engine</strong> tab. Your edited
+            pay rules were kept — reload to replace them with the new defaults.
           </p>
           <div className="flex items-center gap-2 shrink-0">
             <button onClick={reloadCbaDefaults}

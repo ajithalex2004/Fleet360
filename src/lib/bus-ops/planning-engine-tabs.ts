@@ -7,16 +7,19 @@
  * safely rather than render an empty shell.
  */
 
-export const PLANNING_ENGINE_TAB_IDS = ['cba', 'headway', 'core'] as const;
+// Kept in the same order as the TABS array in planning-engine/page.tsx —
+// this is a second source of truth for tab identity, not just a list of
+// valid ids, so letting the two orderings drift would be misleading.
+export const PLANNING_ENGINE_TAB_IDS = ['cba', 'core', 'headway'] as const;
 
 export type PlanningEngineTabId = typeof PLANNING_ENGINE_TAB_IDS[number];
 
 /**
- * Planning Core is the landing tab even though CBA is listed first.
+ * Planning Core is the landing tab even though it isn't listed first.
  *
  * Visual order follows the data flow — labour rules feed the plan, and
  * Planning Core pre-fills its WorkRules from the default CBA rule-set.
- * But Planning Core is the daily-driver task while CBA and Headway are
+ * But Planning Core is the daily-driver task while the other two are
  * configured rarely, so opening on a config screen would tax the
  * frequent job on every visit.
  */

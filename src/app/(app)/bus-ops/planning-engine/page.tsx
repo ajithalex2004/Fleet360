@@ -5,20 +5,22 @@
  * One page, three tabs, consolidating what used to be three separate
  * routes:
  *
- *   /bus-ops/cba-rules  →  ?tab=cba       CBA / Union Rules
- *   /bus-ops/headway    →  ?tab=headway   Headway Management
+ *   /bus-ops/cba-rules  →  ?tab=cba       Operational Rules Engine
  *   /bus-ops/plan       →  ?tab=core      Planning Core   ← default
+ *   /bus-ops/headway    →  ?tab=headway   Headway Management
  *
  * All three old paths still resolve; they redirect here preserving the
  * tab, so bookmarks and the dashboard tiles keep working.
  *
- * Ordering vs default is deliberate and they differ. CBA sits first
+ * Visual order and default tab are deliberate and independent — changing
+ * one doesn't imply the other. Operational Rules Engine (CBA) sits first
  * because it is upstream in the mental model — labour rules feed the
  * plan, and Planning Core literally pre-fills its WorkRules from the
- * default rule-set via cbaToWorkRules. But Planning Core is the tab that
- * opens, because it is the daily-driver task while CBA and Headway are
+ * default rule-set via cbaToWorkRules. Planning Core is the tab that
+ * opens, because it is the daily-driver task while the other two are
  * configured rarely; landing on a config screen would tax the frequent
- * job every time.
+ * job every time. Headway's position (last) is a product decision, not
+ * derived from the data-flow reasoning above.
  *
  * Guarded as a whole on bus-ops:admin:planning-core. That tightens CBA
  * and Headway, which previously had no page guard at all — their APIs
@@ -39,9 +41,9 @@ import { resolvePlanningEngineTab } from '@/lib/bus-ops/planning-engine-tabs';
 
 /** Visual order. `core` is the default active tab — see the file header. */
 const TABS: TabDef[] = [
-  { id: 'cba',     label: 'CBA / Union Rules', icon: ShieldCheck },
-  { id: 'headway', label: 'Headway',           icon: Clock },
-  { id: 'core',    label: 'Planning Core',     icon: Sparkles },
+  { id: 'cba',     label: 'Operational Rules Engine', icon: ShieldCheck },
+  { id: 'core',    label: 'Planning Core',            icon: Sparkles },
+  { id: 'headway', label: 'Headway',                  icon: Clock },
 ];
 
 export default function PlanningEnginePage() {
