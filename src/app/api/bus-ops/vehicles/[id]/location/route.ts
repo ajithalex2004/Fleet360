@@ -37,6 +37,7 @@ import {
   type StopTransition,
 } from '@/lib/bus-gps';
 import { sendWhatsApp } from '@/lib/whatsapp';
+import { recordAbsence } from '@/lib/bus-ops/passenger-attendance';
 import { upsertFleetPosition } from '@/app/api/bus-ops/fleet-positions/route';
 
 export const runtime = 'nodejs';
@@ -217,6 +218,33 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
+    // Stop-exit absence marking. When the vehicle leaves a stop's
+    // geofence, anyone still CONFIRMED whose assigned boarding stop that
+    // was did not get on — record it.
+    //
+    // EXIT is the trigger, not ENTER: while the bus is standing at the
+    // stop a passenger can still walk up and be detected, so marking on
+    // arrival would fire on riders who then board seconds later.
+    //
+    // This is a per-stop miss, not a verdict on the trip. ABSENT is
+    // non-terminal, so a rider who misses Stop A and catches the same
+    // bus at Stop B is moved back to BOARDED by the gateway, and the
+    // absence row stays in boarding_events as the historical fact.
+    // recordAbsence only accepts CONFIRMED → ABSENT, so an out-of-order
+    // or replayed EXIT cannot mark an already-boarded rider absent.
+    //
+    // Best-effort, exactly like the approach notifications above: a
+    // failure here must never fail GPS ingest.
+    const exits = transitions.filter((t): t is Extract<StopTransition, { type: 'EXIT' }> => t.type === 'EXIT');
+    let markedAbsent = 0;
+    for (const t of exits) {
+      try {
+        markedAbsent += await markAbsentAtStop(scheduleId, t.stopId, new Date(t.occurredAt), tenantId);
+      } catch (err) {
+        console.warn('[bus-ops/location] stop-exit absence marking failed', { scheduleId, stopId: t.stopId, err });
+      }
+    }
+
     // Live-map feed — best-effort. Any failure here is logged and swallowed
     // so it can never break the actual GPS ingest.
     try {
@@ -269,11 +297,71 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       stored: validPings.length,
       transitions,
       approachNotifications: approachNotifiedCount,
+      // Surfaced so a caller can see the sweep ran and how many riders it
+      // caught, rather than having to diff the manifest afterwards.
+      markedAbsent,
     });
   } catch (e) {
     console.error('[bus-ops/vehicles/:id/location POST]', e);
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to ingest location' }, { status: 500 });
   }
+}
+
+/**
+ * Mark every still-CONFIRMED passenger assigned to `stopId` as ABSENT,
+ * because the vehicle has just left that stop without them.
+ *
+ * Returns how many were actually marked. Each goes through
+ * recordAbsence so the transition is validated and a boarding_events row
+ * is written alongside the status change — that row is what lets
+ * attendance reporting say "missed their assigned stop" even after the
+ * rider catches the bus at a later stop and returns to BOARDED.
+ *
+ * Passengers already BOARDED are filtered out by the query and would be
+ * rejected by the state machine anyway; both layers agree, deliberately.
+ */
+async function markAbsentAtStop(
+  scheduleId: string,
+  stopId: string,
+  occurredAt: Date,
+  tenantId: string | null,
+): Promise<number> {
+  const rows = await prisma.tripPassenger.findMany({
+    where: {
+      tripId: scheduleId,
+      boardingStopId: stopId,
+      status: 'CONFIRMED',
+      deletedAt: null,
+    },
+    select: { id: true, staffMemberId: true },
+  });
+  if (rows.length === 0) return 0;
+
+  let marked = 0;
+  for (const row of rows) {
+    // One transaction per passenger rather than one for the batch: a
+    // single rejected transition must not roll back the others.
+    const result = await prisma.$transaction((tx) =>
+      recordAbsence(tx, {
+        scheduleId,
+        passengerId:   row.id,
+        staffMemberId: row.staffMemberId,
+        tenantId,
+        stopId,
+        // The absence is derived from the geofence exit, so the source
+        // is GEOFENCE — distinguishable in reporting from an operator
+        // marking someone absent by hand.
+        source:      'GEOFENCE',
+        occurredAt,
+        performedBy: 'system:stop-exit',
+      }),
+    ).catch((err) => {
+      console.warn('[bus-ops/location] recordAbsence failed', { passengerId: row.id, err });
+      return { applied: false } as const;
+    });
+    if (result.applied) marked += 1;
+  }
+  return marked;
 }
 
 /**

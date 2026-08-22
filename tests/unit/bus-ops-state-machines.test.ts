@@ -29,6 +29,10 @@ const PAX_ALLOWED: Array<[TripPassengerStatus, TripPassengerStatus]> = [
   ['CONFIRMED',  'BOARDED'],   ['CONFIRMED',  'ABSENT'],
   ['CONFIRMED',  'NO_SHOW'],   ['CONFIRMED',  'CANCELLED'],
   ['BOARDED',    'ALIGHTED'],
+  // A per-stop miss is not a verdict on the whole trip: a rider who
+  // misses their assigned stop can walk to the next one and catch the
+  // same bus, at which point the BLE gateway detects their tag.
+  ['ABSENT',     'BOARDED'],   ['ABSENT',     'CANCELLED'],
 ];
 
 describe('trip lifecycle', () => {
@@ -93,11 +97,30 @@ describe('passenger lifecycle', () => {
     expect(canTransitionPassenger('BOARDED', 'NO_SHOW')).toBe(false);
   });
 
+  it('ABSENT can re-board — the rider caught the bus at a later stop', () => {
+    // The operational rule this encodes: bus leaves Stop A without them
+    // (ABSENT), they walk to Stop B, BLE detects the tag (BOARDED). While
+    // ABSENT was terminal the manifest stayed wrong for the rest of the
+    // trip and headcount disagreed with who was physically aboard.
+    expect(canTransitionPassenger('ABSENT', 'BOARDED')).toBe(true);
+    expect(canTransitionPassenger('ABSENT', 'CANCELLED')).toBe(true);
+    expect(isPassengerTerminal('ABSENT')).toBe(false);
+  });
+
+  it('ABSENT cannot jump straight to ALIGHTED or NO_SHOW', () => {
+    // Re-boarding has to go through BOARDED so a boarding_events row is
+    // written for it — otherwise the alight has no matching board and
+    // onboard counts derived from the log go negative.
+    expect(canTransitionPassenger('ABSENT', 'ALIGHTED')).toBe(false);
+    expect(canTransitionPassenger('ABSENT', 'NO_SHOW')).toBe(false);
+  });
+
   it('terminal states enumerated', () => {
-    for (const s of ['ALIGHTED','ABSENT','NO_SHOW','CANCELLED'] as TripPassengerStatus[]) {
+    for (const s of ['ALIGHTED','NO_SHOW','CANCELLED'] as TripPassengerStatus[]) {
       expect(isPassengerTerminal(s)).toBe(true);
     }
-    for (const s of ['WAITLISTED','CONFIRMED','BOARDED'] as TripPassengerStatus[]) {
+    // ABSENT is deliberately non-terminal — see above.
+    for (const s of ['WAITLISTED','CONFIRMED','BOARDED','ABSENT'] as TripPassengerStatus[]) {
       expect(isPassengerTerminal(s)).toBe(false);
     }
   });
