@@ -10,7 +10,7 @@
  *
  * Each tenant can define one or more rule-sets (e.g. "UAE Federal
  * Labour Law 2024", "DPC 2024 CBA", "Weekend Only"). A rule-set is a
- * named bundle of labour rules that the Planning Core reads as
+ * named bundle of operational rules that the Planning Core reads as
  * runcut work-rules when computing runs/blocks/rosters.
  *
  * The panel:
@@ -229,7 +229,7 @@ export function CbaRulesPanel({ onRuleSetsChanged }: CbaRulesPanelProps = {}) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {ruleSets.length === 0 ? (
-          <p className="text-slate-500 italic lg:col-span-2">No rule-sets yet — create one to start configuring labour rules.</p>
+          <p className="text-slate-500 italic lg:col-span-2">No rule-sets yet — create one to start configuring operational rules.</p>
         ) : ruleSets.map((rs) => (
           <div key={rs.id} className="rounded-2xl bg-slate-800/50 border border-white/10 p-5">
             <div className="flex items-start justify-between gap-3 mb-2">

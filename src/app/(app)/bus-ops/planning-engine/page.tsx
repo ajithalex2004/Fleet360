@@ -14,7 +14,7 @@
  *
  * Visual order and default tab are deliberate and independent — changing
  * one doesn't imply the other. Operational Rules Engine (CBA) sits first
- * because it is upstream in the mental model — labour rules feed the
+ * because it is upstream in the mental model — operational rules feed the
  * plan, and Planning Core literally pre-fills its WorkRules from the
  * default rule-set via cbaToWorkRules. Planning Core is the tab that
  * opens, because it is the daily-driver task while the other two are
@@ -102,9 +102,9 @@ function PlanningEngineInner() {
 
   const subtitle = useMemo(() => {
     switch (activeId) {
-      case 'cba':     return 'Labour rules, service frequency, and the runcut/blocking/rostering engine — in the order they feed each other.';
-      case 'headway': return 'Labour rules, service frequency, and the runcut/blocking/rostering engine — in the order they feed each other.';
-      default:        return 'Runcut, block and roster staff transport — with the labour and frequency rules that feed it one tab away.';
+      case 'cba':     return 'Operational rules, service frequency, and the runcut/blocking/rostering engine — in the order they feed each other.';
+      case 'headway': return 'Operational rules, service frequency, and the runcut/blocking/rostering engine — in the order they feed each other.';
+      default:        return 'Runcut, block and roster staff transport — with the operational and frequency rules that feed it one tab away.';
     }
   }, [activeId]);
 

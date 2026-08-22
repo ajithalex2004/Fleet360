@@ -17,7 +17,7 @@ export type PlanningEngineTabId = typeof PLANNING_ENGINE_TAB_IDS[number];
 /**
  * Planning Core is the landing tab even though it isn't listed first.
  *
- * Visual order follows the data flow — labour rules feed the plan, and
+ * Visual order follows the data flow — operational rules feed the plan, and
  * Planning Core pre-fills its WorkRules from the default CBA rule-set.
  * But Planning Core is the daily-driver task while the other two are
  * configured rarely, so opening on a config screen would tax the

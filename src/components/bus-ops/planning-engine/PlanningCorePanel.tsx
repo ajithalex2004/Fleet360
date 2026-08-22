@@ -654,7 +654,7 @@ export function PlanningCorePanel({ cbaRevision = 0, onEditPceRules }: PlanningC
               <KpiCard label="Total pay cost" value={fmtMoney(plan.summary.totalPayCost)} sub={`${plan.summary.totalPayHours}h total`} accent="emerald" />
               <KpiCard label="Overtime" value={fmtHours(plan.summary.overtimeHours * 60)} sub="of total hours" accent="amber" />
               <KpiCard label="Total work" value={fmtHours(plan.summary.totalWorkHours * 60)} sub="sum of trip durations" accent="blue" />
-              <KpiCard label="Deadhead" value={fmtHours(plan.summary.totalDeadheadHours * 60)} sub="non-driving paid" accent="slate" />
+              <KpiCard label="NRM" value={fmtHours(plan.summary.totalDeadheadHours * 60)} sub="non-driving paid" accent="slate" />
               <KpiCard label="Runs" value={plan.summary.runCount} sub={`${plan.summary.avgTripsPerRun.toFixed(1)} trips/run`} accent="violet" />
               <KpiCard label="Blocks" value={plan.summary.blockCount} sub={`${plan.summary.avgTripsPerBlock.toFixed(1)} trips/block`} accent="cyan" />
             </div>
@@ -814,7 +814,7 @@ function BlocksSection({ blocks }: { blocks: PlanBlock[] }) {
                 <th className="text-right py-2 px-2">Trips</th>
                 <th className="text-right py-2 px-2">Work</th>
                 <th className="text-right py-2 px-2">Span</th>
-                <th className="text-right py-2 px-2">Deadhead</th>
+                <th className="text-right py-2 px-2">NRM</th>
                 <th className="text-left py-2 px-2">Trip sequence</th>
               </tr>
             </thead>
@@ -901,7 +901,7 @@ function CompareDiff({ compareResult }: { compareResult: { left: SavedPlanSummar
     { key: 'totalPayCost',       label: 'Total pay cost',       unit: 'AED' },
     { key: 'totalPayHours',      label: 'Total pay hours',      unit: 'h' },
     { key: 'totalWorkHours',     label: 'Total work hours',     unit: 'h' },
-    { key: 'totalDeadheadHours', label: 'Total deadhead hours', unit: 'h' },
+    { key: 'totalDeadheadHours', label: 'Total NRM hours',      unit: 'h' },
     { key: 'overtimeHours',      label: 'Overtime hours',       unit: 'h' },
   ];
   return (
