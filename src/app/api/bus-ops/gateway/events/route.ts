@@ -44,8 +44,27 @@ import {
 } from '@/lib/bus-gateway';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import type { BoardingEventSource } from '@prisma/client';
 
 export const runtime = 'nodejs';
+
+/**
+ * Source recorded on every BoardingEvent this route writes.
+ *
+ * Was the string literal 'BLE_GATEWAY', which is not a member of the
+ * boarding_event_source enum (BLE | QR | NFC | MANUAL | DRIVER_APP |
+ * GEOFENCE). Both the dedup lookup and the insert therefore threw
+ * "Invalid value for argument `method`" on every event, and the catch
+ * around them counted it as a generic error — so the gateway received a
+ * 200 while nothing was ever recorded and no passenger was ever marked
+ * BOARDED.
+ *
+ * Typed as BoardingEventSource rather than a bare string so the compiler
+ * rejects the next invalid value instead of leaving it to fail at
+ * runtime. tsc did flag the original (TS2322 on both lines); CI's
+ * typecheck is continue-on-error under KNOWN-TS-001, so it shipped.
+ */
+const BLE_METHOD: BoardingEventSource = 'BLE';
 
 interface IngestSummary {
   gatewayId: string;
@@ -232,7 +251,11 @@ export async function POST(req: NextRequest) {
       }).catch(() => {});
     }
 
-    if (summary.transitionsApplied > 0) {
+    // Also audit batches that only produced errors. Previously this was
+    // gated on transitionsApplied > 0, so a batch where every event
+    // failed left no audit trail at all — combined with the hardcoded
+    // ok: true, a totally broken ingest was invisible from both ends.
+    if (summary.transitionsApplied > 0 || summary.errors > 0) {
       void logAudit({
         userId: `gateway:${gatewayId}`,
         userRole: 'GATEWAY',
@@ -243,7 +266,30 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({ ok: true, summary });
+    // `ok` reflects whether every event in the batch was actually
+    // recorded — NOT merely that the request was parsed and authorised.
+    //
+    // This previously returned a hardcoded `ok: true` whenever the
+    // handler didn't throw, while per-event failures were swallowed into
+    // summary.errors by the catch inside applyTransition. A gateway
+    // pushing boardings therefore saw 200 { ok: true } while every event
+    // was discarded — the exact failure mode the BLE_METHOD bug above
+    // produced, invisible for as long as nobody read the summary.
+    //
+    // The batch still returns 200: partial success is a real outcome
+    // (one unknown tag shouldn't fail nineteen good boardings), and a
+    // 5xx would make gateways retry events that were stored fine. The
+    // signal moves into the body instead, where a client can act on it.
+    const ok = summary.errors === 0;
+    return NextResponse.json({
+      ok,
+      // Flat counters alongside the summary so a gateway can alert on
+      // partial failure without understanding the nested shape.
+      processed: summary.transitionsApplied + summary.duplicates + summary.errors,
+      boarded:   summary.transitionsApplied,
+      errors:    summary.errors,
+      summary,
+    });
   } catch (err) {
     captureException(err, { context: 'bus-ops.gateway.events', tags: { gatewayId } });
     return NextResponse.json({ ok: false, error: 'Ingest failed', summary }, { status: 500 });
@@ -294,7 +340,7 @@ async function applyTransition(
       scheduleId: activeTripId,
       passengerId: passenger.id,
       direction: t.kind,
-      method: 'BLE_GATEWAY',
+      method: BLE_METHOD,
       performedAt: { gte: dedupWindowStart, lte: dedupWindowEnd },
     },
     select: { id: true },
@@ -311,7 +357,7 @@ async function applyTransition(
           scheduleId: activeTripId,
           passengerId: passenger.id,
           staffMemberId: tag.staffMemberId,
-          method: 'BLE_GATEWAY',
+          method: BLE_METHOD,
           direction: t.kind,
           identifier: t.tagId,
           performedAt: t.occurredAt,
