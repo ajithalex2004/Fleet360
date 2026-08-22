@@ -46,19 +46,23 @@ interface Trip {
 // Palettes come from src/lib/bus-ops/status-meta.ts so every bus-ops UI
 // renders the same status with the same colour.
 import { TRIP_STATUS_META, PASSENGER_STATUS_META, pillClass } from '@/lib/bus-ops/status-meta';
+import { allowedPassengerTransitions } from '@/lib/bus-ops/state-machines';
 const PAX_PILL  = Object.fromEntries(Object.entries(PASSENGER_STATUS_META).map(([k, v]) => [k, pillClass(v)])) as Record<PassengerStatus, string>;
 const TRIP_PILL = Object.fromEntries(Object.entries(TRIP_STATUS_META).map(([k, v]) => [k, pillClass(v)])) as Record<TripStatus, string>;
 
 // Allowed passenger status advances the ops UI surfaces per current status.
-const NEXT_ACTIONS: Record<PassengerStatus, PassengerStatus[]> = {
-  CONFIRMED:  ['BOARDED', 'ABSENT'],
-  BOARDED:    ['ALIGHTED'],
-  ALIGHTED:   [],
-  ABSENT:     [],
-  NO_SHOW:    [],
-  CANCELLED:  [],
-  WAITLISTED: ['CONFIRMED', 'CANCELLED'],
-};
+//
+// Derived from the state machine rather than hand-maintained. This used
+// to be a second copy of the transition table, which meant a rules change
+// in state-machines.ts left this screen silently enforcing the old ones —
+// it still listed ABSENT as terminal after ABSENT → BOARDED was allowed,
+// so the button to re-board a rider who caught the bus at a later stop
+// simply never rendered.
+//
+// NO_SHOW is filtered out because it isn't an ops-floor action here: it's
+// set by schedules/[id]/depart when the trip leaves without the rider.
+const nextActionsFor = (s: PassengerStatus): PassengerStatus[] =>
+  allowedPassengerTransitions(s).filter(t => t !== 'NO_SHOW') as PassengerStatus[];
 
 export default function TripDetailPage() {
   const params = useParams<{ id: string }>();
@@ -182,7 +186,7 @@ export default function TripDetailPage() {
                 <tbody>
                   {trip.passengers.map(p => {
                     const status = (p.status ?? 'CONFIRMED') as PassengerStatus;
-                    const actions = NEXT_ACTIONS[status] ?? [];
+                    const actions = nextActionsFor(status);
                     return (
                       <tr key={p.id} className="border-b border-white/5 hover:bg-white/5">
                         <td className="px-4 py-2 text-sm font-mono text-white">{p.employeeId ?? '—'}</td>

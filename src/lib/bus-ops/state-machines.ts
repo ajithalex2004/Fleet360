@@ -89,18 +89,39 @@ export type TripPassengerStatus =
  *                NO_SHOW (never showed up at all — set by
  *                schedules/[id]/depart) or CANCELLED
  * - BOARDED    → ALIGHTED (got off at drop-off stop)
- * - ALIGHTED, ABSENT, NO_SHOW, CANCELLED → terminal
+ * - ABSENT     → BOARDED (caught the same bus at a LATER stop) or
+ *                CANCELLED
+ * - ALIGHTED, NO_SHOW, CANCELLED → terminal
  *
- * Note: ABSENT vs NO_SHOW split — ABSENT is bus-arrived-you-weren't-
- * there (per-stop miss); NO_SHOW is trip-departed-without-you (whole
- * trip miss). Both terminal.
+ * ABSENT vs NO_SHOW: ABSENT is bus-arrived-you-weren't-there — a
+ * per-stop miss, recorded when the vehicle leaves the passenger's
+ * assigned stop without detecting them. NO_SHOW is
+ * trip-departed-without-you, a whole-trip miss.
+ *
+ * ABSENT is deliberately NOT terminal. Missing one stop says nothing
+ * about the rest of the route: a rider who misses their assigned stop
+ * can walk to the next one and board the same bus, at which point the
+ * BLE gateway detects their tag and they are genuinely aboard. While
+ * ABSENT was terminal the manifest stayed permanently wrong for those
+ * riders and headcount disagreed with who was physically on the vehicle.
+ *
+ * The later boarding does not erase the earlier absence. It stays in
+ * boarding_events as its own row (direction ABSENT, carrying the stop
+ * id), so attendance reporting still sees "missed their assigned stop"
+ * while the current status correctly reads BOARDED. Status answers
+ * "where are they now"; the event log answers "what happened".
+ *
+ * BOARDED → ABSENT stays illegal. Someone already aboard cannot become
+ * absent from a stop the vehicle has left, and allowing it would
+ * conflate a detection correction with a genuine miss — making absence
+ * rates unusable for the SLA reporting they feed.
  */
 const PASSENGER_TRANSITIONS: Readonly<Record<TripPassengerStatus, readonly TripPassengerStatus[]>> = {
   WAITLISTED: ['CONFIRMED', 'CANCELLED'],
   CONFIRMED:  ['BOARDED', 'ABSENT', 'NO_SHOW', 'CANCELLED'],
   BOARDED:    ['ALIGHTED'],
   ALIGHTED:   [],
-  ABSENT:     [],
+  ABSENT:     ['BOARDED', 'CANCELLED'],
   NO_SHOW:    [],
   CANCELLED:  [],
 } as const;

@@ -59,6 +59,11 @@ import {
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 import type { BoardingEventSource } from '@prisma/client';
+import {
+  recordBoarding,
+  logAlightEvent,
+  type AttendanceContext,
+} from '@/lib/bus-ops/passenger-attendance';
 
 export const runtime = 'nodejs';
 
@@ -379,31 +384,44 @@ async function applyTransition(
   }
 
   try {
-    await prisma.$transaction([
-      prisma.boardingEvent.create({
-        data: {
-          scheduleId: activeTripId,
-          passengerId: passenger.id,
-          staffMemberId: tag.staffMemberId,
-          method: BLE_METHOD,
-          direction: t.kind,
-          identifier: t.tagId,
-          performedAt: t.occurredAt,
-          performedBy: `gateway:${gatewayId}`,
-          rawPayload: { rssiDbm: t.rssiDbm ?? null, location: t.location ?? null },
-          ...(tenantId ? { tenantId } : {}),
-        },
-      }),
-      // BOARD flips status; ALIGHT keeps BOARDED but the event log is the
-      // source of truth for actual onboard count.
-      prisma.tripPassenger.update({
-        where: { id: passenger.id },
-        data: t.kind === 'BOARD'
-          ? { status: 'BOARDED', boardedAt: t.occurredAt }
-          : {},
-      }),
-    ]);
-    summary.transitionsApplied += 1;
+    // Routed through the shared attendance service rather than writing
+    // status directly. The direct write skipped the passenger state
+    // machine entirely, so this path could produce states the manual API
+    // then refused to leave — two rules governing one column. It also
+    // means a rider who missed their assigned stop and caught the bus
+    // further along is now correctly re-boarded (ABSENT → BOARDED),
+    // with the earlier absence left intact in the event log.
+    const ctx: AttendanceContext = {
+      scheduleId:    activeTripId,
+      passengerId:   passenger.id,
+      staffMemberId: tag.staffMemberId,
+      tenantId,
+      source:        BLE_METHOD,
+      identifier:    t.tagId,
+      occurredAt:    t.occurredAt,
+      performedBy:   `gateway:${gatewayId}`,
+      rawPayload:    { rssiDbm: t.rssiDbm ?? null, location: t.location ?? null },
+    };
+
+    const result = await prisma.$transaction((tx) =>
+      t.kind === 'BOARD'
+        // ALIGHT deliberately does NOT move status to ALIGHTED here.
+        // Onboard count is derived from the event log, and flipping
+        // status on a stop-level alight would end the passenger's trip
+        // early on multi-leg routes. recordAlighting exists for callers
+        // that do want the status change.
+        ? recordBoarding(tx, ctx)
+        : logAlightEvent(tx, ctx),
+    );
+
+    if (result.applied) {
+      summary.transitionsApplied += 1;
+    } else {
+      // Rejected rather than errored — an already-boarded duplicate or a
+      // move the state machine forbids. Neither is a fault of the
+      // gateway, so it must not inflate summary.errors and turn ok false.
+      summary.unknownTags.push({ tagId: t.tagId, reason: result.reason ?? 'transition rejected' });
+    }
   } catch (err) {
     summary.errors += 1;
     captureException(err, { context: 'bus-gateway.applyTransition', tags: { gatewayId, tagId: t.tagId } });
