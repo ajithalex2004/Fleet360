@@ -195,7 +195,7 @@ export function CbaRulesPanel({ onRuleSetsChanged }: CbaRulesPanelProps = {}) {
           inside a tab reads as a nested page. */}
       <div className="flex items-start justify-between flex-wrap gap-4">
         <p className="text-sm text-slate-400 max-w-3xl">
-          Define the labour rules that the Planning Core uses when computing runs, blocks, and
+          Define the operational rules that the Planning Core uses when computing runs, blocks, and
           rosters. The default rule-set is applied to every route without an explicit binding.
         </p>
         <button onClick={() => setShowNew(true)}
