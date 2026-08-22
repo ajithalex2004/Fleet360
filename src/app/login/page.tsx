@@ -172,12 +172,13 @@ export default function LoginPage() {
             /* eslint-disable-next-line @next/next/no-img-element */
             <img src={branding.logoUrl} alt={branding.productName ?? branding.tenantName ?? ''}
               className="mx-auto h-10 max-w-[200px] object-contain" />
-          ) : (
+          ) : branding?.productName ? (
             <div className="text-4xl font-black text-white tracking-tight">
-              {branding?.productName
-                ? <span>{branding.productName}</span>
-                : <>Fleet<span className="text-blue-500">360</span></>}
+              <span>{branding.productName}</span>
             </div>
+          ) : (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img src="/logo-fleet360.png" alt="FLEET360" className="mx-auto h-16 max-w-[200px] object-contain" />
           )}
           <p className="text-slate-400 text-sm">
             {branding?.tagline ?? 'Fleet Management Platform'}
