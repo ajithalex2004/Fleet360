@@ -89,6 +89,9 @@ export default function RoutesPage() {
   const router                        = useRouter();
   const [routes,        setRoutes]    = useState<BusRoute[]>([]);
   const [selected,      setSelected]  = useState<BusRoute | null>(null);
+  // Multi-row selection for bulk actions — distinct from `selected` above,
+  // which is the single row open in the detail/edit view.
+  const [selectedIds,   setSelectedIds] = useState<Set<string>>(new Set());
   const [showStops,     setShowStops] = useState(false);
   const [loading,       setLoading]   = useState(true);
   const [saving,        setSaving]    = useState(false);
@@ -589,7 +592,22 @@ export default function RoutesPage() {
         initialSort={{ key: 'name', dir: 'asc' }}
         kpis={kpis}
         filterChips={filterChips}
-        toolbar={{ title: 'RoutesGrid', exportName: 'bus-ops-routes', sortSelector: true }}
+        numbered
+        selectable
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
+        toolbar={{
+          title: 'RoutesGrid', exportName: 'bus-ops-routes', sortSelector: true,
+          actions: selectedIds.size > 0 ? (
+            <span className="inline-flex items-center gap-2 text-xs text-violet-300">
+              {selectedIds.size} selected
+              <button type="button" onClick={() => setSelectedIds(new Set())}
+                className="text-slate-400 hover:text-white underline underline-offset-2">
+                Clear
+              </button>
+            </span>
+          ) : undefined,
+        }}
       />
 
       {/* New Route modal */}
