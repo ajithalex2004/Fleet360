@@ -141,6 +141,16 @@ const KIND_META: KindMeta[] = [
 
 const KIND_BY_ID = new Map(KIND_META.map((k) => [k.kind, k]));
 
+// Position of each kind within KIND_META, used to group the list by
+// category (Route Consolidation buffers, Vehicle reuse, Zone
+// compatibility, …) instead of the API's alphabetical-by-kind order,
+// which interleaves unrelated categories — e.g. DROPOFF_ZONE_FALLBACK_KM
+// sorts between DEPARTURE_TIME_PROXIMITY and MAX_VEHICLE_REUSE_WINDOW.
+// KIND_META's own array order already keeps each category's entries
+// adjacent (see the comments there), so this reuses that ordering rather
+// than inventing a second, parallel category taxonomy.
+const KIND_ORDER = new Map(KIND_META.map((k, i) => [k.kind, i]));
+
 const ACTION_PILL: Record<string, string> = {
   BLOCK: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
   WARN: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
@@ -174,6 +184,16 @@ function PlanningConstraintsPageInner() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Display order only — deliberately not sent back to the API, and not
+  // used for enabledCount/blockCount below, since those are order-
+  // independent. `?? Infinity` sinks any kind the DB has that KIND_META
+  // doesn't (e.g. a row from a kind since retired) to the bottom rather
+  // than throwing it into position 0.
+  const sortedRows = useMemo(
+    () => [...rows].sort((a, b) => (KIND_ORDER.get(a.kind) ?? Infinity) - (KIND_ORDER.get(b.kind) ?? Infinity)),
+    [rows],
+  );
 
   const enabledCount = useMemo(() => rows.filter((r) => r.isEnabled).length, [rows]);
   const blockCount = useMemo(() => rows.filter((r) => r.action === 'BLOCK' && r.isEnabled).length, [rows]);
@@ -255,7 +275,7 @@ function PlanningConstraintsPageInner() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {rows.map((r) => {
+              {sortedRows.map((r) => {
                 const meta = KIND_BY_ID.get(r.kind);
                 return (
                   <tr key={r.id} className="text-slate-200 hover:bg-slate-800/40">
