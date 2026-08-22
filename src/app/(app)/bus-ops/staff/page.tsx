@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { UserCog, UserPlus } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
 
 interface StaffMember {
   id: string; employeeId?: string; name: string; department?: string; designation?: string;
@@ -17,13 +18,12 @@ const TRANSPORT_TYPES  = ['BUS','TAXI','SELF'];
 export default function StaffPage() {
   const [staff, setStaff]           = useState<StaffMember[]>([]);
   const [routes, setRoutes]         = useState<Route[]>([]);
-  const [search, setSearch]         = useState('');
-  const [deptFilter, setDept]       = useState('');
   const [showModal, setShowModal]   = useState(false);
   const [editMember, setEditMember] = useState<StaffMember | null>(null);
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
   const [error, setError]           = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const emptyForm = { employeeId:'', name:'', department:'', designation:'', contactNumber:'', email:'', residenceArea:'', defaultRouteId:'', defaultStopName:'', shiftType:'MORNING', transportType:'BUS', isActive:true };
   const [formData, setFormData] = useState(emptyForm);
@@ -40,14 +40,6 @@ export default function StaffPage() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
-
-  const departments = [...new Set(staff.map(s=>s.department).filter(Boolean))].sort() as string[];
-
-  const filtered = staff.filter(s => {
-    const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) || (s.employeeId??'').includes(search) || (s.email??'').toLowerCase().includes(search.toLowerCase());
-    const matchDept   = !deptFilter || s.department === deptFilter;
-    return matchSearch && matchDept;
-  });
 
   const openNew = () => { setEditMember(null); setFormData(emptyForm as any); setShowModal(true); };
   const openEdit = (m: StaffMember) => {
@@ -76,6 +68,55 @@ export default function StaffPage() {
     loadData();
   };
 
+  const staffColumns: DataGridColumn<StaffMember>[] = [
+    { key: 'employeeId', header: 'Emp ID', accessor: m => m.employeeId,
+      render: m => <span className="font-mono text-white">{m.employeeId ?? '-'}</span> },
+    { key: 'name', header: 'Name', accessor: m => m.name,
+      render: m => <span className="font-medium text-white">{m.name}</span> },
+    { key: 'department', header: 'Dept / Role', accessor: m => m.department, filter: 'select',
+      render: m => (
+        <div>
+          <div>{m.department ?? '-'}</div>
+          <div className="text-xs text-slate-300">{m.designation ?? ''}</div>
+        </div>
+      ) },
+    { key: 'contact', header: 'Contact', accessor: m => m.contactNumber,
+      render: m => (
+        <div>
+          <div>{m.contactNumber ?? '-'}</div>
+          <div className="text-xs text-slate-300">{m.email ?? ''}</div>
+        </div>
+      ) },
+    { key: 'residenceArea', header: 'Residence', accessor: m => m.residenceArea },
+    { key: 'route', header: 'Route', accessor: m => m.defaultRouteId ? (routes.find(r=>r.id===m.defaultRouteId)?.name ?? m.defaultRouteId) : '',
+      render: m => (
+        <div>
+          <div>{m.defaultRouteId ? (routes.find(r=>r.id===m.defaultRouteId)?.name ?? m.defaultRouteId.slice(0,8)) : '-'}</div>
+          {m.defaultStopName && <div className="text-xs text-slate-300">{m.defaultStopName}</div>}
+        </div>
+      ) },
+    { key: 'shiftType', header: 'Shift', accessor: m => m.shiftType, filter: 'select' },
+    { key: 'transportType', header: 'Transport', accessor: m => m.transportType, filter: 'select',
+      render: m => (
+        <span className={`px-2 py-0.5 rounded text-xs font-medium ${m.transportType==='BUS' ? 'bg-emerald-500/20 text-emerald-400' : m.transportType==='TAXI' ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-500/20 text-slate-200'}`}>
+          {m.transportType ?? 'BUS'}
+        </span>
+      ) },
+    { key: 'isActive', header: 'Status', accessor: m => m.isActive ? 'Active' : 'Inactive', filter: 'select',
+      render: m => m.isActive
+        ? <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Active</span>
+        : <span className="px-2 py-0.5 rounded-full text-xs bg-slate-500/20 text-slate-200 border border-slate-500/30">Inactive</span> },
+    { key: 'actions', header: 'Actions', filter: false, sortable: false,
+      render: m => (
+        <div className="flex gap-2">
+          <button onClick={()=>openEdit(m)} className="text-xs px-2 py-1 rounded bg-violet-500/20 text-violet-400 border border-violet-500/30 hover:bg-violet-500/30">Edit</button>
+          <button onClick={()=>toggleActive(m)} className="text-xs px-2 py-1 rounded bg-slate-700 text-white border border-white/10 hover:bg-slate-600">
+            {m.isActive ? 'Suspend' : 'Activate'}
+          </button>
+        </div>
+      ) },
+  ];
+
   if (loading) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading staff...</div></div>;
 
   return (
@@ -94,71 +135,31 @@ export default function StaffPage() {
 
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
 
-      <div className="flex gap-4 flex-wrap">
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, ID or email..."
-          className="flex-1 min-w-48 max-w-sm px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
-        <select value={deptFilter} onChange={e=>setDept(e.target.value)}
-          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
-          <option value="">All Departments</option>
-          {departments.map(d=><option key={d} value={d}>{d}</option>)}
-        </select>
-      </div>
-
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
-        {filtered.length === 0 ? (
-          <div className="text-center text-slate-400 py-12">No staff found</div>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-white/5">
-                {['Emp ID','Name','Dept / Role','Contact','Residence','Route','Shift','Transport','Status','Actions'].map(h=>(
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-400">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(m=>(
-                <tr key={m.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-3 text-sm font-mono text-white">{m.employeeId ?? '-'}</td>
-                  <td className="px-4 py-3 text-sm font-medium text-white">{m.name}</td>
-                  <td className="px-4 py-3 text-sm text-white">
-                    <div>{m.department ?? '-'}</div>
-                    <div className="text-xs text-slate-300">{m.designation ?? ''}</div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-white">
-                    <div>{m.contactNumber ?? '-'}</div>
-                    <div className="text-xs text-slate-300">{m.email ?? ''}</div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-white">{m.residenceArea ?? '-'}</td>
-                  <td className="px-4 py-3 text-sm text-white">
-                    {m.defaultRouteId ? (routes.find(r=>r.id===m.defaultRouteId)?.name ?? m.defaultRouteId.slice(0,8)) : '-'}
-                    {m.defaultStopName && <div className="text-xs text-slate-300">{m.defaultStopName}</div>}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-white">{m.shiftType ?? '-'}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${m.transportType==='BUS' ? 'bg-emerald-500/20 text-emerald-400' : m.transportType==='TAXI' ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-500/20 text-slate-200'}`}>
-                      {m.transportType ?? 'BUS'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {m.isActive
-                      ? <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Active</span>
-                      : <span className="px-2 py-0.5 rounded-full text-xs bg-slate-500/20 text-slate-200 border border-slate-500/30">Inactive</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <button onClick={()=>openEdit(m)} className="text-xs px-2 py-1 rounded bg-violet-500/20 text-violet-400 border border-violet-500/30 hover:bg-violet-500/30">Edit</button>
-                      <button onClick={()=>toggleActive(m)} className="text-xs px-2 py-1 rounded bg-slate-700 text-white border border-white/10 hover:bg-slate-600">
-                        {m.isActive ? 'Suspend' : 'Activate'}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <FleetDataGrid
+        gridName="StaffRegister"
+        rows={staff}
+        getRowId={m => m.id}
+        loading={false}
+        emptyMessage="No staff found"
+        columns={staffColumns}
+        numbered
+        selectable
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
+        toolbar={{
+          exportName: 'staff-register',
+          title: 'Staff Register',
+          actions: selectedIds.size > 0 ? (
+            <span className="inline-flex items-center gap-2 text-xs text-violet-300">
+              {selectedIds.size} selected
+              <button type="button" onClick={() => setSelectedIds(new Set())}
+                className="text-slate-400 hover:text-white underline underline-offset-2">
+                Clear
+              </button>
+            </span>
+          ) : undefined,
+        }}
+      />
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
