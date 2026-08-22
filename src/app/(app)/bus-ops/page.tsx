@@ -143,10 +143,10 @@ export default function BusOpsDashboard() {
                   desc: 'Analyse pairs, apply merges, history & revert',
                 },
                 {
-                  label: 'Planning Core',
-                  href: '/bus-ops/plan',
+                  label: 'Planning Engine',
+                  href: '/bus-ops/planning-engine',
                   icon: Sparkles,
-                  desc: 'Runcutting / blocking / roster plans',
+                  desc: 'Runcutting / blocking / roster, plus CBA and headway rules',
                 },
                 {
                   label: 'Vehicle/Resource Optimization',
@@ -178,14 +178,18 @@ export default function BusOpsDashboard() {
         <Panel title="Quick Actions" icon={Sparkles} accent="violet">
           <div className="grid grid-cols-2 gap-2">
             {[
+              // Headway and CBA moved inside this gate along with the rest.
+              // They used to render for every role, but both now live behind
+              // the Planning Engine's bus-ops:admin:planning-core guard — an
+              // ungated tile would just walk the user into a permission wall.
               ...(isTenantAdmin ? [
-                { label: 'Planning Core',     href: '/bus-ops/plan',         icon: Sparkles,      accent: 'violet' as const, badge: 'P0' },
-                { label: 'PCE Constraints',   href: '/bus-ops/planning-constraints', icon: Shield, accent: 'violet' as const },
-                { label: 'Route Consolidation', href: '/bus-ops/route-consolidation', icon: GitMerge, accent: 'violet' as const },
+                { label: 'Planning Engine',   href: '/bus-ops/planning-engine',            icon: Sparkles, accent: 'violet' as const, badge: 'P0' },
+                { label: 'PCE Constraints',   href: '/bus-ops/planning-constraints',       icon: Shield,   accent: 'violet' as const },
+                { label: 'Route Consolidation', href: '/bus-ops/route-consolidation',      icon: GitMerge, accent: 'violet' as const },
                 { label: 'Vehicle/Resource Optimization', href: '/bus-ops/vehicle-resource-optimization', icon: Repeat, accent: 'violet' as const },
+                { label: 'Headway Mgmt',      href: '/bus-ops/planning-engine?tab=headway', icon: Timer,   accent: 'cyan' as const,   badge: 'P1' },
+                { label: 'CBA Rule Engine',   href: '/bus-ops/planning-engine?tab=cba',     icon: Scale,   accent: 'amber' as const,  badge: 'P1' },
               ] : []),
-              { label: 'Headway Mgmt',      href: '/bus-ops/headway',      icon: Timer,         accent: 'cyan' as const,   badge: 'P1' },
-              { label: 'CBA Rule Engine',   href: '/bus-ops/cba-rules',    icon: Scale,         accent: 'amber' as const,  badge: 'P1' },
               { label: 'Power BI Connector',href: '/bus-ops/powerbi',      icon: BarChart3,     accent: 'emerald' as const,badge: 'P1' },
               { label: 'Multilayer GIS',    href: '/bus-ops/gis',          icon: Layers,        accent: 'rose' as const,   badge: 'P1' },
               { label: 'Rider App (PWA)',   href: '/bus-ops/passenger/app',icon: Smartphone,    accent: 'cyan' as const,   badge: 'P1' },
