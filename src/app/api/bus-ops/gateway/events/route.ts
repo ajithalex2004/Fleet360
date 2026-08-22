@@ -24,12 +24,26 @@
  *     },
  *   }
  *
- * Auth: HMAC-SHA256 of the raw body using BLE_GATEWAY_SHARED_SECRET, hex
- * encoded in `x-gateway-signature`. Bodies replay-protected by includes
- * timestamps, but you should also rotate the shared secret periodically.
+ * Auth: HMAC-SHA256 of the raw body, hex encoded in
+ * `x-gateway-signature`, keyed by the per-gateway secret (falling back
+ * to BLE_GATEWAY_SHARED_SECRET while the per-secret rollout completes).
+ * A gateway with neither fails closed. This route is listed in
+ * PUBLIC_PREFIXES because hardware has no operator session, so the
+ * signature check here IS the trust boundary — not a second layer
+ * behind one.
  *
- * Idempotency: writes are keyed by (scheduleId, passengerId, occurredAt) —
- * sending the same event twice is safe.
+ * NOT replay-protected. The previous version of this comment claimed
+ * bodies were, which was never true: nothing binds a request to a time
+ * window or a nonce, so a captured body can be re-sent. The per-event
+ * dedup below absorbs an immediate resend, but a replay far enough
+ * later resolves a DIFFERENT active trip and would apply the events
+ * there. Fixing that needs a signed timestamp plus a freshness window,
+ * which is a protocol change on the firmware side — tracked separately
+ * rather than silently assumed to be handled.
+ *
+ * Idempotency: per-event dedup on
+ * (scheduleId, passengerId, direction, method) within ±5s of
+ * occurredAt — sending the same event twice in quick succession is safe.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -107,14 +121,28 @@ export async function POST(req: NextRequest) {
       secret: true,
     },
   });
-  if (!gateway || gateway.isActive === false) {
-    return NextResponse.json({ ok: false, error: 'Gateway not registered or inactive' }, { status: 404 });
-  }
+  // Unregistered/inactive gateway and bad signature deliberately return
+  // the SAME 401 with the same body. This endpoint is unauthenticated at
+  // the middleware layer, so a distinguishable "not registered" response
+  // lets anyone enumerate which gateway ids exist by posting a garbage
+  // signature and watching for 404 vs 401 — the same oracle that
+  // returning 403 instead of 404 gives on a tenant-scoped lookup.
+  // A legitimate operator debugging real hardware has the server logs;
+  // an anonymous prober learns nothing either way.
+  //
+  // resolveGatewaySecret returns null when the row has no secret and no
+  // BLE_GATEWAY_SHARED_SECRET fallback is configured, and
+  // verifyGatewaySignatureWithSecret treats a null secret as failure —
+  // so a secret-less gateway fails closed, not open.
+  const authOk =
+    gateway != null &&
+    gateway.isActive !== false &&
+    verifyGatewaySignatureWithSecret(rawBody, sig, resolveGatewaySecret(gateway.secret));
 
-  // Verify HMAC using the per-gateway secret (or env fallback).
-  const effectiveSecret = resolveGatewaySecret(gateway.secret);
-  if (!verifyGatewaySignatureWithSecret(rawBody, sig, effectiveSecret)) {
-    return NextResponse.json({ ok: false, error: 'Invalid signature' }, { status: 401 });
+  // `!gateway ||` is redundant with authOk at runtime but narrows the
+  // type for every gateway.* access below.
+  if (!gateway || !authOk) {
+    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
 
   // tenantId is derived from the gateway row — hardware devices authenticate

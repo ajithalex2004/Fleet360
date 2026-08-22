@@ -240,7 +240,7 @@ describe('BLE gateway boarding ingest', () => {
     expect(body.summary.transitionsApplied).toBe(0);
   }, 90_000);
 
-  it('rejects an unsigned or wrongly-signed payload', async () => {
+  it('rejects a wrongly-signed payload', async () => {
     if (!serverAvailable || !hasDb) return;
 
     const res = await postEvents(
@@ -248,5 +248,40 @@ describe('BLE gateway boarding ingest', () => {
       'wrong-secret',
     );
     expect(res.status).toBe(401);
+  }, 90_000);
+
+  it('rejects a payload with no signature header at all', async () => {
+    if (!serverAvailable || !hasDb) return;
+
+    // Distinct from the wrong-signature case: this exercises the
+    // `!signatureHex → false` branch in verifyGatewaySignatureWithSecret,
+    // i.e. that a missing header fails closed rather than skipping the
+    // check. Worth pinning now the route is reachable without a session.
+    const raw = JSON.stringify({
+      gatewayId: GATEWAY_ID,
+      events: [{ kind: 'BOARD', tagId: TAG_ID, occurredAt: new Date().toISOString() }],
+    });
+    const res = await fetch('http://localhost:3000/api/bus-ops/gateway/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, // no x-gateway-signature
+      body: raw,
+    });
+    expect(res.status).toBe(401);
+  }, 90_000);
+
+  it('does not leak which gateway ids exist', async () => {
+    if (!serverAvailable || !hasDb) return;
+
+    // The route is unauthenticated at the middleware layer, so a
+    // distinguishable "not registered" response would let anyone
+    // enumerate valid gateway ids by posting garbage and watching for
+    // 404 vs 401. Registered-but-badly-signed and simply-unknown must be
+    // indistinguishable in both status AND body.
+    const unknown = await postEvents({ gatewayId: `NOPE-${runId}`, events: [] }, 'wrong-secret');
+    const known   = await postEvents({ gatewayId: GATEWAY_ID,      events: [] }, 'wrong-secret');
+
+    expect(unknown.status).toBe(401);
+    expect(known.status).toBe(401);
+    expect(await unknown.json()).toEqual(await known.json());
   }, 90_000);
 });
