@@ -88,6 +88,7 @@
         "uuid": "^13.0.0",
         "web-push": "^3.6.7",
         "ws": "^8.21.1",
+        "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
         "zod": "^4.1.13",
         "zod-to-json-schema": "^3.25.0",
         "zustand": "^5.0.8"
