@@ -559,7 +559,7 @@ export function PlanningCorePanel({ cbaRevision = 0, onEditPceRules }: PlanningC
         <div className="rounded-2xl bg-slate-800/50 border border-white/10 p-5">
           <h3 className="text-sm font-bold text-white mb-3">Blocking &amp; Rostering</h3>
           <div className="grid grid-cols-2 gap-2 text-[11px] mb-3">
-            <NumberField label="Max deadhead (min)" value={blockOptions.maxDeadheadMins} step="5"
+            <NumberField label="Allowed NRM (min)" value={blockOptions.maxDeadheadMins} step="5"
               onChange={(v) => setBlockOptions({ ...blockOptions, maxDeadheadMins: v })} />
             <NumberField label="Max block work (min)" value={blockOptions.maxBlockWorkMins} step="30"
               onChange={(v) => setBlockOptions({ ...blockOptions, maxBlockWorkMins: v })} />
