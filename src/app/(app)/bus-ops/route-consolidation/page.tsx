@@ -31,6 +31,7 @@ import RouteConsolidationApplyModal, { type RecommendationForApply } from '@/com
 import RouteConsolidationHistoryPanel from '@/components/bus-ops/RouteConsolidationHistoryPanel';
 import RouteConsolidationScoringPolicyPanel from '@/components/bus-ops/RouteConsolidationScoringPolicyPanel';
 import RequireTenantAdmin from '@/components/bus-ops/RequireTenantAdmin';
+import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
 
 // ─── Types matched to /analyze response ─────────────────────────────
 
@@ -125,6 +126,45 @@ interface AnalyzeResponse {
   };
 }
 
+const recommendationColumns: DataGridColumn<Recommendation>[] = [
+  { key: 'pair', header: 'Pair', accessor: r => `${r.routeA.name} + ${r.routeB.name}`,
+    render: r => (
+      <div>
+        <div className="font-medium">{r.routeA.name} + {r.routeB.name}</div>
+        <VerdictBadge verdict={r.verdict} />
+      </div>
+    ) },
+  { key: 'zones', header: 'Zones', filter: false, sortable: false,
+    render: r => (
+      <div className="flex flex-col gap-0.5">
+        <ZoneBadge side="Pickup" compat={r.zoneCompat.pickup} />
+        <ZoneBadge side="Dropoff" compat={r.zoneCompat.dropoff} />
+      </div>
+    ) },
+  { key: 'timing', header: 'Timing', filter: false, sortable: false,
+    render: r => (
+      <div className="text-xs text-slate-400">
+        <div>{r.timeCompat.shift ?? '—'}</div>
+        <div>{r.timeCompat.direction ?? '—'}</div>
+      </div>
+    ) },
+  { key: 'demand', header: 'Demand', accessor: r => r.demand.combined, align: 'right',
+    render: r => (
+      <div>
+        <div>{r.demand.combined}</div>
+        <div className="text-[10px] text-slate-500">{r.demand.routeAEnrolled} + {r.demand.routeBEnrolled}</div>
+      </div>
+    ) },
+  { key: 'savings', header: 'Savings/wk', accessor: r => r.estimatedSavings.weeklyAmount, align: 'right',
+    render: r => <span className="text-emerald-300">{fmtMoney(r.estimatedSavings.weeklyAmount)}</span> },
+  { key: 'penalty', header: 'Penalty', accessor: r => r.components.pcePenalty, align: 'right',
+    render: r => r.components.pcePenalty > 0
+      ? <span className="text-violet-300">{r.components.pcePenalty}</span>
+      : <span className="text-slate-500">—</span> },
+  { key: 'score', header: 'Score', accessor: r => r.operatorScore, align: 'right',
+    render: r => <span className={`font-semibold ${r.operatorScore >= 50 ? 'text-emerald-300' : 'text-rose-300'}`}>{r.operatorScore}</span> },
+];
+
 // ─── Page ────────────────────────────────────────────────────────────
 
 type Tab = 'recommendations' | 'history';
@@ -143,13 +183,17 @@ function RouteConsolidationPageInner() {
   const [analysing, setAnalysing] = useState(false);
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  // Bumped on every analyse() call and used as the recommendations grid's
+  // React `key` — forces a fresh FleetDataGrid instance (clearing its
+  // internal expanded/sort/filter state) instead of risking stale expand
+  // state surviving onto a same-keyed row in a brand new result set.
+  const [analysisRunId, setAnalysisRunId] = useState(0);
   const [showSkipped, setShowSkipped] = useState(false);
   const [applyingRec, setApplyingRec] = useState<{ rec: Recommendation; recommendationId: string } | null>(null);
   const [appliedFlash, setAppliedFlash] = useState<string | null>(null);
 
   const analyse = useCallback(async () => {
-    setAnalysing(true); setError(null); setResult(null); setExpandedRow(null);
+    setAnalysing(true); setError(null); setResult(null); setAnalysisRunId(id => id + 1);
     try {
       const res = await fetch('/api/bus-ops/route-consolidation/analyze', {
         method: 'POST',
@@ -339,97 +383,41 @@ function RouteConsolidationPageInner() {
               </p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-900/80 text-left text-xs uppercase tracking-wider text-slate-400">
-                  <tr>
-                    <th className="w-8 px-3 py-2"></th>
-                    <th className="w-8 px-3 py-2 text-center">#</th>
-                    <th className="px-3 py-2">Pair</th>
-                    <th className="px-3 py-2">Zones</th>
-                    <th className="px-3 py-2">Timing</th>
-                    <th className="px-3 py-2 text-right">Demand</th>
-                    <th className="px-3 py-2 text-right">Savings/wk</th>
-                    <th className="px-3 py-2 text-right">Penalty</th>
-                    <th className="px-3 py-2 text-right">Score</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800">
-                  {result.recommendations.map((rec, i) => {
-                    const key = `${rec.routeA.id}-${rec.routeB.id}`;
-                    const isExpanded = expandedRow === key;
-                    const isWinner = rec === winner;
-                    return (
-                      <React.Fragment key={key}>
-                        <tr
-                          className={`text-slate-200 cursor-pointer hover:bg-slate-800/40 ${isWinner ? 'bg-emerald-500/5' : !rec.feasible ? 'bg-slate-800/40 text-slate-400' : ''}`}
-                          onClick={() => setExpandedRow(isExpanded ? null : key)}
-                        >
-                          <td className="px-3 py-3 text-slate-500">
-                            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                          </td>
-                          <td className="px-3 py-3 text-center">
-                            {isWinner ? <Trophy className="mx-auto h-4 w-4 text-emerald-400" /> : <span className="text-xs text-slate-500">{i + 1}</span>}
-                          </td>
-                          <td className="px-3 py-3">
-                            <div className="font-medium">{rec.routeA.name} + {rec.routeB.name}</div>
-                            <VerdictBadge verdict={rec.verdict} />
-                          </td>
-                          <td className="px-3 py-3">
-                            <div className="flex flex-col gap-0.5">
-                              <ZoneBadge side="Pickup" compat={rec.zoneCompat.pickup} />
-                              <ZoneBadge side="Dropoff" compat={rec.zoneCompat.dropoff} />
-                            </div>
-                          </td>
-                          <td className="px-3 py-3 text-xs text-slate-400">
-                            <div>{rec.timeCompat.shift ?? '—'}</div>
-                            <div>{rec.timeCompat.direction ?? '—'}</div>
-                          </td>
-                          <td className="px-3 py-3 text-right">
-                            <div>{rec.demand.combined}</div>
-                            <div className="text-[10px] text-slate-500">{rec.demand.routeAEnrolled} + {rec.demand.routeBEnrolled}</div>
-                          </td>
-                          <td className="px-3 py-3 text-right text-emerald-300">{fmtMoney(rec.estimatedSavings.weeklyAmount)}</td>
-                          <td className="px-3 py-3 text-right">
-                            {rec.components.pcePenalty > 0
-                              ? <span className="text-violet-300">{rec.components.pcePenalty}</span>
-                              : <span className="text-slate-500">—</span>}
-                          </td>
-                          <td className={`px-3 py-3 text-right font-semibold ${rec.operatorScore >= 50 ? 'text-emerald-300' : 'text-rose-300'}`}>
-                            {rec.operatorScore}
-                          </td>
-                        </tr>
-                        {isExpanded && (
-                          <tr>
-                            <td colSpan={9} className="bg-slate-900/60 px-6 py-4 space-y-3">
-                              <PceVerdictPanel body={{
-                                verdict: rec.verdict,
-                                checks: rec.checks,
-                                totalPenalty: rec.components.pcePenalty,
-                              }} />
-                              <RecMetadata rec={rec} />
-                              {rec.feasible && (
-                                <div className="pt-3 border-t border-slate-800 flex items-center justify-end">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setApplyingRec({ rec, recommendationId: key });
-                                    }}
-                                    className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
-                                  >
-                                    <CheckCircle2 className="w-4 h-4" /> Apply this consolidation
-                                  </button>
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <FleetDataGrid
+              key={analysisRunId}
+              gridName="RouteConsolidationRecommendations"
+              rows={result.recommendations}
+              getRowId={r => `${r.routeA.id}-${r.routeB.id}`}
+              loading={false}
+              emptyMessage="No results"
+              columns={recommendationColumns}
+              numbered
+              numberRender={(r, pos) => r === winner
+                ? <Trophy className="mx-auto h-4 w-4 text-emerald-400" />
+                : <span className="text-xs text-slate-500">{pos}</span>}
+              rowClassName={r => `text-slate-200 ${r === winner ? 'bg-emerald-500/5' : !r.feasible ? 'bg-slate-800/40 text-slate-400' : ''}`}
+              expandable={r => (
+                <div className="space-y-3">
+                  <PceVerdictPanel body={{
+                    verdict: r.verdict,
+                    checks: r.checks,
+                    totalPenalty: r.components.pcePenalty,
+                  }} />
+                  <RecMetadata rec={r} />
+                  {r.feasible && (
+                    <div className="pt-3 border-t border-slate-800 flex items-center justify-end">
+                      <button
+                        onClick={() => setApplyingRec({ rec: r, recommendationId: `${r.routeA.id}-${r.routeB.id}` })}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+                      >
+                        <CheckCircle2 className="w-4 h-4" /> Apply this consolidation
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              toolbar={{ exportName: 'route-consolidation-recommendations', title: 'Recommendations' }}
+            />
           )}
 
           {/* Skipped pairs breakdown */}

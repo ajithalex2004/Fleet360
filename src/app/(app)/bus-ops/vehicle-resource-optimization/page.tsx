@@ -26,6 +26,7 @@ import React, { useCallback, useState } from 'react';
 import { Repeat, RefreshCw, ChevronDown, ChevronRight, Info, AlertTriangle, GitMerge, ArrowRight } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
 import RequireTenantAdmin from '@/components/bus-ops/RequireTenantAdmin';
+import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
 
 // ─── Types matched to /vehicle-reuse response ───────────────────────
 
@@ -80,6 +81,34 @@ interface VehicleReuseResponse {
   totals: { routesAnalysed: number; orderedPairsConsidered: number; opportunitiesFound: number };
 }
 
+const opportunityColumns: DataGridColumn<VehicleReuseOpportunity>[] = [
+  { key: 'routeA', header: 'Route A', accessor: o => o.firstRouteName,
+    render: o => <span className="font-medium">{o.firstRouteName}</span> },
+  { key: 'arrives', header: 'Arrives', accessor: o => o.firstArrivalTime,
+    render: o => <span className="text-xs text-slate-400">{o.firstArrivalTime}</span> },
+  { key: 'routeB', header: 'Route B', accessor: o => o.secondRouteName,
+    render: o => <span className="font-medium">{o.secondRouteName}</span> },
+  { key: 'departs', header: 'Departs', accessor: o => o.secondDepartureTime,
+    render: o => <span className="text-xs text-slate-400">{o.secondDepartureTime}</span> },
+  { key: 'gap', header: 'Gap', accessor: o => o.availableGapMinutes, align: 'right',
+    render: o => `${o.availableGapMinutes}m` },
+  { key: 'reposition', header: 'Reposition', accessor: o => o.repositionDurationMinutes, align: 'right',
+    render: o => <span className="text-xs text-slate-400">{o.repositionDurationMinutes}m</span> },
+  { key: 'slack', header: 'Usable Slack', accessor: o => o.remainingSlackMinutes, align: 'right',
+    render: o => (
+      <span className={`font-semibold ${o.remainingSlackMinutes >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+        {o.remainingSlackMinutes >= 0 ? '+' : ''}{o.remainingSlackMinutes}m
+      </span>
+    ) },
+  { key: 'status', header: 'Status', accessor: o => o.feasibility, filter: 'select',
+    render: o => (
+      <>
+        <FeasibilityBadge feasibility={o.feasibility} />
+        {o.warnings.length > 0 && <AlertTriangle className="inline-block w-3.5 h-3.5 ml-1.5 text-amber-400" />}
+      </>
+    ) },
+];
+
 // ─── Page ────────────────────────────────────────────────────────────
 
 export default function VehicleResourceOptimizationPage() {
@@ -94,11 +123,14 @@ function VehicleResourceOptimizationPageInner() {
   const [analysing, setAnalysing] = useState(false);
   const [result, setResult] = useState<VehicleReuseResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  // Bumped on every onAnalyse() call and used as the opportunities grid's
+  // React `key` — forces a fresh FleetDataGrid instance instead of risking
+  // stale expand state surviving onto a same-keyed row in a new result set.
+  const [analysisRunId, setAnalysisRunId] = useState(0);
   const [showSkipped, setShowSkipped] = useState(false);
 
   const onAnalyse = useCallback(async () => {
-    setAnalysing(true); setError(null); setResult(null); setExpandedRow(null);
+    setAnalysing(true); setError(null); setResult(null); setAnalysisRunId(id => id + 1);
     try {
       const res = await fetch('/api/bus-ops/route-consolidation/vehicle-reuse', {
         method: 'POST',
@@ -191,63 +223,18 @@ function VehicleResourceOptimizationPageInner() {
               </p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-900/80 text-left text-xs uppercase tracking-wider text-slate-400">
-                  <tr>
-                    <th className="w-8 px-3 py-2"></th>
-                    <th className="px-3 py-2">Route A</th>
-                    <th className="px-3 py-2">Arrives</th>
-                    <th className="px-3 py-2">Route B</th>
-                    <th className="px-3 py-2">Departs</th>
-                    <th className="px-3 py-2 text-right">Gap</th>
-                    <th className="px-3 py-2 text-right">Reposition</th>
-                    <th className="px-3 py-2 text-right">Usable Slack</th>
-                    <th className="px-3 py-2">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800">
-                  {result.opportunities.map((o) => {
-                    const key = `${o.firstRouteId}-${o.secondRouteId}`;
-                    const isExpanded = expandedRow === key;
-                    return (
-                      <React.Fragment key={key}>
-                        <tr
-                          className="text-slate-200 cursor-pointer hover:bg-slate-800/40"
-                          onClick={() => setExpandedRow(isExpanded ? null : key)}
-                        >
-                          <td className="px-3 py-3 text-slate-500">
-                            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                          </td>
-                          <td className="px-3 py-3 font-medium">{o.firstRouteName}</td>
-                          <td className="px-3 py-3 text-xs text-slate-400">{o.firstArrivalTime}</td>
-                          <td className="px-3 py-3 font-medium">{o.secondRouteName}</td>
-                          <td className="px-3 py-3 text-xs text-slate-400">{o.secondDepartureTime}</td>
-                          <td className="px-3 py-3 text-right">{o.availableGapMinutes}m</td>
-                          <td className="px-3 py-3 text-right text-xs text-slate-400">{o.repositionDurationMinutes}m</td>
-                          <td className={`px-3 py-3 text-right font-semibold ${o.remainingSlackMinutes >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
-                            {o.remainingSlackMinutes >= 0 ? '+' : ''}{o.remainingSlackMinutes}m
-                          </td>
-                          <td className="px-3 py-3">
-                            <FeasibilityBadge feasibility={o.feasibility} />
-                            {o.warnings.length > 0 && (
-                              <AlertTriangle className="inline-block w-3.5 h-3.5 ml-1.5 text-amber-400" />
-                            )}
-                          </td>
-                        </tr>
-                        {isExpanded && (
-                          <tr>
-                            <td colSpan={9} className="bg-slate-900/60 px-6 py-4">
-                              <ReuseOpportunityDetail o={o} />
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <FleetDataGrid
+              key={analysisRunId}
+              gridName="VehicleReuseOpportunities"
+              rows={result.opportunities}
+              getRowId={o => `${o.firstRouteId}-${o.secondRouteId}`}
+              loading={false}
+              emptyMessage="No opportunities found"
+              columns={opportunityColumns}
+              numbered
+              expandable={o => <ReuseOpportunityDetail o={o} />}
+              toolbar={{ exportName: 'vehicle-reuse-opportunities', title: 'Opportunities' }}
+            />
           )}
 
           {result && result.skipped.length > 0 && (
