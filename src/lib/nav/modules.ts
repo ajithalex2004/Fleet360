@@ -162,6 +162,10 @@ export const MODULES: ModuleDef[] = [
       { label: 'Route Optimization',  href: '/bus-ops/route-planner',       icon: Route,           group: 'Planning' },
       { label: 'Schedules',           href: '/bus-ops/schedules',           icon: Calendar,        group: 'Planning' },
       { label: 'Schedule Templates',  href: '/bus-ops/schedule-templates',  icon: Repeat,          group: 'Planning' },
+      // Planning Engine (runcut/block/roster + CBA + headway) was reachable
+      // only from a dashboard tile despite being the P0 planning surface.
+      // Listed here for parity with the other Planning entries.
+      { label: 'Planning Engine',     href: '/bus-ops/planning-engine',     icon: Sparkles,        group: 'Planning' },
       { label: 'Planning Constraints',href: '/bus-ops/planning-constraints',icon: Shield,          group: 'Planning' },
       { label: 'Planning Optimizer',  href: '/bus-ops/planning-optimizer',  icon: Sparkles,        group: 'Planning' },
       { label: 'Route Consolidation', href: '/bus-ops/route-consolidation', icon: GitMerge,        group: 'Planning' },

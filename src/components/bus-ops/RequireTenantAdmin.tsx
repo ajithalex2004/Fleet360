@@ -16,17 +16,32 @@ import { ShieldAlert } from 'lucide-react';
 import { useFetchedData } from '@/hooks/useFetchedData';
 import { hasPermission, buildPermissionKey, SYSTEM_ROLES } from '@/lib/permissions';
 
-export default function RequireTenantAdmin({ resource, children }: { resource: string; children: React.ReactNode }) {
+/**
+ * Same check as the component below, but returned rather than rendered.
+ *
+ * Needed where access decides what to *offer* instead of whether to show
+ * a page at all — the Planning Engine uses it to omit the "Edit PCE
+ * Rules" button for users who lack bus-ops:admin:planning-constraints,
+ * since rendering it would walk them into a 403 from the drawer's first
+ * fetch.
+ *
+ * `loading` is surfaced so callers can avoid flashing an affordance on
+ * and then off again while /api/auth/me is in flight.
+ */
+export function useBusOpsAdminAccess(resource: string): { allowed: boolean; loading: boolean } {
   const { data, loading } = useFetchedData<{ role?: string }>('/api/auth/me');
+  const roleCode = data?.role ?? '';
+  const perms = (SYSTEM_ROLES.find(r => r.code === roleCode)?.permissions ?? [])
+    .map(p => buildPermissionKey(p.module, p.action, p.resource));
+  return { allowed: hasPermission(perms, 'bus-ops', 'admin', resource), loading };
+}
+
+export default function RequireTenantAdmin({ resource, children }: { resource: string; children: React.ReactNode }) {
+  const { allowed, loading } = useBusOpsAdminAccess(resource);
 
   if (loading) {
     return <div className="p-10 text-center text-slate-500 text-sm">Checking access…</div>;
   }
-
-  const roleCode = data?.role ?? '';
-  const perms = (SYSTEM_ROLES.find(r => r.code === roleCode)?.permissions ?? [])
-    .map(p => buildPermissionKey(p.module, p.action, p.resource));
-  const allowed = hasPermission(perms, 'bus-ops', 'admin', resource);
 
   if (!allowed) {
     return (

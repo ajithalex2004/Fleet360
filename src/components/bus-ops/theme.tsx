@@ -6,5 +6,5 @@
  * required. New code should import from '@/components/ui/page-theme'.
  */
 
-export { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
-export type { PageAccent, BusOpsAccent } from '@/components/ui/page-theme';
+export { PageHeader, KpiCard, Panel, StatusPill, TabStrip } from '@/components/ui/page-theme';
+export type { PageAccent, BusOpsAccent, TabDef } from '@/components/ui/page-theme';

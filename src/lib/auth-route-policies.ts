@@ -66,6 +66,18 @@ export const PUBLIC_PREFIXES: readonly string[] = [
   '/api/carrier-portal/',
   // Driver mobile app — device-token authed.
   '/api/driver-app/',
+  // BLE gateway ingest — hardware devices sign the raw body with a
+  // per-gateway HMAC-SHA256 (x-gateway-signature) and have no operator
+  // session to present. The handler is the auth boundary: it resolves the
+  // gateway row, 404s unregistered/inactive gateways, verifies the
+  // signature with timingSafeEqual and 401s on mismatch, then derives
+  // tenantId from the gateway record rather than trusting any client
+  // header. Same shape as /api/driver-app/ above.
+  //
+  // Without this the endpoint is unreachable by the only clients it
+  // exists for — every gateway POST was 401'd by the middleware before
+  // reaching the signature check.
+  '/api/bus-ops/gateway/',
   // Staff PWA push — the public-key endpoint is unauthenticated (the key
   // is meant to be public), the subscribe endpoint identifies the staff
   // member by employeeId (no admin session needed for the rider app),
