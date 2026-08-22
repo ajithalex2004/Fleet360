@@ -93,6 +93,31 @@ interface DataGridProps<T> {
    * as data-grid-name for support / QA (e.g. "RoutesGrid", "SchedulesGrid").
    */
   gridName?: string;
+  /**
+   * Leading "#" column showing each row's position in the CURRENT view —
+   * i.e. after sort and filters are applied, not raw array index. A row's
+   * number moves when the user sorts or filters; that's intentional, it's
+   * "row 3 of what I'm looking at now", not a stable row identity. Default
+   * false — existing consumers are unaffected unless they opt in.
+   */
+  numbered?: boolean;
+  /**
+   * Leading checkbox column for multi-row selection, for bulk actions the
+   * page wants to build on top (bulk delete/export/status-change/etc — this
+   * component only tracks which ids are checked, it doesn't know what to do
+   * with them). Independent of `selectedId` above, which is a single active
+   * row for click/highlight (e.g. master-detail) — the two are unrelated
+   * concepts and a page could use either, both, or neither.
+   *
+   * Controlled: pass `selectedIds` + `onSelectionChange`, same pattern as a
+   * controlled input. The "select all" header checkbox acts on the rows
+   * currently visible after filtering (`processed`), matching how filtered
+   * bulk-select conventionally behaves elsewhere (e.g. Gmail's "select all
+   * that match this search") — not the full unfiltered `rows`.
+   */
+  selectable?: boolean;
+  selectedIds?: Set<string>;
+  onSelectionChange?: (ids: Set<string>) => void;
 }
 
 const KPI_ACCENTS: Record<KpiAccent, { bg: string; text: string }> = {
@@ -118,6 +143,7 @@ const cmp = (a: unknown, b: unknown): number => {
 export default function FleetDataGrid<T>({
   rows, columns, getRowId, onRowClick, selectedId, loading, emptyMessage = 'No rows',
   initialSort, toolbar = {}, kpis, filterChips, className = '', gridName = 'FleetDataGrid',
+  numbered = false, selectable = false, selectedIds, onSelectionChange,
 }: DataGridProps<T>) {
   const tb = { search: true, columns: true, density: true, filters: true, exportCsv: true, sortSelector: false, ...toolbar };
 
@@ -228,6 +254,47 @@ export default function FleetDataGrid<T>({
   };
 
   const clearAll = () => { setColFilters({}); setGlobalSearch(''); setChipValues({}); };
+
+  // Selection is fully controlled by the caller (same contract as a
+  // controlled <input>) — this component never holds its own copy of
+  // selectedIds, so a parent can't get out of sync with what it's
+  // rendering. `?? new Set()` covers a caller that hasn't set an initial
+  // value yet rather than crashing on undefined.
+  const selection = selectedIds ?? new Set<string>();
+  // Propagation is stopped by the wrapping <td>'s own onClick below, not
+  // here — this only computes the next selection state.
+  const toggleRow = (id: string) => {
+    const next = new Set(selection);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    onSelectionChange?.(next);
+  };
+  // "Select all" acts on `processed` (the current filtered/sorted view),
+  // not the full `rows` — selecting everything that matches an active
+  // filter, not everything that exists. See the prop doc for the
+  // Gmail-style rationale.
+  const visibleIds = useMemo(() => processed.map(getRowId), [processed, getRowId]);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selection.has(id));
+  const someVisibleSelected = !allVisibleSelected && visibleIds.some(id => selection.has(id));
+  const toggleAllVisible = () => {
+    const next = new Set(selection);
+    if (allVisibleSelected) {
+      for (const id of visibleIds) next.delete(id);
+    } else {
+      for (const id of visibleIds) next.add(id);
+    }
+    onSelectionChange?.(next);
+  };
+  // Native <input> has no `indeterminate` HTML attribute — it's a DOM
+  // property only settable imperatively, hence the ref instead of a prop.
+  const headerCheckboxRef = (el: HTMLInputElement | null) => {
+    if (el) el.indeterminate = someVisibleSelected;
+  };
+
+  // Both extra columns are prepended before the caller's own columns, so
+  // colSpan for the loading-skeleton and empty-state rows (which each
+  // render one <td> spanning every column) needs to account for them.
+  const leadingColCount = (numbered ? 1 : 0) + (selectable ? 1 : 0);
+  const totalColCount = visibleColumns.length + leadingColCount;
 
   const exportCsv = () => {
     const cols = visibleColumns.filter(c => c.accessor);
@@ -424,6 +491,22 @@ export default function FleetDataGrid<T>({
         <table className="w-full text-sm" style={{ tableLayout: 'auto' }}>
           <thead>
             <tr className="border-b border-white/10 text-slate-500 text-[11px] uppercase tracking-wider bg-slate-900/40">
+              {numbered && (
+                <th className="px-3 py-2.5 font-medium text-left w-10">#</th>
+              )}
+              {selectable && (
+                <th className="px-3 py-2.5 w-10">
+                  <input
+                    type="checkbox"
+                    ref={headerCheckboxRef}
+                    checked={allVisibleSelected}
+                    onChange={toggleAllVisible}
+                    disabled={visibleIds.length === 0}
+                    aria-label="Select all rows"
+                    className="accent-violet-500 w-3.5 h-3.5"
+                  />
+                </th>
+              )}
               {visibleColumns.map(c => {
                 const sortable = c.sortable ?? !!c.accessor;
                 const isSorted = sort?.key === c.key;
@@ -446,6 +529,8 @@ export default function FleetDataGrid<T>({
 
             {showFilters && (
               <tr className="border-b border-white/10 bg-slate-950/40">
+                {numbered && <th className="px-2 py-1.5" />}
+                {selectable && <th className="px-2 py-1.5" />}
                 {visibleColumns.map(c => {
                   const filterable = c.filter !== false && (c.filter !== undefined || !!c.accessor);
                   return (
@@ -471,15 +556,30 @@ export default function FleetDataGrid<T>({
           <tbody className="divide-y divide-white/5">
             {loading ? (
               [...Array(6)].map((_, i) => (
-                <tr key={i}><td colSpan={visibleColumns.length} className="px-3 py-2"><div className="h-6 bg-slate-800/50 rounded animate-pulse" /></td></tr>
+                <tr key={i}><td colSpan={totalColCount} className="px-3 py-2"><div className="h-6 bg-slate-800/50 rounded animate-pulse" /></td></tr>
               ))
             ) : processed.length === 0 ? (
-              <tr><td colSpan={visibleColumns.length} className="text-center text-slate-500 py-12">{emptyMessage}</td></tr>
-            ) : processed.map(row => {
+              <tr><td colSpan={totalColCount} className="text-center text-slate-500 py-12">{emptyMessage}</td></tr>
+            ) : processed.map((row, i) => {
               const id = getRowId(row);
+              const isSelected = selection.has(id);
               return (
                 <tr key={id} onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  className={`${onRowClick ? 'cursor-pointer' : ''} transition-colors ${selectedId === id ? 'bg-violet-500/10' : 'hover:bg-white/[0.03]'}`}>
+                  className={`${onRowClick ? 'cursor-pointer' : ''} transition-colors ${selectedId === id ? 'bg-violet-500/10' : isSelected ? 'bg-violet-500/5' : 'hover:bg-white/[0.03]'}`}>
+                  {numbered && (
+                    <td className={`px-3 ${pad} text-left text-slate-500 tabular-nums`}>{i + 1}</td>
+                  )}
+                  {selectable && (
+                    <td className={`px-3 ${pad}`} onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleRow(id)}
+                        aria-label={`Select row ${i + 1}`}
+                        className="accent-violet-500 w-3.5 h-3.5"
+                      />
+                    </td>
+                  )}
                   {visibleColumns.map(c => (
                     <td key={c.key} className={`px-3 ${pad} ${alignClass(c.align)} ${c.cellClassName ?? 'text-slate-300'}`}>
                       {c.render ? c.render(row) : (() => { const v = c.accessor?.(row); return v == null || v === '' ? '—' : String(v); })()}
