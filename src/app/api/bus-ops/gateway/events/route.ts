@@ -416,10 +416,18 @@ async function applyTransition(
 
     if (result.applied) {
       summary.transitionsApplied += 1;
+    } else if (result.reason === 'already in target state') {
+      // A second detection of someone already aboard. The ±5s window
+      // above catches exact resends; this catches the same rider being
+      // re-scanned later in the trip, which is normal for a BLE gateway
+      // seeing a stationary tag. Counted as a duplicate, not an unknown
+      // tag — it is a known rider in a known state.
+      summary.duplicates += 1;
     } else {
-      // Rejected rather than errored — an already-boarded duplicate or a
-      // move the state machine forbids. Neither is a fault of the
-      // gateway, so it must not inflate summary.errors and turn ok false.
+      // A move the state machine forbids (e.g. a stale BOARD arriving
+      // after the passenger already alighted). Not the gateway's fault,
+      // so it must not inflate summary.errors and flip ok to false, but
+      // worth surfacing rather than swallowing.
       summary.unknownTags.push({ tagId: t.tagId, reason: result.reason ?? 'transition rejected' });
     }
   } catch (err) {
