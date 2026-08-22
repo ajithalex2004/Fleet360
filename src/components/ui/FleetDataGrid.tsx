@@ -102,6 +102,15 @@ interface DataGridProps<T> {
    */
   numbered?: boolean;
   /**
+   * Override the content of the `numbered` column for specific rows —
+   * e.g. swapping a trophy icon in for the winning row's position number.
+   * Receives the row and its 1-based position in the current view (same
+   * value the plain numbered column would render). Return the number
+   * itself (or any node) to fall back to default-looking output. Ignored
+   * when `numbered` is false.
+   */
+  numberRender?: (row: T, position: number) => React.ReactNode;
+  /**
    * Leading checkbox column for multi-row selection, for bulk actions the
    * page wants to build on top (bulk delete/export/status-change/etc — this
    * component only tracks which ids are checked, it doesn't know what to do
@@ -118,6 +127,15 @@ interface DataGridProps<T> {
   selectable?: boolean;
   selectedIds?: Set<string>;
   onSelectionChange?: (ids: Set<string>) => void;
+  /**
+   * Business-state-driven row background (e.g. tinting a "winner" row,
+   * muting an infeasible one) — a concern the grid has no opinion on.
+   * When provided for a given row, it fully replaces the default
+   * hover/selected background for that row rather than combining with
+   * it, so conflicting `bg-*` utilities never fight over specificity.
+   * Return '' to opt a specific row back into "no special background".
+   */
+  rowClassName?: (row: T) => string;
 }
 
 const KPI_ACCENTS: Record<KpiAccent, { bg: string; text: string }> = {
@@ -143,7 +161,7 @@ const cmp = (a: unknown, b: unknown): number => {
 export default function FleetDataGrid<T>({
   rows, columns, getRowId, onRowClick, selectedId, loading, emptyMessage = 'No rows',
   initialSort, toolbar = {}, kpis, filterChips, className = '', gridName = 'FleetDataGrid',
-  numbered = false, selectable = false, selectedIds, onSelectionChange,
+  numbered = false, numberRender, selectable = false, selectedIds, onSelectionChange, rowClassName,
 }: DataGridProps<T>) {
   const tb = { search: true, columns: true, density: true, filters: true, exportCsv: true, sortSelector: false, ...toolbar };
 
@@ -565,9 +583,11 @@ export default function FleetDataGrid<T>({
               const isSelected = selection.has(id);
               return (
                 <tr key={id} onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  className={`${onRowClick ? 'cursor-pointer' : ''} transition-colors ${selectedId === id ? 'bg-violet-500/10' : isSelected ? 'bg-violet-500/5' : 'hover:bg-white/[0.03]'}`}>
+                  className={`${onRowClick ? 'cursor-pointer' : ''} transition-colors ${
+                    rowClassName ? rowClassName(row) : (selectedId === id ? 'bg-violet-500/10' : isSelected ? 'bg-violet-500/5' : 'hover:bg-white/[0.03]')
+                  }`}>
                   {numbered && (
-                    <td className={`px-3 ${pad} text-left text-slate-500 tabular-nums`}>{i + 1}</td>
+                    <td className={`px-3 ${pad} text-left text-slate-500 tabular-nums`}>{numberRender ? numberRender(row, i + 1) : i + 1}</td>
                   )}
                   {selectable && (
                     <td className={`px-3 ${pad}`} onClick={e => e.stopPropagation()}>
