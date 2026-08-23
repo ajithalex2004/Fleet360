@@ -23,26 +23,19 @@
  * via the regular operator-side patch endpoint with audit logging.
  */
 
+import 'server-only';
 import { prisma } from '@/lib/prisma';
 import { ensureShipperPortalTables } from './schema';
+import {
+  TRACKING_LEVELS,
+  type TrackingLevel,
+  isTrackingLevel,
+  DEFAULT_TRACKING_LEVEL,
+  TERMINAL_STATUSES
+} from './visibility-types';
 
-// ── Types ──────────────────────────────────────────────────────────────
-
-export const TRACKING_LEVELS = ['NONE', 'STATUS_ONLY', 'STATUS_AND_ETA', 'FULL_TRACKING'] as const;
-export type TrackingLevel = typeof TRACKING_LEVELS[number];
-
-export function isTrackingLevel(s: string | null | undefined): s is TrackingLevel {
-  return !!s && (TRACKING_LEVELS as readonly string[]).includes(s);
-}
-
-/** Hard fallback when nothing is configured at any level. */
-export const DEFAULT_TRACKING_LEVEL: TrackingLevel = 'STATUS_ONLY';
-
-// Terminal status names — used to filter timelines at NONE.
-const TERMINAL_STATUSES = new Set([
-  'DRAFT', 'PENDING', 'ACKNOWLEDGED', 'APPROVED',
-  'DELIVERED', 'POD_SUBMITTED', 'CLOSED', 'CANCELLED', 'REJECTED',
-]);
+// Re-export types for backwards compatibility
+export { TRACKING_LEVELS, type TrackingLevel, isTrackingLevel, DEFAULT_TRACKING_LEVEL };
 
 // ── Resolution ─────────────────────────────────────────────────────────
 
