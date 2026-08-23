@@ -30,12 +30,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, type LucideIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Pin, Settings, Eye, EyeOff, type LucideIcon } from 'lucide-react';
 import { MODULES, moduleFromPathname, type ModuleDef, type SubPage } from '@/lib/nav/modules';
 import { openTab, WorkspaceTabsFullError } from './workspace-tabs-store';
 import { usePermissions } from '@/contexts/PermissionContext';
 
 const COLLAPSE_KEY = 'fleet360-sidebar-collapsed-v1';
+const PINNED_KEY = 'fleet360-sidebar-pinned-v1';
+const HIDDEN_MODULES_KEY = 'fleet360-sidebar-hidden-modules-v1';
 
 interface Props {
   /** Notify the AppShell when a tab open fails because the cap is reached. */
@@ -55,13 +57,51 @@ export default function Sidebar({ onTabsFull }: Props) {
     subs ? subs.filter(sp => !sp.superOnly || isSuperAdmin) : undefined;
 
   const [collapsed, setCollapsed] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [hiddenModules, setHiddenModules] = useState<Set<string>>(new Set());
+  const [showSettings, setShowSettings] = useState(false);
+
   useEffect(() => {
-    try { if (window.localStorage.getItem(COLLAPSE_KEY) === '1') setCollapsed(true); } catch {}
+    try {
+      if (window.localStorage.getItem(COLLAPSE_KEY) === '1') setCollapsed(true);
+      if (window.localStorage.getItem(PINNED_KEY) === '1') setPinned(true);
+      const hidden = window.localStorage.getItem(HIDDEN_MODULES_KEY);
+      if (hidden) setHiddenModules(new Set(JSON.parse(hidden)));
+    } catch {}
   }, []);
+
   const toggleCollapsed = () => {
+    if (pinned) return; // Don't collapse when pinned
     setCollapsed(c => {
       const next = !c;
       try { window.localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0'); } catch {}
+      return next;
+    });
+  };
+
+  const togglePinned = () => {
+    setPinned(p => {
+      const next = !p;
+      try { window.localStorage.setItem(PINNED_KEY, next ? '1' : '0'); } catch {}
+      if (next) setCollapsed(false); // Expand when pinned
+      return next;
+    });
+  };
+
+  const hideModule = (moduleId: string) => {
+    setHiddenModules(prev => {
+      const next = new Set(prev);
+      next.add(moduleId);
+      try { window.localStorage.setItem(HIDDEN_MODULES_KEY, JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  };
+
+  const unhideModule = (moduleId: string) => {
+    setHiddenModules(prev => {
+      const next = new Set(prev);
+      next.delete(moduleId);
+      try { window.localStorage.setItem(HIDDEN_MODULES_KEY, JSON.stringify([...next])); } catch {}
       return next;
     });
   };
@@ -116,9 +156,17 @@ export default function Sidebar({ onTabsFull }: Props) {
         )}
         <button
           type="button"
+          onClick={togglePinned}
+          title={pinned ? 'Unpin sidebar' : 'Pin sidebar (keep expanded)'}
+          className={`ml-auto rounded-md p-1 transition-colors ${pinned ? 'text-amber-400 bg-amber-500/10' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
+        >
+          <Pin className={`h-4 w-4 ${pinned ? 'fill-current' : ''}`} />
+        </button>
+        <button
+          type="button"
           onClick={toggleCollapsed}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="ml-auto rounded-md p-1 text-slate-400 hover:bg-white/5 hover:text-white"
+          className="rounded-md p-1 text-slate-400 hover:bg-white/5 hover:text-white"
         >
           {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
         </button>
@@ -126,7 +174,7 @@ export default function Sidebar({ onTabsFull }: Props) {
 
       <nav ref={navRef} className="flex-1 overflow-y-auto overflow-x-visible p-2">
         <ul className="space-y-0.5">
-          {MODULES.map(m => {
+          {MODULES.filter(m => !hiddenModules.has(m.id)).map(m => {
             const isActive = activeModule?.id === m.id;
             return (
               <li key={m.id}>
@@ -137,6 +185,7 @@ export default function Sidebar({ onTabsFull }: Props) {
                   moduleId={m.id}
                   onTabOpen={openTab}
                   onTabsFull={onTabsFull}
+                  onHide={hideModule}
                   onHover={(el) => {
                     if (!collapsed || !m.subPages?.length) return;
                     const rect = el.getBoundingClientRect();
@@ -179,6 +228,47 @@ export default function Sidebar({ onTabsFull }: Props) {
           })}
         </ul>
       </nav>
+
+      {/* Settings panel - show/hide modules */}
+      {!collapsed && (
+        <div className="border-t border-white/10 p-2">
+          <button
+            type="button"
+            onClick={() => setShowSettings(!showSettings)}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-slate-400 hover:bg-white/5 hover:text-white transition-colors"
+          >
+            <Settings className="h-4 w-4" />
+            <span className="text-[13px]">Menu Settings</span>
+          </button>
+        </div>
+      )}
+
+      {/* Hidden modules panel */}
+      {showSettings && !collapsed && hiddenModules.size > 0 && (
+        <div className="absolute bottom-14 left-2 right-2 max-h-64 overflow-y-auto rounded-xl border border-white/10 bg-slate-900 p-2 shadow-2xl">
+          <div className="border-b border-white/10 px-2 pb-2 mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+            Hidden Modules
+          </div>
+          <ul className="space-y-1">
+            {MODULES.filter(m => hiddenModules.has(m.id)).map(m => {
+              const Icon = m.icon;
+              return (
+                <li key={m.id}>
+                  <button
+                    type="button"
+                    onClick={() => unhideModule(m.id)}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-slate-300 hover:bg-white/5 hover:text-white transition-colors"
+                  >
+                    <Icon className="h-4 w-4 text-slate-400" />
+                    <span className="flex-1 text-left text-[13px] truncate">{m.label}</span>
+                    <Eye className="h-3.5 w-3.5 text-emerald-400" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {collapsed && flyoutFor && (() => {
         const m = MODULES.find(x => x.id === flyoutFor);
@@ -227,13 +317,17 @@ export default function Sidebar({ onTabsFull }: Props) {
 }
 
 function NavRow({
-  module: m, collapsed, active, moduleId, onTabOpen, onTabsFull, onHover,
+  module: m, collapsed, active, moduleId, onTabOpen, onTabsFull, onHover, onHide,
 }: {
   module: ModuleDef; collapsed: boolean; active: boolean; moduleId: string;
   onTabOpen: (t: { key: string; label: string; moduleId: string; iconName: string }) => void;
   onTabsFull?: (message: string) => void;
   onHover: (el: HTMLElement) => void;
+  onHide: (moduleId: string) => void;
 }) {
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
+
   const Icon = m.icon;
   const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     // <Link> already does the navigation. We only need to add the tab-store
@@ -248,28 +342,69 @@ function NavRow({
       else throw err;
     }
   };
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenuPos({ x: e.clientX, y: e.clientY });
+    setShowContextMenu(true);
+  };
+
+  useEffect(() => {
+    if (!showContextMenu) return;
+    const close = () => setShowContextMenu(false);
+    window.addEventListener('click', close);
+    window.addEventListener('contextmenu', close);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('contextmenu', close);
+    };
+  }, [showContextMenu]);
+
   return (
-    <Link
-      href={m.href}
-      prefetch
-      onClick={handleClick}
-      onMouseEnter={(e) => {
-        prefetchHref(m.href);
-        onHover(e.currentTarget);
-      }}
-      title={collapsed ? m.label : undefined}
-      className={`flex w-full items-center gap-2.5 rounded-md text-left transition-colors ${
-        collapsed ? 'justify-center py-2' : 'px-2 py-1.5'
-      } ${active ? 'bg-amber-500/15 text-amber-200' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}
-    >
-      <Icon className={`h-4 w-4 flex-shrink-0 ${active ? 'text-amber-300' : 'text-slate-400'}`} />
-      {!collapsed && <span className="flex-1 truncate text-[13px]">{m.label}</span>}
-      {!collapsed && m.subPages && m.subPages.length > 0 && (
-        active
-          ? <ChevronLeft className="h-3.5 w-3.5 rotate-[-90deg] text-slate-500" />
-          : <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
+    <>
+      <Link
+        href={m.href}
+        prefetch
+        onClick={handleClick}
+        onContextMenu={handleContextMenu}
+        onMouseEnter={(e) => {
+          prefetchHref(m.href);
+          onHover(e.currentTarget);
+        }}
+        title={collapsed ? m.label : undefined}
+        className={`flex w-full items-center gap-2.5 rounded-md text-left transition-colors ${
+          collapsed ? 'justify-center py-2' : 'px-2 py-1.5'
+        } ${active ? 'bg-amber-500/15 text-amber-200' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}
+      >
+        <Icon className={`h-4 w-4 flex-shrink-0 ${active ? 'text-amber-300' : 'text-slate-400'}`} />
+        {!collapsed && <span className="flex-1 truncate text-[13px]">{m.label}</span>}
+        {!collapsed && m.subPages && m.subPages.length > 0 && (
+          active
+            ? <ChevronLeft className="h-3.5 w-3.5 rotate-[-90deg] text-slate-500" />
+            : <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
+        )}
+      </Link>
+
+      {/* Context menu */}
+      {showContextMenu && (
+        <div
+          className="fixed z-[100] min-w-[160px] rounded-lg border border-white/10 bg-slate-900 py-1 shadow-2xl"
+          style={{ left: contextMenuPos.x, top: contextMenuPos.y }}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              onHide(m.id);
+              setShowContextMenu(false);
+            }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white"
+          >
+            <EyeOff className="h-4 w-4 text-slate-400" />
+            <span>Hide from menu</span>
+          </button>
+        </div>
       )}
-    </Link>
+    </>
   );
 }
 

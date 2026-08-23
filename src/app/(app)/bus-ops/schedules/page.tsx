@@ -350,7 +350,15 @@ export default function SchedulesPage() {
         {dateFilter && <button onClick={()=>setDate('')} className="text-sm text-slate-400 hover:text-white">Clear date</button>}
       </div>
 
-      {/* SchedulesGrid */}
+      {/* SchedulesGrid.
+          Not wiring the grid's generic `selectable` here: this page's own
+          `select` column (above, in scheduleColumns) already does multi-row
+          selection, but with a business rule the generic primitive can't
+          express yet — only SCHEDULED trips are mergeable, so its checkbox
+          is disabled per-row. Turning on `selectable` too would either
+          duplicate the checkbox column or (if the hand-rolled one were
+          removed) silently drop that eligibility guard. `numbered` has no
+          such conflict — it's purely additive. */}
       <FleetDataGrid
         gridName="Schedules"
         rows={schedules}
@@ -358,6 +366,7 @@ export default function SchedulesPage() {
         loading={false}
         emptyMessage="No trips found"
         columns={scheduleColumns}
+        numbered
         toolbar={{ exportName: 'schedules', title: 'Schedules' }}
       />
 

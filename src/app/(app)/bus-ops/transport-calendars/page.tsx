@@ -14,6 +14,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Plus, Trash2, X } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
 
 type EntryKind = 'HOLIDAY' | 'WORKING_OVERRIDE' | 'HALF_DAY' | 'REDUCED_SERVICE';
 
@@ -58,6 +59,7 @@ export default function TransportCalendarsPage() {
   const [error, setError] = useState('');
   const [showNewCalendar, setShowNewCalendar] = useState(false);
   const [showNewEntry, setShowNewEntry] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -99,6 +101,26 @@ export default function TransportCalendarsPage() {
       setError(e instanceof Error ? e.message : 'Delete failed');
     }
   };
+
+  const entryColumns: DataGridColumn<Entry>[] = [
+    { key: 'entryDate', header: 'Date', accessor: e => e.entryDate,
+      render: e => <span className="text-white whitespace-nowrap">{fmtDate(e.entryDate)}</span> },
+    { key: 'kind', header: 'Kind', accessor: e => e.kind, filter: 'select',
+      render: e => (
+        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium border ${KIND_PILL[e.kind]}`}>
+          {KIND_LABEL[e.kind]}
+        </span>
+      ) },
+    { key: 'note', header: 'Note', accessor: e => e.note,
+      render: e => <span className="text-slate-300 truncate max-w-md block">{e.note ?? '—'}</span> },
+    { key: 'actions', header: 'Actions', align: 'right', filter: false, sortable: false,
+      render: e => (
+        <button onClick={() => deleteEntry(e.id)}
+          className="p-1 rounded border border-white/10 text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10">
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      ) },
+  ];
 
   return (
     <div className="space-y-6">
@@ -158,51 +180,39 @@ export default function TransportCalendarsPage() {
         {/* Right: entries table */}
         <div className="lg:col-span-2">
           {selected ? (
-            <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
-                <div>
-                  <div className="text-sm font-semibold text-white">{selected.name}</div>
-                  <div className="text-[11px] text-slate-500">{selected.entries.length} entries</div>
-                </div>
-                <button onClick={() => setShowNewEntry(true)}
-                  className="inline-flex items-center gap-1 rounded-lg bg-violet-500/20 border border-violet-500/40 px-3 py-1.5 text-xs text-violet-200 hover:bg-violet-500/30">
-                  <Plus className="w-3.5 h-3.5" /> Add Entry
-                </button>
-              </div>
-              {selected.entries.length === 0 ? (
-                <div className="py-10 text-center text-slate-400 text-sm">No entries yet.</div>
-              ) : (
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-white/5 text-xs text-slate-400">
-                      <th className="px-4 py-2 text-left">Date</th>
-                      <th className="px-4 py-2 text-left">Kind</th>
-                      <th className="px-4 py-2 text-left">Note</th>
-                      <th className="px-4 py-2 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selected.entries.map(e => (
-                      <tr key={e.id} className="border-b border-white/5 hover:bg-white/5">
-                        <td className="px-4 py-2 text-sm text-white whitespace-nowrap">{fmtDate(e.entryDate)}</td>
-                        <td className="px-4 py-2">
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium border ${KIND_PILL[e.kind]}`}>
-                            {KIND_LABEL[e.kind]}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2 text-sm text-slate-300 truncate max-w-md">{e.note ?? '—'}</td>
-                        <td className="px-4 py-2 text-right">
-                          <button onClick={() => deleteEntry(e.id)}
-                            className="p-1 rounded border border-white/10 text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+            <FleetDataGrid
+              gridName="CalendarEntries"
+              rows={selected.entries}
+              getRowId={e => e.id}
+              loading={false}
+              emptyMessage="No entries yet."
+              columns={entryColumns}
+              numbered
+              selectable
+              selectedIds={selectedIds}
+              onSelectionChange={setSelectedIds}
+              toolbar={{
+                title: selected.name,
+                exportName: `calendar-${selected.name}`,
+                actions: (
+                  <>
+                    {selectedIds.size > 0 && (
+                      <span className="inline-flex items-center gap-2 text-xs text-violet-300">
+                        {selectedIds.size} selected
+                        <button type="button" onClick={() => setSelectedIds(new Set())}
+                          className="text-slate-400 hover:text-white underline underline-offset-2">
+                          Clear
+                        </button>
+                      </span>
+                    )}
+                    <button onClick={() => setShowNewEntry(true)}
+                      className="inline-flex items-center gap-1 rounded-lg bg-violet-500/20 border border-violet-500/40 px-3 py-1.5 text-xs text-violet-200 hover:bg-violet-500/30">
+                      <Plus className="w-3.5 h-3.5" /> Add Entry
+                    </button>
+                  </>
+                ),
+              }}
+            />
           ) : (
             <div className="bg-slate-800/30 border border-white/5 rounded-2xl p-10 text-center text-slate-500 text-sm">
               Select a calendar on the left to see its entries.

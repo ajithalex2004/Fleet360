@@ -18,6 +18,7 @@
 import React, { useEffect, useState } from 'react';
 import { Sparkles, Play, RefreshCw, Trophy, CheckCircle2, AlertTriangle, XCircle, Info } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
 
 // ─── Types matching the /planning/optimize response ─────────────────
 
@@ -63,6 +64,26 @@ interface OptimizeResponse {
   ranked: PlanScore[];
 }
 
+const planColumns: DataGridColumn<SavedPlanSummary>[] = [
+  { key: 'name', header: 'Plan', accessor: p => p.name,
+    render: p => (
+      <div>
+        <div className="font-medium">{p.name}</div>
+        <div className="text-xs text-slate-500">{p.status ?? 'DRAFT'}</div>
+      </div>
+    ) },
+  { key: 'range', header: 'Range', accessor: p => p.dateFrom,
+    render: p => <span className="text-slate-400">{fmtDate(p.dateFrom)} → {fmtDate(p.dateTo)}</span> },
+  { key: 'payCost', header: 'Pay cost', accessor: p => p.summary?.totalPayCost, align: 'right',
+    render: p => fmtMoney(p.summary?.totalPayCost) },
+  { key: 'counts', header: 'Trips · Drivers · Blocks', accessor: p => p.summary?.tripCount, align: 'right', filter: false,
+    render: p => (
+      <span className="text-slate-400">
+        {p.summary?.tripCount ?? '—'} · {p.summary?.driverCount ?? '—'} · {p.summary?.blockCount ?? '—'}
+      </span>
+    ) },
+];
+
 // ─── Page ────────────────────────────────────────────────────────────
 
 export default function PlanningOptimizerPage() {
@@ -86,14 +107,6 @@ export default function PlanningOptimizerPage() {
       }
     })();
   }, []);
-
-  const toggle = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
 
   const run = async () => {
     setError(null); setResult(null); setRanking(true);
@@ -119,6 +132,35 @@ export default function PlanningOptimizerPage() {
   const canRun = selected.size >= 2 && !ranking;
   const feasibleWinner = result?.ranked.find((r) => r.feasible) ?? null;
 
+  const resultColumns: DataGridColumn<PlanScore>[] = [
+    { key: 'plan', header: 'Plan', accessor: r => r.planName,
+      render: r => (
+        <div>
+          <div className="font-medium">{r.planName}</div>
+          <div className="font-mono text-[10px] text-slate-500">{r.planId.slice(0, 8)}</div>
+        </div>
+      ) },
+    { key: 'verdict', header: 'Verdict', accessor: r => r.verdict, filter: 'select',
+      render: r => <VerdictBadge verdict={r.verdict} /> },
+    { key: 'operatingCost', header: 'Op. cost', accessor: r => r.operatingCost, align: 'right',
+      render: r => fmtMoney(r.operatingCost) },
+    { key: 'pcePenalty', header: 'PCE penalty', accessor: r => r.pcePenalty, align: 'right',
+      render: r => r.pcePenalty > 0
+        ? <span className="text-violet-300">{r.pcePenalty}</span>
+        : <span className="text-slate-500">—</span> },
+    { key: 'totalCost', header: 'Total', accessor: r => r.totalCost, align: 'right',
+      render: r => <span className="font-semibold">{fmtMoney(r.totalCost)}</span> },
+    { key: 'gated', header: 'Trips gated', accessor: r => r.blockedTripIds.length, align: 'right', filter: false,
+      render: r => (
+        <span className="text-xs">
+          {r.blockedTripIds.length > 0 && <span className="text-rose-300">{r.blockedTripIds.length} blocked</span>}
+          {r.blockedTripIds.length > 0 && r.warningTripIds.length > 0 && <span className="text-slate-600"> · </span>}
+          {r.warningTripIds.length > 0 && <span className="text-amber-300">{r.warningTripIds.length} warn</span>}
+          {r.blockedTripIds.length === 0 && r.warningTripIds.length === 0 && <span className="text-slate-500">clean</span>}
+        </span>
+      ) },
+  ];
+
   return (
     <div className="space-y-8">
       <PageHeader
@@ -143,47 +185,19 @@ export default function PlanningOptimizerPage() {
               No saved plans yet. Compute + save a couple on the <a href="/bus-ops/plan" className="text-violet-400 hover:underline">Planning Core</a> page first.
             </div>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-900/80 text-left text-xs uppercase tracking-wider text-slate-400">
-                  <tr>
-                    <th className="w-10 px-3 py-2"></th>
-                    <th className="px-3 py-2">Plan</th>
-                    <th className="px-3 py-2">Range</th>
-                    <th className="px-3 py-2 text-right">Pay cost</th>
-                    <th className="px-3 py-2 text-right">Trips · Drivers · Blocks</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800">
-                  {plans.map((p) => {
-                    const isSelected = selected.has(p.id);
-                    return (
-                      <tr key={p.id} className={`text-slate-200 hover:bg-slate-800/40 ${isSelected ? 'bg-violet-500/5' : ''}`}>
-                        <td className="px-3 py-2">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggle(p.id)}
-                            className="h-4 w-4 rounded border-slate-600 bg-slate-800"
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="font-medium">{p.name}</div>
-                          <div className="text-xs text-slate-500">{p.status ?? 'DRAFT'}</div>
-                        </td>
-                        <td className="px-3 py-2 text-slate-400">
-                          {fmtDate(p.dateFrom)} → {fmtDate(p.dateTo)}
-                        </td>
-                        <td className="px-3 py-2 text-right">{fmtMoney(p.summary?.totalPayCost)}</td>
-                        <td className="px-3 py-2 text-right text-slate-400">
-                          {p.summary?.tripCount ?? '—'} · {p.summary?.driverCount ?? '—'} · {p.summary?.blockCount ?? '—'}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <FleetDataGrid
+              gridName="CandidatePlans"
+              rows={plans}
+              getRowId={p => p.id}
+              loading={false}
+              emptyMessage="No saved plans yet."
+              columns={planColumns}
+              numbered
+              selectable
+              selectedIds={selected}
+              onSelectionChange={setSelected}
+              toolbar={{ exportName: 'candidate-plans', title: 'Candidate Plans' }}
+            />
           )}
           <p className="text-xs text-slate-500">Pick at least 2 plans to rank.</p>
         </section>
@@ -270,69 +284,23 @@ export default function PlanningOptimizerPage() {
               </span>
             )}
           </SectionHeading>
-          <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-900/80 text-left text-xs uppercase tracking-wider text-slate-400">
-                <tr>
-                  <th className="w-12 px-3 py-2 text-center">#</th>
-                  <th className="px-3 py-2">Plan</th>
-                  <th className="px-3 py-2">Verdict</th>
-                  <th className="px-3 py-2 text-right">Op. cost</th>
-                  <th className="px-3 py-2 text-right">PCE penalty</th>
-                  <th className="px-3 py-2 text-right">Total</th>
-                  <th className="px-3 py-2 text-right">Trips gated</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800">
-                {result.ranked.map((r, i) => (
-                  <RankedRow key={r.planId} score={r} rank={i + 1} isWinner={r === feasibleWinner} />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <FleetDataGrid
+            gridName="RankedResults"
+            rows={result.ranked}
+            getRowId={r => r.planId}
+            loading={false}
+            emptyMessage="No results"
+            columns={resultColumns}
+            numbered
+            numberRender={(r, pos) => r === feasibleWinner
+              ? <Trophy className="mx-auto h-4 w-4 text-emerald-400" />
+              : <span className="text-xs text-slate-500">{pos}</span>}
+            rowClassName={r => `text-slate-200 ${r === feasibleWinner ? 'bg-emerald-500/5' : r.feasible ? '' : 'bg-slate-800/40 text-slate-400'}`}
+            toolbar={{ search: false, filters: true, columns: false, density: false, exportCsv: true, exportName: 'ranked-results', title: 'Ranked Results' }}
+          />
         </section>
       )}
     </div>
-  );
-}
-
-// ─── Row ────────────────────────────────────────────────────────────
-
-function RankedRow({ score, rank, isWinner }: { score: PlanScore; rank: number; isWinner: boolean }) {
-  return (
-    <tr className={`text-slate-200 ${isWinner ? 'bg-emerald-500/5' : score.feasible ? '' : 'bg-slate-800/40 text-slate-400'}`}>
-      <td className="px-3 py-2 text-center">
-        {isWinner ? (
-          <Trophy className="mx-auto h-4 w-4 text-emerald-400" />
-        ) : (
-          <span className="text-xs text-slate-500">{rank}</span>
-        )}
-      </td>
-      <td className="px-3 py-2">
-        <div className="font-medium">{score.planName}</div>
-        <div className="font-mono text-[10px] text-slate-500">{score.planId.slice(0, 8)}</div>
-      </td>
-      <td className="px-3 py-2"><VerdictBadge verdict={score.verdict} /></td>
-      <td className="px-3 py-2 text-right">{fmtMoney(score.operatingCost)}</td>
-      <td className="px-3 py-2 text-right">
-        {score.pcePenalty > 0
-          ? <span className="text-violet-300">{score.pcePenalty}</span>
-          : <span className="text-slate-500">—</span>}
-      </td>
-      <td className="px-3 py-2 text-right font-semibold">{fmtMoney(score.totalCost)}</td>
-      <td className="px-3 py-2 text-right text-xs">
-        {score.blockedTripIds.length > 0 && (
-          <span className="text-rose-300">{score.blockedTripIds.length} blocked</span>
-        )}
-        {score.blockedTripIds.length > 0 && score.warningTripIds.length > 0 && <span className="text-slate-600"> · </span>}
-        {score.warningTripIds.length > 0 && (
-          <span className="text-amber-300">{score.warningTripIds.length} warn</span>
-        )}
-        {score.blockedTripIds.length === 0 && score.warningTripIds.length === 0 && (
-          <span className="text-slate-500">clean</span>
-        )}
-      </td>
-    </tr>
   );
 }
 

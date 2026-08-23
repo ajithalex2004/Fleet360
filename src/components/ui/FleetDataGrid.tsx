@@ -17,7 +17,7 @@ import React, { useMemo, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   ArrowUp, ArrowDown, ChevronsUpDown, Search as SearchIcon, Columns3, Download,
-  Rows3, Filter, X, ArrowUpDown,
+  Rows3, Filter, X, ArrowUpDown, ChevronRight, ChevronDown,
 } from 'lucide-react';
 
 export type SortDir = 'asc' | 'desc';
@@ -93,6 +93,60 @@ interface DataGridProps<T> {
    * as data-grid-name for support / QA (e.g. "RoutesGrid", "SchedulesGrid").
    */
   gridName?: string;
+  /**
+   * Leading "#" column showing each row's position in the CURRENT view —
+   * i.e. after sort and filters are applied, not raw array index. A row's
+   * number moves when the user sorts or filters; that's intentional, it's
+   * "row 3 of what I'm looking at now", not a stable row identity. Default
+   * false — existing consumers are unaffected unless they opt in.
+   */
+  numbered?: boolean;
+  /**
+   * Override the content of the `numbered` column for specific rows —
+   * e.g. swapping a trophy icon in for the winning row's position number.
+   * Receives the row and its 1-based position in the current view (same
+   * value the plain numbered column would render). Return the number
+   * itself (or any node) to fall back to default-looking output. Ignored
+   * when `numbered` is false.
+   */
+  numberRender?: (row: T, position: number) => React.ReactNode;
+  /**
+   * Leading checkbox column for multi-row selection, for bulk actions the
+   * page wants to build on top (bulk delete/export/status-change/etc — this
+   * component only tracks which ids are checked, it doesn't know what to do
+   * with them). Independent of `selectedId` above, which is a single active
+   * row for click/highlight (e.g. master-detail) — the two are unrelated
+   * concepts and a page could use either, both, or neither.
+   *
+   * Controlled: pass `selectedIds` + `onSelectionChange`, same pattern as a
+   * controlled input. The "select all" header checkbox acts on the rows
+   * currently visible after filtering (`processed`), matching how filtered
+   * bulk-select conventionally behaves elsewhere (e.g. Gmail's "select all
+   * that match this search") — not the full unfiltered `rows`.
+   */
+  selectable?: boolean;
+  selectedIds?: Set<string>;
+  onSelectionChange?: (ids: Set<string>) => void;
+  /**
+   * Business-state-driven row background (e.g. tinting a "winner" row,
+   * muting an infeasible one) — a concern the grid has no opinion on.
+   * When provided for a given row, it fully replaces the default
+   * hover/selected background for that row rather than combining with
+   * it, so conflicting `bg-*` utilities never fight over specificity.
+   * Return '' to opt a specific row back into "no special background".
+   */
+  rowClassName?: (row: T) => string;
+  /**
+   * Per-row detail panel — when this returns a node for a given row, that
+   * row gets a leading chevron and becomes expandable; clicking the
+   * chevron (or the row itself, when `onRowClick` isn't also set) inserts
+   * the returned content as a full-width row beneath it. Return null/
+   * undefined/false to make a specific row non-expandable while the
+   * feature is still on for the rest. Uncontrolled and single-open, like
+   * an accordion — expanding one row collapses whichever was open before.
+   * Not a fit for pages needing multiple rows open at once.
+   */
+  expandable?: (row: T) => React.ReactNode | null | undefined | false;
 }
 
 const KPI_ACCENTS: Record<KpiAccent, { bg: string; text: string }> = {
@@ -118,6 +172,8 @@ const cmp = (a: unknown, b: unknown): number => {
 export default function FleetDataGrid<T>({
   rows, columns, getRowId, onRowClick, selectedId, loading, emptyMessage = 'No rows',
   initialSort, toolbar = {}, kpis, filterChips, className = '', gridName = 'FleetDataGrid',
+  numbered = false, numberRender, selectable = false, selectedIds, onSelectionChange, rowClassName,
+  expandable,
 }: DataGridProps<T>) {
   const tb = { search: true, columns: true, density: true, filters: true, exportCsv: true, sortSelector: false, ...toolbar };
 
@@ -129,6 +185,7 @@ export default function FleetDataGrid<T>({
   const [showFilters, setShowFilters] = useState(true);
   const [colMenuOpen, setColMenuOpen] = useState(false);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   /** Multi-value chip state: chip.key -> set of active option values. */
   const [chipValues, setChipValues] = useState<Record<string, Set<string>>>({});
 
@@ -228,6 +285,51 @@ export default function FleetDataGrid<T>({
   };
 
   const clearAll = () => { setColFilters({}); setGlobalSearch(''); setChipValues({}); };
+
+  // Selection is fully controlled by the caller (same contract as a
+  // controlled <input>) — this component never holds its own copy of
+  // selectedIds, so a parent can't get out of sync with what it's
+  // rendering. `?? new Set()` covers a caller that hasn't set an initial
+  // value yet rather than crashing on undefined.
+  const selection = selectedIds ?? new Set<string>();
+  // Propagation is stopped by the wrapping <td>'s own onClick below, not
+  // here — this only computes the next selection state.
+  const toggleRow = (id: string) => {
+    const next = new Set(selection);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    onSelectionChange?.(next);
+  };
+  // "Select all" acts on `processed` (the current filtered/sorted view),
+  // not the full `rows` — selecting everything that matches an active
+  // filter, not everything that exists. See the prop doc for the
+  // Gmail-style rationale.
+  const visibleIds = useMemo(() => processed.map(getRowId), [processed, getRowId]);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selection.has(id));
+  const someVisibleSelected = !allVisibleSelected && visibleIds.some(id => selection.has(id));
+  const toggleAllVisible = () => {
+    const next = new Set(selection);
+    if (allVisibleSelected) {
+      for (const id of visibleIds) next.delete(id);
+    } else {
+      for (const id of visibleIds) next.add(id);
+    }
+    onSelectionChange?.(next);
+  };
+  // Native <input> has no `indeterminate` HTML attribute — it's a DOM
+  // property only settable imperatively, hence the ref instead of a prop.
+  const headerCheckboxRef = (el: HTMLInputElement | null) => {
+    if (el) el.indeterminate = someVisibleSelected;
+  };
+
+  const toggleExpanded = (id: string) => {
+    setExpandedId(prev => (prev === id ? null : id));
+  };
+
+  // All extra columns are prepended before the caller's own columns, so
+  // colSpan for the loading-skeleton and empty-state rows (which each
+  // render one <td> spanning every column) needs to account for them.
+  const leadingColCount = (expandable ? 1 : 0) + (numbered ? 1 : 0) + (selectable ? 1 : 0);
+  const totalColCount = visibleColumns.length + leadingColCount;
 
   const exportCsv = () => {
     const cols = visibleColumns.filter(c => c.accessor);
@@ -424,6 +526,25 @@ export default function FleetDataGrid<T>({
         <table className="w-full text-sm" style={{ tableLayout: 'auto' }}>
           <thead>
             <tr className="border-b border-white/10 text-slate-500 text-[11px] uppercase tracking-wider bg-slate-900/40">
+              {expandable && (
+                <th className="px-3 py-2.5 w-8" />
+              )}
+              {numbered && (
+                <th className="px-3 py-2.5 font-medium text-left w-10">#</th>
+              )}
+              {selectable && (
+                <th className="px-3 py-2.5 w-10">
+                  <input
+                    type="checkbox"
+                    ref={headerCheckboxRef}
+                    checked={allVisibleSelected}
+                    onChange={toggleAllVisible}
+                    disabled={visibleIds.length === 0}
+                    aria-label="Select all rows"
+                    className="accent-violet-500 w-3.5 h-3.5"
+                  />
+                </th>
+              )}
               {visibleColumns.map(c => {
                 const sortable = c.sortable ?? !!c.accessor;
                 const isSorted = sort?.key === c.key;
@@ -446,6 +567,9 @@ export default function FleetDataGrid<T>({
 
             {showFilters && (
               <tr className="border-b border-white/10 bg-slate-950/40">
+                {expandable && <th className="px-2 py-1.5" />}
+                {numbered && <th className="px-2 py-1.5" />}
+                {selectable && <th className="px-2 py-1.5" />}
                 {visibleColumns.map(c => {
                   const filterable = c.filter !== false && (c.filter !== undefined || !!c.accessor);
                   return (
@@ -471,21 +595,56 @@ export default function FleetDataGrid<T>({
           <tbody className="divide-y divide-white/5">
             {loading ? (
               [...Array(6)].map((_, i) => (
-                <tr key={i}><td colSpan={visibleColumns.length} className="px-3 py-2"><div className="h-6 bg-slate-800/50 rounded animate-pulse" /></td></tr>
+                <tr key={i}><td colSpan={totalColCount} className="px-3 py-2"><div className="h-6 bg-slate-800/50 rounded animate-pulse" /></td></tr>
               ))
             ) : processed.length === 0 ? (
-              <tr><td colSpan={visibleColumns.length} className="text-center text-slate-500 py-12">{emptyMessage}</td></tr>
-            ) : processed.map(row => {
+              <tr><td colSpan={totalColCount} className="text-center text-slate-500 py-12">{emptyMessage}</td></tr>
+            ) : processed.map((row, i) => {
               const id = getRowId(row);
+              const isSelected = selection.has(id);
+              const detail = expandable?.(row);
+              const isExpandableRow = !!expandable && detail != null && detail !== false;
+              const isExpanded = isExpandableRow && expandedId === id;
+              const rowClickHandler = onRowClick
+                ? () => onRowClick(row)
+                : isExpandableRow ? () => toggleExpanded(id) : undefined;
               return (
-                <tr key={id} onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  className={`${onRowClick ? 'cursor-pointer' : ''} transition-colors ${selectedId === id ? 'bg-violet-500/10' : 'hover:bg-white/[0.03]'}`}>
-                  {visibleColumns.map(c => (
-                    <td key={c.key} className={`px-3 ${pad} ${alignClass(c.align)} ${c.cellClassName ?? 'text-slate-300'}`}>
-                      {c.render ? c.render(row) : (() => { const v = c.accessor?.(row); return v == null || v === '' ? '—' : String(v); })()}
-                    </td>
-                  ))}
-                </tr>
+                <React.Fragment key={id}>
+                  <tr onClick={rowClickHandler}
+                    className={`${rowClickHandler ? 'cursor-pointer' : ''} transition-colors ${
+                      rowClassName ? rowClassName(row) : (selectedId === id ? 'bg-violet-500/10' : isSelected ? 'bg-violet-500/5' : 'hover:bg-white/[0.03]')
+                    }`}>
+                    {expandable && (
+                      <td className={`px-3 ${pad} text-slate-500`} onClick={isExpandableRow ? e => { e.stopPropagation(); toggleExpanded(id); } : undefined}>
+                        {isExpandableRow && (isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />)}
+                      </td>
+                    )}
+                    {numbered && (
+                      <td className={`px-3 ${pad} text-left text-slate-500 tabular-nums`}>{numberRender ? numberRender(row, i + 1) : i + 1}</td>
+                    )}
+                    {selectable && (
+                      <td className={`px-3 ${pad}`} onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleRow(id)}
+                          aria-label={`Select row ${i + 1}`}
+                          className="accent-violet-500 w-3.5 h-3.5"
+                        />
+                      </td>
+                    )}
+                    {visibleColumns.map(c => (
+                      <td key={c.key} className={`px-3 ${pad} ${alignClass(c.align)} ${c.cellClassName ?? 'text-slate-300'}`}>
+                        {c.render ? c.render(row) : (() => { const v = c.accessor?.(row); return v == null || v === '' ? '—' : String(v); })()}
+                      </td>
+                    ))}
+                  </tr>
+                  {isExpanded && (
+                    <tr>
+                      <td colSpan={totalColCount} className="bg-slate-900/60 px-6 py-4">{detail}</td>
+                    </tr>
+                  )}
+                </React.Fragment>
               );
             })}
           </tbody>
