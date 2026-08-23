@@ -1212,6 +1212,8 @@ model RentalCustomer {
   createdAt        DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId         String    @map("tenant_id")
+  tenant           Tenant    @relation("RentalCustomerToTenant", fields: [tenantId], references: [id])
   fullName         String    @map("full_name")
   customerType     String?   @default("INDIVIDUAL") @map("customer_type") // INDIVIDUAL|CORPORATE|AIRLINE|INSURANCE
   nationality      String?
@@ -1241,6 +1243,7 @@ model RentalCustomer {
 
   bookings RentalBooking[]
 
+  @@index([tenantId], map: "idx_rental_customers_tenant_id")
   @@index([customerType], map: "idx_rental_customers_customer_type")
   @@index([deletedAt], map: "idx_rental_customers_deleted_at")
   @@map("rental_customers")
@@ -1252,7 +1255,9 @@ model RentalBooking {
   createdAt       DateTime?           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime?           @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt       DateTime?           @map("deleted_at") @db.Timestamptz(6)
-  bookingRef      String?             @unique @map("booking_ref")
+  tenantId        String              @map("tenant_id")
+  tenant          Tenant              @relation("RentalBookingToTenant", fields: [tenantId], references: [id])
+  bookingRef      String?             @map("booking_ref")
   customerId      String              @map("customer_id")
   vehicleId       String?             @map("vehicle_id")
   vehicleCategory String?             @map("vehicle_category")
@@ -1272,11 +1277,13 @@ model RentalBooking {
   damageClaims    DamageClaim[]
   agreement       RentalAgreement?
 
+  @@index([tenantId], map: "idx_rental_bookings_tenant_id")
   @@index([customerId], map: "idx_rental_bookings_customer_id")
   @@index([vehicleId], map: "idx_rental_bookings_vehicle_id")
   @@index([status], map: "idx_rental_bookings_status")
   @@index([pickupDate], map: "idx_rental_bookings_pickup_date")
   @@index([deletedAt], map: "idx_rental_bookings_deleted_at")
+  @@unique([tenantId, bookingRef], map: "uq_rental_bookings_tenant_ref")
   @@map("rental_bookings")
   @@schema("public")
 }
@@ -1284,6 +1291,8 @@ model RentalBooking {
 model VehicleInspection {
   id        String        @id @default(uuid())
   createdAt DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId  String        @map("tenant_id")
+  tenant    Tenant        @relation("VehicleInspectionToTenant", fields: [tenantId], references: [id])
   bookingId String        @map("booking_id")
   type      String // checkin | checkout
   mileage   Int?
@@ -1293,6 +1302,7 @@ model VehicleInspection {
   notes     String?
   booking   RentalBooking @relation(fields: [bookingId], references: [id])
 
+  @@index([tenantId], map: "idx_vehicle_inspections_tenant_id")
   @@map("vehicle_inspections")
   @@schema("public")
 }
@@ -1300,6 +1310,8 @@ model VehicleInspection {
 model DamageClaim {
   id               String        @id @default(uuid())
   createdAt        DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId         String        @map("tenant_id")
+  tenant           Tenant        @relation("DamageClaimToTenant", fields: [tenantId], references: [id])
   bookingId        String        @map("booking_id")
   description      String?
   estimatedCost    Decimal?      @map("estimated_cost") @db.Decimal
@@ -1309,6 +1321,7 @@ model DamageClaim {
   billedToCustomer Boolean?      @default(false) @map("billed_to_customer")
   booking          RentalBooking @relation(fields: [bookingId], references: [id])
 
+  @@index([tenantId], map: "idx_damage_claims_tenant_id")
   @@map("damage_claims")
   @@schema("public")
 }
@@ -1401,7 +1414,9 @@ model RateEvent {
   createdAt            DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt            DateTime? @map("deleted_at") @db.Timestamptz(6)
-  eventCode            String    @unique @map("event_code")
+  tenantId             String    @map("tenant_id")
+  tenant               Tenant    @relation("RateEventToTenant", fields: [tenantId], references: [id])
+  eventCode            String    @map("event_code")
   name                 String
   description          String?
   dateFrom             DateTime  @map("date_from") @db.Timestamptz(6)
@@ -1413,6 +1428,7 @@ model RateEvent {
   isActive             Boolean?  @default(true)
   notes                String?
 
+  @@index([tenantId], map: "idx_rate_events_tenant_id")
   @@index([isActive, dateFrom, dateTo], map: "idx_rate_events_active_dates")
   @@index([deletedAt], map: "idx_rate_events_deleted_at")
   @@map("rate_events")
@@ -1423,6 +1439,8 @@ model RateEvent {
 model RentalRateQuote {
   id                String    @id @default(uuid())
   createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId          String    @map("tenant_id")
+  tenant            Tenant    @relation("RentalRateQuoteToTenant", fields: [tenantId], references: [id])
   bookingId         String?   @map("booking_id")
   vehicleCategory   String    @map("vehicle_category")
   pickupDate        DateTime  @map("pickup_date") @db.Timestamptz(6)
@@ -1443,6 +1461,7 @@ model RentalRateQuote {
   breakdown         String? // JSON line-by-line detail
   expiresAt         DateTime? @map("expires_at") @db.Timestamptz(6)
 
+  @@index([tenantId], map: "idx_rental_rate_quotes_tenant_id")
   @@index([bookingId], map: "idx_rental_rate_quotes_booking_id")
   @@map("rental_rate_quotes")
   @@schema("public")
@@ -1452,7 +1471,9 @@ model RentalAgreement {
   id              String    @id @default(uuid())
   createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  agreementNo     String?   @unique @map("agreement_no")
+  tenantId        String    @map("tenant_id")
+  tenant          Tenant    @relation("RentalAgreementToTenant", fields: [tenantId], references: [id])
+  agreementNo     String?   @map("agreement_no")
   bookingId       String    @unique @map("booking_id")
   customerId      String    @map("customer_id")
   vehicleId       String?   @map("vehicle_id")
@@ -1501,6 +1522,7 @@ model RentalAgreement {
   vehicleExchanges RentalVehicleExchange[]
   invoices         RentalInvoice[]
 
+  @@index([tenantId], map: "idx_rental_agreements_tenant_id")
   @@index([customerId], map: "idx_rental_agreements_customer_id")
   @@index([vehicleId], map: "idx_rental_agreements_vehicle_id")
   @@index([status], map: "idx_rental_agreements_status")
@@ -1513,6 +1535,8 @@ model RentalAgreement {
 model RentalVehicleExchange {
   id                String          @id @default(uuid())
   createdAt         DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId          String          @map("tenant_id")
+  tenant            Tenant          @relation("RentalVehicleExchangeToTenant", fields: [tenantId], references: [id])
   agreementId       String          @map("agreement_id")
   fromVehicleId     String          @map("from_vehicle_id")
   toVehicleId       String          @map("to_vehicle_id")
@@ -1525,6 +1549,7 @@ model RentalVehicleExchange {
   notes             String?
   agreement         RentalAgreement @relation(fields: [agreementId], references: [id])
 
+  @@index([tenantId], map: "idx_rental_vehicle_exchanges_tenant_id")
   @@index([agreementId], map: "idx_rental_vehicle_exchanges_agreement_id")
   @@map("rental_vehicle_exchanges")
   @@schema("public")
@@ -1533,6 +1558,8 @@ model RentalVehicleExchange {
 model RentalExtension {
   id              String          @id @default(uuid())
   createdAt       DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId        String          @map("tenant_id")
+  tenant          Tenant          @relation("RentalExtensionToTenant", fields: [tenantId], references: [id])
   agreementId     String          @map("agreement_id")
   originalEndDate DateTime        @map("original_end_date") @db.Timestamptz(6)
   newEndDate      DateTime        @map("new_end_date") @db.Timestamptz(6)
@@ -1543,6 +1570,7 @@ model RentalExtension {
   status          String?         @default("PENDING") // PENDING|APPROVED|REJECTED
   agreement       RentalAgreement @relation(fields: [agreementId], references: [id])
 
+  @@index([tenantId], map: "idx_rental_extensions_tenant_id")
   @@map("rental_extensions")
   @@schema("public")
 }
@@ -1550,6 +1578,8 @@ model RentalExtension {
 model RentalPayment {
   id            String          @id @default(uuid())
   createdAt     DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId      String          @map("tenant_id")
+  tenant        Tenant          @relation("RentalPaymentToTenant", fields: [tenantId], references: [id])
   agreementId   String          @map("agreement_id")
   amount        Decimal         @db.Decimal
   currency      String?         @default("AED")
@@ -1561,6 +1591,7 @@ model RentalPayment {
   notes         String?
   agreement     RentalAgreement @relation(fields: [agreementId], references: [id])
 
+  @@index([tenantId], map: "idx_rental_payments_tenant_id")
   @@map("rental_payments")
   @@schema("public")
 }
@@ -1572,7 +1603,9 @@ model RentalAncillary {
   createdAt            DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt            DateTime? @map("deleted_at") @db.Timestamptz(6)
-  code                 String    @unique
+  tenantId             String    @map("tenant_id")
+  tenant               Tenant    @relation("RentalAncillaryToTenant", fields: [tenantId], references: [id])
+  code                 String
   nameEn               String    @map("name_en")
   nameAr               String?   @map("name_ar")
   description          String?
@@ -1585,6 +1618,7 @@ model RentalAncillary {
   sortOrder            Int?      @default(0)
   notes                String?
 
+  @@index([tenantId], map: "idx_rental_ancillaries_tenant_id")
   @@index([deletedAt], map: "idx_rental_ancillaries_deleted_at")
   @@map("rental_ancillaries")
   @@schema("public")
@@ -1593,6 +1627,8 @@ model RentalAncillary {
 model RentalAdditionalCharge {
   id               String          @id @default(uuid())
   createdAt        DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId         String          @map("tenant_id")
+  tenant           Tenant          @relation("RentalAdditionalChargeToTenant", fields: [tenantId], references: [id])
   agreementId      String          @map("agreement_id")
   chargeType       String          @map("charge_type") // FUEL|EXTRA_KM|DAMAGE|CLEANING|TRAFFIC_FINE|OTHER
   description      String?
@@ -1602,6 +1638,7 @@ model RentalAdditionalCharge {
   billedToCustomer Boolean?        @default(true) @map("billed_to_customer")
   agreement        RentalAgreement @relation(fields: [agreementId], references: [id])
 
+  @@index([tenantId], map: "idx_rental_additional_charges_tenant_id")
   @@map("rental_additional_charges")
   @@schema("public")
 }
@@ -1612,8 +1649,10 @@ model RentalInvoice {
   createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId  String    @map("tenant_id")
+  tenant    Tenant    @relation("RentalInvoiceToTenant", fields: [tenantId], references: [id])
 
-  invoiceNo   String @unique @map("invoice_no")
+  invoiceNo   String @map("invoice_no")
   agreementId String @map("agreement_id")
   customerId  String @map("customer_id")
 
@@ -1664,12 +1703,14 @@ model RentalInvoice {
   lineItems       RentalInvoiceLineItem[]
   receiptPayments RentalInvoicePayment[]
 
+  @@index([tenantId], map: "idx_rental_invoices_tenant_id")
   @@index([agreementId], map: "idx_rental_invoices_agreement_id")
   @@index([customerId], map: "idx_rental_invoices_customer_id")
   @@index([status], map: "idx_rental_invoices_status")
   @@index([dueDate], map: "idx_rental_invoices_due_date")
   @@index([deletedAt], map: "idx_rental_invoices_deleted_at")
   @@index([corporateAccountId], map: "idx_rental_invoices_corporate_account_id")
+  @@unique([tenantId, invoiceNo], map: "uq_rental_invoices_tenant_no")
   @@map("rental_invoices")
   @@schema("public")
 }
@@ -1677,6 +1718,8 @@ model RentalInvoice {
 model RentalInvoiceLineItem {
   id          String        @id @default(uuid())
   createdAt   DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId    String        @map("tenant_id")
+  tenant      Tenant        @relation("RentalInvoiceLineItemToTenant", fields: [tenantId], references: [id])
   invoiceId   String        @map("invoice_id")
   lineType    String        @map("line_type")
   // RENTAL|INSURANCE|FUEL|EXTRA_KM|DAMAGE|TRAFFIC_FINE|CLEANING|EXTENSION|DEPOSIT|DISCOUNT|TAX|OTHER
@@ -1691,6 +1734,7 @@ model RentalInvoiceLineItem {
   referenceId String?       @map("reference_id") // chargeId, trafficFineId etc.
   invoice     RentalInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
+  @@index([tenantId], map: "idx_rental_invoice_line_items_tenant_id")
   @@index([invoiceId], map: "idx_rental_invoice_line_items_invoice_id")
   @@map("rental_invoice_line_items")
   @@schema("public")
@@ -1700,18 +1744,22 @@ model RentalInvoiceLineItem {
 model RentalInvoicePayment {
   id            String        @id @default(uuid())
   createdAt     DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId      String        @map("tenant_id")
+  tenant        Tenant        @relation("RentalInvoicePaymentToTenant", fields: [tenantId], references: [id])
   invoiceId     String        @map("invoice_id")
   amount        Decimal       @db.Decimal
   currency      String?       @default("AED")
   paymentMethod String?       @map("payment_method") // CASH|CARD|BANK|CHEQUE|ONLINE
   referenceNo   String?       @map("reference_no")
-  receiptNo     String?       @unique @map("receipt_no")
+  receiptNo     String?       @map("receipt_no")
   paidAt        DateTime      @map("paid_at") @db.Timestamptz(6)
   receivedBy    String?       @map("received_by")
   notes         String?
   invoice       RentalInvoice @relation(fields: [invoiceId], references: [id])
 
+  @@index([tenantId], map: "idx_rental_invoice_payments_tenant_id")
   @@index([invoiceId], map: "idx_rental_invoice_payments_invoice_id")
+  @@unique([tenantId, receiptNo], map: "uq_rental_invoice_payments_tenant_receipt")
   @@map("rental_invoice_payments")
   @@schema("public")
 }
@@ -3189,6 +3237,8 @@ model LeaseQuotation {
 
 model LeaseQuotationItem {
   id            String         @id @default(uuid())
+  tenantId      String         @map("tenant_id")
+  tenant        Tenant         @relation("LeaseQuotationItemToTenant", fields: [tenantId], references: [id])
   quotationId   String         @map("quotation_id")
   itemType      String         @map("item_type") // VEHICLE|ACCESSORY|SERVICE|INSURANCE|MAINTENANCE|DRIVER|OTHER
   description   String
@@ -3200,12 +3250,15 @@ model LeaseQuotationItem {
   notes         String?
   quotation     LeaseQuotation @relation(fields: [quotationId], references: [id])
 
+  @@index([tenantId], map: "idx_lease_quotation_items_tenant_id")
   @@map("lease_quotation_items")
   @@schema("public")
 }
 
 model LeaseQuotationVehicle {
   id          String         @id @default(uuid())
+  tenantId    String         @map("tenant_id")
+  tenant      Tenant         @relation("LeaseQuotationVehicleToTenant", fields: [tenantId], references: [id])
   quotationId String         @map("quotation_id")
   vehicleType String         @map("vehicle_type") // SEDAN|SUV|VAN|BUS|TRUCK|LUXURY
   make        String?
@@ -3216,6 +3269,7 @@ model LeaseQuotationVehicle {
   monthlyRate Decimal?       @map("monthly_rate") @db.Decimal
   quotation   LeaseQuotation @relation(fields: [quotationId], references: [id])
 
+  @@index([tenantId], map: "idx_lease_quotation_vehicles_tenant_id")
   @@map("lease_quotation_vehicles")
   @@schema("public")
 }
@@ -3282,6 +3336,8 @@ model LeaseContract2 {
 
 model LeaseContractVehicle {
   id           String         @id @default(uuid())
+  tenantId     String         @map("tenant_id")
+  tenant       Tenant         @relation("LeaseContractVehicleToTenant", fields: [tenantId], references: [id])
   contractId   String         @map("contract_id")
   vehicleId    String?        @map("vehicle_id")
   vehicleType  String         @map("vehicle_type")
@@ -3297,6 +3353,7 @@ model LeaseContractVehicle {
   status       String?        @default("ACTIVE") // ACTIVE|EXCHANGED|RETURNED
   contract     LeaseContract2 @relation(fields: [contractId], references: [id])
 
+  @@index([tenantId], map: "idx_lease_contract_vehicles_tenant_id")
   @@map("lease_contract_vehicles")
   @@schema("public")
 }
@@ -3804,6 +3861,8 @@ model LeaseInvoice {
 
 model LeaseInvoiceLine {
   id          String       @id @default(uuid())
+  tenantId    String       @map("tenant_id")
+  tenant      Tenant       @relation("LeaseInvoiceLineToTenant", fields: [tenantId], references: [id])
   invoiceId   String       @map("invoice_id")
   contractId  String?      @map("contract_id")
   vehicleRef  String?      @map("vehicle_ref")
@@ -3815,6 +3874,7 @@ model LeaseInvoiceLine {
   currency    String?      @default("AED")
   invoice     LeaseInvoice @relation(fields: [invoiceId], references: [id])
 
+  @@index([tenantId], map: "idx_lease_invoice_lines_tenant_id")
   @@map("lease_invoice_lines")
   @@schema("public")
 }
@@ -3952,6 +4012,29 @@ model Tenant {
   scimTokens         ScimToken[]
   ipAllowlists       IpAllowlist[]
   subscription       Subscription?
+
+  // Rental domain relations
+  rentalCustomers              RentalCustomer[]              @relation("RentalCustomerToTenant")
+  rentalBookings               RentalBooking[]               @relation("RentalBookingToTenant")
+  rentalRateQuotes             RentalRateQuote[]             @relation("RentalRateQuoteToTenant")
+  rentalAgreements             RentalAgreement[]             @relation("RentalAgreementToTenant")
+  rentalVehicleExchanges       RentalVehicleExchange[]       @relation("RentalVehicleExchangeToTenant")
+  rentalExtensions             RentalExtension[]             @relation("RentalExtensionToTenant")
+  rentalPayments               RentalPayment[]               @relation("RentalPaymentToTenant")
+  rentalAncillaries            RentalAncillary[]             @relation("RentalAncillaryToTenant")
+  rentalAdditionalCharges      RentalAdditionalCharge[]      @relation("RentalAdditionalChargeToTenant")
+  rentalInvoices               RentalInvoice[]               @relation("RentalInvoiceToTenant")
+  rentalInvoiceLineItems       RentalInvoiceLineItem[]       @relation("RentalInvoiceLineItemToTenant")
+  rentalInvoicePayments        RentalInvoicePayment[]        @relation("RentalInvoicePaymentToTenant")
+  vehicleInspections           VehicleInspection[]           @relation("VehicleInspectionToTenant")
+  damageClaims                 DamageClaim[]                 @relation("DamageClaimToTenant")
+  rateEvents                   RateEvent[]                   @relation("RateEventToTenant")
+
+  // Lease domain child relations
+  leaseQuotationItems          LeaseQuotationItem[]          @relation("LeaseQuotationItemToTenant")
+  leaseQuotationVehicles       LeaseQuotationVehicle[]       @relation("LeaseQuotationVehicleToTenant")
+  leaseContractVehicles        LeaseContractVehicle[]        @relation("LeaseContractVehicleToTenant")
+  leaseInvoiceLines            LeaseInvoiceLine[]            @relation("LeaseInvoiceLineToTenant")
 
   /// Fleet routing / VRPTW org-wide defaults. Bottom of the sourcing
   /// hierarchy (RoutePassenger → BusRoute → Tenant). Nullable so the
