@@ -19,6 +19,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const PostBodySchema = z.object({
   // Client-generated UUID for idempotency. The sync queue uses the
   // same UUID across retries, so duplicate submissions no-op.
@@ -49,6 +50,12 @@ const PostBodySchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const ctx = (await requireDriverSession(req));
   if (ctx instanceof NextResponse) return ctx;
 
@@ -111,6 +118,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const ctx = (await requireDriverSession(req));
   if (ctx instanceof NextResponse) return ctx;
 

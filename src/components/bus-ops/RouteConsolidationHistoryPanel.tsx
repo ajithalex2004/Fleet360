@@ -15,6 +15,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { History, RefreshCw, Undo2, CheckCircle2, XCircle } from 'lucide-react';
 import RouteConsolidationRevertModal, { type ConsolidationForRevert } from '@/components/bus-ops/RouteConsolidationRevertModal';
+import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
 
 interface HistoryRow {
   id: string;
@@ -38,6 +39,7 @@ export default function RouteConsolidationHistoryPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reverting, setReverting] = useState<ConsolidationForRevert | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -54,6 +56,57 @@ export default function RouteConsolidationHistoryPanel() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  const historyColumns: DataGridColumn<HistoryRow>[] = [
+    { key: 'status', header: 'Status', accessor: r => r.status, filter: 'select',
+      render: r => <StatusPill status={r.status} /> },
+    { key: 'mergedRoute', header: 'Merged route', accessor: r => r.mergedRoute?.name,
+      render: r => (
+        <div>
+          <div className="font-medium">{r.mergedRoute?.name ?? '(no merged route)'}</div>
+          <div className="font-mono text-[10px] text-slate-500">{r.mergedRoute?.id.slice(0, 8) ?? '—'}</div>
+        </div>
+      ) },
+    { key: 'sources', header: 'Sources', accessor: r => r.sources.map(s => s.name ?? s.id).join(' + '),
+      render: r => <span className="text-xs text-slate-400">{r.sources.map((s) => s.name ?? s.id.slice(0, 8)).join(' + ')}</span> },
+    { key: 'applied', header: 'Applied', accessor: r => r.appliedAt,
+      render: r => (
+        <div className="text-xs">
+          <div className="text-slate-300">{new Date(r.appliedAt).toLocaleString()}</div>
+          <div className="text-slate-500">by {r.appliedBy}</div>
+        </div>
+      ) },
+    { key: 'reverted', header: 'Reverted', accessor: r => r.revertedAt,
+      render: r => r.revertedAt ? (
+        <div className="text-xs">
+          <div className="text-slate-300">{new Date(r.revertedAt).toLocaleString()}</div>
+          <div className="text-slate-500">by {r.revertedBy}</div>
+          {r.revertReason && <div className="text-slate-500 mt-0.5 italic">{r.revertReason}</div>}
+        </div>
+      ) : <span className="text-slate-600">—</span> },
+    { key: 'rowActions', header: 'Actions', align: 'right', filter: false, sortable: false,
+      render: r => {
+        const withinWindow = revertEligibleWindow(r);
+        const canRevert = r.status === 'APPLIED' && withinWindow;
+        return canRevert ? (
+          <button
+            onClick={() => setReverting({
+              id: r.id,
+              appliedAt: r.appliedAt,
+              mergedRoute: r.mergedRoute,
+              sources: r.sources,
+            })}
+            className="inline-flex items-center gap-1 rounded-lg border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-xs text-rose-200 hover:bg-rose-500/20"
+          >
+            <Undo2 className="w-3.5 h-3.5" /> Revert
+          </button>
+        ) : r.status === 'APPLIED' && !withinWindow ? (
+          <span className="text-xs text-slate-500" title={`Revert window (${REVERT_WINDOW_HOURS}h) elapsed`}>outside window</span>
+        ) : (
+          <span className="text-xs text-slate-600">—</span>
+        );
+      } },
+  ];
 
   return (
     <div className="space-y-3">
@@ -79,70 +132,31 @@ export default function RouteConsolidationHistoryPanel() {
           <p className="mt-1 text-xs text-slate-500">Apply a recommendation from the Recommendations tab to populate this view.</p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-900/80 text-left text-xs uppercase tracking-wider text-slate-400">
-              <tr>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Merged route</th>
-                <th className="px-3 py-2">Sources</th>
-                <th className="px-3 py-2">Applied</th>
-                <th className="px-3 py-2">Reverted</th>
-                <th className="px-3 py-2 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {rows.map((r) => {
-                const withinWindow = revertEligibleWindow(r);
-                const canRevert = r.status === 'APPLIED' && withinWindow;
-                return (
-                  <tr key={r.id} className={`text-slate-200 ${r.status === 'REVERTED' ? 'bg-slate-800/40 text-slate-400' : ''}`}>
-                    <td className="px-3 py-3"><StatusPill status={r.status} /></td>
-                    <td className="px-3 py-3">
-                      <div className="font-medium">{r.mergedRoute?.name ?? '(no merged route)'}</div>
-                      <div className="font-mono text-[10px] text-slate-500">{r.mergedRoute?.id.slice(0, 8) ?? '—'}</div>
-                    </td>
-                    <td className="px-3 py-3 text-xs text-slate-400">
-                      {r.sources.map((s) => s.name ?? s.id.slice(0, 8)).join(' + ')}
-                    </td>
-                    <td className="px-3 py-3 text-xs">
-                      <div className="text-slate-300">{new Date(r.appliedAt).toLocaleString()}</div>
-                      <div className="text-slate-500">by {r.appliedBy}</div>
-                    </td>
-                    <td className="px-3 py-3 text-xs">
-                      {r.revertedAt ? (
-                        <>
-                          <div className="text-slate-300">{new Date(r.revertedAt).toLocaleString()}</div>
-                          <div className="text-slate-500">by {r.revertedBy}</div>
-                          {r.revertReason && <div className="text-slate-500 mt-0.5 italic">{r.revertReason}</div>}
-                        </>
-                      ) : <span className="text-slate-600">—</span>}
-                    </td>
-                    <td className="px-3 py-3 text-right">
-                      {canRevert ? (
-                        <button
-                          onClick={() => setReverting({
-                            id: r.id,
-                            appliedAt: r.appliedAt,
-                            mergedRoute: r.mergedRoute,
-                            sources: r.sources,
-                          })}
-                          className="inline-flex items-center gap-1 rounded-lg border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-xs text-rose-200 hover:bg-rose-500/20"
-                        >
-                          <Undo2 className="w-3.5 h-3.5" /> Revert
-                        </button>
-                      ) : r.status === 'APPLIED' && !withinWindow ? (
-                        <span className="text-xs text-slate-500" title={`Revert window (${REVERT_WINDOW_HOURS}h) elapsed`}>outside window</span>
-                      ) : (
-                        <span className="text-xs text-slate-600">—</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <FleetDataGrid
+          gridName="RouteConsolidationHistory"
+          rows={rows}
+          getRowId={r => r.id}
+          loading={false}
+          emptyMessage="No consolidations applied yet in this tenant."
+          columns={historyColumns}
+          numbered
+          selectable
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          toolbar={{
+            exportName: 'route-consolidation-history',
+            title: 'Applied Consolidations',
+            actions: selectedIds.size > 0 ? (
+              <span className="inline-flex items-center gap-2 text-xs text-violet-300">
+                {selectedIds.size} selected
+                <button type="button" onClick={() => setSelectedIds(new Set())}
+                  className="text-slate-400 hover:text-white underline underline-offset-2">
+                  Clear
+                </button>
+              </span>
+            ) : undefined,
+          }}
+        />
       )}
 
       {reverting && (

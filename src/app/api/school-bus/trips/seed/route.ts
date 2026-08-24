@@ -11,6 +11,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const exec  = (sql: string, ...v: unknown[]) => prisma.$executeRawUnsafe(sql, ...v).catch(() => 0);
 const query = <T = Row>(sql: string, ...v: unknown[]) => prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -217,6 +218,12 @@ async function insertEvents(
 
 /* ── main seed logic ─────────────────────────────────────── */
 export async function POST() {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureTables();
 

@@ -17,6 +17,7 @@ import type { ServiceTone } from '@/types/service-config';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string }>; }
@@ -33,6 +34,12 @@ function authorize(req: NextRequest, tenantId: string): { ok: true; userId: stri
 }
 
 export async function GET(req: NextRequest, { params }: RouteParams) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const { id: tenantId } = await params;
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;
@@ -60,6 +67,12 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 }
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const { id: tenantId } = await params;
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;

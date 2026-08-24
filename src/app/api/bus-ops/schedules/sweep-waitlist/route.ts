@@ -40,9 +40,16 @@ import { sendEmail } from '@/lib/email';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret && !req.headers.get('x-tenant-id')) {
     const auth = req.headers.get('authorization');

@@ -5,9 +5,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type ExpRow = Record<string, unknown>;
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const [row] = await prisma.$queryRawUnsafe<ExpRow[]>(
     `SELECT * FROM finance_expenses WHERE id = $1 AND deleted_at IS NULL`, params.id
   ).catch(() => [] as ExpRow[]);
@@ -16,6 +23,12 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const body = await req.json();
   const { action } = body;
   const now = new Date().toISOString();
@@ -50,6 +63,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await prisma.$executeRawUnsafe(
     `UPDATE finance_expenses SET deleted_at=NOW() WHERE id=$1`, params.id
   ).catch(() => {});

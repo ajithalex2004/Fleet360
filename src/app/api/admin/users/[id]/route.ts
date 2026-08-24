@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAG = 'users:list';
 
 type Params = { params: Promise<{ id: string }> };
@@ -21,6 +22,12 @@ const ALL_MODULES = [
 ] as const;
 
 export async function GET(_req: NextRequest, { params }: Params) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const { id } = await params;
     // User is global but UserTenant has RLS. Use platform-admin so we can
@@ -43,6 +50,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const { id } = await params;
     const body    = await req.json();
@@ -96,6 +109,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const { id } = await params;
     // Soft-delete: deactivate rather than hard-delete

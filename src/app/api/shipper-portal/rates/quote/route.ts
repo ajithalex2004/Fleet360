@@ -21,6 +21,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireShipperPortal } from '@/lib/shipper-portal/auth';
 import { signJwtForBackend } from '@/lib/auth/jwt';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const GO_BACKEND_URL = process.env.GO_BACKEND_URL ?? 'http://localhost:8080';
@@ -36,6 +37,12 @@ interface IncomingBody {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const auth = await requireShipperPortal(req);
   if (auth instanceof NextResponse) return auth;
 

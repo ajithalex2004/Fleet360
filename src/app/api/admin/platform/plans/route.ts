@@ -17,6 +17,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { listPlans, invalidatePlanCache } from '@/lib/plans';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 function requireSuperAdmin(req: NextRequest): { ok: true; userId: string } | { ok: false; res: NextResponse } {
   const role   = req.headers.get('x-user-role')   ?? '';
   const userId = req.headers.get('x-user-id')     ?? '';
@@ -37,6 +38,12 @@ function requireSuperAdmin(req: NextRequest): { ok: true; userId: string } | { o
 
 // ── GET — list all plans (admin sees inactive too) ────────────────────────
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const auth = requireSuperAdmin(req);
   if (!auth.ok) return auth.res;
   try {
@@ -68,6 +75,12 @@ interface CreateBody {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const auth = requireSuperAdmin(req);
   if (!auth.ok) return auth.res;
 

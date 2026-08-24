@@ -26,6 +26,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function genId(): string    { return crypto.randomUUID(); }
@@ -63,6 +64,12 @@ async function ensureTable(): Promise<void> {
 // ── POST — all actions ────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await ensureTable();
 
   const url    = request.nextUrl;

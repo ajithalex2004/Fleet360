@@ -18,6 +18,7 @@ import type { Lang } from '@/lib/pdf/theme';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const VENDOR = {
@@ -54,6 +55,12 @@ interface StudentRow {
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const { id } = await params;
   const lang: Lang = req.nextUrl.searchParams.get('lang') === 'ar' ? 'ar' : 'en';
   const download = req.nextUrl.searchParams.get('download') === '1';

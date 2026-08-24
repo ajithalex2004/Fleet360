@@ -10,14 +10,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 type IdCtx = { params: Promise<{ id: string }> };
 
 export async function GET(req: NextRequest, { params }: IdCtx) {
   const { id } = await params;
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
 
   const run = await prisma.fleetOptimizationRun.findFirst({
     where: { id, tenantId },

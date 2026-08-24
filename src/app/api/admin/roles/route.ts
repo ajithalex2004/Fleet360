@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { cacheRead, publicCacheControl, revalidateCache } from '@/lib/server-cache';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAG = 'roles:all';
 
 /**
@@ -28,6 +29,12 @@ const getRoles = cacheRead(
 );
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const { searchParams } = new URL(req.url);
     const tenantId = searchParams.get('tenantId');
@@ -41,6 +48,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await req.json();
     const { permissionIds = [], ...roleData } = body;

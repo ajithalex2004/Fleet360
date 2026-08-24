@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // GET /api/maintenance/warranties
 // Query params: tenantId?, vehicleId?, activeOnly?
 export async function GET(request: Request) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const { searchParams } = new URL(request.url);
         const tenantId  = searchParams.get('tenantId')  ?? '';
@@ -34,6 +41,12 @@ export async function GET(request: Request) {
 // Body: { vehicleId, warrantyType, provider?, startDate, expiryDate,
 //         coverageDescription?, maxClaimAmount?, isActive?, tenantId? }
 export async function POST(request: Request) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const body = await request.json();
 

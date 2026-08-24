@@ -29,6 +29,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 import { privateCacheControl } from '@/lib/server-cache';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import {
   isRequestType,
   isIncidentType,
@@ -56,6 +57,12 @@ const PostBodySchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const ctx = await requireDriverSession(req);
   if (ctx instanceof NextResponse) return ctx;
 
@@ -177,6 +184,12 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const ctx = await requireDriverSession(req);
   if (ctx instanceof NextResponse) return ctx;
 

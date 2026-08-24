@@ -12,7 +12,14 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const sp = new URL(req.url).searchParams;
   const params = new URLSearchParams({ module: 'SCHOOL_BUS' });
   if (sp.get('tenantId')) params.set('tenantId', sp.get('tenantId')!);
@@ -25,6 +32,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   // Forward body to Finance invoices endpoint with module=SCHOOL_BUS injected
   try {
     const body = await req.json();

@@ -15,11 +15,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { assignBroadcast } from '@/lib/logistics/domain';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest, { params: _params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   const actorUserId = req.headers.get('x-user-id');
   const actorRole = req.headers.get('x-user-role');
 

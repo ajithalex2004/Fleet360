@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AlertTriangle, Plus } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
 
 interface Incident {
   id: string; incidentNo?: string; scheduleId?: string; routeId?: string; vehicleId?: string; driverId?: string;

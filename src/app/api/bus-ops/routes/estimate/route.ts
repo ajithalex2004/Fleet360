@@ -33,13 +33,21 @@ import { geocode, GeocodeError, type GeocodeResult } from '@/lib/logistics/geoco
 import { computeDistanceMatrix } from '@/lib/logistics/distance-matrix';
 import { computeGoogleDirections } from '@/lib/logistics/google-directions';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface Leg { fromLabel: string; toLabel: string; km: number; min: number }
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
 
   const { searchParams } = new URL(req.url);
   const origin = searchParams.get('origin')?.trim();

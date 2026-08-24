@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const INIT_PERIODS = `
   CREATE TABLE IF NOT EXISTS finance_periods (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -55,6 +56,12 @@ function makePeriodsForYear(year: number): { number: number; name: string; from:
 }
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await prisma.$executeRawUnsafe(INIT_PERIODS).catch(()=>{});
   await prisma.$executeRawUnsafe(INIT_FY).catch(()=>{});
 
@@ -99,6 +106,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await prisma.$executeRawUnsafe(INIT_PERIODS).catch(()=>{});
   await prisma.$executeRawUnsafe(INIT_FY).catch(()=>{});
 

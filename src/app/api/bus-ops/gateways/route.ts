@@ -12,13 +12,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { gatewaySecretConfigured } from '@/lib/bus-gateway';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const OFFLINE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes without heartbeat → offline
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
 
   const gateways = await prisma.bleGateway.findMany({
     where: { tenantId },

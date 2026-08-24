@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureDispatchSchema, DEFAULT_WEIGHTS } from '@/lib/dispatch/schema';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
 function serialize(row: Row): Row {
@@ -25,6 +26,12 @@ function serialize(row: Row): Row {
 }
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureDispatchSchema();
 
@@ -72,6 +79,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureDispatchSchema();
 
@@ -136,6 +149,12 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureDispatchSchema();
     const id = new URL(req.url).searchParams.get('id');

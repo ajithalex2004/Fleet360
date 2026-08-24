@@ -20,6 +20,7 @@ import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 import { privateCacheControl } from '@/lib/server-cache';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const DEFAULT_RADIUS_M = 100;
 
 interface StopRow {
@@ -41,6 +42,12 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } },
 ) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const ctx = await requireDriverSession(req);
   if (ctx instanceof NextResponse) return ctx;
 

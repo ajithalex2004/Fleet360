@@ -17,6 +17,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const VALID_TYPES  = new Set(['STOP', 'GARAGE', 'ORIGIN_DESTINATION', 'BASE_CAMP', 'ACCOMMODATION']);
 const VALID_SHAPES = new Set(['CIRCLE', 'POLYGON']);
 
@@ -66,8 +67,15 @@ function shapeIsValid(body: {
 }
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
 
   const sp = req.nextUrl.searchParams;
   const type    = sp.get('type');
@@ -96,8 +104,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   const createdBy = req.headers.get('x-user-id') ?? null;
 
   try {

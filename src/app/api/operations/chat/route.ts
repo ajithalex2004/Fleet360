@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { transformStream } from '@crayonai/stream';
 import { DBMessage, getMessageStore } from '../../chat/messageStore';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const SYSTEM_PROMPT = `You are the Fleet360 Operations Assistant — an expert AI embedded in a Smart Transport Management Platform used by fleet operators, dispatchers, and operations managers in the UAE.
 
 You have real-time access to the following live data via tools:
@@ -33,6 +34,12 @@ TOOL USAGE RULES:
 GREETING: When the user first connects, immediately call showKPIDashboard to show the full operations overview.`;
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
   const body = await req.json();
   const { prompt, threadId, responseId } = body as {

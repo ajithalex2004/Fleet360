@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { isPlaceShape, isPlaceType } from '@/lib/places/types';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 function bad(msg: string, status = 400) {
@@ -20,19 +21,30 @@ async function loadOwned(id: string, tenantId: string) {
 }
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return bad('Not authenticated', 401);
-  const { id } = await ctx.params;
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz; = await ctx.params;
   const row = await loadOwned(id, tenantId);
   if (!row) return bad('Not found', 404);
   return NextResponse.json(row);
 }
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return bad('Not authenticated', 401);
-  const updatedBy = req.headers.get('x-user-id') ?? null;
-  const { id } = await ctx.params;
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz; = await ctx.params;
 
   const existing = await loadOwned(id, tenantId);
   if (!existing) return bad('Not found', 404);
@@ -73,9 +85,15 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 }
 
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return bad('Not authenticated', 401);
-  const { id } = await ctx.params;
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz; = await ctx.params;
   const existing = await loadOwned(id, tenantId);
   if (!existing) return bad('Not found', 404);
 

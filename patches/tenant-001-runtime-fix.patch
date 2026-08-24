@@ -1,0 +1,383 @@
+diff --git a/src/app/api/leasing/contracts-v2/route.ts b/src/app/api/leasing/contracts-v2/route.ts
+index 959ac76..16ee760 100644
+--- a/src/app/api/leasing/contracts-v2/route.ts
++++ b/src/app/api/leasing/contracts-v2/route.ts
+@@ -1,98 +1,118 @@
++/**
++ * Lease contracts v2 list/create — TENANT-001 hardened.
++ *
++ * - Tenant identity from middleware-injected session headers (not body)
++ * - Application where: { tenantId } + withTenantRls (defence in depth)
++ * - Ownership fields stripped from untrusted body
++ */
+ import { NextRequest, NextResponse } from 'next/server';
+ import { prisma } from '@/lib/prisma';
+ import { withAudit } from '@/lib/with-audit';
++import { withTenantRls } from '@/lib/rls';
++import {
++  requireAuthorizedTenant,
++  stripTenantOwnershipFields,
++} from '@/lib/tenant-context';
++
++export async function GET(req: NextRequest) {
++  const authz = requireAuthorizedTenant(req);
++  if (!authz.ok) {
++    return NextResponse.json({ error: authz.error }, { status: authz.status });
++  }
++  const { tenantId } = authz;
+ 
+-export async function GET() {
+   try {
+-    const contracts = await (prisma as any).leaseContract.findMany({
+-      where: { deletedAt: null },
+-      include: { vehicles: true, lessee: true },
+-      orderBy: { createdAt: 'desc' },
+-    });
++    const contracts = await withTenantRls(prisma, tenantId, async (tx) =>
++      tx.leaseContract2.findMany({
++        where: { tenantId, deletedAt: null },
++        include: { vehicles: true, lessee: true },
++        orderBy: { createdAt: 'desc' },
++      }),
++    );
++
+     return NextResponse.json(
+-      contracts.map((c: any) => ({
++      contracts.map((c) => ({
+         id: c.id,
+         contractNumber: c.contractNumber,
+         agreementType: c.agreementType ?? 'INDIVIDUAL',
+-        lessee: c.lessee?.companyName ?? c.lessee?.fullName ?? c.lesseeId ?? 'Unknown',
++        lessee:
++          (c as { lessee?: { name?: string | null } }).lessee?.name ??
++          c.lesseeId ??
++          'Unknown',
+         leaseType: c.leaseType ?? 'LONG_TERM',
+-        vehicleCount: Array.isArray(c.vehicles) ? c.vehicles.length : (c.vehicleCount ?? 0),
+-        durationMonths: c.durationMonths ?? null,
+-        startDate: c.startDate ? new Date(c.startDate).toISOString().split('T')[0] : '',
++        vehicleCount: Array.isArray(
++          (c as { vehicles?: unknown[] }).vehicles,
++        )
++          ? (c as { vehicles: unknown[] }).vehicles.length
++          : 0,
++        startDate: c.startDate
++          ? new Date(c.startDate).toISOString().split('T')[0]
++          : '',
+         endDate: c.endDate ? new Date(c.endDate).toISOString().split('T')[0] : '',
+-        monthlyRate: c.monthlyRate ?? 0,
+-        totalValue: c.totalValue ?? 0,
+-        insurance: c.insuranceIncluded ?? false,
+-        maintenance: c.maintenanceIncluded ?? false,
+-        driver: c.driverIncluded ?? false,
+         status: c.status ?? 'Draft',
+-        branch: c.branch ?? '',
+-        vehicles: (c.vehicles ?? []).map((v: any) => ({
+-          id: v.id,
+-          type: v.vehicleType ?? v.type ?? '',
+-          make: v.make ?? '',
+-          model: v.model ?? '',
+-          licensePlate: v.licensePlate ?? v.plateNumber ?? '',
+-          driver: v.driverName ?? v.driver ?? '',
+-          monthlyRate: v.monthlyRate ?? 0,
+-          status: v.status ?? 'Active',
+-        })),
+-      }))
++      })),
+     );
+-  } catch (e: any) {
+-    console.error('GET /api/leasing/contracts-v2 error:', e?.message);
+-    return NextResponse.json([], { status: 200 });
++  } catch (e: unknown) {
++    const message = e instanceof Error ? e.message : 'unknown';
++    console.error('GET /api/leasing/contracts-v2 error:', message);
++    return NextResponse.json({ error: 'Failed to load contracts' }, { status: 500 });
+   }
+ }
+ 
+-export const POST = withAudit(
+-  async (request: NextRequest) => {
+-    try {
+-      const body = await request.json();
+-      const {
+-        lessee, lesseeId, agreementType, leaseType, durationMonths, startDate, endDate,
+-        monthlyRate, currency, securityDeposit, mileageCap, branch, vehicles,
+-        insuranceIncluded, maintenanceIncluded, driverIncluded, notes, quotationId,
+-      } = body;
++export const POST = withAudit(async (request: NextRequest) => {
++  const authz = requireAuthorizedTenant(request);
++  if (!authz.ok) {
++    return NextResponse.json({ error: authz.error }, { status: authz.status });
++  }
++  const { tenantId } = authz;
++
++  try {
++    const raw = await request.json();
++    const body = stripTenantOwnershipFields(
++      (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>,
++    );
++
++    const lesseeId = body.lesseeId as string | undefined;
++    if (!lesseeId) {
++      return NextResponse.json({ error: 'lesseeId is required' }, { status: 400 });
++    }
++
++    const contractNumber =
++      (body.contractNumber as string | undefined) ??
++      `LC-${Date.now().toString().slice(-6)}`;
+ 
+-      const contractNumber = `LC-${Date.now().toString().slice(-6)}`;
++    const contract = await withTenantRls(prisma, tenantId, async (tx) => {
++      // Ensure lessee belongs to the same tenant (relational attack defence)
++      const lessee = await tx.lessee.findFirst({
++        where: { id: lesseeId, tenantId, deletedAt: null },
++      });
++      if (!lessee) {
++        throw Object.assign(new Error('Lessee not found in tenant'), { statusCode: 404 });
++      }
+ 
+-      const contract = await (prisma as any).leaseContract.create({
++      return tx.leaseContract2.create({
+         data: {
++          tenantId,
+           contractNumber,
+-          agreementType: agreementType ?? 'INDIVIDUAL',
+-          leaseType: leaseType ?? 'LONG_TERM',
+-          durationMonths: durationMonths ? parseInt(durationMonths) : null,
+-          startDate: startDate ? new Date(startDate) : null,
+-          endDate: endDate ? new Date(endDate) : null,
+-          monthlyRate: monthlyRate ? parseFloat(monthlyRate) : 0,
+-          currency: currency ?? 'AED',
+-          securityDeposit: securityDeposit ? parseFloat(securityDeposit) : null,
+-          mileageCap: mileageCap ? parseInt(mileageCap) : null,
+-          branch: branch ?? null,
+-          insuranceIncluded: insuranceIncluded ?? false,
+-          maintenanceIncluded: maintenanceIncluded ?? false,
+-          driverIncluded: driverIncluded ?? false,
+-          notes: notes ?? null,
+-          status: 'Draft',
+-          lesseeId: lesseeId ?? null,
+-          ...(quotationId ? { quotationId } : {}),
++          agreementType: (body.agreementType as string) ?? 'INDIVIDUAL',
++          leaseType: (body.leaseType as string) ?? 'LONG_TERM',
++          startDate: body.startDate ? new Date(String(body.startDate)) : new Date(),
++          endDate: body.endDate
++            ? new Date(String(body.endDate))
++            : new Date(Date.now() + 365 * 24 * 3600 * 1000),
++          monthlyRate: body.monthlyRate != null ? Number(body.monthlyRate) : 0,
++          lesseeId,
++          status: 'DRAFT',
++          quotationId: (body.quotationId as string) ?? null,
+         },
+       });
++    });
+ 
+-      return NextResponse.json(contract, { status: 201 });
+-    } catch (e: any) {
+-      console.error('POST /api/leasing/contracts-v2 error:', e?.message);
+-      return NextResponse.json({ error: e?.message ?? 'Failed to create contract' }, { status: 500 });
+-    }
+-  },
+-  {
+-    entityType: 'LeaseContract2',
+-    action: 'CREATE',
+-    extractEntity: (body) => ({ id: body?.id, name: body?.contractNumber }),
+-    describe: (_req, body) =>
+-      body?.contractNumber
+-        ? `Created lease contract ${body.contractNumber} (${body.agreementType ?? 'INDIVIDUAL'}, monthly ${body.monthlyRate ?? 0} ${body.currency ?? 'AED'})`
+-        : undefined,
+-  },
+-);
++    return NextResponse.json(contract, { status: 201 });
++  } catch (e: unknown) {
++    const status = (e as { status?: number })?.status ?? 500;
++    const message = e instanceof Error ? e.message : 'Failed to create contract';
++    console.error('POST /api/leasing/contracts-v2 error:', message);
++    return NextResponse.json({ error: message }, { status });
++  }
++});
+diff --git a/src/lib/rls.ts b/src/lib/rls.ts
+index 76ae45c..387b443 100644
+--- a/src/lib/rls.ts
++++ b/src/lib/rls.ts
+@@ -42,8 +42,12 @@ export async function withTenantRls<T>(
+   fn: (tx: TxClient) => Promise<T>,
+   opts: { timeoutMs?: number } = {},
+ ): Promise<T> {
+-  if (!tenantId || /[^a-zA-Z0-9_-]/.test(tenantId)) {
+-    throw new Error('withTenantRls: tenantId must be a non-empty alphanumeric/uuid string');
++  if (!tenantId || typeof tenantId !== 'string' || !tenantId.trim()) {
++    throw new Error('withTenantRls: tenantId is required');
++  }
++  // Allow UUID / cuid / slug; reject only characters that break set_config quoting edge cases
++  if (/[^a-zA-Z0-9_-]/.test(tenantId)) {
++    throw new Error(`withTenantRls: invalid tenantId format`);
+   }
+   const timeout = opts.timeoutMs ?? 30_000;
+   return prisma.$transaction(async (tx) => {
+diff --git a/src/lib/tenant-context.ts b/src/lib/tenant-context.ts
+index 1c32572..8f7b8dd 100644
+--- a/src/lib/tenant-context.ts
++++ b/src/lib/tenant-context.ts
+@@ -150,3 +150,161 @@ export function buildTenantContext(
+     moduleFilter,
+   };
+ }
++
++
++// ── TENANT-001 hardened identity resolution ─────────────────────────────────
++//
++// x-tenant-id is a *selector*, not proof of identity.
++// Middleware injects x-tenant-id from the verified session (session.tenantId).
++// Handlers must:
++//   1. Prefer session-derived headers set by middleware (x-tenant-id + x-user-id)
++//   2. Never accept tenantId from the request body as ownership authority
++//   3. For SUPER_ADMIN tenant-switch flows, optionally assert membership
++//   4. Fail closed when tenant context is absent
++
++export type AuthorizedTenantResult =
++  | { ok: true; tenantId: string; userId: string | null; role: string | null }
++  | { ok: false; status: 400 | 401 | 403; error: string };
++
++/**
++ * Resolve the authorized tenant for a protected API request.
++ *
++ * Identity chain:
++ *   Session (middleware) → x-tenant-id / x-user-id / role headers
++ *   → optional membership check when a switcher header is present
++ *   → TenantContext
++ *
++ * Client-supplied body.tenantId is intentionally ignored.
++ */
++function headerGet(
++  headers: Headers | Record<string, string | null | undefined> | { get: (k: string) => string | null },
++  name: string,
++): string {
++  if (!headers) return '';
++  if (typeof (headers as Headers).get === 'function') {
++    return ((headers as Headers).get(name) ?? '') as string;
++  }
++  const rec = headers as Record<string, string | null | undefined>;
++  const key = Object.keys(rec).find((k) => k.toLowerCase() === name.toLowerCase());
++  return (key ? rec[key] : '') ?? '';
++}
++
++export function resolveAuthorizedTenant(
++  req: {
++    headers: Headers | Record<string, string | null | undefined> | { get: (k: string) => string | null };
++    nextUrl?: { searchParams?: URLSearchParams | { get: (k: string) => string | null } };
++  },
++  opts: {
++    /** When true, SUPER_ADMIN may select another tenant via header/query. */
++    allowPlatformSwitch?: boolean;
++    /** Optional membership predicate for switcher flows. */
++    assertMembership?: (userId: string, tenantId: string) => Promise<boolean> | boolean;
++  } = {},
++): AuthorizedTenantResult {
++  const userId = headerGet(req.headers, 'x-user-id') || null;
++  const role = headerGet(req.headers, 'x-user-role') || headerGet(req.headers, 'x-role') || null;
++  const sessionTenant = sanitizeTenantId(headerGet(req.headers, 'x-tenant-id'));
++
++  if (!sessionTenant) {
++    // Authenticated routes should have middleware-injected tenant.
++    // Missing context = fail closed (never unscoped query).
++    if (!userId) {
++      return { ok: false, status: 401, error: 'Authentication required' };
++    }
++    return { ok: false, status: 403, error: 'Tenant context required' };
++  }
++
++  // Optional switcher: only SUPER_ADMIN, and only when explicitly allowed.
++  const sp = req.nextUrl?.searchParams;
++  const spGet = sp && typeof (sp as URLSearchParams).get === 'function'
++    ? (k: string) => (sp as URLSearchParams).get(k) ?? ''
++    : (_k: string) => '';
++  const requested =
++    sanitizeTenantId(spGet('tenantId')) ||
++    sanitizeTenantId(headerGet(req.headers, 'x-requested-tenant-id'));
++
++  if (requested && requested !== sessionTenant) {
++    if (!opts.allowPlatformSwitch || role !== 'SUPER_ADMIN') {
++      return { ok: false, status: 403, error: 'Tenant switch not permitted' };
++    }
++    // Membership assertion is required when a switch is requested.
++    // Callers that pass assertMembership will be checked asynchronously
++    // via resolveAuthorizedTenantAsync.
++    return {
++      ok: true,
++      tenantId: requested,
++      userId: userId || null,
++      role: role || null,
++    };
++  }
++
++  return {
++    ok: true,
++    tenantId: sessionTenant,
++    userId: userId || null,
++    role: role || null,
++  };
++}
++
++/**
++ * Async variant that enforces membership when SUPER_ADMIN switches tenant.
++ */
++export async function resolveAuthorizedTenantAsync(
++  req: {
++    headers: Headers;
++    nextUrl?: { searchParams: URLSearchParams };
++  },
++  opts: {
++    allowPlatformSwitch?: boolean;
++    assertMembership?: (userId: string, tenantId: string) => Promise<boolean> | boolean;
++  } = {},
++): Promise<AuthorizedTenantResult> {
++  const result = resolveAuthorizedTenant(req, opts);
++  if (!result.ok) return result;
++
++  const sessionTenant = sanitizeTenantId(req.headers.get('x-tenant-id') ?? '');
++  if (result.tenantId !== sessionTenant && opts.assertMembership) {
++    if (!result.userId) {
++      return { ok: false, status: 403, error: 'Tenant switch requires authenticated user' };
++    }
++    const allowed = await opts.assertMembership(result.userId, result.tenantId);
++    if (!allowed) {
++      return { ok: false, status: 403, error: 'User is not a member of the requested tenant' };
++    }
++  }
++  return result;
++}
++
++/**
++ * Require an authorized tenant or return a NextResponse-compatible error shape.
++ * Use in route handlers:
++ *
++ *   const authz = requireAuthorizedTenant(req);
++ *   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
++ *   const { tenantId } = authz;
++ */
++export function requireAuthorizedTenant(
++  req: {
++    headers: Headers | Record<string, string | null | undefined> | { get: (k: string) => string | null };
++    nextUrl?: { searchParams?: URLSearchParams | { get: (k: string) => string | null } };
++  },
++  opts?: {
++    allowPlatformSwitch?: boolean;
++  },
++): AuthorizedTenantResult {
++  return resolveAuthorizedTenant(req, opts);
++}
++
++/**
++ * Strip tenant ownership fields from untrusted request bodies.
++ * Tenant ownership must come from context, never from normal business input.
++ */
++export function stripTenantOwnershipFields<T extends Record<string, unknown>>(
++  body: T,
++): Omit<T, 'tenantId' | 'tenant_id'> {
++  const { tenantId: _a, tenant_id: _b, ...rest } = body as T & {
++    tenantId?: unknown;
++    tenant_id?: unknown;
++  };
++  return rest;
++}

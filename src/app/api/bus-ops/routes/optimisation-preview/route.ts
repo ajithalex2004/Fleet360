@@ -12,9 +12,16 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { optimiseRoute, type GeoStop } from '@/lib/agents/route-optimiser/tsp';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET() {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const routes = await prisma.busRoute.findMany({
     where: { deletedAt: null, isActive: true, routeType: { in: ['STAFF', 'BOTH'] } },
     select: {

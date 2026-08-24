@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /**
  * GET    /api/school-bus/students/[id]  — single student detail
  * PATCH  /api/school-bus/students/[id]  — update student
@@ -8,6 +9,12 @@ import { prisma } from '@/lib/prisma';
  */
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     type StudentDetail = {
       id: string; student_code: string; first_name: string; last_name: string;
@@ -49,6 +56,12 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await req.json();
     const fields: string[] = [];
@@ -87,6 +100,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await prisma.$executeRawUnsafe(
       `UPDATE school_bus_students SET deleted_at = NOW(), is_active = false WHERE id = $1 AND deleted_at IS NULL`,

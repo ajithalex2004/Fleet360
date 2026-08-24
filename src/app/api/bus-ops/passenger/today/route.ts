@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
@@ -18,8 +19,15 @@ export async function GET(req: NextRequest) {
   // tenant filter, so a user authenticated for tenant A could enumerate
   // employees + beacon UUIDs + RFID tags in tenant B. Stamp the tenant from
   // the session-injected header and scope every read.
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
 
   const employeeId = req.nextUrl.searchParams.get('employeeId');
   if (!employeeId) {

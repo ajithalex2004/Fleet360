@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET() {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const quotations = await prisma.quotation.findMany({
             where: { deletedAt: null },
@@ -22,6 +29,12 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const body = await request.json();
 

@@ -15,6 +15,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { invalidatePlanCache } from '@/lib/plans';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 interface RouteParams { params: Promise<{ code: string }>; }
 
 function requireSuperAdmin(req: NextRequest): { ok: true; userId: string } | { ok: false; res: NextResponse } {
@@ -75,6 +76,12 @@ const COL_MAP: Record<keyof UpdateBody, string> = {
 };
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const auth = requireSuperAdmin(req);
   if (!auth.ok) return auth.res;
   const { code: rawCode } = await params;
@@ -132,6 +139,12 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 
 // ── DELETE — soft delete ───────────────────────────────────────────────────
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const auth = requireSuperAdmin(req);
   if (!auth.ok) return auth.res;
   const { code: rawCode } = await params;

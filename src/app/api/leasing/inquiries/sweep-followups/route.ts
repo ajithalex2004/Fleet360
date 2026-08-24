@@ -22,9 +22,16 @@ import { captureException } from '@/lib/sentry';
 import { sendEmail } from '@/lib/email';
 import { sendWhatsApp } from '@/lib/whatsapp';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const tenantHeader = req.headers.get('x-tenant-id');
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret && !tenantHeader) {

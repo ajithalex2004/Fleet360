@@ -3,7 +3,14 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET() {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const templates = await withPlatformAdmin(prisma, (tx) =>
             tx.notificationTemplate.findMany()
@@ -15,6 +22,12 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const body = await request.json();
         const template = await withPlatformAdmin(prisma, (tx) =>
@@ -36,6 +49,12 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const body = await request.json();
         const template = await withPlatformAdmin(prisma, (tx) =>

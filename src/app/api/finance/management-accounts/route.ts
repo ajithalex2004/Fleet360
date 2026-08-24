@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 function toN(v: unknown): number { return parseFloat(String(v ?? 0)) || 0; }
 
 // ── Core query helpers (param-based so they can run for two periods) ──────────
@@ -206,6 +207,12 @@ async function buildPeriod(
 }
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const sp   = req.nextUrl.searchParams;
   const type = sp.get('type') ?? 'income_statement';
   const from = sp.get('from') ?? `${new Date().getFullYear()}-01-01`;

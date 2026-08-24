@@ -2,9 +2,16 @@ import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import nodemailer from 'nodemailer';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const prisma = new PrismaClient();
 
 export async function POST(request: Request) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const body = await request.json();
         const { recipient, to, subject, body: messageBody, text, triggerReason } = body;

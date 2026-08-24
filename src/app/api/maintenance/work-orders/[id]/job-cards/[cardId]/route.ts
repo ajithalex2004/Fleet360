@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // PUT /api/maintenance/work-orders/[id]/job-cards/[cardId]
 // Updates a job card (status, hours, technician, tasks).
 // Body: { title?, description?, technicianId?, technicianName?, status?, actualHours?,
@@ -9,6 +10,12 @@ export async function PUT(
     request: Request,
     { params }: { params: { id: string; cardId: string } },
 ) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const { cardId } = params;
         const body = await request.json();
@@ -70,6 +77,12 @@ export async function DELETE(
     _request: Request,
     { params }: { params: { id: string; cardId: string } },
 ) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const { cardId } = params;
         await prisma.jobCard.delete({ where: { id: cardId } });

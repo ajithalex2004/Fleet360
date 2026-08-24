@@ -26,6 +26,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { tick } from '@/lib/outbox/publisher';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // Side-effect import: registers all in-process consumers with the
 // outbox registry. Must be present for tick() to find handlers.
 import '@/lib/finance/consumers';

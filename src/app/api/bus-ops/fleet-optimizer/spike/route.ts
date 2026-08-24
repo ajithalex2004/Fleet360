@@ -26,6 +26,7 @@ import { parseSuccess, normaliseSkipReason } from '@/lib/planning/fleet-routing/
 import { resolveTimeWindow } from '@/lib/planning/fleet-routing/window-resolver';
 import type { ShipmentInput, VehicleInput } from '@/lib/planning/fleet-routing/types';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 // ── Fake fixtures (Dubai — Al Khail Gate area) ─────────────────────────────
@@ -45,6 +46,12 @@ const FAKE_DEPOT = { lat: 25.1250, lng: 55.2010, label: 'Depot' };
 interface CriterionResult { ok: boolean; detail: string }
 
 export async function POST() {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   if (process.env.NODE_ENV === 'production') {
     return NextResponse.json({ error: 'spike endpoint is dev-only' }, { status: 403 });
   }

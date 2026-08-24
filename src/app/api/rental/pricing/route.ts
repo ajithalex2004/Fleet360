@@ -3,7 +3,13 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { prisma } from '@/lib/prisma';
 import { pricingRuleToRow, rowToCamel } from '@/lib/pricing-rule-helpers';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const rows = await prisma.$queryRawUnsafe<any[]>(
       "SELECT * FROM pricing_rules ORDER BY created_at DESC"

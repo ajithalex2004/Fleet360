@@ -2,12 +2,19 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { publishRecoveryCompleted } from '@/lib/maintenance/publish-event';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ── GET /api/maintenance/breakdown-reports/[id] ───────────────────────────────
 
 export async function GET(
     _request: Request,
     { params }: { params: { id: string } },
 ) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const report = await prisma.breakdownReport.findUnique({
             where: { id: params.id },
@@ -43,6 +50,12 @@ export async function PATCH(
     request: Request,
     { params }: { params: { id: string } },
 ) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const { id } = params;
         const body   = await request.json();

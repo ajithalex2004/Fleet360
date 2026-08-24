@@ -10,11 +10,18 @@ import { ensureInvitationTable } from '@/lib/invitations';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string; invId: string }>; }
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const { id: tenantId, invId } = await params;
 
   const role     = req.headers.get('x-user-role')   ?? '';

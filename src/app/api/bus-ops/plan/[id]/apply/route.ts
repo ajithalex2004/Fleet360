@@ -38,6 +38,7 @@ import { withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 import { evaluatePlanApply } from '@/lib/planning/apply-gate';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import {
   assignVehiclesToBlocks,
   VEHICLE_GROUP_CONFLICT,
@@ -88,6 +89,12 @@ interface DriverRoster {
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const tenantId = req.headers.get('x-tenant-id') ?? '';
   if (!tenantId) {
     return NextResponse.json({ error: 'No tenant context' }, { status: 400 });

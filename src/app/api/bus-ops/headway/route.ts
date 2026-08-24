@@ -29,6 +29,7 @@ import { revalidateCache } from '@/lib/server-cache';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 import { expandHeadway, daysToMask, maskToDays } from '@/lib/headway/service';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /**
  * Every method is gated on bus-ops:admin:headway. Headway rules define the
  * published service frequency and each one can bind to a CBA rule-set via
@@ -69,6 +70,12 @@ function shapeRule(r: RuleRow) {
 }
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const tenantId = req.headers.get('x-tenant-id') ?? '';
   if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   const permError = requireBusOpsAdminAccess(req, HEADWAY_RESOURCE);
@@ -106,6 +113,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const tenantId = req.headers.get('x-tenant-id') ?? '';
   if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   const permError = requireBusOpsAdminAccess(req, HEADWAY_RESOURCE);
@@ -150,6 +163,12 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const tenantId = req.headers.get('x-tenant-id') ?? '';
   if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   const permError = requireBusOpsAdminAccess(req, HEADWAY_RESOURCE);

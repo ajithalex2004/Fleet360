@@ -6,10 +6,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // finance_reminder_schedules and finance_reminder_log are created + seeded by
 // migration 20260810000003_finance_reference_data_seed — no runtime DDL needed.
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const p           = req.nextUrl.searchParams;
   const include_log = p.get('include_log') === 'true';
   const schedule_id = p.get('schedule_id');
@@ -49,6 +56,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const b = await req.json();
 
   if (b.action === 'run') {
@@ -150,6 +163,12 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const b = await req.json();
   const { id } = b;
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
@@ -183,6 +202,12 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const { id } = await req.json();
   await prisma.$executeRawUnsafe(`DELETE FROM finance_reminder_schedules WHERE id = $1::uuid`, id);
   return NextResponse.json({ ok: true });

@@ -33,10 +33,17 @@ import { privateCacheControl } from '@/lib/server-cache';
 import { requireDriverSession } from '@/lib/driver-session';
 import { findRule, DEFAULT_CBA_RULES } from '@/lib/cba/types';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const PLATFORM_DEFAULT_HOURS =
   DEFAULT_CBA_RULES.rules.find((r) => r.category === 'MAX_DRIVING_HOURS_CONTINUOUS')?.value ?? 4.5;
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const ctx = await requireDriverSession(req);
   if (ctx instanceof NextResponse) return ctx;
 

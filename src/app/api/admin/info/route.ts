@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { MODULES, MODULE_BY_KEY } from '@/lib/modules';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // Platform modules — derived from the canonical registry so the admin info
 // endpoint stays in sync with the platform home, the admin tenants matrix,
 // the access-control layer, and the RBAC permission matrix. Editing the
@@ -49,6 +50,12 @@ const NOTIFICATION_CHANNELS = [
 ];
 
 export async function GET() {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     return await withPlatformAdmin(prisma, async (tx) => {
       // DB model counts from Prisma. The 'tx' client is the same

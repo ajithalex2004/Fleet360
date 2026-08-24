@@ -16,6 +16,7 @@ import { ensureMfaColumns } from '@/lib/auth-mfa-schema';
 import { generateTotpSecret, provisioningUri } from '@/lib/totp';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {

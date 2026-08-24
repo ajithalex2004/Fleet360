@@ -18,14 +18,22 @@ import { prisma } from '@/lib/prisma';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   // Audit risk #13 — tenant scoping. Both the trip and the staff member must
   // be resolved *inside the caller's tenant* so an authenticated user for one
   // tenant can't enroll another tenant's employee onto another tenant's trip.
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
 
   try {
     const body = await req.json();

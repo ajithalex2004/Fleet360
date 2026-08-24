@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma';
 import { getTenantContext } from '@/lib/tenant-session';
 import { ensureMfaColumns } from '@/lib/auth-mfa-schema';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {

@@ -22,6 +22,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const PLATFORM_TENANT_DOMAIN = 'xl-ai-platform.internal';
 const PLATFORM_TENANT_NAME   = 'Fleet360 — Platform';
 
@@ -34,6 +35,12 @@ function hashPassword(password: string): string {
 // ── GET — check if super admin exists (no credentials exposed) ─────────────────
 
 export async function GET() {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     type Row = { count: string };
     const rows = await prisma.$queryRawUnsafe<Row[]>(
@@ -58,6 +65,12 @@ export async function GET() {
 // ── POST — create / reset super admin ─────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const setupSecret = process.env.SETUP_SECRET;
 
   if (!setupSecret) {

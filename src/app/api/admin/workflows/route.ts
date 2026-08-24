@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listWorkflows, createWorkflow } from '@/lib/workflow-db';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const { searchParams } = new URL(req.url);
     const workflows = await listWorkflows({
@@ -20,6 +27,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await req.json();
     const { name, module, procedure, description, serviceTypeId, tenantId, scopeId } = body;

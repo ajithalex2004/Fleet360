@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma';
 import { ensureDispatchSchema } from '@/lib/dispatch/schema';
 import { manualOverride } from '@/lib/dispatch/engine';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
 function serialize(rows: Row[]): Row[] {
@@ -24,6 +25,12 @@ function serialize(rows: Row[]): Row[] {
 }
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureDispatchSchema();
 
@@ -86,6 +93,12 @@ export async function GET(req: NextRequest) {
 
 /** POST — manual admin override assignment */
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureDispatchSchema();
     const { jobId, driverId, vehicleId, adminId } = await req.json();

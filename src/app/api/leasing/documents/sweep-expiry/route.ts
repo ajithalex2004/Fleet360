@@ -22,9 +22,16 @@ import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 import { env } from '@/lib/env';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   // Optional shared-secret auth for cron triggers.
   const cronSecret = process.env.CRON_SECRET;
   const tenantHeader = req.headers.get('x-tenant-id');

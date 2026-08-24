@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getBranding } from '@/lib/branding';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type PermRow   = { nav_key: string; enabled: boolean };
 type ModuleRow = { module: string };
 

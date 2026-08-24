@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const body = await req.json();
   const sets: string[] = [];
   if (body.name)        sets.push(`name = '${body.name.replace(/'/g,"''")}'`);
@@ -14,6 +21,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await prisma.$executeRawUnsafe(`UPDATE customer_hierarchy SET is_active = false WHERE id = '${params.id}'`);
   return NextResponse.json({ success: true });
 }

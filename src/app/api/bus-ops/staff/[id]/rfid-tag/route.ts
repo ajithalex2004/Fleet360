@@ -9,14 +9,27 @@ import { prisma } from '@/lib/prisma';
 import { normaliseNfcUid } from '@/lib/bus-checkin';
 import { logAudit } from '@/lib/audit';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const tag = await prisma.staffRfidTag.findUnique({ where: { staffMemberId: params.id } });
   return tag ? NextResponse.json(tag) : NextResponse.json({ error: 'No tag registered' }, { status: 404 });
 }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const body = await req.json();
   const tagUid = normaliseNfcUid(String(body?.tagUid ?? ''));
   if (!tagUid) return NextResponse.json({ error: 'tagUid is required' }, { status: 400 });
@@ -47,6 +60,12 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await prisma.staffRfidTag.update({
     where: { staffMemberId: params.id },
     data: { isActive: false },

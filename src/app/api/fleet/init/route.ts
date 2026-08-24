@@ -9,7 +9,14 @@ import { ensureFleetSchema } from '@/lib/fleet/schema';
 import { ensureHosSchema } from '@/lib/fleet/hos-schema';
 import { ensureAgentSchema } from '@/lib/agents/schema';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET() {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await Promise.all([ensureFleetSchema(), ensureHosSchema(), ensureAgentSchema()]);
     return NextResponse.json({ ok: true, message: 'Fleet + Agent schemas initialised' });

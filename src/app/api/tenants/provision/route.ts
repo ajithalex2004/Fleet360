@@ -11,6 +11,7 @@ import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { signSession } from '@/lib/tenant-session';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ── Free email domains blocklist ─────────────────────────────────────────────
 const FREE_EMAIL_DOMAINS = new Set([
   'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'live.com',
@@ -206,6 +207,12 @@ async function detectDomainVerifColumnsExist(): Promise<boolean> {
 // ── POST handler ──────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body   = await request.json();
     const parsed = ProvisionSchema.safeParse(body);

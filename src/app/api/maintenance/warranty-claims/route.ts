@@ -2,9 +2,16 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { publishWarrantyClaimRaised } from '@/lib/maintenance/publish-event';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // GET /api/maintenance/warranty-claims
 // Query params: tenantId?, warrantyId?, requestId?, status?
 export async function GET(request: Request) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const { searchParams } = new URL(request.url);
         const tenantId   = searchParams.get('tenantId')   ?? '';
@@ -36,6 +43,12 @@ export async function GET(request: Request) {
 // POST /api/maintenance/warranty-claims
 // Body: { warrantyId, requestId?, claimDate?, claimedAmount?, description?, tenantId? }
 export async function POST(request: Request) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const body = await request.json();
 

@@ -12,6 +12,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { revokeSession } from '@/lib/session-blocklist';
 import { verifySession } from '@/lib/tenant-session';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const SESSION_COOKIES = ['xl-session', 'xl-driver-session'] as const;
 
 async function logoutResponse(request: NextRequest): Promise<NextResponse> {

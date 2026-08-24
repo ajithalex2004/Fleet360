@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ─────────────────────────────────────────────────────────────────────────────
 // Ensure table exists (idempotent DDL)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,6 +50,12 @@ async function generateStaffNo(): Promise<string> {
 // Query params: module, branch_name, role, status, search, page, limit
 // ─────────────────────────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureTable();
 
@@ -141,6 +148,12 @@ export async function GET(req: NextRequest) {
 // POST /api/branch-staff — create new assignment
 // ─────────────────────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureTable();
     const body = await req.json();
@@ -179,6 +192,12 @@ export async function POST(req: NextRequest) {
 // PATCH /api/branch-staff — update one record (id in body)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function PATCH(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureTable();
     const body = await req.json();
@@ -223,6 +242,12 @@ export async function PATCH(req: NextRequest) {
 // DELETE /api/branch-staff — soft-delete (id in query)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function DELETE(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureTable();
     const id = new URL(req.url).searchParams.get('id');

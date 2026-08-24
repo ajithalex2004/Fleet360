@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /**
  * Investigation notes for incidents.
  * Auto-creates `incident_notes` table.
@@ -26,6 +27,12 @@ async function ensureTable() {
 }
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureTable();
     type NoteRow = { id: string; incident_id: string; note_type: string; content: string; author: string | null; created_at: string };
@@ -41,6 +48,12 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureTable();
     const { noteType = 'INVESTIGATION', content, author } = await req.json();

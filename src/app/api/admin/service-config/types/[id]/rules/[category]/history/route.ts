@@ -22,6 +22,7 @@ import { RULE_CATEGORIES, type RuleCategory } from '@/types/service-rules';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string; category: string }>; }
@@ -48,6 +49,12 @@ async function resolveScopeId(tenantId: string, requested: string | null): Promi
 }
 
 export async function GET(req: NextRequest, { params }: RouteParams) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const auth = authorizeServiceConfig(req);
   if (!auth.ok) return auth.res;
   const { id, category } = await params;
@@ -65,6 +72,12 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 }
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const auth = authorizeServiceConfig(req);
   if (!auth.ok) return auth.res;
   const adminCheck = requireAdmin(auth);

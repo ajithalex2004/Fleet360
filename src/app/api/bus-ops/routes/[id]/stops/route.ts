@@ -15,7 +15,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { syncStopPlace, syncStopPlaces } from '@/lib/places/sync-stop';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const stops = await prisma.routeStop.findMany({
       where: { routeId: params.id },
@@ -32,6 +39,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 // failure never rolls back the RouteStop write (the source model is
 // authoritative, Place is a mirror).
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await req.json();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -74,6 +87,12 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await req.json();
     const [route, maxSeq] = await Promise.all([

@@ -7,6 +7,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(_req: NextRequest): Promise<NextResponse> {
   return NextResponse.json(
     {

@@ -17,10 +17,17 @@ import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 import { evaluateReportTransition } from '@/lib/driver-reports';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } },
 ) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const ctx = await requireDriverSession(req);
   if (ctx instanceof NextResponse) return ctx;
 

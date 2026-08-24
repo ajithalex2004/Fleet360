@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Shipment Drafted',
   PENDING: 'Shipment Created',
@@ -36,6 +37,12 @@ const LEGACY_STATUS: Record<string, string> = {
 };
 
 export async function GET(_req: Request, { params }: { params: { ref: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const ref = (params.ref ?? '').toUpperCase().trim();
   if (!ref) return NextResponse.json({ error: 'Missing reference' }, { status: 400 });
 

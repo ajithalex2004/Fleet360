@@ -6,6 +6,7 @@ import { requireUnderQuota } from '@/lib/plan-limits';
 import { revalidateCache } from '@/lib/server-cache';
 import type { PlanCode } from '@/lib/billing';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const FLEET_STATS_TAG = 'fleet:stats';
 
 const toCamel = (s: string) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
@@ -13,6 +14,12 @@ const rowToCamel = (r: Record<string, unknown>) =>
   Object.fromEntries(Object.entries(r).map(([k, v]) => [toCamel(k), v]));
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await ensureFleetSchema();
   try {
     const sp = req.nextUrl.searchParams;
@@ -89,6 +96,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await ensureFleetSchema();
   try {
     // Quota: vehicles per plan.

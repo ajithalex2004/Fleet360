@@ -1,12 +1,19 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // GET /api/maintenance/work-orders/[id]/job-cards
 // Returns all job cards (with tasks) for the given work order.
 export async function GET(
     _request: Request,
     { params }: { params: { id: string } },
 ) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const { id } = params;
 
@@ -33,6 +40,12 @@ export async function POST(
     request: Request,
     { params }: { params: { id: string } },
 ) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const { id } = params;
         const body = await request.json();

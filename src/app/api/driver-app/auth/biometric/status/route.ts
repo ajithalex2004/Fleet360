@@ -22,7 +22,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getTenantContextOrNull } from '@/lib/tenant-session';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   // The cookie name for the driver app is separate from the admin's
   // so the two audiences are isolated. Both cookies use the same
   // session token format (we just sign the role into the payload).

@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma }                    from '@/lib/prisma';
 import { withPlatformAdmin }         from '@/lib/rls';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const n = (v: unknown) => parseFloat(String(v ?? 0)) || 0;
 const s = (v: unknown) => String(v ?? '');
@@ -23,6 +24,12 @@ const s = (v: unknown) => String(v ?? '');
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     return await withPlatformAdmin(prisma, async (tx) => {
       const sp   = new URL(req.url).searchParams;

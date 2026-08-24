@@ -164,3 +164,10 @@ export function assertPassengerTransition(from: TripPassengerStatus, to: TripPas
 export function isPassengerTerminal(status: TripPassengerStatus): boolean {
   return PASSENGER_TRANSITIONS[status].length === 0;
 }
+
+/**
+ * Get allowed next statuses for a passenger in a given status.
+ */
+export function allowedPassengerTransitions(status: TripPassengerStatus): readonly TripPassengerStatus[] {
+  return PASSENGER_TRANSITIONS[status] ?? [];
+}

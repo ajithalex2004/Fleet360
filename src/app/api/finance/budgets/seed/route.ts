@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const DEFAULT_BUDGETS = [
   { category: 'MAINTENANCE',     budgetAmount: 50000,  notes: 'Vehicle maintenance & repairs' },
   { category: 'FUEL',            budgetAmount: 30000,  notes: 'Fleet fuel costs'               },
@@ -23,6 +24,12 @@ const DEFAULT_BUDGETS = [
 ];
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const year = parseInt(
     req.nextUrl.searchParams.get('year') ?? String(new Date().getFullYear())
   );

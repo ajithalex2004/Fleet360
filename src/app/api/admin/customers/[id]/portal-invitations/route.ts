@@ -18,6 +18,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import {
@@ -30,11 +31,11 @@ import {
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  const userId = req.headers.get('x-user-id');
-  if (!tenantId || !userId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId, userId } = authz;
 
   try {
     const { id: customerId } = await params;
@@ -140,8 +141,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
  * invited / who's active / who's pending.
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
 
   try {
     const { id: customerId } = await params;

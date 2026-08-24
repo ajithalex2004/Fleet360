@@ -40,6 +40,7 @@ import { sendWhatsApp } from '@/lib/whatsapp';
 import { recordAbsence } from '@/lib/bus-ops/passenger-attendance';
 import { upsertFleetPosition } from '@/app/api/bus-ops/fleet-positions/route';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface SinglePingBody {
@@ -64,8 +65,15 @@ interface PassengerRow { id: string; employee_name: string | null; contact_numbe
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: vehicleId } = await params;
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
 
   let body: SinglePingBody & BatchBody;
   try { body = (await req.json()) as SinglePingBody & BatchBody; }

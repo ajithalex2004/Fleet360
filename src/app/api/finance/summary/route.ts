@@ -20,6 +20,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl } from '@/lib/server-cache';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAG = 'finance:summary';
 
 function toNum(val: unknown): number {
@@ -175,6 +176,12 @@ const getFinanceSummary = cacheRead(
 );
 
 export async function GET(request: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const sp   = request.nextUrl.searchParams;
     const fromIso = sp.get('from');

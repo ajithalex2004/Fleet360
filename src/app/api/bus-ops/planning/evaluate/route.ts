@@ -25,11 +25,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { loadPlanFacts, type ExistingTripInput, type ProposedTripInput } from '@/lib/planning/facts';
 import { evaluatePlan } from '@/lib/planning/evaluate-plan';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const ROLES = new Set(['source', 'merged', 'standalone']);
 
 export async function POST(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
 
   let body: unknown;
   try {

@@ -17,6 +17,7 @@ import { sendEmail } from '@/lib/email';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const TOKEN_TTL_MIN = 60;

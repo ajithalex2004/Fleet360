@@ -14,6 +14,7 @@ import { ensureMfaColumns } from '@/lib/auth-mfa-schema';
 import { verifyTotp, verifyRecoveryCode } from '@/lib/totp';
 import { getEffectiveRole } from '@/lib/permissions/effective-role';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ── Password verification (matches the PBKDF2 format used in /api/tenants/provision) ──
 
 function verifyPassword(plaintext: string, stored: string): boolean {

@@ -26,6 +26,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { logAudit } from '@/lib/platform-audit-log';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 interface RouteParams { params: Promise<{ id: string }>; }
 
 // Hardcoded whitelist — server-side enforcement, never trust the UI.
@@ -55,6 +56,12 @@ function requireSuperAdmin(req: NextRequest): { ok: true; userId: string; email:
 }
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const auth = requireSuperAdmin(req);
   if (!auth.ok) return auth.res;
 

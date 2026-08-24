@@ -22,6 +22,7 @@ import { prisma } from '@/lib/prisma';
 import { chatComplete } from '@/lib/agents/openai-client';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface BucketKey {
@@ -43,6 +44,12 @@ interface ForecastRow extends BucketKey {
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const sp = req.nextUrl.searchParams;
   const weeks = Math.max(1, Math.min(12, Number(sp.get('weeks') ?? 4)));
   const aiAnnotate = sp.get('aiAnnotate') !== '0';

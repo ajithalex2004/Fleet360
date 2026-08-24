@@ -16,6 +16,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Users, RefreshCw } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
 
 type PassengerStatus = 'CONFIRMED' | 'BOARDED' | 'ALIGHTED' | 'ABSENT' | 'NO_SHOW' | 'CANCELLED' | 'WAITLISTED';
 type TripStatus = 'SCHEDULED' | 'DEPARTED' | 'IN_TRANSIT' | 'COMPLETED' | 'CANCELLED';
@@ -71,6 +72,7 @@ export default function TripDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [rowBusy, setRowBusy] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     if (!tripId) return;
@@ -110,6 +112,48 @@ export default function TripDetailPage() {
     trip?.passengers.forEach(p => { if (p.status) c[p.status]++; });
     return c;
   }, [trip]);
+
+  const passengerColumns: DataGridColumn<Passenger>[] = [
+    { key: 'employeeId', header: 'Emp ID', accessor: p => p.employeeId,
+      render: p => <span className="font-mono text-white">{p.employeeId ?? '—'}</span> },
+    { key: 'employeeName', header: 'Employee', accessor: p => p.employeeName,
+      render: p => <span className="text-white">{p.employeeName ?? '—'}</span> },
+    { key: 'boardingStopName', header: 'Pickup', accessor: p => p.boardingStopName },
+    { key: 'alightingStopName', header: 'Drop-off', accessor: p => p.alightingStopName },
+    { key: 'status', header: 'Status', accessor: p => p.status ?? 'CONFIRMED', filter: 'select',
+      render: p => {
+        const status = (p.status ?? 'CONFIRMED') as PassengerStatus;
+        return <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium border ${PAX_PILL[status]}`}>{status}</span>;
+      } },
+    { key: 'boardedAt', header: 'Boarded at', accessor: p => p.boardedAt,
+      render: p => (
+        <span className="text-xs text-slate-400 whitespace-nowrap">
+          {p.boardedAt ? new Date(p.boardedAt).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit' }) : '—'}
+        </span>
+      ) },
+    { key: 'rowActions', header: 'Actions', align: 'right', filter: false, sortable: false,
+      render: p => {
+        const status = (p.status ?? 'CONFIRMED') as PassengerStatus;
+        const actions = nextActionsFor(status);
+        return actions.length === 0 ? (
+          <span className="text-[10px] text-slate-500 italic">terminal</span>
+        ) : (
+          <div className="flex gap-1 justify-end">
+            {actions.map(nxt => (
+              <button key={nxt} onClick={() => markPassenger(p.id, nxt)} disabled={rowBusy === p.id}
+                className={`text-[11px] px-2 py-1 rounded border transition-colors disabled:opacity-50 ${
+                  nxt === 'BOARDED'  ? 'border-emerald-500/40 text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20'  :
+                  nxt === 'ABSENT'   ? 'border-rose-500/40    text-rose-200    bg-rose-500/10    hover:bg-rose-500/20'    :
+                  nxt === 'ALIGHTED' ? 'border-cyan-500/40    text-cyan-200    bg-cyan-500/10    hover:bg-cyan-500/20'    :
+                  'border-slate-500/40 text-slate-200 bg-slate-500/10 hover:bg-slate-500/20'
+                }`}>
+                {rowBusy === p.id ? '…' : nxt}
+              </button>
+            ))}
+          </div>
+        );
+      } },
+  ];
 
   return (
     <div className="space-y-6">
@@ -161,69 +205,36 @@ export default function TripDetailPage() {
           </div>
 
           {/* Passenger manifest */}
-          <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-white/5 text-sm text-slate-300">
+          <div>
+            <div className="px-1 pb-2 text-sm text-slate-300">
               Passenger manifest ({trip.passengers.length})
               {trip.capacity != null && <span className="text-slate-500"> of {trip.capacity}</span>}
             </div>
-            {trip.passengers.length === 0 ? (
-              <div className="py-10 text-center text-slate-400 text-sm">
-                No passengers on this trip yet. Roster expansion runs on trip create — check the Passengers page for the route roster.
-              </div>
-            ) : (
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-white/5 text-xs text-slate-400">
-                    <th className="px-4 py-2 text-left">Emp ID</th>
-                    <th className="px-4 py-2 text-left">Employee</th>
-                    <th className="px-4 py-2 text-left">Pickup</th>
-                    <th className="px-4 py-2 text-left">Drop-off</th>
-                    <th className="px-4 py-2 text-left">Status</th>
-                    <th className="px-4 py-2 text-left">Boarded at</th>
-                    <th className="px-4 py-2 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {trip.passengers.map(p => {
-                    const status = (p.status ?? 'CONFIRMED') as PassengerStatus;
-                    const actions = nextActionsFor(status);
-                    return (
-                      <tr key={p.id} className="border-b border-white/5 hover:bg-white/5">
-                        <td className="px-4 py-2 text-sm font-mono text-white">{p.employeeId ?? '—'}</td>
-                        <td className="px-4 py-2 text-sm text-white">{p.employeeName ?? '—'}</td>
-                        <td className="px-4 py-2 text-sm text-slate-300">{p.boardingStopName ?? '—'}</td>
-                        <td className="px-4 py-2 text-sm text-slate-300">{p.alightingStopName ?? '—'}</td>
-                        <td className="px-4 py-2">
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium border ${PAX_PILL[status]}`}>{status}</span>
-                        </td>
-                        <td className="px-4 py-2 text-xs text-slate-400 whitespace-nowrap">
-                          {p.boardedAt ? new Date(p.boardedAt).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit' }) : '—'}
-                        </td>
-                        <td className="px-4 py-2 text-right">
-                          {actions.length === 0 ? (
-                            <span className="text-[10px] text-slate-500 italic">terminal</span>
-                          ) : (
-                            <div className="flex gap-1 justify-end">
-                              {actions.map(nxt => (
-                                <button key={nxt} onClick={() => markPassenger(p.id, nxt)} disabled={rowBusy === p.id}
-                                  className={`text-[11px] px-2 py-1 rounded border transition-colors disabled:opacity-50 ${
-                                    nxt === 'BOARDED'  ? 'border-emerald-500/40 text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20'  :
-                                    nxt === 'ABSENT'   ? 'border-rose-500/40    text-rose-200    bg-rose-500/10    hover:bg-rose-500/20'    :
-                                    nxt === 'ALIGHTED' ? 'border-cyan-500/40    text-cyan-200    bg-cyan-500/10    hover:bg-cyan-500/20'    :
-                                    'border-slate-500/40 text-slate-200 bg-slate-500/10 hover:bg-slate-500/20'
-                                  }`}>
-                                  {rowBusy === p.id ? '…' : nxt}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
+            <FleetDataGrid
+              gridName="PassengerManifest"
+              rows={trip.passengers}
+              getRowId={p => p.id}
+              loading={false}
+              emptyMessage="No passengers on this trip yet. Roster expansion runs on trip create — check the Passengers page for the route roster."
+              columns={passengerColumns}
+              numbered
+              selectable
+              selectedIds={selectedIds}
+              onSelectionChange={setSelectedIds}
+              toolbar={{
+                exportName: 'passenger-manifest',
+                title: 'Passenger Manifest',
+                actions: selectedIds.size > 0 ? (
+                  <span className="inline-flex items-center gap-2 text-xs text-violet-300">
+                    {selectedIds.size} selected
+                    <button type="button" onClick={() => setSelectedIds(new Set())}
+                      className="text-slate-400 hover:text-white underline underline-offset-2">
+                      Clear
+                    </button>
+                  </span>
+                ) : undefined,
+              }}
+            />
           </div>
         </>
       )}

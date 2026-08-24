@@ -19,6 +19,7 @@ model ChecklistItem {
   notes       String?
   workOrderId String
   WorkOrder   WorkOrder @relation(fields: [workOrderId], references: [id])
+
   @@schema("public")
 }
 
@@ -41,6 +42,7 @@ model IntegrationConfig {
   fromNumber  String?
   isEnabled   Boolean  @default(true)
   updatedAt   DateTime
+
   @@schema("public")
 }
 
@@ -53,6 +55,7 @@ model NotificationLog {
   status        String
   sentAt        DateTime @default(now())
   triggerReason String?
+
   @@schema("public")
 }
 
@@ -65,6 +68,7 @@ model PartUsage {
   source       PartSource
   workOrderId  String
   WorkOrder    WorkOrder  @relation(fields: [workOrderId], references: [id])
+
   @@schema("public")
 }
 
@@ -79,6 +83,7 @@ model ServiceSchedule {
   nextServiceMileage Int
   vehicleId          String
   Vehicle            Vehicle  @relation(fields: [vehicleId], references: [id])
+
   @@schema("public")
 }
 
@@ -87,43 +92,43 @@ model ServiceSchedule {
 // ============================================================
 
 model MaintenancePlan {
-  id                String           @id @default(uuid())
-  createdAt         DateTime?        @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime?        @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt         DateTime?        @map("deleted_at") @db.Timestamptz(6)
-  tenantId          String           @map("tenant_id")
-  name              String
-  description       String?
-  maintenanceType   String?          @map("maintenance_type")
+  id               String    @id @default(uuid())
+  createdAt        DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId         String    @map("tenant_id")
+  name             String
+  description      String?
+  maintenanceType  String?   @map("maintenance_type")
   /// JSON: { allVehicles: bool, vehicleIds?: string[], vehicleTypes?: string[] }
-  applicability     Json?
-  gracePeriodDays   Int?             @map("grace_period_days")
-  earlyWindowDays   Int?             @map("early_window_days")
-  earlyWindowKm     Int?             @map("early_window_km")
-  isActive          Boolean          @default(true) @map("is_active")
-  notifyDaysBefore  Int?             @map("notify_days_before")
+  applicability    Json?
+  gracePeriodDays  Int?      @map("grace_period_days")
+  earlyWindowDays  Int?      @map("early_window_days")
+  earlyWindowKm    Int?      @map("early_window_km")
+  isActive         Boolean   @default(true) @map("is_active")
+  notifyDaysBefore Int?      @map("notify_days_before")
 
-  triggers          PMTrigger[]
-  scheduleItems     PMScheduleItem[]
+  triggers      PMTrigger[]
+  scheduleItems PMScheduleItem[]
 
-  @@index([tenantId],  map: "idx_maintenance_plans_tenant_id")
+  @@index([tenantId], map: "idx_maintenance_plans_tenant_id")
   @@index([deletedAt], map: "idx_maintenance_plans_deleted_at")
-  @@index([isActive],  map: "idx_maintenance_plans_is_active")
+  @@index([isActive], map: "idx_maintenance_plans_is_active")
   @@map("maintenance_plans")
   @@schema("public")
 }
 
 model PMTrigger {
-  id            String          @id @default(uuid())
-  createdAt     DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
-  planId        String          @map("plan_id")
-  triggerType   PMTriggerType   @map("trigger_type")
+  id            String        @id @default(uuid())
+  createdAt     DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
+  planId        String        @map("plan_id")
+  triggerType   PMTriggerType @map("trigger_type")
   /// Numeric interval: km for ODOMETER, days for CALENDAR, hours for ENGINE_HOURS
-  intervalValue Int             @map("interval_value")
+  intervalValue Int           @map("interval_value")
   /// KM | DAYS | HOURS
-  intervalUnit  String          @map("interval_unit")
+  intervalUnit  String        @map("interval_unit")
 
-  plan          MaintenancePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  plan MaintenancePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@index([planId], map: "idx_pm_triggers_plan_id")
   @@map("pm_triggers")
@@ -131,28 +136,28 @@ model PMTrigger {
 }
 
 model PMScheduleItem {
-  id                  String          @id @default(uuid())
-  createdAt           DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime?       @updatedAt @map("updated_at") @db.Timestamptz(6)
-  tenantId            String          @map("tenant_id")
-  planId              String          @map("plan_id")
-  vehicleId           String          @map("vehicle_id")
-  lastServiceDate     DateTime?       @map("last_service_date") @db.Timestamptz(6)
-  lastOdometerKm      Int?            @map("last_odometer_km")
+  id                 String       @id @default(uuid())
+  createdAt          DateTime?    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime?    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId           String       @map("tenant_id")
+  planId             String       @map("plan_id")
+  vehicleId          String       @map("vehicle_id")
+  lastServiceDate    DateTime?    @map("last_service_date") @db.Timestamptz(6)
+  lastOdometerKm     Int?         @map("last_odometer_km")
   /// Pre-computed next due date from calendar trigger; refreshed on service completion
-  nextDueDateCalc     DateTime?       @map("next_due_date_calc") @db.Timestamptz(6)
+  nextDueDateCalc    DateTime?    @map("next_due_date_calc") @db.Timestamptz(6)
   /// Pre-computed next due odometer from odometer trigger; refreshed on service completion
-  nextDueOdometerKm   Int?            @map("next_due_odometer_km")
-  status              PMItemStatus    @default(UPCOMING)
-  generatedRequestId  String?         @map("generated_request_id")
+  nextDueOdometerKm  Int?         @map("next_due_odometer_km")
+  status             PMItemStatus @default(UPCOMING)
+  generatedRequestId String?      @map("generated_request_id")
 
-  plan                MaintenancePlan @relation(fields: [planId], references: [id])
+  plan MaintenancePlan @relation(fields: [planId], references: [id])
 
   @@unique([planId, vehicleId], map: "uniq_pm_schedule_items_plan_vehicle")
-  @@index([tenantId],  map: "idx_pm_schedule_items_tenant_id")
+  @@index([tenantId], map: "idx_pm_schedule_items_tenant_id")
   @@index([vehicleId], map: "idx_pm_schedule_items_vehicle_id")
-  @@index([status],    map: "idx_pm_schedule_items_status")
-  @@index([planId],    map: "idx_pm_schedule_items_plan_id")
+  @@index([status], map: "idx_pm_schedule_items_status")
+  @@index([planId], map: "idx_pm_schedule_items_plan_id")
   @@map("pm_schedule_items")
   @@schema("public")
 }
@@ -176,6 +181,7 @@ model User {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime
   userTenants  UserTenant[]
+
   @@schema("public")
 }
 
@@ -188,6 +194,7 @@ model WorkLog {
   notes          String
   workOrderId    String
   WorkOrder      WorkOrder @relation(fields: [workOrderId], references: [id])
+
   @@schema("public")
 }
 
@@ -200,6 +207,7 @@ model WorkOrder {
   status                  WorkOrderStatus
   requestId               String             @unique
   garageId                String
+  tenantId                String             @map("tenant_id")
   Attachment              Attachment[]
   ChecklistItem           ChecklistItem[]
   PartUsage               PartUsage[]
@@ -207,6 +215,9 @@ model WorkOrder {
   jobCards                JobCard[]
   Garage                  Garage             @relation(fields: [garageId], references: [id])
   MaintenanceRequest      MaintenanceRequest @relation(fields: [requestId], references: [id])
+  Tenant                  Tenant             @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
   @@schema("public")
 }
 
@@ -248,10 +259,10 @@ model Alert {
   updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
   tenantId        String    @map("tenant_id")
-  type            String?   /// Legacy free-text category; superseded by `code`.
+  type            String? /// Legacy free-text category; superseded by `code`.
   title           String?
   description     String?
-  severity        String?   /// LOW | MEDIUM | HIGH | CRITICAL
+  severity        String? /// LOW | MEDIUM | HIGH | CRITICAL
   dateCreated     DateTime? @map("date_created") @db.Timestamptz(6)
   relatedEntityId String?   @map("related_entity_id")
   status          String?
@@ -260,26 +271,26 @@ model Alert {
   // ── Alert engine (Phase 1) ──────────────────────────────────────────
   /// Machine-readable condition code — see AlertCondition constants in
   /// src/events/contracts/alert.events.ts.
-  code               String?
-  sourceModule       String?   @map("source_module")
-  sourceEventId      String?   @map("source_event_id") @db.Uuid
-  subjectType        String?   @map("subject_type")   /// TripSchedule | Vehicle | Driver | Passenger | Route | Stop
-  subjectId          String?   @map("subject_id")
+  code            String?
+  sourceModule    String?   @map("source_module")
+  sourceEventId   String?   @map("source_event_id") @db.Uuid
+  subjectType     String?   @map("subject_type") /// TripSchedule | Vehicle | Driver | Passenger | Route | Stop
+  subjectId       String?   @map("subject_id")
   /// Dedup guard — while an Alert with this key is OPEN (not resolved),
   /// no new Alert with the same (tenantId, dedupeKey) can be raised.
-  dedupeKey          String?   @map("dedupe_key")
-  channels           String[]                                     /// PUSH | SMS | WHATSAPP | EMAIL | IN_APP
-  recipients         String[]                                     /// Role names or CUSTOM user ids
-  context            Json?                                        /// Free-form event context — tripNumber, vehicle plate, etc.
-  acknowledgedAt     DateTime? @map("acknowledged_at") @db.Timestamptz(6)
-  acknowledgedBy     String?   @map("acknowledged_by")
-  resolvedAt         DateTime? @map("resolved_at")    @db.Timestamptz(6)
-  resolvedBy         String?   @map("resolved_by")
-  resolutionNote     String?   @map("resolution_note")
-  slaAckDueAt        DateTime? @map("sla_ack_due_at")     @db.Timestamptz(6)
-  slaResolveDueAt    DateTime? @map("sla_resolve_due_at") @db.Timestamptz(6)
-  escalationLevel    Int       @default(0) @map("escalation_level")
-  lastEscalatedAt    DateTime? @map("last_escalated_at") @db.Timestamptz(6)
+  dedupeKey       String?   @map("dedupe_key")
+  channels        String[] /// PUSH | SMS | WHATSAPP | EMAIL | IN_APP
+  recipients      String[] /// Role names or CUSTOM user ids
+  context         Json? /// Free-form event context — tripNumber, vehicle plate, etc.
+  acknowledgedAt  DateTime? @map("acknowledged_at") @db.Timestamptz(6)
+  acknowledgedBy  String?   @map("acknowledged_by")
+  resolvedAt      DateTime? @map("resolved_at") @db.Timestamptz(6)
+  resolvedBy      String?   @map("resolved_by")
+  resolutionNote  String?   @map("resolution_note")
+  slaAckDueAt     DateTime? @map("sla_ack_due_at") @db.Timestamptz(6)
+  slaResolveDueAt DateTime? @map("sla_resolve_due_at") @db.Timestamptz(6)
+  escalationLevel Int       @default(0) @map("escalation_level")
+  lastEscalatedAt DateTime? @map("last_escalated_at") @db.Timestamptz(6)
 
   @@index([deletedAt], map: "idx_alerts_deleted_at")
   @@index([tenantId], map: "idx_alerts_tenant_id")
@@ -297,26 +308,26 @@ model Alert {
 /// no SLA, no escalation) — the Alert is still created but nobody's
 /// notified until ops configures the rule.
 model AlertRule {
-  id                     String    @id @default(uuid())
-  createdAt              DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt              DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt              DateTime? @map("deleted_at") @db.Timestamptz(6)
-  tenantId               String    @map("tenant_id")
+  id        String    @id @default(uuid())
+  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId  String    @map("tenant_id")
 
-  code                   String
-  isEnabled              Boolean   @default(true) @map("is_enabled")
+  code      String
+  isEnabled Boolean @default(true) @map("is_enabled")
 
-  defaultSeverity        String    @default("MEDIUM") @map("default_severity")
-  defaultChannels        String[]                     @map("default_channels")
-  recipientTypes         String[]                     @map("recipient_types")
-  specificRecipientIds   String[]                     @map("specific_recipient_ids")
+  defaultSeverity      String   @default("MEDIUM") @map("default_severity")
+  defaultChannels      String[] @map("default_channels")
+  recipientTypes       String[] @map("recipient_types")
+  specificRecipientIds String[] @map("specific_recipient_ids")
 
-  slaAckMinutes          Int?      @map("sla_ack_minutes")
-  slaResolveMinutes      Int?      @map("sla_resolve_minutes")
+  slaAckMinutes     Int? @map("sla_ack_minutes")
+  slaResolveMinutes Int? @map("sla_resolve_minutes")
 
   /// Escalation ladder — [{ afterMinutes, channels, recipients }, ...]
   /// Applied by the escalation cron in order.
-  escalationLevels       Json?     @map("escalation_levels")
+  escalationLevels Json? @map("escalation_levels")
 
   @@unique([tenantId, code], map: "uq_alert_rules_tenant_code")
   @@index([tenantId], map: "idx_alert_rules_tenant_id")
@@ -414,6 +425,7 @@ model Driver {
   @@index([deletedAt], map: "idx_drivers_deleted_at")
   @@index([status], map: "idx_drivers_status")
   @@index([tenantId], map: "idx_drivers_tenant_id")
+  @@index([tenantId])
   @@map("drivers")
   @@schema("public")
 }
@@ -444,7 +456,7 @@ model Garage {
 
   @@index([deletedAt], map: "idx_garages_deleted_at")
   @@index([tenantId], map: "idx_garages_tenant_id")
-  @@index([placeId],  map: "idx_garages_place_id")
+  @@index([placeId], map: "idx_garages_place_id")
   @@map("garages")
   @@schema("public")
 }
@@ -512,53 +524,53 @@ model Invoice {
 }
 
 model MaintenanceRequest {
-  id                  String          @id @default(uuid())
-  createdAt           DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime?       @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt           DateTime?       @map("deleted_at") @db.Timestamptz(6)
-  tenantId            String          @map("tenant_id")
-  vehicleId           String?         @map("vehicle_id")
-  driverId            String?         @map("driver_id")
-  requestDate         DateTime?       @map("request_date") @db.Timestamptz(6)
+  id                  String              @id @default(uuid())
+  createdAt           DateTime?           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime?           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt           DateTime?           @map("deleted_at") @db.Timestamptz(6)
+  tenantId            String              @map("tenant_id")
+  vehicleId           String?             @map("vehicle_id")
+  driverId            String?             @map("driver_id")
+  requestDate         DateTime?           @map("request_date") @db.Timestamptz(6)
   description         String?
   status              String?
-  expectedEndDate     DateTime?       @map("expected_end_date") @db.Timestamptz(6)
-  garageId            String?         @map("garage_id")
-  estimatedCost       Decimal?        @map("estimated_cost") @db.Decimal
-  actualCost          Decimal?        @map("actual_cost") @db.Decimal
-  actualPartsCost     Decimal?        @map("actual_parts_cost") @db.Decimal
-  actualLaborCost     Decimal?        @map("actual_labor_cost") @db.Decimal
-  actualOtherCost     Decimal?        @map("actual_other_cost") @db.Decimal
-  completionDate      DateTime?       @map("completion_date") @db.Timestamptz(6)
-  maintenanceType     String?         @map("maintenance_type")
+  expectedEndDate     DateTime?           @map("expected_end_date") @db.Timestamptz(6)
+  garageId            String?             @map("garage_id")
+  estimatedCost       Decimal?            @map("estimated_cost") @db.Decimal
+  actualCost          Decimal?            @map("actual_cost") @db.Decimal
+  actualPartsCost     Decimal?            @map("actual_parts_cost") @db.Decimal
+  actualLaborCost     Decimal?            @map("actual_labor_cost") @db.Decimal
+  actualOtherCost     Decimal?            @map("actual_other_cost") @db.Decimal
+  completionDate      DateTime?           @map("completion_date") @db.Timestamptz(6)
+  maintenanceType     String?             @map("maintenance_type")
   priority            String?
-  workOrderNo         String?         @map("work_order_no")
+  workOrderNo         String?             @map("work_order_no")
   odometer            BigInt?
-  candidateGarageIds  String?         @map("candidate_garage_ids")
-  maintenanceJobs     String[]        @map("maintenance_jobs")
-  estimateApproval    String?         @map("estimate_approval")
-  workLog             String?         @map("work_log")
-  partsUsed           String?         @map("parts_used")
-  checklistItems      String?         @map("checklist_items")
-  assignedTechnicians String?         @map("assigned_technicians")
-  actualCostsData     String?         @map("actual_costs_data")
+  candidateGarageIds  String?             @map("candidate_garage_ids")
+  maintenanceJobs     String[]            @map("maintenance_jobs")
+  estimateApproval    String?             @map("estimate_approval")
+  workLog             String?             @map("work_log")
+  partsUsed           String?             @map("parts_used")
+  checklistItems      String?             @map("checklist_items")
+  assignedTechnicians String?             @map("assigned_technicians")
+  actualCostsData     String?             @map("actual_costs_data")
   /// Set on COMPLETED/CLOSED — FK to finance.finance_payables.id
-  financePayableId    String?         @map("finance_payable_id")
+  financePayableId    String?             @map("finance_payable_id")
   /// Set on COMPLETED/CLOSED — FK to finance_journal_entries.id
-  financeJeId         String?         @map("finance_je_id")
+  financeJeId         String?             @map("finance_je_id")
   /// Populated when this MR was auto-created from a breakdown report
-  breakdownReportId   String?         @map("breakdown_report_id")
+  breakdownReportId   String?             @map("breakdown_report_id")
   attachments         Attachment[]
   comments            Comment[]
   histories           StatusHistory[]
-  Driver              Driver?         @relation(fields: [driverId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_maintenance_requests_driver")
-  Garage              Garage?         @relation(fields: [garageId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_maintenance_requests_garage")
-  Vehicle             Vehicle?        @relation(fields: [vehicleId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_maintenance_requests_vehicle")
+  Driver              Driver?             @relation(fields: [driverId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_maintenance_requests_driver")
+  Garage              Garage?             @relation(fields: [garageId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_maintenance_requests_garage")
+  Vehicle             Vehicle?            @relation(fields: [vehicleId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_maintenance_requests_vehicle")
   quotations          Quotation[]
   WorkOrder           WorkOrder?
   qualityInspections  QualityInspection[]
   warrantyClaims      WarrantyClaim[]
-  BreakdownReport     BreakdownReport? @relation("breakdown_mr")
+  BreakdownReport     BreakdownReport?    @relation("breakdown_mr")
 
   @@index([deletedAt], map: "idx_maintenance_requests_deleted_at")
   @@index([vehicleId], map: "idx_maintenance_requests_vehicle_id")
@@ -566,6 +578,7 @@ model MaintenanceRequest {
   @@index([garageId], map: "idx_maintenance_requests_garage_id")
   @@index([status], map: "idx_maintenance_requests_status")
   @@index([tenantId], map: "idx_maintenance_requests_tenant_id")
+  @@index([tenantId])
   @@map("maintenance_requests")
   @@schema("public")
 }
@@ -578,49 +591,49 @@ model MaintenanceRequest {
 ///
 /// The MR is intentionally bypass the estimation/quotation steps.
 model BreakdownReport {
-  id                    String    @id @default(uuid())
-  createdAt             DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt             DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt             DateTime? @map("deleted_at") @db.Timestamptz(6)
+  id        String    @id @default(uuid())
+  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  reportNo              String?   @unique @map("report_no") // BRK-YYYYMM-NNNNN
-  tenantId              String    @map("tenant_id")
-  vehicleId             String?   @map("vehicle_id")
-  driverId              String?   @map("driver_id")
-  reportedAt            DateTime  @default(now()) @map("reported_at") @db.Timestamptz(6)
+  reportNo   String?  @unique @map("report_no") // BRK-YYYYMM-NNNNN
+  tenantId   String   @map("tenant_id")
+  vehicleId  String?  @map("vehicle_id")
+  driverId   String?  @map("driver_id")
+  reportedAt DateTime @default(now()) @map("reported_at") @db.Timestamptz(6)
 
   /// FLAT_TYRE | ENGINE_FAILURE | BATTERY_DEAD | ACCIDENT | FUEL_EMPTY |
   /// OVERHEATING | ELECTRICAL | TRANSMISSION | OTHER
-  breakdownType         String    @default("OTHER") @map("breakdown_type")
+  breakdownType String @default("OTHER") @map("breakdown_type")
 
   /// FREE TEXT location description (e.g. "Sheikh Zayed Road, near Mall of UAE")
-  location              String?
-  latitude              Decimal?  @db.Decimal
-  longitude             Decimal?  @db.Decimal
+  location  String?
+  latitude  Decimal? @db.Decimal
+  longitude Decimal? @db.Decimal
 
-  driverNotes           String?   @map("driver_notes")
-  photoUrls             Json?     @default("[]") @map("photo_urls")
+  driverNotes String? @map("driver_notes")
+  photoUrls   Json?   @default("[]") @map("photo_urls")
 
-  severity              String    @default("HIGH")
+  severity String @default("HIGH")
   // REPORTED | RECOVERY_DISPATCHED | RECOVERY_COMPLETED | AT_WORKSHOP | RESOLVED
-  status                String    @default("REPORTED")
+  status   String @default("REPORTED")
 
   /// Recovery dispatch details
-  recoveryVehicleId     String?   @map("recovery_vehicle_id")
-  recoveryDriverId      String?   @map("recovery_driver_id")
-  recoveryNotes         String?   @map("recovery_notes")
-  recoveryDispatchedAt  DateTime? @map("recovery_dispatched_at") @db.Timestamptz(6)
-  recoveryCompletedAt   DateTime? @map("recovery_completed_at") @db.Timestamptz(6)
-  estimatedArrivalAt    DateTime? @map("estimated_arrival_at") @db.Timestamptz(6)
+  recoveryVehicleId    String?   @map("recovery_vehicle_id")
+  recoveryDriverId     String?   @map("recovery_driver_id")
+  recoveryNotes        String?   @map("recovery_notes")
+  recoveryDispatchedAt DateTime? @map("recovery_dispatched_at") @db.Timestamptz(6)
+  recoveryCompletedAt  DateTime? @map("recovery_completed_at") @db.Timestamptz(6)
+  estimatedArrivalAt   DateTime? @map("estimated_arrival_at") @db.Timestamptz(6)
 
   /// Auto-created MaintenanceRequest when this breakdown report is submitted
-  maintenanceRequestId  String?   @unique @map("maintenance_request_id")
-  MaintenanceRequest    MaintenanceRequest? @relation("breakdown_mr", fields: [maintenanceRequestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  maintenanceRequestId String?             @unique @map("maintenance_request_id")
+  MaintenanceRequest   MaintenanceRequest? @relation("breakdown_mr", fields: [maintenanceRequestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([tenantId, status], map: "idx_breakdown_reports_tenant_status")
-  @@index([vehicleId],        map: "idx_breakdown_reports_vehicle_id")
-  @@index([reportedAt],       map: "idx_breakdown_reports_reported_at")
-  @@index([deletedAt],        map: "idx_breakdown_reports_deleted_at")
+  @@index([vehicleId], map: "idx_breakdown_reports_vehicle_id")
+  @@index([reportedAt], map: "idx_breakdown_reports_reported_at")
+  @@index([deletedAt], map: "idx_breakdown_reports_deleted_at")
   @@map("breakdown_reports")
   @@schema("public")
 }
@@ -759,8 +772,8 @@ model Vehicle {
   // end-of-day. App layer is responsible for ensuring the referenced Place
   // has type=DEPOT; the FK itself is untyped so a depot can graduate to a
   // multi-use site without an ALTER.
-  homeDepotId     String?  @map("home_depot_id")
-  homeDepot       Place?   @relation("VehicleHomeDepot", fields: [homeDepotId], references: [id], onDelete: SetNull)
+  homeDepotId String? @map("home_depot_id")
+  homeDepot   Place?  @relation("VehicleHomeDepot", fields: [homeDepotId], references: [id], onDelete: SetNull)
 
   // Optional FK to spatial.places(id) with type=OPERATIONAL_ZONE — the
   // broad zone this vehicle is based in. Used as a soft ranking signal by
@@ -768,8 +781,8 @@ model Vehicle {
   // same-zone vehicles rank above cross-zone ones, but zone is never a
   // hard eligibility filter — an untagged vehicle is still assignable,
   // just not zone-preferred.
-  zoneId          String?  @map("zone_id")
-  zone            Place?   @relation("VehicleZone", fields: [zoneId], references: [id], onDelete: SetNull)
+  zoneId String? @map("zone_id")
+  zone   Place?  @relation("VehicleZone", fields: [zoneId], references: [id], onDelete: SetNull)
 
   // -- Fleet extended fields (used by Fleet raw-SQL queries) ----------------
   vehicleCode     String?   @map("vehicle_code")
@@ -812,6 +825,7 @@ model Vehicle {
   @@index([status], map: "idx_vehicles_status")
   @@index([tenantId], map: "idx_vehicles_tenant_id")
   @@index([homeDepotId], map: "idx_vehicles_home_depot")
+  @@index([tenantId])
   @@map("vehicles")
   @@schema("public")
 }
@@ -822,6 +836,7 @@ enum ActionStatus {
   ASSIGNED
   ESCALATED
   RESOLVED
+
   @@schema("public")
 }
 
@@ -830,6 +845,7 @@ enum AlertSeverity {
   MEDIUM
   HIGH
   CRITICAL
+
   @@schema("public")
 }
 
@@ -839,6 +855,7 @@ enum AlertType {
   LICENSE_RENEWAL
   PERMIT_RENEWAL
   OTHER
+
   @@schema("public")
 }
 
@@ -847,6 +864,7 @@ enum ApprovalStatus {
   APPROVED
   REJECTED
   ESCALATED
+
   @@schema("public")
 }
 
@@ -859,6 +877,7 @@ enum AttachmentType {
   ESTIMATE
   APPROVED_ESTIMATE
   OTHER
+
   @@schema("public")
 }
 
@@ -867,6 +886,7 @@ enum InvoiceCategory {
   PARTS
   SERVICE
   OTHER
+
   @@schema("public")
 }
 
@@ -875,6 +895,7 @@ enum MaintenancePriority {
   MEDIUM
   HIGH
   CRITICAL
+
   @@schema("public")
 }
 
@@ -895,6 +916,7 @@ enum MaintenanceStatus {
   PENDING_INVOICE
   INVOICE_SUBMITTED
   CLOSED
+
   @@schema("public")
 }
 
@@ -904,6 +926,7 @@ enum MaintenanceType {
   EMERGENCY
   INSPECTION
   BREAKDOWN
+
   @@schema("public")
 }
 
@@ -911,6 +934,7 @@ enum PartSource {
   STOCK
   ORDERED
   CUSTOMER_SUPPLIED
+
   @@schema("public")
 }
 
@@ -919,6 +943,7 @@ enum PaymentStatus {
   PARTIALLY_PAID
   PAID
   OVERDUE
+
   @@schema("public")
 }
 
@@ -927,6 +952,7 @@ enum QuotationStatus {
   APPROVED
   REJECTED
   EXPIRED
+
   @@schema("public")
 }
 
@@ -938,6 +964,7 @@ enum WorkOrderStatus {
   COMPLETED
   INVOICE_SUBMITTED
   SUBMIT_INVOICE
+
   @@schema("public")
 }
 
@@ -947,6 +974,7 @@ enum PMTriggerType {
   ENGINE_HOURS
   OPERATING_HOURS
   COMPONENT_LIFE
+
   @@schema("public")
 }
 
@@ -956,6 +984,7 @@ enum PMItemStatus {
   OVERDUE
   COMPLETED
   SNOOZED
+
   @@schema("public")
 }
 
@@ -988,6 +1017,7 @@ enum NotificationEvent {
   VEHICLE_CHANGED
   DRIVER_CHANGED
   BOARDING_MISSED
+
   @@schema("public")
 }
 
@@ -997,6 +1027,7 @@ enum RecipientType {
   FLEET_MANAGER
   ADMIN
   CUSTOM
+
   @@schema("public")
 }
 
@@ -1042,42 +1073,42 @@ model NotificationRule {
 
 // 1. Quality Inspection --------------------------------------------------
 model QualityInspection {
-  id             String    @id @default(uuid())
-  createdAt      DateTime  @default(now())  @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime  @updatedAt       @map("updated_at") @db.Timestamptz(6)
-  tenantId       String    @default("")     @map("tenant_id")
-  requestId      String                     @map("request_id")
-  inspectorId    String?                    @map("inspector_id")
-  inspectorName  String?                    @map("inspector_name")
+  id            String    @id @default(uuid())
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId      String    @default("") @map("tenant_id")
+  requestId     String    @map("request_id")
+  inspectorId   String?   @map("inspector_id")
+  inspectorName String?   @map("inspector_name")
   /// PENDING | PASS | FAIL
-  overallResult  String    @default("PENDING") @map("overall_result")
-  notes          String?
-  inspectedAt    DateTime?                  @map("inspected_at") @db.Timestamptz(6)
+  overallResult String    @default("PENDING") @map("overall_result")
+  notes         String?
+  inspectedAt   DateTime? @map("inspected_at") @db.Timestamptz(6)
   /// [{id,item,result:'PASS'|'FAIL'|'NA',notes,photoUrl}]
-  checklist      Json      @default("[]")
+  checklist     Json      @default("[]")
 
   MaintenanceRequest MaintenanceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
   @@index([requestId], map: "idx_qi_request_id")
-  @@index([tenantId],  map: "idx_qi_tenant_id")
+  @@index([tenantId], map: "idx_qi_tenant_id")
   @@map("quality_inspections")
   @@schema("public")
 }
 
 // 2. Job Cards (within Work Order) ---------------------------------------
 model JobCard {
-  id              String    @id @default(uuid())
-  createdAt       DateTime  @default(now())  @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime  @updatedAt       @map("updated_at") @db.Timestamptz(6)
-  workOrderId     String                     @map("work_order_id")
-  title           String
-  description     String?
-  technicianId    String?                    @map("technician_id")
-  technicianName  String?                    @map("technician_name")
+  id             String   @id @default(uuid())
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workOrderId    String   @map("work_order_id")
+  title          String
+  description    String?
+  technicianId   String?  @map("technician_id")
+  technicianName String?  @map("technician_name")
   /// PENDING | IN_PROGRESS | COMPLETED
-  status          String    @default("PENDING")
-  estimatedHours  Decimal?  @db.Decimal      @map("estimated_hours")
-  actualHours     Decimal?  @db.Decimal      @map("actual_hours")
+  status         String   @default("PENDING")
+  estimatedHours Decimal? @map("estimated_hours") @db.Decimal
+  actualHours    Decimal? @map("actual_hours") @db.Decimal
 
   WorkOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   tasks     JobTask[]
@@ -1090,11 +1121,11 @@ model JobCard {
 model JobTask {
   id          String    @id @default(uuid())
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  jobCardId   String                    @map("job_card_id")
+  jobCardId   String    @map("job_card_id")
   description String
   completed   Boolean   @default(false)
-  completedAt DateTime?                 @map("completed_at") @db.Timestamptz(6)
-  completedBy String?                   @map("completed_by")
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+  completedBy String?   @map("completed_by")
 
   JobCard JobCard @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
 
@@ -1105,24 +1136,24 @@ model JobTask {
 
 // 3. Warranty Management -------------------------------------------------
 model VehicleWarranty {
-  id                  String    @id @default(uuid())
-  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime  @updatedAt      @map("updated_at") @db.Timestamptz(6)
-  tenantId            String    @default("")    @map("tenant_id")
-  vehicleId           String                    @map("vehicle_id")
+  id                  String   @id @default(uuid())
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId            String   @default("") @map("tenant_id")
+  vehicleId           String   @map("vehicle_id")
   /// MANUFACTURER | EXTENDED | THIRD_PARTY
-  warrantyType        String                    @map("warranty_type")
+  warrantyType        String   @map("warranty_type")
   provider            String?
-  startDate           DateTime                  @map("start_date") @db.Date
-  expiryDate          DateTime                  @map("expiry_date") @db.Date
-  coverageDescription String?                   @map("coverage_description")
-  maxClaimAmount      Decimal?  @db.Decimal     @map("max_claim_amount")
-  isActive            Boolean   @default(true)  @map("is_active")
+  startDate           DateTime @map("start_date") @db.Date
+  expiryDate          DateTime @map("expiry_date") @db.Date
+  coverageDescription String?  @map("coverage_description")
+  maxClaimAmount      Decimal? @map("max_claim_amount") @db.Decimal
+  isActive            Boolean  @default(true) @map("is_active")
 
   claims WarrantyClaim[]
 
   @@index([vehicleId], map: "idx_vw_vehicle_id")
-  @@index([tenantId],  map: "idx_vw_tenant_id")
+  @@index([tenantId], map: "idx_vw_tenant_id")
   @@map("vehicle_warranties")
   @@schema("public")
 }
@@ -1130,23 +1161,23 @@ model VehicleWarranty {
 model WarrantyClaim {
   id              String    @id @default(uuid())
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime  @updatedAt      @map("updated_at") @db.Timestamptz(6)
-  tenantId        String    @default("")    @map("tenant_id")
-  warrantyId      String                    @map("warranty_id")
-  requestId       String?                   @map("request_id")
-  claimDate       DateTime?                 @map("claim_date") @db.Date
-  claimedAmount   Decimal?  @db.Decimal     @map("claimed_amount")
-  approvedAmount  Decimal?  @db.Decimal     @map("approved_amount")
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId        String    @default("") @map("tenant_id")
+  warrantyId      String    @map("warranty_id")
+  requestId       String?   @map("request_id")
+  claimDate       DateTime? @map("claim_date") @db.Date
+  claimedAmount   Decimal?  @map("claimed_amount") @db.Decimal
+  approvedAmount  Decimal?  @map("approved_amount") @db.Decimal
   /// PENDING | APPROVED | REJECTED | PAID
   status          String    @default("PENDING")
   description     String?
-  referenceNumber String?                   @map("reference_number")
+  referenceNumber String?   @map("reference_number")
 
   VehicleWarranty    VehicleWarranty     @relation(fields: [warrantyId], references: [id])
-  MaintenanceRequest MaintenanceRequest? @relation(fields: [requestId],  references: [id])
+  MaintenanceRequest MaintenanceRequest? @relation(fields: [requestId], references: [id])
 
   @@index([warrantyId], map: "idx_wc_warranty_id")
-  @@index([tenantId],   map: "idx_wc_tenant_id")
+  @@index([tenantId], map: "idx_wc_tenant_id")
   @@map("warranty_claims")
   @@schema("public")
 }
@@ -1212,6 +1243,8 @@ model RentalCustomer {
   createdAt        DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId         String    @map("tenant_id")
+  tenant           Tenant    @relation("RentalCustomerToTenant", fields: [tenantId], references: [id])
   fullName         String    @map("full_name")
   customerType     String?   @default("INDIVIDUAL") @map("customer_type") // INDIVIDUAL|CORPORATE|AIRLINE|INSURANCE
   nationality      String?
@@ -1241,8 +1274,10 @@ model RentalCustomer {
 
   bookings RentalBooking[]
 
+  @@index([tenantId], map: "idx_rental_customers_tenant_id")
   @@index([customerType], map: "idx_rental_customers_customer_type")
   @@index([deletedAt], map: "idx_rental_customers_deleted_at")
+  @@index([tenantId])
   @@map("rental_customers")
   @@schema("public")
 }
@@ -1252,7 +1287,9 @@ model RentalBooking {
   createdAt       DateTime?           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime?           @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt       DateTime?           @map("deleted_at") @db.Timestamptz(6)
-  bookingRef      String?             @unique @map("booking_ref")
+  tenantId        String              @map("tenant_id")
+  tenant          Tenant              @relation("RentalBookingToTenant", fields: [tenantId], references: [id])
+  bookingRef      String?             @map("booking_ref")
   customerId      String              @map("customer_id")
   vehicleId       String?             @map("vehicle_id")
   vehicleCategory String?             @map("vehicle_category")
@@ -1272,11 +1309,14 @@ model RentalBooking {
   damageClaims    DamageClaim[]
   agreement       RentalAgreement?
 
+  @@unique([tenantId, bookingRef], map: "uq_rental_bookings_tenant_ref")
+  @@index([tenantId], map: "idx_rental_bookings_tenant_id")
   @@index([customerId], map: "idx_rental_bookings_customer_id")
   @@index([vehicleId], map: "idx_rental_bookings_vehicle_id")
   @@index([status], map: "idx_rental_bookings_status")
   @@index([pickupDate], map: "idx_rental_bookings_pickup_date")
   @@index([deletedAt], map: "idx_rental_bookings_deleted_at")
+  @@index([tenantId])
   @@map("rental_bookings")
   @@schema("public")
 }
@@ -1284,6 +1324,8 @@ model RentalBooking {
 model VehicleInspection {
   id        String        @id @default(uuid())
   createdAt DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId  String        @map("tenant_id")
+  tenant    Tenant        @relation("VehicleInspectionToTenant", fields: [tenantId], references: [id])
   bookingId String        @map("booking_id")
   type      String // checkin | checkout
   mileage   Int?
@@ -1293,6 +1335,7 @@ model VehicleInspection {
   notes     String?
   booking   RentalBooking @relation(fields: [bookingId], references: [id])
 
+  @@index([tenantId], map: "idx_vehicle_inspections_tenant_id")
   @@map("vehicle_inspections")
   @@schema("public")
 }
@@ -1300,6 +1343,8 @@ model VehicleInspection {
 model DamageClaim {
   id               String        @id @default(uuid())
   createdAt        DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId         String        @map("tenant_id")
+  tenant           Tenant        @relation("DamageClaimToTenant", fields: [tenantId], references: [id])
   bookingId        String        @map("booking_id")
   description      String?
   estimatedCost    Decimal?      @map("estimated_cost") @db.Decimal
@@ -1309,6 +1354,7 @@ model DamageClaim {
   billedToCustomer Boolean?      @default(false) @map("billed_to_customer")
   booking          RentalBooking @relation(fields: [bookingId], references: [id])
 
+  @@index([tenantId], map: "idx_damage_claims_tenant_id")
   @@map("damage_claims")
   @@schema("public")
 }
@@ -1401,7 +1447,9 @@ model RateEvent {
   createdAt            DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt            DateTime? @map("deleted_at") @db.Timestamptz(6)
-  eventCode            String    @unique @map("event_code")
+  tenantId             String    @map("tenant_id")
+  tenant               Tenant    @relation("RateEventToTenant", fields: [tenantId], references: [id])
+  eventCode            String    @map("event_code")
   name                 String
   description          String?
   dateFrom             DateTime  @map("date_from") @db.Timestamptz(6)
@@ -1413,6 +1461,7 @@ model RateEvent {
   isActive             Boolean?  @default(true)
   notes                String?
 
+  @@index([tenantId], map: "idx_rate_events_tenant_id")
   @@index([isActive, dateFrom, dateTo], map: "idx_rate_events_active_dates")
   @@index([deletedAt], map: "idx_rate_events_deleted_at")
   @@map("rate_events")
@@ -1423,6 +1472,8 @@ model RateEvent {
 model RentalRateQuote {
   id                String    @id @default(uuid())
   createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId          String    @map("tenant_id")
+  tenant            Tenant    @relation("RentalRateQuoteToTenant", fields: [tenantId], references: [id])
   bookingId         String?   @map("booking_id")
   vehicleCategory   String    @map("vehicle_category")
   pickupDate        DateTime  @map("pickup_date") @db.Timestamptz(6)
@@ -1443,6 +1494,7 @@ model RentalRateQuote {
   breakdown         String? // JSON line-by-line detail
   expiresAt         DateTime? @map("expires_at") @db.Timestamptz(6)
 
+  @@index([tenantId], map: "idx_rental_rate_quotes_tenant_id")
   @@index([bookingId], map: "idx_rental_rate_quotes_booking_id")
   @@map("rental_rate_quotes")
   @@schema("public")
@@ -1452,7 +1504,9 @@ model RentalAgreement {
   id              String    @id @default(uuid())
   createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  agreementNo     String?   @unique @map("agreement_no")
+  tenantId        String    @map("tenant_id")
+  tenant          Tenant    @relation("RentalAgreementToTenant", fields: [tenantId], references: [id])
+  agreementNo     String?   @map("agreement_no")
   bookingId       String    @unique @map("booking_id")
   customerId      String    @map("customer_id")
   vehicleId       String?   @map("vehicle_id")
@@ -1501,10 +1555,12 @@ model RentalAgreement {
   vehicleExchanges RentalVehicleExchange[]
   invoices         RentalInvoice[]
 
+  @@index([tenantId], map: "idx_rental_agreements_tenant_id")
   @@index([customerId], map: "idx_rental_agreements_customer_id")
   @@index([vehicleId], map: "idx_rental_agreements_vehicle_id")
   @@index([status], map: "idx_rental_agreements_status")
   @@index([openBranchId], map: "idx_rental_agreements_open_branch_id")
+  @@index([tenantId])
   @@map("rental_agreements")
   @@schema("public")
 }
@@ -1513,6 +1569,8 @@ model RentalAgreement {
 model RentalVehicleExchange {
   id                String          @id @default(uuid())
   createdAt         DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId          String          @map("tenant_id")
+  tenant            Tenant          @relation("RentalVehicleExchangeToTenant", fields: [tenantId], references: [id])
   agreementId       String          @map("agreement_id")
   fromVehicleId     String          @map("from_vehicle_id")
   toVehicleId       String          @map("to_vehicle_id")
@@ -1525,6 +1583,7 @@ model RentalVehicleExchange {
   notes             String?
   agreement         RentalAgreement @relation(fields: [agreementId], references: [id])
 
+  @@index([tenantId], map: "idx_rental_vehicle_exchanges_tenant_id")
   @@index([agreementId], map: "idx_rental_vehicle_exchanges_agreement_id")
   @@map("rental_vehicle_exchanges")
   @@schema("public")
@@ -1533,6 +1592,8 @@ model RentalVehicleExchange {
 model RentalExtension {
   id              String          @id @default(uuid())
   createdAt       DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId        String          @map("tenant_id")
+  tenant          Tenant          @relation("RentalExtensionToTenant", fields: [tenantId], references: [id])
   agreementId     String          @map("agreement_id")
   originalEndDate DateTime        @map("original_end_date") @db.Timestamptz(6)
   newEndDate      DateTime        @map("new_end_date") @db.Timestamptz(6)
@@ -1543,6 +1604,7 @@ model RentalExtension {
   status          String?         @default("PENDING") // PENDING|APPROVED|REJECTED
   agreement       RentalAgreement @relation(fields: [agreementId], references: [id])
 
+  @@index([tenantId], map: "idx_rental_extensions_tenant_id")
   @@map("rental_extensions")
   @@schema("public")
 }
@@ -1550,6 +1612,8 @@ model RentalExtension {
 model RentalPayment {
   id            String          @id @default(uuid())
   createdAt     DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId      String          @map("tenant_id")
+  tenant        Tenant          @relation("RentalPaymentToTenant", fields: [tenantId], references: [id])
   agreementId   String          @map("agreement_id")
   amount        Decimal         @db.Decimal
   currency      String?         @default("AED")
@@ -1561,6 +1625,8 @@ model RentalPayment {
   notes         String?
   agreement     RentalAgreement @relation(fields: [agreementId], references: [id])
 
+  @@index([tenantId], map: "idx_rental_payments_tenant_id")
+  @@index([tenantId])
   @@map("rental_payments")
   @@schema("public")
 }
@@ -1572,7 +1638,9 @@ model RentalAncillary {
   createdAt            DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt            DateTime? @map("deleted_at") @db.Timestamptz(6)
-  code                 String    @unique
+  tenantId             String    @map("tenant_id")
+  tenant               Tenant    @relation("RentalAncillaryToTenant", fields: [tenantId], references: [id])
+  code                 String
   nameEn               String    @map("name_en")
   nameAr               String?   @map("name_ar")
   description          String?
@@ -1585,7 +1653,9 @@ model RentalAncillary {
   sortOrder            Int?      @default(0)
   notes                String?
 
+  @@index([tenantId], map: "idx_rental_ancillaries_tenant_id")
   @@index([deletedAt], map: "idx_rental_ancillaries_deleted_at")
+  @@index([tenantId])
   @@map("rental_ancillaries")
   @@schema("public")
 }
@@ -1593,6 +1663,8 @@ model RentalAncillary {
 model RentalAdditionalCharge {
   id               String          @id @default(uuid())
   createdAt        DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId         String          @map("tenant_id")
+  tenant           Tenant          @relation("RentalAdditionalChargeToTenant", fields: [tenantId], references: [id])
   agreementId      String          @map("agreement_id")
   chargeType       String          @map("charge_type") // FUEL|EXTRA_KM|DAMAGE|CLEANING|TRAFFIC_FINE|OTHER
   description      String?
@@ -1602,6 +1674,7 @@ model RentalAdditionalCharge {
   billedToCustomer Boolean?        @default(true) @map("billed_to_customer")
   agreement        RentalAgreement @relation(fields: [agreementId], references: [id])
 
+  @@index([tenantId], map: "idx_rental_additional_charges_tenant_id")
   @@map("rental_additional_charges")
   @@schema("public")
 }
@@ -1612,8 +1685,10 @@ model RentalInvoice {
   createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId  String    @map("tenant_id")
+  tenant    Tenant    @relation("RentalInvoiceToTenant", fields: [tenantId], references: [id])
 
-  invoiceNo   String @unique @map("invoice_no")
+  invoiceNo   String @map("invoice_no")
   agreementId String @map("agreement_id")
   customerId  String @map("customer_id")
 
@@ -1664,12 +1739,15 @@ model RentalInvoice {
   lineItems       RentalInvoiceLineItem[]
   receiptPayments RentalInvoicePayment[]
 
+  @@unique([tenantId, invoiceNo], map: "uq_rental_invoices_tenant_no")
+  @@index([tenantId], map: "idx_rental_invoices_tenant_id")
   @@index([agreementId], map: "idx_rental_invoices_agreement_id")
   @@index([customerId], map: "idx_rental_invoices_customer_id")
   @@index([status], map: "idx_rental_invoices_status")
   @@index([dueDate], map: "idx_rental_invoices_due_date")
   @@index([deletedAt], map: "idx_rental_invoices_deleted_at")
   @@index([corporateAccountId], map: "idx_rental_invoices_corporate_account_id")
+  @@index([tenantId])
   @@map("rental_invoices")
   @@schema("public")
 }
@@ -1677,6 +1755,8 @@ model RentalInvoice {
 model RentalInvoiceLineItem {
   id          String        @id @default(uuid())
   createdAt   DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId    String        @map("tenant_id")
+  tenant      Tenant        @relation("RentalInvoiceLineItemToTenant", fields: [tenantId], references: [id])
   invoiceId   String        @map("invoice_id")
   lineType    String        @map("line_type")
   // RENTAL|INSURANCE|FUEL|EXTRA_KM|DAMAGE|TRAFFIC_FINE|CLEANING|EXTENSION|DEPOSIT|DISCOUNT|TAX|OTHER
@@ -1691,6 +1771,7 @@ model RentalInvoiceLineItem {
   referenceId String?       @map("reference_id") // chargeId, trafficFineId etc.
   invoice     RentalInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
+  @@index([tenantId], map: "idx_rental_invoice_line_items_tenant_id")
   @@index([invoiceId], map: "idx_rental_invoice_line_items_invoice_id")
   @@map("rental_invoice_line_items")
   @@schema("public")
@@ -1700,17 +1781,21 @@ model RentalInvoiceLineItem {
 model RentalInvoicePayment {
   id            String        @id @default(uuid())
   createdAt     DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId      String        @map("tenant_id")
+  tenant        Tenant        @relation("RentalInvoicePaymentToTenant", fields: [tenantId], references: [id])
   invoiceId     String        @map("invoice_id")
   amount        Decimal       @db.Decimal
   currency      String?       @default("AED")
   paymentMethod String?       @map("payment_method") // CASH|CARD|BANK|CHEQUE|ONLINE
   referenceNo   String?       @map("reference_no")
-  receiptNo     String?       @unique @map("receipt_no")
+  receiptNo     String?       @map("receipt_no")
   paidAt        DateTime      @map("paid_at") @db.Timestamptz(6)
   receivedBy    String?       @map("received_by")
   notes         String?
   invoice       RentalInvoice @relation(fields: [invoiceId], references: [id])
 
+  @@unique([tenantId, receiptNo], map: "uq_rental_invoice_payments_tenant_receipt")
+  @@index([tenantId], map: "idx_rental_invoice_payments_tenant_id")
   @@index([invoiceId], map: "idx_rental_invoice_payments_invoice_id")
   @@map("rental_invoice_payments")
   @@schema("public")
@@ -1721,66 +1806,66 @@ model RentalInvoicePayment {
 // ============================================================
 
 model BusRoute {
-  id                    String         @id @default(uuid())
-  createdAt             DateTime?      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt             DateTime?      @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt             DateTime?      @map("deleted_at") @db.Timestamptz(6)
-  tenantId              String?        @map("tenant_id")
+  id                    String            @id @default(uuid())
+  createdAt             DateTime?         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime?         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt             DateTime?         @map("deleted_at") @db.Timestamptz(6)
+  tenantId              String?           @map("tenant_id")
   name                  String
   // Optional short code (e.g. "RT-001"). Tenant-scoped unique via
   // uniq_bus_routes_tenant_code (partial index — allows multiple NULLs).
   code                  String?
   origin                String
   destination           String
-  routeType             String?        @default("STAFF") @map("route_type") // STAFF|SCHOOL|BOTH
+  routeType             String?           @default("STAFF") @map("route_type") // STAFF|SCHOOL|BOTH
   /// Vehicle group the route is authored for (BUS | VAN | PICKUP | SUV | ECONOMY | LUXURY …).
   /// When set, the Resource Validation Engine's V5 check compares this to
   /// Vehicle.vehicleGroup and BLOCKs mismatches. Null → V5 is a no-op (PASS)
   /// so tenants without a routing standard aren't false-alarmed.
-  requiredVehicleGroup  String?        @map("required_vehicle_group")
+  requiredVehicleGroup  String?           @map("required_vehicle_group")
   /// Minimum driver license category required for the route (LIGHT | HEAVY |
   /// BUS | MOTORCYCLE). Matches Driver.licenseType. Null → D7 is a no-op.
   /// Should reflect the most restrictive UAE RTA requirement for the route's
   /// typical vehicle — a bus route uses BUS, a shuttle van typically LIGHT.
-  requiredLicenseType   String?        @map("required_license_type")
+  requiredLicenseType   String?           @map("required_license_type")
   /// FK to spatial.places(id) with type=OPERATIONAL_ZONE — the zone this
   /// route serves. Explicit tagging (not derived from stop geometry) —
   /// point-in-polygon zone inference is a possible later upgrade, not
   /// implemented yet. Used the same way as Vehicle.zoneId: a soft ranking
   /// signal for smart vehicle matching, never a hard eligibility filter.
-  zoneId                String?        @map("zone_id")
-  zone                  Place?         @relation("RouteZone", fields: [zoneId], references: [id], onDelete: SetNull)
-  totalDistanceKm       Float?         @map("total_distance_km")
-  estimatedDurationMins Int?           @map("estimated_duration_mins")
-  capacity              Int?           @default(30)
-  isActive              Boolean?       @default(true) @map("is_active")
+  zoneId                String?           @map("zone_id")
+  zone                  Place?            @relation("RouteZone", fields: [zoneId], references: [id], onDelete: SetNull)
+  totalDistanceKm       Float?            @map("total_distance_km")
+  estimatedDurationMins Int?              @map("estimated_duration_mins")
+  capacity              Int?              @default(30)
+  isActive              Boolean?          @default(true) @map("is_active")
   notes                 String?
   /// Route scheduling metadata authored on the Routes page. When present these
   /// are the "typical" scheduling for the route — TripSchedule and
   /// BusOpsScheduleTemplate can still override on a per-trip / per-template
   /// basis. All nullable so pre-existing rows are unaffected.
-  direction             String?        @map("direction")             // INBOUND | OUTBOUND
-  shiftType             String?        @map("shift_type")            // MORNING | EVENING | NIGHT | SPLIT
-  departureTime         String?        @map("departure_time")        // 'HH:MM' 24h
-  expectedArrivalTime   String?        @map("expected_arrival_time") // 'HH:MM' 24h
+  direction             String?           @map("direction") // INBOUND | OUTBOUND
+  shiftType             String?           @map("shift_type") // MORNING | EVENING | NIGHT | SPLIT
+  departureTime         String?           @map("departure_time") // 'HH:MM' 24h
+  expectedArrivalTime   String?           @map("expected_arrival_time") // 'HH:MM' 24h
   /// Default vehicle and driver for the route. Not enforced as FK on purpose
   /// (bus_routes is cross-tenant-referenced in some legacy contexts) — the
   /// Routes page validates the id belongs to the tenant on write.
-  assignedVehicleId     String?        @map("assigned_vehicle_id")
-  assignedDriverId      String?        @map("assigned_driver_id")
+  assignedVehicleId     String?           @map("assigned_vehicle_id")
+  assignedDriverId      String?           @map("assigned_driver_id")
   /// Fleet routing / VRPTW — buffer (minutes) around this route's
   /// departureTime that individual pickups may slide within, letting the
   /// solver consolidate nearby stops onto one bus. Falls back to the
   /// tenant default when null. See src/lib/planning/fleet-routing/window-resolver.ts.
-  pickupBufferMin       Int?           @map("pickup_buffer_min")
+  pickupBufferMin       Int?              @map("pickup_buffer_min")
   /// Route Consolidation Phase 2 — retirement fields.
   /// Set when a route is deactivated as a consolidation source or as an
   /// archived merged route after revert. `retiredReason` discriminates
   /// consolidation-driven retirement from other operator-authored reasons
   /// so cool-down / analysis queries can filter cheaply.
-  retiredReason         String?        @map("retired_reason")
-  retiredAt             DateTime?      @map("retired_at") @db.Timestamptz(6)
-  retiredBy             String?        @map("retired_by")
+  retiredReason         String?           @map("retired_reason")
+  retiredAt             DateTime?         @map("retired_at") @db.Timestamptz(6)
+  retiredBy             String?           @map("retired_by")
   stops                 RouteStop[]
   schedules             TripSchedule[]
   headwayRules          HeadwayRule[]
@@ -1799,27 +1884,27 @@ model BusRoute {
 /// between directions AND across time within a direction. See
 /// FOLLOWUP_ROUTE_VERSIONING.md for the migration strategy.
 model BusRouteVariant {
-  id           String    @id @default(uuid())
-  createdAt    DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
-  tenantId     String    @map("tenant_id")
-  routeId      String    @map("route_id")
+  id        String    @id @default(uuid())
+  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId  String    @map("tenant_id")
+  routeId   String    @map("route_id")
 
-  name         String    /// Display label — "Morning → Office"
+  name        String /// Display label — "Morning → Office"
   /// Canonical bucket for filtering / dispatch UI — MORNING | EVENING |
   /// INBOUND | OUTBOUND | WEEKEND | SPECIAL | NIGHT (free-text, extensible).
-  kind         String?
-  description  String?
-  isActive     Boolean   @default(true) @map("is_active")
-  createdBy    String?   @map("created_by")
+  kind        String?
+  description String?
+  isActive    Boolean @default(true) @map("is_active")
+  createdBy   String? @map("created_by")
 
-  route        BusRoute  @relation(fields: [routeId], references: [id], onDelete: Cascade)
-  versions     BusRouteVariantVersion[]
+  route    BusRoute                 @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  versions BusRouteVariantVersion[]
 
   @@unique([routeId, name], map: "uq_bus_route_variants_route_name")
-  @@index([routeId],   map: "idx_bus_route_variants_route")
-  @@index([tenantId],  map: "idx_bus_route_variants_tenant")
+  @@index([routeId], map: "idx_bus_route_variants_route")
+  @@index([tenantId], map: "idx_bus_route_variants_tenant")
   @@index([deletedAt], map: "idx_bus_route_variants_deleted")
   @@map("bus_route_variants")
   @@schema("public")
@@ -1830,67 +1915,67 @@ model BusRouteVariant {
 /// version they used so historical reporting reads the stops that
 /// actually operated — not whatever the route looks like today.
 model BusRouteVariantVersion {
-  id             String    @id @default(uuid())
-  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
-  tenantId       String    @map("tenant_id")
-  variantId      String    @map("variant_id")
+  id        String    @id @default(uuid())
+  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId  String    @map("tenant_id")
+  variantId String    @map("variant_id")
 
-  versionNumber  Int       @map("version_number")
-  effectiveFrom  DateTime  @map("effective_from") @db.Date
-  effectiveTo    DateTime? @map("effective_to")   @db.Date
+  versionNumber Int       @map("version_number")
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
 
   /// DRAFT | PUBLISHED | ARCHIVED
-  status         String    @default("DRAFT")
-  publishedAt    DateTime? @map("published_at")   @db.Timestamptz(6)
-  publishedBy    String?   @map("published_by")
-  notes          String?
+  status      String    @default("DRAFT")
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+  publishedBy String?   @map("published_by")
+  notes       String?
 
-  variant        BusRouteVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
-  stops          RouteStop[]
-  trips          TripSchedule[]
+  variant BusRouteVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  stops   RouteStop[]
+  trips   TripSchedule[]
 
   @@unique([variantId, versionNumber], map: "uq_bus_route_variant_versions_variant_ver")
   @@index([variantId], map: "idx_bus_route_variant_versions_variant")
-  @@index([tenantId],  map: "idx_bus_route_variant_versions_tenant")
-  @@index([status],    map: "idx_bus_route_variant_versions_status")
+  @@index([tenantId], map: "idx_bus_route_variant_versions_tenant")
+  @@index([status], map: "idx_bus_route_variant_versions_status")
   @@index([deletedAt], map: "idx_bus_route_variant_versions_deleted")
   @@map("bus_route_variant_versions")
   @@schema("public")
 }
 
 model RouteStop {
-  id                   String   @id @default(uuid())
-  tenantId             String?  @map("tenant_id")
-  routeId              String   @map("route_id")
-  stopName             String   @map("stop_name")
+  id                   String                  @id @default(uuid())
+  tenantId             String?                 @map("tenant_id")
+  routeId              String                  @map("route_id")
+  stopName             String                  @map("stop_name")
   sequence             Int
-  gpsLat               Float?   @map("gps_lat")
-  gpsLng               Float?   @map("gps_lng")
+  gpsLat               Float?                  @map("gps_lat")
+  gpsLng               Float?                  @map("gps_lng")
   // Radius in metres around the stop's GPS point that counts as "at the stop".
   // A ping crossing INTO this radius creates a TripStopVisit.enteredAt event
   // (bus arrived at stop); crossing OUT sets leftAt. Null defaults to 100m
   // in the evaluator so legacy stops still work without a backfill.
-  geofenceRadiusM      Int?     @map("geofence_radius_m")
-  estimatedArrivalMins Int?     @map("estimated_arrival_mins")
+  geofenceRadiusM      Int?                    @map("geofence_radius_m")
+  estimatedArrivalMins Int?                    @map("estimated_arrival_mins")
   landmark             String?
   /// Phase 3b — link to spatial.places(type=STOP). The Place carries the
   /// same lat/lng + radius as gpsLat/gpsLng/geofenceRadiusM here, and is
   /// backfilled at migration time so both stay in sync. Readers still use
   /// the local columns; the Place link is available for cross-module
   /// queries (e.g. "all Places used by any route in this tenant").
-  placeId              String?  @map("place_id")
-  place                Place?   @relation("RouteStopPlace", fields: [placeId], references: [id], onDelete: SetNull)
+  placeId              String?                 @map("place_id")
+  place                Place?                  @relation("RouteStopPlace", fields: [placeId], references: [id], onDelete: SetNull)
   /// Route versioning Phase 1 — link to the specific variant version this
   /// stop belongs to. When null the stop is a "flat" pre-versioning row
   /// still readable via routeId. New stops written through the versioned
   /// writer API always stamp this.
-  variantVersionId     String?  @map("variant_version_id")
+  variantVersionId     String?                 @map("variant_version_id")
   variantVersion       BusRouteVariantVersion? @relation(fields: [variantVersionId], references: [id], onDelete: Cascade)
-  route                BusRoute @relation(fields: [routeId], references: [id])
+  route                BusRoute                @relation(fields: [routeId], references: [id])
 
-  @@index([placeId],          map: "idx_route_stops_place_id")
+  @@index([placeId], map: "idx_route_stops_place_id")
   @@index([variantVersionId], map: "idx_route_stops_variant_version")
   @@map("route_stops")
   @@schema("public")
@@ -1913,37 +1998,37 @@ model RouteStop {
 /// is phase-2 wiring — the roster is the source of truth for who normally
 /// rides which route.
 model RoutePassenger {
-  id            String    @id @default(uuid())
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
-  tenantId      String    @map("tenant_id")
-  routeId       String    @map("route_id")
-  staffMemberId String    @map("staff_member_id")
-  pickupStopId  String?   @map("pickup_stop_id")
-  pickupTime    String?   @map("pickup_time") // 'HH:MM' 24h
-  dropoffStopId String?   @map("dropoff_stop_id")
-  dropoffTime   String?   @map("dropoff_time")
-  effectiveFrom DateTime  @default(now()) @map("effective_from") @db.Date
-  effectiveTo   DateTime? @map("effective_to") @db.Date
-  status        String    @default("ACTIVE") // ACTIVE | INACTIVE
-  notes         String?
-  createdBy     String?   @map("created_by")
+  id                  String    @id @default(uuid())
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt           DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId            String    @map("tenant_id")
+  routeId             String    @map("route_id")
+  staffMemberId       String    @map("staff_member_id")
+  pickupStopId        String?   @map("pickup_stop_id")
+  pickupTime          String?   @map("pickup_time") // 'HH:MM' 24h
+  dropoffStopId       String?   @map("dropoff_stop_id")
+  dropoffTime         String?   @map("dropoff_time")
+  effectiveFrom       DateTime  @default(now()) @map("effective_from") @db.Date
+  effectiveTo         DateTime? @map("effective_to") @db.Date
+  status              String    @default("ACTIVE") // ACTIVE | INACTIVE
+  notes               String?
+  createdBy           String?   @map("created_by")
   /// Fleet routing / VRPTW — per-enrollment overrides. All 'HH:MM' 24h
   /// strings to match pickupTime / dropoffTime convention above. Nullable
   /// so the resolver falls through to BusRoute / Tenant defaults.
-  earliestPickup      String? @map("earliest_pickup")        // window start override
-  latestPickup        String? @map("latest_pickup")          // window end override
-  requiredArrivalTime String? @map("required_arrival_time")  // hard workplace-arrival override
-  pickupBufferMin     Int?    @map("pickup_buffer_min")
+  earliestPickup      String?   @map("earliest_pickup") // window start override
+  latestPickup        String?   @map("latest_pickup") // window end override
+  requiredArrivalTime String?   @map("required_arrival_time") // hard workplace-arrival override
+  pickupBufferMin     Int?      @map("pickup_buffer_min")
 
   route BusRoute @relation(fields: [routeId], references: [id])
 
-  @@index([tenantId],      map: "idx_route_passengers_tenant")
-  @@index([routeId],       map: "idx_route_passengers_route")
+  @@index([tenantId], map: "idx_route_passengers_tenant")
+  @@index([routeId], map: "idx_route_passengers_route")
   @@index([staffMemberId], map: "idx_route_passengers_staff")
-  @@index([deletedAt],     map: "idx_route_passengers_deleted")
-  @@index([status],        map: "idx_route_passengers_status")
+  @@index([deletedAt], map: "idx_route_passengers_deleted")
+  @@index([status], map: "idx_route_passengers_status")
   @@map("route_passengers")
   @@schema("public")
 }
@@ -1957,32 +2042,32 @@ model RoutePassenger {
 /// "specific dated trip" semantics of TripSchedule (dispatch board, GPS,
 /// incidents, roster expansion) stay unambiguous.
 model BusOpsScheduleTemplate {
-  id             String    @id @default(uuid())
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
-  tenantId       String    @map("tenant_id")
+  id             String     @id @default(uuid())
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime?  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime?  @map("deleted_at") @db.Timestamptz(6)
+  tenantId       String     @map("tenant_id")
   name           String
-  routeId        String    @map("route_id")
-  vehicleId      String?   @map("vehicle_id") // default vehicle; overridable per instance
-  driverId       String?   @map("driver_id")
-  weekType       String    @map("week_type")  // SUN_THU | MON_FRI | SAT_WED | CUSTOM
-  activeDays     Int[]     @map("active_days") // 0=Sun … 6=Sat, matches JS Date.getDay()
-  session        String                         // MORNING | EVENING | NIGHT | SPLIT
-  departureTime  String    @map("departure_time") // 'HH:MM' 24h
-  arrivalTime    String?   @map("arrival_time")   // 'HH:MM' 24h (auto-fillable from route.duration)
-  direction      String                         // PICKUP | DROPOFF
-  effectiveFrom  DateTime  @default(now()) @map("effective_from") @db.Date
-  effectiveTo    DateTime? @map("effective_to") @db.Date
+  routeId        String     @map("route_id")
+  vehicleId      String?    @map("vehicle_id") // default vehicle; overridable per instance
+  driverId       String?    @map("driver_id")
+  weekType       String     @map("week_type") // SUN_THU | MON_FRI | SAT_WED | CUSTOM
+  activeDays     Int[]      @map("active_days") // 0=Sun … 6=Sat, matches JS Date.getDay()
+  session        String // MORNING | EVENING | NIGHT | SPLIT
+  departureTime  String     @map("departure_time") // 'HH:MM' 24h
+  arrivalTime    String?    @map("arrival_time") // 'HH:MM' 24h (auto-fillable from route.duration)
+  direction      String // PICKUP | DROPOFF
+  effectiveFrom  DateTime   @default(now()) @map("effective_from") @db.Date
+  effectiveTo    DateTime?  @map("effective_to") @db.Date
   exceptionDates DateTime[] @map("exception_dates") @db.Date
-  status         String    @default("ACTIVE") // ACTIVE | INACTIVE
+  status         String     @default("ACTIVE") // ACTIVE | INACTIVE
   notes          String?
-  createdBy      String?   @map("created_by")
+  createdBy      String?    @map("created_by")
 
-  @@index([tenantId],  map: "idx_bus_ops_schedule_templates_tenant")
-  @@index([routeId],   map: "idx_bus_ops_schedule_templates_route")
+  @@index([tenantId], map: "idx_bus_ops_schedule_templates_tenant")
+  @@index([routeId], map: "idx_bus_ops_schedule_templates_route")
   @@index([deletedAt], map: "idx_bus_ops_schedule_templates_deleted")
-  @@index([status],    map: "idx_bus_ops_schedule_templates_status")
+  @@index([status], map: "idx_bus_ops_schedule_templates_status")
   @@map("bus_ops_schedule_templates")
   @@schema("public")
 }
@@ -1993,21 +2078,21 @@ model BusOpsScheduleTemplate {
 /// force-generate on WORKING_OVERRIDE dates. HALF_DAY and REDUCED_SERVICE
 /// are informational for the UI (phase 2).
 model TransportCalendar {
-  id            String    @id @default(uuid())
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
-  tenantId      String    @map("tenant_id")
+  id            String                   @id @default(uuid())
+  createdAt     DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime?                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt     DateTime?                @map("deleted_at") @db.Timestamptz(6)
+  tenantId      String                   @map("tenant_id")
   name          String
-  effectiveFrom DateTime  @default(now()) @map("effective_from") @db.Date
-  effectiveTo   DateTime? @map("effective_to") @db.Date
-  isActive      Boolean   @default(true) @map("is_active")
+  effectiveFrom DateTime                 @default(now()) @map("effective_from") @db.Date
+  effectiveTo   DateTime?                @map("effective_to") @db.Date
+  isActive      Boolean                  @default(true) @map("is_active")
   notes         String?
-  createdBy     String?   @map("created_by")
+  createdBy     String?                  @map("created_by")
   entries       TransportCalendarEntry[]
 
-  @@index([tenantId],  map: "idx_transport_calendars_tenant")
-  @@index([isActive],  map: "idx_transport_calendars_active")
+  @@index([tenantId], map: "idx_transport_calendars_tenant")
+  @@index([isActive], map: "idx_transport_calendars_active")
   @@index([deletedAt], map: "idx_transport_calendars_deleted")
   @@map("transport_calendars")
   @@schema("public")
@@ -2018,13 +2103,13 @@ model TransportCalendarEntry {
   createdAt  DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   calendarId String            @map("calendar_id")
   entryDate  DateTime          @map("entry_date") @db.Date
-  kind       String                                    // HOLIDAY | WORKING_OVERRIDE | HALF_DAY | REDUCED_SERVICE
+  kind       String // HOLIDAY | WORKING_OVERRIDE | HALF_DAY | REDUCED_SERVICE
   note       String?
   calendar   TransportCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
 
   @@unique([calendarId, entryDate], map: "uniq_transport_calendar_entries_cal_date")
   @@index([calendarId], map: "idx_transport_calendar_entries_calendar")
-  @@index([entryDate],  map: "idx_transport_calendar_entries_date")
+  @@index([entryDate], map: "idx_transport_calendar_entries_date")
   @@map("transport_calendar_entries")
   @@schema("public")
 }
@@ -2054,18 +2139,18 @@ model BusRouteType {
 // duplication) doesn't create extra visits or re-notify.
 
 model BusGpsPing {
-  id           String    @id @default(uuid())
-  createdAt    DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  tenantId     String?   @map("tenant_id")
-  vehicleId    String    @map("vehicle_id")
-  scheduleId   String?   @map("schedule_id")
-  latitude     Float
-  longitude    Float
-  speedKmh     Float?    @map("speed_kmh")
-  headingDeg   Float?    @map("heading_deg")
-  accuracyM    Float?    @map("accuracy_m")
-  occurredAt   DateTime  @map("occurred_at") @db.Timestamptz(6)
-  source       String?   // 'DRIVER_APP' | 'TRACKER' | 'GATEWAY'
+  id         String    @id @default(uuid())
+  createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId   String?   @map("tenant_id")
+  vehicleId  String    @map("vehicle_id")
+  scheduleId String?   @map("schedule_id")
+  latitude   Float
+  longitude  Float
+  speedKmh   Float?    @map("speed_kmh")
+  headingDeg Float?    @map("heading_deg")
+  accuracyM  Float?    @map("accuracy_m")
+  occurredAt DateTime  @map("occurred_at") @db.Timestamptz(6)
+  source     String? // 'DRIVER_APP' | 'TRACKER' | 'GATEWAY'
 
   @@index([scheduleId, occurredAt], map: "idx_bus_gps_pings_schedule_occurred")
   @@index([vehicleId, occurredAt], map: "idx_bus_gps_pings_vehicle_occurred")
@@ -2074,19 +2159,19 @@ model BusGpsPing {
 }
 
 model TripStopVisit {
-  id             String    @id @default(uuid())
-  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  tenantId       String?   @map("tenant_id")
-  scheduleId     String    @map("schedule_id")
-  stopId         String    @map("stop_id")
+  id                 String    @id @default(uuid())
+  createdAt          DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId           String?   @map("tenant_id")
+  scheduleId         String    @map("schedule_id")
+  stopId             String    @map("stop_id")
   // Ping crossed the approach radius (default 800m). Used to gate approach
   // notifications so they fire at most once per visit.
-  approachedAt   DateTime? @map("approached_at") @db.Timestamptz(6)
+  approachedAt       DateTime? @map("approached_at") @db.Timestamptz(6)
   // Ping crossed the arrival radius (default 100m). "Bus at stop".
-  enteredAt      DateTime? @map("entered_at") @db.Timestamptz(6)
+  enteredAt          DateTime? @map("entered_at") @db.Timestamptz(6)
   // Ping exited the arrival radius after entering.
-  leftAt         DateTime? @map("left_at") @db.Timestamptz(6)
+  leftAt             DateTime? @map("left_at") @db.Timestamptz(6)
   // Whether the approach notification was successfully queued (best-effort).
   approachNotifiedAt DateTime? @map("approach_notified_at") @db.Timestamptz(6)
 
@@ -2096,57 +2181,57 @@ model TripStopVisit {
 }
 
 model TripSchedule {
-  id             String          @id @default(uuid())
-  createdAt      DateTime?       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime?       @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt      DateTime?       @map("deleted_at") @db.Timestamptz(6)
+  id                    String                  @id @default(uuid())
+  createdAt             DateTime?               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime?               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt             DateTime?               @map("deleted_at") @db.Timestamptz(6)
   /// Tenant scope — column was created by the legacy tenant_isolation.sql
   /// ops script; declared here so the Prisma client exposes `tenantId` and
   /// future migrations track it. Nullable until `phase0_backfill_safety.sql`
   /// is run on the target environment.
-  tenantId       String?         @map("tenant_id")
-  tripNumber     String?         @unique @map("trip_number")
+  tenantId              String?                 @map("tenant_id")
+  tripNumber            String?                 @unique @map("trip_number")
   // Back-reference to the recurring template this instance was generated
   // from (null = ad-hoc one-off trip created directly, not from a template).
-  templateId     String?         @map("template_id")
-  routeId        String          @map("route_id")
-  vehicleId      String?         @map("vehicle_id")
-  driverId       String?         @map("driver_id")
-  departureTime  DateTime        @map("departure_time") @db.Timestamptz(6)
-  arrivalTime    DateTime?       @map("arrival_time") @db.Timestamptz(6)
+  templateId            String?                 @map("template_id")
+  routeId               String                  @map("route_id")
+  vehicleId             String?                 @map("vehicle_id")
+  driverId              String?                 @map("driver_id")
+  departureTime         DateTime                @map("departure_time") @db.Timestamptz(6)
+  arrivalTime           DateTime?               @map("arrival_time") @db.Timestamptz(6)
   /// Hard "must-arrive-by" deadline used by MERGED_ARRIVAL_SLA in the
   /// Planning Constraint Engine. `arrivalTime` is an estimate; this is
   /// the commitment. Nullable — trips without a stated SLA are treated
   /// as unconstrained.
-  latestArrivalTime DateTime?    @map("latest_arrival_time") @db.Timestamptz(6)
-  frequency      String?         @default("DAILY") // DAILY|WEEKLY|ONCE
-  shiftType      String?         @map("shift_type") // MORNING|EVENING|NIGHT|SPLIT
-  direction      String?         @default("INBOUND") // INBOUND|OUTBOUND
-  capacity       Int?            @default(30)
-  confirmedCount Int?            @default(0) @map("confirmed_count")
-  status         String?         @default("SCHEDULED") // SCHEDULED|DEPARTED|IN_TRANSIT|COMPLETED|CANCELLED|MERGED
+  latestArrivalTime     DateTime?               @map("latest_arrival_time") @db.Timestamptz(6)
+  frequency             String?                 @default("DAILY") // DAILY|WEEKLY|ONCE
+  shiftType             String?                 @map("shift_type") // MORNING|EVENING|NIGHT|SPLIT
+  direction             String?                 @default("INBOUND") // INBOUND|OUTBOUND
+  capacity              Int?                    @default(30)
+  confirmedCount        Int?                    @default(0) @map("confirmed_count")
+  status                String?                 @default("SCHEDULED") // SCHEDULED|DEPARTED|IN_TRANSIT|COMPLETED|CANCELLED|MERGED
   /// Merge lineage — set on source trips when they get merged into a
   /// new consolidated trip. Points at the merged trip's id. Nullable
   /// on the common (unmerged) case. Self-relation kept as a plain FK
   /// column here; the Prisma-level self-relation is deliberately not
   /// declared to avoid churning include/select shapes across the app.
-  mergedIntoTripId String?       @map("merged_into_trip_id")
+  mergedIntoTripId      String?                 @map("merged_into_trip_id")
   // ── Headway support ──────────────────────────────────────────────────
   // 'TIMEPOINT' (default): the row IS a single timed trip.
   // 'HEADWAY':            the row is a headway template — actual trips are
   //                       expanded from HeadwayRule rows at view time.
-  schedulingMode String?         @default("TIMEPOINT") @map("scheduling_mode") // TIMEPOINT|HEADWAY
-  notes          String?
+  schedulingMode        String?                 @default("TIMEPOINT") @map("scheduling_mode") // TIMEPOINT|HEADWAY
+  notes                 String?
   /// Route versioning Phase 1 — snapshot of the specific variant version
   /// this trip runs. Historical reads should prefer this over `routeId`
   /// so a route edit made after the trip completed can't corrupt
   /// what-actually-happened.
-  routeVariantVersionId String?  @map("route_variant_version_id")
+  routeVariantVersionId String?                 @map("route_variant_version_id")
   routeVariantVersion   BusRouteVariantVersion? @relation(fields: [routeVariantVersionId], references: [id], onDelete: SetNull)
-  route          BusRoute        @relation(fields: [routeId], references: [id])
-  passengers     TripPassenger[]
-  tripLogs       TripLog[]
-  headwayRules   HeadwayRule[]
+  route                 BusRoute                @relation(fields: [routeId], references: [id])
+  passengers            TripPassenger[]
+  tripLogs              TripLog[]
+  headwayRules          HeadwayRule[]
 
   @@index([routeVariantVersionId], map: "idx_trip_schedules_variant_version")
   @@map("trip_schedules")
@@ -2251,25 +2336,26 @@ model CbaRuleSet {
 }
 
 model TripPassenger {
-  id                String       @id @default(uuid())
-  createdAt         DateTime?    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime?    @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt         DateTime?    @map("deleted_at") @db.Timestamptz(6)
-  tenantId          String?      @map("tenant_id")
-  tripId            String       @map("trip_id")
-  staffMemberId     String?      @map("staff_member_id")
-  employeeId        String?      @map("employee_id")
-  employeeName      String?      @map("employee_name")
+  id                String               @id @default(uuid())
+  createdAt         DateTime?            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime?            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime?            @map("deleted_at") @db.Timestamptz(6)
+  tenantId          String?              @map("tenant_id")
+  tripId            String               @map("trip_id")
+  staffMemberId     String?              @map("staff_member_id")
+  employeeId        String?              @map("employee_id")
+  employeeName      String?              @map("employee_name")
   department        String?
-  boardingStopId    String?      @map("boarding_stop_id")
-  alightingStopId   String?      @map("alighting_stop_id")
-  boardingStopName  String?      @map("boarding_stop_name")
-  alightingStopName String?      @map("alighting_stop_name")
-  boardedAt         DateTime?    @map("boarded_at") @db.Timestamptz(6)
+  boardingStopId    String?              @map("boarding_stop_id")
+  alightingStopId   String?              @map("alighting_stop_id")
+  boardingStopName  String?              @map("boarding_stop_name")
+  alightingStopName String?              @map("alighting_stop_name")
+  boardedAt         DateTime?            @map("boarded_at") @db.Timestamptz(6)
   status            TripPassengerStatus? @default(CONFIRMED)
   notes             String?
-  trip              TripSchedule @relation(fields: [tripId], references: [id])
+  trip              TripSchedule         @relation(fields: [tripId], references: [id])
 
+  @@index([tenantId])
   @@map("trip_passengers")
   @@schema("public")
 }
@@ -2345,24 +2431,24 @@ model StaffTransportPlan {
 }
 
 model StaffMember {
-  id                String                  @id @default(uuid())
-  createdAt         DateTime?               @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime?               @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt         DateTime?               @map("deleted_at") @db.Timestamptz(6)
-  tenantId          String                  @map("tenant_id")
-  employeeId        String?                 @map("employee_id")
-  name              String
-  department        String?
-  designation       String?
-  contactNumber     String?                 @map("contact_number")
-  email             String?
-  residenceArea     String?                 @map("residence_area")
-  defaultRouteId    String?                 @map("default_route_id")
-  defaultStopId     String?                 @map("default_stop_id")
-  defaultStopName   String?                 @map("default_stop_name")
-  shiftType         String?                 @map("shift_type") // MORNING|EVENING|BOTH
-  transportType     String?                 @default("BUS") @map("transport_type") // BUS|TAXI|SELF
-  isActive          Boolean?                @default(true) @map("is_active")
+  id                   String                  @id @default(uuid())
+  createdAt            DateTime?               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime?               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt            DateTime?               @map("deleted_at") @db.Timestamptz(6)
+  tenantId             String                  @map("tenant_id")
+  employeeId           String?                 @map("employee_id")
+  name                 String
+  department           String?
+  designation          String?
+  contactNumber        String?                 @map("contact_number")
+  email                String?
+  residenceArea        String?                 @map("residence_area")
+  defaultRouteId       String?                 @map("default_route_id")
+  defaultStopId        String?                 @map("default_stop_id")
+  defaultStopName      String?                 @map("default_stop_name")
+  shiftType            String?                 @map("shift_type") // MORNING|EVENING|BOTH
+  transportType        String?                 @default("BUS") @map("transport_type") // BUS|TAXI|SELF
+  isActive             Boolean?                @default(true) @map("is_active")
   transportRequests    StaffTransportRequest[]
   pushSubscriptions    PushSubscription[]
   transportEnrollments TransportEnrollment[]
@@ -2387,27 +2473,27 @@ model StaffMember {
 /// non-transport modules (leasing, fleet, etc.) don't drag around unused
 /// columns. Backfilled from staff_members columns in Task 3 migration.
 model TransportEnrollment {
-  id              String    @id @default(uuid())
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
-  tenantId        String    @map("tenant_id")
-  employeeId      String    @map("employee_id")
-  defaultRouteId  String?   @map("default_route_id")
-  defaultStopId   String?   @map("default_stop_id")
-  defaultStopName String?   @map("default_stop_name")
-  shiftType       String?   @map("shift_type") // MORNING | EVENING | BOTH
-  transportType   String?   @default("BUS") @map("transport_type") // BUS | TAXI | SELF
-  isActive        Boolean   @default(true) @map("is_active")
+  id              String      @id @default(uuid())
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime?   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime?   @map("deleted_at") @db.Timestamptz(6)
+  tenantId        String      @map("tenant_id")
+  employeeId      String      @map("employee_id")
+  defaultRouteId  String?     @map("default_route_id")
+  defaultStopId   String?     @map("default_stop_id")
+  defaultStopName String?     @map("default_stop_name")
+  shiftType       String?     @map("shift_type") // MORNING | EVENING | BOTH
+  transportType   String?     @default("BUS") @map("transport_type") // BUS | TAXI | SELF
+  isActive        Boolean     @default(true) @map("is_active")
   employee        StaffMember @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   // DB has a partial unique WHERE deleted_at IS NULL — declared as index
   // in Prisma to avoid full-uniqueness conflicts during introspection
   // (Prisma doesn't yet support WHERE clauses on @@unique).
   @@index([employeeId], map: "uniq_transport_enrollments_employee")
-  @@index([tenantId],   map: "idx_transport_enrollments_tenant")
+  @@index([tenantId], map: "idx_transport_enrollments_tenant")
   @@index([defaultRouteId], map: "idx_transport_enrollments_route")
-  @@index([isActive],   map: "idx_transport_enrollments_active")
+  @@index([isActive], map: "idx_transport_enrollments_active")
   @@map("transport_enrollments")
   @@schema("public")
 }
@@ -2456,7 +2542,7 @@ model BleGateway {
   secret               String?
   secretRotatedAt      DateTime? @map("secret_rotated_at") @db.Timestamptz(6)
 
-  @@index([tenantId],  map: "idx_ble_gateways_tenant_id")
+  @@index([tenantId], map: "idx_ble_gateways_tenant_id")
   @@index([gatewayId], map: "idx_ble_gateways_gateway_id")
   @@map("ble_gateways")
   @@schema("public")
@@ -2475,7 +2561,7 @@ model StaffBleTag {
   notes             String?
 
   @@index([tenantId], map: "idx_staff_ble_tags_tenant_id")
-  @@index([tagId],    map: "idx_staff_ble_tags_tag_id")
+  @@index([tagId], map: "idx_staff_ble_tags_tag_id")
   @@map("staff_ble_tags")
   @@schema("public")
 }
@@ -2533,26 +2619,26 @@ model StaffRfidTag {
 }
 
 model BoardingEvent {
-  id            String    @id @default(uuid())
-  createdAt     DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
-  tenantId      String?   @map("tenant_id")
-  scheduleId    String    @map("schedule_id")
-  passengerId   String?   @map("passenger_id")
-  staffMemberId String?   @map("staff_member_id")
+  id            String              @id @default(uuid())
+  createdAt     DateTime?           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime?           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt     DateTime?           @map("deleted_at") @db.Timestamptz(6)
+  tenantId      String?             @map("tenant_id")
+  scheduleId    String              @map("schedule_id")
+  passengerId   String?             @map("passenger_id")
+  staffMemberId String?             @map("staff_member_id")
   method        BoardingEventSource // enforced enum (BLE|QR|NFC|MANUAL|DRIVER_APP|GEOFENCE)
-  direction     String    @default("BOARD") // BOARD|ALIGHT
+  direction     String              @default("BOARD") // BOARD|ALIGHT
   identifier    String?
-  stopId        String?   @map("stop_id")
-  performedAt   DateTime  @default(now()) @map("performed_at") @db.Timestamptz(6)
-  performedBy   String?   @map("performed_by")
-  rawPayload    Json?     @map("raw_payload")
+  stopId        String?             @map("stop_id")
+  performedAt   DateTime            @default(now()) @map("performed_at") @db.Timestamptz(6)
+  performedBy   String?             @map("performed_by")
+  rawPayload    Json?               @map("raw_payload")
   // Phase-2 typed fields — added alongside legacy method/direction strings
-  eventType     BoardingEventType? @map("event_type")
+  eventType     BoardingEventType?  @map("event_type")
   source        BoardingSource?
-  confidence    Float?             // 0–1, BLE RSSI confidence
-  deviceId      String?            @map("device_id")
+  confidence    Float? // 0–1, BLE RSSI confidence
+  deviceId      String?             @map("device_id")
 
   @@index([scheduleId], map: "idx_boarding_events_schedule_id")
   @@index([passengerId], map: "idx_boarding_events_passenger_id")
@@ -2578,7 +2664,7 @@ model BusPreTripCheck {
   notes         String?
   signatureData String?   @map("signature_data")
 
-  defects       DvirDefect[]
+  defects DvirDefect[]
 
   @@index([scheduleId], map: "idx_bus_pretrip_checks_schedule_id")
   @@index([performedAt], map: "idx_bus_pretrip_checks_performed_at")
@@ -2653,52 +2739,52 @@ model TripIncident {
 // Phase 2 cuts each reader over one module at a time.
 
 model Place {
-  id          String    @id @default(uuid())
-  createdAt   DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
-  tenantId    String    @map("tenant_id")
+  id        String    @id @default(uuid())
+  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId  String    @map("tenant_id")
 
   name        String
   /// Short optional code for human cross-reference (e.g. "GAR-DUB-01").
   code        String?
-  type        String    // PlaceType enum values (kept as text so a new type doesn't need a migration)
-  shape       String    // POINT | CIRCLE | POLYGON
+  type        String // PlaceType enum values (kept as text so a new type doesn't need a migration)
+  shape       String // POINT | CIRCLE | POLYGON
   description String?
   address     String?
 
-  centerLat   Float?    @map("center_lat")
-  centerLng   Float?    @map("center_lng")
+  centerLat Float? @map("center_lat")
+  centerLng Float? @map("center_lng")
   /// Circle radius in metres. Only meaningful when shape=CIRCLE.
-  radiusM     Int?      @map("radius_m")
+  radiusM   Int?   @map("radius_m")
   /// Polygon vertices as JSON [{lat, lng}, ...]. Only meaningful when shape=POLYGON.
-  polygon     Json?
+  polygon   Json?
 
   /// Per-type extras — e.g. capacity for a depot, opening hours for a
   /// warehouse, parent route for a stop. Free-form so each consumer can
   /// stash what it needs without a schema change.
-  metadata    Json?
+  metadata Json?
 
   /// Optional soft link to the source row that seeded this Place during
   /// backfill. Lets us reconcile if a legacy row is edited before Phase 2.
-  sourceModule String?   @map("source_module")   // 'bus-ops' | 'logistics' | 'school-bus' | ...
-  sourceId     String?   @map("source_id")
+  sourceModule String? @map("source_module") // 'bus-ops' | 'logistics' | 'school-bus' | ...
+  sourceId     String? @map("source_id")
 
-  active      Boolean   @default(true)
-  createdBy   String?   @map("created_by")
-  updatedBy   String?   @map("updated_by")
+  active    Boolean @default(true)
+  createdBy String? @map("created_by")
+  updatedBy String? @map("updated_by")
 
   // Back-relations from cross-schema consumers (Phase 3b). Named so Prisma
   // can distinguish multiple relations to Place from different call-sites.
-  garages         Garage[]  @relation("GaragePlace")
+  garages         Garage[]    @relation("GaragePlace")
   routeStops      RouteStop[] @relation("RouteStopPlace")
-  vehiclesHomedAt Vehicle[] @relation("VehicleHomeDepot")
-  vehiclesInZone  Vehicle[] @relation("VehicleZone")
-  routesInZone    BusRoute[] @relation("RouteZone")
+  vehiclesHomedAt Vehicle[]   @relation("VehicleHomeDepot")
+  vehiclesInZone  Vehicle[]   @relation("VehicleZone")
+  routesInZone    BusRoute[]  @relation("RouteZone")
 
-  @@index([tenantId],            map: "idx_places_tenant_id")
-  @@index([tenantId, type],      map: "idx_places_tenant_type")
-  @@index([deletedAt],           map: "idx_places_deleted_at")
+  @@index([tenantId], map: "idx_places_tenant_id")
+  @@index([tenantId, type], map: "idx_places_tenant_type")
+  @@index([deletedAt], map: "idx_places_deleted_at")
   @@index([sourceModule, sourceId], map: "idx_places_source")
   @@map("places")
   @@schema("spatial")
@@ -3189,6 +3275,8 @@ model LeaseQuotation {
 
 model LeaseQuotationItem {
   id            String         @id @default(uuid())
+  tenantId      String         @map("tenant_id")
+  tenant        Tenant         @relation("LeaseQuotationItemToTenant", fields: [tenantId], references: [id])
   quotationId   String         @map("quotation_id")
   itemType      String         @map("item_type") // VEHICLE|ACCESSORY|SERVICE|INSURANCE|MAINTENANCE|DRIVER|OTHER
   description   String
@@ -3200,12 +3288,15 @@ model LeaseQuotationItem {
   notes         String?
   quotation     LeaseQuotation @relation(fields: [quotationId], references: [id])
 
+  @@index([tenantId], map: "idx_lease_quotation_items_tenant_id")
   @@map("lease_quotation_items")
   @@schema("public")
 }
 
 model LeaseQuotationVehicle {
   id          String         @id @default(uuid())
+  tenantId    String         @map("tenant_id")
+  tenant      Tenant         @relation("LeaseQuotationVehicleToTenant", fields: [tenantId], references: [id])
   quotationId String         @map("quotation_id")
   vehicleType String         @map("vehicle_type") // SEDAN|SUV|VAN|BUS|TRUCK|LUXURY
   make        String?
@@ -3216,6 +3307,7 @@ model LeaseQuotationVehicle {
   monthlyRate Decimal?       @map("monthly_rate") @db.Decimal
   quotation   LeaseQuotation @relation(fields: [quotationId], references: [id])
 
+  @@index([tenantId], map: "idx_lease_quotation_vehicles_tenant_id")
   @@map("lease_quotation_vehicles")
   @@schema("public")
 }
@@ -3282,6 +3374,8 @@ model LeaseContract2 {
 
 model LeaseContractVehicle {
   id           String         @id @default(uuid())
+  tenantId     String         @map("tenant_id")
+  tenant       Tenant         @relation("LeaseContractVehicleToTenant", fields: [tenantId], references: [id])
   contractId   String         @map("contract_id")
   vehicleId    String?        @map("vehicle_id")
   vehicleType  String         @map("vehicle_type")
@@ -3297,6 +3391,7 @@ model LeaseContractVehicle {
   status       String?        @default("ACTIVE") // ACTIVE|EXCHANGED|RETURNED
   contract     LeaseContract2 @relation(fields: [contractId], references: [id])
 
+  @@index([tenantId], map: "idx_lease_contract_vehicles_tenant_id")
   @@map("lease_contract_vehicles")
   @@schema("public")
 }
@@ -3804,6 +3899,8 @@ model LeaseInvoice {
 
 model LeaseInvoiceLine {
   id          String       @id @default(uuid())
+  tenantId    String       @map("tenant_id")
+  tenant      Tenant       @relation("LeaseInvoiceLineToTenant", fields: [tenantId], references: [id])
   invoiceId   String       @map("invoice_id")
   contractId  String?      @map("contract_id")
   vehicleRef  String?      @map("vehicle_ref")
@@ -3815,6 +3912,7 @@ model LeaseInvoiceLine {
   currency    String?      @default("AED")
   invoice     LeaseInvoice @relation(fields: [invoiceId], references: [id])
 
+  @@index([tenantId], map: "idx_lease_invoice_lines_tenant_id")
   @@map("lease_invoice_lines")
   @@schema("public")
 }
@@ -3953,12 +4051,36 @@ model Tenant {
   ipAllowlists       IpAllowlist[]
   subscription       Subscription?
 
+  // Rental domain relations
+  rentalCustomers         RentalCustomer[]         @relation("RentalCustomerToTenant")
+  rentalBookings          RentalBooking[]          @relation("RentalBookingToTenant")
+  rentalRateQuotes        RentalRateQuote[]        @relation("RentalRateQuoteToTenant")
+  rentalAgreements        RentalAgreement[]        @relation("RentalAgreementToTenant")
+  rentalVehicleExchanges  RentalVehicleExchange[]  @relation("RentalVehicleExchangeToTenant")
+  rentalExtensions        RentalExtension[]        @relation("RentalExtensionToTenant")
+  rentalPayments          RentalPayment[]          @relation("RentalPaymentToTenant")
+  rentalAncillaries       RentalAncillary[]        @relation("RentalAncillaryToTenant")
+  rentalAdditionalCharges RentalAdditionalCharge[] @relation("RentalAdditionalChargeToTenant")
+  rentalInvoices          RentalInvoice[]          @relation("RentalInvoiceToTenant")
+  rentalInvoiceLineItems  RentalInvoiceLineItem[]  @relation("RentalInvoiceLineItemToTenant")
+  rentalInvoicePayments   RentalInvoicePayment[]   @relation("RentalInvoicePaymentToTenant")
+  vehicleInspections      VehicleInspection[]      @relation("VehicleInspectionToTenant")
+  damageClaims            DamageClaim[]            @relation("DamageClaimToTenant")
+  rateEvents              RateEvent[]              @relation("RateEventToTenant")
+
+  // Lease domain child relations
+  leaseQuotationItems    LeaseQuotationItem[]    @relation("LeaseQuotationItemToTenant")
+  leaseQuotationVehicles LeaseQuotationVehicle[] @relation("LeaseQuotationVehicleToTenant")
+  leaseContractVehicles  LeaseContractVehicle[]  @relation("LeaseContractVehicleToTenant")
+  leaseInvoiceLines      LeaseInvoiceLine[]      @relation("LeaseInvoiceLineToTenant")
+
   /// Fleet routing / VRPTW org-wide defaults. Bottom of the sourcing
   /// hierarchy (RoutePassenger → BusRoute → Tenant). Nullable so the
   /// resolver can fall through to compiled-in constants if the tenant
   /// hasn't configured them.
-  defaultPickupBufferMin      Int?    @map("default_pickup_buffer_min")
-  defaultRequiredArrivalTime  String? @map("default_required_arrival_time") // 'HH:MM' 24h
+  defaultPickupBufferMin     Int?        @map("default_pickup_buffer_min")
+  defaultRequiredArrivalTime String?     @map("default_required_arrival_time") // 'HH:MM' 24h
+  workOrders                 WorkOrder[]
 
   @@map("tenants")
   @@schema("public")
@@ -4210,13 +4332,14 @@ model Customer {
   // Status
   status String? @default("ACTIVE") // ACTIVE|INACTIVE
 
-  region     CustomerHierarchy? @relation("CustomerRegion", fields: [regionId], references: [id])
-  department CustomerHierarchy? @relation("CustomerDepartment", fields: [departmentId], references: [id])
-  unit       CustomerHierarchy? @relation("CustomerUnit", fields: [unitId], references: [id])
+  region       CustomerHierarchy?    @relation("CustomerRegion", fields: [regionId], references: [id])
+  department   CustomerHierarchy?    @relation("CustomerDepartment", fields: [departmentId], references: [id])
+  unit         CustomerHierarchy?    @relation("CustomerUnit", fields: [unitId], references: [id])
   documents    CustomerDocument[]
   interactions CustomerInteraction[]
   lessee       Lessee?
 
+  @@index([tenantId])
   @@map("customers")
   @@schema("public")
 }
@@ -4325,7 +4448,7 @@ model FinanceExpense {
 
   vehicleId    String? @map("vehicle_id")
   driverId     String? @map("driver_id")
-  costCentre   String? @map("cost_centre")   // RAC|LEASING|LOGISTICS|STAFF|SCHOOL|ADMIN
+  costCentre   String? @map("cost_centre") // RAC|LEASING|LOGISTICS|STAFF|SCHOOL|ADMIN
   profitCentre String? @map("profit_centre") // PC-RENTAL|PC-LEASING|PC-LOGISTICS|PC-BUS|PC-MAINTENANCE|PC-ADMIN
 
   receiptUrl      String?   @map("receipt_url")
@@ -4342,7 +4465,7 @@ model FinanceExpense {
   // Tenant scope (added in 20260811200000_create_missing_finance_tables).
   // Text per dev DB convention; not a Prisma FK (multi-tenant data
   // ownership is enforced at the application/RPC layer, not the DB).
-  tenantId        String?  @map("tenant_id")
+  tenantId String? @map("tenant_id")
 
   @@map("finance_expenses")
   @@schema("finance")
@@ -4752,24 +4875,24 @@ model UsageEvent {
 // We keep a soft delete (`revokedAt`) so we can disable a single device
 // without losing the history.
 model PushSubscription {
-  id           String      @id @default(uuid())
-  createdAt    DateTime?   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime?   @updatedAt @map("updated_at") @db.Timestamptz(6)
-  revokedAt    DateTime?   @map("revoked_at") @db.Timestamptz(6)
-  tenantId     String?     @map("tenant_id")
-  staffMemberId String     @map("staff_member_id")
-  endpoint     String      @unique
-  p256dh       String
-  auth         String
-  userAgent    String?     @map("user_agent")
+  id                String    @id @default(uuid())
+  createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(6)
+  tenantId          String?   @map("tenant_id")
+  staffMemberId     String    @map("staff_member_id")
+  endpoint          String    @unique
+  p256dh            String
+  auth              String
+  userAgent         String?   @map("user_agent")
   // Reminder opt-ins (so the user can mute "Boarding call" but keep
   // "Running late" alerts). Default to all on.
-  optInTripReminder   Boolean? @default(true) @map("opt_in_trip_reminder")
-  optInRunningLate    Boolean? @default(true) @map("opt_in_running_late")
-  optInDelay          Boolean? @default(true) @map("opt_in_delay")
-  lastSentAt    DateTime?  @map("last_sent_at") @db.Timestamptz(6)
-  lastErrorAt   DateTime?  @map("last_error_at") @db.Timestamptz(6)
-  lastErrorCode Int?       @map("last_error_code")
+  optInTripReminder Boolean?  @default(true) @map("opt_in_trip_reminder")
+  optInRunningLate  Boolean?  @default(true) @map("opt_in_running_late")
+  optInDelay        Boolean?  @default(true) @map("opt_in_delay")
+  lastSentAt        DateTime? @map("last_sent_at") @db.Timestamptz(6)
+  lastErrorAt       DateTime? @map("last_error_at") @db.Timestamptz(6)
+  lastErrorCode     Int?      @map("last_error_code")
 
   staffMember StaffMember @relation(fields: [staffMemberId], references: [id], onDelete: Cascade)
 
@@ -4795,59 +4918,59 @@ model FinanceInvoice {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  invoiceNumber  String  @unique @map("invoice_number")
-  clientName     String  @map("client_name")
-  clientEmail    String? @map("client_email")
-  clientPhone    String? @map("client_phone")
-  clientAddress  String? @map("client_address")
-  serviceType    String  @default("GENERAL") @map("service_type")
-  module         String  @default("GENERAL")
-  description    String?
-  lineItems      Json    @default("[]") @map("line_items")
-  lineItemsJson  Json?   @map("line_items_json")
-  subtotal       Decimal @default(0) @db.Decimal(14, 2)
-  discountAmount Decimal @default(0) @map("discount_amount") @db.Decimal(14, 2)
-  vatRate        Decimal @default(5) @map("vat_rate") @db.Decimal(5, 2)
-  vatAmount      Decimal @default(0) @map("vat_amount") @db.Decimal(14, 2)
-  totalAmount    Decimal @default(0) @map("total_amount") @db.Decimal(14, 2)
-  paidAmount     Decimal @default(0) @map("paid_amount") @db.Decimal(14, 2)
-  currency       String  @default("AED")
-  issueDate      DateTime @default(now()) @map("issue_date") @db.Date
-  dueDate        DateTime? @map("due_date") @db.Date
-  paymentStatus  String  @default("DRAFT") @map("payment_status")
-  notes          String?
+  invoiceNumber      String    @unique @map("invoice_number")
+  clientName         String    @map("client_name")
+  clientEmail        String?   @map("client_email")
+  clientPhone        String?   @map("client_phone")
+  clientAddress      String?   @map("client_address")
+  serviceType        String    @default("GENERAL") @map("service_type")
+  module             String    @default("GENERAL")
+  description        String?
+  lineItems          Json      @default("[]") @map("line_items")
+  lineItemsJson      Json?     @map("line_items_json")
+  subtotal           Decimal   @default(0) @db.Decimal(14, 2)
+  discountAmount     Decimal   @default(0) @map("discount_amount") @db.Decimal(14, 2)
+  vatRate            Decimal   @default(5) @map("vat_rate") @db.Decimal(5, 2)
+  vatAmount          Decimal   @default(0) @map("vat_amount") @db.Decimal(14, 2)
+  totalAmount        Decimal   @default(0) @map("total_amount") @db.Decimal(14, 2)
+  paidAmount         Decimal   @default(0) @map("paid_amount") @db.Decimal(14, 2)
+  currency           String    @default("AED")
+  issueDate          DateTime  @default(now()) @map("issue_date") @db.Date
+  dueDate            DateTime? @map("due_date") @db.Date
+  paymentStatus      String    @default("DRAFT") @map("payment_status")
+  notes              String?
   // Polymorphic back-link to source module record
-  referenceId    String?   @map("reference_id") @db.Uuid
-  referenceType  String?   @map("reference_type")
-  createdBy      String?   @map("created_by")
-  tenantId       String?   @map("tenant_id")
+  referenceId        String?   @map("reference_id") @db.Uuid
+  referenceType      String?   @map("reference_type")
+  createdBy          String?   @map("created_by")
+  tenantId           String?   @map("tenant_id")
   // Structured source fields — richer than the polymorphic pair above
-  moduleSource       String?  @map("module_source")
-  sourceEntityType   String?  @map("source_entity_type")
-  sourceEntityId     String?  @map("source_entity_id")
-  sourceEntityNo     String?  @map("source_entity_no")
-  sourceCustomerId   String?  @map("source_customer_id")
-  sourceCustomerName String?  @map("source_customer_name")
-  sourceContractIds  String[] @map("source_contract_ids")
-  sourcePayload      Json     @default("{}") @map("source_payload")
+  moduleSource       String?   @map("module_source")
+  sourceEntityType   String?   @map("source_entity_type")
+  sourceEntityId     String?   @map("source_entity_id")
+  sourceEntityNo     String?   @map("source_entity_no")
+  sourceCustomerId   String?   @map("source_customer_id")
+  sourceCustomerName String?   @map("source_customer_name")
+  sourceContractIds  String[]  @map("source_contract_ids")
+  sourcePayload      Json      @default("{}") @map("source_payload")
 
   // ── Extended columns — migration 20260810000001_finance_extended_columns ──
   // Previously added at runtime by bootstrap() / ensureTable(); now
   // migration-managed. All nullable for backward compatibility with rows
   // that predate these columns.
-  branch             String?  @default("Dubai")        // originating branch label
-  vehicleNo          String?  @map("vehicle_no")       // registration / plate
-  contractType       String?  @map("contract_type")    // e.g. LEASE | RENTAL | LOGISTICS
+  branch       String? @default("Dubai") // originating branch label
+  vehicleNo    String? @map("vehicle_no") // registration / plate
+  contractType String? @map("contract_type") // e.g. LEASE | RENTAL | LOGISTICS
 
   // Branch foreign key — links to the tenant_branches record that issued the invoice.
   // Nullable: invoices created before branch management existed have no FK.
-  branchId           String?  @map("branch_id") @db.Uuid
-  branchName         String?  @map("branch_name")
-  branchTradeLicense String?  @map("branch_trade_license")
-  branchAddress      String?  @map("branch_address")
+  branchId           String? @map("branch_id") @db.Uuid
+  branchName         String? @map("branch_name")
+  branchTradeLicense String? @map("branch_trade_license")
+  branchAddress      String? @map("branch_address")
 
   // Relations
-  tenantBranch TenantBranch?    @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  tenantBranch TenantBranch?              @relation(fields: [branchId], references: [id], onDelete: SetNull)
   payments     FinancePayment[]
   allocations  FinancePaymentAllocation[]
 
@@ -4871,30 +4994,30 @@ model FinanceJournalEntry {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  jeNumber    String  @unique @map("je_number")
-  entryDate   DateTime @map("entry_date") @db.Date
-  periodYear  Int      @map("period_year")
-  periodMonth Int      @map("period_month")
-  narration   String
-  reference   String?
-  sourceType  String  @default("MANUAL") @map("source_type")
-  sourceId    String? @map("source_id")
+  jeNumber     String    @unique @map("je_number")
+  entryDate    DateTime  @map("entry_date") @db.Date
+  periodYear   Int       @map("period_year")
+  periodMonth  Int       @map("period_month")
+  narration    String
+  reference    String?
+  sourceType   String    @default("MANUAL") @map("source_type")
+  sourceId     String?   @map("source_id")
   // DRAFT | APPROVED | POSTED | REVERSED
-  status      String  @default("DRAFT")
-  totalDebit  Decimal @default(0) @map("total_debit") @db.Decimal(15, 2)
-  totalCredit Decimal @default(0) @map("total_credit") @db.Decimal(15, 2)
-  isBalanced  Boolean @default(false) @map("is_balanced")
+  status       String    @default("DRAFT")
+  totalDebit   Decimal   @default(0) @map("total_debit") @db.Decimal(15, 2)
+  totalCredit  Decimal   @default(0) @map("total_credit") @db.Decimal(15, 2)
+  isBalanced   Boolean   @default(false) @map("is_balanced")
   // Reversal cross-references
-  reversedJeId String? @map("reversed_je_id")
-  reversalJeId String? @map("reversal_je_id")
-  preparedBy  String?   @map("prepared_by")
-  approvedBy  String?   @map("approved_by")
-  postedBy    String?   @map("posted_by")
-  approvedAt  DateTime? @map("approved_at") @db.Timestamptz(6)
-  postedAt    DateTime? @map("posted_at") @db.Timestamptz(6)
-  notes       String?
-  currency    String  @default("AED")
-  tenantId    String? @map("tenant_id")
+  reversedJeId String?   @map("reversed_je_id")
+  reversalJeId String?   @map("reversal_je_id")
+  preparedBy   String?   @map("prepared_by")
+  approvedBy   String?   @map("approved_by")
+  postedBy     String?   @map("posted_by")
+  approvedAt   DateTime? @map("approved_at") @db.Timestamptz(6)
+  postedAt     DateTime? @map("posted_at") @db.Timestamptz(6)
+  notes        String?
+  currency     String    @default("AED")
+  tenantId     String?   @map("tenant_id")
 
   lines FinanceJournalLine[]
 
@@ -4938,15 +5061,15 @@ model FinanceJournalLine {
 //
 // DO NOT recreate this table at runtime.
 model FinancePayment {
-  id            String   @id @default(uuid()) @db.Uuid
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id        String   @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   // FK to the invoice being paid. Nullable: a payment can be recorded
   // before it is matched to a specific invoice (unallocated cash).
-  invoiceId     String?  @map("invoice_id") @db.Uuid
-  invoice       FinanceInvoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  invoiceId String?         @map("invoice_id") @db.Uuid
+  invoice   FinanceInvoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
 
-  tenantId      String?  @map("tenant_id")
+  tenantId String? @map("tenant_id")
 
   amount        Decimal  @db.Decimal(14, 2)
   paymentDate   DateTime @default(now()) @map("payment_date") @db.Date
@@ -4957,7 +5080,7 @@ model FinancePayment {
 
   allocations FinancePaymentAllocation[]
 
-  @@index([tenantId],  map: "idx_finance_payments_tenant")
+  @@index([tenantId], map: "idx_finance_payments_tenant")
   @@index([invoiceId], map: "idx_finance_payments_invoice")
   @@map("finance_payments")
   @@schema("finance")
@@ -5001,34 +5124,34 @@ model BillingRun {
 //
 // DO NOT recreate this table at runtime.
 model TenantBranch {
-  id                     String    @id @default(uuid()) @db.Uuid
-  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt              DateTime? @map("deleted_at") @db.Timestamptz(6)
+  id        String    @id @default(uuid()) @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  tenantId               String    @map("tenant_id")
-  branchName             String    @map("branch_name")
+  tenantId              String    @map("tenant_id")
+  branchName            String    @map("branch_name")
   // UAE emirate code: DUBAI | ABU_DHABI | SHARJAH | AJMAN | etc.
-  emirate                String    @default("DUBAI")
-  tradeLicenseNo         String?   @map("trade_license_no")
-  tradeLicenseAuthority  String?   @map("trade_license_authority")
-  tradeLicenseExpiry     DateTime? @map("trade_license_expiry") @db.Date
-  billingAddress         String?   @map("billing_address")
-  billingCity            String?   @map("billing_city")
-  billingPoBox           String?   @map("billing_po_box")
-  contactName            String?   @map("contact_name")
-  contactEmail           String?   @map("contact_email")
-  contactPhone           String?   @map("contact_phone")
-  costCenterCode         String?   @map("cost_center_code")
-  isDefault              Boolean   @default(false) @map("is_default")
-  isActive               Boolean   @default(true)  @map("is_active")
-  notes                  String?
+  emirate               String    @default("DUBAI")
+  tradeLicenseNo        String?   @map("trade_license_no")
+  tradeLicenseAuthority String?   @map("trade_license_authority")
+  tradeLicenseExpiry    DateTime? @map("trade_license_expiry") @db.Date
+  billingAddress        String?   @map("billing_address")
+  billingCity           String?   @map("billing_city")
+  billingPoBox          String?   @map("billing_po_box")
+  contactName           String?   @map("contact_name")
+  contactEmail          String?   @map("contact_email")
+  contactPhone          String?   @map("contact_phone")
+  costCenterCode        String?   @map("cost_center_code")
+  isDefault             Boolean   @default(false) @map("is_default")
+  isActive              Boolean   @default(true) @map("is_active")
+  notes                 String?
 
   // Finance invoices issued under this branch
   invoices FinanceInvoice[]
 
   @@index([tenantId], map: "idx_tenant_branches_tenant")
-  @@index([emirate],  map: "idx_tenant_branches_emirate")
+  @@index([emirate], map: "idx_tenant_branches_emirate")
   @@map("tenant_branches")
   @@schema("public")
 }
@@ -5039,21 +5162,21 @@ model TenantBranch {
 // dimension) — profit centres track P&L by business unit.
 // Seeded with 7 standard entries by migration 20260810000006.
 model FinanceProfitCentre {
-  id          String   @id @default(uuid()) @db.Uuid
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt       @map("updated_at") @db.Timestamptz(6)
+  id        String   @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  code        String  @unique
+  code        String   @unique
   name        String
   description String?
-  parentCode  String? @map("parent_code")
+  parentCode  String?  @map("parent_code")
   // RENTAL | LEASING | LOGISTICS | BUS | MAINTENANCE | GENERAL
   module      String?
-  isActive    Boolean @default(true)  @map("is_active")
+  isActive    Boolean  @default(true) @map("is_active")
   budget      Decimal? @db.Decimal(15, 2)
-  tenantId    String? @map("tenant_id")
+  tenantId    String?  @map("tenant_id")
 
-  @@index([code],     map: "idx_profit_centres_code")
+  @@index([code], map: "idx_profit_centres_code")
   @@index([tenantId], map: "idx_profit_centres_tenant")
   @@map("finance_profit_centres")
   @@schema("finance")
@@ -5066,12 +5189,12 @@ model FinanceProfitCentre {
 // Payment status: UNPAID → PARTIALLY_PAID → PAID (or OVERDUE | VOID)
 // Source-to-finance lineage: MAINTENANCE_REQUEST | CARRIER_SETTLEMENT | VENDOR_INVOICE | MANUAL
 model FinancePayable {
-  id            String    @id @default(uuid()) @db.Uuid
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime  @updatedAt       @map("updated_at") @db.Timestamptz(6)
-  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+  id        String    @id @default(uuid()) @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  payableNumber String  @unique @map("payable_number")
+  payableNumber String @unique @map("payable_number")
 
   vendorId    String? @map("vendor_id")
   vendorName  String  @map("vendor_name")
@@ -5079,47 +5202,47 @@ model FinancePayable {
   vendorPhone String? @map("vendor_phone")
 
   // MAINTENANCE | LOGISTICS | LEASING | GENERAL
-  module      String?
+  module     String?
   // MAINTENANCE_REQUEST | CARRIER_SETTLEMENT | VENDOR_INVOICE | MANUAL
-  sourceType  String? @map("source_type")
-  sourceId    String? @map("source_id")
+  sourceType String? @map("source_type")
+  sourceId   String? @map("source_id")
 
   description String?
   lineItems   Json    @default("[]") @map("line_items")
 
-  subtotal     Decimal @default(0) @map("subtotal")     @db.Decimal(15, 2)
-  vatAmount    Decimal @default(0) @map("vat_amount")   @db.Decimal(15, 2)
-  totalAmount  Decimal @default(0) @map("total_amount") @db.Decimal(15, 2)
-  paidAmount   Decimal @default(0) @map("paid_amount")  @db.Decimal(15, 2)
-  currency     String  @default("AED")
+  subtotal    Decimal @default(0) @map("subtotal") @db.Decimal(15, 2)
+  vatAmount   Decimal @default(0) @map("vat_amount") @db.Decimal(15, 2)
+  totalAmount Decimal @default(0) @map("total_amount") @db.Decimal(15, 2)
+  paidAmount  Decimal @default(0) @map("paid_amount") @db.Decimal(15, 2)
+  currency    String  @default("AED")
 
-  issueDate    DateTime  @default(now()) @map("issue_date") @db.Date
-  dueDate      DateTime? @map("due_date") @db.Date
+  issueDate DateTime  @default(now()) @map("issue_date") @db.Date
+  dueDate   DateTime? @map("due_date") @db.Date
 
   // UNPAID | PARTIALLY_PAID | PAID | OVERDUE | VOID
   paymentStatus String @default("UNPAID") @map("payment_status")
   // DRAFT | SUBMITTED | APPROVED | POSTED
   status        String @default("DRAFT")
 
-  costCentre      String? @map("cost_centre")
-  profitCentre    String? @map("profit_centre")
-  journalEntryId  String? @map("journal_entry_id")
+  costCentre     String? @map("cost_centre")
+  profitCentre   String? @map("profit_centre")
+  journalEntryId String? @map("journal_entry_id")
 
-  preparedBy  String?   @map("prepared_by")
-  approvedBy  String?   @map("approved_by")
-  postedBy    String?   @map("posted_by")
-  approvedAt  DateTime? @map("approved_at") @db.Timestamptz(6)
-  postedAt    DateTime? @map("posted_at")   @db.Timestamptz(6)
+  preparedBy String?   @map("prepared_by")
+  approvedBy String?   @map("approved_by")
+  postedBy   String?   @map("posted_by")
+  approvedAt DateTime? @map("approved_at") @db.Timestamptz(6)
+  postedAt   DateTime? @map("posted_at") @db.Timestamptz(6)
 
   notes    String?
   tenantId String? @map("tenant_id")
 
   allocations FinancePaymentAllocation[]
 
-  @@index([tenantId],             map: "idx_finance_payables_tenant")
-  @@index([status],               map: "idx_finance_payables_status")
-  @@index([paymentStatus],        map: "idx_finance_payables_payment_status")
-  @@index([vendorId],             map: "idx_finance_payables_vendor")
+  @@index([tenantId], map: "idx_finance_payables_tenant")
+  @@index([status], map: "idx_finance_payables_status")
+  @@index([paymentStatus], map: "idx_finance_payables_payment_status")
+  @@index([vendorId], map: "idx_finance_payables_vendor")
   @@index([sourceType, sourceId], map: "idx_finance_payables_source")
   @@map("finance_payables")
   @@schema("finance")
@@ -5134,10 +5257,10 @@ model FinancePayable {
 model FinanceDebitNote {
   id        String    @id @default(uuid()) @db.Uuid
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime  @updatedAt       @map("updated_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  dnNumber  String @unique @map("dn_number")
+  dnNumber String @unique @map("dn_number")
 
   // AP-side: debit note against a vendor payable
   originalPayableId String? @map("original_payable_id")
@@ -5153,29 +5276,29 @@ model FinanceDebitNote {
   module String?
 
   // PRICE_CORRECTION | RETURN_OF_GOODS | SERVICE_SHORTFALL | OVERCHARGE | UNDERBILLING | OTHER
-  reasonCode   String @map("reason_code")
+  reasonCode   String  @map("reason_code")
   reasonDetail String? @map("reason_detail")
 
-  lineItems   Json    @default("[]") @map("line_items")
-  subtotal    Decimal @default(0) @db.Decimal(15, 2)
-  vatAmount   Decimal @default(0) @map("vat_amount")   @db.Decimal(15, 2)
-  totalAmount Decimal @default(0) @map("total_amount") @db.Decimal(15, 2)
-  currency    String  @default("AED")
+  lineItems   Json     @default("[]") @map("line_items")
+  subtotal    Decimal  @default(0) @db.Decimal(15, 2)
+  vatAmount   Decimal  @default(0) @map("vat_amount") @db.Decimal(15, 2)
+  totalAmount Decimal  @default(0) @map("total_amount") @db.Decimal(15, 2)
+  currency    String   @default("AED")
   issueDate   DateTime @default(now()) @map("issue_date") @db.Date
 
   // DRAFT | ISSUED | APPLIED | VOIDED
   status        String  @default("DRAFT")
   appliedAmount Decimal @default(0) @map("applied_amount") @db.Decimal(15, 2)
 
-  issuedBy    String? @map("issued_by")
-  approvedBy  String? @map("approved_by")
-  notes       String?
-  tenantId    String? @map("tenant_id")
+  issuedBy   String? @map("issued_by")
+  approvedBy String? @map("approved_by")
+  notes      String?
+  tenantId   String? @map("tenant_id")
 
-  @@index([tenantId],           map: "idx_finance_debit_notes_tenant")
-  @@index([status],             map: "idx_finance_debit_notes_status")
-  @@index([originalPayableId],  map: "idx_finance_debit_notes_payable")
-  @@index([originalInvoiceId],  map: "idx_finance_debit_notes_invoice")
+  @@index([tenantId], map: "idx_finance_debit_notes_tenant")
+  @@index([status], map: "idx_finance_debit_notes_status")
+  @@index([originalPayableId], map: "idx_finance_debit_notes_payable")
+  @@index([originalInvoiceId], map: "idx_finance_debit_notes_invoice")
   @@map("finance_debit_notes")
   @@schema("finance")
 }
@@ -5200,8 +5323,8 @@ model FinancePaymentAllocation {
   invoice   FinanceInvoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
 
   // AP-side: links to a vendor payable
-  payableId String?          @map("payable_id") @db.Uuid
-  payable   FinancePayable?  @relation(fields: [payableId], references: [id], onDelete: SetNull)
+  payableId String?         @map("payable_id") @db.Uuid
+  payable   FinancePayable? @relation(fields: [payableId], references: [id], onDelete: SetNull)
 
   allocatedAmount Decimal  @map("allocated_amount") @db.Decimal(14, 2)
   allocationDate  DateTime @default(now()) @map("allocation_date") @db.Date
@@ -5215,7 +5338,7 @@ model FinancePaymentAllocation {
   @@index([paymentId], map: "idx_payment_alloc_payment")
   @@index([invoiceId], map: "idx_payment_alloc_invoice")
   @@index([payableId], map: "idx_payment_alloc_payable")
-  @@index([tenantId],  map: "idx_payment_alloc_tenant")
+  @@index([tenantId], map: "idx_payment_alloc_tenant")
   @@map("finance_payment_allocations")
   @@schema("finance")
 }
@@ -5235,20 +5358,20 @@ model FinancePaymentAllocation {
 /// severity and photo evidence. Owned by the Fleet domain.
 /// Closes gap 1 of the mobile-sync doc.
 model DvirDefect {
-  id                          String    @id @default(uuid())
-  createdAt                   DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                   DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt                   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  id        String    @id @default(uuid())
+  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  tenantId                    String?  @map("tenant_id")
-  dvirId                      String   @map("dvir_id")
-  component                   String   // BRAKES | LIGHTS | TIRES | STEERING | EXHAUST | ... (free-form for now)
-  position                    String?  // FRONT_LEFT | REAR_RIGHT | CENTER | GENERIC
-  severity                    String   // MINOR | MAJOR | CRITICAL | OUT_OF_SERVICE
-  description                 String?
-  photoUrl                    String?  @map("photo_url")
-  requiresImmediateAttention  Boolean  @default(false) @map("requires_immediate_attention")
-  status                      String   @default("OPEN") // OPEN | RESOLVED | DEFERRED
+  tenantId                   String? @map("tenant_id")
+  dvirId                     String  @map("dvir_id")
+  component                  String // BRAKES | LIGHTS | TIRES | STEERING | EXHAUST | ... (free-form for now)
+  position                   String? // FRONT_LEFT | REAR_RIGHT | CENTER | GENERIC
+  severity                   String // MINOR | MAJOR | CRITICAL | OUT_OF_SERVICE
+  description                String?
+  photoUrl                   String? @map("photo_url")
+  requiresImmediateAttention Boolean @default(false) @map("requires_immediate_attention")
+  status                     String  @default("OPEN") // OPEN | RESOLVED | DEFERRED
 
   dvir BusPreTripCheck @relation(fields: [dvirId], references: [id], onDelete: Cascade)
 
@@ -5275,7 +5398,7 @@ model VehicleIssueReport {
   vehicleId       String    @map("vehicle_id")
   driverId        String?   @map("driver_id")
   issueType       String    @map("issue_type") // MECHANICAL | ELECTRICAL | BODY | DAMAGE | CLEANLINESS | ODOR | OTHER
-  severity        String    // MINOR | MODERATE | SEVERE | OUT_OF_SERVICE
+  severity        String // MINOR | MODERATE | SEVERE | OUT_OF_SERVICE
   description     String?
   photoUrls       Json?     @map("photo_urls")
   reportedAt      DateTime  @default(now()) @map("reported_at") @db.Timestamptz(6)
@@ -5303,20 +5426,20 @@ model CustomerInteraction {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  tenantId          String?   @map("tenant_id")
-  customerId        String    @map("customer_id")
-  driverId          String?   @map("driver_id")
-  tripId            String?   @map("trip_id") // soft reference to TripLog (no FK to allow multi-table trip references)
-  interactionType   String    @map("interaction_type") // NOTE | COMPLAINT | REQUEST | PRAISE | ISSUE | PICKUP | DROP_OFF
-  channel           String?   // IN_PERSON | PHONE | EMAIL | WHATSAPP | APP
-  notes             String?
-  location          String?
-  latitude          Decimal?  @db.Decimal
-  longitude         Decimal?  @db.Decimal
-  photoUrls         Json?     @map("photo_urls")
-  occurredAt        DateTime  @map("occurred_at") @db.Timestamptz(6)
-  followUpRequired  Boolean   @default(false) @map("follow_up_required")
-  followUpAt        DateTime? @map("follow_up_at") @db.Timestamptz(6)
+  tenantId         String?   @map("tenant_id")
+  customerId       String    @map("customer_id")
+  driverId         String?   @map("driver_id")
+  tripId           String?   @map("trip_id") // soft reference to TripLog (no FK to allow multi-table trip references)
+  interactionType  String    @map("interaction_type") // NOTE | COMPLAINT | REQUEST | PRAISE | ISSUE | PICKUP | DROP_OFF
+  channel          String? // IN_PERSON | PHONE | EMAIL | WHATSAPP | APP
+  notes            String?
+  location         String?
+  latitude         Decimal?  @db.Decimal
+  longitude        Decimal?  @db.Decimal
+  photoUrls        Json?     @map("photo_urls")
+  occurredAt       DateTime  @map("occurred_at") @db.Timestamptz(6)
+  followUpRequired Boolean   @default(false) @map("follow_up_required")
+  followUpAt       DateTime? @map("follow_up_at") @db.Timestamptz(6)
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
 
@@ -5382,7 +5505,7 @@ model EventOutbox {
   tenantId      String    @db.Uuid
   correlationId String?   @db.Uuid
   causationId   String?   @db.Uuid
-  actor         String?   // userId or 'system'
+  actor         String? // userId or 'system'
   /// Event-specific data. Typed by the consumer based on eventType
   /// + eventVersion (typically via Zod).
   payload       Json
@@ -5443,6 +5566,7 @@ enum TransportRequestType {
   STOP_CHANGE
   TEMP_TRIP
   SPECIAL
+
   @@schema("public")
 }
 
@@ -5451,6 +5575,7 @@ enum TransportRequestStatus {
   APPROVED
   REJECTED
   FULFILLED
+
   @@schema("public")
 }
 
@@ -5458,6 +5583,7 @@ enum BoardingEventType {
   BOARDED
   ALIGHTED
   NO_SHOW
+
   // Postgres type is boarding_event_type — without @@map Prisma emits
   // public."BoardingEventType", which does not exist. Same defect that
   // TripPassengerStatus carried.
@@ -5472,6 +5598,7 @@ enum BoardingSource {
   DRIVER
   MANUAL
   DISPATCHER
+
   // See BoardingEventType above — Postgres type is boarding_source.
   @@map("boarding_source")
   @@schema("public")
@@ -5489,6 +5616,7 @@ enum BoardingEventSource {
   MANUAL
   DRIVER_APP
   GEOFENCE
+
   @@map("boarding_event_source")
   @@schema("public")
 }
@@ -5501,6 +5629,7 @@ enum TripPassengerStatus {
   NO_SHOW
   CANCELLED
   WAITLISTED
+
   // The Postgres type is trip_passenger_status. Without this @@map,
   // Prisma emitted public."TripPassengerStatus" and every write that
   // set a status failed with 42704 type does not exist — including the
@@ -5534,8 +5663,8 @@ model TransportRequest {
   approvedBy  String?                @map("approved_by")
   approvedAt  DateTime?              @map("approved_at") @db.Timestamptz(6)
 
-  @@index([tenantId],    map: "idx_transport_requests_tenant_id")
-  @@index([status],      map: "idx_transport_requests_status")
+  @@index([tenantId], map: "idx_transport_requests_tenant_id")
+  @@index([status], map: "idx_transport_requests_status")
   @@index([requestType], map: "idx_transport_requests_type")
   @@map("transport_requests")
   @@schema("public")
@@ -5554,31 +5683,31 @@ model TransportRequest {
 ///   PENALTY  — plan legal but scored (penaltyScore) — future optimiser
 ///              picks lowest total; today the evaluator only surfaces it
 model PlanningConstraint {
-  id             String    @id @default(uuid())
-  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
-  tenantId       String    @map("tenant_id")
+  id        String    @id @default(uuid())
+  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId  String    @map("tenant_id")
 
-  name           String
-  kind           String
-  action         String    @default("BLOCK")
-  penaltyScore   Decimal?  @map("penalty_score") @db.Decimal(10, 2)
+  name         String
+  kind         String
+  action       String   @default("BLOCK")
+  penaltyScore Decimal? @map("penalty_score") @db.Decimal(10, 2)
 
-  params         Json      @default("{}")
+  params Json @default("{}")
 
-  effectiveFrom  DateTime? @map("effective_from") @db.Date
-  effectiveTo    DateTime? @map("effective_to")   @db.Date
+  effectiveFrom DateTime? @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
 
-  reason         String?
-  isEnabled      Boolean   @default(true) @map("is_enabled")
-  createdBy      String?   @map("created_by")
-  updatedBy      String?   @map("updated_by")
+  reason    String?
+  isEnabled Boolean @default(true) @map("is_enabled")
+  createdBy String? @map("created_by")
+  updatedBy String? @map("updated_by")
 
-  @@index([tenantId],         map: "idx_planning_constraints_tenant")
-  @@index([tenantId, kind],   map: "idx_planning_constraints_tenant_kind")
-  @@index([deletedAt],        map: "idx_planning_constraints_deleted")
-  @@index([isEnabled],        map: "idx_planning_constraints_enabled")
+  @@index([tenantId], map: "idx_planning_constraints_tenant")
+  @@index([tenantId, kind], map: "idx_planning_constraints_tenant_kind")
+  @@index([deletedAt], map: "idx_planning_constraints_deleted")
+  @@index([isEnabled], map: "idx_planning_constraints_enabled")
   @@map("planning_constraints")
   @@schema("public")
 }
@@ -5623,13 +5752,13 @@ model PlanningConstraint {
 // Enforced at the application layer (resolver / API validation), not via a
 // DB CHECK — summing floats to exactly 1.0 in SQL is unreliable.
 model RouteConsolidationScoringPolicy {
-  id                 String    @id @default(uuid())
-  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  tenantId           String    @map("tenant_id")
+  id        String    @id @default(uuid())
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId  String    @map("tenant_id")
 
   name               String
-  calculationVersion String    @map("calculation_version")
+  calculationVersion String @map("calculation_version")
 
   // ── Normalization references ──────────────────────────────────────────────
   distanceReferenceKm             Float @map("distance_reference_km")
@@ -5640,8 +5769,8 @@ model RouteConsolidationScoringPolicy {
 
   // ── Benefit weights (sum to 1.0) ───────────────────────────────────────────
   distanceWeight        Float @map("distance_weight")
-  timeWeight             Float @map("time_weight")
-  resourceReleaseWeight  Float @map("resource_release_weight")
+  timeWeight            Float @map("time_weight")
+  resourceReleaseWeight Float @map("resource_release_weight")
 
   // ── Impact weights (sum to 1.0) — pcePenaltyWeight absorbs the old λ ───────
   passengerImpactWeight Float @map("passenger_impact_weight")
@@ -5655,75 +5784,75 @@ model RouteConsolidationScoringPolicy {
   createdBy String? @map("created_by")
   updatedBy String? @map("updated_by")
 
-  @@index([tenantId],             map: "idx_rc_scoring_policy_tenant")
-  @@index([tenantId, isActive],   map: "idx_rc_scoring_policy_tenant_active")
+  @@index([tenantId], map: "idx_rc_scoring_policy_tenant")
+  @@index([tenantId, isActive], map: "idx_rc_scoring_policy_tenant_active")
   @@map("route_consolidation_scoring_policies")
   @@schema("public")
 }
 
 model RouteConsolidation {
-  id                     String    @id @default(uuid())
-  tenantId               String    @map("tenant_id")
-  recommendationId       String    @map("recommendation_id")
-  idempotencyKey         String    @map("idempotency_key")
-  mergedRouteId          String?   @map("merged_route_id")
-  status                 String    // APPLIED | REVERTED (CHECK enforced in raw SQL)
+  id               String  @id @default(uuid())
+  tenantId         String  @map("tenant_id")
+  recommendationId String  @map("recommendation_id")
+  idempotencyKey   String  @map("idempotency_key")
+  mergedRouteId    String? @map("merged_route_id")
+  status           String // APPLIED | REVERTED (CHECK enforced in raw SQL)
 
   /// JSON evidence — the objective and full recommendation snapshot at
   /// apply time. Used only for reporting / provenance; do not join to
   /// these fields for referential integrity.
-  objectiveSnapshot      Json      @default("{}") @map("objective_snapshot")
-  recommendationSnapshot Json      @default("{}") @map("recommendation_snapshot")
+  objectiveSnapshot      Json @default("{}") @map("objective_snapshot")
+  recommendationSnapshot Json @default("{}") @map("recommendation_snapshot")
 
   /// Fingerprint of Route M + its stops + migration rows immediately
   /// after apply commits. Revert-eligibility compares this to the
   /// current fingerprint; drift blocks the revert.
-  appliedStateHash       String    @map("applied_state_hash")
+  appliedStateHash String @map("applied_state_hash")
 
-  appliedAt              DateTime  @map("applied_at") @db.Timestamptz(6)
-  appliedBy              String    @map("applied_by")
+  appliedAt DateTime @map("applied_at") @db.Timestamptz(6)
+  appliedBy String   @map("applied_by")
 
-  revertedAt             DateTime? @map("reverted_at") @db.Timestamptz(6)
-  revertedBy             String?   @map("reverted_by")
-  revertReason           String?   @map("revert_reason")
+  revertedAt   DateTime? @map("reverted_at") @db.Timestamptz(6)
+  revertedBy   String?   @map("reverted_by")
+  revertReason String?   @map("revert_reason")
 
-  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt              DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  sources                RouteConsolidationSource[]
-  enrollmentMigrations   RouteConsolidationEnrollmentMigration[]
+  sources              RouteConsolidationSource[]
+  enrollmentMigrations RouteConsolidationEnrollmentMigration[]
 
   @@unique([tenantId, idempotencyKey], map: "uniq_route_consolidations_tenant_idem")
-  @@index([tenantId, status],          map: "idx_route_consolidations_tenant_status")
-  @@index([tenantId, mergedRouteId],   map: "idx_route_consolidations_tenant_merged_route")
+  @@index([tenantId, status], map: "idx_route_consolidations_tenant_status")
+  @@index([tenantId, mergedRouteId], map: "idx_route_consolidations_tenant_merged_route")
   @@map("route_consolidations")
   @@schema("public")
 }
 
 model RouteConsolidationSource {
-  id                     String   @id @default(uuid())
-  tenantId               String   @map("tenant_id")
-  consolidationId        String   @map("consolidation_id")
-  sourceRouteId          String   @map("source_route_id")
+  id                   String    @id @default(uuid())
+  tenantId             String    @map("tenant_id")
+  consolidationId      String    @map("consolidation_id")
+  sourceRouteId        String    @map("source_route_id")
   /// BusRoute.updatedAt snapshot at analyze time. The apply guard
   /// refuses stale applies when the source has been edited since.
-  sourceRouteUpdatedAt   DateTime? @map("source_route_updated_at") @db.Timestamptz(6)
-  sequence               Int      @default(0)
-  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  sourceRouteUpdatedAt DateTime? @map("source_route_updated_at") @db.Timestamptz(6)
+  sequence             Int       @default(0)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  consolidation          RouteConsolidation @relation(fields: [consolidationId], references: [id], onDelete: Cascade)
+  consolidation RouteConsolidation @relation(fields: [consolidationId], references: [id], onDelete: Cascade)
 
   @@unique([consolidationId, sourceRouteId], map: "uniq_route_consolidation_sources_pair")
-  @@index([tenantId, sourceRouteId],         map: "idx_route_consolidation_sources_tenant_source")
-  @@index([consolidationId],                 map: "idx_route_consolidation_sources_consolidation")
+  @@index([tenantId, sourceRouteId], map: "idx_route_consolidation_sources_tenant_source")
+  @@index([consolidationId], map: "idx_route_consolidation_sources_consolidation")
   @@map("route_consolidation_sources")
   @@schema("public")
 }
 
 model RouteConsolidationEnrollmentMigration {
-  id                     String   @id @default(uuid())
-  tenantId               String   @map("tenant_id")
-  consolidationId        String   @map("consolidation_id")
+  id              String @id @default(uuid())
+  tenantId        String @map("tenant_id")
+  consolidationId String @map("consolidation_id")
 
   /// Exactly ONE of these must be set (XOR CHECK enforced in raw SQL).
   /// Two nullable FKs preserve referential integrity to both target
@@ -5731,26 +5860,26 @@ model RouteConsolidationEnrollmentMigration {
   /// Note the type asymmetry: RoutePassenger.id is UUID in the DB
   /// (legacy migration artifact) while TransportEnrollment.id is TEXT.
   /// FK column types must match the referenced column exactly.
-  routePassengerId       String?  @map("route_passenger_id") @db.Uuid
-  transportEnrollmentId  String?  @map("transport_enrollment_id")
+  routePassengerId      String? @map("route_passenger_id") @db.Uuid
+  transportEnrollmentId String? @map("transport_enrollment_id")
 
-  sourceRouteId          String   @map("source_route_id")
-  targetRouteId          String   @map("target_route_id")
+  sourceRouteId String @map("source_route_id")
+  targetRouteId String @map("target_route_id")
 
-  oldPickupStopId        String?  @map("old_pickup_stop_id")
-  newPickupStopId        String?  @map("new_pickup_stop_id")
-  oldDropoffStopId       String?  @map("old_dropoff_stop_id")
-  newDropoffStopId       String?  @map("new_dropoff_stop_id")
+  oldPickupStopId  String? @map("old_pickup_stop_id")
+  newPickupStopId  String? @map("new_pickup_stop_id")
+  oldDropoffStopId String? @map("old_dropoff_stop_id")
+  newDropoffStopId String? @map("new_dropoff_stop_id")
 
   /// EXACT_STOP | EXACT_PLACE_ID | OPERATOR_RESOLVED (CHECK enforced in raw SQL).
-  mappingMethod          String   @map("mapping_method")
+  mappingMethod String @map("mapping_method")
 
-  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  consolidation          RouteConsolidation @relation(fields: [consolidationId], references: [id], onDelete: Cascade)
+  consolidation RouteConsolidation @relation(fields: [consolidationId], references: [id], onDelete: Cascade)
 
   @@index([consolidationId], map: "idx_route_consol_enroll_mig_consolidation")
-  @@index([tenantId],        map: "idx_route_consol_enroll_mig_tenant")
+  @@index([tenantId], map: "idx_route_consol_enroll_mig_tenant")
   @@map("route_consolidation_enrollment_migrations")
   @@schema("public")
 }
@@ -5768,26 +5897,26 @@ model RouteConsolidationEnrollmentMigration {
 /// set + same routing conditions = same matrix; reuse instead of re-billing.
 /// cacheKey is sha256 over every axis that affects the returned matrix.
 model FleetRouteMatrixCache {
-  id               String    @id @default(uuid())
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  tenantId         String    @map("tenant_id")
+  id               String   @id @default(uuid())
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId         String   @map("tenant_id")
   /// Deterministic hash over ALL of: originsHash, destinationsHash,
   /// routingMode, trafficBucket, routeModifiers, apiVersion.
   /// Missing any of these = silently serving stale data to the solver.
-  cacheKey         String    @map("cache_key")
-  originsHash      String    @map("origins_hash")      // sha256 of sorted [{lat, lng}] @ 5dp
-  destinationsHash String    @map("destinations_hash")
-  routingMode      String    @map("routing_mode")      // DRIVE | TWO_WHEELER | BICYCLE | WALK
-  trafficBucket    String    @map("traffic_bucket")    // off-peak | am-peak | midday | pm-peak | evening
-  routeModifiers   String    @map("route_modifiers")   // JSON string
-  apiVersion       String    @map("api_version")
-  origins          Json      // decoded [{id, lat, lng}] for debugging
+  cacheKey         String   @map("cache_key")
+  originsHash      String   @map("origins_hash") // sha256 of sorted [{lat, lng}] @ 5dp
+  destinationsHash String   @map("destinations_hash")
+  routingMode      String   @map("routing_mode") // DRIVE | TWO_WHEELER | BICYCLE | WALK
+  trafficBucket    String   @map("traffic_bucket") // off-peak | am-peak | midday | pm-peak | evening
+  routeModifiers   String   @map("route_modifiers") // JSON string
+  apiVersion       String   @map("api_version")
+  origins          Json // decoded [{id, lat, lng}] for debugging
   destinations     Json
-  matrix           Json      // raw Google Routes API response
-  computedAt       DateTime  @default(now()) @map("computed_at") @db.Timestamptz(6)
+  matrix           Json // raw Google Routes API response
+  computedAt       DateTime @default(now()) @map("computed_at") @db.Timestamptz(6)
 
   @@unique([tenantId, cacheKey], map: "uniq_fleet_route_matrix_tenant_key")
-  @@index([computedAt],          map: "idx_fleet_route_matrix_computed")
+  @@index([computedAt], map: "idx_fleet_route_matrix_computed")
   @@map("fleet_route_matrix_cache")
   @@schema("public")
 }
@@ -5802,26 +5931,26 @@ model FleetRouteMatrixCache {
 ///   INFEASIBLE = problem valid, no solution exists (relax constraints)
 ///   FAILED     = API/network/auth error (retry or fix credentials)
 model FleetOptimizationRun {
-  id             String    @id @default(uuid())
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  tenantId       String    @map("tenant_id")
-  createdBy      String    @map("created_by")
-  status         String    // PENDING | VALIDATING | SOLVING | SUCCESS | INFEASIBLE | FAILED | CANCELLED | PUBLISHED
-  statusReason   String?   @map("status_reason")     // human explanation
-  targetDate     DateTime  @map("target_date") @db.Date
-  inputSnapshot  Json      @map("input_snapshot")    // frozen input at solve time
-  rawResponse    Json?     @map("raw_response")      // Google's raw response — traceability
-  metrics        Json?     // { totalDistanceKm, totalDurationMin, unassignedCount, solveSec, costEstimate }
-  errorMessage   String?   @map("error_message")
-  publishedAt    DateTime? @map("published_at") @db.Timestamptz(6)
-  publishedBy    String?   @map("published_by")
-  routes         FleetOptimizationRunRoute[]
-  unassigned     FleetOptimizationRunUnassigned[]
+  id            String                           @id @default(uuid())
+  createdAt     DateTime                         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime?                        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId      String                           @map("tenant_id")
+  createdBy     String                           @map("created_by")
+  status        String // PENDING | VALIDATING | SOLVING | SUCCESS | INFEASIBLE | FAILED | CANCELLED | PUBLISHED
+  statusReason  String?                          @map("status_reason") // human explanation
+  targetDate    DateTime                         @map("target_date") @db.Date
+  inputSnapshot Json                             @map("input_snapshot") // frozen input at solve time
+  rawResponse   Json?                            @map("raw_response") // Google's raw response — traceability
+  metrics       Json? // { totalDistanceKm, totalDurationMin, unassignedCount, solveSec, costEstimate }
+  errorMessage  String?                          @map("error_message")
+  publishedAt   DateTime?                        @map("published_at") @db.Timestamptz(6)
+  publishedBy   String?                          @map("published_by")
+  routes        FleetOptimizationRunRoute[]
+  unassigned    FleetOptimizationRunUnassigned[]
 
-  @@index([tenantId],   map: "idx_fleet_opt_run_tenant")
+  @@index([tenantId], map: "idx_fleet_opt_run_tenant")
   @@index([targetDate], map: "idx_fleet_opt_run_target_date")
-  @@index([status],     map: "idx_fleet_opt_run_status")
+  @@index([status], map: "idx_fleet_opt_run_status")
   @@map("fleet_optimization_runs")
   @@schema("public")
 }
@@ -5830,48 +5959,48 @@ model FleetOptimizationRun {
 /// operators can query "every route bus DXB-A-12345 was assigned to this
 /// month" as SQL, not JSON traversal.
 model FleetOptimizationRunRoute {
-  id                String    @id @default(uuid())
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  tenantId          String    @map("tenant_id")
-  runId             String    @map("run_id")
-  vehicleId         String    @map("vehicle_id")
-  driverId          String?   @map("driver_id")
-  sequenceInRun     Int       @map("sequence_in_run") // 1-based
-  totalDistanceKm   Float     @map("total_distance_km")
-  totalDurationMin  Int       @map("total_duration_min")
-  totalPassengers   Int       @map("total_passengers")
-  encodedPolyline   String    @map("encoded_polyline") // from Routes API computeRoutes
-  startTime         DateTime  @map("start_time") @db.Timestamptz(6)
-  endTime           DateTime  @map("end_time") @db.Timestamptz(6)
-  run               FleetOptimizationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
-  stops             FleetOptimizationRunStop[]
+  id               String                     @id @default(uuid())
+  createdAt        DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId         String                     @map("tenant_id")
+  runId            String                     @map("run_id")
+  vehicleId        String                     @map("vehicle_id")
+  driverId         String?                    @map("driver_id")
+  sequenceInRun    Int                        @map("sequence_in_run") // 1-based
+  totalDistanceKm  Float                      @map("total_distance_km")
+  totalDurationMin Int                        @map("total_duration_min")
+  totalPassengers  Int                        @map("total_passengers")
+  encodedPolyline  String                     @map("encoded_polyline") // from Routes API computeRoutes
+  startTime        DateTime                   @map("start_time") @db.Timestamptz(6)
+  endTime          DateTime                   @map("end_time") @db.Timestamptz(6)
+  run              FleetOptimizationRun       @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stops            FleetOptimizationRunStop[]
 
-  @@index([runId],                map: "idx_fleet_opt_run_route_run")
-  @@index([tenantId, vehicleId],  map: "idx_fleet_opt_run_route_vehicle")
+  @@index([runId], map: "idx_fleet_opt_run_route_run")
+  @@index([tenantId, vehicleId], map: "idx_fleet_opt_run_route_vehicle")
   @@map("fleet_optimization_run_routes")
   @@schema("public")
 }
 
 /// One visit within a solved route. Ordered by `sequence` (1..N).
 model FleetOptimizationRunStop {
-  id              String    @id @default(uuid())
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  tenantId        String    @map("tenant_id")
-  runRouteId      String    @map("run_route_id")
-  sequence        Int
+  id             String                    @id @default(uuid())
+  createdAt      DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId       String                    @map("tenant_id")
+  runRouteId     String                    @map("run_route_id")
+  sequence       Int
   /// FK to RouteStop when the pickup matches an existing stop, null when
   /// the solver picked a fresh coord that doesn't correspond to a stored stop.
-  stopId          String?   @map("stop_id")
-  lat             Float
-  lng             Float
-  label           String
-  arrivalTime     DateTime  @map("arrival_time") @db.Timestamptz(6)
-  departureTime   DateTime  @map("departure_time") @db.Timestamptz(6)
-  passengerCount  Int       @map("passenger_count")
+  stopId         String?                   @map("stop_id")
+  lat            Float
+  lng            Float
+  label          String
+  arrivalTime    DateTime                  @map("arrival_time") @db.Timestamptz(6)
+  departureTime  DateTime                  @map("departure_time") @db.Timestamptz(6)
+  passengerCount Int                       @map("passenger_count")
   /// string[] of RoutePassenger ids picked up here — Json because Prisma
   /// doesn't support String[] on this schema's provider without hassle.
-  passengerIds    Json      @map("passenger_ids")
-  runRoute        FleetOptimizationRunRoute @relation(fields: [runRouteId], references: [id], onDelete: Cascade)
+  passengerIds   Json                      @map("passenger_ids")
+  runRoute       FleetOptimizationRunRoute @relation(fields: [runRouteId], references: [id], onDelete: Cascade)
 
   @@index([runRouteId, sequence], map: "idx_fleet_opt_run_stop_route_seq")
   @@map("fleet_optimization_run_stops")
@@ -5882,21 +6011,20 @@ model FleetOptimizationRunStop {
 /// so they know WHY (usually: capacity or window infeasibility). One row
 /// per unassigned passenger.
 model FleetOptimizationRunUnassigned {
-  id            String    @id @default(uuid())
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  tenantId      String    @map("tenant_id")
-  runId         String    @map("run_id")
-  passengerId   String?   @map("passenger_id") // FK to RoutePassenger, null if solver picked a fresh coord
-  stopLat       Float     @map("stop_lat")
-  stopLng       Float     @map("stop_lng")
-  stopLabel     String    @map("stop_label")
+  id           String               @id @default(uuid())
+  createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId     String               @map("tenant_id")
+  runId        String               @map("run_id")
+  passengerId  String?              @map("passenger_id") // FK to RoutePassenger, null if solver picked a fresh coord
+  stopLat      Float                @map("stop_lat")
+  stopLng      Float                @map("stop_lng")
+  stopLabel    String               @map("stop_label")
   /// Machine-readable reason so the UI can render targeted remediation copy.
-  reason        String    // NO_VEHICLE_HAS_CAPACITY | OUTSIDE_ALL_TIME_WINDOWS | CANNOT_MEET_REQUIRED_ARRIVAL | WOULD_BREAK_MAX_DRIVE_TIME | INFEASIBLE_OTHER
-  reasonDetail  String?   @map("reason_detail")
-  run           FleetOptimizationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  reason       String // NO_VEHICLE_HAS_CAPACITY | OUTSIDE_ALL_TIME_WINDOWS | CANNOT_MEET_REQUIRED_ARRIVAL | WOULD_BREAK_MAX_DRIVE_TIME | INFEASIBLE_OTHER
+  reasonDetail String?              @map("reason_detail")
+  run          FleetOptimizationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   @@index([runId], map: "idx_fleet_opt_run_unassigned_run")
   @@map("fleet_optimization_run_unassigned")
   @@schema("public")
 }
-

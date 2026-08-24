@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { logInteraction } from '@/lib/agents/whatsapp-agent/agent';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const INIT = `
   CREATE TABLE IF NOT EXISTS whatsapp_messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

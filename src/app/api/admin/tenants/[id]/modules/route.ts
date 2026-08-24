@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   return withTenantRls(prisma, params.id, async (tx) => {
     const modules = await tx.tenantModule.findMany({ where: { tenantId: params.id } });
     return NextResponse.json(modules);
@@ -11,6 +18,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
 // PUT: replace all module assignments
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     return await withTenantRls(prisma, params.id, async (tx) => {
       const { enabledModules }: { enabledModules: string[] } = await req.json();

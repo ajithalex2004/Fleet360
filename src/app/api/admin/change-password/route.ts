@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ── PBKDF2 helpers — must match /api/auth/login and /api/tenants/provision ──
 
 function verifyPassword(plaintext: string, stored: string): boolean {
@@ -26,6 +27,12 @@ function hashPassword(plaintext: string): string {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await req.json();
     const { current_password, new_password } = body;

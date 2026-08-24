@@ -14,11 +14,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getShipperOnboarding, updateShipperOnboarding } from '@/lib/logistics/domain';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   try {
     const shipper = await getShipperOnboarding({ tenantId, customerId: params.id });
     if (!shipper) return NextResponse.json({ error: 'Shipper not found' }, { status: 404 });
@@ -41,8 +49,15 @@ interface PatchBody {
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
 
   let body: PatchBody;
   try { body = (await req.json()) as PatchBody; }

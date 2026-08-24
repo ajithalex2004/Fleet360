@@ -16,7 +16,14 @@ import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import { signSession } from '@/lib/tenant-session';
 import { newId } from '@/lib/driver-offline/db';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const body = await req.json() as { response: any; driverId?: string };
   if (!body?.response || !body?.driverId) {
     return NextResponse.json({ error: 'response + driverId required' }, { status: 400 });

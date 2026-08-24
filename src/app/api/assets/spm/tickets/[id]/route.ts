@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { ensureSpmSchema } from '@/lib/assets/spm-schema';
 import { randomUUID } from 'crypto';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -16,6 +17,12 @@ function ser<T>(v: T): T {
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureSpmSchema();
     const { id } = await params;
@@ -49,6 +56,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureSpmSchema();
     const { id } = await params;

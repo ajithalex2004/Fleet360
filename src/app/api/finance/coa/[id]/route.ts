@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type CoaRow = Record<string, unknown>;
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const [row] = await prisma.$queryRawUnsafe<CoaRow[]>(
     `SELECT c.*,
        (SELECT COALESCE(SUM(CASE WHEN jl.normal_balance='DEBIT' THEN jl.debit_amount - jl.credit_amount
@@ -20,6 +27,12 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const body = await req.json();
   const updates: string[] = [];
   const values: unknown[] = [];
@@ -43,6 +56,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   // Prevent deletion of system accounts or accounts with transactions
   const [acc] = await prisma.$queryRawUnsafe<{is_system: boolean; account_code: string}[]>(
     `SELECT is_system, account_code FROM finance_chart_of_accounts WHERE id=$1 OR account_code=$1`, params.id

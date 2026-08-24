@@ -18,6 +18,7 @@ import { SERVICE_TONES, type ServiceTone, type ServiceCategoryWithTypes, type Se
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface CategoryRow {
@@ -71,6 +72,12 @@ function mappingRowToApi(r: MappingRow): ServiceModuleMapping {
 }
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const auth = authorizeServiceConfig(req);
   if (!auth.ok) return auth.res;
 
@@ -130,6 +137,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const auth = authorizeServiceConfig(req);
   if (!auth.ok) return auth.res;
   const adminCheck = requireAdmin(auth);

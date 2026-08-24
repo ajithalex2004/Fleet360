@@ -17,6 +17,7 @@ import { withTenantRls } from '@/lib/rls';
 import { ensureShipperPortalTables } from '@/lib/shipper-portal/schema';
 import { DEFAULT_TRACKING_LEVEL } from '@/lib/shipper-portal/visibility';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface CustomerRow {
@@ -31,9 +32,15 @@ interface CustomerRow {
 }
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   }
 
   try {

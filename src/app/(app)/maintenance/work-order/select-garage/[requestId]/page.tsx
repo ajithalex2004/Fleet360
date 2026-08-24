@@ -10,7 +10,7 @@ import {
     WorkOrderConfirmation
 } from '@/types/maintenance';
 import { getMaintenanceRequests, getGarages, getDrivers } from '@/services/mockData';
-import { sendWorkOrderEmail, sendDriverAssignmentEmail } from '@/services/email/emailService';
+import { sendWorkOrderEmailAction, sendDriverAssignmentEmailAction } from './actions';
 import { formatCurrency } from '@/utils/currency';
 
 export default function SelectGaragePage() {
@@ -115,17 +115,15 @@ export default function SelectGaragePage() {
             console.log('Work Order Created:', workOrder);
 
             // Send work order email
-            await sendWorkOrderEmail(request, selectedGarage.name, selectedGarage.email);
+            await sendWorkOrderEmailAction(request, selectedGarage.email);
 
             // If driver assigned, send driver notification
             if (selectedDriverId) {
                 const driver = drivers.find(d => d.id === selectedDriverId);
                 if (driver) {
-                    await sendDriverAssignmentEmail(
+                    await sendDriverAssignmentEmailAction(
                         request,
-                        driver.name,
-                        driver.email || `${driver.name.toLowerCase().replace(/\s+/g, '')}@company.com`,
-                        selectedGarage.name
+                        driver.email || `${driver.name.toLowerCase().replace(/\s+/g, '')}@company.com`
                     );
                 }
             }

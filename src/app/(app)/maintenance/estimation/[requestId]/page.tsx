@@ -13,7 +13,7 @@ import {
 } from '@/types/maintenance';
 import { getMaintenanceRequests, getGarages, getVehicles } from '@/services/mockData';
 import { matchGarages, getMatchScoreColor, getMatchScoreBadge, getMatchQuality } from '@/services/garageMatching';
-import { sendRFQEmail } from '@/services/email/emailService';
+import { sendRFQEmailAction } from './actions';
 import { formatCurrency } from '@/utils/currency';
 import { generateApprovalLink } from '@/services/approvalLinkService';
 import { UserRole, Permission, hasPermission, getCurrentUserRole } from '@/services/rbac';
@@ -134,7 +134,7 @@ export default function EstimationPage() {
                     additionalNotes: request.description
                 };
 
-                await sendRFQEmail(request, garageEmails);
+                await sendRFQEmailAction(request, garageEmails);
 
                 // Update matched garages with RFQ sent status
                 const updatedMatches = matchedGarages.map(m => {

@@ -4,6 +4,7 @@ import { cachedJson } from '@/lib/response-helpers';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAG = 'fleet:stats';
 
 const zero = () => Promise.resolve([{ count: BigInt(0) }]);
@@ -105,6 +106,12 @@ const getFleetStats = cacheRead(
 );
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     // tenantId is the per-tenant cache key — see server-cache.ts for the
     // security rationale (public CDN would leak data across tenants).

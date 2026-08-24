@@ -15,9 +15,16 @@ import { getMergeCandidates, haversineKm, evaluatePair, loadMergeConfigPublic } 
 import { prisma } from '@/lib/prisma';
 import { ensureDispatchSchema } from '@/lib/dispatch/schema';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureDispatchSchema();
 
@@ -126,6 +133,12 @@ export async function GET(req: NextRequest) {
 
 /* ── POST: execute a merge (mark two jobs as merged, create combined job) ── */
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureDispatchSchema();
 

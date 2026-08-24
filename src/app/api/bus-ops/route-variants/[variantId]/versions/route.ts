@@ -24,6 +24,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { randomUUID } from 'crypto';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 interface StopInput {
   stopName?: string;
   sequence?: number;
@@ -35,8 +36,15 @@ interface StopInput {
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ variantId: string }> }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   const { variantId } = await params;
   try {
     const versions = await prisma.busRouteVariantVersion.findMany({
@@ -54,8 +62,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ vari
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ variantId: string }> }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   const publishedBy = req.headers.get('x-user-id') ?? null;
   const { variantId } = await params;
 

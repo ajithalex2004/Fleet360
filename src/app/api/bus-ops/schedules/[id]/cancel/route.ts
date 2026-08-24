@@ -4,9 +4,17 @@ import { getEventBus }     from '@/events/event-bus';
 import { TRIP_CANCELLED }  from '@/events/registry';
 import { assertTripTransition, TripTransitionError, type TripScheduleStatus } from '@/lib/bus-ops/state-machines';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   try {
     const body = await req.json();
     const schedule = await prisma.tripSchedule.findFirst({ where: { id: params.id, tenantId } });

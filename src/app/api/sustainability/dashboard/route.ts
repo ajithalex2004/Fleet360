@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ── GHG Protocol / ISO 14064 Emission Factors ─────────────────────────────────
 // Sources: IPCC AR6 WG3 (2022), BEIS 2023 Conversion Factors,
 //          UAE Ministry of Energy & Infrastructure Grid Factor 2023
@@ -122,6 +123,12 @@ async function ensureTables() {
 
 // ── Main GET handler ──────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await ensureTables();
 
   const { searchParams } = new URL(req.url);

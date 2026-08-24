@@ -20,6 +20,7 @@ import { revalidateCache } from '@/lib/server-cache';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 import { CBA_SCHEMA_VERSION, freshCbaRules, type CbaRules } from '@/lib/cba/types';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAG = 'bus-ops:cba';
 
 /**
@@ -72,6 +73,12 @@ function shape(r: RuleSetRow) {
 }
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const tenantId = req.headers.get('x-tenant-id') ?? '';
   if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   const permError = requireBusOpsAdminAccess(req, CBA_RESOURCE);
@@ -112,6 +119,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const tenantId = req.headers.get('x-tenant-id') ?? '';
   if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   const permError = requireBusOpsAdminAccess(req, CBA_RESOURCE);
@@ -149,6 +162,12 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const tenantId = req.headers.get('x-tenant-id') ?? '';
   if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   const permError = requireBusOpsAdminAccess(req, CBA_RESOURCE);
@@ -189,6 +208,12 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const tenantId = req.headers.get('x-tenant-id') ?? '';
   if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   const permError = requireBusOpsAdminAccess(req, CBA_RESOURCE);

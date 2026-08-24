@@ -7,7 +7,8 @@
  * a nested transaction and, more importantly, to prevent a request's tenant
  * context from leaking into concurrent work.
  */
-import { AsyncLocalStorage } from 'node:async_hooks';
+import 'server-only';
+import { AsyncLocalStorage } from 'async_hooks';
 import type { Prisma } from '@prisma/client';
 
 export interface RlsScope {

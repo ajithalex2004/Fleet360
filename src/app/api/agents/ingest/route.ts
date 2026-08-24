@@ -10,7 +10,14 @@ import { dispatch } from '@/lib/agents/orchestrator';
 import { AgentEvent } from '@/lib/agents/types';
 import { ensureAgentSchema } from '@/lib/agents/schema';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await ensureAgentSchema();
   try {
     const body = await req.json() as AgentEvent;

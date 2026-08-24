@@ -25,6 +25,7 @@ import { ensureDispatchSchema }       from '@/lib/dispatch/schema';
 import { triggerMergeScanOnCreate }   from '@/lib/dispatch/merge-trigger';
 import { dispatch as agentDispatch }  from '@/lib/agents/orchestrator';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
 function serialize(rows: Row[]): Row[] {
@@ -40,6 +41,12 @@ function serialize(rows: Row[]): Row[] {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureDispatchSchema();
 

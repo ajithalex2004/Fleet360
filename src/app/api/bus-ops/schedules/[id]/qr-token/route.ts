@@ -13,9 +13,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { issueQrToken } from '@/lib/bus-checkin';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const ttlSeconds = Math.max(60, Number(req.nextUrl.searchParams.get('ttlSeconds') ?? 900));
   const schedule = await prisma.tripSchedule.findUnique({
     where: { id: params.id },

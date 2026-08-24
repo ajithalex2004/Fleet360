@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { ensureAuditTable, logAudit, AuditPayload } from '@/lib/audit';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ---------------------------------------------------------------------------
 // GET /api/admin/audit-logs
 // Query params:
@@ -17,6 +18,12 @@ import { ensureAuditTable, logAudit, AuditPayload } from '@/lib/audit';
 // allows the cross-tenant read.
 // ---------------------------------------------------------------------------
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureAuditTable();
 
@@ -99,6 +106,12 @@ export async function GET(req: NextRequest) {
 // Prisma model).
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body: AuditPayload = await req.json();
     if (!body.entityType || !body.action) {

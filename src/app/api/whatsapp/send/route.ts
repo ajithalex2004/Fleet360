@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID ?? '';
 const AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN ?? '';
 const FROM_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER ?? 'whatsapp:+14155238886';
@@ -68,6 +69,12 @@ async function sendViaTwilio(to: string, body: string): Promise<{ sid: string; s
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const payload: SendPayload = await req.json();
     const { to, message, templateName, templateVars = {}, module = 'GENERAL', intent = 'GENERAL' } = payload;
@@ -126,6 +133,12 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const { searchParams } = new URL(req.url);
     const to = searchParams.get('to');

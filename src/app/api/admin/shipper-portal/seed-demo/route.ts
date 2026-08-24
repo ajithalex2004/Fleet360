@@ -23,14 +23,19 @@ import { createPortalUser } from '@/lib/shipper-portal/portal-users-store';
 import { createInvitation } from '@/lib/shipper-portal/invitations';
 import { ensureShipperPortalTables } from '@/lib/shipper-portal/schema';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  const userId   = req.headers.get('x-user-id');
-  const role     = req.headers.get('x-user-role') ?? '';
-  if (!tenantId || !userId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId, userId, role } = authz;, { status: 401 });
   }
 
   const force = req.nextUrl.searchParams.get('force') === 'true';

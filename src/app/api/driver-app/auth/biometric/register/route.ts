@@ -34,6 +34,7 @@ import { prisma } from '@/lib/prisma';
 import { getTenantContextOrNull } from '@/lib/tenant-session';
 import { generateRegistrationOptions } from '@simplewebauthn/server';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // Lazy import: we don't want to add @simplewebauthn/server as a hard dep
 // for the admin app. The first registration in a tenant pulls it in.
 let _rpID: string | null = null;
@@ -61,6 +62,12 @@ async function rp() {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const ctx = getTenantContextOrNull(req);
   if (!ctx) {
     return NextResponse.json({ error: 'session required' }, { status: 401 });

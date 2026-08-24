@@ -10,7 +10,14 @@ import { optimizeRoute, estimateFuelCost, DEFAULT_FUEL_PRICE_AED, type Waypoint 
 import { prisma } from '@/lib/prisma';
 import { getLatestFuelPrice } from '@/lib/fleet/fuel-price';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await req.json() as {
       waypoints: Waypoint[];

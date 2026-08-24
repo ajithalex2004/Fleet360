@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveCarrierPortalInvite, submitCarrierBid } from '@/lib/logistics/domain';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface BidBody {
@@ -26,6 +27,12 @@ interface BidBody {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   let body: BidBody;
   try { body = (await req.json()) as BidBody; }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }

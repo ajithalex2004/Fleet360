@@ -3,7 +3,13 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { prisma } from '@/lib/prisma';
 import { pricingRuleUpdateSet, rowToCamel } from '@/lib/pricing-rule-helpers';
 
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const rows = await prisma.$queryRawUnsafe<any[]>(
       "SELECT * FROM pricing_rules WHERE id = $1", params.id
@@ -40,7 +46,13 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await prisma.$executeRawUnsafe(
       "DELETE FROM pricing_rules WHERE id = $1", params.id

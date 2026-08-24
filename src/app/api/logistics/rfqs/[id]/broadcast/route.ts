@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createLoadBroadcast, getActiveLoadBroadcast, resolveShipmentPickupGeo } from '@/lib/logistics/domain';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 async function rfqShipmentId(tenantId: string, rfqId: string): Promise<string | null> {
@@ -27,8 +28,15 @@ async function rfqShipmentId(tenantId: string, rfqId: string): Promise<string | 
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   try {
     const shipmentId = await rfqShipmentId(tenantId, id);
     if (!shipmentId) return NextResponse.json({ error: 'RFQ not found' }, { status: 404 });
@@ -55,8 +63,15 @@ interface BroadcastBody {
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   const createdBy = req.headers.get('x-user-id');
 
   let body: BroadcastBody;

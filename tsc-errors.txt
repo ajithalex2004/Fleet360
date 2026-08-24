@@ -1,0 +1,132 @@
+.next/types/app/api/bus-ops/routes/[id]/stops/route.ts(49,7): error TS2344: Type '{ __tag__: "GET"; __param_position__: "second"; __param_type__: { params: { id: string; }; }; }' does not satisfy the constraint 'ParamCheck<RouteContext>'.
+  The types of '__param_type__.params' are incompatible between these types.
+    Type '{ id: string; }' is missing the following properties from type 'Promise<any>': then, catch, finally, [Symbol.toStringTag]
+.next/types/app/api/bus-ops/routes/[id]/stops/route.ts(166,7): error TS2344: Type '{ __tag__: "POST"; __param_position__: "second"; __param_type__: { params: { id: string; }; }; }' does not satisfy the constraint 'ParamCheck<RouteContext>'.
+  The types of '__param_type__.params' are incompatible between these types.
+    Type '{ id: string; }' is missing the following properties from type 'Promise<any>': then, catch, finally, [Symbol.toStringTag]
+.next/types/app/api/bus-ops/routes/[id]/stops/route.ts(205,7): error TS2344: Type '{ __tag__: "PUT"; __param_position__: "second"; __param_type__: { params: { id: string; }; }; }' does not satisfy the constraint 'ParamCheck<RouteContext>'.
+  The types of '__param_type__.params' are incompatible between these types.
+    Type '{ id: string; }' is missing the following properties from type 'Promise<any>': then, catch, finally, [Symbol.toStringTag]
+.next/types/app/api/dispatcher/reports/[id]/acknowledge/route.ts(166,7): error TS2344: Type '{ __tag__: "POST"; __param_position__: "second"; __param_type__: { params: { id: string; }; }; }' does not satisfy the constraint 'ParamCheck<RouteContext>'.
+  The types of '__param_type__.params' are incompatible between these types.
+    Type '{ id: string; }' is missing the following properties from type 'Promise<any>': then, catch, finally, [Symbol.toStringTag]
+.next/types/app/api/dispatcher/trips/[id]/cancel/route.ts(166,7): error TS2344: Type '{ __tag__: "POST"; __param_position__: "second"; __param_type__: { params: { id: string; }; }; }' does not satisfy the constraint 'ParamCheck<RouteContext>'.
+  The types of '__param_type__.params' are incompatible between these types.
+    Type '{ id: string; }' is missing the following properties from type 'Promise<any>': then, catch, finally, [Symbol.toStringTag]
+.next/types/app/api/driver-app/reports/[id]/cancel/route.ts(166,7): error TS2344: Type '{ __tag__: "POST"; __param_position__: "second"; __param_type__: { params: { id: string; }; }; }' does not satisfy the constraint 'ParamCheck<RouteContext>'.
+  The types of '__param_type__.params' are incompatible between these types.
+    Type '{ id: string; }' is missing the following properties from type 'Promise<any>': then, catch, finally, [Symbol.toStringTag]
+.next/types/app/api/driver-app/reports/[id]/route.ts(49,7): error TS2344: Type '{ __tag__: "GET"; __param_position__: "second"; __param_type__: { params: { id: string; }; }; }' does not satisfy the constraint 'ParamCheck<RouteContext>'.
+  The types of '__param_type__.params' are incompatible between these types.
+    Type '{ id: string; }' is missing the following properties from type 'Promise<any>': then, catch, finally, [Symbol.toStringTag]
+patches/tenant-context.ts(6,64): error TS2307: Cannot find module './modules' or its corresponding type declarations.
+scripts/outbox-publisher-dev.ts(25,21): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+scripts/test-outbox-flow.ts(28,22): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+scripts/test-outbox-flow.ts(29,46): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+src/app/api/bus-ops/gateway/events/route.ts(297,7): error TS2322: Type '"BLE_GATEWAY"' is not assignable to type 'BoardingEventSource | EnumBoardingEventSourceFilter<"BoardingEvent"> | undefined'.
+src/app/api/bus-ops/gateway/events/route.ts(314,11): error TS2322: Type '"BLE_GATEWAY"' is not assignable to type 'BoardingEventSource'.
+src/app/api/bus-ops/passenger/today/route.ts(61,49): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type 'VehicleBeaconWhereInput'.
+src/app/api/bus-ops/route-passengers/bulk-import/route.ts(104,33): error TS2339: Property 'bulkImportJob' does not exist on type 'PrismaClient<{ log: ({ level: "error"; emit: "event"; } | { readonly level: "warn"; readonly emit: "stdout"; })[]; }, "error", DefaultArgs>'.
+src/app/api/bus-ops/route-passengers/bulk-import/route.ts(233,18): error TS2339: Property 'bulkImportJob' does not exist on type 'PrismaClient<{ log: ({ level: "error"; emit: "event"; } | { readonly level: "warn"; readonly emit: "stdout"; })[]; }, "error", DefaultArgs>'.
+src/app/api/bus-ops/schedules/[id]/depart/route.ts(24,84): error TS2345: Argument of type '"DEPARTED"' is not assignable to parameter of type 'TripScheduleStatus'.
+src/app/api/leasing/contracts-v2/[id]/pdf/route.ts(30,12): error TS2552: Cannot find name 'NextResponse'. Did you mean 'Response'?
+src/app/api/leasing/contracts-v2/route.ts(62,21): error TS2554: Expected 2 arguments, but got 1.
+src/app/api/leasing/drivers/allocations/[allocationId]/release/route.ts(66,11): error TS2322: Type 'string | null' is not assignable to type 'string | StringFilter<"LeaseContractVehicle"> | undefined'.
+  Type 'null' is not assignable to type 'string | StringFilter<"LeaseContractVehicle"> | undefined'.
+src/app/api/leasing/inquiries/[id]/route.ts(14,8): error TS2304: Cannot find name 'tenantId'.
+src/app/api/leasing/inquiries/[id]/route.ts(18,18): error TS18004: No value exists in scope for the shorthand property 'tenantId'. Either declare one or provide an initializer.
+src/app/api/leasing/inquiries/[id]/route.ts(21,12): error TS18004: No value exists in scope for the shorthand property 'tenantId'. Either declare one or provide an initializer.
+src/app/api/leasing/invoices/[id]/pdf/route.ts(31,12): error TS2552: Cannot find name 'NextResponse'. Did you mean 'Response'?
+src/app/api/leasing/lessees/[id]/statement/route.ts(33,12): error TS2552: Cannot find name 'NextResponse'. Did you mean 'Response'?
+src/app/api/leasing/pre-billing/[id]/pdf/route.ts(40,12): error TS2552: Cannot find name 'NextResponse'. Did you mean 'Response'?
+src/app/api/leasing/quotations/[id]/approve/route.ts(160,20): error TS2322: Type 'string | null' is not assignable to type 'string | StringFilter<"LeaseInquiry"> | undefined'.
+  Type 'null' is not assignable to type 'string | StringFilter<"LeaseInquiry"> | undefined'.
+src/app/api/leasing/quotations/[id]/convert/route.ts(105,11): error TS7034: Variable 'payments' implicitly has type 'any[]' in some locations where its type cannot be determined.
+src/app/api/leasing/quotations/[id]/convert/route.ts(124,43): error TS7005: Variable 'payments' implicitly has an 'any[]' type.
+src/app/api/leasing/quotations/[id]/pdf/route.ts(37,12): error TS2552: Cannot find name 'NextResponse'. Did you mean 'Response'?
+src/app/api/leasing/receipts/[id]/pdf/route.ts(35,12): error TS2552: Cannot find name 'NextResponse'. Did you mean 'Response'?
+src/app/api/rental/agreements/[id]/pdf/route.ts(23,12): error TS2304: Cannot find name 'NextResponse'.
+src/app/api/rental/agreements/route.ts(69,65): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type 'RentalAgreementWhereInput'.
+src/app/api/rental/ancillaries/route.ts(40,16): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type 'RentalAncillaryWhereInput'.
+src/app/api/rental/bookings/[id]/cross-border-permit/route.ts(52,12): error TS2304: Cannot find name 'NextResponse'.
+src/app/api/rental/bookings/sweep-penalties/route.ts(58,13): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type 'RentalBookingWhereInput'.
+src/app/api/rental/bookings/sweep-penalties/route.ts(93,19): error TS2339: Property 'action' does not exist on type 'PenaltyAssessment'.
+src/app/api/rental/bookings/sweep-penalties/route.ts(94,24): error TS2339: Property 'action' does not exist on type 'PenaltyAssessment'.
+src/app/api/rental/bookings/sweep-penalties/route.ts(107,19): error TS2339: Property 'action' does not exist on type 'PenaltyAssessment'.
+src/app/api/rental/bookings/sweep-penalties/route.ts(107,43): error TS2339: Property 'action' does not exist on type 'PenaltyAssessment'.
+src/app/api/rental/bookings/sweep-penalties/route.ts(112,48): error TS2339: Property 'action' does not exist on type 'PenaltyAssessment'.
+src/app/api/rental/bookings/sweep-penalties/route.ts(113,30): error TS2339: Property 'amount' does not exist on type 'PenaltyAssessment'.
+src/app/api/rental/bookings/sweep-penalties/route.ts(137,31): error TS2339: Property 'currency' does not exist on type 'PenaltyAssessment'.
+src/app/api/rental/bookings/sweep-penalties/route.ts(143,19): error TS2339: Property 'action' does not exist on type 'PenaltyAssessment'.
+src/app/api/rental/bookings/sweep-penalties/route.ts(149,26): error TS2339: Property 'action' does not exist on type 'PenaltyAssessment'.
+src/app/api/rental/channels/route.ts(25,14): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type 'RentalBookingWhereInput'.
+src/app/api/rental/channels/route.ts(41,21): error TS18048: 'stat._count' is possibly 'undefined'.
+src/app/api/rental/channels/route.ts(41,34): error TS2339: Property '_all' does not exist on type 'true | { id?: number | undefined; createdAt?: number | undefined; updatedAt?: number | undefined; deletedAt?: number | undefined; bookingRef?: number | undefined; customerId?: number | undefined; ... 13 more ...; _all?: number | undefined; }'.
+  Property '_all' does not exist on type 'true'.
+src/app/api/rental/channels/route.ts(42,22): error TS18048: 'stat._max' is possibly 'undefined'.
+src/app/api/rental/customers/[id]/route.ts(17,20): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type 'RentalBookingWhereInput'.
+src/app/api/rental/customers/route.ts(12,16): error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type 'RentalCustomerWhereInput'.
+src/app/api/rental/customers/route.ts(49,34): error TS2322: Type '{ tenantId: string; }' is not assignable to type '(Without<RentalCustomerCreateInput, RentalCustomerUncheckedCreateInput> & RentalCustomerUncheckedCreateInput) | (Without<...> & RentalCustomerCreateInput)'.
+src/app/api/rental/damage-claims/route.ts(64,31): error TS2322: Type '{ tenantId: string; }' is not assignable to type '(Without<DamageClaimCreateInput, DamageClaimUncheckedCreateInput> & DamageClaimUncheckedCreateInput) | (Without<...> & DamageClaimCreateInput)'.
+src/app/api/rental/inspections/route.ts(36,37): error TS2322: Type '{ tenantId: string; }' is not assignable to type '(Without<VehicleInspectionCreateInput, VehicleInspectionUncheckedCreateInput> & VehicleInspectionUncheckedCreateInput) | (Without<...> & VehicleInspectionCreateInput)'.
+src/app/api/rental/invoices/[id]/payments/[paymentId]/pdf/route.ts(33,12): error TS2304: Cannot find name 'NextResponse'.
+src/app/api/rental/invoices/[id]/pdf/route.ts(30,12): error TS2304: Cannot find name 'NextResponse'.
+src/components/bus-ops/FleetOptimizerMap.tsx(54,25): error TS2503: Cannot find namespace 'google'.
+src/components/bus-ops/FleetOptimizerMap.tsx(55,30): error TS2503: Cannot find namespace 'google'.
+src/components/bus-ops/FleetOptimizerMap.tsx(107,26): error TS2503: Cannot find namespace 'google'.
+src/components/bus-ops/FleetOptimizerMap.tsx(107,64): error TS2503: Cannot find namespace 'google'.
+src/components/bus-ops/FleetOptimizerMap.tsx(110,51): error TS2339: Property 'LatLng' does not exist on type 'GoogleCtors'.
+src/components/bus-ops/FleetOptimizerMap.tsx(120,21): error TS2339: Property 'SymbolPath' does not exist on type 'GoogleCtors'.
+src/components/bus-ops/FleetOptimizerMap.tsx(127,26): error TS2503: Cannot find namespace 'google'.
+src/components/bus-ops/FleetOptimizerMap.tsx(129,29): error TS2339: Property 'LatLng' does not exist on type 'GoogleCtors'.
+src/components/bus-ops/FleetOptimizerMap.tsx(144,24): error TS2503: Cannot find namespace 'google'.
+src/components/bus-ops/FleetOptimizerMap.tsx(146,27): error TS2339: Property 'LatLng' does not exist on type 'GoogleCtors'.
+src/components/bus-ops/FleetOptimizerMap.tsx(149,17): error TS2339: Property 'isEmpty' does not exist on type 'GMapsLatLngBounds'.
+src/components/bus-ops/RoutesBulkImportModal.tsx(204,15): error TS2322: Type 'string' is not assignable to type 'undefined'.
+src/components/bus-ops/RoutesBulkImportModal.tsx(213,22): error TS2322: Type 'number' is not assignable to type 'undefined'.
+src/components/bus-ops/RoutesBulkImportModal.tsx(223,14): error TS2322: Type 'string' is not assignable to type 'undefined'.
+src/lib/bus-ops/status-meta.ts(43,3): error TS2353: Object literal may only specify known properties, and 'CANCELLED' does not exist in type 'Record<TripPassengerStatus, StatusMeta>'.
+src/lib/finance/consumers/index.ts(22,26): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+src/lib/finance/consumers/index.ts(23,64): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+src/lib/finance/consumers/index.ts(27,8): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+src/lib/outbox/publisher.ts(37,36): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+src/lib/planning/fleet-routing/assemble-inputs.ts(106,7): error TS2561: Object literal may only specify known properties, but 'route' does not exist in type 'RoutePassengerSelect<DefaultArgs>'. Did you mean to write 'routeId'?
+src/lib/planning/fleet-routing/assemble-inputs.ts(136,24): error TS2551: Property 'route' does not exist on type '{ status: string; id: string; createdAt: Date; updatedAt: Date | null; tenantId: string; createdBy: string | null; deletedAt: Date | null; routeId: string; notes: string | null; ... 10 more ...; requiredArrivalTime: string | null; }'. Did you mean 'routeId'?
+src/lib/planning/fleet-routing/assemble-inputs.ts(136,38): error TS2551: Property 'route' does not exist on type '{ status: string; id: string; createdAt: Date; updatedAt: Date | null; tenantId: string; createdBy: string | null; deletedAt: Date | null; routeId: string; notes: string | null; ... 10 more ...; requiredArrivalTime: string | null; }'. Did you mean 'routeId'?
+src/lib/planning/fleet-routing/assemble-inputs.ts(146,18): error TS2551: Property 'route' does not exist on type '{ status: string; id: string; createdAt: Date; updatedAt: Date | null; tenantId: string; createdBy: string | null; deletedAt: Date | null; routeId: string; notes: string | null; ... 10 more ...; requiredArrivalTime: string | null; }'. Did you mean 'routeId'?
+src/lib/planning/fleet-routing/assemble-inputs.ts(168,11): error TS2551: Property 'route' does not exist on type '{ status: string; id: string; createdAt: Date; updatedAt: Date | null; tenantId: string; createdBy: string | null; deletedAt: Date | null; routeId: string; notes: string | null; ... 10 more ...; requiredArrivalTime: string | null; }'. Did you mean 'routeId'?
+src/lib/planning/fleet-routing/assemble-inputs.ts(168,28): error TS7006: Parameter 's' implicitly has an 'any' type.
+src/lib/planning/fleet-routing/assemble-inputs.ts(169,11): error TS2551: Property 'route' does not exist on type '{ status: string; id: string; createdAt: Date; updatedAt: Date | null; tenantId: string; createdBy: string | null; deletedAt: Date | null; routeId: string; notes: string | null; ... 10 more ...; requiredArrivalTime: string | null; }'. Did you mean 'routeId'?
+src/lib/planning/fleet-routing/assemble-inputs.ts(184,26): error TS2551: Property 'route' does not exist on type '{ status: string; id: string; createdAt: Date; updatedAt: Date | null; tenantId: string; createdBy: string | null; deletedAt: Date | null; routeId: string; notes: string | null; ... 10 more ...; requiredArrivalTime: string | null; }'. Did you mean 'routeId'?
+src/lib/planning/fleet-routing/assemble-inputs.ts(185,32): error TS2551: Property 'route' does not exist on type '{ status: string; id: string; createdAt: Date; updatedAt: Date | null; tenantId: string; createdBy: string | null; deletedAt: Date | null; routeId: string; notes: string | null; ... 10 more ...; requiredArrivalTime: string | null; }'. Did you mean 'routeId'?
+src/lib/planning/fleet-routing/assemble-inputs.ts(186,28): error TS2551: Property 'route' does not exist on type '{ status: string; id: string; createdAt: Date; updatedAt: Date | null; tenantId: string; createdBy: string | null; deletedAt: Date | null; routeId: string; notes: string | null; ... 10 more ...; requiredArrivalTime: string | null; }'. Did you mean 'routeId'?
+src/lib/planning/fleet-routing/assemble-inputs.ts(207,25): error TS2551: Property 'route' does not exist on type '{ status: string; id: string; createdAt: Date; updatedAt: Date | null; tenantId: string; createdBy: string | null; deletedAt: Date | null; routeId: string; notes: string | null; ... 10 more ...; requiredArrivalTime: string | null; }'. Did you mean 'routeId'?
+src/lib/realtime/hub.ts(125,33): error TS2307: Cannot find module 'ioredis' or its corresponding type declarations.
+src/lib/realtime/hub.ts(152,33): error TS2307: Cannot find module 'ioredis' or its corresponding type declarations.
+src/lib/realtime/hub.ts(158,22): error TS7006: Parameter 'err' implicitly has an 'any' type.
+src/lib/realtime/hub.ts(165,25): error TS7006: Parameter '_pattern' implicitly has an 'any' type.
+src/lib/realtime/hub.ts(165,35): error TS7006: Parameter '_redisChannel' implicitly has an 'any' type.
+src/lib/realtime/hub.ts(165,50): error TS7006: Parameter 'raw' implicitly has an 'any' type.
+tests/integration/staff-transport-bulk-import.test.ts(167,33): error TS2339: Property 'bulkImportJob' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+tests/integration/staff-transport-bulk-import.test.ts(180,32): error TS2339: Property 'bulkImportJob' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+tests/unit/bus-ops-state-machines.test.ts(12,3): error TS2305: Module '"@/lib/bus-ops/state-machines"' has no exported member 'isTripTerminal'.
+tests/unit/bus-ops-state-machines.test.ts(12,19): error TS2305: Module '"@/lib/bus-ops/state-machines"' has no exported member 'isPassengerTerminal'.
+tests/unit/bus-ops-state-machines.test.ts(13,3): error TS2305: Module '"@/lib/bus-ops/state-machines"' has no exported member 'allowedTripTransitions'.
+tests/unit/bus-ops-state-machines.test.ts(13,27): error TS2724: '"@/lib/bus-ops/state-machines"' has no exported member named 'allowedPassengerTransitions'. Did you mean 'assertPassengerTransition'?
+tests/unit/bus-ops-state-machines.test.ts(17,56): error TS2322: Type '"DEPARTED"' is not assignable to type 'TripScheduleStatus'.
+tests/unit/bus-ops-state-machines.test.ts(17,67): error TS2322: Type '"IN_TRANSIT"' is not assignable to type 'TripScheduleStatus'.
+tests/unit/bus-ops-state-machines.test.ts(18,45): error TS2322: Type '"WAITLISTED"' is not assignable to type 'TripPassengerStatus'.
+tests/unit/bus-ops-state-machines.test.ts(18,110): error TS2322: Type '"CANCELLED"' is not assignable to type 'TripPassengerStatus'.
+tests/unit/bus-ops-state-machines.test.ts(23,18): error TS2322: Type '"DEPARTED"' is not assignable to type 'TripScheduleStatus'.
+tests/unit/bus-ops-state-machines.test.ts(24,4): error TS2322: Type '"DEPARTED"' is not assignable to type 'TripScheduleStatus'.
+tests/unit/bus-ops-state-machines.test.ts(24,18): error TS2322: Type '"IN_TRANSIT"' is not assignable to type 'TripScheduleStatus'.
+tests/unit/bus-ops-state-machines.test.ts(24,34): error TS2322: Type '"DEPARTED"' is not assignable to type 'TripScheduleStatus'.
+tests/unit/bus-ops-state-machines.test.ts(24,63): error TS2322: Type '"DEPARTED"' is not assignable to type 'TripScheduleStatus'.
+tests/unit/bus-ops-state-machines.test.ts(25,4): error TS2322: Type '"IN_TRANSIT"' is not assignable to type 'TripScheduleStatus'.
+tests/unit/bus-ops-state-machines.test.ts(25,34): error TS2322: Type '"IN_TRANSIT"' is not assignable to type 'TripScheduleStatus'.
+tests/unit/bus-ops-state-machines.test.ts(28,4): error TS2322: Type '"WAITLISTED"' is not assignable to type 'TripPassengerStatus'.
+tests/unit/bus-ops-state-machines.test.ts(28,33): error TS2322: Type '"WAITLISTED"' is not assignable to type 'TripPassengerStatus'.
+tests/unit/bus-ops-state-machines.test.ts(28,47): error TS2322: Type '"CANCELLED"' is not assignable to type 'TripPassengerStatus'.
+tests/unit/bus-ops-state-machines.test.ts(30,47): error TS2322: Type '"CANCELLED"' is not assignable to type 'TripPassengerStatus'.
+tests/unit/bus-ops-state-machines.test.ts(83,44): error TS2345: Argument of type '"CANCELLED"' is not assignable to parameter of type 'TripPassengerStatus'.
+tests/unit/bus-ops-state-machines.test.ts(87,35): error TS2345: Argument of type '"WAITLISTED"' is not assignable to parameter of type 'TripPassengerStatus'.

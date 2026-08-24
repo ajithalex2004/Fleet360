@@ -10,7 +10,7 @@ import {
     MaintenanceStatus
 } from '@/types/maintenance';
 import { getMaintenanceRequests, getVehicles, getDrivers } from '@/services/mockData';
-import { sendJobClosureEmail } from '@/services/email/emailService';
+import { sendJobClosureEmailAction } from './actions';
 import { formatCurrency } from '@/utils/currency';
 
 export default function JobClosurePage() {
@@ -68,7 +68,7 @@ export default function JobClosurePage() {
 
         try {
             // Send closure notifications
-            await sendJobClosureEmail(request);
+            await sendJobClosureEmailAction(request, []);
 
             // Update request status
             const updatedRequest: EnhancedMaintenanceRequest = {

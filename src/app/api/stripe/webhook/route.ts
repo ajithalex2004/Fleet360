@@ -17,11 +17,18 @@ import {
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 // Disable Next's body parsing — we need the raw body for signature verification.
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const sig = req.headers.get('stripe-signature');
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!sig || !secret) {

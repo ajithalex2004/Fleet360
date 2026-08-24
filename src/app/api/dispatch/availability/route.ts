@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureDispatchSchema } from '@/lib/dispatch/schema';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
 function serialize(rows: Row[]): Row[] {
@@ -32,6 +33,12 @@ function serialize(rows: Row[]): Row[] {
    last-known location for dispatch dashboard
 ───────────────────────────────────────────── */
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureDispatchSchema();
 
@@ -118,6 +125,12 @@ export async function GET(req: NextRequest) {
    Body: { driverId, vehicleId?, zoneId?, serviceTypes?, shiftStartsAt? }
 ───────────────────────────────────────────── */
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureDispatchSchema();
 
@@ -193,6 +206,12 @@ export async function POST(req: NextRequest) {
    Valid statuses: AVAILABLE, BUSY, BREAK, OFF_DUTY
 ───────────────────────────────────────────── */
 export async function PATCH(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureDispatchSchema();
 

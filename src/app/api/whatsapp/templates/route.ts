@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const INIT_TABLE = `
   CREATE TABLE IF NOT EXISTS whatsapp_templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -94,6 +95,12 @@ async function ensureTableAndSeed() {
 }
 
 export async function GET() {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureTableAndSeed();
     const templates = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
@@ -107,6 +114,12 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureTableAndSeed();
     const body = await req.json() as {
@@ -144,6 +157,12 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await req.json() as {
       template_name: string;

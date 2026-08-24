@@ -5,6 +5,7 @@ import { expandRosterToTrip } from '@/lib/bus-ops/expand-roster';
 import { resolveVariantVersionForTrip } from '@/lib/bus-ops/resolve-variant-version';
 import { raiseAlert } from '@/lib/alerts/raise';
 import { validateResourceAssignment } from '@/lib/bus-ops/validate-assignment';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import {
   estimateRosterCountForTrip,
   isValidationEnabled,
@@ -44,8 +45,15 @@ const getSchedules = cacheRead(
 
 export async function GET(req: NextRequest) {
   try {
-    const tenantId = req.headers.get('x-tenant-id');
-    if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+    if (!authz.ok) {
+
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+    }
+
+    const { tenantId } = authz;, { status: 401 });
     const { searchParams } = new URL(req.url);
     const status  = searchParams.get('status');
     const routeId = searchParams.get('routeId');
@@ -63,8 +71,15 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const tenantId = req.headers.get('x-tenant-id');
-    if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+    if (!authz.ok) {
+
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+    }
+
+    const { tenantId } = authz;, { status: 401 });
     const body = await req.json();
     const count = await prisma.tripSchedule.count();
     const tripNumber = body.tripNumber ?? `TRP-${String(count + 1).padStart(5, '0')}`;

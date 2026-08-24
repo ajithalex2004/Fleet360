@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // GET /api/maintenance/[id]/warranty-check
 // Returns active warranties for the vehicle linked to this request.
 // Useful to call when request reaches ESTIMATION_APPROVED.
@@ -8,6 +9,12 @@ export async function GET(
     _request: Request,
     { params }: { params: { id: string } },
 ) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const { id } = params;
 

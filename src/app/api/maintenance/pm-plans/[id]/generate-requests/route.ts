@@ -5,6 +5,7 @@ import { PMItemStatus, PMTriggerType, type PMTrigger, type MaintenancePlan } fro
 import { MaintenanceStatus, MaintenanceType } from '@/types/maintenance';
 import { publishPMScheduleTriggered } from '@/lib/maintenance/publish-event';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /**
  * POST /api/maintenance/pm-plans/[id]/generate-requests
  *
@@ -16,6 +17,12 @@ export async function POST(
     _request: Request,
     { params }: { params: { id: string } },
 ) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const plan = await prisma.maintenancePlan.findUnique({
             where: { id: params.id },

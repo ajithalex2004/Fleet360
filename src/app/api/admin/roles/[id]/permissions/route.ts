@@ -3,9 +3,16 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const ROLES_TAG = 'roles:all';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   return withPlatformAdmin(prisma, async (tx) => {
     const rps = await tx.rolePermission.findMany({
       where: { roleId: params.id },
@@ -19,6 +26,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
 // PUT: replace all permissions for a role
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const { permissionIds }: { permissionIds: string[] } = await req.json();
     const perms = await withPlatformAdmin(prisma, async (tx) => {

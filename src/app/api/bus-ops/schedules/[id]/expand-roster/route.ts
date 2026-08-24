@@ -15,9 +15,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { expandRosterToTrip } from '@/lib/bus-ops/expand-roster';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   const { id } = await ctx.params;
 
   const schedule = await prisma.tripSchedule.findFirst({

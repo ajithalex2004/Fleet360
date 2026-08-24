@@ -25,6 +25,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { logAudit } from '@/lib/platform-audit-log';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const MAX_PASSES = 8;
 
 interface RouteParams { params: Promise<{ id: string }>; }
@@ -177,6 +178,12 @@ async function multiPassDelete(tenantId: string): Promise<Record<string, number>
 }
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
   const auth = requireSuperAdmin(req);
   if (!auth.ok) return auth.res;

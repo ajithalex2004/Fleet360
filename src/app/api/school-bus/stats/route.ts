@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl } from '@/lib/server-cache';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAG = 'school-bus:stats';
 
 const zero = () => Promise.resolve([{ count: BigInt(0) }]);
@@ -84,6 +85,12 @@ const getSchoolBusStats = cacheRead(
 );
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const tenantId = req.headers.get('x-tenant-id') ?? 'unknown';
     const data = await getSchoolBusStats(tenantId);

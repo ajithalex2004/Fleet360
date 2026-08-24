@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ---------------------------------------------------------------------------
 // billing_runs and the finance_invoices columns this route uses are owned
 // by Prisma migrations:
@@ -163,6 +164,17 @@ async function computeBilling(sub: Subscription, tenantName: string): Promise<{
 // ---------------------------------------------------------------------------
 export async function GET(_req: NextRequest) {
 
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;
+
+
   type RunRow = {
     id: string;
     created_at: Date;
@@ -212,6 +224,17 @@ export async function GET(_req: NextRequest) {
 // action=preview      → dry run, returns what would be billed
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
+
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;
+
 
   try {
     const body   = await req.json();

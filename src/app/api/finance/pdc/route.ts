@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const INIT = `
   CREATE TABLE IF NOT EXISTS finance_pdc_cheques (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -42,6 +43,12 @@ type PdcRow = {
 };
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await prisma.$executeRawUnsafe(INIT).catch(() => {});
   const sp = req.nextUrl.searchParams;
   const status = sp.get('status');
@@ -82,6 +89,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await prisma.$executeRawUnsafe(INIT).catch(() => {});
   const body = await req.json();
 

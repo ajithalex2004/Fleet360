@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const INDEXES = [
   // MaintenanceRequest
   'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_maintenance_requests_vehicle_id ON maintenance_requests(vehicle_id)',
@@ -52,6 +53,12 @@ const INDEXES = [
 ];
 
 export async function POST() {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   // CREATE INDEX on tenant-scoped tables — wrap with platform admin so
   // the existing tenant data is visible (some CREATE INDEX CONCURRENTLY
   // variants need to scan the whole table).
@@ -73,6 +80,12 @@ export async function POST() {
 }
 
 export async function GET() {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   // Check which indexes already exist
   const rows = await withPlatformAdmin(prisma, (tx) =>
     tx.$queryRaw<{ indexname: string }[]>`

@@ -5,12 +5,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // finance_tax_categories and finance_vat_audit_logs are created + seeded by
 // migration 20260810000003_finance_reference_data_seed — no runtime DDL needed.
 
 type TaxRow = Record<string, unknown>;
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const sp = req.nextUrl.searchParams;
   const type = sp.get('type'); // categories | audit | summary
 
@@ -103,6 +110,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const body = await req.json();
 
   if (body.type === 'audit_log') {

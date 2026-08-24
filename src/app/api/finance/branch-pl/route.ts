@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /**
  * GET /api/finance/branch-pl
  * Branch-level P&L segmented by cost center / emirate
@@ -25,6 +26,12 @@ function num(v: unknown): number {
 }
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const { searchParams } = new URL(req.url);
   const tenantId  = searchParams.get('tenantId') ?? '';
   const branchId  = searchParams.get('branchId') ?? '';

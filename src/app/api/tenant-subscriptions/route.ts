@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ---------------------------------------------------------------------------
 // Table bootstrap
 // ---------------------------------------------------------------------------
@@ -105,6 +106,12 @@ function addYear(dateStr: string): string {
 // Query params: tenantId, status, moduleCode
 // ---------------------------------------------------------------------------
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await ensureTable();
 
   const { searchParams } = new URL(req.url);
@@ -178,6 +185,12 @@ export async function GET(req: NextRequest) {
 // Body actions: activate | suspend | cancel | (default = create)
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await ensureTable();
 
   try {
@@ -305,6 +318,12 @@ export async function POST(req: NextRequest) {
 // Body: { id, basePrice?, maxVehicles?, maxUsers?, maxStudents?, planTier?, billingCycle?, notes? }
 // ---------------------------------------------------------------------------
 export async function PATCH(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await ensureTable();
 
   try {

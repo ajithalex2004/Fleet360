@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureAgentSchema } from '@/lib/agents/schema';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const AGENT_CONFIGS_DDL = `
   CREATE TABLE IF NOT EXISTS agent_configs (
     id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -183,6 +184,12 @@ async function activityFeed() {
 
 // ── Main handler ───────────────────────────────────────────────────────────────
 export async function GET() {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   // Run DDL sequentially first to avoid pool pressure during init
   await ensureAgentSchema();
   await ensureAgentConfigsTable();

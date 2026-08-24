@@ -24,7 +24,7 @@ import {
 import {
   TRACKING_LEVELS,
   type TrackingLevel,
-} from '@/lib/shipper-portal/visibility';
+} from '@/lib/shipper-portal/visibility-types';
 
 interface LevelOption {
   value: TrackingLevel;
@@ -229,4 +229,4 @@ export function TrackingVisibilityModal({
 }
 
 // Re-export so consumers don't need a second import line
-export { TRACKING_LEVELS, type TrackingLevel } from '@/lib/shipper-portal/visibility';
+export { TRACKING_LEVELS, type TrackingLevel } from '@/lib/shipper-portal/visibility-types';

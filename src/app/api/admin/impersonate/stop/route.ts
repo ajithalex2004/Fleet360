@@ -12,12 +12,19 @@ import { verifySession } from '@/lib/tenant-session';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const COOKIE_NAME              = 'xl-session';
 const IMPERSONATOR_COOKIE_NAME = 'xl-impersonator-session';
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const stashed = req.cookies.get(IMPERSONATOR_COOKIE_NAME)?.value;
     if (!stashed) {

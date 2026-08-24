@@ -10,6 +10,7 @@ import { handleDriverResponse } from '@/lib/dispatch/engine';
 import { prisma }               from '@/lib/prisma';
 import { dispatch as agentDispatch } from '@/lib/agents/orchestrator';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 async function handle(token: string, action: string, reason: string | undefined, baseUrl: string) {
   if (!token)  return NextResponse.json({ error: 'token is required' },  { status: 400 });
   if (!action) return NextResponse.json({ error: 'action is required' }, { status: 400 });
@@ -53,6 +54,12 @@ async function handle(token: string, action: string, reason: string | undefined,
 
 /** GET — WhatsApp link click (opens in browser, returns JSON) */
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const sp      = new URL(req.url).searchParams;
   const token   = sp.get('token')  ?? '';
   const action  = sp.get('action') ?? '';
@@ -62,6 +69,12 @@ export async function GET(req: NextRequest) {
 
 /** POST — in-app React Native driver response */
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const { token, action, reason } = await req.json().catch(() => ({} as any));
   const baseUrl = `${req.nextUrl.protocol}//${req.nextUrl.host}`;
   return handle(String(token ?? ''), String(action ?? ''), reason, baseUrl);

@@ -20,6 +20,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { resolveCarrierAppDevice, upsertCarrierPresence } from '@/lib/logistics/domain';
 import { applyDriverTelemetryLimit } from '@/lib/rate-limit-scope';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 function bearer(req: NextRequest, bodyToken?: string): string {
@@ -40,6 +41,12 @@ interface HeartbeatBody {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   let body: HeartbeatBody;
   try { body = (await req.json()) as HeartbeatBody; }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }

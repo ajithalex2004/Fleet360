@@ -15,6 +15,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import crypto from 'crypto';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // Keys that the platform admin can enable/disable per tenant
 export const TOGGLEABLE_NAV_KEYS = [
   'branches',
@@ -50,6 +51,12 @@ async function ensureTable(): Promise<void> {
 // ── GET — fetch enabled nav keys ───────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const role     = request.headers.get('x-user-role') ?? 'TENANT_ADMIN';
   const myTenant = request.headers.get('x-tenant-id') ?? '';
 
@@ -86,6 +93,12 @@ export async function GET(request: NextRequest) {
 // ── PUT — super admin updates permissions for a tenant ─────────────────────────
 
 export async function PUT(request: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const role = request.headers.get('x-user-role') ?? '';
   if (role !== 'SUPER_ADMIN') {
     return NextResponse.json({ error: 'Forbidden — Super Admin only' }, { status: 403 });

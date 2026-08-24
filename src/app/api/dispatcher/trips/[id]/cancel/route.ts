@@ -36,6 +36,7 @@ import { verifySession } from '@/lib/tenant-session';
 import { withTenantRls } from '@/lib/rls';
 import { evaluateTransition, type TripStatus } from '@/lib/trip-state';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const BodySchema = z.object({
   reason: z.string().max(500).optional(),
   at: z.string().datetime().optional(),
@@ -49,6 +50,12 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } },
 ) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   // 1) Auth — read + verify the session cookie
   const driverToken = req.cookies.get('xl-driver-session')?.value;
   const adminToken = req.cookies.get('xl-session')?.value;

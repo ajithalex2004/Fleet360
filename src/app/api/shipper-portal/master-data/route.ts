@@ -12,9 +12,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireShipperPortal } from '@/lib/shipper-portal/auth';
 import { listLogisticsMasterData } from '@/lib/logistics/domain';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const auth = await requireShipperPortal(req);
   if (auth instanceof NextResponse) return auth;
 

@@ -7,10 +7,17 @@ import { prisma } from '@/lib/prisma';
 import { computeSLASnapshot } from '@/lib/maintenance/sla-engine';
 import type { MaintenanceRequest, MaintenanceStatus } from '@/types/maintenance';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(
     _req: NextRequest,
     { params }: { params: { id: string } },
 ) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     const mr = await prisma.maintenanceRequest.findUnique({
         where: { id: params.id },
     });

@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureGuardianNotificationsTable } from '@/lib/school-bus-notify';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface StudentRow {
@@ -32,6 +33,12 @@ interface StudentRow {
 }
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const phone = req.nextUrl.searchParams.get('guardianPhone')?.trim();
   if (!phone) {
     return NextResponse.json({ error: 'guardianPhone is required' }, { status: 400 });

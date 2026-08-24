@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { publishRecoveryDispatched } from '@/lib/maintenance/publish-event';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // POST /api/maintenance/breakdown-reports/[id]/dispatch-recovery
 // Body: { recoveryVehicleId?, recoveryDriverId?, estimatedArrivalAt?, recoveryNotes? }
 
@@ -9,6 +10,12 @@ export async function POST(
     request: Request,
     { params }: { params: { id: string } },
 ) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const { id }  = params;
         const body    = await request.json();

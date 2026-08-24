@@ -16,6 +16,7 @@ import { requireUnderQuota } from '@/lib/plan-limits';
 import { cacheRead, publicCacheControl, revalidateCache } from '@/lib/server-cache';
 import type { PlanCode } from '@/lib/billing';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAG = 'users:list';
 
 // All modules in the platform — used for moduleAccess validation
@@ -27,6 +28,12 @@ const ALL_MODULES = [
 type ModuleName = typeof ALL_MODULES[number];
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const { searchParams } = new URL(req.url);
     const tenantId   = searchParams.get('tenantId');
@@ -110,6 +117,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await req.json();
 

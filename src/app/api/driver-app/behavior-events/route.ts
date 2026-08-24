@@ -23,6 +23,7 @@ import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 import { applyDriverTelemetryLimit } from '@/lib/rate-limit-scope';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const EventSchema = z.object({
   id: z.string().uuid(),
   tripId: z.string().uuid().nullable().optional(),
@@ -86,6 +87,12 @@ function computeScoreFromRows(rows: Array<{ type: string; occurred_at: Date; val
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const ctx = await requireDriverSession(req);
   if (ctx instanceof NextResponse) return ctx;
 
@@ -150,6 +157,12 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const ctx = await requireDriverSession(req);
   if (ctx instanceof NextResponse) return ctx;
 

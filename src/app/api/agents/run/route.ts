@@ -9,7 +9,14 @@ import { triggerFullScan } from '@/lib/agents/orchestrator';
 import { AgentId } from '@/lib/agents/types';
 import { ensureAgentSchema } from '@/lib/agents/schema';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await ensureAgentSchema();
   try {
     const { agent_id, tenant_id } = await req.json() as { agent_id: AgentId; tenant_id?: string };

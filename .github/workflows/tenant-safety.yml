@@ -1,0 +1,81 @@
+name: Tenant Safety Contract Enforcement
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feat/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+jobs:
+  api-route-check:
+    name: API Route Authorization Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check tenant authorization in API routes
+        run: node scripts/check-tenant-auth.js
+        continue-on-error: false
+
+  schema-validation:
+    name: Schema Tenant Isolation Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate tenant schema isolation
+        run: node scripts/validate-tenant-schema.js
+        continue-on-error: false
+
+  enforcement-summary:
+    name: Summary Report
+    runs-on: ubuntu-latest
+    needs: [api-route-check, schema-validation]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate summary
+        run: |
+          echo "## Tenant Safety Contract Enforcement" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All API routes must use \`requireAuthorizedTenant()\` for tenant isolation." >> $GITHUB_STEP_SUMMARY
+          echo "All tenant-owned models must have \`tenantId\` with NOT NULL and indexes." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.api-route-check.result }}" == "success" ]; then
+            echo "✅ API Route Check: PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ API Route Check: FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.schema-validation.result }}" == "success" ]; then
+            echo "✅ Schema Validation: PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Schema Validation: FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "See [TENANT_SAFETY_CONTRACT.md](./docs/TENANT_SAFETY_CONTRACT.md) for details." >> $GITHUB_STEP_SUMMARY

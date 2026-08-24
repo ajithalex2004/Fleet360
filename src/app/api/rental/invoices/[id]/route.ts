@@ -3,7 +3,13 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { prisma } from '@/lib/prisma';
 
 // ── GET /api/rental/invoices/:id ─────────────────────────────────────────────
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const [rows, lineItems, payments] = await Promise.all([
       prisma.$queryRawUnsafe<any[]>(
@@ -85,7 +91,13 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 // ── DELETE /api/rental/invoices/:id  (soft delete) ───────────────────────────
-export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     // Only DRAFT or VOID invoices can be soft-deleted
     const rows = await prisma.$queryRawUnsafe<any[]>(

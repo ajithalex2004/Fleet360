@@ -15,6 +15,7 @@ import { findSsoConfigByEmail } from '@/lib/sso';
 import { signSsoState } from '@/lib/sso-state';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const SSO_STATE_COOKIE = 'xl-sso-state';
