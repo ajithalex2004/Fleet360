@@ -14,14 +14,14 @@
  * aiRiskScore01 input is omitted (defaults to 0 — no AI signal).
  * When the schema is extended, add the join here.
  */
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { computeRiskScore } from '@/lib/maintenance/risk-score';
 import type { RiskScoreInputs } from '@/types/maintenance';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-export async function GET() {
+export async function GET(req: NextRequest) {
 
     const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
     if (!authz.ok) {

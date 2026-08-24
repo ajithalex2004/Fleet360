@@ -6,7 +6,7 @@ import { ALL_PERMISSIONS, SYSTEM_ROLES } from '@/lib/permissions';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // ── GET: quick DB health check ────────────────────────────────────────────────
-export async function GET() {
+export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -29,7 +29,7 @@ export async function GET() {
 
 // ── POST: seed permissions + system roles ────────────────────────────────────
 export async function POST(_req: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  const authz = requireAuthorizedTenant({ headers: _req.headers, nextUrl: _req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }

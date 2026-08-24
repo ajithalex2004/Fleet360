@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma }       from '@/lib/prisma';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -15,9 +15,9 @@ import {
   publishMaintenanceClosed,
 } from '@/lib/maintenance/publish-event';
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
 
-    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
@@ -52,9 +52,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
 }
 
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
 
-    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
@@ -240,9 +240,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 }
 
 
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
 
-    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }

@@ -5,7 +5,7 @@
  * Returns command-strip KPIs, per-batch-agent stats + pending items,
  * and per-conversational-agent 7-day stats.
  */
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureAgentSchema } from '@/lib/agents/schema';
@@ -184,7 +184,7 @@ async function activityFeed() {
 }
 
 // ── Main handler ───────────────────────────────────────────────────────────────
-export async function GET() {
+export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });

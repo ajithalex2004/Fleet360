@@ -1,9 +1,9 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-export async function POST() {
+export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -257,7 +257,7 @@ export async function POST() {
   });
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });

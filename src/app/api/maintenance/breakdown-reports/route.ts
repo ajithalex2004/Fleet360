@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { publishBreakdownReported } from '@/lib/maintenance/publish-event';
@@ -19,9 +19,9 @@ async function generateReportNo(): Promise<string> {
 // ── GET /api/maintenance/breakdown-reports ────────────────────────────────────
 // Query params: tenantId?, vehicleId?, driverId?, status?, severity?
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
 
-    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
@@ -71,9 +71,9 @@ export async function GET(request: Request) {
 //   • Links BreakdownReport ↔ MaintenanceRequest bidirectionally
 //   • Publishes maintenance.breakdown_reported event (fire-and-forget)
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
 
-    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }

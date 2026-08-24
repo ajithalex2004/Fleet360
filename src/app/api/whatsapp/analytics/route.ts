@@ -1,9 +1,9 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-export async function GET() {
+export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {

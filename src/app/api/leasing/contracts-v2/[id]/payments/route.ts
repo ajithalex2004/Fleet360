@@ -13,7 +13,7 @@ import { withTenantRls } from '@/lib/rls';
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
 
-  const authz = requireAuthorizedTenant(req);
+  const authz = requireAuthorizedTenant(request);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }

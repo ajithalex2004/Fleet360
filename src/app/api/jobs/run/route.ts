@@ -19,7 +19,7 @@ export const maxDuration = 300; // seconds — Vercel Pro plan max
 // ── GET /api/jobs — list registered jobs (authenticated) ─────────────────────
 
 export async function GET(request: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 // ── POST /api/jobs/run?job=<name> — run a job ─────────────────────────────────
 
 export async function POST(request: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }

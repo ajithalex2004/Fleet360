@@ -1,9 +1,9 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-export async function POST(request: Request) {
-    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+export async function POST(request: NextRequest) {
+    const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }

@@ -7,12 +7,12 @@
  * from the type definitions are returned directly — the frontend can POST
  * overrides here in a future iteration.
  */
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { DEFAULT_SLA_RULES } from '@/types/maintenance';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-export async function GET() {
+export async function GET(req: NextRequest) {
     const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });

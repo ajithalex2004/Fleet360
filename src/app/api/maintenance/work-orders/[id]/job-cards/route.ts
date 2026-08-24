@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
@@ -6,11 +6,11 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 // GET /api/maintenance/work-orders/[id]/job-cards
 // Returns all job cards (with tasks) for the given work order.
 export async function GET(
-    _request: Request,
+    _request: NextRequest,
     { params }: { params: { id: string } },
 ) {
 
-    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    const authz = requireAuthorizedTenant({ headers: _request.headers, nextUrl: _request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
@@ -42,11 +42,11 @@ export async function GET(
 // Creates a new job card (optionally with initial tasks).
 // Body: { title, description?, technicianId?, technicianName?, estimatedHours?, tasks?: string[] }
 export async function POST(
-    request: Request,
+    request: NextRequest,
     { params }: { params: { id: string } },
 ) {
 
-    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }

@@ -18,7 +18,7 @@
  * so criterion 3 can be verified.
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { checkGoogleAuth, optimizeTours, GoogleApiError } from '@/lib/planning/fleet-routing/google-client';
 import { getRouteMatrix } from '@/lib/planning/fleet-routing/matrix-cache';
@@ -46,7 +46,7 @@ const FAKE_DEPOT = { lat: 25.1250, lng: 55.2010, label: 'Depot' };
 
 interface CriterionResult { ok: boolean; detail: string }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });

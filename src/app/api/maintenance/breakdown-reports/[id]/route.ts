@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { publishRecoveryCompleted } from '@/lib/maintenance/publish-event';
@@ -7,11 +7,11 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 // ── GET /api/maintenance/breakdown-reports/[id] ───────────────────────────────
 
 export async function GET(
-    _request: Request,
+    _request: NextRequest,
     { params }: { params: { id: string } },
 ) {
 
-    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    const authz = requireAuthorizedTenant({ headers: _request.headers, nextUrl: _request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
@@ -52,11 +52,11 @@ export async function GET(
 //   AT_WORKSHOP         → RESOLVED
 
 export async function PATCH(
-    request: Request,
+    request: NextRequest,
     { params }: { params: { id: string } },
 ) {
 
-    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }

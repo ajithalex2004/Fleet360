@@ -177,7 +177,7 @@ const getFinanceSummary = cacheRead(
 );
 
 export async function GET(request: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }

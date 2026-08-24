@@ -8,7 +8,7 @@
  * Statuses: COMPLETED · IN_PROGRESS · SCHEDULED · CANCELLED
  * Includes: speeding events, harsh braking, geofence exits, stop arrivals, boarding events
  */
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
@@ -218,7 +218,7 @@ async function insertEvents(
 }
 
 /* ── main seed logic ─────────────────────────────────────── */
-export async function POST() {
+export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });

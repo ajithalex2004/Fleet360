@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { calculateDue, sortByUrgency, type VehicleSnapshot } from '@/lib/pm/due-calculator';
@@ -6,11 +6,11 @@ import { PMItemStatus, type PMTrigger, type MaintenancePlan, PMTriggerType } fro
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function GET(
-    _request: Request,
+    _request: NextRequest,
     { params }: { params: { id: string } },
 ) {
 
-    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    const authz = requireAuthorizedTenant({ headers: _request.headers, nextUrl: _request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }

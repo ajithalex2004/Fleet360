@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { publishRecoveryDispatched } from '@/lib/maintenance/publish-event';
@@ -8,11 +8,11 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 // Body: { recoveryVehicleId?, recoveryDriverId?, estimatedArrivalAt?, recoveryNotes? }
 
 export async function POST(
-    request: Request,
+    request: NextRequest,
     { params }: { params: { id: string } },
 ) {
 
-    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }

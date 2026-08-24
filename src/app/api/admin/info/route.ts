@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { MODULES, MODULE_BY_KEY } from '@/lib/modules';
@@ -49,7 +49,7 @@ const NOTIFICATION_CHANNELS = [
   { id: 'erp',      name: 'ERP / Accounting', icon: 'P', description: 'Accounting system integration: SAP, Oracle, Sage, Navision, QuickBooks - invoice and payment sync', status: 'configurable', configPath: '/admin/settings/integrations' },
 ];
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });

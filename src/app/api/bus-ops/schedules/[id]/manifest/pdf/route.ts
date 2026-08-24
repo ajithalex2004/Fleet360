@@ -15,7 +15,7 @@
 
 import { createElement } from 'react';
 import { withTenantRls } from '@/lib/rls';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { renderPdf } from '@/lib/pdf/render';
 import { BusManifestPdf, type BusManifestPdfData, type ManifestPassenger } from '@/lib/pdf/templates/bus-manifest';

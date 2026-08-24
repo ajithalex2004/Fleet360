@@ -8,7 +8,7 @@
  * No writes. Safe to call from a dashboard widget on any cadence.
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { optimiseRoute, type GeoStop } from '@/lib/agents/route-optimiser/tsp';
@@ -16,7 +16,7 @@ import { optimiseRoute, type GeoStop } from '@/lib/agents/route-optimiser/tsp';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {

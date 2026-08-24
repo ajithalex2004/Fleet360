@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
@@ -36,8 +36,8 @@ const LEGACY_STATUS: Record<string, string> = {
   COMPLETED: 'CLOSED',
 };
 
-export async function GET(_req: Request, { params }: { params: { ref: string } }) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+export async function GET(_req: NextRequest, { params }: { params: { ref: string } }) {
+  const authz = requireAuthorizedTenant({ headers: _req.headers, nextUrl: _req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }

@@ -9,7 +9,7 @@
 
 import { createElement } from 'react';
 import { withTenantRls } from '@/lib/rls';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { renderPdf } from '@/lib/pdf/render';
@@ -37,7 +37,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
 
-  const authz = requireAuthorizedTenant(req);
+  const authz = requireAuthorizedTenant(request);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }

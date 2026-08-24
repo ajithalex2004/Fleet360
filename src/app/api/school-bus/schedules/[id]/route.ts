@@ -75,7 +75,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
 
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  const authz = requireAuthorizedTenant({ headers: _.headers, nextUrl: _.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }

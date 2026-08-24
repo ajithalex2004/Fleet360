@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -10,7 +10,7 @@ const BODY = {
   canonicalEntity: 'logistics_shipment_orders',
 };
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -20,7 +20,7 @@ export async function GET() {
   return NextResponse.json(BODY, { status: 410 });
 }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -30,7 +30,7 @@ export async function POST() {
   return NextResponse.json(BODY, { status: 410 });
 }
 
-export async function DELETE() {
+export async function DELETE(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });

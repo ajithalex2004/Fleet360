@@ -29,7 +29,7 @@ function serialize(obj: unknown): unknown {
 
 export async function GET(request: NextRequest) {
 
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
@@ -76,8 +76,8 @@ export async function GET(request: NextRequest) {
  * Vehicle creation is centralised in Fleet Management.
  * Direct POST to /api/vehicles is not permitted from operational modules.
  */
-export async function POST() {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+export async function POST(request: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }

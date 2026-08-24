@@ -1,5 +1,5 @@
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
@@ -29,8 +29,8 @@ export async function GET() {
     }
 }
 
-export async function POST(request: Request) {
-    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+export async function POST(request: NextRequest) {
+    const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
@@ -60,8 +60,8 @@ export async function POST(request: Request) {
     }
 }
 
-export async function PUT(request: Request) {
-    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+export async function PUT(request: NextRequest) {
+    const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
