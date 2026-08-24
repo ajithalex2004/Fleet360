@@ -26,7 +26,8 @@ async function ensureTable() {
   `);
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string; docId: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string; docId: string }> }) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -64,7 +65,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string; 
 }
 
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string; docId: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string; docId: string }> }) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 

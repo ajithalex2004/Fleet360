@@ -8,8 +8,9 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 // Useful to call when request reaches ESTIMATION_APPROVED.
 export async function GET(
     _request: NextRequest,
-    { params }: { params: { id: string } },
+    props: { params: Promise<{ id: string }> },
 ) {
+    const params = await props.params;
 
     const authz = requireAuthorizedTenant({ headers: _request.headers, nextUrl: _request.nextUrl });
     if (!authz.ok) {

@@ -19,7 +19,8 @@ import { calculateRate, type RateRequest } from '@/lib/rental-rate-engine';
 import { getEventBus }               from '@/events/event-bus';
 import { RENTAL_INVOICE_GENERATED }  from '@/events/registry';
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {

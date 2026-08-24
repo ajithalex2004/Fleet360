@@ -5,7 +5,8 @@ import { withTenantRls } from '@/lib/rls';
 
 // POST /api/rental/bookings/[id]/complete
 // Closes/completes a booking on vehicle return, records return inspection
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {

@@ -7,7 +7,8 @@ import { sendBookingActivatedWhatsApp } from '@/lib/whatsapp';
 
 // POST /api/rental/bookings/[id]/activate
 // Activates booking (vehicle handed over to customer), records checkout inspection
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {

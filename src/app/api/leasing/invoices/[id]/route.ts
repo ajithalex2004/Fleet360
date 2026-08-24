@@ -10,7 +10,8 @@ import { withTenantRls } from '@/lib/rls';
  * Returns 404 (not 403) on cross-tenant probes to avoid leaking
  * row existence.
  */
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
@@ -30,7 +31,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });

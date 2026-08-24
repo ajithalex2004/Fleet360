@@ -6,7 +6,8 @@ import { TRIP_COMPLETED }  from '@/events/registry';
 import { assertTripTransition, TripTransitionError, type TripScheduleStatus } from '@/lib/bus-ops/state-machines';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
 
   // Tenant-scope the lookup. Without this, any authenticated caller could
   // complete a trip belonging to another tenant by supplying its id — the

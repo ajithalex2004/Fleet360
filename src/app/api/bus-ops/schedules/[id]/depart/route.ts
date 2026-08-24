@@ -14,7 +14,8 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
  */
 const LATE_DEPARTURE_TOLERANCE_MIN = 5;
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 

@@ -10,7 +10,8 @@ import { prisma } from '@/lib/prisma';
  * Returns 404 (not 403) on cross-tenant probes so we don't leak the
  * existence of rows belonging to other tenants.
  */
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
