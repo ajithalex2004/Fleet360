@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAG = 'tenants:list';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {

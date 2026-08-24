@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { publishWarrantyClaimRaised } from '@/lib/maintenance/publish-event';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // GET /api/maintenance/warranty-claims
 // Query params: tenantId?, warrantyId?, requestId?, status?
 export async function GET(request: Request) {

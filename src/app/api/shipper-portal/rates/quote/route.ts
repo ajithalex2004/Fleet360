@@ -21,6 +21,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireShipperPortal } from '@/lib/shipper-portal/auth';
 import { signJwtForBackend } from '@/lib/auth/jwt';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const GO_BACKEND_URL = process.env.GO_BACKEND_URL ?? 'http://localhost:8080';

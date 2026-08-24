@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { paginate, paginatedResponse } from '@/lib/pagination';
 import { revalidateCache } from '@/lib/server-cache';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAGS = ['fleet:stats', 'fleet:documents-expiring'];
 
 export async function GET(req: NextRequest) {

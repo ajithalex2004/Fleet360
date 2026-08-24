@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { ensureAuditTable, logAudit, AuditPayload } from '@/lib/audit';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ---------------------------------------------------------------------------
 // GET /api/admin/audit-logs
 // Query params:

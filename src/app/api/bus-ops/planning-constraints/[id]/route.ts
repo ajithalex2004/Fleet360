@@ -12,11 +12,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const ACTIONS = new Set(['BLOCK', 'WARN', 'PENALTY']);
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   const permError = requireBusOpsAdminAccess(req, 'planning-constraints');
   if (permError) return permError;
   const { id } = await ctx.params;
@@ -29,8 +37,15 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 }
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   const permError = requireBusOpsAdminAccess(req, 'planning-constraints');
   if (permError) return permError;
   const updatedBy = req.headers.get('x-user-id') ?? null;
@@ -82,8 +97,15 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 }
 
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   const permError = requireBusOpsAdminAccess(req, 'planning-constraints');
   if (permError) return permError;
   const { id } = await ctx.params;

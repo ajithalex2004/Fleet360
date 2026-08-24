@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { randomUUID } from 'crypto';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
     return await withTenantRls(prisma, params.id, async (tx) => {

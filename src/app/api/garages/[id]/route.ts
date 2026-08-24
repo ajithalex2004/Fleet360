@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(request: Request, { params }: { params: { id: string } }) {
     try {
         const garage = await prisma.garage.findFirst({

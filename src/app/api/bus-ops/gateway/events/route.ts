@@ -59,6 +59,7 @@ import {
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 import type { BoardingEventSource } from '@prisma/client';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import {
   recordBoarding,
   logAlightEvent,

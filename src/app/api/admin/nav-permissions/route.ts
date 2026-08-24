@@ -15,6 +15,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import crypto from 'crypto';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // Keys that the platform admin can enable/disable per tenant
 export const TOGGLEABLE_NAV_KEYS = [
   'branches',

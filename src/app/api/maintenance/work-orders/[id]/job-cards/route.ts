@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // GET /api/maintenance/work-orders/[id]/job-cards
 // Returns all job cards (with tasks) for the given work order.
 export async function GET(

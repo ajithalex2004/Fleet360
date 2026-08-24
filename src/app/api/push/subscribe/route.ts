@@ -20,6 +20,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 interface SubscribeBody {
   endpoint: string;
   keys: { p256dh: string; auth: string };

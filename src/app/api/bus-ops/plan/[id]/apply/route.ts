@@ -38,6 +38,7 @@ import { withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 import { evaluatePlanApply } from '@/lib/planning/apply-gate';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import {
   assignVehiclesToBlocks,
   VEHICLE_GROUP_CONFLICT,

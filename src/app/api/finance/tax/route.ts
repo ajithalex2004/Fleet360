@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // finance_tax_categories and finance_vat_audit_logs are created + seeded by
 // migration 20260810000003_finance_reference_data_seed — no runtime DDL needed.
 

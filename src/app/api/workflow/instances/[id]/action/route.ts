@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { advanceWorkflow, getWorkflowInstanceWithHistory } from '@/lib/workflow-db';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const body = await req.json();

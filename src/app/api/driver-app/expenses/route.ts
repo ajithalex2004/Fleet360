@@ -18,6 +18,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const PostBodySchema = z.object({
   id: z.string().uuid(),
   shiftId: z.string().uuid().optional(),

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /* ── Bootstrap table ─────────────────────────────────────── */
 async function ensureTable() {
   await prisma.$executeRawUnsafe(`

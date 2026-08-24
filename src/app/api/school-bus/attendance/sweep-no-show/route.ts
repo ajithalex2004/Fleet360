@@ -24,6 +24,7 @@ import { loadStudentForNotify, notifyGuardians, ensureGuardianNotificationsTable
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface TripRow {

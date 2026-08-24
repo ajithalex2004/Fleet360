@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /**
  * Ambulance Dispatch Calls API
  * Auto-creates `ambulance_calls` table.

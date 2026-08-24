@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const INIT_TABLE = `
   CREATE TABLE IF NOT EXISTS whatsapp_templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

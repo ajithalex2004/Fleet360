@@ -11,6 +11,7 @@ import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { signSession } from '@/lib/tenant-session';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ── Free email domains blocklist ─────────────────────────────────────────────
 const FREE_EMAIL_DOMAINS = new Set([
   'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'live.com',

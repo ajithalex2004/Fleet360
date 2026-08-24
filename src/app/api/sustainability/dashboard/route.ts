@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ── GHG Protocol / ISO 14064 Emission Factors ─────────────────────────────────
 // Sources: IPCC AR6 WG3 (2022), BEIS 2023 Conversion Factors,
 //          UAE Ministry of Energy & Infrastructure Grid Factor 2023

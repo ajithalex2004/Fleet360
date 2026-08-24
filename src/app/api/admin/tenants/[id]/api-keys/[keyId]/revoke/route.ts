@@ -10,6 +10,7 @@ import { ensureApiKeyTable } from '@/lib/api-keys';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string; keyId: string }>; }

@@ -10,6 +10,7 @@
 import { NextResponse } from 'next/server';
 import { DEFAULT_SLA_RULES } from '@/types/maintenance';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET() {
     return NextResponse.json({ rules: DEFAULT_SLA_RULES });
 }

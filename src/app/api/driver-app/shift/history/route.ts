@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 interface HistoryRow {
   id: string;
   started_at: Date;

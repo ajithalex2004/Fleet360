@@ -20,6 +20,7 @@ import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 import { privateCacheControl } from '@/lib/server-cache';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const DEFAULT_RADIUS_M = 100;
 
 interface StopRow {

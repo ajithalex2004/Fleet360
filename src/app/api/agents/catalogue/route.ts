@@ -6,6 +6,7 @@
 import { NextResponse } from 'next/server';
 import { AGENT_CATALOGUE } from '@/lib/agents/registry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET() {
   return NextResponse.json({ agents: AGENT_CATALOGUE });
 }

@@ -10,6 +10,7 @@ import dns from 'dns';
 import { promisify } from 'util';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const resolveTxt = promisify(dns.resolveTxt);
 
 // ── POST — Email token verification ──────────────────────────────────────────

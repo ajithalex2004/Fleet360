@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Shipment Drafted',
   PENDING: 'Shipment Created',

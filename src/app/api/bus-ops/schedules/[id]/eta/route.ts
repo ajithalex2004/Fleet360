@@ -28,6 +28,7 @@ import { prisma } from '@/lib/prisma';
 import { predictEta, type TrackingPoint } from '@/lib/logistics/eta-predictor';
 import { raiseAlert } from '@/lib/alerts/raise';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 /**
@@ -44,8 +45,15 @@ interface VisitRow { stop_id: string; entered_at: Date | null }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: scheduleId } = await params;
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
 
   try {
     // ensureBusGpsTables() removed — tables live in fleet schema now

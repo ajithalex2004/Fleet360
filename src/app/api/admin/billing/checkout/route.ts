@@ -12,6 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { getStripe, getOrCreateCustomer, getPriceId, isStripeConfigured } from '@/lib/billing';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -23,10 +24,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Stripe is not configured. Set STRIPE_SECRET_KEY.' }, { status: 503 });
   }
 
-  const tenantId = req.headers.get('x-tenant-id');
-  const userId   = req.headers.get('x-user-id');
-  const role     = req.headers.get('x-user-role') ?? '';
-  if (!tenantId || !userId) return NextResponse.json({ ok: false, error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ ok: false, error: authz.error }, { status: authz.status });
+  }
+  const { tenantId, userId, role } = authz;
+
   if (role !== 'TENANT_ADMIN' && role !== 'SUPER_ADMIN') {
     return NextResponse.json({ ok: false, error: 'Only tenant admins can manage billing.' }, { status: 403 });
   }

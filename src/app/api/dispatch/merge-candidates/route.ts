@@ -15,6 +15,7 @@ import { getMergeCandidates, haversineKm, evaluatePair, loadMergeConfigPublic } 
 import { prisma } from '@/lib/prisma';
 import { ensureDispatchSchema } from '@/lib/dispatch/schema';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
 export async function GET(req: NextRequest) {

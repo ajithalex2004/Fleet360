@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const tenantId = req.headers.get('x-tenant-id') ?? '';
   if (!tenantId) {

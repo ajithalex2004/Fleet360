@@ -14,6 +14,7 @@ import { runDispatch } from '@/lib/dispatch/engine';
 import { logAudit } from '@/lib/audit';
 import type { ServiceType, DispatchPriority } from '@/lib/dispatch/types';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(req: NextRequest) {
   try {
     await ensureDispatchSchema();

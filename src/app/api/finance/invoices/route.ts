@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { assertCanWrite } from '@/lib/access-control';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /**
  * GET  /api/finance/invoices  — paginated list with filters
  * POST /api/finance/invoices  — create invoice with line items + UAE 5% VAT
@@ -18,9 +19,15 @@ import { assertCanWrite } from '@/lib/access-control';
  */
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   }
 
   const { searchParams } = new URL(req.url);

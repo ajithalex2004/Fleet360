@@ -15,6 +15,7 @@ import { prisma } from '@/lib/prisma';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const ALLOWED_SESSIONS = ['MORNING', 'AFTERNOON', 'BOTH'] as const;

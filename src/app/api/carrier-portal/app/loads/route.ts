@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { listCarrierPortalRfqs, resolveCarrierAppDevice, submitCarrierBid } from '@/lib/logistics/domain';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 async function requireDevice(req: NextRequest) {

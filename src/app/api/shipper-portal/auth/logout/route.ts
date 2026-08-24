@@ -5,6 +5,7 @@
 import { NextResponse } from 'next/server';
 import { buildClearSessionCookie } from '@/lib/shipper-portal/auth';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST() {

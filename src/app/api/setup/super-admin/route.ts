@@ -22,6 +22,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const PLATFORM_TENANT_DOMAIN = 'xl-ai-platform.internal';
 const PLATFORM_TENANT_NAME   = 'Fleet360 — Platform';
 

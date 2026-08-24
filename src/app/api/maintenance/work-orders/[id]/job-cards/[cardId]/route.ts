@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // PUT /api/maintenance/work-orders/[id]/job-cards/[cardId]
 // Updates a job card (status, hours, technician, tasks).
 // Body: { title?, description?, technicianId?, technicianName?, status?, actualHours?,

@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as {

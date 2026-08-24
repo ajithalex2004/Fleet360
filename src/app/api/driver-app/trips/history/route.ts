@@ -26,6 +26,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 interface TripRow {
   id: string;
   trip_number: string | null;

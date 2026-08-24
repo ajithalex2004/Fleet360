@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runTripReminders } from '@/lib/push/scheduler';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(req: NextRequest) {
   const secret = process.env.PUSH_CRON_SECRET;
   if (secret) {

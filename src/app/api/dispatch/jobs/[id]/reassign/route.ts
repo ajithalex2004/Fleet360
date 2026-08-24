@@ -17,6 +17,7 @@ import { prisma }                    from '@/lib/prisma';
 import { ensureDispatchSchema }      from '@/lib/dispatch/schema';
 import { dispatch as agentDispatch } from '@/lib/agents/orchestrator';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
 export async function POST(

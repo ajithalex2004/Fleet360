@@ -5,6 +5,7 @@ import { DBMessage, getMessageStore } from "./messageStore";
 import { logInteraction } from "@/lib/agents/chat-widget/agent";
 
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(req: NextRequest) {
   const t0 = Date.now();
   const { prompt, threadId, responseId } = (await req.json()) as {

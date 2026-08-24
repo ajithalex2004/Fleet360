@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { validateResourceAssignment } from '@/lib/bus-ops/validate-assignment';
 import { isValidationEnabled, withAssignmentLocks } from '@/lib/bus-ops/assignment-txn';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /**
  * Fields whose change requires re-running resource validation. Missing
  * any of them from the trigger list would silently allow unsafe
@@ -27,8 +28,15 @@ function touchesAssignment(body: Record<string, unknown>): boolean {
 }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   try {
     const schedule = await prisma.tripSchedule.findFirst({
       where: { id: params.id, tenantId, deletedAt: null },
@@ -46,8 +54,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   try {
     // Load full existing row so we can build an effective-merged
     // schedule for validation. Any assignment-affecting field NOT in
@@ -130,8 +145,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   try {
     const existing = await prisma.tripSchedule.findFirst({ where: { id: params.id, tenantId, deletedAt: null }, select: { id: true } });
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });

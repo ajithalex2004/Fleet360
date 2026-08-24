@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // Default thresholds per agent — used when no row exists yet
 const DEFAULTS: Record<string, Record<string, unknown>> = {
   'predictive-maintenance': {

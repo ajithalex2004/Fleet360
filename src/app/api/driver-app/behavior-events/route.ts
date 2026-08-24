@@ -23,6 +23,7 @@ import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 import { applyDriverTelemetryLimit } from '@/lib/rate-limit-scope';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const EventSchema = z.object({
   id: z.string().uuid(),
   tripId: z.string().uuid().nullable().optional(),

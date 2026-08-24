@@ -4,6 +4,7 @@ import { paginate, paginatedResponse } from '@/lib/pagination';
 import { getEventBus }    from '@/events/event-bus';
 import { FUEL_FILLED }    from '@/events/registry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(req: NextRequest) {
   try {
     const sp = req.nextUrl.searchParams;

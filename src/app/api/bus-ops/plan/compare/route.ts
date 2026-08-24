@@ -18,6 +18,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 interface PlanSummary {
   runCount: number;
   blockCount: number;

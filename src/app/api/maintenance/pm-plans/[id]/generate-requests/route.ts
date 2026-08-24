@@ -5,6 +5,7 @@ import { PMItemStatus, PMTriggerType, type PMTrigger, type MaintenancePlan } fro
 import { MaintenanceStatus, MaintenanceType } from '@/types/maintenance';
 import { publishPMScheduleTriggered } from '@/lib/maintenance/publish-event';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /**
  * POST /api/maintenance/pm-plans/[id]/generate-requests
  *

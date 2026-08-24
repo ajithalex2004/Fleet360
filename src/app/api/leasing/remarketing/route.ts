@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const RETIRED_REMARKETING_RESPONSE = {
   error: 'Leasing remarketing has been retired.',
   redirectTo: '/leasing',

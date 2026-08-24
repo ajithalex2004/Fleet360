@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { logInteraction } from '@/lib/agents/ops-assistant/agent';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const SYSTEM_PROMPT = `You are the Fleet360 Operations Assistant — an expert AI embedded in a Smart Transport Management Platform used by fleet operators, dispatchers, and operations managers in the UAE.
 
 You have real-time access to the following live data via tools:

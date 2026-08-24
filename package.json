@@ -40,7 +40,10 @@
         "cap:sync": "npm run build:driver && npx cap sync",
         "cap:open:ios": "npx cap open ios",
         "cap:open:android": "npx cap open android",
-        "test:isolation:tenant001": "vitest run tests/unit/tenant-authorized-context.test.ts tests/integration/tenant-001-leasing-rental-isolation.test.ts"
+        "test:isolation:tenant001": "vitest run tests/unit/tenant-authorized-context.test.ts tests/integration/tenant-001-leasing-rental-isolation.test.ts",
+        "tenant:check-auth": "node scripts/check-tenant-auth.js",
+        "tenant:check-schema": "node scripts/validate-tenant-schema.js",
+        "tenant:audit": "npm run tenant:check-auth && npm run tenant:check-schema"
     },
     "dependencies": {
         "@capacitor-community/sqlite": "^8.1.1",

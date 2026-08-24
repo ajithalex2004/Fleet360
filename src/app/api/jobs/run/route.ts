@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { JOB_MAP, JOB_REGISTRY, isJobAuthorized, type JobContext } from '@/lib/jobs/registry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const dynamic     = 'force-dynamic';
 export const maxDuration = 300; // seconds — Vercel Pro plan max
 

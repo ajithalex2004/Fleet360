@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { publishBreakdownReported } from '@/lib/maintenance/publish-event';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function generateReportNo(): Promise<string> {

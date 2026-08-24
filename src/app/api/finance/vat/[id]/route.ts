@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /**
  * PATCH /api/finance/vat/:id  — advance VAT return status (DRAFT→SUBMITTED→PAID)
  * GET   /api/finance/vat/:id  — single VAT return detail

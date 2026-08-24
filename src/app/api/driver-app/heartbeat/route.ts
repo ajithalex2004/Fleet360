@@ -20,6 +20,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { resolveCarrierAppDevice, upsertCarrierPresence } from '@/lib/logistics/domain';
 import { applyDriverTelemetryLimit } from '@/lib/rate-limit-scope';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 function bearer(req: NextRequest, bodyToken?: string): string {

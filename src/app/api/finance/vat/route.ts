@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /**
  * GET  /api/finance/vat  — returns { summary, returns }
  *   summary: auto-computed from all module revenue tables for current/selected quarter

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /**
  * GET   /api/finance/invoices/:id  — full detail with payment history
  * PATCH /api/finance/invoices/:id  — update status / fields

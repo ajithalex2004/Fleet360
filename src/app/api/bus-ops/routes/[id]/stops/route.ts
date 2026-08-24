@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { syncStopPlace, syncStopPlaces } from '@/lib/places/sync-stop';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const stops = await prisma.routeStop.findMany({

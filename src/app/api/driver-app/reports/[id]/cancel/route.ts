@@ -17,6 +17,7 @@ import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 import { evaluateReportTransition } from '@/lib/driver-reports';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } },

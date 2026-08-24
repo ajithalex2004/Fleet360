@@ -27,6 +27,7 @@ import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 import { evaluateTransition, classifyTiming, type TripStatus } from '@/lib/trip-state';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const BodySchema = z.object({
   at: z.string().datetime().optional(),
   lat: z.number().min(-90).max(90).optional(),

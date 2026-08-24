@@ -25,6 +25,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { logAudit } from '@/lib/platform-audit-log';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const MAX_PASSES = 8;
 
 interface RouteParams { params: Promise<{ id: string }>; }

@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(req: NextRequest) {
   try {
-    const tenantId = req.headers.get('x-tenant-id');
-    if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+    if (!authz.ok) {
+
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+    }
+
+    const { tenantId } = authz;, { status: 401 });
     const { searchParams } = new URL(req.url);
     const tripId = searchParams.get('tripId');
     const passengers = await prisma.tripPassenger.findMany({
@@ -21,8 +29,15 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const tenantId = req.headers.get('x-tenant-id');
-    if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+    if (!authz.ok) {
+
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+    }
+
+    const { tenantId } = authz;, { status: 401 });
     const body = await req.json();
     const passenger = await prisma.tripPassenger.create({
       data: { ...body, tenantId },

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMyPendingApprovals } from '@/lib/workflow-db';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);

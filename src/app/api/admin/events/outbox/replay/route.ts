@@ -23,6 +23,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma }                    from '@/lib/prisma';
 import { withPlatformAdmin }         from '@/lib/rls';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {

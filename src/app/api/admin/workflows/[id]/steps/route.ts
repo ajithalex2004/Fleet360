@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listSteps, createStep } from '@/lib/workflow-db';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const steps = await listSteps(params.id);

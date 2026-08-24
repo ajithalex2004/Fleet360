@@ -22,6 +22,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireDriverSession } from '@/lib/driver-session';
 import { privateCacheControl } from '@/lib/server-cache';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 let cachedTenants: { raw: string; ids: Set<string> } | null = null;
 
 function getEnabledTenants(): Set<string> {

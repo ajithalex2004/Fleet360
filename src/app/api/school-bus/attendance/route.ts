@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /**
  * Auto-creates `school_bus_attendance` table.
  * GET  /api/school-bus/attendance?date=YYYY-MM-DD&routeId=&sessionType=

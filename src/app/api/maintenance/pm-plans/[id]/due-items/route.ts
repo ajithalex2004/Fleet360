@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { calculateDue, sortByUrgency, type VehicleSnapshot } from '@/lib/pm/due-calculator';
 import { PMItemStatus, type PMTrigger, type MaintenancePlan, PMTriggerType } from '@/types/maintenance';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(
     _request: Request,
     { params }: { params: { id: string } },

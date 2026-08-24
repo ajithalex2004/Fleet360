@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBrandingByCode, getBrandingByDomain } from '@/lib/branding';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {

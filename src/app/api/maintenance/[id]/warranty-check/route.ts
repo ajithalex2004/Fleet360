@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // GET /api/maintenance/[id]/warranty-check
 // Returns active warranties for the vehicle linked to this request.
 // Useful to call when request reaches ESTIMATION_APPROVED.

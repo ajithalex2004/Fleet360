@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function PATCH() {
   return NextResponse.json(
     {

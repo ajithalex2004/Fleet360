@@ -26,6 +26,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { logAudit } from '@/lib/platform-audit-log';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 interface RouteParams { params: Promise<{ id: string }>; }
 
 // Hardcoded whitelist — server-side enforcement, never trust the UI.

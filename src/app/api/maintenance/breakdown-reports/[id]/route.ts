@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { publishRecoveryCompleted } from '@/lib/maintenance/publish-event';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ── GET /api/maintenance/breakdown-reports/[id] ───────────────────────────────
 
 export async function GET(

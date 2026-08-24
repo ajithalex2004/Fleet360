@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { duplicateWorkflow } from '@/lib/workflow-db';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
   try {
     const newId = await duplicateWorkflow(params.id);

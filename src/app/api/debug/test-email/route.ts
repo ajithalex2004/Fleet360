@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { processNotificationRules } from '@/lib/notifications';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET() {
     try {
         console.log('[Debug] Manually triggering SR_CREATED notification');

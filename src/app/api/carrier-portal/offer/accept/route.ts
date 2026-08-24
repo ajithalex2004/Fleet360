@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { respondToBroadcastOffer } from '@/lib/logistics/domain';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {

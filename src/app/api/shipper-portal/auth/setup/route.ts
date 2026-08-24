@@ -20,6 +20,7 @@ import { getPortalUserById, markPortalUserLoggedIn } from '@/lib/shipper-portal/
 import { signPortalSession, buildSessionCookie } from '@/lib/shipper-portal/auth';
 import { hashPassword, validatePassword } from '@/lib/password-policy';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {

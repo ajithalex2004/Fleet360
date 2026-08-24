@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
 import { raiseAlert } from '@/lib/alerts/raise';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAG = 'bus-ops:incidents';
 
 const getIncidents = cacheRead(
@@ -22,8 +23,15 @@ const getIncidents = cacheRead(
 
 export async function GET(req: NextRequest) {
   try {
-    const tenantId = req.headers.get('x-tenant-id');
-    if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+    if (!authz.ok) {
+
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+    }
+
+    const { tenantId } = authz;, { status: 401 });
     const { searchParams } = new URL(req.url);
     const status   = searchParams.get('status');
     const severity = searchParams.get('severity');
@@ -43,8 +51,15 @@ const SEV_TO_ALERT: Record<string, string> = {
 
 export async function POST(req: NextRequest) {
   try {
-    const tenantId = req.headers.get('x-tenant-id');
-    if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+    if (!authz.ok) {
+
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+    }
+
+    const { tenantId } = authz;, { status: 401 });
     const body = await req.json();
     const count = await prisma.tripIncident.count();
     const incidentNo = body.incidentNo ?? `INC-${String(count + 1).padStart(5, '0')}`;

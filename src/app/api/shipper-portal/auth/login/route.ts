@@ -13,6 +13,7 @@ import { _findUserWithHashByEmail, markPortalUserLoggedIn } from '@/lib/shipper-
 import { signPortalSession, buildSessionCookie } from '@/lib/shipper-portal/auth';
 import { verifyPassword } from '@/lib/password-policy';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const GENERIC_AUTH_ERROR = 'Invalid email or password';

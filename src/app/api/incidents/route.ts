@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const zero = () => Promise.resolve([{ count: BigInt(0) }]);
 
 // ── POST — create a new incident ─────────────────────────────────────────────

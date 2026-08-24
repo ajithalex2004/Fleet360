@@ -13,15 +13,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createShipmentOrder, listShipmentOrders } from '@/lib/logistics/domain';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const POSTABLE_MARKETPLACE = new Set(['PRIVATE', 'DRAFT', '']);
 const TERMINAL_STATUS = new Set(['DELIVERED', 'POD_SUBMITTED', 'COMPLETED', 'CLOSED', 'CANCELLED']);
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   }
 
   const sp = req.nextUrl.searchParams;
@@ -76,9 +83,15 @@ interface ShipmentBody {
 }
 
 export async function POST(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   }
 
   let body: ShipmentBody;

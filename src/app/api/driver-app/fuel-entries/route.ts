@@ -19,6 +19,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const PostBodySchema = z.object({
   // Client-generated UUID for idempotency. The sync queue uses the
   // same UUID across retries, so duplicate submissions no-op.

@@ -17,6 +17,7 @@ import {
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 // Disable Next's body parsing — we need the raw body for signature verification.
 export const dynamic = 'force-dynamic';

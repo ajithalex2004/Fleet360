@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /**
  * GET /api/finance/vat-branch
  * Consolidated UAE FTA VAT Return with per-branch breakdown.

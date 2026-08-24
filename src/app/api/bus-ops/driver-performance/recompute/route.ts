@@ -18,6 +18,7 @@ import { scoreDriverPeriod, type DriverPeriodMetrics } from '@/lib/bus-driver-sc
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const ON_TIME_TOLERANCE_MIN = 5;

@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveCarrierPortalInvite, submitCarrierBid } from '@/lib/logistics/domain';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface BidBody {

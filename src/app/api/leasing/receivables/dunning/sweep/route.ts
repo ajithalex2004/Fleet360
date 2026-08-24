@@ -43,6 +43,7 @@ import { sendEmail } from '@/services/email/emailService';
 import { logAudit } from '@/lib/audit';
 import { captureException, captureMessage } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 type InvoiceWithLessee = Awaited<ReturnType<typeof prisma.leaseInvoice.findMany>>[number] & {

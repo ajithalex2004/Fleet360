@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json();
   const sets: string[] = [];

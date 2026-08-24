@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ---------------------------------------------------------------------------
 // billing_runs and the finance_invoices columns this route uses are owned
 // by Prisma migrations:

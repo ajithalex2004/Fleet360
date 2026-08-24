@@ -16,6 +16,7 @@ import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import { signSession } from '@/lib/tenant-session';
 import { newId } from '@/lib/driver-offline/db';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(req: NextRequest) {
   const body = await req.json() as { response: any; driverId?: string };
   if (!body?.response || !body?.driverId) {

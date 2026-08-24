@@ -38,6 +38,7 @@ import {
 import { resolveZoneFallbackKm } from '@/lib/planning/zone-compat-policy';
 import { resolveCbaWorkRules } from '@/lib/cba/engine';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAG = 'staff-transport-plans';
 
 export async function POST(req: NextRequest) {

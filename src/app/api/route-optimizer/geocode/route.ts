@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { geocodeAddress } from '@/lib/mapbox';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get('q')?.trim();
 

@@ -26,6 +26,7 @@ import { parseSuccess, normaliseSkipReason } from '@/lib/planning/fleet-routing/
 import { resolveTimeWindow } from '@/lib/planning/fleet-routing/window-resolver';
 import type { ShipmentInput, VehicleInput } from '@/lib/planning/fleet-routing/types';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 // ── Fake fixtures (Dubai — Al Khail Gate area) ─────────────────────────────

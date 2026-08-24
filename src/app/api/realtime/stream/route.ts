@@ -3,6 +3,7 @@
  */
 
 import { NextRequest } from 'next/server';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import {
   ensureRedisSubscriber,
   subscribeRealtime,
@@ -13,9 +14,15 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return new Response(JSON.stringify({ error: 'Not authenticated' }), {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
     });

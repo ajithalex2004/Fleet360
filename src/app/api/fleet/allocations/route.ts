@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { paginate, paginatedResponse } from '@/lib/pagination';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const toCamel = (s: string) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 const rowToCamel = (r: Record<string, unknown>) =>
   Object.fromEntries(Object.entries(r).map(([k, v]) => [toCamel(k), v]));

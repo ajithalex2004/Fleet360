@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // finance_reminder_schedules and finance_reminder_log are created + seeded by
 // migration 20260810000003_finance_reference_data_seed — no runtime DDL needed.
 

@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ── PBKDF2 helpers — must match /api/auth/login and /api/tenants/provision ──
 
 function verifyPassword(plaintext: string, stored: string): boolean {

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
 import { revalidateCache } from '@/lib/server-cache';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const FLEET_STATS_TAG = 'fleet:stats';
 
 const toCamel = (s: string) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());

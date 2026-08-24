@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const INIT_STATEMENTS = `
   CREATE TABLE IF NOT EXISTS finance_bank_statements (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),

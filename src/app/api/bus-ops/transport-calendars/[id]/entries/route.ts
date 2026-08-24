@@ -9,11 +9,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const VALID_KINDS = new Set(['HOLIDAY', 'WORKING_OVERRIDE', 'HALF_DAY', 'REDUCED_SERVICE']);
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   const { id: calendarId } = await ctx.params;
 
   // Tenant-scope check: caller must own the calendar

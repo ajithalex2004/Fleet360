@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(req: NextRequest, ctx2: { params: Promise<{ id: string }> }) {
   const { id: shiftId } = await ctx2.params;
   const ctx = await requireDriverSession(req);

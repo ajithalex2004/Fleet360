@@ -16,6 +16,7 @@ import { prisma } from '@/lib/prisma';
 import { getTenantContextOrNull } from '@/lib/tenant-session';
 import { verifyRegistrationResponse } from '@simplewebauthn/server';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(req: NextRequest) {
   const ctx = getTenantContextOrNull(req);
   if (!ctx) {

@@ -7,6 +7,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   return NextResponse.redirect(new URL(`/api/finance/invoices/${id}`, req.url), { status: 308 });

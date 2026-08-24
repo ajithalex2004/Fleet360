@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 async function bootstrap() {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS finance_recurring_schedules (

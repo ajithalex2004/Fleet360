@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const INIT_BUDGET_SUBMISSIONS = `
   CREATE TABLE IF NOT EXISTS finance_budget_submissions (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),

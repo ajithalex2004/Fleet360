@@ -20,6 +20,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { generateAuthenticationOptions } from '@simplewebauthn/server';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(req: NextRequest) {
   const body = await req.json() as { username?: string };
   if (!body?.username) {

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 function toN(v: unknown): number { return parseFloat(String(v ?? 0)) || 0; }
 
 interface BSLine { code: string; label: string; amount: number; subtype?: string | null; }

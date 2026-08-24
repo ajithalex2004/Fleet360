@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma';
 import { normaliseBleUuid } from '@/lib/bus-checkin';
 import { logAudit } from '@/lib/audit';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {

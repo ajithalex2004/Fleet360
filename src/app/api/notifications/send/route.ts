@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import nodemailer from 'nodemailer';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const prisma = new PrismaClient();
 
 export async function POST(request: Request) {

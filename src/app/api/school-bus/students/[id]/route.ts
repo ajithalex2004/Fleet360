@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /**
  * GET    /api/school-bus/students/[id]  — single student detail
  * PATCH  /api/school-bus/students/[id]  — update student

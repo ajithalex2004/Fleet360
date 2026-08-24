@@ -6,6 +6,7 @@
 import { NextResponse } from 'next/server';
 import { CURRENT_API_VERSION, DEPRECATED_VERSIONS } from '@/lib/api-version';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET() {
   return NextResponse.json({
     apiVersion:         CURRENT_API_VERSION,

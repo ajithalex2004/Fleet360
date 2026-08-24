@@ -22,6 +22,7 @@ import { prisma } from '@/lib/prisma';
 import { chatComplete } from '@/lib/agents/openai-client';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface BucketKey {

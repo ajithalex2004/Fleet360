@@ -10,6 +10,7 @@ import { dispatch } from '@/lib/agents/orchestrator';
 import { AgentEvent } from '@/lib/agents/types';
 import { ensureAgentSchema } from '@/lib/agents/schema';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(req: NextRequest) {
   await ensureAgentSchema();
   try {

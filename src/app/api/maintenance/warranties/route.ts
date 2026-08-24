@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // GET /api/maintenance/warranties
 // Query params: tenantId?, vehicleId?, activeOnly?
 export async function GET(request: Request) {

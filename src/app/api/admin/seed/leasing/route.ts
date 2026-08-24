@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { randomUUID } from 'crypto';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 function addMonths(d: Date, m: number) { const r = new Date(d); r.setMonth(r.getMonth() + m); return r; }
 function ago(days: number) { return new Date(Date.now() - days * 86400000); }
 

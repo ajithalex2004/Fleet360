@@ -18,6 +18,7 @@ import { prisma } from '@/lib/prisma';
 import { requireShipperPortal } from '@/lib/shipper-portal/auth';
 import { createShipmentOrder, createShippingRequest, LogisticsValidationError } from '@/lib/logistics/domain';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 // ── GET — list converted job orders ────────────────────────────────────────

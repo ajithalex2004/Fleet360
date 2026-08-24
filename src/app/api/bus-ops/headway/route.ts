@@ -29,6 +29,7 @@ import { revalidateCache } from '@/lib/server-cache';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 import { expandHeadway, daysToMask, maskToDays } from '@/lib/headway/service';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /**
  * Every method is gated on bus-ops:admin:headway. Headway rules define the
  * published service frequency and each one can bind to a CBA rule-set via

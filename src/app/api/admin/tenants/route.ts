@@ -4,6 +4,7 @@ import { withPlatformAdmin } from '@/lib/rls';
 import { MODULES } from '@/lib/permissions';
 import { cacheRead, publicCacheControl, revalidateCache } from '@/lib/server-cache';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAG = 'tenants:list';
 
 const getTenants = cacheRead(

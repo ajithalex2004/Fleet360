@@ -15,6 +15,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { invalidatePlanCache } from '@/lib/plans';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 interface RouteParams { params: Promise<{ code: string }>; }
 
 function requireSuperAdmin(req: NextRequest): { ok: true; userId: string } | { ok: false; res: NextResponse } {

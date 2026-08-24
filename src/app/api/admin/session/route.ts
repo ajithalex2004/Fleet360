@@ -3,6 +3,7 @@ import { isDbConnectionError, prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { verifySession } from '@/lib/tenant-session';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 let lastDbUnavailableWarnAt = 0;
 const DB_UNAVAILABLE_WARN_INTERVAL_MS = 30_000;
 

@@ -24,6 +24,7 @@ import { verifySession } from '@/lib/tenant-session';
 import { withTenantRls } from '@/lib/rls';
 import { evaluateReportTransition } from '@/lib/driver-reports';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const BodySchema = z.object({
   notes: z.string().max(500).optional(),
 });

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getWorkflowStats } from '@/lib/workflow-db';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET() {
   try {
     const stats = await getWorkflowStats();

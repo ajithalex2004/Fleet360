@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const prisma = new PrismaClient();
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {

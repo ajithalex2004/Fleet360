@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { WorkOrderStatus } from '@prisma/client';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(request: Request) {
     try {
         const body = await request.json();

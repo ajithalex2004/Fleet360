@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveCarrierPortalInvite } from '@/lib/logistics/domain';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {

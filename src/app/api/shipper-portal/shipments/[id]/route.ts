@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireShipperPortal } from '@/lib/shipper-portal/auth';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import {
   resolveTrackingLevel,
   filterShipmentForTracking,

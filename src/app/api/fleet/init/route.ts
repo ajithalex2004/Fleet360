@@ -9,6 +9,7 @@ import { ensureFleetSchema } from '@/lib/fleet/schema';
 import { ensureHosSchema } from '@/lib/fleet/hos-schema';
 import { ensureAgentSchema } from '@/lib/agents/schema';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET() {
   try {
     await Promise.all([ensureFleetSchema(), ensureHosSchema(), ensureAgentSchema()]);

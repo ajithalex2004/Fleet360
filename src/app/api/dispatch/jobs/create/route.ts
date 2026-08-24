@@ -25,6 +25,7 @@ import { ensureDispatchSchema }       from '@/lib/dispatch/schema';
 import { triggerMergeScanOnCreate }   from '@/lib/dispatch/merge-trigger';
 import { dispatch as agentDispatch }  from '@/lib/agents/orchestrator';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
 function serialize(rows: Row[]): Row[] {

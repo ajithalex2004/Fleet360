@@ -21,6 +21,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { isPlaceShape, isPlaceType } from '@/lib/places/types';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 function bad(msg: string, status = 400) {
@@ -28,21 +29,15 @@ function bad(msg: string, status = 400) {
 }
 
 export async function GET(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return bad('Not authenticated', 401);
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
-  const sp = req.nextUrl.searchParams;
-  const typeParam = sp.getAll('type').flatMap(v => v.split(',')).map(v => v.trim()).filter(Boolean);
-  const sourceModule = sp.get('sourceModule');
-  const q = sp.get('q');
-  const activeParam = sp.get('active');
+  if (!authz.ok) {
 
-  try {
-    const rows = await prisma.place.findMany({
-      where: {
-        tenantId,
-        deletedAt: null,
-        ...(typeParam.length ? { type: { in: typeParam } } : {}),
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz; } : {}),
         ...(sourceModule ? { sourceModule } : {}),
         ...(activeParam === 'true'  ? { active: true }  : {}),
         ...(activeParam === 'false' ? { active: false } : {}),
@@ -61,22 +56,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return bad('Not authenticated', 401);
-  const createdBy = req.headers.get('x-user-id') ?? null;
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
-  try {
-    const body = await req.json();
-    if (!body?.name?.trim())        return bad('name is required');
-    if (!isPlaceType(body?.type))   return bad('type is not a valid PlaceType');
-    if (!isPlaceShape(body?.shape)) return bad('shape must be POINT, CIRCLE or POLYGON');
+  if (!authz.ok) {
 
-    // Shape-specific validation. Kept strict so a CIRCLE without a radius or
-    // a POLYGON with < 3 vertices can't be committed and confuse renderers.
-    if (body.shape === 'CIRCLE') {
-      if (typeof body.centerLat !== 'number' || typeof body.centerLng !== 'number') return bad('CIRCLE requires numeric centerLat/centerLng');
-      if (!(typeof body.radiusM === 'number' && body.radiusM > 0)) return bad('CIRCLE requires positive radiusM');
-    }
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;
     if (body.shape === 'POLYGON') {
       if (!Array.isArray(body.polygon) || body.polygon.length < 3) return bad('POLYGON requires at least 3 vertices');
     }

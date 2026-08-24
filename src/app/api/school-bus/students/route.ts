@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /**
  * Auto-creates the `school_bus_students` table if it doesn't exist.
  * GET  /api/school-bus/students          — list with optional filters

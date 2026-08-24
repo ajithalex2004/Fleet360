@@ -4,6 +4,7 @@ import { cachedJson } from '@/lib/response-helpers';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAG = 'fleet:stats';
 
 const zero = () => Promise.resolve([{ count: BigInt(0) }]);

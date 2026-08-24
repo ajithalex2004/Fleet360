@@ -30,6 +30,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { getTenantContextOrNull } from '@/lib/tenant-session';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const ItemSchema = z.object({
   ok: z.boolean(),
   note: z.string().max(500).optional(),

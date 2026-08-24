@@ -13,6 +13,7 @@
 import { NextResponse } from 'next/server';
 import { getPublicVapidKey } from '@/lib/push/server';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET() {
   try {
     const key = getPublicVapidKey();

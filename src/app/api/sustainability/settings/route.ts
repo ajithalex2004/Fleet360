@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // Bootstrap the settings table (same as in dashboard route)
 async function ensureTable() {
   await prisma.$executeRawUnsafe(`

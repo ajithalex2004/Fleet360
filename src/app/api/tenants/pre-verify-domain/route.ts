@@ -26,6 +26,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function genId(): string    { return crypto.randomUUID(); }

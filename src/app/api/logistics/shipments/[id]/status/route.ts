@@ -3,6 +3,7 @@ import { updateShipmentOrder } from '@/lib/logistics/domain';
 import { getEventBus }      from '@/events/event-bus';
 import { SHIPMENT_CLOSED }  from '@/events/registry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -34,9 +35,15 @@ function normalizeTransitionStatus(status: string): string {
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   }
 
   let body: { currentStatus?: string | null; status?: string; note?: string | null };

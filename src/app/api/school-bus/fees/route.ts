@@ -12,6 +12,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(req: NextRequest) {
   const sp = new URL(req.url).searchParams;
   const params = new URLSearchParams({ module: 'SCHOOL_BUS' });

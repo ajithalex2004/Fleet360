@@ -14,6 +14,7 @@ import { assessChecklist, PRETRIP_CHECKLIST } from '@/lib/bus-pretrip-checklist'
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {

@@ -22,6 +22,7 @@ import { captureException } from '@/lib/sentry';
 import { sendEmail } from '@/lib/email';
 import { sendWhatsApp } from '@/lib/whatsapp';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {

@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { signSession } from '@/lib/tenant-session';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ── Cookie helpers ────────────────────────────────────────────────────────────
 
 const COOKIE_NAME = 'xl-session';

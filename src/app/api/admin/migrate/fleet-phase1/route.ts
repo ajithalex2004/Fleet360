@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST() {
   // Schema migrations are platform-admin operations: they create / alter
   // tables, may write to system catalogs, and need to see every existing

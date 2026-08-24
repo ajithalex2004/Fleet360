@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   await ensureFleetSchema();
   try {

@@ -20,6 +20,7 @@ import { revalidateCache } from '@/lib/server-cache';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 import { CBA_SCHEMA_VERSION, freshCbaRules, type CbaRules } from '@/lib/cba/types';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAG = 'bus-ops:cba';
 
 /**

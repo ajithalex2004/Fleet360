@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { revalidateCache } from '@/lib/server-cache';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // Must match the tag used by the list endpoint's cacheRead — every write
 // here invalidates the same key so the next GET /api/bus-ops/routes serves
 // fresh data instead of the cached snapshot.
@@ -13,8 +14,15 @@ type IdCtx = { params: Promise<{ id: string }> };
 
 export async function GET(req: NextRequest, { params }: IdCtx) {
   const { id } = await params;
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   try {
     const route = await prisma.busRoute.findFirst({
       where: { id, tenantId, deletedAt: null },
@@ -37,8 +45,15 @@ export async function GET(req: NextRequest, { params }: IdCtx) {
 
 export async function PATCH(req: NextRequest, { params }: IdCtx) {
   const { id } = await params;
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   try {
     const existing = await prisma.busRoute.findFirst({ where: { id, tenantId, deletedAt: null }, select: { id: true } });
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -93,8 +108,15 @@ export async function PATCH(req: NextRequest, { params }: IdCtx) {
 
 export async function DELETE(req: NextRequest, { params }: IdCtx) {
   const { id } = await params;
-  const tenantId = req.headers.get('x-tenant-id');
-  if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+
+  if (!authz.ok) {
+
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  }
+
+  const { tenantId } = authz;, { status: 401 });
   try {
     // Load the route first so we can enforce the two-step delete protocol:
     // route must be deactivated (isActive = false) BEFORE it can be deleted.

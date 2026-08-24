@@ -16,6 +16,7 @@ import { requireUnderQuota } from '@/lib/plan-limits';
 import { cacheRead, publicCacheControl, revalidateCache } from '@/lib/server-cache';
 import type { PlanCode } from '@/lib/billing';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAG = 'users:list';
 
 // All modules in the platform — used for moduleAccess validation

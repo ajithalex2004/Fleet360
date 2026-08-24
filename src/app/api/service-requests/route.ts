@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { processNotificationRules } from '@/lib/notifications';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET() {
     try {
         const requests = await prisma.serviceRequest.findMany({

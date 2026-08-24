@@ -18,6 +18,7 @@ import { NextResponse } from 'next/server';
 import { listPlans } from '@/lib/plans';
 import { publicCacheControl } from '@/lib/server-cache';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(): Promise<NextResponse> {
   const plans = await listPlans({ activeOnly: true });
   return NextResponse.json({ plans }, {

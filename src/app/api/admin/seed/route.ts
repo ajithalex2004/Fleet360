@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { ALL_PERMISSIONS, SYSTEM_ROLES } from '@/lib/permissions';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ── GET: quick DB health check ────────────────────────────────────────────────
 export async function GET() {
   try {

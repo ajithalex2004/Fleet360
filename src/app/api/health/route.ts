@@ -13,6 +13,7 @@
 import { NextResponse } from 'next/server';
 import { ensureDbConnected, prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const dynamic = 'force-dynamic'; // never cache
 
 const RELEASE =

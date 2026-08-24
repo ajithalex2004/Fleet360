@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID ?? '';
 const AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN ?? '';
 const FROM_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER ?? 'whatsapp:+14155238886';

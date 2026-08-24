@@ -19,6 +19,7 @@ import { prisma } from '@/lib/prisma';
 import { computeRiskScore } from '@/lib/maintenance/risk-score';
 import type { RiskScoreInputs } from '@/types/maintenance';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET() {
     const now   = new Date();
     const ago90 = new Date(now.getTime() - 90  * 24 * 60 * 60 * 1000);

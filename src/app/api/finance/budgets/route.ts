@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 /**
  * GET  /api/finance/budgets?year=YYYY&month=MM
  *   Returns budgets with LIVE actual amounts computed from module tables.

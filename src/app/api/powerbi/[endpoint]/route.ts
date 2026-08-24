@@ -35,6 +35,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const ENDPOINTS = new Set(['schedule', 'stops', 'drivers', 'runs', 'blocks', 'incidents']);
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ endpoint: string }> }) {
