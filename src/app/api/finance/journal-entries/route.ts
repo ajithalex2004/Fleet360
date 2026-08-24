@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
                '[]'::json
              ) AS lines
            FROM finance_journal_entries je
-           LEFT JOIN finance_journal_lines jl ON jl.journal_entry_id = je.id
+           LEFT JOIN finance_journal_lines jl ON jl.journal_entry_id = je.id::text
            ${where}
            GROUP BY je.id
            ORDER BY je.entry_date DESC, je.je_number DESC
@@ -249,8 +249,8 @@ export async function POST(req: NextRequest) {
              '[]'::json
            ) AS lines
          FROM finance_journal_entries je
-         LEFT JOIN finance_journal_lines jl ON jl.journal_entry_id = je.id
-         WHERE je.id = $1 GROUP BY je.id`,
+         LEFT JOIN finance_journal_lines jl ON jl.journal_entry_id = je.id::text
+         WHERE je.id::text = $1 GROUP BY je.id`,
         jeId,
       ).catch(() => []);
 

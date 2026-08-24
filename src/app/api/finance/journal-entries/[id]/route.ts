@@ -46,8 +46,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
              '[]'::json
            ) AS lines
          FROM finance_journal_entries je
-         LEFT JOIN finance_journal_lines jl ON jl.journal_entry_id = je.id
-         WHERE je.id = $1 AND je.deleted_at IS NULL ${tenantClause}
+         LEFT JOIN finance_journal_lines jl ON jl.journal_entry_id = je.id::text
+         WHERE je.id::text = $1 AND je.deleted_at IS NULL ${tenantClause}
          GROUP BY je.id`,
         params.id,
       ).catch(() => [] as JeRow[]);

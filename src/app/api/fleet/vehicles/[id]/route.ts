@@ -36,7 +36,7 @@ export async function GET(
                   vt.transmission_type,
                   z.name AS zone_name
            FROM vehicles v
-           LEFT JOIN vehicle_types vt ON vt.id = v.vehicle_type_id
+           LEFT JOIN vehicle_types vt ON vt.id::text = v.vehicle_type_id
            LEFT JOIN spatial.places z ON z.id = v.zone_id
            WHERE v.id = $1 AND v.deleted_at IS NULL`,
           id,
