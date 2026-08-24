@@ -24,6 +24,27 @@ const EXEMPT_PATTERNS = [
   /^src\/app\/api\/auth\//,
   /^src\/app\/api\/health/,
   /^src\/app\/api\/cron\//,
+
+  // ── Individually exempt: these CANNOT use requireAuthorizedTenant ──────────
+  // Both are authenticated, just not by a per-request tenant context. Do not
+  // "fix" them by adding requireAuthorizedTenant() — doing so has already
+  // broken production once each.
+
+  // Session bootstrap. This is the endpoint the client calls to *establish* a
+  // tenant session, so requiring an already-authorized tenant is a deadlock:
+  // it returned 401 to every session-restore attempt, which made ModuleGuard
+  // render its "Session required" wall across the whole app (fixed in
+  // ca8a8523). It authenticates itself — a signed `xl-session` cookie via
+  // verifySession(), cross-checked against any userId/tenantId supplied, then
+  // an active UserTenant row lookup before anything is returned.
+  /^src\/app\/api\/admin\/session\/route\.ts$/,
+
+  // Cron-triggered scheduler that lives outside api/cron/. Gated by the
+  // PUSH_CRON_SECRET shared secret, and deliberately accepts a null tenantId
+  // so runTripReminders() can iterate every active tenant via withSystemJob.
+  // requireAuthorizedTenant() would force a single-tenant context and silently
+  // break the all-tenant sweep (reverted in 54ef02b8).
+  /^src\/app\/api\/push\/run-scheduler\/route\.ts$/,
 ];
 
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
