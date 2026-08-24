@@ -27,7 +27,8 @@ async function ensureTable() {
   `);
 }
 
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: _.headers, nextUrl: _.nextUrl });
   if (!authz.ok) {
@@ -52,7 +53,8 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {

@@ -16,7 +16,8 @@ import { withTenantRls } from '@/lib/rls';
  * LeaseContract2; we surface a small contract preview by joining via
  * the lessee's quotations → contracts2 chain.
  */
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
@@ -49,7 +50,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -80,7 +82,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });

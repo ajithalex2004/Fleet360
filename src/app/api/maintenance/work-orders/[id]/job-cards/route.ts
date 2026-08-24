@@ -7,8 +7,9 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 // Returns all job cards (with tasks) for the given work order.
 export async function GET(
     _request: NextRequest,
-    { params }: { params: { id: string } },
+    props: { params: Promise<{ id: string }> },
 ) {
+    const params = await props.params;
 
     const authz = requireAuthorizedTenant({ headers: _request.headers, nextUrl: _request.nextUrl });
     if (!authz.ok) {
@@ -43,8 +44,9 @@ export async function GET(
 // Body: { title, description?, technicianId?, technicianName?, estimatedHours?, tasks?: string[] }
 export async function POST(
     request: NextRequest,
-    { params }: { params: { id: string } },
+    props: { params: Promise<{ id: string }> },
 ) {
+    const params = await props.params;
 
     const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {

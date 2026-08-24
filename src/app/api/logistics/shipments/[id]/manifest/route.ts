@@ -73,7 +73,8 @@ async function loadCargo(tenantId: string, shipmentOrderId: string): Promise<Car
   }));
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -218,7 +219,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -331,7 +333,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 }
 
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 

@@ -36,7 +36,8 @@ const LEGACY_STATUS: Record<string, string> = {
   COMPLETED: 'CLOSED',
 };
 
-export async function GET(_req: NextRequest, { params }: { params: { ref: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ ref: string }> }) {
+  const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: _req.headers, nextUrl: _req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });

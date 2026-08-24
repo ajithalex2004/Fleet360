@@ -4,7 +4,8 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
 // POST /api/rental/bookings/[id]/extend
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {

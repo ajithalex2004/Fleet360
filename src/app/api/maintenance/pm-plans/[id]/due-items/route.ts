@@ -7,8 +7,9 @@ import { PMItemStatus, type PMTrigger, type MaintenancePlan, PMTriggerType } fro
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function GET(
     _request: NextRequest,
-    { params }: { params: { id: string } },
+    props: { params: Promise<{ id: string }> },
 ) {
+    const params = await props.params;
 
     const authz = requireAuthorizedTenant({ headers: _request.headers, nextUrl: _request.nextUrl });
     if (!authz.ok) {

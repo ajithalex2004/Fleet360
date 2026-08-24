@@ -5,7 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type CoaRow = Record<string, unknown>;
 
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: _.headers, nextUrl: _.nextUrl });
   if (!authz.ok) {
@@ -31,7 +32,8 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -65,7 +67,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 
-export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: _.headers, nextUrl: _.nextUrl });
   if (!authz.ok) {

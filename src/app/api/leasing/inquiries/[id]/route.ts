@@ -20,8 +20,9 @@ async function guardTenant(tenantId: string, id: string) {
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
@@ -47,8 +48,9 @@ export async function GET(
 // PATCH: safe partial update — only updates whitelisted fields
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
+  const params = await props.params;
   const authz = requireAuthorizedTenant(request);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -93,19 +95,20 @@ export async function PATCH(
 // PUT: kept for backward compat, delegates to PATCH logic
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
   const authz = requireAuthorizedTenant(request);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  return PATCH(request, { params });
+  return PATCH(request, props);
 }
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
+  const params = await props.params;
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });

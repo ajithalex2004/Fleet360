@@ -16,8 +16,9 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
  */
 export async function POST(
     _request: NextRequest,
-    { params }: { params: { id: string } },
+    props: { params: Promise<{ id: string }> },
 ) {
+    const params = await props.params;
 
     const authz = requireAuthorizedTenant({ headers: _request.headers, nextUrl: _request.nextUrl });
     if (!authz.ok) {

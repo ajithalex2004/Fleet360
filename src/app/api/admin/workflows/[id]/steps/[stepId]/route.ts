@@ -3,7 +3,8 @@ import { withTenantRls } from '@/lib/rls';
 import { updateStep, deleteStep } from '@/lib/workflow-db';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-export async function PUT(req: NextRequest, { params }: { params: { stepId: string } }) {
+export async function PUT(req: NextRequest, props: { params: Promise<{ stepId: string }> }) {
+  const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -19,7 +20,8 @@ export async function PUT(req: NextRequest, { params }: { params: { stepId: stri
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { stepId: string } }) {
+export async function DELETE(_req: NextRequest, props: { params: Promise<{ stepId: string }> }) {
+  const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: _req.headers, nextUrl: _req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });

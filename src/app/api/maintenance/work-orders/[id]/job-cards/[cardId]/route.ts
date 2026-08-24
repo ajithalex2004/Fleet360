@@ -9,8 +9,9 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 //         tasksToAdd?: string[], tasksToToggle?: { id: string; completed: boolean }[] }
 export async function PUT(
     request: NextRequest,
-    { params }: { params: { id: string; cardId: string } },
+    props: { params: Promise<{ id: string; cardId: string }> },
 ) {
+    const params = await props.params;
 
     const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {
@@ -80,8 +81,9 @@ export async function PUT(
 // DELETE /api/maintenance/work-orders/[id]/job-cards/[cardId]
 export async function DELETE(
     _request: NextRequest,
-    { params }: { params: { id: string; cardId: string } },
+    props: { params: Promise<{ id: string; cardId: string }> },
 ) {
+    const params = await props.params;
 
     const authz = requireAuthorizedTenant({ headers: _request.headers, nextUrl: _request.nextUrl });
     if (!authz.ok) {

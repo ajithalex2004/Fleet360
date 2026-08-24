@@ -11,7 +11,8 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
 
   const authz = requireAuthorizedTenant(request);
   if (!authz.ok) {

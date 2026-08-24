@@ -29,8 +29,9 @@ export const runtime = 'nodejs';
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string; claimId: string } },
+  props: { params: Promise<{ id: string; claimId: string }> },
 ) {
+  const params = await props.params;
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
