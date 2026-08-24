@@ -20,10 +20,10 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
            (SELECT COALESCE(SUM(CASE WHEN jl.normal_balance='DEBIT' THEN jl.debit_amount - jl.credit_amount
                                    ELSE jl.credit_amount - jl.debit_amount END),0)::text
               FROM finance_journal_lines jl
-              JOIN finance_journal_entries je ON je.id = jl.journal_entry_id
+              JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id
              WHERE jl.account_code = c.account_code AND je.status = 'POSTED') as current_balance
          FROM finance_chart_of_accounts c
-         WHERE c.id = $1 OR c.account_code = $1`,
+         WHERE c.id::text = $1 OR c.account_code = $1`,
         params.id
       ).catch(() => [] as CoaRow[]);
       if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -57,7 +57,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       values.push(params.id);
 
       const [row] = await tx.$queryRawUnsafe<CoaRow[]>(
-        `UPDATE finance_chart_of_accounts SET ${updates.join(', ')}, updated_at=NOW() WHERE id=$${pi} OR account_code=$${pi} RETURNING *`,
+        `UPDATE finance_chart_of_accounts SET ${updates.join(', ')}, updated_at=NOW() WHERE id::text=$${pi} OR account_code=$${pi} RETURNING *`,
         ...values
       ).catch(() => [] as CoaRow[]);
 
@@ -79,7 +79,7 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
   return withTenantRls(prisma, tenantId, async (tx) => {
     // Prevent deletion of system accounts or accounts with transactions
       const [acc] = await tx.$queryRawUnsafe<{is_system: boolean; account_code: string}[]>(
-        `SELECT is_system, account_code FROM finance_chart_of_accounts WHERE id=$1 OR account_code=$1`, params.id
+        `SELECT is_system, account_code FROM finance_chart_of_accounts WHERE id::text=$1 OR account_code=$1`, params.id
       ).catch(() => [] as {is_system: boolean; account_code: string}[]);
 
       if (!acc) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -91,7 +91,7 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
       if (parseInt(count) > 0) return NextResponse.json({ error: 'Account has journal entries and cannot be deleted' }, { status: 400 });
 
       await tx.$executeRawUnsafe(
-        `UPDATE finance_chart_of_accounts SET deleted_at=NOW() WHERE id=$1 OR account_code=$1`, params.id
+        `UPDATE finance_chart_of_accounts SET deleted_at=NOW() WHERE id::text=$1 OR account_code=$1`, params.id
       ).catch(() => {});
       return NextResponse.json({ ok: true });
   });
