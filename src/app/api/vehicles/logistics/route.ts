@@ -7,6 +7,12 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
  * Returns logistics vehicles enriched with the most recent service schedule.
  */
 export async function GET() {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const vehicles = await prisma.$queryRawUnsafe<Array<{
       id: string;

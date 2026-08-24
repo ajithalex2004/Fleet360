@@ -11,6 +11,12 @@ const toNumber = (value: unknown): number | null => {
 };
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const tenantId = req.headers.get('x-tenant-id') ?? req.nextUrl.searchParams.get('tenantId');
   const tenantWhere = tenantId ? ' AND so.tenant_id = $1' : '';
   const params = tenantId ? [tenantId] : [];

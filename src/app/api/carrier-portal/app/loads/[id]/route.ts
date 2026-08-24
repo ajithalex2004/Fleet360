@@ -43,6 +43,12 @@ async function requireAssignedShipment(req: NextRequest, shipmentOrderId: string
 }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const auth = await requireAssignedShipment(req, params.id);
   if ('error' in auth) return auth.error;
 
@@ -74,6 +80,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const auth = await requireAssignedShipment(req, params.id);
   if ('error' in auth) return auth.error;
 

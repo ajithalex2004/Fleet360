@@ -12,6 +12,12 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const VALID_STATUS = ['REPORTED', 'OPEN', 'UNDER_INVESTIGATION', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED', 'CLOSED'];
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await req.json();
     const { action } = body;
@@ -102,6 +108,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     type IncidentRow = Record<string, unknown>;
     const [incident] = await prisma.$queryRawUnsafe<IncidentRow[]>(

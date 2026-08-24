@@ -7,6 +7,12 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAG = 'tenants:list';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     return await withTenantRls(prisma, params.id, async (tx) => {
       const tenant = await tx.tenant.findUnique({
@@ -26,6 +32,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     return await withTenantRls(prisma, params.id, async (tx) => {
       const { modules, userTenants, roles, ...data } = await req.json();
@@ -42,6 +54,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     return await withTenantRls(prisma, params.id, async (tx) => {
       await tx.tenant.update({ where: { id: params.id }, data: { isActive: false } });

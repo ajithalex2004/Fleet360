@@ -50,6 +50,12 @@ const NOTIFICATION_CHANNELS = [
 ];
 
 export async function GET() {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     return await withPlatformAdmin(prisma, async (tx) => {
       // DB model counts from Prisma. The 'tx' client is the same

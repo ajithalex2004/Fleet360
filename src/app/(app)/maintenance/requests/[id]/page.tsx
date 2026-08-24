@@ -27,7 +27,7 @@ import {
 } from '@/services/mockData';
 import { sendNotification } from '@/utils/notifications';
 import StatusBadge from '@/components/ui/StatusBadge';
-import { getNextStatuses } from '@/services/workflowStateMachine';
+import { getNextStatuses } from '@/services/workflowStateMachine-client';
 import { matchGarages } from '@/services/garageMatching';
 import { EnhancedGarage } from '@/types/maintenance';
 import { useToast } from '@/contexts/ToastContext';

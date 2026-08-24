@@ -10,6 +10,12 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const VALID_STATUSES = ['DRAFT', 'SUBMITTED', 'PAID', 'CANCELLED'];
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const vatReturn = await prisma.vatReturn.findUnique({ where: { id: params.id } });
     if (!vatReturn) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -21,6 +27,12 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await req.json();
     const { status, submissionDate, paymentDate, notes } = body;

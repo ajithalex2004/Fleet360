@@ -6,6 +6,12 @@ export async function PATCH(
     request: Request,
     { params }: { params: { id: string } }
 ) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const id = params.id;
         const body = await request.json();

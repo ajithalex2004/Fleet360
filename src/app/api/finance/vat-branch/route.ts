@@ -31,6 +31,12 @@ function quarterDates(q: string): { start: string; end: string } | null {
 }
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const { searchParams } = new URL(req.url);
   const tenantId = searchParams.get('tenantId') ?? '';
   const quarter  = searchParams.get('quarter') ?? '';

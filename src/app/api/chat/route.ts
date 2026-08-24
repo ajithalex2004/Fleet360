@@ -7,6 +7,12 @@ import { logInteraction } from "@/lib/agents/chat-widget/agent";
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const t0 = Date.now();
   const { prompt, threadId, responseId } = (await req.json()) as {
     prompt: DBMessage;

@@ -35,6 +35,12 @@ function checkDoc(dt: Date | null | undefined, nowMs: number, thresholdMs: numbe
 }
 
 export async function GET(request: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const sp          = request.nextUrl.searchParams;
     const withinDays  = parseInt(sp.get('days') ?? '30', 10);

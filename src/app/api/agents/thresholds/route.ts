@@ -61,6 +61,12 @@ const DDL = `
 `;
 
 export async function GET() {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await prisma.$executeRawUnsafe(DDL).catch(() => {});
 
   const rows = await prisma.$queryRawUnsafe<{ agent_id: string; thresholds: string }[]>(
@@ -82,6 +88,12 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const { agentId, thresholds } = await req.json() as {
     agentId: string;
     thresholds: Record<string, unknown>;

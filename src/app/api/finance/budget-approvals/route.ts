@@ -50,6 +50,12 @@ function nextSubmissionNo(year: number, count: number): string {
 }
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await prisma.$executeRawUnsafe(INIT_BUDGET_SUBMISSIONS).catch(()=>{});
   await prisma.$executeRawUnsafe(INIT_BUDGET_COMMENTS).catch(()=>{});
 
@@ -91,6 +97,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await prisma.$executeRawUnsafe(INIT_BUDGET_SUBMISSIONS).catch(()=>{});
   await prisma.$executeRawUnsafe(INIT_BUDGET_COMMENTS).catch(()=>{});
 
@@ -202,6 +214,12 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const sp = req.nextUrl.searchParams;
   const id = sp.get('id');
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });

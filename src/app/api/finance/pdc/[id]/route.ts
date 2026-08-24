@@ -9,6 +9,12 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type PdcRow = Record<string, unknown>;
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const [row] = await prisma.$queryRawUnsafe<PdcRow[]>(
     `SELECT * FROM finance_pdc_cheques WHERE id = $1 AND deleted_at IS NULL`, params.id
   ).catch(() => [] as PdcRow[]);
@@ -17,6 +23,12 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const body = await req.json();
   const { action, bounceReason, notes } = body;
 
@@ -49,6 +61,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await prisma.$executeRawUnsafe(
     `UPDATE finance_pdc_cheques SET deleted_at=NOW() WHERE id=$1`, params.id
   ).catch(() => {});

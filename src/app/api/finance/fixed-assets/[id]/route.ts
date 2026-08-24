@@ -5,6 +5,12 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type AssetRow = Record<string, unknown>;
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const [asset] = await prisma.$queryRawUnsafe<AssetRow[]>(
     `SELECT a.*,
        json_agg(json_build_object(
@@ -21,6 +27,12 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const body = await req.json();
   const allowed = ['asset_name', 'description', 'location', 'notes', 'registration_no', 'vehicle_id', 'coa_account_code'];
   const updates: string[] = [];
@@ -40,6 +52,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await prisma.$executeRawUnsafe(`UPDATE finance_fixed_assets SET deleted_at=NOW() WHERE id=$1`, params.id).catch(() => {});
   return NextResponse.json({ ok: true });
 }

@@ -30,6 +30,12 @@ const INIT_AUDIT_IDX = `CREATE INDEX IF NOT EXISTS finance_audit_log_module_idx 
 const INIT_AUDIT_IDX2 = `CREATE INDEX IF NOT EXISTS finance_audit_log_entity_idx ON finance_audit_log(entity_type, entity_id)`;
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await prisma.$executeRawUnsafe(INIT_AUDIT).catch(()=>{});
   await prisma.$executeRawUnsafe(INIT_AUDIT_IDX).catch(()=>{});
   await prisma.$executeRawUnsafe(INIT_AUDIT_IDX2).catch(()=>{});
@@ -79,6 +85,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await prisma.$executeRawUnsafe(INIT_AUDIT).catch(()=>{});
 
   const body = await req.json();

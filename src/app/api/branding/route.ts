@@ -16,6 +16,12 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const url = new URL(req.url);
   const code   = url.searchParams.get('tenant') ?? '';
   const domain = url.searchParams.get('domain') ?? '';

@@ -207,6 +207,12 @@ async function detectDomainVerifColumnsExist(): Promise<boolean> {
 // ── POST handler ──────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body   = await request.json();
     const parsed = ProvisionSchema.safeParse(body);

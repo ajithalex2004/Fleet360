@@ -69,6 +69,12 @@ async function ensureTable() {
 
 /* ── GET — return all settings as flat object ────────────── */
 export async function GET() {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     // platform_settings is a global table (no tenant_id), but the wrap is
     // the canonical pattern for admin routes and keeps future RLS additions
@@ -91,6 +97,12 @@ export async function GET() {
 
 /* ── PATCH — update one or many settings ─────────────────── */
 export async function PATCH(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await req.json() as Record<string, string>;
     return await withPlatformAdmin(prisma, async (tx) => {

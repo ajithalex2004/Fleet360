@@ -135,6 +135,12 @@ function enc(obj: unknown) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const t0 = Date.now();
   const { message, threadId } = await req.json() as { message: string; threadId: string };
 

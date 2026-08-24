@@ -24,6 +24,12 @@ const s = (v: unknown) => String(v ?? '');
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     return await withPlatformAdmin(prisma, async (tx) => {
       const sp   = new URL(req.url).searchParams;

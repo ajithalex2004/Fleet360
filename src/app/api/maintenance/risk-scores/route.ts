@@ -21,6 +21,12 @@ import type { RiskScoreInputs } from '@/types/maintenance';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET() {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     const now   = new Date();
     const ago90 = new Date(now.getTime() - 90  * 24 * 60 * 60 * 1000);
     const ago180= new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);

@@ -32,6 +32,12 @@ const BodySchema = z.object({
 });
 
 export async function POST(req: NextRequest, ctx2: { params: Promise<{ id: string }> }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const { id: shiftId } = await ctx2.params;
   const ctx = await requireDriverSession(req);
   if (ctx instanceof NextResponse) return ctx;

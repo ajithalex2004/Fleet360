@@ -9,11 +9,23 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const { id } = await params;
   return NextResponse.redirect(new URL(`/api/finance/invoices/${id}`, req.url), { status: 308 });
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const { id } = await params;
   try {
     const body = await req.json();
@@ -29,6 +41,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const { id } = await params;
   return NextResponse.redirect(new URL(`/api/finance/invoices/${id}`, req.url), { status: 308 });
 }

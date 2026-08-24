@@ -7,6 +7,12 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const CACHE_TAGS = ['fleet:stats', 'fleet:documents-expiring'];
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const sp = req.nextUrl.searchParams;
     const vehicleId = sp.get('vehicleId');
@@ -30,6 +36,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await req.json();
     const document = await prisma.vehicleDocument.create({ data: body });

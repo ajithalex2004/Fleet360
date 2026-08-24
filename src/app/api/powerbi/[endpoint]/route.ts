@@ -39,6 +39,12 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const ENDPOINTS = new Set(['schedule', 'stops', 'drivers', 'runs', 'blocks', 'incidents']);
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ endpoint: string }> }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const { endpoint } = await params;
   if (!ENDPOINTS.has(endpoint)) {
     return NextResponse.json({ error: 'Unknown endpoint' }, { status: 404 });

@@ -20,7 +20,7 @@ import {
     updateMaintenanceRequest
 } from '@/services/mockData';
 import StatusBadge from '@/components/ui/StatusBadge';
-import { getNextStatuses } from '@/services/workflowStateMachine';
+import { getNextStatuses } from '@/services/workflowStateMachine-client';
 
 // Comprehensive Maintenance Jobs Database
 const MAINTENANCE_JOBS_DATABASE = {

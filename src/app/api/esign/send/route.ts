@@ -48,6 +48,12 @@ async function ensureTable() {
 
 // ── POST — create signing request ────────────────────────────────────────────
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureTable();
 
@@ -133,6 +139,12 @@ export async function POST(req: NextRequest) {
 
 // ── GET — list signing requests for a contract ───────────────────────────────
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     await ensureTable();
 

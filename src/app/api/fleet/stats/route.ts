@@ -106,6 +106,12 @@ const getFleetStats = cacheRead(
 );
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     // tenantId is the per-tenant cache key — see server-cache.ts for the
     // security rationale (public CDN would leak data across tenants).

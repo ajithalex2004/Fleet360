@@ -5,6 +5,12 @@ import { randomUUID } from 'crypto';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     return await withTenantRls(prisma, params.id, async (tx) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -43,6 +49,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     return await withTenantRls(prisma, params.id, async (tx) => {
       const body = await req.json();

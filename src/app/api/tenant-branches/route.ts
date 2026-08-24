@@ -75,6 +75,12 @@ function serializeRow(row: Row): Row {
 // ?includeInactive=true — include inactive branches
 // ---------------------------------------------------------------------------
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const { searchParams } = new URL(req.url);
   const tenantId        = searchParams.get('tenantId') ?? '';
   const emirate         = searchParams.get('emirate') ?? '';
@@ -166,6 +172,12 @@ export async function GET(req: NextRequest) {
 // POST /api/tenant-branches — create branch
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await req.json();
     const {
@@ -233,6 +245,12 @@ export async function POST(req: NextRequest) {
 // Body: { id, ...fields }
 // ---------------------------------------------------------------------------
 export async function PATCH(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await req.json();
     const { id, tenantId, ...fields } = body;
@@ -306,6 +324,12 @@ export async function PATCH(req: NextRequest) {
 // Body: { id }
 // ---------------------------------------------------------------------------
 export async function DELETE(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });

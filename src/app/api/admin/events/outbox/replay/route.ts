@@ -27,6 +27,12 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await req.json().catch(() => ({}));
     const { eventIds, dryRun = false }: { eventIds?: string[]; dryRun?: boolean } = body;

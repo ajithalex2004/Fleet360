@@ -15,7 +15,7 @@ import {
     updateMaintenanceRequest,
 } from '@/services/mockData';
 import StatusBadge from '@/components/ui/StatusBadge';
-import { getNextStatuses } from '@/services/workflowStateMachine';
+import { getNextStatuses } from '@/services/workflowStateMachine-client';
 import FilterBar from '@/components/Maintenance/FilterBar';
 
 // --- Modals ---

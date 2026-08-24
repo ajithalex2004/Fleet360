@@ -32,6 +32,12 @@ function serializeRow(row: Row): Row {
 // ?type=tenant_billing&tenantId=X → all subscription invoices for one tenant
 // ---------------------------------------------------------------------------
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const { searchParams } = new URL(req.url);
   const type     = searchParams.get('type') ?? 'dashboard';
   const tenantId = searchParams.get('tenantId') ?? '';
@@ -278,6 +284,12 @@ export async function GET(req: NextRequest) {
 // Stub — actual billing engine lives at /api/billing/auto-invoice
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const body = await req.json().catch(() => ({}));
   const { action } = body as { action?: string };
 

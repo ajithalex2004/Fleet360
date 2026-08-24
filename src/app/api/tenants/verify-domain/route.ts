@@ -16,6 +16,12 @@ const resolveTxt = promisify(dns.resolveTxt);
 // ── POST — Email token verification ──────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await request.json();
     const { token, tenantId } = body as { token?: string; tenantId?: string };
@@ -79,6 +85,12 @@ export async function POST(request: NextRequest) {
 // ── GET — DNS TXT record verification ────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const { searchParams } = request.nextUrl;
     const tenantId = searchParams.get('tenantId');

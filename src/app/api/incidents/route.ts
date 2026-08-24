@@ -7,6 +7,12 @@ const zero = () => Promise.resolve([{ count: BigInt(0) }]);
 // ── POST — create a new incident ─────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await req.json();
     const {
@@ -62,6 +68,12 @@ export async function POST(req: NextRequest) {
 // ── GET — dashboard stats ─────────────────────────────────────────────────────
 
 export async function GET() {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const [
       totalIncidents,

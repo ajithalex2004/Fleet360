@@ -13,11 +13,23 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const beacon = await prisma.vehicleBeacon.findUnique({ where: { vehicleId: params.id } });
   return beacon ? NextResponse.json(beacon) : NextResponse.json({ error: 'No beacon registered' }, { status: 404 });
 }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const body = await req.json();
   const bleUuid = normaliseBleUuid(String(body?.bleUuid ?? ''));
   if (!bleUuid) return NextResponse.json({ error: 'bleUuid is required' }, { status: 400 });
@@ -55,6 +67,12 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await prisma.vehicleBeacon.update({
     where: { vehicleId: params.id },
     data: { isActive: false },

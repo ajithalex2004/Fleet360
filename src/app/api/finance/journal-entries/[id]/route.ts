@@ -15,6 +15,12 @@ function getTenant(req: NextRequest): string | null {
 // ── GET /api/finance/journal-entries/:id ─────────────────────────────────────
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const tenantId = getTenant(req);
   if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -49,6 +55,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 // ── PATCH /api/finance/journal-entries/:id ───────────────────────────────────
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const tenantId = getTenant(req);
   if (!tenantId || tenantId === '*') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -215,6 +227,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 // ── DELETE /api/finance/journal-entries/:id ──────────────────────────────────
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const tenantId = getTenant(req);
   if (!tenantId || tenantId === '*') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

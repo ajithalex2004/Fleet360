@@ -47,6 +47,12 @@ interface StudentRow {
 }
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const driverCode = req.nextUrl.searchParams.get('driverCode')?.trim();
   if (!driverCode) {
     return NextResponse.json({ error: 'driverCode is required' }, { status: 400 });

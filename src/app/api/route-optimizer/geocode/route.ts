@@ -10,6 +10,12 @@ import { geocodeAddress } from '@/lib/mapbox';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const q = req.nextUrl.searchParams.get('q')?.trim();
 
   if (!q || q.length < 2) {

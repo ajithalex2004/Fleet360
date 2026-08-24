@@ -4,6 +4,12 @@ import { withPlatformAdmin } from '@/lib/rls';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST() {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   // Schema migrations are platform-admin operations: they create / alter
   // tables, may write to system catalogs, and need to see every existing
   // row. Wrap with withPlatformAdmin so any future RLS on these tables
@@ -252,5 +258,11 @@ export async function POST() {
 }
 
 export async function GET() {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   return NextResponse.json({ message: 'POST to this endpoint to run Fleet Phase 1 migration' });
 }

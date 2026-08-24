@@ -43,6 +43,12 @@ async function ownsType(tenantId: string, typeId: string): Promise<boolean> {
 }
 
 export async function GET(req: NextRequest, { params }: RouteParams) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const auth = authorizeServiceConfig(req);
   if (!auth.ok) return auth.res;
   const { id } = await params;
@@ -97,6 +103,12 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 }
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const auth = authorizeServiceConfig(req);
   if (!auth.ok) return auth.res;
   const adminCheck = requireAdmin(auth);

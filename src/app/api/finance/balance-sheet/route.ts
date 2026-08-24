@@ -12,6 +12,12 @@ function toN(v: unknown): number { return parseFloat(String(v ?? 0)) || 0; }
 interface BSLine { code: string; label: string; amount: number; subtype?: string | null; }
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const sp  = req.nextUrl.searchParams;
   const asOf = sp.get('asOf') ?? new Date().toISOString().slice(0, 10);
 

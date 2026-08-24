@@ -43,6 +43,12 @@ export const runtime = 'nodejs';
 const METHODS: CheckinMethod[] = ['QR', 'NFC', 'BLE', 'MANUAL'];
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await req.json();
     const method = String(body?.method ?? '').toUpperCase() as CheckinMethod;

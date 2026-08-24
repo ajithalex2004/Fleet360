@@ -13,6 +13,12 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type CoaRow = Record<string, unknown>;
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const sp     = req.nextUrl.searchParams;
   const type   = sp.get('type');    // filter by ASSET | LIABILITY | EQUITY | INCOME | EXPENSE
   const search = sp.get('search');
@@ -49,6 +55,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const body = await req.json();
 
   // Determine normal_balance from account_type if not specified

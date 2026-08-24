@@ -7,6 +7,12 @@ import { ALL_PERMISSIONS, SYSTEM_ROLES } from '@/lib/permissions';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ── GET: quick DB health check ────────────────────────────────────────────────
 export async function GET() {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     // Platform-admin so the query is allowed even if any future permission or
     // role table ends up with RLS. Today Permission/Role are no-ops here.
@@ -23,6 +29,12 @@ export async function GET() {
 
 // ── POST: seed permissions + system roles ────────────────────────────────────
 export async function POST(_req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     return await withPlatformAdmin(prisma, async (tx) => {
       // ── 1. All permissions in ONE SQL query (INSERT … ON CONFLICT DO UPDATE) ──

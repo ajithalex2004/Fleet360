@@ -46,6 +46,12 @@ type StmtRow = Record<string, unknown>;
 type LineRow  = Record<string, unknown>;
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await prisma.$executeRawUnsafe(INIT_STATEMENTS).catch(() => {});
   await prisma.$executeRawUnsafe(INIT_LINES).catch(() => {});
 
@@ -94,6 +100,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   await prisma.$executeRawUnsafe(INIT_STATEMENTS).catch(() => {});
   await prisma.$executeRawUnsafe(INIT_LINES).catch(() => {});
   const body = await req.json();

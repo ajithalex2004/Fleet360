@@ -18,6 +18,12 @@ type Row = Record<string, unknown>;
 // ── GET /api/finance/profit-centres ──────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const sp   = req.nextUrl.searchParams;
   const type = sp.get('type'); // list | pl
   const code = sp.get('code');
@@ -104,6 +110,12 @@ export async function GET(req: NextRequest) {
 // ── POST /api/finance/profit-centres ─────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const body = await req.json();
   if (!body.code || !body.name) {
     return NextResponse.json({ error: 'code and name are required' }, { status: 400 });
@@ -131,6 +143,12 @@ export async function POST(req: NextRequest) {
 // ── PATCH /api/finance/profit-centres?code=PC-RENTAL ─────────────────────────
 
 export async function PATCH(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const code = req.nextUrl.searchParams.get('code');
   if (!code) return NextResponse.json({ error: 'code query param required' }, { status: 400 });
 

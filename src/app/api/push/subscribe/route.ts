@@ -30,6 +30,12 @@ interface SubscribeBody {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   let body: SubscribeBody;
   try {
     body = (await req.json()) as SubscribeBody;
@@ -95,6 +101,12 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   const tenantId = req.headers.get('x-tenant-id') ?? '';
   const url = new URL(req.url);
   const endpoint = url.searchParams.get('endpoint');

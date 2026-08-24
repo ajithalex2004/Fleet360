@@ -19,6 +19,12 @@ async function generateReportNo(): Promise<string> {
 // Query params: tenantId?, vehicleId?, driverId?, status?, severity?
 
 export async function GET(request: Request) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const { searchParams } = new URL(request.url);
         const vehicleId = searchParams.get('vehicleId') ?? undefined;
@@ -61,6 +67,12 @@ export async function GET(request: Request) {
 //   • Publishes maintenance.breakdown_reported event (fire-and-forget)
 
 export async function POST(request: Request) {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
+
     try {
         const body = await request.json();
 

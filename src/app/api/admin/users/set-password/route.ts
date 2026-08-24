@@ -17,6 +17,12 @@ function hashPassword(password: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const { userId, password } = await request.json() as { userId?: string; password?: string };
 

@@ -3,6 +3,12 @@ import { advanceWorkflow, getWorkflowInstanceWithHistory } from '@/lib/workflow-
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const body = await req.json();
     const { action, comments, actionedByEmail, currentStepOrder } = body;
@@ -30,6 +36,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 }
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
   try {
     const instance = await getWorkflowInstanceWithHistory(params.id);
     if (!instance) return NextResponse.json({ error: 'Not found' }, { status: 404 });
