@@ -13,11 +13,12 @@
  *   { ok, generated, skipped, trips: [{ id, tripCode, routeName, status }] }
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureTripTables } from '../route';
 import { ensureDispatchSchema } from '@/lib/dispatch/schema';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -122,7 +123,7 @@ export async function POST(req: NextRequest) {
       trips: generated,
       message: `Generated ${generated.length} trip(s) for ${date}. ${skipped} already existed.`,
     }, { status: 201 });
-  } catch (err) {
+    } catch (err) {
     console.error('[school-bus/trips/generate POST]', err);
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
   }

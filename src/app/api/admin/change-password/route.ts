@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // ── PBKDF2 helpers — must match /api/auth/login and /api/tenants/provision ──
 
 function verifyPassword(plaintext: string, stored: string): boolean {
@@ -34,7 +34,8 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const { current_password, new_password } = body;
 
     // Always prefer the JWT-verified middleware header — it comes from the signed
@@ -103,7 +104,7 @@ export async function POST(req: NextRequest) {
       );
       return NextResponse.json({ ok: true, message: 'Password changed successfully' });
     });
-  } catch (err: unknown) {
+    } catch (err) {
     console.error('[change-password]', err);
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: msg }, { status: 500 });

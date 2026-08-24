@@ -12,11 +12,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { expandRosterToTrip } from '@/lib/bus-ops/expand-roster';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -25,31 +27,36 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  const { id } = await ctx.params;
+  const { tenantId } = authz;
 
-  const schedule = await prisma.tripSchedule.findFirst({
-    where: { id, deletedAt: null },
-    select: { id: true, routeId: true, departureTime: true, tenantId: true },
+  return withTenantRls(prisma, tenantId, async (tx) => {
+
+      const { id } = await ctx.params;
+
+      const schedule = await tx.tripSchedule.findFirst({
+        where: { id, deletedAt: null },
+        select: { id: true, routeId: true, departureTime: true, tenantId: true },
+      });
+      if (!schedule) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+      // Extra tenant guard: TripSchedule.tenantId is nullable in schema so we
+      // accept a match OR a null value (legacy rows) — never a foreign tenant.
+      if (schedule.tenantId && schedule.tenantId !== tenantId) {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      }
+
+      try {
+        const result = await expandRosterToTrip(
+          tenantId,
+          schedule.id,
+          schedule.routeId,
+          new Date(schedule.departureTime),
+        );
+        return NextResponse.json({ ok: true, ...result });
+        } catch (e) {
+        console.error('[schedules/expand-roster.POST]', e);
+        return NextResponse.json({ error: 'Failed to expand roster' }, { status: 500 });
+      }
   });
-  if (!schedule) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-
-  // Extra tenant guard: TripSchedule.tenantId is nullable in schema so we
-  // accept a match OR a null value (legacy rows) — never a foreign tenant.
-  if (schedule.tenantId && schedule.tenantId !== tenantId) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  }
-
-  try {
-    const result = await expandRosterToTrip(
-      tenantId,
-      schedule.id,
-      schedule.routeId,
-      new Date(schedule.departureTime),
-    );
-    return NextResponse.json({ ok: true, ...result });
-  } catch (e) {
-    console.error('[schedules/expand-roster.POST]', e);
-    return NextResponse.json({ error: 'Failed to expand roster' }, { status: 500 });
-  }
 }
+

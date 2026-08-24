@@ -45,8 +45,7 @@ export async function POST(req: NextRequest) {
 
     const result = await optimizeRoute(waypoints);
 
-    const tenantId = req.headers.get('x-tenant-id');
-    const latestFuel = tenantId ? await getLatestFuelPrice(prisma, tenantId).catch(() => null) : null;
+    const latestFuel = await getLatestFuelPrice(prisma, tenantId).catch(() => null);
     const fuel = estimateFuelCost(result.totalDistanceKm, vehicleType, latestFuel?.price ?? DEFAULT_FUEL_PRICE_AED);
     const fuelPriceSource = latestFuel ? 'fleet-log' as const : 'default' as const;
 
@@ -64,7 +63,7 @@ export async function POST(req: NextRequest) {
         fuelPriceSource,
       },
     });
-  } catch (err) {
+    } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
 
     // If Google Cloud credentials aren't configured, return a mock result

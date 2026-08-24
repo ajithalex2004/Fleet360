@@ -13,79 +13,89 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { assessSchoolBusChecklist, SCHOOL_BUS_PRETRIP_CHECKLIST } from '@/lib/school-bus-pretrip';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const { id } = await params;
-  const latest = await prisma.busPreTripCheck.findFirst({
-    where: { scheduleId: id },
-    orderBy: { performedAt: 'desc' },
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const { id } = await params;
+      const latest = await tx.busPreTripCheck.findFirst({
+        where: { scheduleId: id },
+        orderBy: { performedAt: 'desc' },
+      });
+      return NextResponse.json({ check: latest, checklist: SCHOOL_BUS_PRETRIP_CHECKLIST });
   });
-  return NextResponse.json({ check: latest, checklist: SCHOOL_BUS_PRETRIP_CHECKLIST });
 }
+
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const { id } = await params;
-  try {
-    const body = await req.json();
-    const items = Array.isArray(body?.items) ? body.items : [];
-    if (items.length === 0) {
-      return NextResponse.json({ error: 'items[] is required' }, { status: 400 });
-    }
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const { id } = await params;
+      try {
+        const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
+        const items = Array.isArray(body?.items) ? body.items : [];
+        if (items.length === 0) {
+          return NextResponse.json({ error: 'items[] is required' }, { status: 400 });
+        }
 
-    // Verify trip exists in school_bus_trips
-    const tripRows = await prisma.$queryRawUnsafe<Array<{ id: string; vehicle_id: string | null; driver_name: string | null }>>(
-      `SELECT id::text, vehicle_id::text, driver_name FROM school_bus_trips WHERE id = $1::uuid`,
-      id,
-    ).catch(() => []);
-    if (tripRows.length === 0) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
+        // Verify trip exists in school_bus_trips
+        const tripRows = await tx.$queryRawUnsafe<Array<{ id: string; vehicle_id: string | null; driver_name: string | null }>>(
+          `SELECT id::text, vehicle_id::text, driver_name FROM school_bus_trips WHERE id = $1::uuid`,
+          id,
+        ).catch(() => []);
+        if (tripRows.length === 0) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
 
-    const assessment = assessSchoolBusChecklist(items);
+        const assessment = assessSchoolBusChecklist(items);
 
-    const check = await prisma.busPreTripCheck.create({
-      data: {
-        scheduleId: id,
-        vehicleId: tripRows[0].vehicle_id,
-        driverId: tripRows[0].driver_name ?? null,
-        performedBy: req.headers.get('x-user-id') ?? body.performedBy ?? null,
-        checkItems: items,
-        overallPass: assessment.overallPass,
-        failCount: assessment.failCount,
-        notes: body.notes ?? null,
-        signatureData: body.signatureData ?? null,
-      },
-    });
+        const check = await tx.busPreTripCheck.create({
+          data: {
+            scheduleId: id,
+            vehicleId: tripRows[0].vehicle_id,
+            driverId: tripRows[0].driver_name ?? null,
+            performedBy: req.headers.get('x-user-id') ?? body.performedBy ?? null,
+            checkItems: items,
+            overallPass: assessment.overallPass,
+            failCount: assessment.failCount,
+            notes: body.notes ?? null,
+            signatureData: body.signatureData ?? null,
+          },
+        });
 
-    void logAudit({
-      userId: req.headers.get('x-user-id') ?? 'system',
-      userRole: req.headers.get('x-user-role') ?? 'DRIVER',
-      entityType: 'SchoolBusTrip',
-      entityId: id,
-      action: 'UPDATE',
-      details: `School-bus pre-trip check ${assessment.overallPass ? 'PASS' : `FAIL (${assessment.blockingFailures.length} blocking)`} — ${items.filter((i: { ok: boolean }) => i.ok).length}/${items.length} items OK.`,
-    });
+        void logAudit({
+          userId: req.headers.get('x-user-id') ?? 'system',
+          userRole: req.headers.get('x-user-role') ?? 'DRIVER',
+          entityType: 'SchoolBusTrip',
+          entityId: id,
+          action: 'UPDATE',
+          details: `School-bus pre-trip check ${assessment.overallPass ? 'PASS' : `FAIL (${assessment.blockingFailures.length} blocking)`} — ${items.filter((i: { ok: boolean }) => i.ok).length}/${items.length} items OK.`,
+        });
 
-    return NextResponse.json({ check, assessment }, { status: 201 });
-  } catch (err) {
-    captureException(err, { context: 'school-bus.pretrip-check.create', tags: { tripId: id } });
-    return NextResponse.json({ error: 'Failed to record check' }, { status: 500 });
-  }
+        return NextResponse.json({ check, assessment }, { status: 201 });
+        } catch (err) {
+        captureException(err, { context: 'school-bus.pretrip-check.create', tags: { tripId: id } });
+        return NextResponse.json({ error: 'Failed to record check' }, { status: 500 });
+      }
+  });
 }
+

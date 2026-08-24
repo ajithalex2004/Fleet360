@@ -6,12 +6,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { signSession } from '@/lib/tenant-session';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // ── Free email domains blocklist ─────────────────────────────────────────────
 const FREE_EMAIL_DOMAINS = new Set([
   'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'live.com',
@@ -207,289 +208,293 @@ async function detectDomainVerifColumnsExist(): Promise<boolean> {
 // ── POST handler ──────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    const body   = await request.json();
-    const parsed = ProvisionSchema.safeParse(body);
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const body   = await request.json();
+        const parsed = ProvisionSchema.safeParse(body);
 
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Validation Error', details: parsed.error.flatten() },
-        { status: 422 },
-      );
-    }
-
-    const data = parsed.data;
-
-    // Block free email domains
-    const contactEmailDomain = emailDomain(data.contactEmail);
-    if (FREE_EMAIL_DOMAINS.has(contactEmailDomain)) {
-      return NextResponse.json(
-        { error: 'Validation Error', message: 'Please use your company email, not a free email provider.' },
-        { status: 422 },
-      );
-    }
-
-    // Email domain must match company domain
-    const normalizedDomain = data.domain.replace(/^www\./, '').toLowerCase().trim();
-    if (contactEmailDomain !== normalizedDomain) {
-      return NextResponse.json(
-        { error: 'Validation Error', message: `Email domain (${contactEmailDomain}) must match company domain (${normalizedDomain}).` },
-        { status: 422 },
-      );
-    }
-
-    // Duplicate domain check
-    const existingTenant = await prisma.tenant.findFirst({
-      where: { domain: normalizedDomain },
-      select: { id: true },
-    });
-    if (existingTenant) {
-      return NextResponse.json(
-        { error: 'Conflict', message: `A tenant with domain "${normalizedDomain}" already exists.` },
-        { status: 409 },
-      );
-    }
-
-    // ── Check pre-verification (if provided) ─────────────────────────────────
-    let domainPreVerified = false;
-    if (data.preVerificationId) {
-      try {
-        type PreRow = { domain: string; verified: boolean; expires_at: string };
-        const preRows = await prisma.$queryRawUnsafe<PreRow[]>(
-          `SELECT domain, verified, expires_at FROM domain_pre_verifications WHERE id = $1`,
-          data.preVerificationId,
-        );
-        if (
-          preRows.length &&
-          preRows[0].verified &&
-          preRows[0].domain === normalizedDomain &&
-          new Date(preRows[0].expires_at) > new Date()
-        ) {
-          domainPreVerified = true;
-        }
-      } catch {
-        // Table may not exist yet — treat as not pre-verified
-      }
-    }
-
-    // Prepare IDs
-    const tenantId          = crypto.randomUUID();
-    const userId            = crypto.randomUUID();
-    const passwordHash      = hashPassword(data.adminPassword);
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    const allModules        = Array.from(new Set(['admin', 'platform', ...data.selectedModules]));
-
-    // Ensure required columns exist BEFORE the transaction (DDL cannot run inside tx)
-    await Promise.all([ensurePasswordHashColumn(), ensureTrnColumn(), ensureDomainVerificationColumns()]);
-
-    // Detect table/column names OUTSIDE the transaction — avoids try/catch inside
-    // a PG transaction (any thrown error inside a tx aborts it with code 25P02).
-    const [userTable, domainVerifColumnsExist] = await Promise.all([
-      detectUserTableName(),
-      detectDomainVerifColumnsExist(),
-    ]);
-
-    console.log(`[provision] userTable=${userTable} domainVerifCols=${domainVerifColumnsExist}`);
-
-    // ── DB transaction ────────────────────────────────────────────────────────
-    const { tenant, user } = await prisma.$transaction(async (tx) => {
-
-      // 1. Create Tenant
-      const tenant = await tx.tenant.create({
-        data: {
-          id:           tenantId,
-          name:         data.companyName,
-          domain:       normalizedDomain,
-          contactEmail: data.contactEmail,
-          contactName:  data.contactName,
-          contactPhone: data.contactPhone,
-          plan:         data.plan,
-          isActive:     true,
-          code:         generateCode(data.companyName),
-          // data_residency — only meaningful for ENTERPRISE; store for all
-          // tiers so it's always a valid column value.
-          dataResidency: data.plan === 'ENTERPRISE' ? data.dataResidency : 'GLOBAL',
-        },
-      });
-
-      // 1a. Set TRN via raw SQL (handles case where Prisma client is stale)
-      if (data.trn) {
-        await tx.$executeRawUnsafe(
-          `UPDATE tenants SET trn = $1 WHERE id = $2`,
-          data.trn,
-          tenantId,
-        );
-      }
-
-      // 2. Create TenantModules
-      await tx.tenantModule.createMany({
-        data: allModules.map(module => ({
-          id:        crypto.randomUUID(),
-          tenantId:  tenant.id,
-          module,
-          isEnabled: true,
-        })),
-        skipDuplicates: true,
-      });
-
-      // 3. Create User via Prisma ORM (handles table/column names correctly)
-      let user;
-      try {
-        user = await tx.user.create({
-          data: {
-            id:        userId,
-            username:  data.contactEmail,
-            email:     data.contactEmail,
-            firstName: data.adminFirstName,
-            lastName:  data.adminLastName,
-            isActive:  true,
-            updatedAt: new Date(),
-          },
-        });
-      } catch (userErr: unknown) {
-        // If email already exists, fetch the existing user
-        const msg = userErr instanceof Error ? userErr.message : '';
-        if (msg.includes('Unique constraint') || msg.includes('unique')) {
-          user = await tx.user.findUniqueOrThrow({ where: { email: data.contactEmail } });
-        } else {
-          throw userErr;
-        }
-      }
-
-      // 4. Store password hash — use pre-detected table name (no try/catch inside tx)
-      await tx.$executeRawUnsafe(
-        `UPDATE ${userTable} SET password_hash = $1 WHERE id = $2`,
-        passwordHash,
-        user.id,
-      );
-
-      // 5. Find or create TENANT_ADMIN role (scoped to this tenant).
-      //    The first admin of a newly provisioned organisation is a Tenant Admin,
-      //    NOT a platform-level Super Admin. Super Admin is reserved for the
-      //    platform operator and is managed separately via /admin.
-      let role = await tx.role.findFirst({ where: { code: 'TENANT_ADMIN', tenantId: tenant.id } });
-
-      if (!role) {
-        role = await tx.role.create({
-          data: {
-            id:          crypto.randomUUID(),
-            name:        'Tenant Admin',
-            code:        'TENANT_ADMIN',
-            tenantId:    tenant.id,
-            isSystem:    true,
-            description: 'Full administrative access within this organisation',
-          },
-        });
-      }
-
-      // 6. Create UserTenant
-      await tx.userTenant.create({
-        data: {
-          id:       crypto.randomUUID(),
-          userId:   user.id,
-          tenantId: tenant.id,
-          roleId:   role.id,
-          isActive: true,
-        },
-      });
-
-      // 7. Store domain verification token — only if columns confirmed to exist pre-flight.
-      //    No try/catch here: any error inside a PG transaction aborts it with 25P02.
-      if (domainVerifColumnsExist) {
-        if (domainPreVerified) {
-          await tx.$executeRawUnsafe(
-            `UPDATE tenants SET domain_verification_token = $1, domain_verified_at = NOW(), domain_verification_method = 'PRE_REGISTRATION' WHERE id = $2`,
-            verificationToken,
-            tenant.id,
-          );
-        } else {
-          await tx.$executeRawUnsafe(
-            `UPDATE tenants SET domain_verification_token = $1, domain_verification_method = 'EMAIL' WHERE id = $2`,
-            verificationToken,
-            tenant.id,
+        if (!parsed.success) {
+          return NextResponse.json(
+            { error: 'Validation Error', details: parsed.error.flatten() },
+            { status: 422 },
           );
         }
-      } else {
-        console.warn('[provision] domain verification columns not yet in DB — skipping token storage for tenant', tenant.id);
+
+        const data = parsed.data;
+
+        // Block free email domains
+        const contactEmailDomain = emailDomain(data.contactEmail);
+        if (FREE_EMAIL_DOMAINS.has(contactEmailDomain)) {
+          return NextResponse.json(
+            { error: 'Validation Error', message: 'Please use your company email, not a free email provider.' },
+            { status: 422 },
+          );
+        }
+
+        // Email domain must match company domain
+        const normalizedDomain = data.domain.replace(/^www\./, '').toLowerCase().trim();
+        if (contactEmailDomain !== normalizedDomain) {
+          return NextResponse.json(
+            { error: 'Validation Error', message: `Email domain (${contactEmailDomain}) must match company domain (${normalizedDomain}).` },
+            { status: 422 },
+          );
+        }
+
+        // Duplicate domain check
+        const existingTenant = await tx.tenant.findFirst({
+          where: { domain: normalizedDomain },
+          select: { id: true },
+        });
+        if (existingTenant) {
+          return NextResponse.json(
+            { error: 'Conflict', message: `A tenant with domain "${normalizedDomain}" already exists.` },
+            { status: 409 },
+          );
+        }
+
+        // ── Check pre-verification (if provided) ─────────────────────────────────
+        let domainPreVerified = false;
+        if (data.preVerificationId) {
+          try {
+            type PreRow = { domain: string; verified: boolean; expires_at: string };
+            const preRows = await tx.$queryRawUnsafe<PreRow[]>(
+              `SELECT domain, verified, expires_at FROM domain_pre_verifications WHERE id = $1`,
+              data.preVerificationId,
+            );
+            if (
+              preRows.length &&
+              preRows[0].verified &&
+              preRows[0].domain === normalizedDomain &&
+              new Date(preRows[0].expires_at) > new Date()
+            ) {
+              domainPreVerified = true;
+            }
+          } catch {
+            // Table may not exist yet — treat as not pre-verified
+          }
+        }
+
+        // Prepare IDs
+        const tenantId          = crypto.randomUUID();
+        const userId            = crypto.randomUUID();
+        const passwordHash      = hashPassword(data.adminPassword);
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+        const allModules        = Array.from(new Set(['admin', 'platform', ...data.selectedModules]));
+
+        // Ensure required columns exist BEFORE the transaction (DDL cannot run inside tx)
+        await Promise.all([ensurePasswordHashColumn(), ensureTrnColumn(), ensureDomainVerificationColumns()]);
+
+        // Detect table/column names OUTSIDE the transaction — avoids try/catch inside
+        // a PG transaction (any thrown error inside a tx aborts it with code 25P02).
+        const [userTable, domainVerifColumnsExist] = await Promise.all([
+          detectUserTableName(),
+          detectDomainVerifColumnsExist(),
+        ]);
+
+        console.log(`[provision] userTable=${userTable} domainVerifCols=${domainVerifColumnsExist}`);
+
+        // ── DB transaction ────────────────────────────────────────────────────────
+        const { tenant, user } = await tx.$transaction(async (tx) => {
+
+          // 1. Create Tenant
+          const tenant = await tx.tenant.create({
+            data: {
+              id:           tenantId,
+              name:         data.companyName,
+              domain:       normalizedDomain,
+              contactEmail: data.contactEmail,
+              contactName:  data.contactName,
+              contactPhone: data.contactPhone,
+              plan:         data.plan,
+              isActive:     true,
+              code:         generateCode(data.companyName),
+              // data_residency — only meaningful for ENTERPRISE; store for all
+              // tiers so it's always a valid column value.
+              dataResidency: data.plan === 'ENTERPRISE' ? data.dataResidency : 'GLOBAL',
+            },
+          });
+
+          // 1a. Set TRN via raw SQL (handles case where Prisma client is stale)
+          if (data.trn) {
+            await tx.$executeRawUnsafe(
+              `UPDATE tenants SET trn = $1 WHERE id = $2`,
+              data.trn,
+              tenantId,
+            );
+          }
+
+          // 2. Create TenantModules
+          await tx.tenantModule.createMany({
+            data: allModules.map(module => ({
+              id:        crypto.randomUUID(),
+              tenantId:  tenant.id,
+              module,
+              isEnabled: true,
+            })),
+            skipDuplicates: true,
+          });
+
+          // 3. Create User via Prisma ORM (handles table/column names correctly)
+          let user;
+          try {
+            user = await tx.user.create({
+              data: {
+                id:        userId,
+                username:  data.contactEmail,
+                email:     data.contactEmail,
+                firstName: data.adminFirstName,
+                lastName:  data.adminLastName,
+                isActive:  true,
+                updatedAt: new Date(),
+              },
+            });
+            } catch (e) {
+            // If email already exists, fetch the existing user
+            const msg = e instanceof Error ? e.message : '';
+            if (msg.includes('Unique constraint') || msg.includes('unique')) {
+              user = await tx.user.findUniqueOrThrow({ where: { email: data.contactEmail } });
+            } else {
+              throw e;
+            }
+          }
+
+          // 4. Store password hash — use pre-detected table name (no try/catch inside tx)
+          await tx.$executeRawUnsafe(
+            `UPDATE ${userTable} SET password_hash = $1 WHERE id = $2`,
+            passwordHash,
+            user.id,
+          );
+
+          // 5. Find or create TENANT_ADMIN role (scoped to this tenant).
+          //    The first admin of a newly provisioned organisation is a Tenant Admin,
+          //    NOT a platform-level Super Admin. Super Admin is reserved for the
+          //    platform operator and is managed separately via /admin.
+          let role = await tx.role.findFirst({ where: { code: 'TENANT_ADMIN', tenantId: tenant.id } });
+
+          if (!role) {
+            role = await tx.role.create({
+              data: {
+                id:          crypto.randomUUID(),
+                name:        'Tenant Admin',
+                code:        'TENANT_ADMIN',
+                tenantId:    tenant.id,
+                isSystem:    true,
+                description: 'Full administrative access within this organisation',
+              },
+            });
+          }
+
+          // 6. Create UserTenant
+          await tx.userTenant.create({
+            data: {
+              id:       crypto.randomUUID(),
+              userId:   user.id,
+              tenantId: tenant.id,
+              roleId:   role.id,
+              isActive: true,
+            },
+          });
+
+          // 7. Store domain verification token — only if columns confirmed to exist pre-flight.
+          //    No try/catch here: any error inside a PG transaction aborts it with 25P02.
+          if (domainVerifColumnsExist) {
+            if (domainPreVerified) {
+              await tx.$executeRawUnsafe(
+                `UPDATE tenants SET domain_verification_token = $1, domain_verified_at = NOW(), domain_verification_method = 'PRE_REGISTRATION' WHERE id = $2`,
+                verificationToken,
+                tenant.id,
+              );
+            } else {
+              await tx.$executeRawUnsafe(
+                `UPDATE tenants SET domain_verification_token = $1, domain_verification_method = 'EMAIL' WHERE id = $2`,
+                verificationToken,
+                tenant.id,
+              );
+            }
+          } else {
+            console.warn('[provision] domain verification columns not yet in DB — skipping token storage for tenant', tenant.id);
+          }
+
+          return { tenant, user };
+        });
+
+        // Send verification email only if domain not already pre-verified (fire-and-forget)
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${request.headers.get('host')}`;
+        if (!domainPreVerified) {
+          sendVerificationEmail({
+            to: user.email ?? data.contactEmail,
+            tenantName: tenant.name,
+            token: verificationToken,
+            baseUrl,
+            tenantId: tenant.id,
+          }).catch(() => {});
+        }
+
+        // Start a 14-day trial subscription (best-effort — won't block signup).
+        void import('@/lib/billing').then(m => m.startTrialForTenant(tenant.id)).catch(() => {});
+
+        // Set session cookie — newly provisioned users always start as TENANT_ADMIN
+        const effectivePlan = tenant.plan ?? 'TRIAL';
+        const sessionToken = await signSession({
+          userId:        user.id,
+          tenantId:      tenant.id,
+          plan:          effectivePlan,
+          role:          'TENANT_ADMIN',
+          // Embed residency in token so middleware can forward x-data-residency
+          // without a DB lookup on every subsequent request.
+          ...(effectivePlan === 'ENTERPRISE' && tenant.dataResidency && tenant.dataResidency !== 'GLOBAL'
+            ? { dataResidency: tenant.dataResidency }
+            : {}),
+        });
+
+        const payload: Record<string, unknown> = {
+          ok:                   true,
+          tenantId:             tenant.id,
+          userId:               user.id,
+          verificationRequired: !domainPreVerified,
+          domainVerified:       domainPreVerified,
+          domain:               normalizedDomain,
+        };
+        if (process.env.NODE_ENV !== 'production') {
+          payload.verificationToken = verificationToken;
+        }
+
+        const isSecure = process.env.NODE_ENV === 'production';
+        const response = NextResponse.json(payload, { status: 201 });
+
+        // Explicitly delete any existing session first (prevents stale admin session
+        // from being returned on client-side navigations that reuse cookie state).
+        response.cookies.delete('xl-session');
+
+        // Set the new session for the freshly provisioned tenant.
+        response.cookies.set('xl-session', sessionToken, {
+          httpOnly: true,
+          sameSite: 'lax',
+          secure:   isSecure,
+          maxAge:   86_400,
+          path:     '/',
+        });
+        return response;
+
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[tenants/provision] ERROR:', message, err);
+        return NextResponse.json(
+          {
+            error:   'Internal Server Error',
+            message: `Provisioning failed: ${message}`,
+            detail:  message,
+          },
+          { status: 500 },
+        );
       }
-
-      return { tenant, user };
-    });
-
-    // Send verification email only if domain not already pre-verified (fire-and-forget)
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${request.headers.get('host')}`;
-    if (!domainPreVerified) {
-      sendVerificationEmail({
-        to: user.email ?? data.contactEmail,
-        tenantName: tenant.name,
-        token: verificationToken,
-        baseUrl,
-        tenantId: tenant.id,
-      }).catch(() => {});
-    }
-
-    // Start a 14-day trial subscription (best-effort — won't block signup).
-    void import('@/lib/billing').then(m => m.startTrialForTenant(tenant.id)).catch(() => {});
-
-    // Set session cookie — newly provisioned users always start as TENANT_ADMIN
-    const effectivePlan = tenant.plan ?? 'TRIAL';
-    const sessionToken = await signSession({
-      userId:        user.id,
-      tenantId:      tenant.id,
-      plan:          effectivePlan,
-      role:          'TENANT_ADMIN',
-      // Embed residency in token so middleware can forward x-data-residency
-      // without a DB lookup on every subsequent request.
-      ...(effectivePlan === 'ENTERPRISE' && tenant.dataResidency && tenant.dataResidency !== 'GLOBAL'
-        ? { dataResidency: tenant.dataResidency }
-        : {}),
-    });
-
-    const payload: Record<string, unknown> = {
-      ok:                   true,
-      tenantId:             tenant.id,
-      userId:               user.id,
-      verificationRequired: !domainPreVerified,
-      domainVerified:       domainPreVerified,
-      domain:               normalizedDomain,
-    };
-    if (process.env.NODE_ENV !== 'production') {
-      payload.verificationToken = verificationToken;
-    }
-
-    const isSecure = process.env.NODE_ENV === 'production';
-    const response = NextResponse.json(payload, { status: 201 });
-
-    // Explicitly delete any existing session first (prevents stale admin session
-    // from being returned on client-side navigations that reuse cookie state).
-    response.cookies.delete('xl-session');
-
-    // Set the new session for the freshly provisioned tenant.
-    response.cookies.set('xl-session', sessionToken, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure:   isSecure,
-      maxAge:   86_400,
-      path:     '/',
-    });
-    return response;
-
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('[tenants/provision] ERROR:', message, err);
-    return NextResponse.json(
-      {
-        error:   'Internal Server Error',
-        message: `Provisioning failed: ${message}`,
-        detail:  message,
-      },
-      { status: 500 },
-    );
-  }
+  });
 }
+

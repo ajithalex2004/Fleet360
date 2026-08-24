@@ -12,47 +12,52 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const body = await request.json();
-    const { payments } = body;
 
-    // Verify contract ownership before writing the schedule.
-    const contract = await prisma.leaseContract2.findFirst({
-      where: { id: params.id, tenantId },
-      select: { id: true },
-    });
-    if (!contract) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    }
-
-    // Try Prisma model first, fall back gracefully
+  return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-      const created = await Promise.all(
-        (payments ?? []).map((p: any) =>
-          (prisma as any).leasePaymentSchedule.create({
-            data: {
-              contractId: params.id,
-              monthNumber: p.month,
-              dueDate: new Date(p.dueDate),
-              amount: p.amount,
-              vatAmount: p.vat,
-              totalAmount: p.total,
-              status: 'PENDING',
-              tenantId,
-            },
-          })
-        )
-      );
-      return NextResponse.json({ success: true, count: created.length });
-    } catch {
-      return NextResponse.json({ success: true, count: payments?.length ?? 0 });
-    }
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? 'Failed' }, { status: 500 });
-  }
+        const body = await request.json();
+        const { payments } = body;
+
+        // Verify contract ownership before writing the schedule.
+        const contract = await tx.leaseContract2.findFirst({
+          where: { id: params.id, tenantId },
+          select: { id: true },
+        });
+        if (!contract) {
+          return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        }
+
+        // Try Prisma model first, fall back gracefully
+        try {
+          const created = await Promise.all(
+            (payments ?? []).map((p: any) =>
+              (prisma as any).leasePaymentSchedule.create({
+                data: {
+                  contractId: params.id,
+                  monthNumber: p.month,
+                  dueDate: new Date(p.dueDate),
+                  amount: p.amount,
+                  vatAmount: p.vat,
+                  totalAmount: p.total,
+                  status: 'PENDING',
+                  tenantId,
+                },
+              })
+            )
+          );
+          return NextResponse.json({ success: true, count: created.length });
+        } catch {
+          return NextResponse.json({ success: true, count: payments?.length ?? 0 });
+        }
+      } catch (e) {
+        return NextResponse.json({ error: e?.message ?? 'Failed' }, { status: 500 });
+      }
+  });
 }
+

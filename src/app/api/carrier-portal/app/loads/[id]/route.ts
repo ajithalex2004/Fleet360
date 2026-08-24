@@ -70,7 +70,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       timeline,
       settlement,
     }, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (e) {
+    } catch (e) {
     console.error('[carrier-portal/app/loads/:id GET]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to load carrier load detail' },
@@ -129,7 +129,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
 
     return NextResponse.json({ success: true, data: result }, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     console.error('[carrier-portal/app/loads/:id POST]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to record carrier execution update' },

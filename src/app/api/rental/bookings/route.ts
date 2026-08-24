@@ -52,8 +52,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(data, {
       headers: { 'Cache-Control': privateCacheControl(30, 120) },
     });
-  } catch (error) {
-    console.error('Error fetching bookings:', error);
+    } catch (e) {
+    console.error('Error fetching bookings:', e);
     return NextResponse.json({ error: 'Failed to fetch bookings' }, { status: 500 });
   }
 }
@@ -78,8 +78,8 @@ export async function POST(req: NextRequest) {
     );
     revalidateCache([CACHE_TAG]);
     return NextResponse.json(booking, { status: 201 });
-  } catch (error) {
-    console.error('Error creating booking:', error);
+    } catch (e) {
+    console.error('Error creating booking:', e);
     return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 });
   }
 }

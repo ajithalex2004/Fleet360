@@ -17,10 +17,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { resolveCarrierAppDevice, upsertCarrierPresence } from '@/lib/logistics/domain';
 import { applyDriverTelemetryLimit } from '@/lib/rate-limit-scope';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 function bearer(req: NextRequest, bodyToken?: string): string {
@@ -94,7 +95,7 @@ export async function POST(req: NextRequest) {
       speedKph: body.speedKph ?? null,
     });
     return NextResponse.json({ ok: true, availability }, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (e) {
+    } catch (e) {
     console.error('[driver-app/heartbeat]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'heartbeat failed' },

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 
@@ -15,27 +16,32 @@ import { prisma } from '@/lib/prisma';
  * for the receivables dashboard.
  */
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const { searchParams } = new URL(req.url);
-    const contractId = searchParams.get('contractId');
-    const status     = searchParams.get('status');
-    const overages = await prisma.leaseMileageOverage.findMany({
-      where: {
-        tenantId,
-        ...(contractId ? { contractId } : {}),
-        ...(status ? { status } : {}),
-      },
-      include: { contract: { select: { contractNumber: true } } },
-      orderBy: { createdAt: 'desc' },
-    });
-    return NextResponse.json(overages);
-  } catch (e) {
-    console.error('GET /api/leasing/mileage-overages error:', e);
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
-  }
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const { searchParams } = new URL(req.url);
+        const contractId = searchParams.get('contractId');
+        const status     = searchParams.get('status');
+        const overages = await tx.leaseMileageOverage.findMany({
+          where: {
+            tenantId,
+            ...(contractId ? { contractId } : {}),
+            ...(status ? { status } : {}),
+          },
+          include: { contract: { select: { contractNumber: true } } },
+          orderBy: { createdAt: 'desc' },
+        });
+        return NextResponse.json(overages);
+      } catch (e) {
+        console.error('GET /api/leasing/mileage-overages error:', e);
+        return NextResponse.json({ error: 'Failed' }, { status: 500 });
+      }
+  });
 }
+

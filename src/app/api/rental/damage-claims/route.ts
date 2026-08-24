@@ -14,7 +14,7 @@ const getClaims = cacheRead(
     bookingId: string | null,
     take: number, skip: number, page: number, limit: number,
   ) => {
-    const where = { deletedAt: null, ...(status ? { status } : {}), ...(bookingId ? { bookingId } : {}) };
+    const where = { tenantId, deletedAt: null, ...(status ? { status } : {}), ...(bookingId ? { bookingId } : {}) };
     const [data, total] = await Promise.all([
       prisma.damageClaim.findMany({
         where,
@@ -45,8 +45,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(data, {
       headers: { 'Cache-Control': privateCacheControl(30, 120) },
     });
-  } catch (error) {
-    console.error('Error fetching damage claims:', error);
+    } catch (e) {
+    console.error('Error fetching damage claims:', e);
     return NextResponse.json({ error: 'Failed to fetch damage claims' }, { status: 500 });
   }
 }
@@ -65,8 +65,8 @@ export async function POST(req: NextRequest) {
     );
     revalidateCache([CACHE_TAG]);
     return NextResponse.json(damageClaim, { status: 201 });
-  } catch (error) {
-    console.error('Error creating damage claim:', error);
+    } catch (e) {
+    console.error('Error creating damage claim:', e);
     return NextResponse.json({ error: 'Failed to create damage claim' }, { status: 500 });
   }
 }

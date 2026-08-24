@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ received: true });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'stripe.webhook.handle', tags: { eventType: event.type } });
     // 500 makes Stripe retry — only return for transient/unknown errors.
     return NextResponse.json({ ok: false }, { status: 500 });

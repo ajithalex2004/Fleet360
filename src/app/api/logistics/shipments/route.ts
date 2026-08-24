@@ -11,9 +11,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { createShipmentOrder, listShipmentOrders } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const POSTABLE_MARKETPLACE = new Set(['PRIVATE', 'DRAFT', '']);
@@ -28,8 +29,7 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   const sp = req.nextUrl.searchParams;
   const search = sp.get('search');
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
       );
     }
     return NextResponse.json({ data });
-  } catch (e) {
+    } catch (e) {
     console.error('[logistics/shipments GET]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to list shipments' },
@@ -91,8 +91,7 @@ export async function POST(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   let body: ShipmentBody;
   try { body = (await req.json()) as ShipmentBody; }
@@ -137,7 +136,7 @@ export async function POST(req: NextRequest) {
       createdBy: req.headers.get('x-user-id') ?? null,
     });
     return NextResponse.json({ data: shipment }, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     console.error('[logistics/shipments POST]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to create shipment' },

@@ -10,9 +10,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { startSolve } from '@/lib/planning/fleet-routing/solve-orchestrator';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface SolveBody {
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
   let body: SolveBody;
   try { body = await req.json(); }
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
       timeout:    body.timeout,
     });
     return NextResponse.json({ runId, status: 'PENDING' }, { status: 202 });
-  } catch (e) {
+    } catch (e) {
     console.error('[fleet-optimizer/solve]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'Failed to start solve' },

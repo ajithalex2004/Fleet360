@@ -1,27 +1,32 @@
 import { NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { WorkOrderStatus } from '@prisma/client';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function POST(request: Request) {
+
     const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
     const { tenantId } = authz;
 
+  return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        const body = await request.json();
+            const body = await request.json();
 
-        const newWorkOrder = await prisma.workOrder.create({
-            data: {
-                ...body,
-                status: WorkOrderStatus.NOT_STARTED,
-            },
-        });
+            const newWorkOrder = await tx.workOrder.create({
+                data: {
+                    ...body,
+                    status: WorkOrderStatus.NOT_STARTED,
+                },
+            });
 
-        return NextResponse.json(newWorkOrder);
-    } catch (error) {
-        return NextResponse.json({ error: 'Failed to create work order' }, { status: 500 });
-    }
+            return NextResponse.json(newWorkOrder);
+        } catch (e) {
+            return NextResponse.json({ error: 'Failed to create work order' }, { status: 500 });
+        }
+  });
 }
+

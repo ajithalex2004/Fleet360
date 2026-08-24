@@ -1,0 +1,122 @@
+name: Tenant RLS Compliance Check
+
+on:
+  pull_request:
+    paths:
+      - 'src/app/api/**/*.ts'
+      - 'src/lib/tenant-context.ts'
+      - 'src/lib/rls.ts'
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  check-rls-compliance:
+    name: Check Tenant RLS Compliance
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run RLS Compliance Check
+        id: rls_check
+        run: |
+          echo "Running tenant RLS compliance validation..."
+          node scripts/check-tenant-rls.js > rls-report.txt 2>&1
+          EXIT_CODE=$?
+
+          # Extract summary
+          echo "## Tenant RLS Compliance Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Get summary section
+          sed -n '/SUMMARY/,/VIOLATIONS/p' rls-report.txt | head -n -2 >> $GITHUB_STEP_SUMMARY
+
+          # Check if there are violations
+          VIOLATIONS=$(grep "❌ Violations:" rls-report.txt | awk '{print $3}')
+          echo "violations=$VIOLATIONS" >> $GITHUB_OUTPUT
+
+          if [ "$VIOLATIONS" != "0" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ❌ Violations Found" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            sed -n '/VIOLATIONS:/,/WARNINGS/p' rls-report.txt | head -n -2 >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ✅ All checks passed!" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload RLS Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rls-compliance-report
+          path: rls-report.txt
+          retention-days: 30
+
+      - name: Comment PR
+        if: github.event_name == 'pull_request' && failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('rls-report.txt', 'utf8');
+
+            // Extract violations
+            const violationsMatch = report.match(/❌ Violations:\s+(\d+)/);
+            const violations = violationsMatch ? violationsMatch[1] : '0';
+
+            if (violations !== '0') {
+              const violationSection = report.split('VIOLATIONS:')[1]?.split('WARNINGS')[0] || '';
+
+              const comment = `## ❌ Tenant RLS Compliance Check Failed
+
+**${violations} violation(s) found** in API routes.
+
+### Violations:
+\`\`\`
+${violationSection.trim().substring(0, 2000)}
+\`\`\`
+
+### How to Fix:
+
+1. **Missing \`requireAuthorizedTenant()\`:**
+   - Add authorization check at the start of your handler
+   - Import from \`@/lib/tenant-context\`
+
+2. **Missing RLS wrapper:**
+   - Wrap database operations with \`withTenantRls(prisma, tenantId, async (tx) => { ... })\`
+   - Import from \`@/lib/rls\`
+
+3. **Missing body sanitization:**
+   - Use \`stripTenantOwnershipFields()\` on request bodies
+   - Prevents tenant_id injection
+
+### Resources:
+- [Migration Guide](../blob/main/MIGRATION_PROGRESS.md)
+- [RLS Wrapper Documentation](../blob/main/docs/rls-wrappers.md)
+
+Run locally: \`npm run tenant:check-rls\`
+`;
+
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            }

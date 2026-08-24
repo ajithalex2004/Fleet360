@@ -12,6 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { computeRentalAnalytics } from '@/lib/rental-analytics';
@@ -20,109 +21,114 @@ import { captureException } from '@/lib/sentry';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const sp = req.nextUrl.searchParams;
-    const fromParam = sp.get('from');
-    const toParam = sp.get('to');
-    const periodTo = toParam ? new Date(toParam) : new Date();
-    const periodFrom = fromParam ? new Date(fromParam) : new Date(periodTo.getTime() - 30 * 86400000);
 
-    if (Number.isNaN(periodFrom.getTime()) || Number.isNaN(periodTo.getTime())) {
-      return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
-    }
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const sp = req.nextUrl.searchParams;
+        const fromParam = sp.get('from');
+        const toParam = sp.get('to');
+        const periodTo = toParam ? new Date(toParam) : new Date();
+        const periodFrom = fromParam ? new Date(fromParam) : new Date(periodTo.getTime() - 30 * 86400000);
 
-    // Pull bookings whose period overlaps [periodFrom, periodTo].
-    const bookingsRaw = await prisma.rentalBooking.findMany({
-      where: {
-        deletedAt: null,
-        AND: [
-          { pickupDate: { lte: periodTo } },
-          { dropoffDate: { gte: periodFrom } },
-        ],
-      },
-      select: {
-        id: true,
-        vehicleCategory: true,
-        pickupDate: true,
-        dropoffDate: true,
-        totalDays: true,
-        totalAmount: true,
-        channel: true,
-        status: true,
-      },
-    });
+        if (Number.isNaN(periodFrom.getTime()) || Number.isNaN(periodTo.getTime())) {
+          return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
+        }
 
-    const vehiclesRaw = await prisma.vehicle.findMany({
-      where: { tenantId, deletedAt: null },
-      select: { id: true, type: true, status: true },
-    });
+        // Pull bookings whose period overlaps [periodFrom, periodTo].
+        const bookingsRaw = await tx.rentalBooking.findMany({
+          where: {
+            deletedAt: null,
+            AND: [
+              { pickupDate: { lte: periodTo } },
+              { dropoffDate: { gte: periodFrom } },
+            ],
+          },
+          select: {
+            id: true,
+            vehicleCategory: true,
+            pickupDate: true,
+            dropoffDate: true,
+            totalDays: true,
+            totalAmount: true,
+            channel: true,
+            status: true,
+          },
+        });
 
-    const invoicesRaw = await prisma.rentalInvoice.findMany({
-      where: {
-        deletedAt: null,
-        invoiceDate: { gte: periodFrom, lte: periodTo },
-      },
-      select: { id: true, customerId: true, invoiceDate: true, totalAmount: true, paidAmount: true, currency: true },
-    });
+        const vehiclesRaw = await tx.vehicle.findMany({
+          where: { tenantId, deletedAt: null },
+          select: { id: true, type: true, status: true },
+        });
 
-    // Damage claims linked to bookings in the period
-    const damagesRaw = await prisma.damageClaim.findMany({
-      where: {
-        booking: {
-          AND: [
-            { pickupDate: { lte: periodTo } },
-            { dropoffDate: { gte: periodFrom } },
-          ],
-        },
-      },
-      select: { id: true, bookingId: true, estimatedCost: true, actualCost: true, status: true, billedToCustomer: true },
-    });
+        const invoicesRaw = await tx.rentalInvoice.findMany({
+          where: {
+            deletedAt: null,
+            invoiceDate: { gte: periodFrom, lte: periodTo },
+          },
+          select: { id: true, customerId: true, invoiceDate: true, totalAmount: true, paidAmount: true, currency: true },
+        });
 
-    const result = computeRentalAnalytics({
-      periodFrom,
-      periodTo,
-      bookings: bookingsRaw.map(b => ({
-        id: b.id,
-        vehicleCategory: b.vehicleCategory,
-        pickupDate: b.pickupDate,
-        dropoffDate: b.dropoffDate,
-        totalDays: b.totalDays,
-        totalAmount: b.totalAmount ? Number(b.totalAmount) : null,
-        channel: b.channel,
-        status: b.status,
-      })),
-      vehicles: vehiclesRaw.map(v => ({
-        id: v.id,
-        category: v.type,
-        status: v.status,
-      })),
-      invoices: invoicesRaw.map(i => ({
-        id: i.id,
-        customerId: i.customerId,
-        invoiceDate: i.invoiceDate,
-        totalAmount: Number(i.totalAmount),
-        paidAmount: i.paidAmount ? Number(i.paidAmount) : 0,
-        currency: i.currency,
-      })),
-      damageClaims: damagesRaw.map(d => ({
-        id: d.id,
-        bookingId: d.bookingId,
-        estimatedCost: d.estimatedCost ? Number(d.estimatedCost) : null,
-        actualCost: d.actualCost ? Number(d.actualCost) : null,
-        status: d.status,
-        billedToCustomer: d.billedToCustomer,
-      })),
-    });
+        // Damage claims linked to bookings in the period
+        const damagesRaw = await tx.damageClaim.findMany({
+          where: {
+            booking: {
+              AND: [
+                { pickupDate: { lte: periodTo } },
+                { dropoffDate: { gte: periodFrom } },
+              ],
+            },
+          },
+          select: { id: true, bookingId: true, estimatedCost: true, actualCost: true, status: true, billedToCustomer: true },
+        });
 
-    return NextResponse.json(result);
-  } catch (err) {
-    captureException(err, { context: 'rental.analytics.dashboard' });
-    console.error('[rental analytics] error:', err);
-    return NextResponse.json({ error: 'Analytics failed' }, { status: 500 });
-  }
+        const result = computeRentalAnalytics({
+          periodFrom,
+          periodTo,
+          bookings: bookingsRaw.map(b => ({
+            id: b.id,
+            vehicleCategory: b.vehicleCategory,
+            pickupDate: b.pickupDate,
+            dropoffDate: b.dropoffDate,
+            totalDays: b.totalDays,
+            totalAmount: b.totalAmount ? Number(b.totalAmount) : null,
+            channel: b.channel,
+            status: b.status,
+          })),
+          vehicles: vehiclesRaw.map(v => ({
+            id: v.id,
+            category: v.type,
+            status: v.status,
+          })),
+          invoices: invoicesRaw.map(i => ({
+            id: i.id,
+            customerId: i.customerId,
+            invoiceDate: i.invoiceDate,
+            totalAmount: Number(i.totalAmount),
+            paidAmount: i.paidAmount ? Number(i.paidAmount) : 0,
+            currency: i.currency,
+          })),
+          damageClaims: damagesRaw.map(d => ({
+            id: d.id,
+            bookingId: d.bookingId,
+            estimatedCost: d.estimatedCost ? Number(d.estimatedCost) : null,
+            actualCost: d.actualCost ? Number(d.actualCost) : null,
+            status: d.status,
+            billedToCustomer: d.billedToCustomer,
+          })),
+        });
+
+        return NextResponse.json(result);
+      } catch (err) {
+        captureException(err, { context: 'rental.analytics.dashboard' });
+        console.error('[rental analytics] error:', err);
+        return NextResponse.json({ error: 'Analytics failed' }, { status: 500 });
+      }
+  });
 }
+

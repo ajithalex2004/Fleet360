@@ -18,7 +18,7 @@ import {
 } from '@/lib/shipper-portal/visibility';
 import { logAudit } from '@/lib/audit';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -30,8 +30,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   }
 
-  const { tenantId, userId } = authz;, { status: 401 });
-  }
+  const { tenantId, userId } = authz;
 
   try {
     const { id: customerId } = await params;
@@ -78,7 +77,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     });
 
     return NextResponse.json({ ok: true, customerId, level: body.level });
-  } catch (e) {
+    } catch (e) {
     console.error('[admin/customers/tracking-visibility] PATCH', e);
     return NextResponse.json({ error: 'Failed to update visibility' }, { status: 500 });
   }

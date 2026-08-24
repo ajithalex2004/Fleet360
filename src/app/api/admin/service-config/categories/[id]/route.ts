@@ -13,7 +13,7 @@ import { SERVICE_TONES } from '@/types/service-config';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string }>; }
@@ -40,7 +40,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   await ensureServiceConfigTables();
 
   let body: Record<string, unknown>;
-  try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
+  try { const bodyRaw = await req.json(); body = stripTenantOwnershipFields(bodyRaw); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
 
   const sets: string[] = [];
   const args: unknown[] = [];
@@ -85,7 +85,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     });
 
     return NextResponse.json({ ok: true, category: cat });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'service-config.categories.update' });
     return NextResponse.json({ ok: false, error: 'Update failed' }, { status: 500 });
   }

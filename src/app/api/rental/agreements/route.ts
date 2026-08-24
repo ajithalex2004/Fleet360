@@ -6,47 +6,51 @@ import { paginate, paginatedResponse } from '@/lib/pagination';
 import { assertCanWrite } from '@/lib/access-control';
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({headers: req.headers, nextUrl: req.nextUrl});
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    const sp = req.nextUrl.searchParams;
-    const status = sp.get('status');
-    const customerId = sp.get('customerId');
-    const { take, skip, page, limit } = paginate(sp);
-    const where = {
-      tenantId,
-      ...(status ? { status } : {}),
-      ...(customerId ? { customerId } : {}),
-    };
-    const [data, total] = await Promise.all([
-      prisma.rentalAgreement.findMany({
-        where,
-        include: {
-          booking: {
-            select: {
-              id: true,
-              bookingRef: true,
-              pickupDate: true,
-              dropoffDate: true,
-              customer: { select: { id: true, fullName: true, phone: true } },
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const sp = req.nextUrl.searchParams;
+        const status = sp.get('status');
+        const customerId = sp.get('customerId');
+        const { take, skip, page, limit } = paginate(sp);
+        const where = {
+          tenantId,
+          ...(status ? { status } : {}),
+          ...(customerId ? { customerId } : {}),
+        };
+        const [data, total] = await Promise.all([
+          tx.rentalAgreement.findMany({
+            where,
+            include: {
+              booking: {
+                select: {
+                  id: true,
+                  bookingRef: true,
+                  pickupDate: true,
+                  dropoffDate: true,
+                  customer: { select: { id: true, fullName: true, phone: true } },
+                },
+              },
             },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        take,
-        skip,
-      }),
-      prisma.rentalAgreement.count({ where }),
-    ]);
-    return NextResponse.json(paginatedResponse(data, total, page, limit));
-  } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
-  }
+            orderBy: { createdAt: 'desc' },
+            take,
+            skip,
+          }),
+          tx.rentalAgreement.count({ where }),
+        ]);
+        return NextResponse.json(paginatedResponse(data, total, page, limit));
+      } catch (e) {
+        return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant({headers: req.headers, nextUrl: req.nextUrl});
@@ -73,7 +77,7 @@ export async function POST(req: NextRequest) {
     }),
     );
     return NextResponse.json(agreement, { status: 201 });
-  } catch (error) {
+    } catch (e) {
     return NextResponse.json({ error: 'Failed to create' }, { status: 500 });
   }
 }

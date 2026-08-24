@@ -9,7 +9,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { withTenantRls } from '@/lib/rls';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { getStripe, getTenantBilling, isStripeConfigured } from '@/lib/billing';
 import { captureException } from '@/lib/sentry';
 
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
       return_url: `${baseUrl}/admin/subscription`,
     });
     return NextResponse.json({ ok: true, url: session.url });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'billing.portal', tags: { tenantId } });
     return NextResponse.json({ ok: false, error: 'Failed to open customer portal.' }, { status: 500 });
   }

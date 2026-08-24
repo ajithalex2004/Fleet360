@@ -1,0 +1,771 @@
+{
+  "categories": {
+    "already_fixed": [
+      {
+        "file": "src/app/api/admin/migrate/fleet-phase1/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/admin/migrate/indexes/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/admin/migrate/rac-phase1/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/admin/nav-permissions/route.ts",
+        "handler": "PUT"
+      },
+      {
+        "file": "src/app/api/admin/notification-rules/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/admin/notification-rules/route.ts",
+        "handler": "PUT"
+      },
+      {
+        "file": "src/app/api/admin/notification-templates/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/admin/notification-templates/route.ts",
+        "handler": "PUT"
+      },
+      {
+        "file": "src/app/api/admin/seed/leasing/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/admin/seed/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/admin/tenants/[id]/api-keys/[keyId]/revoke/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/admin/tenants/[id]/branding/logo/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/admin/tenants/[id]/hard-delete/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/admin/tenants/[id]/invitations/[invId]/revoke/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/admin/users/set-password/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/admin/users/[id]/hard-delete/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/agents/thresholds/route.ts",
+        "handler": "PATCH"
+      },
+      {
+        "file": "src/app/api/alert-configs/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/alert-configs/[id]/route.ts",
+        "handler": "PATCH"
+      },
+      {
+        "file": "src/app/api/alerts/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/alerts/[id]/route.ts",
+        "handler": "PATCH"
+      },
+      {
+        "file": "src/app/api/bus-ops/driver-performance/recompute/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/bus-ops/fleet-optimizer/runs/[id]/cancel/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/bus-ops/fleet-optimizer/runs/[id]/publish/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/bus-ops/gateway/events/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/bus-ops/gateways/[id]/rotate-secret/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/bus-ops/plan/[id]/apply/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/bus-ops/schedules/sweep-waitlist/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/bus-ops/schedules/[id]/expand-roster/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/carrier-portal/app/loads/[id]/documents/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/dispatcher/reports/[id]/acknowledge/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/dispatcher/trips/[id]/cancel/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/driver-app/auth/biometric/register/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/driver-app/behavior-events/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/driver-app/dvir/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/driver-app/expenses/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/driver-app/fuel-entries/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/driver-app/reports/[id]/cancel/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/driver-app/shift/current/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/driver-app/shift/[id]/checklist/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/driver-app/shift/[id]/end/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/driver-app/trips/[id]/end/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/driver-app/trips/[id]/start/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/drivers/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/finance/budgets/seed/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/garages/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/garages/[id]/route.ts",
+        "handler": "PUT"
+      },
+      {
+        "file": "src/app/api/leasing/contracts-v2/[id]/payments/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/leasing/contracts-v2/[id]/vehicles/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/leasing/documents/upload/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/leasing/fuel/import/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/leasing/fuel/sweep-bill/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/leasing/import/lessees/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/leasing/import/vehicles/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/leasing/inquiries/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/leasing/inquiries/sweep-followups/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/leasing/inquiries/[id]/activities/[activityId]/done/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/leasing/inquiries/[id]/route.ts",
+        "handler": "PATCH"
+      },
+      {
+        "file": "src/app/api/leasing/insurance/sweep-expiry/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/leasing/lead-channels/[channel]/webhook/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/leasing/mileage-readings/sweep-stale/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/leasing/quotations/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/leasing/receivables/dunning/sweep/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/leasing/traffic-fines/sweep-bill/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/maintenance/breakdown-reports/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/maintenance/breakdown-reports/[id]/dispatch-recovery/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/maintenance/breakdown-reports/[id]/route.ts",
+        "handler": "PATCH"
+      },
+      {
+        "file": "src/app/api/maintenance/pm-plans/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/maintenance/pm-plans/[id]/generate-requests/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/maintenance/pm-plans/[id]/route.ts",
+        "handler": "PUT"
+      },
+      {
+        "file": "src/app/api/maintenance/warranties/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/maintenance/warranty-claims/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/maintenance/work-orders/[id]/job-cards/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/maintenance/work-orders/[id]/job-cards/[cardId]/route.ts",
+        "handler": "PUT"
+      },
+      {
+        "file": "src/app/api/maintenance/[id]/quality-inspection/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/maintenance-requests/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/maintenance-requests/[id]/route.ts",
+        "handler": "PATCH"
+      },
+      {
+        "file": "src/app/api/notifications/history/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/notifications/send/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/places/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/quotations/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/quotations/[id]/route.ts",
+        "handler": "PUT"
+      },
+      {
+        "file": "src/app/api/rental/bookings/sweep-penalties/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/rental/channels/[channel]/webhook/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/school-bus/attendance/sweep-no-show/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/service-requests/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/service-requests/[id]/route.ts",
+        "handler": "PATCH"
+      },
+      {
+        "file": "src/app/api/tenants/pre-verify-domain/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/tenants/provision/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/tenants/verify-domain/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/users/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/users/[id]/route.ts",
+        "handler": "PATCH"
+      },
+      {
+        "file": "src/app/api/vehicles/[id]/route.ts",
+        "handler": "PATCH"
+      },
+      {
+        "file": "src/app/api/whatsapp/send/route.ts",
+        "handler": "POST"
+      },
+      {
+        "file": "src/app/api/work-orders/route.ts",
+        "handler": "POST"
+      }
+    ],
+    "no_body_parsing": [],
+    "needs_fix": {},
+    "not_found": []
+  },
+  "violations": [
+    {
+      "file": "src/app/api/admin/migrate/fleet-phase1/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/admin/migrate/indexes/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/admin/migrate/rac-phase1/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/admin/nav-permissions/route.ts",
+      "handler": "PUT"
+    },
+    {
+      "file": "src/app/api/admin/notification-rules/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/admin/notification-rules/route.ts",
+      "handler": "PUT"
+    },
+    {
+      "file": "src/app/api/admin/notification-templates/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/admin/notification-templates/route.ts",
+      "handler": "PUT"
+    },
+    {
+      "file": "src/app/api/admin/seed/leasing/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/admin/seed/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/admin/tenants/[id]/api-keys/[keyId]/revoke/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/admin/tenants/[id]/branding/logo/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/admin/tenants/[id]/hard-delete/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/admin/tenants/[id]/invitations/[invId]/revoke/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/admin/users/set-password/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/admin/users/[id]/hard-delete/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/agents/thresholds/route.ts",
+      "handler": "PATCH"
+    },
+    {
+      "file": "src/app/api/alert-configs/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/alert-configs/[id]/route.ts",
+      "handler": "PATCH"
+    },
+    {
+      "file": "src/app/api/alerts/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/alerts/[id]/route.ts",
+      "handler": "PATCH"
+    },
+    {
+      "file": "src/app/api/bus-ops/driver-performance/recompute/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/bus-ops/fleet-optimizer/runs/[id]/cancel/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/bus-ops/fleet-optimizer/runs/[id]/publish/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/bus-ops/gateway/events/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/bus-ops/gateways/[id]/rotate-secret/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/bus-ops/plan/[id]/apply/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/bus-ops/schedules/sweep-waitlist/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/bus-ops/schedules/[id]/expand-roster/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/carrier-portal/app/loads/[id]/documents/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/dispatcher/reports/[id]/acknowledge/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/dispatcher/trips/[id]/cancel/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/driver-app/auth/biometric/register/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/driver-app/behavior-events/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/driver-app/dvir/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/driver-app/expenses/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/driver-app/fuel-entries/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/driver-app/reports/[id]/cancel/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/driver-app/shift/current/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/driver-app/shift/[id]/checklist/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/driver-app/shift/[id]/end/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/driver-app/trips/[id]/end/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/driver-app/trips/[id]/start/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/drivers/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/finance/budgets/seed/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/garages/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/garages/[id]/route.ts",
+      "handler": "PUT"
+    },
+    {
+      "file": "src/app/api/leasing/contracts-v2/[id]/payments/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/leasing/contracts-v2/[id]/vehicles/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/leasing/documents/upload/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/leasing/fuel/import/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/leasing/fuel/sweep-bill/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/leasing/import/lessees/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/leasing/import/vehicles/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/leasing/inquiries/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/leasing/inquiries/sweep-followups/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/leasing/inquiries/[id]/activities/[activityId]/done/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/leasing/inquiries/[id]/route.ts",
+      "handler": "PATCH"
+    },
+    {
+      "file": "src/app/api/leasing/insurance/sweep-expiry/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/leasing/lead-channels/[channel]/webhook/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/leasing/mileage-readings/sweep-stale/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/leasing/quotations/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/leasing/receivables/dunning/sweep/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/leasing/traffic-fines/sweep-bill/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/maintenance/breakdown-reports/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/maintenance/breakdown-reports/[id]/dispatch-recovery/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/maintenance/breakdown-reports/[id]/route.ts",
+      "handler": "PATCH"
+    },
+    {
+      "file": "src/app/api/maintenance/pm-plans/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/maintenance/pm-plans/[id]/generate-requests/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/maintenance/pm-plans/[id]/route.ts",
+      "handler": "PUT"
+    },
+    {
+      "file": "src/app/api/maintenance/warranties/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/maintenance/warranty-claims/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/maintenance/work-orders/[id]/job-cards/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/maintenance/work-orders/[id]/job-cards/[cardId]/route.ts",
+      "handler": "PUT"
+    },
+    {
+      "file": "src/app/api/maintenance/[id]/quality-inspection/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/maintenance-requests/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/maintenance-requests/[id]/route.ts",
+      "handler": "PATCH"
+    },
+    {
+      "file": "src/app/api/notifications/history/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/notifications/send/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/places/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/quotations/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/quotations/[id]/route.ts",
+      "handler": "PUT"
+    },
+    {
+      "file": "src/app/api/rental/bookings/sweep-penalties/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/rental/channels/[channel]/webhook/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/school-bus/attendance/sweep-no-show/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/service-requests/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/service-requests/[id]/route.ts",
+      "handler": "PATCH"
+    },
+    {
+      "file": "src/app/api/tenants/pre-verify-domain/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/tenants/provision/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/tenants/verify-domain/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/users/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/users/[id]/route.ts",
+      "handler": "PATCH"
+    },
+    {
+      "file": "src/app/api/vehicles/[id]/route.ts",
+      "handler": "PATCH"
+    },
+    {
+      "file": "src/app/api/whatsapp/send/route.ts",
+      "handler": "POST"
+    },
+    {
+      "file": "src/app/api/work-orders/route.ts",
+      "handler": "POST"
+    }
+  ]
+}

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureHosSchema } from '@/lib/fleet/hos-schema';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
@@ -228,8 +229,8 @@ export async function GET(req: NextRequest) {
         hasMore: offset + rows.length < total,
       }),
     );
-  } catch (error) {
-    console.error('Error fetching HoS logs:', error);
+  } catch (e) {
+    console.error('Error fetching HoS logs:', e);
     return NextResponse.json({ error: 'Failed to fetch HoS logs' }, { status: 500 });
   }
 }
@@ -287,8 +288,8 @@ export async function POST(req: NextRequest) {
     );
 
     return NextResponse.json(ser(rows[0]), { status: 201 });
-  } catch (error) {
-    console.error('Error creating HoS log:', error);
+    } catch (e) {
+    console.error('Error creating HoS log:', e);
     return NextResponse.json({ error: 'Failed to create HoS log' }, { status: 500 });
   }
 }

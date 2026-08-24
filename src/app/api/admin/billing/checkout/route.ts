@@ -12,7 +12,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { withTenantRls } from '@/lib/rls';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { getStripe, getOrCreateCustomer, getPriceId, isStripeConfigured } from '@/lib/billing';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ ok: true, url: session.url, sessionId: session.id });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'billing.checkout', tags: { tenantId } });
     return NextResponse.json({ ok: false, error: 'Failed to create checkout session.' }, { status: 500 });
   }

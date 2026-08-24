@@ -27,7 +27,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!existing) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const { action, acknowledgedBy, ...data } = body;
 
     const updateData: Record<string, unknown> = { ...data };
@@ -49,7 +50,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json(alert);
   } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
   }
 }
 
@@ -77,8 +78,8 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     }),
     );
     return NextResponse.json({ success: true });
-  } catch (e) {
+    } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
   }
 }

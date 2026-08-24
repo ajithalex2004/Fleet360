@@ -10,9 +10,10 @@
  * Returns per-route: enrolled, capacity, utilisation%, status (OK/WARNING/OVERLOAD)
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
 async function ensureRoutesTable() {
@@ -42,79 +43,83 @@ async function ensureRoutesTable() {
 }
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    await ensureRoutesTable();
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        await ensureRoutesTable();
 
-    const sp       = new URL(req.url).searchParams;
-    const tenantId = sp.get('tenantId') ?? 'default';
+        const sp       = new URL(req.url).searchParams;
+        const tenantId = sp.get('tenantId') ?? 'default';
 
-    type CapRow = Row & { route_id: string; route_name: string; seat_capacity: number; enrolled: bigint };
+        type CapRow = Row & { route_id: string; route_name: string; seat_capacity: number; enrolled: bigint };
 
-    const rows = await prisma.$queryRawUnsafe<CapRow[]>(`
-      SELECT
-        r.id                                          AS route_id,
-        r.route_name,
-        r.route_code,
-        r.session,
-        r.direction,
-        r.assigned_vehicle_id,
-        r.assigned_attendant_id,
-        COALESCE(r.seat_capacity, 40)                 AS seat_capacity,
-        COUNT(s.id)                                   AS enrolled,
-        r.status
-      FROM   school_bus_routes r
-      LEFT   JOIN school_bus_students s
-             ON  s.route_id = r.id
-             AND s.is_active = true
-             AND s.deleted_at IS NULL
-      WHERE  r.tenant_id = $1
-        AND  r.status != 'DELETED'
-      GROUP  BY r.id, r.route_name, r.route_code, r.session, r.direction,
-                r.assigned_vehicle_id, r.assigned_attendant_id, r.seat_capacity, r.status
-      ORDER  BY r.route_name
-    `, tenantId).catch(() => [] as CapRow[]);
+        const rows = await tx.$queryRawUnsafe<CapRow[]>(`
+          SELECT
+            r.id                                          AS route_id,
+            r.route_name,
+            r.route_code,
+            r.session,
+            r.direction,
+            r.assigned_vehicle_id,
+            r.assigned_attendant_id,
+            COALESCE(r.seat_capacity, 40)                 AS seat_capacity,
+            COUNT(s.id)                                   AS enrolled,
+            r.status
+          FROM   school_bus_routes r
+          LEFT   JOIN school_bus_students s
+                 ON  s.route_id = r.id
+                 AND s.is_active = true
+                 AND s.deleted_at IS NULL
+          WHERE  r.tenant_id = $1
+            AND  r.status != 'DELETED'
+          GROUP  BY r.id, r.route_name, r.route_code, r.session, r.direction,
+                    r.assigned_vehicle_id, r.assigned_attendant_id, r.seat_capacity, r.status
+          ORDER  BY r.route_name
+        `, tenantId).catch(() => [] as CapRow[]);
 
-    const data = rows.map(r => {
-      const enrolled   = Number(r.enrolled ?? 0);
-      const capacity   = Number(r.seat_capacity ?? 40);
-      const pct        = capacity > 0 ? Math.round((enrolled / capacity) * 100) : 0;
-      const status     = enrolled > capacity ? 'OVERLOAD' : pct >= 90 ? 'WARNING' : 'OK';
-      const hasAttendant = !!r.assigned_attendant_id;
+        const data = rows.map(r => {
+          const enrolled   = Number(r.enrolled ?? 0);
+          const capacity   = Number(r.seat_capacity ?? 40);
+          const pct        = capacity > 0 ? Math.round((enrolled / capacity) * 100) : 0;
+          const status     = enrolled > capacity ? 'OVERLOAD' : pct >= 90 ? 'WARNING' : 'OK';
+          const hasAttendant = !!r.assigned_attendant_id;
 
-      return {
-        routeId:            String(r.route_id),
-        routeName:          String(r.route_name),
-        routeCode:          r.route_code ? String(r.route_code) : null,
-        session:            String(r.session),
-        direction:          String(r.direction),
-        assignedVehicleId:  r.assigned_vehicle_id  ? String(r.assigned_vehicle_id)  : null,
-        hasAttendant,
-        seatCapacity:       capacity,
-        enrolledStudents:   enrolled,
-        availableSeats:     Math.max(0, capacity - enrolled),
-        utilisationPct:     pct,
-        capacityStatus:     status,   // OK | WARNING | OVERLOAD
-        complianceStatus:   !hasAttendant ? 'NO_ATTENDANT' : 'OK',
-      };
-    });
+          return {
+            routeId:            String(r.route_id),
+            routeName:          String(r.route_name),
+            routeCode:          r.route_code ? String(r.route_code) : null,
+            session:            String(r.session),
+            direction:          String(r.direction),
+            assignedVehicleId:  r.assigned_vehicle_id  ? String(r.assigned_vehicle_id)  : null,
+            hasAttendant,
+            seatCapacity:       capacity,
+            enrolledStudents:   enrolled,
+            availableSeats:     Math.max(0, capacity - enrolled),
+            utilisationPct:     pct,
+            capacityStatus:     status,   // OK | WARNING | OVERLOAD
+            complianceStatus:   !hasAttendant ? 'NO_ATTENDANT' : 'OK',
+          };
+        });
 
-    const summary = {
-      total:    data.length,
-      ok:       data.filter(d => d.capacityStatus === 'OK').length,
-      warning:  data.filter(d => d.capacityStatus === 'WARNING').length,
-      overload: data.filter(d => d.capacityStatus === 'OVERLOAD').length,
-      noAttendant: data.filter(d => d.complianceStatus === 'NO_ATTENDANT').length,
-    };
+        const summary = {
+          total:    data.length,
+          ok:       data.filter(d => d.capacityStatus === 'OK').length,
+          warning:  data.filter(d => d.capacityStatus === 'WARNING').length,
+          overload: data.filter(d => d.capacityStatus === 'OVERLOAD').length,
+          noAttendant: data.filter(d => d.complianceStatus === 'NO_ATTENDANT').length,
+        };
 
-    return NextResponse.json({ routes: data, summary });
-  } catch (err) {
-    console.error('[school-bus/capacity-check GET]', err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
-  }
+        return NextResponse.json({ routes: data, summary });
+        } catch (err) {
+        console.error('[school-bus/capacity-check GET]', err);
+        return NextResponse.json({ error: String(err) }, { status: 500 });
+      }
+  });
 }
+

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureAssetsSchema } from '@/lib/assets/schema';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -57,7 +58,7 @@ export async function GET(
       ...ser([row as Row])[0],
       recentMovements: ser(movements as Row[]),
     });
-  } catch (err) {
+    } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

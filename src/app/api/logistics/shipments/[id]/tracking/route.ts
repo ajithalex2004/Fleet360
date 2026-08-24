@@ -16,11 +16,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { addTrackingEvent } from '@/lib/logistics/domain';
 import { recomputeShipmentEta } from '@/lib/logistics/eta-notifier';
 import { evaluateShipmentGeofences } from '@/lib/logistics/geofence-service';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface Body {
@@ -42,8 +43,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   const { id } = await params;
   let body: Body;
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     let etaResult: Awaited<ReturnType<typeof recomputeShipmentEta>> | null = null;
     try {
       etaResult = await recomputeShipmentEta({ tenantId, shipmentOrderId: id });
-    } catch (e) {
+      } catch (e) {
       console.error('[tracking ingest] ETA recompute failed', e);
     }
 
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     let geofence: Awaited<ReturnType<typeof evaluateShipmentGeofences>> | null = null;
     try {
       geofence = await evaluateShipmentGeofences({ tenantId, shipmentOrderId: id });
-    } catch (e) {
+      } catch (e) {
       console.error('[tracking ingest] geofence eval failed', e);
     }
 

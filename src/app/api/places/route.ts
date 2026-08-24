@@ -18,10 +18,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { isPlaceShape, isPlaceType } from '@/lib/places/types';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 function bad(msg: string, status = 400) {
@@ -37,7 +38,20 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz; } : {}),
+  const { tenantId } = authz;
+
+  const sp = req.nextUrl.searchParams;
+  const typeParam = sp.getAll('type').flatMap(v => v.split(',')).map(v => v.trim()).filter(Boolean);
+  const sourceModule = sp.get('sourceModule');
+  const q = sp.get('q');
+  const activeParam = sp.get('active');
+
+  try {
+    const rows = await prisma.place.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        ...(typeParam.length ? { type: { in: typeParam } } : {}),
         ...(sourceModule ? { sourceModule } : {}),
         ...(activeParam === 'true'  ? { active: true }  : {}),
         ...(activeParam === 'false' ? { active: false } : {}),
@@ -56,6 +70,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -65,36 +80,53 @@ export async function POST(req: NextRequest) {
   }
 
   const { tenantId } = authz;
-    if (body.shape === 'POLYGON') {
-      if (!Array.isArray(body.polygon) || body.polygon.length < 3) return bad('POLYGON requires at least 3 vertices');
-    }
-    if (body.shape === 'POINT') {
-      if (typeof body.centerLat !== 'number' || typeof body.centerLng !== 'number') return bad('POINT requires numeric centerLat/centerLng');
-    }
+  const createdBy = req.headers.get('x-user-id') ?? null;
 
-    const row = await prisma.place.create({
-      data: {
-        tenantId,
-        name:         body.name.trim(),
-        code:         body.code?.trim() || null,
-        type:         body.type,
-        shape:        body.shape,
-        description:  body.description?.trim() || null,
-        address:      body.address?.trim() || null,
-        centerLat:    body.centerLat ?? null,
-        centerLng:    body.centerLng ?? null,
-        radiusM:      body.radiusM ?? null,
-        polygon:      body.polygon ?? null,
-        metadata:     body.metadata ?? null,
-        sourceModule: body.sourceModule ?? null,
-        sourceId:     body.sourceId ?? null,
-        active:       body.active ?? true,
-        createdBy,
-      },
-    });
-    return NextResponse.json(row, { status: 201 });
-  } catch (e) {
-    console.error('[places.POST]', e);
-    return bad('Failed to create place', 500);
-  }
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+      const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
+      if (!body?.name?.trim())        return bad('name is required');
+      if (!isPlaceType(body?.type))   return bad('type is not a valid PlaceType');
+      if (!isPlaceShape(body?.shape)) return bad('shape must be POINT, CIRCLE or POLYGON');
+
+      // Shape-specific validation. Kept strict so a CIRCLE without a radius or
+      // a POLYGON with < 3 vertices can't be committed and confuse renderers.
+      if (body.shape === 'CIRCLE') {
+        if (typeof body.centerLat !== 'number' || typeof body.centerLng !== 'number') return bad('CIRCLE requires numeric centerLat/centerLng');
+        if (!(typeof body.radiusM === 'number' && body.radiusM > 0)) return bad('CIRCLE requires positive radiusM');
+      }
+      if (body.shape === 'POLYGON') {
+        if (!Array.isArray(body.polygon) || body.polygon.length < 3) return bad('POLYGON requires at least 3 vertices');
+      }
+      if (body.shape === 'POINT') {
+        if (typeof body.centerLat !== 'number' || typeof body.centerLng !== 'number') return bad('POINT requires numeric centerLat/centerLng');
+      }
+
+      const row = await tx.place.create({
+        data: {
+          tenantId,
+          name:         body.name.trim(),
+          code:         body.code?.trim() || null,
+          type:         body.type,
+          shape:        body.shape,
+          description:  body.description?.trim() || null,
+          address:      body.address?.trim() || null,
+          centerLat:    body.centerLat ?? null,
+          centerLng:    body.centerLng ?? null,
+          radiusM:      body.radiusM ?? null,
+          polygon:      body.polygon ?? null,
+          metadata:     body.metadata ?? null,
+          sourceModule: body.sourceModule ?? null,
+          sourceId:     body.sourceId ?? null,
+          active:       body.active ?? true,
+          createdBy,
+        },
+      });
+      return NextResponse.json(row, { status: 201 });
+    } catch (e) {
+      console.error('[places.POST]', e);
+      return bad('Failed to create place', 500);
+    }
+  });
 }

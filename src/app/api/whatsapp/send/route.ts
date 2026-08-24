@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID ?? '';
 const AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN ?? '';
 const FROM_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER ?? 'whatsapp:+14155238886';
@@ -69,96 +70,105 @@ async function sendViaTwilio(to: string, body: string): Promise<{ sid: string; s
 }
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    const payload: SendPayload = await req.json();
-    const { to, message, templateName, templateVars = {}, module = 'GENERAL', intent = 'GENERAL' } = payload;
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const payloadRaw: SendPayload = await req.json();
+        const payload = stripTenantOwnershipFields(payloadRaw);
+        const { to, message, templateName, templateVars = {}, module = 'GENERAL', intent = 'GENERAL' } = payload;
 
-    if (!to) {
-      return NextResponse.json({ error: 'to is required' }, { status: 400 });
-    }
+        if (!to) {
+          return NextResponse.json({ error: 'to is required' }, { status: 400 });
+        }
 
-    const normalizedTo = to.startsWith('+') ? to : `+${to}`;
+        const normalizedTo = to.startsWith('+') ? to : `+${to}`;
 
-    // Build message body
-    let messageBody = message ?? '';
-    let resolvedTemplate: string | null = null;
+        // Build message body
+        let messageBody = message ?? '';
+        let resolvedTemplate: string | null = null;
 
-    if (templateName) {
-      const body = await getTemplateBody(templateName, templateVars);
-      if (body) {
-        messageBody = body;
-        resolvedTemplate = templateName;
+        if (templateName) {
+          const body = await getTemplateBody(templateName, templateVars);
+          if (body) {
+            messageBody = body;
+            resolvedTemplate = templateName;
+          }
+        }
+
+        if (!messageBody) {
+          return NextResponse.json({ error: 'message body is empty' }, { status: 400 });
+        }
+
+        // Send via Twilio
+        const twilioResp = await sendViaTwilio(normalizedTo, messageBody);
+        const messageSid = twilioResp?.sid ?? null;
+        const status = twilioResp ? 'SENT' : (ACCOUNT_SID ? 'FAILED' : 'LOGGED');
+
+        // Store outbound message
+        const fromNumber = FROM_NUMBER.replace('whatsapp:', '');
+        await tx.$executeRawUnsafe(
+          `INSERT INTO whatsapp_messages
+             (direction, from_number, to_number, message_body, message_sid, status,
+              message_type, template_name, module, intent, auto_replied, raw_payload)
+           VALUES ('OUTBOUND', $1, $2, $3, $4, $5, $6, $7, $8, $9, false, $10::jsonb)`,
+          fromNumber,
+          normalizedTo,
+          messageBody,
+          messageSid,
+          status,
+          resolvedTemplate ? 'TEMPLATE' : 'TEXT',
+          resolvedTemplate,
+          module,
+          intent,
+          JSON.stringify({ to, templateName, templateVars, module, intent })
+        ).catch(() => {});
+
+        return NextResponse.json({ success: true, messageSid, status });
+        } catch (err) {
+        console.error('[WhatsApp Send]', err);
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
       }
-    }
-
-    if (!messageBody) {
-      return NextResponse.json({ error: 'message body is empty' }, { status: 400 });
-    }
-
-    // Send via Twilio
-    const twilioResp = await sendViaTwilio(normalizedTo, messageBody);
-    const messageSid = twilioResp?.sid ?? null;
-    const status = twilioResp ? 'SENT' : (ACCOUNT_SID ? 'FAILED' : 'LOGGED');
-
-    // Store outbound message
-    const fromNumber = FROM_NUMBER.replace('whatsapp:', '');
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO whatsapp_messages
-         (direction, from_number, to_number, message_body, message_sid, status,
-          message_type, template_name, module, intent, auto_replied, raw_payload)
-       VALUES ('OUTBOUND', $1, $2, $3, $4, $5, $6, $7, $8, $9, false, $10::jsonb)`,
-      fromNumber,
-      normalizedTo,
-      messageBody,
-      messageSid,
-      status,
-      resolvedTemplate ? 'TEMPLATE' : 'TEXT',
-      resolvedTemplate,
-      module,
-      intent,
-      JSON.stringify({ to, templateName, templateVars, module, intent })
-    ).catch(() => {});
-
-    return NextResponse.json({ success: true, messageSid, status });
-  } catch (err) {
-    console.error('[WhatsApp Send]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+  });
 }
+
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    const { searchParams } = new URL(req.url);
-    const to = searchParams.get('to');
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const { searchParams } = new URL(req.url);
+        const to = searchParams.get('to');
 
-    if (!to) {
-      return NextResponse.json({ error: 'to query param required' }, { status: 400 });
-    }
+        if (!to) {
+          return NextResponse.json({ error: 'to query param required' }, { status: 400 });
+        }
 
-    const normalizedTo = to.startsWith('+') ? to : `+${to}`;
+        const normalizedTo = to.startsWith('+') ? to : `+${to}`;
 
-    const messages = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-      `SELECT * FROM whatsapp_messages
-       WHERE from_number = $1 OR to_number = $1
-       ORDER BY created_at ASC`,
-      normalizedTo
-    );
+        const messages = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
+          `SELECT * FROM whatsapp_messages
+           WHERE from_number = $1 OR to_number = $1
+           ORDER BY created_at ASC`,
+          normalizedTo
+        );
 
-    return NextResponse.json({ messages });
-  } catch (err) {
-    console.error('[WhatsApp GET]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+        return NextResponse.json({ messages });
+      } catch (e) {
+        console.error('[WhatsApp GET]', e);
+        return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+      }
+  });
 }
+

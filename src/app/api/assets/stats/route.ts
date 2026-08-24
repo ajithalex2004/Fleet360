@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureAssetsSchema } from '@/lib/assets/schema';
 import { cacheRead, privateCacheControl } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'assets:stats';
 
 type Row = Record<string, unknown>;
@@ -93,18 +94,11 @@ export async function GET(req: NextRequest) {
 
   try {
     await ensureAssetsSchema();
-    const sp = req.nextUrl.searchParams;
-    const queryTenantId = sp.get('tenantId') ?? 'default';
-    // Use the middleware-injected tenantId when available — query-string
-    // tenantId is allowed as a fallback for the assets page which sends
-    // it explicitly.
-    const tenantId = req.headers.get('x-tenant-id') ?? queryTenantId;
-
     const data = await getAssetsStats(tenantId);
     return NextResponse.json(data, {
       headers: { 'Cache-Control': privateCacheControl(30, 120) },
     });
-  } catch (err) {
+    } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

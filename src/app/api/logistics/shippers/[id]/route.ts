@@ -12,9 +12,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { getShipperOnboarding, updateShipperOnboarding } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -26,12 +27,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
   try {
     const shipper = await getShipperOnboarding({ tenantId, customerId: params.id });
     if (!shipper) return NextResponse.json({ error: 'Shipper not found' }, { status: 404 });
     return NextResponse.json({ data: shipper }, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (e) {
+    } catch (e) {
     console.error('[logistics/shippers/:id GET]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to load shipper' },
@@ -57,7 +58,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
   let body: PatchBody;
   try { body = (await req.json()) as PatchBody; }
@@ -82,7 +83,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       creditLimit: credit ?? null,
     });
     return NextResponse.json({ data: shipper });
-  } catch (e) {
+    } catch (e) {
     const msg = e instanceof Error ? e.message : 'failed to update shipper';
     const status = msg.includes('not found') ? 404 : 500;
     if (status === 500) console.error('[logistics/shippers/:id PATCH]', e);

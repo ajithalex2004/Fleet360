@@ -20,7 +20,7 @@ import { revalidateCache } from '@/lib/server-cache';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 import { CBA_SCHEMA_VERSION, freshCbaRules, type CbaRules } from '@/lib/cba/types';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'bus-ops:cba';
 
 /**
@@ -79,8 +79,6 @@ export async function GET(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  const tenantId = req.headers.get('x-tenant-id') ?? '';
-  if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   const permError = requireBusOpsAdminAccess(req, CBA_RESOURCE);
   if (permError) return permError;
   const sp = new URL(req.url).searchParams;
@@ -112,7 +110,7 @@ export async function GET(req: NextRequest) {
     );
     return NextResponse.json(list.map((r) => shape(r as unknown as RuleSetRow)),
       { headers: { 'Cache-Control': 'private, max-age=60' } });
-  } catch (e) {
+      } catch (e) {
     console.error('[cba GET]', e);
     return NextResponse.json({ error: 'Failed to list' }, { status: 500 });
   }
@@ -125,18 +123,14 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  const tenantId = req.headers.get('x-tenant-id') ?? '';
-  if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   const permError = requireBusOpsAdminAccess(req, CBA_RESOURCE);
   if (permError) return permError;
   try {
-    const body = await req.json() as {
-      name: string;
-      description?: string;
+    const bodyRaw = await req.json() as { name: string; description?: string;
       jurisdiction?: string;
       isDefault?: boolean;
-      rules?: CbaRules;
-    };
+      rules?: CbaRules; };
+        const body = stripTenantOwnershipFields(bodyRaw);
     if (!body.name) return NextResponse.json({ error: 'name is required' }, { status: 400 });
     const rules = body.rules ?? freshCbaRules();
     const created = await withTenantRls(prisma, tenantId, (tx) =>
@@ -155,7 +149,7 @@ export async function POST(req: NextRequest) {
     );
     revalidateCache([CACHE_TAG]);
     return NextResponse.json(shape(created as unknown as RuleSetRow), { status: 201 });
-  } catch (e) {
+    } catch (e) {
     console.error('[cba POST]', e);
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed' }, { status: 500 });
   }
@@ -168,20 +162,16 @@ export async function PATCH(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  const tenantId = req.headers.get('x-tenant-id') ?? '';
-  if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   const permError = requireBusOpsAdminAccess(req, CBA_RESOURCE);
   if (permError) return permError;
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
   try {
-    const body = await req.json() as {
-      name?: string;
-      description?: string;
+    const bodyRaw = await req.json() as { name?: string; description?: string;
       jurisdiction?: string;
       isDefault?: boolean;
-      rules?: CbaRules;
-    };
+      rules?: CbaRules; };
+        const body = stripTenantOwnershipFields(bodyRaw);
     const data: Record<string, unknown> = {};
     if (body.name !== undefined)        data.name = body.name;
     if (body.description !== undefined) data.description = body.description;
@@ -214,8 +204,6 @@ export async function DELETE(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  const tenantId = req.headers.get('x-tenant-id') ?? '';
-  if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   const permError = requireBusOpsAdminAccess(req, CBA_RESOURCE);
   if (permError) return permError;
   const id = new URL(req.url).searchParams.get('id');
@@ -233,7 +221,7 @@ export async function DELETE(req: NextRequest) {
     );
     revalidateCache([CACHE_TAG]);
     return NextResponse.json({ success: true });
-  } catch (e) {
+    } catch (e) {
     console.error('[cba DELETE]', e);
     return NextResponse.json({ error: 'Failed' }, { status: 500 });
   }

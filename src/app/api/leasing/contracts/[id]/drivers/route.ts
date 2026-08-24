@@ -20,41 +20,45 @@ import { captureException } from '@/lib/sentry';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  // Confirm the contract belongs to the caller's tenant before exposing
-  // allocation history (otherwise we'd leak other tenants' driver mappings).
-  const contract = await prisma.leaseContract2.findFirst({
-    where: { id: params.id, tenantId },
-    select: { id: true },
-  });
-  if (!contract) {
-    return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
-  }
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    // Confirm the contract belongs to the caller's tenant before exposing
+      // allocation history (otherwise we'd leak other tenants' driver mappings).
+      const contract = await tx.leaseContract2.findFirst({
+        where: { id: params.id, tenantId },
+        select: { id: true },
+      });
+      if (!contract) {
+        return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
+      }
 
-  const allocations = await prisma.leaseDriverAllocation.findMany({
-    where: { tenantId, contractId: params.id },
-    orderBy: [{ status: 'asc' }, { allocatedAt: 'desc' }],
-  });
+      const allocations = await tx.leaseDriverAllocation.findMany({
+        where: { tenantId, contractId: params.id },
+        orderBy: [{ status: 'asc' }, { allocatedAt: 'desc' }],
+      });
 
-  const driverIds = [...new Set(allocations.map(a => a.driverId))];
-  const drivers = await prisma.driver.findMany({
-    where: { id: { in: driverIds } },
-    select: {
-      id: true, name: true, firstName: true, lastName: true,
-      contactNumber: true, licenseNumber: true, licenseExpiry: true,
-    },
-  });
-  const byId = new Map(drivers.map(d => [d.id, d]));
+      const driverIds = [...new Set(allocations.map(a => a.driverId))];
+      const drivers = await tx.driver.findMany({
+        where: { id: { in: driverIds } },
+        select: {
+          id: true, name: true, firstName: true, lastName: true,
+          contactNumber: true, licenseNumber: true, licenseExpiry: true,
+        },
+      });
+      const byId = new Map(drivers.map(d => [d.id, d]));
 
-  return NextResponse.json(
-    allocations.map(a => ({ ...a, driver: byId.get(a.driverId) ?? null })),
-  );
+      return NextResponse.json(
+        allocations.map(a => ({ ...a, driver: byId.get(a.driverId) ?? null })),
+      );
+  });
 }
+
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const authz = requireAuthorizedTenant(req);
@@ -64,7 +68,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const { tenantId } = authz;
 
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const driverId = String(body.driverId ?? '').trim();
     if (!driverId) {
       return NextResponse.json({ error: 'driverId is required' }, { status: 400 });
@@ -139,7 +144,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
 
     return NextResponse.json(newAllocation, { status: 201 });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'leasing.contracts.drivers.allocate', tags: { contractId: params.id } });
     return NextResponse.json({ error: 'Allocation failed' }, { status: 500 });
   }

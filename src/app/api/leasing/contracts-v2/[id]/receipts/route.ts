@@ -13,33 +13,38 @@ import { withTenantRls } from '@/lib/rls';
  * returns 404 (not 403) to avoid leaking row existence.
  */
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    // Verify the contract belongs to this tenant before listing its
-    // receipts — otherwise a cross-tenant contract id would expose
-    // receipts to the wrong tenant.
-    const contract = await prisma.leaseContract2.findFirst({
-      where: { id: params.id, tenantId },
-      select: { id: true },
-    });
-    if (!contract) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    }
 
-    const receipts = await prisma.leaseReceipt.findMany({
-      where: { tenantId, contractId: params.id },
-      orderBy: { receivedDate: 'desc' },
-    });
-    return NextResponse.json(receipts);
-  } catch (e) {
-    console.error('GET /api/leasing/contracts-v2/[id]/receipts error:', e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        // Verify the contract belongs to this tenant before listing its
+        // receipts — otherwise a cross-tenant contract id would expose
+        // receipts to the wrong tenant.
+        const contract = await tx.leaseContract2.findFirst({
+          where: { id: params.id, tenantId },
+          select: { id: true },
+        });
+        if (!contract) {
+          return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        }
+
+        const receipts = await tx.leaseReceipt.findMany({
+          where: { tenantId, contractId: params.id },
+          orderBy: { receivedDate: 'desc' },
+        });
+        return NextResponse.json(receipts);
+      } catch (e) {
+        console.error('GET /api/leasing/contracts-v2/[id]/receipts error:', e);
+        return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const authz = requireAuthorizedTenant(req);
@@ -56,7 +61,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const receiptNumber = `RCP-${Date.now().toString().slice(-6)}`;
     const amount = Number(body.amount ?? 0);
 
@@ -80,8 +86,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }),
     );
     return NextResponse.json(receipt, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     console.error('POST /api/leasing/contracts-v2/[id]/receipts error:', e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
   }
 }

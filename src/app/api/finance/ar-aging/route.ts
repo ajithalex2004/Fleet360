@@ -9,9 +9,10 @@
  * in addition to the FORCE ROW LEVEL SECURITY policy on the table.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -21,8 +22,7 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   const p             = req.nextUrl.searchParams;
   const branch        = p.get('branch');

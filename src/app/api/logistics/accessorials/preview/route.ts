@@ -19,8 +19,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { listAccessorialCatalog } from '@/lib/logistics/domain';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import {
   applyAccessorialCatalog,
   type AccessorialContext,
@@ -38,8 +39,7 @@ export async function POST(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   let body: Partial<AccessorialContext>;
   try { body = (await req.json()) as Partial<AccessorialContext>; }
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     }, {
       headers: { 'Cache-Control': 'private, max-age=10' },
     });
-  } catch (e) {
+    } catch (e) {
     console.error('[accessorials/preview]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'preview failed' },

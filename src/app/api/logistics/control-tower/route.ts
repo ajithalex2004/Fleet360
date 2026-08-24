@@ -12,11 +12,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { getShipmentControlTower } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -25,47 +27,51 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
-  const limit = Math.min(Math.max(parseInt(req.nextUrl.searchParams.get('limit') ?? '500', 10) || 500, 1), 500);
+  return withTenantRls(prisma, tenantId, async (tx) => {
 
-  try {
-    const tower = await getShipmentControlTower({ tenantId, limit });
-    const ids = tower.shipments.map(s => s.id);
+      const limit = Math.min(Math.max(parseInt(req.nextUrl.searchParams.get('limit') ?? '500', 10) || 500, 1), 500);
 
-    // Latest tracking-event note per shipment (the board's "Latest comment").
-    let commentById = new Map<string, { text: string | null; at: string | null; type: string }>();
-    if (ids.length) {
-      const rows = await prisma.$queryRawUnsafe<Array<{
-        shipment_order_id: string; notes: string | null; occurred_at: Date; event_type: string;
-      }>>(
-        `SELECT DISTINCT ON (shipment_order_id)
-                shipment_order_id, notes, occurred_at, event_type
-           FROM logistics_tracking_events
-          WHERE tenant_id = $1 AND shipment_order_id = ANY($2::text[])
-          ORDER BY shipment_order_id, occurred_at DESC`,
-        tenantId, ids,
-      ).catch(() => []);
-      commentById = new Map(rows.map(r => [
-        r.shipment_order_id,
-        { text: r.notes, at: r.occurred_at ? new Date(r.occurred_at).toISOString() : null, type: r.event_type },
-      ]));
-    }
+      try {
+        const tower = await getShipmentControlTower({ tenantId, limit });
+        const ids = tower.shipments.map(s => s.id);
 
-    const shipments = tower.shipments.map(s => ({
-      ...s,
-      latestComment: commentById.get(s.id) ?? null,
-    }));
+        // Latest tracking-event note per shipment (the board's "Latest comment").
+        let commentById = new Map<string, { text: string | null; at: string | null; type: string }>();
+        if (ids.length) {
+          const rows = await tx.$queryRawUnsafe<Array<{
+            shipment_order_id: string; notes: string | null; occurred_at: Date; event_type: string;
+          }>>(
+            `SELECT DISTINCT ON (shipment_order_id)
+                    shipment_order_id, notes, occurred_at, event_type
+               FROM logistics_tracking_events
+              WHERE tenant_id = $1 AND shipment_order_id = ANY($2::text[])
+              ORDER BY shipment_order_id, occurred_at DESC`,
+            tenantId, ids,
+          ).catch(() => []);
+          commentById = new Map(rows.map(r => [
+            r.shipment_order_id,
+            { text: r.notes, at: r.occurred_at ? new Date(r.occurred_at).toISOString() : null, type: r.event_type },
+          ]));
+        }
 
-    return NextResponse.json(
-      { generatedAt: tower.generatedAt, summary: tower.summary, shipments },
-      { headers: { 'Cache-Control': 'no-store' } },
-    );
-  } catch (e) {
-    console.error('[logistics/control-tower GET]', e);
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'failed to load control tower' },
-      { status: 500 },
-    );
-  }
+        const shipments = tower.shipments.map(s => ({
+          ...s,
+          latestComment: commentById.get(s.id) ?? null,
+        }));
+
+        return NextResponse.json(
+          { generatedAt: tower.generatedAt, summary: tower.summary, shipments },
+          { headers: { 'Cache-Control': 'no-store' } },
+        );
+      } catch (e) {
+        console.error('[logistics/control-tower GET]', e);
+        return NextResponse.json(
+          { error: e instanceof Error ? e.message : 'failed to load control tower' },
+          { status: 500 },
+        );
+      }
+  });
 }
+

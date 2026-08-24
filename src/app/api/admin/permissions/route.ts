@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { cacheRead, publicCacheControl, revalidateCache } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'permissions:all';
 
 /**
@@ -40,5 +40,5 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(perms, {
       headers: { 'Cache-Control': publicCacheControl() },
     });
-  } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+    } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }

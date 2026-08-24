@@ -90,9 +90,13 @@ WHERE "tenant_id" IS NULL;
 ALTER TABLE "WorkOrder"
   ALTER COLUMN "tenant_id" SET NOT NULL;
 
-CREATE INDEX IF NOT EXISTS "idx_work_orders_tenant_id"
-  ON "WorkOrder"("tenant_id");
+-- Set NOT NULL constraint for work_orders
+ALTER TABLE "work_orders" ALTER COLUMN "tenant_id" SET NOT NULL;
 
-ALTER TABLE "WorkOrder"
+-- Add indexes for work_orders
+CREATE INDEX IF NOT EXISTS "idx_work_orders_tenant_id"
+  ON "work_orders"("tenant_id");
+
+ALTER TABLE "work_orders"
   ADD CONSTRAINT "fk_work_orders_tenant"
   FOREIGN KEY ("tenant_id") REFERENCES "tenants"("id") ON DELETE RESTRICT;

@@ -31,7 +31,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
     if (!quotation) return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
 
-    const body = await req.json().catch(() => ({}));
+    const bodyRaw = await req.json().catch(() => ({}));
+    const body = stripTenantOwnershipFields(bodyRaw);
     const recipientEmail = body.recipientEmail
       || (quotation.lessee as any)?.email
       || null;
@@ -133,11 +134,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           ? 'Email config found but SMTP host/credentials not set. Quotation marked as SENT_TO_CUSTOMER.'
           : 'No EMAIL integration configured. Go to Admin > Integrations to set up SMTP. Quotation status updated.';
       }
-    } catch (emailErr: any) {
-      console.error('Email send error:', emailErr);
+    } catch (e) {
+      console.error('Email send error:', e);
       emailResult = {
         sent:    false,
-        message: `Quotation status updated but email failed: ${emailErr?.message ?? 'SMTP error'}`,
+        message: `Quotation status updated but email failed: ${e instanceof Error ? e.message : 'SMTP error'}`,
       };
     }
 
@@ -147,8 +148,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       status:        'SENT_TO_CUSTOMER',
       email:         emailResult,
     });
-
-  } catch (e: any) {
+    } catch (e) {
     console.error('Submit quotation error:', e);
     return NextResponse.json({ error: e?.message ?? 'Failed to submit quotation' }, { status: 500 });
   }

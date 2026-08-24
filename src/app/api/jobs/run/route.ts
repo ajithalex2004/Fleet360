@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
       durationMs,
       ...result,
     });
-  } catch (err) {
+    } catch (err) {
     const durationMs = Date.now() - start;
     console.error(`[jobs] ${jobName} threw after ${durationMs}ms:`, err);
 

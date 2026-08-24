@@ -13,9 +13,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { assignBroadcast } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest, { params: _params }: { params: { id: string } }) {
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest, { params: _params }: { params: { id
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
   const actorUserId = req.headers.get('x-user-id');
   const actorRole = req.headers.get('x-user-role');
 

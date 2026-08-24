@@ -209,7 +209,7 @@ export async function POST(req: NextRequest) {
         });
 
         send({ type: 'done' });
-      } catch (err) {
+        } catch (err) {
         send({ type: 'error', message: err instanceof Error ? err.message : String(err) });
       } finally {
         controller.close();

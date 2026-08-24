@@ -31,7 +31,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const resolution = String(body?.resolution ?? '').toUpperCase() as Resolution;
     if (!RESOLUTIONS.includes(resolution)) {
       return NextResponse.json({ error: `resolution must be one of: ${RESOLUTIONS.join(', ')}` }, { status: 400 });

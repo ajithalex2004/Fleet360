@@ -12,9 +12,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { createCarrierPortalInvite } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -27,8 +28,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
   const createdBy = req.headers.get('x-user-id');
 
   let body: { carrierId?: string; expiresAt?: string | null };
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       createdBy,
     });
     return NextResponse.json(invite, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     console.error('[logistics/rfqs/:id/invites POST]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to create invite' },

@@ -88,7 +88,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       pod: result?.pods?.[0] ?? null,
       shipment: result?.shipment ?? null,
     }, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     console.error('[carrier-portal/app/loads/:id/pod POST]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to submit carrier POD' },

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isDbConnectionError, prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { verifySession } from '@/lib/tenant-session';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 let lastDbUnavailableWarnAt = 0;
 const DB_UNAVAILABLE_WARN_INTERVAL_MS = 30_000;
 
@@ -128,7 +128,7 @@ export async function GET(req: NextRequest) {
         }
       );
     });
-  } catch (e) {
+    } catch (e) {
     if (isSessionDbUnavailable(e)) {
       warnDbUnavailable(e);
       return sessionResponse({ error: 'Database connection unavailable' }, 503);

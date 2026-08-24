@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
         status: c.status ?? 'Draft',
       })),
     );
-  } catch (e: unknown) {
+  } catch (e) {
     const message = e instanceof Error ? e.message : 'unknown';
     console.error('GET /api/leasing/contracts-v2 error:', message);
     return NextResponse.json({ error: 'Failed to load contracts' }, { status: 500 });
@@ -109,7 +109,7 @@ export const POST = withAudit(async (request: NextRequest) => {
     });
 
     return NextResponse.json(contract, { status: 201 });
-  } catch (e: unknown) {
+    } catch (e) {
     const status = (e as { status?: number })?.status ?? 500;
     const message = e instanceof Error ? e.message : 'Failed to create contract';
     console.error('POST /api/leasing/contracts-v2 error:', message);

@@ -11,6 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureServiceTicketsTable } from '@/lib/service-tickets/schema';
 import type { TicketType, TicketPriority } from '@/types/service-tickets';
@@ -21,7 +22,7 @@ import {
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string }>; }
@@ -86,7 +87,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
   const { id } = await params;
 
   const row = await loadTicket(tenantId, id);
@@ -96,6 +97,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 }
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -104,83 +106,88 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 
   }
 
-  const { tenantId, userId } = authz;, { status: 401 });
-  const { id } = await params;
+  const { tenantId, userId } = authz;
 
-  let body: Record<string, unknown>;
-  try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const { id } = await params;
 
-  const existing = await loadTicket(tenantId, id);
-  if (!existing) return NextResponse.json({ ok: false, error: 'Ticket not found' }, { status: 404 });
+      let body: Record<string, unknown>;
+      try { const bodyRaw = await req.json(); body = stripTenantOwnershipFields(bodyRaw); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
 
-  // Build dynamic UPDATE
-  const sets: string[] = [];
-  const params2: unknown[] = [];
-  let p = 1;
+      const existing = await loadTicket(tenantId, id);
+      if (!existing) return NextResponse.json({ ok: false, error: 'Ticket not found' }, { status: 404 });
 
-  const setIf = (col: string, value: unknown, cast = '') => {
-    if (value === undefined) return;
-    sets.push(`${col} = $${p}${cast}`);
-    params2.push(value);
-    p++;
-  };
+      // Build dynamic UPDATE
+      const sets: string[] = [];
+      const params2: unknown[] = [];
+      let p = 1;
 
-  setIf('status',                 body.status);
-  setIf('priority',               body.priority);
-  setIf('title',                  body.title);
-  setIf('description',            body.description);
-  setIf('due_date',               body.dueDate, '::date');
-  setIf('assigned_to',            body.assignedTo);
-  setIf('vehicle_id',             body.vehicleId);
-  setIf('related_driver_id',      body.relatedDriverId);
-  setIf('maintenance_request_id', body.maintenanceRequestId);
-  if (body.history      !== undefined) { sets.push(`history = $${p}::jsonb`);       params2.push(JSON.stringify(body.history));      p++; }
-  if (body.attachments  !== undefined) { sets.push(`attachments = $${p}::jsonb`);   params2.push(JSON.stringify(body.attachments));  p++; }
-  if (body.comments     !== undefined) { sets.push(`comments = $${p}::jsonb`);      params2.push(JSON.stringify(body.comments));     p++; }
-  if (body.customFields !== undefined) { sets.push(`custom_fields = $${p}::jsonb`); params2.push(JSON.stringify(body.customFields)); p++; }
+      const setIf = (col: string, value: unknown, cast = '') => {
+        if (value === undefined) return;
+        sets.push(`${col} = $${p}${cast}`);
+        params2.push(value);
+        p++;
+      };
 
-  if (sets.length === 0) {
-    return NextResponse.json({ ok: false, error: 'No updatable fields in body' }, { status: 400 });
-  }
-  sets.push(`updated_at = NOW()`);
+      setIf('status',                 body.status);
+      setIf('priority',               body.priority);
+      setIf('title',                  body.title);
+      setIf('description',            body.description);
+      setIf('due_date',               body.dueDate, '::date');
+      setIf('assigned_to',            body.assignedTo);
+      setIf('vehicle_id',             body.vehicleId);
+      setIf('related_driver_id',      body.relatedDriverId);
+      setIf('maintenance_request_id', body.maintenanceRequestId);
+      if (body.history      !== undefined) { sets.push(`history = $${p}::jsonb`);       params2.push(JSON.stringify(body.history));      p++; }
+      if (body.attachments  !== undefined) { sets.push(`attachments = $${p}::jsonb`);   params2.push(JSON.stringify(body.attachments));  p++; }
+      if (body.comments     !== undefined) { sets.push(`comments = $${p}::jsonb`);      params2.push(JSON.stringify(body.comments));     p++; }
+      if (body.customFields !== undefined) { sets.push(`custom_fields = $${p}::jsonb`); params2.push(JSON.stringify(body.customFields)); p++; }
 
-  params2.push(id, tenantId);
+      if (sets.length === 0) {
+        return NextResponse.json({ ok: false, error: 'No updatable fields in body' }, { status: 400 });
+      }
+      sets.push(`updated_at = NOW()`);
 
-  try {
-    const updated = await prisma.$queryRawUnsafe<Row[]>(
-      `UPDATE service_tickets
-         SET ${sets.join(', ')}
-       WHERE id = $${p}::uuid AND tenant_id = $${p + 1} AND deleted_at IS NULL
-       RETURNING ${SELECT_COLS}`,
-      ...params2,
-    );
-    const ticket = updated[0];
-    if (!ticket) return NextResponse.json({ ok: false, error: 'Update affected no rows' }, { status: 404 });
+      params2.push(id, tenantId);
 
-    // Resolve the ticket's type label from the central catalogue for the
-    // audit log. Cheap: hits the in-process tenant cache after first call.
-    const cfg = await loadServiceConfig(tenantId, ticket.ticket_type as TicketType);
-    void logAudit({
-      tenantId,
-      userId,
-      entityType: 'ServiceTicket',
-      entityId: ticket.id,
-      entityName: ticket.readable_id ?? ticket.id,
-      action: 'UPDATE',
-      details: `${cfg?.type.name ?? 'Ticket'} ${ticket.readable_id ?? ticket.id}: ${
-        Object.keys(body).filter(k => k !== 'history' && k !== 'attachments' && k !== 'comments').join(', ') || 'updated'
-      } → ${ticket.status}`,
-    });
+      try {
+        const updated = await tx.$queryRawUnsafe<Row[]>(
+          `UPDATE service_tickets
+             SET ${sets.join(', ')}
+           WHERE id = $${p}::uuid AND tenant_id = $${p + 1} AND deleted_at IS NULL
+           RETURNING ${SELECT_COLS}`,
+          ...params2,
+        );
+        const ticket = updated[0];
+        if (!ticket) return NextResponse.json({ ok: false, error: 'Update affected no rows' }, { status: 404 });
 
-    const matrix = await matrixFor(tenantId, ticket.ticket_type);
-    return NextResponse.json({ ok: true, ticket: rowToApi(ticket, matrix) });
-  } catch (err) {
-    captureException(err, { context: 'service-tickets.update', tags: { tenantId, id } });
-    return NextResponse.json({ ok: false, error: 'Update failed' }, { status: 500 });
-  }
+        // Resolve the ticket's type label from the central catalogue for the
+        // audit log. Cheap: hits the in-process tenant cache after first call.
+        const cfg = await loadServiceConfig(tenantId, ticket.ticket_type as TicketType);
+        void logAudit({
+          tenantId,
+          userId,
+          entityType: 'ServiceTicket',
+          entityId: ticket.id,
+          entityName: ticket.readable_id ?? ticket.id,
+          action: 'UPDATE',
+          details: `${cfg?.type.name ?? 'Ticket'} ${ticket.readable_id ?? ticket.id}: ${
+            Object.keys(body).filter(k => k !== 'history' && k !== 'attachments' && k !== 'comments').join(', ') || 'updated'
+          } → ${ticket.status}`,
+        });
+
+        const matrix = await matrixFor(tenantId, ticket.ticket_type);
+        return NextResponse.json({ ok: true, ticket: rowToApi(ticket, matrix) });
+        } catch (err) {
+        captureException(err, { context: 'service-tickets.update', tags: { tenantId, id } });
+        return NextResponse.json({ ok: false, error: 'Update failed' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -189,19 +196,23 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
 
   }
 
-  const { tenantId, userId } = authz;, { status: 401 });
-  const { id } = await params;
+  const { tenantId, userId } = authz;
 
-  await ensureServiceTicketsTable();
-  const result = await prisma.$executeRawUnsafe(
-    `UPDATE service_tickets SET deleted_at = NOW() WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
-    id, tenantId,
-  );
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const { id } = await params;
 
-  void logAudit({
-    tenantId, userId, entityType: 'ServiceTicket', entityId: id,
-    action: 'DELETE', details: 'Soft-deleted ticket',
+      await ensureServiceTicketsTable();
+      const result = await tx.$executeRawUnsafe(
+        `UPDATE service_tickets SET deleted_at = NOW() WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
+        id, tenantId,
+      );
+
+      void logAudit({
+        tenantId, userId, entityType: 'ServiceTicket', entityId: id,
+        action: 'DELETE', details: 'Soft-deleted ticket',
+      });
+
+      return NextResponse.json({ ok: true, changed: result });
   });
-
-  return NextResponse.json({ ok: true, changed: result });
 }
+

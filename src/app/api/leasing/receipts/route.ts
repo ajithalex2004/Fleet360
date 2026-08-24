@@ -12,29 +12,34 @@ import { withTenantRls } from '@/lib/rls';
  * `20260627000001_add_tenant_id_to_leasing_tables`.
  */
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const { searchParams } = new URL(req.url);
-    const contractId = searchParams.get('contractId');
 
-    const receipts = await prisma.leaseReceipt.findMany({
-      where: {
-        tenantId,
-        ...(contractId ? { contractId } : {}),
-      },
-      include: { contract: { select: { contractNumber: true } } },
-      orderBy: { receivedDate: 'desc' },
-    });
-    return NextResponse.json(receipts);
-  } catch (e) {
-    console.error('GET /api/leasing/receipts error:', e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const { searchParams } = new URL(req.url);
+        const contractId = searchParams.get('contractId');
+
+        const receipts = await tx.leaseReceipt.findMany({
+          where: {
+            tenantId,
+            ...(contractId ? { contractId } : {}),
+          },
+          include: { contract: { select: { contractNumber: true } } },
+          orderBy: { receivedDate: 'desc' },
+        });
+        return NextResponse.json(receipts);
+      } catch (e) {
+        console.error('GET /api/leasing/receipts error:', e);
+        return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant(req);
@@ -43,7 +48,8 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
 
     // Verify the referenced contract belongs to this tenant before
     // creating the receipt. Otherwise a cross-tenant contract id would
@@ -81,8 +87,8 @@ export async function POST(req: NextRequest) {
     }),
     );
     return NextResponse.json(receipt, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     console.error('POST /api/leasing/receipts error:', e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
   }
 }

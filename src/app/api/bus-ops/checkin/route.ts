@@ -25,6 +25,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import {
@@ -37,162 +38,167 @@ import {
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const METHODS: CheckinMethod[] = ['QR', 'NFC', 'BLE', 'MANUAL'];
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    const body = await req.json();
-    const method = String(body?.method ?? '').toUpperCase() as CheckinMethod;
-    if (!METHODS.includes(method)) {
-      return NextResponse.json({ error: `method must be one of: ${METHODS.join(', ')}` }, { status: 400 });
-    }
-    const direction: CheckinDirection = body?.direction === 'ALIGHT' ? 'ALIGHT' : 'BOARD';
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
+        const method = String(body?.method ?? '').toUpperCase() as CheckinMethod;
+        if (!METHODS.includes(method)) {
+          return NextResponse.json({ error: `method must be one of: ${METHODS.join(', ')}` }, { status: 400 });
+        }
+        const direction: CheckinDirection = body?.direction === 'ALIGHT' ? 'ALIGHT' : 'BOARD';
 
-    let scheduleId: string | null = null;
-    let staffMemberId: string | null = body?.staffMemberId ?? null;
-    let identifier: string | null = null;
-    let resolvedNote = '';
+        let scheduleId: string | null = null;
+        let staffMemberId: string | null = body?.staffMemberId ?? null;
+        let identifier: string | null = null;
+        let resolvedNote = '';
 
-    /* ── Resolve schedule + identity by method ──────────────────────────── */
+        /* ── Resolve schedule + identity by method ──────────────────────────── */
 
-    if (method === 'QR') {
-      const token = String(body?.token ?? '');
-      const verify = verifyQrToken(token);
-      if (!verify.ok) {
-        return NextResponse.json({ error: `QR ${verify.reason}` }, { status: 400 });
-      }
-      scheduleId = verify.scheduleId!;
-      identifier = token;
-      // Caller may pass either staffMemberId OR staffEmployeeId.
-      if (!staffMemberId && body?.staffEmployeeId) {
-        const m = await prisma.staffMember.findUnique({
-          where: { employeeId: String(body.staffEmployeeId) },
-          select: { id: true },
+        if (method === 'QR') {
+          const token = String(body?.token ?? '');
+          const verify = verifyQrToken(token);
+          if (!verify.ok) {
+            return NextResponse.json({ error: `QR ${verify.reason}` }, { status: 400 });
+          }
+          scheduleId = verify.scheduleId!;
+          identifier = token;
+          // Caller may pass either staffMemberId OR staffEmployeeId.
+          if (!staffMemberId && body?.staffEmployeeId) {
+            const m = await tx.staffMember.findUnique({
+              where: { employeeId: String(body.staffEmployeeId) },
+              select: { id: true },
+            });
+            staffMemberId = m?.id ?? null;
+          }
+        }
+        else if (method === 'NFC') {
+          scheduleId = body?.scheduleId ?? null;
+          const tagUid = normaliseNfcUid(String(body?.tagUid ?? ''));
+          if (!scheduleId || !tagUid) {
+            return NextResponse.json({ error: 'scheduleId and tagUid are required for NFC' }, { status: 400 });
+          }
+          const tag = await tx.staffRfidTag.findUnique({
+            where: { tagUid },
+            select: { staffMemberId: true, isActive: true },
+          });
+          if (!tag || tag.isActive === false) {
+            return NextResponse.json({ error: 'Unknown or inactive RFID tag' }, { status: 404 });
+          }
+          staffMemberId = tag.staffMemberId;
+          identifier = tagUid;
+        }
+        else if (method === 'BLE') {
+          scheduleId = body?.scheduleId ?? null;
+          const beaconUuid = normaliseBleUuid(String(body?.beaconUuid ?? ''));
+          if (!scheduleId || !beaconUuid || !staffMemberId) {
+            return NextResponse.json({ error: 'scheduleId, beaconUuid, and staffMemberId are required for BLE' }, { status: 400 });
+          }
+          // Beacon must match the trip's assigned vehicle.
+          const sched = await tx.tripSchedule.findUnique({
+            where: { id: scheduleId },
+            select: { vehicleId: true, status: true },
+          });
+          if (!sched?.vehicleId) {
+            return NextResponse.json({ error: 'Trip has no vehicle assigned — cannot validate BLE beacon' }, { status: 412 });
+          }
+          const beacon = await tx.vehicleBeacon.findUnique({
+            where: { vehicleId: sched.vehicleId },
+            select: { bleUuid: true, isActive: true },
+          });
+          if (!beacon || beacon.isActive === false || beacon.bleUuid.toLowerCase() !== beaconUuid) {
+            return NextResponse.json({ error: 'Beacon UUID does not match trip vehicle' }, { status: 403 });
+          }
+          identifier = beaconUuid;
+          resolvedNote = ` rssi=${body?.rssi ?? '—'}`;
+        }
+        else if (method === 'MANUAL') {
+          scheduleId = body?.scheduleId ?? null;
+          if (!scheduleId) {
+            return NextResponse.json({ error: 'scheduleId is required for MANUAL' }, { status: 400 });
+          }
+          // staffMemberId or passengerId — either works.
+        }
+
+        if (!scheduleId) {
+          return NextResponse.json({ error: 'Could not resolve scheduleId' }, { status: 400 });
+        }
+
+        /* ── Resolve TripPassenger (the link to denormalise status onto) ──── */
+
+        let passengerId: string | null = body?.passengerId ?? null;
+        if (!passengerId && staffMemberId) {
+          const p = await tx.tripPassenger.findFirst({
+            where: { tripId: scheduleId, staffMemberId },
+            select: { id: true },
+          });
+          passengerId = p?.id ?? null;
+        }
+        if (!passengerId && staffMemberId === null) {
+          return NextResponse.json({ error: 'Could not identify staff member or passenger' }, { status: 400 });
+        }
+        if (!passengerId) {
+          return NextResponse.json({ error: `Staff member is not a passenger on this trip` }, { status: 404 });
+        }
+
+        /* ── Persist immutable event + denormalise status ──────────────────── */
+
+        const performedBy = req.headers.get('x-user-id') ?? body?.performedBy ?? null;
+        const performedAt = body?.performedAt ? new Date(body.performedAt) : new Date();
+
+        const [event, passenger] = await tx.$transaction([
+          tx.boardingEvent.create({
+            data: {
+              scheduleId,
+              passengerId,
+              staffMemberId,
+              method,
+              direction,
+              identifier,
+              stopId: body?.stopId ?? null,
+              performedAt,
+              performedBy,
+              rawPayload: body && typeof body === 'object'
+                ? (body as unknown as Prisma.InputJsonValue)
+                : Prisma.JsonNull,
+            },
+          }),
+          tx.tripPassenger.update({
+            where: { id: passengerId },
+            data: direction === 'BOARD'
+              ? { status: 'BOARDED', boardedAt: performedAt }
+              : { /* ALIGHT — preserve BOARDED status, no fields to mutate */ status: 'BOARDED' },
+          }),
+        ]);
+
+        void logAudit({
+          tenantId: req.headers.get('x-tenant-id') ?? undefined,
+          userId: performedBy ?? `method:${method}`,
+          userRole: req.headers.get('x-user-role') ?? 'STAFF',
+          entityType: 'TripPassenger',
+          entityId: passengerId,
+          action: 'UPDATE',
+          details: `${direction} via ${method}${identifier ? ` (${identifier.slice(0, 16)})` : ''}${resolvedNote} on schedule ${scheduleId.slice(0, 8)}.`,
         });
-        staffMemberId = m?.id ?? null;
+
+        return NextResponse.json({ ok: true, event, passenger });
+        } catch (err) {
+        captureException(err, { context: 'bus-ops.checkin' });
+        return NextResponse.json({ error: err instanceof Error ? err.message : 'Check-in failed' }, { status: 500 });
       }
-    }
-    else if (method === 'NFC') {
-      scheduleId = body?.scheduleId ?? null;
-      const tagUid = normaliseNfcUid(String(body?.tagUid ?? ''));
-      if (!scheduleId || !tagUid) {
-        return NextResponse.json({ error: 'scheduleId and tagUid are required for NFC' }, { status: 400 });
-      }
-      const tag = await prisma.staffRfidTag.findUnique({
-        where: { tagUid },
-        select: { staffMemberId: true, isActive: true },
-      });
-      if (!tag || tag.isActive === false) {
-        return NextResponse.json({ error: 'Unknown or inactive RFID tag' }, { status: 404 });
-      }
-      staffMemberId = tag.staffMemberId;
-      identifier = tagUid;
-    }
-    else if (method === 'BLE') {
-      scheduleId = body?.scheduleId ?? null;
-      const beaconUuid = normaliseBleUuid(String(body?.beaconUuid ?? ''));
-      if (!scheduleId || !beaconUuid || !staffMemberId) {
-        return NextResponse.json({ error: 'scheduleId, beaconUuid, and staffMemberId are required for BLE' }, { status: 400 });
-      }
-      // Beacon must match the trip's assigned vehicle.
-      const sched = await prisma.tripSchedule.findUnique({
-        where: { id: scheduleId },
-        select: { vehicleId: true, status: true },
-      });
-      if (!sched?.vehicleId) {
-        return NextResponse.json({ error: 'Trip has no vehicle assigned — cannot validate BLE beacon' }, { status: 412 });
-      }
-      const beacon = await prisma.vehicleBeacon.findUnique({
-        where: { vehicleId: sched.vehicleId },
-        select: { bleUuid: true, isActive: true },
-      });
-      if (!beacon || beacon.isActive === false || beacon.bleUuid.toLowerCase() !== beaconUuid) {
-        return NextResponse.json({ error: 'Beacon UUID does not match trip vehicle' }, { status: 403 });
-      }
-      identifier = beaconUuid;
-      resolvedNote = ` rssi=${body?.rssi ?? '—'}`;
-    }
-    else if (method === 'MANUAL') {
-      scheduleId = body?.scheduleId ?? null;
-      if (!scheduleId) {
-        return NextResponse.json({ error: 'scheduleId is required for MANUAL' }, { status: 400 });
-      }
-      // staffMemberId or passengerId — either works.
-    }
-
-    if (!scheduleId) {
-      return NextResponse.json({ error: 'Could not resolve scheduleId' }, { status: 400 });
-    }
-
-    /* ── Resolve TripPassenger (the link to denormalise status onto) ──── */
-
-    let passengerId: string | null = body?.passengerId ?? null;
-    if (!passengerId && staffMemberId) {
-      const p = await prisma.tripPassenger.findFirst({
-        where: { tripId: scheduleId, staffMemberId },
-        select: { id: true },
-      });
-      passengerId = p?.id ?? null;
-    }
-    if (!passengerId && staffMemberId === null) {
-      return NextResponse.json({ error: 'Could not identify staff member or passenger' }, { status: 400 });
-    }
-    if (!passengerId) {
-      return NextResponse.json({ error: `Staff member is not a passenger on this trip` }, { status: 404 });
-    }
-
-    /* ── Persist immutable event + denormalise status ──────────────────── */
-
-    const performedBy = req.headers.get('x-user-id') ?? body?.performedBy ?? null;
-    const performedAt = body?.performedAt ? new Date(body.performedAt) : new Date();
-
-    const [event, passenger] = await prisma.$transaction([
-      prisma.boardingEvent.create({
-        data: {
-          scheduleId,
-          passengerId,
-          staffMemberId,
-          method,
-          direction,
-          identifier,
-          stopId: body?.stopId ?? null,
-          performedAt,
-          performedBy,
-          rawPayload: body && typeof body === 'object'
-            ? (body as unknown as Prisma.InputJsonValue)
-            : Prisma.JsonNull,
-        },
-      }),
-      prisma.tripPassenger.update({
-        where: { id: passengerId },
-        data: direction === 'BOARD'
-          ? { status: 'BOARDED', boardedAt: performedAt }
-          : { /* ALIGHT — preserve BOARDED status, no fields to mutate */ status: 'BOARDED' },
-      }),
-    ]);
-
-    void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
-      userId: performedBy ?? `method:${method}`,
-      userRole: req.headers.get('x-user-role') ?? 'STAFF',
-      entityType: 'TripPassenger',
-      entityId: passengerId,
-      action: 'UPDATE',
-      details: `${direction} via ${method}${identifier ? ` (${identifier.slice(0, 16)})` : ''}${resolvedNote} on schedule ${scheduleId.slice(0, 8)}.`,
-    });
-
-    return NextResponse.json({ ok: true, event, passenger });
-  } catch (err) {
-    captureException(err, { context: 'bus-ops.checkin' });
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Check-in failed' }, { status: 500 });
-  }
+  });
 }
+

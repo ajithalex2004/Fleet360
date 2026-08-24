@@ -9,6 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { LEAD_CHANNELS } from '@/lib/leasing-lead-channels';
@@ -26,35 +27,40 @@ const PREFIX_BY_KEY: Record<string, string> = {
 };
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  const inquiries = await prisma.leaseInquiry.findMany({
-    where: { tenantId, deletedAt: null, inquiryNumber: { not: null } },
-    select: { inquiryNumber: true, createdAt: true },
-  });
 
-  const out = LEAD_CHANNELS.map(c => {
-    const prefix = PREFIX_BY_KEY[c.key];
-    const matched = prefix
-      ? inquiries.filter(i => i.inquiryNumber!.startsWith(prefix))
-      : [];
-    const lastAt = matched.length > 0
-      ? matched.reduce((max, i) => (i.createdAt && i.createdAt > max ? i.createdAt : max), new Date(0))
-      : null;
-    return {
-      key: c.key,
-      label: c.label,
-      category: c.category,
-      supportsInboundWebhook: c.supportsInboundWebhook,
-      configured: c.secretEnvVar ? Boolean(process.env[c.secretEnvVar]) : true,
-      description: c.description,
-      leadCount: matched.length,
-      lastLeadAt: lastAt && lastAt.getTime() > 0 ? lastAt.toISOString() : null,
-    };
-  });
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const inquiries = await tx.leaseInquiry.findMany({
+        where: { tenantId, deletedAt: null, inquiryNumber: { not: null } },
+        select: { inquiryNumber: true, createdAt: true },
+      });
 
-  return NextResponse.json(out);
+      const out = LEAD_CHANNELS.map(c => {
+        const prefix = PREFIX_BY_KEY[c.key];
+        const matched = prefix
+          ? inquiries.filter(i => i.inquiryNumber!.startsWith(prefix))
+          : [];
+        const lastAt = matched.length > 0
+          ? matched.reduce((max, i) => (i.createdAt && i.createdAt > max ? i.createdAt : max), new Date(0))
+          : null;
+        return {
+          key: c.key,
+          label: c.label,
+          category: c.category,
+          supportsInboundWebhook: c.supportsInboundWebhook,
+          configured: c.secretEnvVar ? Boolean(process.env[c.secretEnvVar]) : true,
+          description: c.description,
+          leadCount: matched.length,
+          lastLeadAt: lastAt && lastAt.getTime() > 0 ? lastAt.toISOString() : null,
+        };
+      });
+
+      return NextResponse.json(out);
+  });
 }
+

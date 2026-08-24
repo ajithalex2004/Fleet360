@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 async function bootstrap() {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS finance_security_deposits (
@@ -83,196 +84,210 @@ function row(r: Record<string, unknown>) {
 }
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  await bootstrap();
-  const p = req.nextUrl.searchParams;
-  const status       = p.get('status');
-  const contract_type = p.get('contract_type');
-  const branch       = p.get('branch');
-  const search       = p.get('search');
-  const aging_only   = p.get('aging_only') === 'true'; // held > 365 days
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    await bootstrap();
+      const p = req.nextUrl.searchParams;
+      const status       = p.get('status');
+      const contract_type = p.get('contract_type');
+      const branch       = p.get('branch');
+      const search       = p.get('search');
+      const aging_only   = p.get('aging_only') === 'true'; // held > 365 days
 
-  let where = 'WHERE 1=1';
-  const params: unknown[] = [];
-  let idx = 1;
+      let where = 'WHERE 1=1';
+      const params: unknown[] = [];
+      let idx = 1;
 
-  if (status)        { where += ` AND status = $${idx++}`;         params.push(status); }
-  if (contract_type) { where += ` AND contract_type = $${idx++}`;  params.push(contract_type); }
-  if (branch)        { where += ` AND branch = $${idx++}`;         params.push(branch); }
-  if (aging_only)    { where += ` AND held_days > 365`; }
-  if (search) {
-    where += ` AND (customer_name ILIKE $${idx} OR vehicle_no ILIKE $${idx} OR deposit_no ILIKE $${idx} OR contract_id ILIKE $${idx})`;
-    params.push(`%${search}%`); idx++;
-  }
+      if (status)        { where += ` AND status = $${idx++}`;         params.push(status); }
+      if (contract_type) { where += ` AND contract_type = $${idx++}`;  params.push(contract_type); }
+      if (branch)        { where += ` AND branch = $${idx++}`;         params.push(branch); }
+      if (aging_only)    { where += ` AND held_days > 365`; }
+      if (search) {
+        where += ` AND (customer_name ILIKE $${idx} OR vehicle_no ILIKE $${idx} OR deposit_no ILIKE $${idx} OR contract_id ILIKE $${idx})`;
+        params.push(`%${search}%`); idx++;
+      }
 
-  const rows = await prisma.$queryRawUnsafe(
-    `SELECT * FROM finance_security_deposits ${where} ORDER BY created_at DESC`,
-    ...params
-  ) as Record<string, unknown>[];
+      const rows = await tx.$queryRawUnsafe(
+        `SELECT * FROM finance_security_deposits ${where} ORDER BY created_at DESC`,
+        ...params
+      ) as Record<string, unknown>[];
 
-  // KPI summary
-  const kpi = await prisma.$queryRawUnsafe(`
-    SELECT
-      COUNT(*)                                          AS total,
-      COUNT(*) FILTER (WHERE status = 'HELD')          AS held_count,
-      COUNT(*) FILTER (WHERE status LIKE '%REFUNDED%') AS refunded_count,
-      COUNT(*) FILTER (WHERE status = 'FORFEITED')     AS forfeited_count,
-      COALESCE(SUM(collected_amount) FILTER (WHERE status = 'HELD'), 0)        AS total_held_amount,
-      COALESCE(SUM(collected_amount) FILTER (WHERE status = 'FORFEITED'), 0)   AS total_forfeited,
-      COALESCE(SUM(refund_amount)    FILTER (WHERE refund_amount IS NOT NULL), 0) AS total_refunded,
-      COUNT(*) FILTER (WHERE held_days > 365)           AS overdue_count
-    FROM finance_security_deposits
-  `) as Record<string, unknown>[];
+      // KPI summary
+      const kpi = await tx.$queryRawUnsafe(`
+        SELECT
+          COUNT(*)                                          AS total,
+          COUNT(*) FILTER (WHERE status = 'HELD')          AS held_count,
+          COUNT(*) FILTER (WHERE status LIKE '%REFUNDED%') AS refunded_count,
+          COUNT(*) FILTER (WHERE status = 'FORFEITED')     AS forfeited_count,
+          COALESCE(SUM(collected_amount) FILTER (WHERE status = 'HELD'), 0)        AS total_held_amount,
+          COALESCE(SUM(collected_amount) FILTER (WHERE status = 'FORFEITED'), 0)   AS total_forfeited,
+          COALESCE(SUM(refund_amount)    FILTER (WHERE refund_amount IS NOT NULL), 0) AS total_refunded,
+          COUNT(*) FILTER (WHERE held_days > 365)           AS overdue_count
+        FROM finance_security_deposits
+      `) as Record<string, unknown>[];
 
-  return NextResponse.json({ deposits: rows.map(row), kpi: kpi[0] });
+      return NextResponse.json({ deposits: rows.map(row), kpi: kpi[0] });
+  });
 }
+
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  await bootstrap();
-  const b = await req.json();
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    await bootstrap();
+      const bRaw = await req.json();
+  const b = stripTenantOwnershipFields(bRaw);
 
-  // Auto-number
-  const now = new Date();
-  const ym  = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const cnt = await prisma.$queryRawUnsafe(
-    `SELECT COUNT(*) AS c FROM finance_security_deposits WHERE deposit_no LIKE $1`,
-    `FSD-${ym}-%`
-  ) as { c: bigint | number }[];
-  const seq = String(Number(cnt[0].c) + 1).padStart(4, '0');
-  const deposit_no = `FSD-${ym}-${seq}`;
+      // Auto-number
+      const now = new Date();
+      const ym  = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const cnt = await tx.$queryRawUnsafe(
+        `SELECT COUNT(*) AS c FROM finance_security_deposits WHERE deposit_no LIKE $1`,
+        `FSD-${ym}-%`
+      ) as { c: bigint | number }[];
+      const seq = String(Number(cnt[0].c) + 1).padStart(4, '0');
+      const deposit_no = `FSD-${ym}-${seq}`;
 
-  const rows = await prisma.$queryRawUnsafe(`
-    INSERT INTO finance_security_deposits
-      (deposit_no, contract_id, contract_type, customer_name, customer_trn,
-       vehicle_no, vehicle_type, branch, collected_amount, collection_date,
-       collection_method, cheque_no, bank_name, notes)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-    RETURNING *
-  `,
-    deposit_no,
-    b.contract_id,
-    b.contract_type ?? 'LEASE',
-    b.customer_name,
-    b.customer_trn ?? null,
-    b.vehicle_no,
-    b.vehicle_type ?? null,
-    b.branch ?? 'Dubai',
-    b.collected_amount,
-    b.collection_date,
-    b.collection_method ?? 'BANK_TRANSFER',
-    b.cheque_no ?? null,
-    b.bank_name ?? null,
-    b.notes ?? null,
-  ) as Record<string, unknown>[];
+      const rows = await tx.$queryRawUnsafe(`
+        INSERT INTO finance_security_deposits
+          (deposit_no, contract_id, contract_type, customer_name, customer_trn,
+           vehicle_no, vehicle_type, branch, collected_amount, collection_date,
+           collection_method, cheque_no, bank_name, notes)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        RETURNING *
+      `,
+        deposit_no,
+        b.contract_id,
+        b.contract_type ?? 'LEASE',
+        b.customer_name,
+        b.customer_trn ?? null,
+        b.vehicle_no,
+        b.vehicle_type ?? null,
+        b.branch ?? 'Dubai',
+        b.collected_amount,
+        b.collection_date,
+        b.collection_method ?? 'BANK_TRANSFER',
+        b.cheque_no ?? null,
+        b.bank_name ?? null,
+        b.notes ?? null,
+      ) as Record<string, unknown>[];
 
-  return NextResponse.json(row(rows[0]), { status: 201 });
+      return NextResponse.json(row(rows[0]), { status: 201 });
+  });
 }
+
 
 export async function PATCH(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  await bootstrap();
-  const b = await req.json();
-  const { id, action } = b;
-  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    await bootstrap();
+      const bRaw = await req.json();
+  const b = stripTenantOwnershipFields(bRaw);
+      const { id, action } = b;
+      if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
-  // ── Add Deduction ─────────────────────────────────────────────────────────
-  if (action === 'add_deduction') {
-    const deduction = {
-      id:          crypto.randomUUID(),
-      description: b.description,
-      amount:      Number(b.amount),
-      date:        b.date ?? new Date().toISOString().split('T')[0],
-      category:    b.category ?? 'DAMAGE',
-    };
-    const rows = await prisma.$queryRawUnsafe(`
-      UPDATE finance_security_deposits
-      SET
-        deductions     = deductions || $2::jsonb,
-        total_deducted = total_deducted + $3,
-        status         = CASE
-          WHEN (collected_amount - total_deducted - $3) <= 0 THEN 'FORFEITED'
-          ELSE 'PARTIALLY_REFUNDED'
-        END,
-        updated_at     = NOW()
-      WHERE id = $1::uuid
-      RETURNING *
-    `, id, JSON.stringify([deduction]), Number(b.amount)) as Record<string, unknown>[];
-    if (!rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 });
-    return NextResponse.json(row(rows[0]));
-  }
+      // ── Add Deduction ─────────────────────────────────────────────────────────
+      if (action === 'add_deduction') {
+        const deduction = {
+          id:          crypto.randomUUID(),
+          description: b.description,
+          amount:      Number(b.amount),
+          date:        b.date ?? new Date().toISOString().split('T')[0],
+          category:    b.category ?? 'DAMAGE',
+        };
+        const rows = await tx.$queryRawUnsafe(`
+          UPDATE finance_security_deposits
+          SET
+            deductions     = deductions || $2::jsonb,
+            total_deducted = total_deducted + $3,
+            status         = CASE
+              WHEN (collected_amount - total_deducted - $3) <= 0 THEN 'FORFEITED'
+              ELSE 'PARTIALLY_REFUNDED'
+            END,
+            updated_at     = NOW()
+          WHERE id = $1::uuid
+          RETURNING *
+        `, id, JSON.stringify([deduction]), Number(b.amount)) as Record<string, unknown>[];
+        if (!rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 });
+        return NextResponse.json(row(rows[0]));
+      }
 
-  // ── Process Refund ────────────────────────────────────────────────────────
-  if (action === 'refund') {
-    const current = await prisma.$queryRawUnsafe(
-      `SELECT * FROM finance_security_deposits WHERE id = $1::uuid`, id
-    ) as Record<string, unknown>[];
-    if (!current.length) return NextResponse.json({ error: 'not found' }, { status: 404 });
-    const dep = current[0];
-    const refundAmt = Number(b.refund_amount ?? (Number(dep.collected_amount) - Number(dep.total_deducted)));
-    const newStatus = refundAmt >= (Number(dep.collected_amount) - Number(dep.total_deducted))
-      ? 'FULLY_REFUNDED' : 'PARTIALLY_REFUNDED';
+      // ── Process Refund ────────────────────────────────────────────────────────
+      if (action === 'refund') {
+        const current = await tx.$queryRawUnsafe(
+          `SELECT * FROM finance_security_deposits WHERE id = $1::uuid`, id
+        ) as Record<string, unknown>[];
+        if (!current.length) return NextResponse.json({ error: 'not found' }, { status: 404 });
+        const dep = current[0];
+        const refundAmt = Number(b.refund_amount ?? (Number(dep.collected_amount) - Number(dep.total_deducted)));
+        const newStatus = refundAmt >= (Number(dep.collected_amount) - Number(dep.total_deducted))
+          ? 'FULLY_REFUNDED' : 'PARTIALLY_REFUNDED';
 
-    const rows = await prisma.$queryRawUnsafe(`
-      UPDATE finance_security_deposits
-      SET
-        refund_amount    = $2,
-        refund_date      = $3,
-        refund_method    = $4,
-        refund_reference = $5,
-        status           = $6,
-        updated_at       = NOW()
-      WHERE id = $1::uuid
-      RETURNING *
-    `, id, refundAmt, b.refund_date ?? new Date().toISOString().split('T')[0],
-       b.refund_method ?? 'BANK_TRANSFER', b.refund_reference ?? null, newStatus
-    ) as Record<string, unknown>[];
-    return NextResponse.json(row(rows[0]));
-  }
+        const rows = await tx.$queryRawUnsafe(`
+          UPDATE finance_security_deposits
+          SET
+            refund_amount    = $2,
+            refund_date      = $3,
+            refund_method    = $4,
+            refund_reference = $5,
+            status           = $6,
+            updated_at       = NOW()
+          WHERE id = $1::uuid
+          RETURNING *
+        `, id, refundAmt, b.refund_date ?? new Date().toISOString().split('T')[0],
+           b.refund_method ?? 'BANK_TRANSFER', b.refund_reference ?? null, newStatus
+        ) as Record<string, unknown>[];
+        return NextResponse.json(row(rows[0]));
+      }
 
-  // ── Forfeit ───────────────────────────────────────────────────────────────
-  if (action === 'forfeit') {
-    const rows = await prisma.$queryRawUnsafe(`
-      UPDATE finance_security_deposits
-      SET status = 'FORFEITED', forfeiture_reason = $2, updated_at = NOW()
-      WHERE id = $1::uuid
-      RETURNING *
-    `, id, b.forfeiture_reason ?? 'Contract default') as Record<string, unknown>[];
-    return NextResponse.json(row(rows[0]));
-  }
+      // ── Forfeit ───────────────────────────────────────────────────────────────
+      if (action === 'forfeit') {
+        const rows = await tx.$queryRawUnsafe(`
+          UPDATE finance_security_deposits
+          SET status = 'FORFEITED', forfeiture_reason = $2, updated_at = NOW()
+          WHERE id = $1::uuid
+          RETURNING *
+        `, id, b.forfeiture_reason ?? 'Contract default') as Record<string, unknown>[];
+        return NextResponse.json(row(rows[0]));
+      }
 
-  // ── Generic field update ──────────────────────────────────────────────────
-  const allowed = ['contract_id','contract_type','customer_name','customer_trn','vehicle_no',
-    'vehicle_type','branch','collected_amount','collection_date','collection_method',
-    'cheque_no','bank_name','notes'];
-  const updates: string[] = [];
-  const vals: unknown[]   = [id];
-  let pi = 2;
-  for (const key of allowed) {
-    if (key in b) { updates.push(`${key} = $${pi++}`); vals.push(b[key]); }
-  }
-  if (!updates.length) return NextResponse.json({ error: 'no fields' }, { status: 400 });
-  updates.push('updated_at = NOW()');
+      // ── Generic field update ──────────────────────────────────────────────────
+      const allowed = ['contract_id','contract_type','customer_name','customer_trn','vehicle_no',
+        'vehicle_type','branch','collected_amount','collection_date','collection_method',
+        'cheque_no','bank_name','notes'];
+      const updates: string[] = [];
+      const vals: unknown[]   = [id];
+      let pi = 2;
+      for (const key of allowed) {
+        if (key in b) { updates.push(`${key} = $${pi++}`); vals.push(b[key]); }
+      }
+      if (!updates.length) return NextResponse.json({ error: 'no fields' }, { status: 400 });
+      updates.push('updated_at = NOW()');
 
-  const rows = await prisma.$queryRawUnsafe(
-    `UPDATE finance_security_deposits SET ${updates.join(', ')} WHERE id = $1::uuid RETURNING *`,
-    ...vals
-  ) as Record<string, unknown>[];
-  if (!rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 });
-  return NextResponse.json(row(rows[0]));
+      const rows = await tx.$queryRawUnsafe(
+        `UPDATE finance_security_deposits SET ${updates.join(', ')} WHERE id = $1::uuid RETURNING *`,
+        ...vals
+      ) as Record<string, unknown>[];
+      if (!rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 });
+      return NextResponse.json(row(rows[0]));
+  });
 }
+

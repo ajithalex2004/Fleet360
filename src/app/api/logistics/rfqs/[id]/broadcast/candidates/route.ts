@@ -10,8 +10,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import {
   findNearestIdleCarriers, resolveShipmentPickupGeo,
   getCarrierAwardComplianceBlockers,
@@ -28,6 +29,7 @@ async function rfqShipmentId(tenantId: string, rfqId: string): Promise<string | 
 }
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+
   const { id } = await ctx.params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -37,69 +39,73 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
-  const sp = req.nextUrl.searchParams;
-  const num = (n: string, d?: number) => { const v = Number(sp.get(n)); return Number.isFinite(v) ? v : d; };
+  return withTenantRls(prisma, tenantId, async (tx) => {
 
-  try {
-    const shipmentId = await rfqShipmentId(tenantId, id);
-    if (!shipmentId) return NextResponse.json({ error: 'RFQ not found' }, { status: 404 });
+      const sp = req.nextUrl.searchParams;
+      const num = (n: string, d?: number) => { const v = Number(sp.get(n)); return Number.isFinite(v) ? v : d; };
 
-    // The load's required vehicle type — only suggest drivers whose vehicle matches.
-    const vtRows = await prisma.$queryRawUnsafe<Array<{ requested_vehicle_type: string | null }>>(
-      `SELECT requested_vehicle_type FROM logistics_shipment_orders WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
-      shipmentId, tenantId,
-    ).catch(() => [] as Array<{ requested_vehicle_type: string | null }>);
-    const requestedVehicleType = vtRows[0]?.requested_vehicle_type ?? null;
+      try {
+        const shipmentId = await rfqShipmentId(tenantId, id);
+        if (!shipmentId) return NextResponse.json({ error: 'RFQ not found' }, { status: 404 });
 
-    const pickup = await resolveShipmentPickupGeo(tenantId, shipmentId);
-    if (!pickup) {
-      return NextResponse.json({ data: [], pickup: null, requestedVehicleType, note: 'This load has no pickup GPS yet, so nearby drivers can’t be ranked. Geocode the pickup or add pickup coordinates.' });
-    }
+        // The load's required vehicle type — only suggest drivers whose vehicle matches.
+        const vtRows = await tx.$queryRawUnsafe<Array<{ requested_vehicle_type: string | null }>>(
+          `SELECT requested_vehicle_type FROM logistics_shipment_orders WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+          shipmentId, tenantId,
+        ).catch(() => [] as Array<{ requested_vehicle_type: string | null }>);
+        const requestedVehicleType = vtRows[0]?.requested_vehicle_type ?? null;
 
-    // Compliance pre-filter: getCarrierAwardComplianceBlockers can reject a
-    // candidate (missing insurance, expired licence, etc.) — better to drop
-    // those before showing the list than to surprise the operator with a
-    // 409 at assign time. Over-fetch by 3× the requested limit so we still
-    // hit the target N after blocked drivers are removed; cap at 30 so the
-    // compliance fan-out stays small even when a caller asks for the max.
-    const wantedLimit = num('limit', 3) ?? 3;
-    const overFetch = Math.min(Math.max(wantedLimit * 3, wantedLimit), 30);
+        const pickup = await resolveShipmentPickupGeo(tenantId, shipmentId);
+        if (!pickup) {
+          return NextResponse.json({ data: [], pickup: null, requestedVehicleType, note: 'This load has no pickup GPS yet, so nearby drivers can’t be ranked. Geocode the pickup or add pickup coordinates.' });
+        }
 
-    const candidates = await findNearestIdleCarriers({
-      tenantId,
-      lat: pickup.lat,
-      lng: pickup.lng,
-      radiusKm: num('radiusKm'),
-      // Match the load's vehicle type by default; an explicit ?vehicleType= overrides.
-      vehicleType: sp.get('vehicleType') ?? requestedVehicleType,
-      limit: overFetch,
-    });
+        // Compliance pre-filter: getCarrierAwardComplianceBlockers can reject a
+        // candidate (missing insurance, expired licence, etc.) — better to drop
+        // those before showing the list than to surprise the operator with a
+        // 409 at assign time. Over-fetch by 3× the requested limit so we still
+        // hit the target N after blocked drivers are removed; cap at 30 so the
+        // compliance fan-out stays small even when a caller asks for the max.
+        const wantedLimit = num('limit', 3) ?? 3;
+        const overFetch = Math.min(Math.max(wantedLimit * 3, wantedLimit), 30);
 
-    type Candidate = (typeof candidates)[number];
-    const compliant: Candidate[] = [];
-    const blocked: Array<{ carrierId: string; carrierName: string | null; reasons: string[] }> = [];
-    await Promise.all(candidates.map(async (c) => {
-      const issues = await getCarrierAwardComplianceBlockers({
-        tenantId, carrierId: c.carrierId, requireVehicle: false,
-      }).catch(() => [] as Array<{ severity: string; label: string }>);
-      const errors = issues.filter(i => i.severity === 'ERROR');
-      if (errors.length === 0) compliant.push(c);
-      else blocked.push({ carrierId: c.carrierId, carrierName: c.carrierName ?? null, reasons: errors.map(e => e.label) });
-    }));
+        const candidates = await findNearestIdleCarriers({
+          tenantId,
+          lat: pickup.lat,
+          lng: pickup.lng,
+          radiusKm: num('radiusKm'),
+          // Match the load's vehicle type by default; an explicit ?vehicleType= overrides.
+          vehicleType: sp.get('vehicleType') ?? requestedVehicleType,
+          limit: overFetch,
+        });
 
-    // Promise.all loses order — restore the scorecard-weighted ranking
-    // emitted by findNearestIdleCarriers (effectiveDistanceKm ASC).
-    compliant.sort((a, b) => (a.effectiveDistanceKm ?? Infinity) - (b.effectiveDistanceKm ?? Infinity));
-    const data = compliant.slice(0, wantedLimit);
+        type Candidate = (typeof candidates)[number];
+        const compliant: Candidate[] = [];
+        const blocked: Array<{ carrierId: string; carrierName: string | null; reasons: string[] }> = [];
+        await Promise.all(candidates.map(async (c) => {
+          const issues = await getCarrierAwardComplianceBlockers({
+            tenantId, carrierId: c.carrierId, requireVehicle: false,
+          }).catch(() => [] as Array<{ severity: string; label: string }>);
+          const errors = issues.filter(i => i.severity === 'ERROR');
+          if (errors.length === 0) compliant.push(c);
+          else blocked.push({ carrierId: c.carrierId, carrierName: c.carrierName ?? null, reasons: errors.map(e => e.label) });
+        }));
 
-    return NextResponse.json(
-      { data, pickup, requestedVehicleType, blockedCount: blocked.length, blocked: blocked.slice(0, 10) },
-      { headers: { 'Cache-Control': 'no-store' } },
-    );
-  } catch (e) {
-    console.error('[rfqs/:id/broadcast/candidates GET]', e);
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'failed to find drivers' }, { status: 500 });
-  }
+        // Promise.all loses order — restore the scorecard-weighted ranking
+        // emitted by findNearestIdleCarriers (effectiveDistanceKm ASC).
+        compliant.sort((a, b) => (a.effectiveDistanceKm ?? Infinity) - (b.effectiveDistanceKm ?? Infinity));
+        const data = compliant.slice(0, wantedLimit);
+
+        return NextResponse.json(
+          { data, pickup, requestedVehicleType, blockedCount: blocked.length, blocked: blocked.slice(0, 10) },
+          { headers: { 'Cache-Control': 'no-store' } },
+        );
+      } catch (e) {
+        console.error('[rfqs/:id/broadcast/candidates GET]', e);
+        return NextResponse.json({ error: e instanceof Error ? e.message : 'failed to find drivers' }, { status: 500 });
+      }
+  });
 }
+

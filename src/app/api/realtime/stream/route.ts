@@ -2,7 +2,7 @@
  * GET /api/realtime/stream?channels=bus-ops:schedules,bus-ops:incidents
  */
 
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import {
   ensureRedisSubscriber,
@@ -22,11 +22,7 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+  const { tenantId } = authz;
 
   const channelsParam = req.nextUrl.searchParams.get('channels') ?? '';
   const channels = channelsParam

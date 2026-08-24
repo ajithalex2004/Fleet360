@@ -1,9 +1,9 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function GET() {
     const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
     if (!authz.ok) {
@@ -23,9 +23,9 @@ export async function GET() {
             })
         );
         return NextResponse.json(rules);
-    } catch (error: any) {
-        console.error('Error fetching rules:', error);
-        return NextResponse.json({ error: `Failed to fetch rules: ${error.message}` }, { status: 500 });
+    } catch (e) {
+        console.error('Error fetching rules:', e);
+        return NextResponse.json({ error: `Failed to fetch rules: ${e.message}` }, { status: 500 });
     }
 }
 
@@ -54,9 +54,9 @@ export async function POST(request: Request) {
             })
         );
         return NextResponse.json(rule);
-    } catch (error: any) {
-        console.error('Error creating rule:', error);
-        return NextResponse.json({ error: `Failed to create rule: ${error.message}` }, { status: 500 });
+    } catch (e) {
+        console.error('Error creating rule:', e);
+        return NextResponse.json({ error: `Failed to create rule: ${e.message}` }, { status: 500 });
     }
 }
 
@@ -86,8 +86,8 @@ export async function PUT(request: Request) {
             })
         );
         return NextResponse.json(rule);
-    } catch (error: any) {
-        console.error('Error updating rule:', error);
-        return NextResponse.json({ error: `Failed to update rule: ${error.message}` }, { status: 500 });
+    } catch (e) {
+        console.error('Error updating rule:', e);
+        return NextResponse.json({ error: `Failed to update rule: ${e.message}` }, { status: 500 });
     }
 }

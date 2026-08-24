@@ -12,9 +12,10 @@
  * DELETE — remove an allocation (trigger reverses the paid_amount update)
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
 function getTenant(req: NextRequest): string | null {
@@ -24,183 +25,196 @@ function getTenant(req: NextRequest): string | null {
 // ── GET /api/finance/payment-allocations ─────────────────────────────────────
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const tenantId = getTenant(req);
-  if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const tenantId = getTenant(req);
+      if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const sp        = req.nextUrl.searchParams;
-  const paymentId = sp.get('paymentId');
-  const invoiceId = sp.get('invoiceId');
-  const payableId = sp.get('payableId');
+      const sp        = req.nextUrl.searchParams;
+      const paymentId = sp.get('paymentId');
+      const invoiceId = sp.get('invoiceId');
+      const payableId = sp.get('payableId');
 
-  if (!paymentId && !invoiceId && !payableId) {
-    return NextResponse.json(
-      { error: 'Provide at least one of: paymentId, invoiceId, payableId' },
-      { status: 400 },
-    );
-  }
+      if (!paymentId && !invoiceId && !payableId) {
+        return NextResponse.json(
+          { error: 'Provide at least one of: paymentId, invoiceId, payableId' },
+          { status: 400 },
+        );
+      }
 
-  let where = `WHERE 1=1`;
-  const params: unknown[] = [];
-  let pi = 1;
+      let where = `WHERE 1=1`;
+      const params: unknown[] = [];
+      let pi = 1;
 
-  if (tenantId !== '*') { where += ` AND pa.tenant_id = $${pi++}`; params.push(tenantId); }
-  if (paymentId)        { where += ` AND pa.payment_id = $${pi++}::uuid`; params.push(paymentId); }
-  if (invoiceId)        { where += ` AND pa.invoice_id = $${pi++}::uuid`; params.push(invoiceId); }
-  if (payableId)        { where += ` AND pa.payable_id = $${pi++}::uuid`; params.push(payableId); }
+      if (tenantId !== '*') { where += ` AND pa.tenant_id = $${pi++}`; params.push(tenantId); }
+      if (paymentId)        { where += ` AND pa.payment_id = $${pi++}::uuid`; params.push(paymentId); }
+      if (invoiceId)        { where += ` AND pa.invoice_id = $${pi++}::uuid`; params.push(invoiceId); }
+      if (payableId)        { where += ` AND pa.payable_id = $${pi++}::uuid`; params.push(payableId); }
 
-  const rows = await prisma.$queryRawUnsafe<Row[]>(
-    `SELECT pa.*,
-       p.amount          AS payment_amount,
-       p.payment_method  AS payment_method,
-       p.payment_date    AS payment_date,
-       p.reference       AS payment_reference,
-       i.invoice_number  AS invoice_number,
-       i.client_name     AS invoice_client,
-       i.total_amount    AS invoice_total,
-       ap.payable_number AS payable_number,
-       ap.vendor_name    AS payable_vendor,
-       ap.total_amount   AS payable_total
-       FROM finance_payment_allocations pa
-       JOIN finance_payments p    ON p.id = pa.payment_id
-       LEFT JOIN finance_invoices i    ON i.id = pa.invoice_id
-       LEFT JOIN finance_payables ap   ON ap.id = pa.payable_id
-      ${where}
-      ORDER BY pa.created_at DESC`,
-    ...params,
-  ).catch(() => []);
+      const rows = await tx.$queryRawUnsafe<Row[]>(
+        `SELECT pa.*,
+           p.amount          AS payment_amount,
+           p.payment_method  AS payment_method,
+           p.payment_date    AS payment_date,
+           p.reference       AS payment_reference,
+           i.invoice_number  AS invoice_number,
+           i.client_name     AS invoice_client,
+           i.total_amount    AS invoice_total,
+           ap.payable_number AS payable_number,
+           ap.vendor_name    AS payable_vendor,
+           ap.total_amount   AS payable_total
+           FROM finance_payment_allocations pa
+           JOIN finance_payments p    ON p.id = pa.payment_id
+           LEFT JOIN finance_invoices i    ON i.id = pa.invoice_id
+           LEFT JOIN finance_payables ap   ON ap.id = pa.payable_id
+          ${where}
+          ORDER BY pa.created_at DESC`,
+        ...params,
+      ).catch(() => []);
 
-  // Summary: total allocated vs unallocated on the payment
-  let summary: Row | null = null;
-  if (paymentId) {
-    const [s] = await prisma.$queryRawUnsafe<Row[]>(
-      `SELECT p.amount                              AS payment_amount,
-              COALESCE(SUM(pa.allocated_amount),0)  AS total_allocated,
-              p.amount - COALESCE(SUM(pa.allocated_amount),0) AS unallocated
-         FROM finance_payments p
-         LEFT JOIN finance_payment_allocations pa ON pa.payment_id = p.id
-        WHERE p.id = $1::uuid
-        GROUP BY p.amount`,
-      paymentId,
-    ).catch(() => []);
-    summary = s ?? null;
-  }
+      // Summary: total allocated vs unallocated on the payment
+      let summary: Row | null = null;
+      if (paymentId) {
+        const [s] = await tx.$queryRawUnsafe<Row[]>(
+          `SELECT p.amount                              AS payment_amount,
+                  COALESCE(SUM(pa.allocated_amount),0)  AS total_allocated,
+                  p.amount - COALESCE(SUM(pa.allocated_amount),0) AS unallocated
+             FROM finance_payments p
+             LEFT JOIN finance_payment_allocations pa ON pa.payment_id = p.id
+            WHERE p.id = $1::uuid
+            GROUP BY p.amount`,
+          paymentId,
+        ).catch(() => []);
+        summary = s ?? null;
+      }
 
-  return NextResponse.json({ data: rows, summary });
+      return NextResponse.json({ data: rows, summary });
+  });
 }
+
 
 // ── POST /api/finance/payment-allocations ─────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const tenantId = getTenant(req);
-  if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const tenantId = getTenant(req);
+      if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = await req.json();
-  const { paymentId, invoiceId, payableId, allocatedAmount, allocationDate, notes, allocatedBy } = body;
+      const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
+      const { paymentId, invoiceId, payableId, allocatedAmount, allocationDate, notes, allocatedBy } = body;
 
-  if (!paymentId) {
-    return NextResponse.json({ error: 'paymentId is required' }, { status: 400 });
-  }
-  if (!invoiceId && !payableId) {
-    return NextResponse.json(
-      { error: 'Provide either invoiceId (AR) or payableId (AP)' },
-      { status: 400 },
-    );
-  }
-  if (!allocatedAmount || parseFloat(allocatedAmount) <= 0) {
-    return NextResponse.json({ error: 'allocatedAmount must be > 0' }, { status: 400 });
-  }
+      if (!paymentId) {
+        return NextResponse.json({ error: 'paymentId is required' }, { status: 400 });
+      }
+      if (!invoiceId && !payableId) {
+        return NextResponse.json(
+          { error: 'Provide either invoiceId (AR) or payableId (AP)' },
+          { status: 400 },
+        );
+      }
+      if (!allocatedAmount || parseFloat(allocatedAmount) <= 0) {
+        return NextResponse.json({ error: 'allocatedAmount must be > 0' }, { status: 400 });
+      }
 
-  // Verify payment belongs to tenant and has sufficient unallocated balance
-  const [payment] = await prisma.$queryRawUnsafe<
-    { id: string; amount: string; tenant_id: string }[]
-  >(
-    `SELECT id, amount::text, tenant_id FROM finance_payments WHERE id=$1::uuid`,
-    paymentId,
-  ).catch(() => []);
+      // Verify payment belongs to tenant and has sufficient unallocated balance
+      const [payment] = await tx.$queryRawUnsafe<
+        { id: string; amount: string; tenant_id: string }[]
+      >(
+        `SELECT id, amount::text, tenant_id FROM finance_payments WHERE id=$1::uuid`,
+        paymentId,
+      ).catch(() => []);
 
-  if (!payment) return NextResponse.json({ error: 'Payment not found' }, { status: 404 });
-  if (tenantId !== '*' && payment.tenant_id !== tenantId) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+      if (!payment) return NextResponse.json({ error: 'Payment not found' }, { status: 404 });
+      if (tenantId !== '*' && payment.tenant_id !== tenantId) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
 
-  const [alreadyAllocated] = await prisma.$queryRawUnsafe<{ total: string }[]>(
-    `SELECT COALESCE(SUM(allocated_amount),0)::text AS total
-       FROM finance_payment_allocations WHERE payment_id=$1::uuid`,
-    paymentId,
-  ).catch(() => [{ total: '0' }]);
+      const [alreadyAllocated] = await tx.$queryRawUnsafe<{ total: string }[]>(
+        `SELECT COALESCE(SUM(allocated_amount),0)::text AS total
+           FROM finance_payment_allocations WHERE payment_id=$1::uuid`,
+        paymentId,
+      ).catch(() => [{ total: '0' }]);
 
-  const paymentAmt  = parseFloat(payment.amount);
-  const usedAmt     = parseFloat(alreadyAllocated?.total ?? '0');
-  const requestAmt  = parseFloat(String(allocatedAmount));
-  const remaining   = paymentAmt - usedAmt;
+      const paymentAmt  = parseFloat(payment.amount);
+      const usedAmt     = parseFloat(alreadyAllocated?.total ?? '0');
+      const requestAmt  = parseFloat(String(allocatedAmount));
+      const remaining   = paymentAmt - usedAmt;
 
-  if (requestAmt > remaining + 0.005) {
-    return NextResponse.json(
-      { error: `Allocation of ${requestAmt} exceeds unallocated balance of ${remaining.toFixed(2)}` },
-      { status: 400 },
-    );
-  }
+      if (requestAmt > remaining + 0.005) {
+        return NextResponse.json(
+          { error: `Allocation of ${requestAmt} exceeds unallocated balance of ${remaining.toFixed(2)}` },
+          { status: 400 },
+        );
+      }
 
-  const [row] = await prisma.$queryRawUnsafe<Row[]>(
-    `INSERT INTO finance_payment_allocations
-       (payment_id, invoice_id, payable_id, allocated_amount, allocation_date,
-        notes, allocated_by, tenant_id)
-     VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8)
-     RETURNING *`,
-    paymentId,
-    invoiceId ? `${invoiceId}::uuid` : null,   // trigger handles UUID cast
-    payableId ? `${payableId}::uuid` : null,
-    requestAmt,
-    allocationDate ?? new Date().toISOString().slice(0, 10),
-    notes          ?? null,
-    allocatedBy    ?? req.headers.get('x-user-id') ?? null,
-    tenantId,
-  ).catch(() => []);
+      const [row] = await tx.$queryRawUnsafe<Row[]>(
+        `INSERT INTO finance_payment_allocations
+           (payment_id, invoice_id, payable_id, allocated_amount, allocation_date,
+            notes, allocated_by, tenant_id)
+         VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING *`,
+        paymentId,
+        invoiceId ? `${invoiceId}::uuid` : null,   // trigger handles UUID cast
+        payableId ? `${payableId}::uuid` : null,
+        requestAmt,
+        allocationDate ?? new Date().toISOString().slice(0, 10),
+        notes          ?? null,
+        allocatedBy    ?? req.headers.get('x-user-id') ?? null,
+        tenantId,
+      ).catch(() => []);
 
-  if (!row) return NextResponse.json({ error: 'Failed to create allocation' }, { status: 500 });
-  return NextResponse.json(row, { status: 201 });
+      if (!row) return NextResponse.json({ error: 'Failed to create allocation' }, { status: 500 });
+      return NextResponse.json(row, { status: 201 });
+  });
 }
+
 
 // ── DELETE /api/finance/payment-allocations?id=... ────────────────────────────
 
 export async function DELETE(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const tenantId = getTenant(req);
-  if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const tenantId = getTenant(req);
+      if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const id = req.nextUrl.searchParams.get('id');
-  if (!id) return NextResponse.json({ error: 'id query param required' }, { status: 400 });
+      const id = req.nextUrl.searchParams.get('id');
+      if (!id) return NextResponse.json({ error: 'id query param required' }, { status: 400 });
 
-  const [current] = await prisma.$queryRawUnsafe<{ tenant_id: string }[]>(
-    `SELECT tenant_id FROM finance_payment_allocations WHERE id=$1::uuid`,
-    id,
-  ).catch(() => []);
+      const [current] = await tx.$queryRawUnsafe<{ tenant_id: string }[]>(
+        `SELECT tenant_id FROM finance_payment_allocations WHERE id=$1::uuid`,
+        id,
+      ).catch(() => []);
 
-  if (!current) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  if (tenantId !== '*' && current.tenant_id !== tenantId) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+      if (!current) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      if (tenantId !== '*' && current.tenant_id !== tenantId) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
 
-  // Hard delete — trigger will reverse paid_amount on the linked document
-  await prisma.$executeRawUnsafe(
-    `DELETE FROM finance_payment_allocations WHERE id=$1::uuid`, id,
-  );
-  return NextResponse.json({ deleted: true });
+      // Hard delete — trigger will reverse paid_amount on the linked document
+      await tx.$executeRawUnsafe(
+        `DELETE FROM finance_payment_allocations WHERE id=$1::uuid`, id,
+      );
+      return NextResponse.json({ deleted: true });
+  });
 }
+

@@ -20,24 +20,29 @@ export const runtime = 'nodejs';
 const ALLOWED_TYPES = ['NOTE', 'CALL', 'EMAIL', 'MEETING', 'SMS', 'WHATSAPP', 'FOLLOW_UP_DUE'];
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  const inquiry = await prisma.leaseInquiry.findFirst({
-    where: { id: params.id, tenantId },
-    select: { id: true },
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const inquiry = await tx.leaseInquiry.findFirst({
+        where: { id: params.id, tenantId },
+        select: { id: true },
+      });
+      if (!inquiry) {
+        return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
+      }
+      const activities = await tx.leaseInquiryActivity.findMany({
+        where: { tenantId, inquiryId: params.id },
+        orderBy: { performedAt: 'desc' },
+      });
+      return NextResponse.json(activities);
   });
-  if (!inquiry) {
-    return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
-  }
-  const activities = await prisma.leaseInquiryActivity.findMany({
-    where: { tenantId, inquiryId: params.id },
-    orderBy: { performedAt: 'desc' },
-  });
-  return NextResponse.json(activities);
 }
+
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const authz = requireAuthorizedTenant(req);
@@ -46,7 +51,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const activityType = String(body.activityType ?? '').toUpperCase();
     if (!ALLOWED_TYPES.includes(activityType)) {
       return NextResponse.json({ error: `activityType must be one of: ${ALLOWED_TYPES.join(', ')}` }, { status: 400 });
@@ -97,7 +103,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
 
     return NextResponse.json(activity, { status: 201 });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'leasing.inquiries.activities.create', tags: { inquiryId: params.id } });
     return NextResponse.json({ error: 'Failed to log activity' }, { status: 500 });
   }

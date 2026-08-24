@@ -24,7 +24,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!existing) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const { contract, ...data } = body;
     if (data.status === 'SENT' && !data.sentAt) data.sentAt = new Date();
     if (data.status === 'CONFIRMED' && !data.confirmedAt) data.confirmedAt = new Date();

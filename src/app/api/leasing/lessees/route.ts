@@ -39,22 +39,27 @@ const individualSchema = baseSchema.extend({
 const lesseeSchema = z.discriminatedUnion('type', [corporateSchema, individualSchema]);
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const lessees = await prisma.lessee.findMany({
-      where: { tenantId, deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-    });
-    return NextResponse.json(lessees);
-  } catch (error) {
-    console.error('Error fetching lessees:', error);
-    return NextResponse.json({ error: 'Failed to fetch lessees' }, { status: 500 });
-  }
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const lessees = await tx.lessee.findMany({
+          where: { tenantId, deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+        });
+        return NextResponse.json(lessees);
+      } catch (e) {
+        console.error('Error fetching lessees:', e);
+        return NextResponse.json({ error: 'Failed to fetch lessees' }, { status: 500 });
+      }
+  });
 }
+
 
 export const POST = withAudit(
   async (req: NextRequest) => {
@@ -83,8 +88,8 @@ export const POST = withAudit(
         tx.lessee.create({ data: { ...parsed.data, tenantId } }),
       );
       return NextResponse.json(lessee, { status: 201 });
-    } catch (error) {
-      console.error('Error creating lessee:', error);
+      } catch (e) {
+      console.error('Error creating lessee:', e);
       return NextResponse.json({ error: 'Failed to create lessee' }, { status: 500 });
     }
   },

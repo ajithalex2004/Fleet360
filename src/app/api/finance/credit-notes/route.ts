@@ -4,9 +4,10 @@
  * Linked to finance_invoices, with reason codes and line items
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const INIT = `
   CREATE TABLE IF NOT EXISTS finance_credit_notes (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -49,73 +50,82 @@ async function nextCnNumber(): Promise<string> {
 }
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  await prisma.$executeRawUnsafe(INIT).catch(() => {});
-  const sp      = req.nextUrl.searchParams;
-  const status  = sp.get('status');
-  const module  = sp.get('module');
-  const page    = Math.max(1, parseInt(sp.get('page')  ?? '1'));
-  const limit   = Math.min(100, parseInt(sp.get('limit') ?? '50'));
-  const offset  = (page - 1) * limit;
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    await tx.$executeRawUnsafe(INIT).catch(() => {});
+      const sp      = req.nextUrl.searchParams;
+      const status  = sp.get('status');
+      const module  = sp.get('module');
+      const page    = Math.max(1, parseInt(sp.get('page')  ?? '1'));
+      const limit   = Math.min(100, parseInt(sp.get('limit') ?? '50'));
+      const offset  = (page - 1) * limit;
 
-  let where = `WHERE deleted_at IS NULL`;
-  const params: unknown[] = [];
-  let pi = 1;
-  if (status) { where += ` AND status = $${pi++}`;  params.push(status); }
-  if (module) { where += ` AND module = $${pi++}`;  params.push(module); }
+      let where = `WHERE deleted_at IS NULL`;
+      const params: unknown[] = [];
+      let pi = 1;
+      if (status) { where += ` AND status = $${pi++}`;  params.push(status); }
+      if (module) { where += ` AND module = $${pi++}`;  params.push(module); }
 
-  const [rows, counts] = await Promise.all([
-    prisma.$queryRawUnsafe<CnRow[]>(
-      `SELECT * FROM finance_credit_notes ${where} ORDER BY created_at DESC LIMIT $${pi} OFFSET $${pi+1}`,
-      ...params, limit, offset
-    ).catch(() => []),
-    prisma.$queryRawUnsafe<{ status: string; count: string; total: string }[]>(
-      `SELECT status, COUNT(*)::text as count, COALESCE(SUM(total_amount),0)::text as total
-         FROM finance_credit_notes WHERE deleted_at IS NULL GROUP BY status`
-    ).catch(() => []),
-  ]);
+      const [rows, counts] = await Promise.all([
+        tx.$queryRawUnsafe<CnRow[]>(
+          `SELECT * FROM finance_credit_notes ${where} ORDER BY created_at DESC LIMIT $${pi} OFFSET $${pi+1}`,
+          ...params, limit, offset
+        ).catch(() => []),
+        tx.$queryRawUnsafe<{ status: string; count: string; total: string }[]>(
+          `SELECT status, COUNT(*)::text as count, COALESCE(SUM(total_amount),0)::text as total
+             FROM finance_credit_notes WHERE deleted_at IS NULL GROUP BY status`
+        ).catch(() => []),
+      ]);
 
-  return NextResponse.json({ data: rows, counts, page, limit });
+      return NextResponse.json({ data: rows, counts, page, limit });
+  });
 }
+
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  await prisma.$executeRawUnsafe(INIT).catch(() => {});
-  const body    = await req.json();
-  const cnNumber = await nextCnNumber();
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    await tx.$executeRawUnsafe(INIT).catch(() => {});
+      const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
+      const cnNumber = await nextCnNumber();
 
-  const lineItems  = body.lineItems ?? [];
-  const subtotal   = lineItems.reduce((s: number, l: { total: number }) => s + (l.total ?? 0), 0) || parseFloat(body.subtotal ?? '0');
-  const vatAmount  = parseFloat(body.vatAmount ?? '0') || Math.round(subtotal * 0.05 * 100) / 100;
-  const total      = subtotal + vatAmount;
+      const lineItems  = body.lineItems ?? [];
+      const subtotal   = lineItems.reduce((s: number, l: { total: number }) => s + (l.total ?? 0), 0) || parseFloat(body.subtotal ?? '0');
+      const vatAmount  = parseFloat(body.vatAmount ?? '0') || Math.round(subtotal * 0.05 * 100) / 100;
+      const total      = subtotal + vatAmount;
 
-  const [row] = await prisma.$queryRawUnsafe<CnRow[]>(
-    `INSERT INTO finance_credit_notes
-       (cn_number, original_invoice_id, original_invoice_no, client_name, client_email,
-        module, reason_code, reason_detail, line_items, subtotal, vat_amount, total_amount,
-        currency, issue_date, issued_by, notes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12,$13,$14,$15,$16)
-     RETURNING *`,
-    cnNumber,
-    body.originalInvoiceId ?? null, body.originalInvoiceNo ?? null,
-    body.clientName, body.clientEmail ?? null,
-    body.module ?? null, body.reasonCode, body.reasonDetail ?? null,
-    JSON.stringify(lineItems), subtotal, vatAmount, total,
-    body.currency ?? 'AED',
-    body.issueDate ?? new Date().toISOString().slice(0, 10),
-    body.issuedBy ?? null, body.notes ?? null,
-  ).catch(() => []);
+      const [row] = await tx.$queryRawUnsafe<CnRow[]>(
+        `INSERT INTO finance_credit_notes
+           (cn_number, original_invoice_id, original_invoice_no, client_name, client_email,
+            module, reason_code, reason_detail, line_items, subtotal, vat_amount, total_amount,
+            currency, issue_date, issued_by, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12,$13,$14,$15,$16)
+         RETURNING *`,
+        cnNumber,
+        body.originalInvoiceId ?? null, body.originalInvoiceNo ?? null,
+        body.clientName, body.clientEmail ?? null,
+        body.module ?? null, body.reasonCode, body.reasonDetail ?? null,
+        JSON.stringify(lineItems), subtotal, vatAmount, total,
+        body.currency ?? 'AED',
+        body.issueDate ?? new Date().toISOString().slice(0, 10),
+        body.issuedBy ?? null, body.notes ?? null,
+      ).catch(() => []);
 
-  if (!row) return NextResponse.json({ error: 'Failed to create credit note' }, { status: 500 });
-  return NextResponse.json(row, { status: 201 });
+      if (!row) return NextResponse.json({ error: 'Failed to create credit note' }, { status: 500 });
+      return NextResponse.json(row, { status: 201 });
+  });
 }
+

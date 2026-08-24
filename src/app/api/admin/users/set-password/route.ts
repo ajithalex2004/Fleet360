@@ -7,9 +7,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = crypto.pbkdf2Sync(password, salt, 100_000, 64, 'sha512').toString('hex');
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({ ok: true });
     });
-  } catch (err) {
+    } catch (err) {
     console.error('[set-password]', err);
     return NextResponse.json({ error: 'Failed to set password' }, { status: 500 });
   }

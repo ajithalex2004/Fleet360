@@ -1,38 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    const insurancePolicies = await prisma.insurancePolicy.findMany({
-      orderBy: { createdAt: 'desc' },
-    });
-    return NextResponse.json(insurancePolicies);
-  } catch (error) {
-    console.error('Error fetching insurance policies:', error);
-    return NextResponse.json({ error: 'Failed to fetch insurance policies' }, { status: 500 });
-  }
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const insurancePolicies = await tx.insurancePolicy.findMany({
+          orderBy: { createdAt: 'desc' },
+        });
+        return NextResponse.json(insurancePolicies);
+      } catch (e) {
+        console.error('Error fetching insurance policies:', e);
+        return NextResponse.json({ error: 'Failed to fetch insurance policies' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    const body = await req.json();
-    const insurancePolicy = await prisma.insurancePolicy.create({ data: body });
-    return NextResponse.json(insurancePolicy, { status: 201 });
-  } catch (error) {
-    console.error('Error creating insurance policy:', error);
-    return NextResponse.json({ error: 'Failed to create insurance policy' }, { status: 500 });
-  }
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
+        const insurancePolicy = await tx.insurancePolicy.create({ data: body });
+        return NextResponse.json(insurancePolicy, { status: 201 });
+        } catch (e) {
+        console.error('Error creating insurance policy:', e);
+        return NextResponse.json({ error: 'Failed to create insurance policy' }, { status: 500 });
+      }
+  });
 }
+

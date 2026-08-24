@@ -12,24 +12,29 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const contract = await prisma.leaseContract2.findFirst({
-      where: { id: params.id, tenantId },
-    });
-    if (!contract) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    }
-    return NextResponse.json(contract);
-  } catch (error) {
-    console.error('Error fetching contract:', error);
-    return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
-  }
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const contract = await tx.leaseContract2.findFirst({
+          where: { id: params.id, tenantId },
+        });
+        if (!contract) {
+          return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        }
+        return NextResponse.json(contract);
+      } catch (e) {
+        console.error('Error fetching contract:', e);
+        return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   const authz = requireAuthorizedTenant(req);
@@ -38,7 +43,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     // Guarded update — refuses to touch contracts from another tenant.
     const existing = await prisma.leaseContract2.findFirst({
       where: { id: params.id, tenantId },
@@ -54,8 +60,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     }),
     );
     return NextResponse.json(contract);
-  } catch (error) {
-    console.error('Error updating contract:', error);
+  } catch (e) {
+    console.error('Error updating contract:', e);
     return NextResponse.json({ error: 'Failed to update' }, { status: 500 });
   }
 }
@@ -81,8 +87,8 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     }),
     );
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('Error deleting contract:', error);
+    } catch (e) {
+    console.error('Error deleting contract:', e);
     return NextResponse.json({ error: 'Failed to delete' }, { status: 500 });
   }
 }

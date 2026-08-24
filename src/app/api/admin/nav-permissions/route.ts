@@ -15,7 +15,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import crypto from 'crypto';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // Keys that the platform admin can enable/disable per tenant
 export const TOGGLEABLE_NAV_KEYS = [
   'branches',
@@ -93,28 +93,29 @@ export async function GET(request: NextRequest) {
 // ── PUT — super admin updates permissions for a tenant ─────────────────────────
 
 export async function PUT(request: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
 
   const role = request.headers.get('x-user-role') ?? '';
   if (role !== 'SUPER_ADMIN') {
     return NextResponse.json({ error: 'Forbidden — Super Admin only' }, { status: 403 });
   }
 
+  // Super admin may target any tenant — the body's tenantId, not the
+  // caller's own authz-derived one, is the write target here.
   const body = await request.json() as { tenantId: string; permissions: Record<string, boolean> };
-  const { tenantId, permissions } = body;
+  const { tenantId: targetTenantId, permissions } = body;
 
-  if (!tenantId || typeof permissions !== 'object') {
+  if (!targetTenantId || typeof permissions !== 'object') {
     return NextResponse.json({ error: 'tenantId and permissions required' }, { status: 400 });
   }
 
   await ensureTable();
 
   // Upsert each toggleable key
-  await withTenantRls(prisma, tenantId, async (tx) => {
+  await withTenantRls(prisma, targetTenantId, async (tx) => {
     for (const key of TOGGLEABLE_NAV_KEYS) {
       const enabled = permissions[key] === true;
       await tx.$executeRawUnsafe(
@@ -122,12 +123,12 @@ export async function PUT(request: NextRequest) {
          VALUES ($1, $2, $3, $4, NOW())
          ON CONFLICT (tenant_id, nav_key) DO UPDATE SET enabled = $4, updated_at = NOW()`,
         crypto.randomUUID(),
-        tenantId,
+        targetTenantId,
         key,
         enabled,
       );
     }
   });
 
-  return NextResponse.json({ ok: true, tenantId });
+  return NextResponse.json({ ok: true, tenantId: targetTenantId });
 }

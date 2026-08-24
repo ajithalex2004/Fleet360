@@ -21,10 +21,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { randomUUID } from 'crypto';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 interface StopInput {
   stopName?: string;
   sequence?: number;
@@ -36,6 +37,7 @@ interface StopInput {
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ variantId: string }> }) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -44,24 +46,30 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ vari
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  const { variantId } = await params;
-  try {
-    const versions = await prisma.busRouteVariantVersion.findMany({
-      where: { tenantId, variantId, deletedAt: null },
-      orderBy: { versionNumber: 'desc' },
-      include: {
-        stops: { orderBy: { sequence: 'asc' } },
-      },
-    });
-    return NextResponse.json(versions);
-  } catch (e) {
-    console.error('[versions.GET]', e);
-    return NextResponse.json({ error: 'Failed to fetch versions' }, { status: 500 });
-  }
+  const { tenantId } = authz;
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+
+      const { variantId } = await params;
+      try {
+        const versions = await tx.busRouteVariantVersion.findMany({
+          where: { tenantId, variantId, deletedAt: null },
+          orderBy: { versionNumber: 'desc' },
+          include: {
+            stops: { orderBy: { sequence: 'asc' } },
+          },
+        });
+        return NextResponse.json(versions);
+      } catch (e) {
+        console.error('[versions.GET]', e);
+        return NextResponse.json({ error: 'Failed to fetch versions' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ variantId: string }> }) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -70,101 +78,107 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ var
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  const publishedBy = req.headers.get('x-user-id') ?? null;
-  const { variantId } = await params;
+  const { tenantId } = authz;
 
-  try {
-    const body = await req.json();
-    const variant = await prisma.busRouteVariant.findFirst({
-      where: { id: variantId, tenantId, deletedAt: null },
-      select: { id: true, routeId: true },
-    });
-    if (!variant) return NextResponse.json({ error: 'Variant not found' }, { status: 404 });
+  return withTenantRls(prisma, tenantId, async (tx) => {
 
-    const effectiveFromDate = body.effectiveFrom ? new Date(body.effectiveFrom) : new Date();
-    // Normalise to UTC midnight so DATE comparisons don't shift by 1 day
-    // for operators in non-UTC timezones (audit risk #17 pattern).
-    const effectiveFrom = new Date(Date.UTC(
-      effectiveFromDate.getUTCFullYear(),
-      effectiveFromDate.getUTCMonth(),
-      effectiveFromDate.getUTCDate(),
-    ));
+      const publishedBy = req.headers.get('x-user-id') ?? null;
+      const { variantId } = await params;
 
-    const stops = Array.isArray(body.stops) ? body.stops as StopInput[] : [];
-    const publishNow = body.publishNow !== false;
-
-    // Version number = max(existing) + 1.
-    const last = await prisma.busRouteVariantVersion.findFirst({
-      where: { variantId, deletedAt: null },
-      orderBy: { versionNumber: 'desc' },
-      select: { versionNumber: true },
-    });
-    const versionNumber = (last?.versionNumber ?? 0) + 1;
-
-    // The published-version cutover + new-version create + stop
-    // materialisation all run in one transaction so a partial failure
-    // never leaves the variant with two PUBLISHED versions (the partial
-    // unique index would raise, but the transaction gives a cleaner
-    // error surface).
-    const created = await prisma.$transaction(async (tx) => {
-      let closedPrevious: string | null = null;
-      if (publishNow) {
-        const prev = await tx.busRouteVariantVersion.findFirst({
-          where: { variantId, status: 'PUBLISHED', deletedAt: null },
+      try {
+        const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
+        const variant = await tx.busRouteVariant.findFirst({
+          where: { id: variantId, tenantId, deletedAt: null },
+          select: { id: true, routeId: true },
         });
-        if (prev) {
-          const yesterday = new Date(effectiveFrom.getTime() - 24 * 3600 * 1000);
-          await tx.busRouteVariantVersion.update({
-            where: { id: prev.id },
-            data:  { status: 'ARCHIVED', effectiveTo: yesterday },
+        if (!variant) return NextResponse.json({ error: 'Variant not found' }, { status: 404 });
+
+        const effectiveFromDate = body.effectiveFrom ? new Date(body.effectiveFrom) : new Date();
+        // Normalise to UTC midnight so DATE comparisons don't shift by 1 day
+        // for operators in non-UTC timezones (audit risk #17 pattern).
+        const effectiveFrom = new Date(Date.UTC(
+          effectiveFromDate.getUTCFullYear(),
+          effectiveFromDate.getUTCMonth(),
+          effectiveFromDate.getUTCDate(),
+        ));
+
+        const stops = Array.isArray(body.stops) ? body.stops as StopInput[] : [];
+        const publishNow = body.publishNow !== false;
+
+        // Version number = max(existing) + 1.
+        const last = await tx.busRouteVariantVersion.findFirst({
+          where: { variantId, deletedAt: null },
+          orderBy: { versionNumber: 'desc' },
+          select: { versionNumber: true },
+        });
+        const versionNumber = (last?.versionNumber ?? 0) + 1;
+
+        // The published-version cutover + new-version create + stop
+        // materialisation all run in one transaction so a partial failure
+        // never leaves the variant with two PUBLISHED versions (the partial
+        // unique index would raise, but the transaction gives a cleaner
+        // error surface).
+        const created = await tx.$transaction(async (tx) => {
+          let closedPrevious: string | null = null;
+          if (publishNow) {
+            const prev = await tx.busRouteVariantVersion.findFirst({
+              where: { variantId, status: 'PUBLISHED', deletedAt: null },
+            });
+            if (prev) {
+              const yesterday = new Date(effectiveFrom.getTime() - 24 * 3600 * 1000);
+              await tx.busRouteVariantVersion.update({
+                where: { id: prev.id },
+                data:  { status: 'ARCHIVED', effectiveTo: yesterday },
+              });
+              closedPrevious = prev.id;
+            }
+          }
+
+          const version = await tx.busRouteVariantVersion.create({
+            data: {
+              id: randomUUID(),
+              tenantId,
+              variantId,
+              versionNumber,
+              effectiveFrom,
+              status:      publishNow ? 'PUBLISHED' : 'DRAFT',
+              publishedAt: publishNow ? new Date() : null,
+              publishedBy: publishNow ? publishedBy : null,
+              notes:       body.notes?.trim() || null,
+            },
           });
-          closedPrevious = prev.id;
-        }
-      }
 
-      const version = await tx.busRouteVariantVersion.create({
-        data: {
-          id: randomUUID(),
-          tenantId,
-          variantId,
-          versionNumber,
-          effectiveFrom,
-          status:      publishNow ? 'PUBLISHED' : 'DRAFT',
-          publishedAt: publishNow ? new Date() : null,
-          publishedBy: publishNow ? publishedBy : null,
-          notes:       body.notes?.trim() || null,
-        },
-      });
+          if (stops.length > 0) {
+            await tx.routeStop.createMany({
+              data: stops.map((s, i) => ({
+                id: randomUUID(),
+                tenantId,
+                routeId: variant.routeId,           // back-compat: routeId stays populated
+                variantVersionId: version.id,        // Phase 1: link to the version
+                stopName: s.stopName ?? `Stop ${i + 1}`,
+                sequence: s.sequence ?? i + 1,
+                gpsLat:   s.gpsLat ?? null,
+                gpsLng:   s.gpsLng ?? null,
+                geofenceRadiusM:      s.geofenceRadiusM ?? null,
+                estimatedArrivalMins: s.estimatedArrivalMins ?? null,
+                landmark: s.landmark ?? null,
+              })),
+            });
+          }
 
-      if (stops.length > 0) {
-        await tx.routeStop.createMany({
-          data: stops.map((s, i) => ({
-            id: randomUUID(),
-            tenantId,
-            routeId: variant.routeId,           // back-compat: routeId stays populated
-            variantVersionId: version.id,        // Phase 1: link to the version
-            stopName: s.stopName ?? `Stop ${i + 1}`,
-            sequence: s.sequence ?? i + 1,
-            gpsLat:   s.gpsLat ?? null,
-            gpsLng:   s.gpsLng ?? null,
-            geofenceRadiusM:      s.geofenceRadiusM ?? null,
-            estimatedArrivalMins: s.estimatedArrivalMins ?? null,
-            landmark: s.landmark ?? null,
-          })),
+          return { version, closedPrevious, stopCount: stops.length };
         });
+
+        return NextResponse.json(created, { status: 201 });
+        } catch (e) {
+        console.error('[versions.POST]', e);
+        const msg = e instanceof Error ? e.message : 'Failed to publish version';
+        if (/uq_bus_route_variant_versions_one_published/.test(msg)) {
+          return NextResponse.json({ error: 'A PUBLISHED version already exists — cutover conflict, please retry' }, { status: 409 });
+        }
+        return NextResponse.json({ error: msg }, { status: 500 });
       }
-
-      return { version, closedPrevious, stopCount: stops.length };
-    });
-
-    return NextResponse.json(created, { status: 201 });
-  } catch (e) {
-    console.error('[versions.POST]', e);
-    const msg = e instanceof Error ? e.message : 'Failed to publish version';
-    if (/uq_bus_route_variant_versions_one_published/.test(msg)) {
-      return NextResponse.json({ error: 'A PUBLISHED version already exists — cutover conflict, please retry' }, { status: 409 });
-    }
-    return NextResponse.json({ error: msg }, { status: 500 });
-  }
+  });
 }
+

@@ -11,19 +11,24 @@ import { withTenantRls } from '@/lib/rls';
  * row existence.
  */
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  const inv = await prisma.leaseInvoice.findFirst({
-    where: { id: params.id, tenantId },
-    include: { lines: true, lessee: true },
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const inv = await tx.leaseInvoice.findFirst({
+        where: { id: params.id, tenantId },
+        include: { lines: true, lessee: true },
+      });
+      return inv
+        ? NextResponse.json(inv)
+        : NextResponse.json({ error: 'Not found' }, { status: 404 });
   });
-  return inv
-    ? NextResponse.json(inv)
-    : NextResponse.json({ error: 'Not found' }, { status: 404 });
 }
+
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const authz = requireAuthorizedTenant(req);
@@ -39,7 +44,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     });
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const { lines, lessee, ...data } = await req.json();
+    const bodyRaw = await req.json();
+    const body = stripTenantOwnershipFields(bodyRaw);
+    const { lines, lessee, ...data } = body;
     if (data.status === 'SENT' && !data.sentAt) data.sentAt = new Date();
     if (data.status === 'PAID' && !data.paidAt) data.paidAt = new Date();
     const inv = await withTenantRls(prisma, tenantId, async (tx) =>

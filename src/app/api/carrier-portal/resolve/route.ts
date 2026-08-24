@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
       );
     }
     return NextResponse.json(context, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (e) {
+    } catch (e) {
     console.error('[carrier-portal/resolve POST]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to load the invite' },

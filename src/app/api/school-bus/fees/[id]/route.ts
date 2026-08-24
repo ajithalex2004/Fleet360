@@ -6,8 +6,9 @@
  * This handler permanently redirects to the Finance invoices endpoint.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -35,7 +36,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       body:    JSON.stringify(body),
     });
     return NextResponse.json(await r.json(), { status: r.status });
-  } catch (err) {
+    } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

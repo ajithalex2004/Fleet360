@@ -12,25 +12,30 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const inquiries = await prisma.leaseInquiry.findMany({
-      where: { tenantId, deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-    });
-    return NextResponse.json(inquiries);
-  } catch (error) {
-    console.error('Error fetching inquiries:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch inquiries' },
-      { status: 500 }
-    );
-  }
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const inquiries = await tx.leaseInquiry.findMany({
+          where: { tenantId, deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+        });
+        return NextResponse.json(inquiries);
+      } catch (e) {
+        console.error('Error fetching inquiries:', e);
+        return NextResponse.json(
+          { error: 'Failed to fetch inquiries' },
+          { status: 500 }
+        );
+      }
+  });
 }
+
 
 export async function POST(request: NextRequest) {
   const authz = requireAuthorizedTenant(req);
@@ -57,8 +62,8 @@ export async function POST(request: NextRequest) {
     );
 
     return NextResponse.json(inquiry, { status: 201 });
-  } catch (error) {
-    console.error('Error creating inquiry:', error);
+    } catch (e) {
+    console.error('Error creating inquiry:', e);
     return NextResponse.json(
       { error: 'Failed to create inquiry' },
       { status: 500 }

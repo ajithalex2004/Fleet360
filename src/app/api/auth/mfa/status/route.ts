@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
       mfaEnabled:    !!row?.mfa_enabled,
       mfaEnrolledAt:  row?.mfa_enrolled_at ?? null,
     });
-  } catch (err) {
+    } catch (err) {
     if (err instanceof NextResponse) return err;
     return NextResponse.json({ ok: false, error: 'Failed to read MFA status' }, { status: 500 });
   }

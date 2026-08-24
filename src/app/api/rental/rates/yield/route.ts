@@ -17,6 +17,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
@@ -38,128 +39,134 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const json = await req.json();
-    const parsed = bodySchema.safeParse(json);
-    if (!parsed.success) {
-      return NextResponse.json(
-        {
-          error: 'Validation failed',
-          details: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })),
-        },
-        { status: 400 },
-      );
-    }
 
-    const pickupDate = new Date(parsed.data.pickupDate);
-    const dropoffDate = new Date(parsed.data.dropoffDate);
-    if (Number.isNaN(pickupDate.getTime()) || Number.isNaN(dropoffDate.getTime())) {
-      return NextResponse.json({ error: 'Invalid pickup/dropoff date' }, { status: 400 });
-    }
-    if (dropoffDate <= pickupDate) {
-      return NextResponse.json({ error: 'dropoffDate must be after pickupDate' }, { status: 400 });
-    }
-
-    // Pull pricing rules for this category. Schema columns vary; we project
-    // only what the engine needs.
-    const ruleRows = await prisma.pricingRule.findMany({
-      where: {
-        // PricingRule schema doesn't have an isActive field consistently —
-        // use what's available.
-        vehicleCategory: parsed.data.vehicleCategory,
-      },
-    });
-    const rules: YieldRule[] = ruleRows.map((r: any) => ({
-      id: r.id,
-      name: r.name ?? null,
-      vehicleCategory: r.vehicleCategory ?? r.vehicle_category,
-      baseDailyRate: Number(r.baseDailyRate ?? r.base_daily_rate ?? 0),
-      weekendDailyRate: r.weekendDailyRate ? Number(r.weekendDailyRate) : null,
-      isActive: r.isActive ?? true,
-    }));
-
-    // Pull events that overlap the pickup date.
-    const eventRows = await prisma.rateEvent.findMany({
-      where: {
-        isActive: true,
-        deletedAt: null,
-        dateFrom: { lte: pickupDate },
-        dateTo: { gte: pickupDate },
-      },
-    });
-    const events: RateEventSnapshot[] = eventRows.map(e => ({
-      id: e.id,
-      eventCode: e.eventCode,
-      name: e.name,
-      dateFrom: e.dateFrom,
-      dateTo: e.dateTo,
-      multiplier: Number(e.multiplier),
-      applicableCategories: e.applicableCategories,
-      applicableChannels: e.applicableChannels,
-      priority: e.priority ?? 0,
-      isActive: e.isActive ?? true,
-    }));
-
-    // Auto-calculate utilization if not provided. Heuristic: count rentals
-    // currently occupying vehicles in this category vs total fleet of this
-    // category. Simple snapshot, refined in v1.1.
-    let utilizationPct = parsed.data.fleetUtilizationPct;
-    if (utilizationPct == null) {
-      try {
-        const now = new Date();
-        const [activeBookings, fleetSize] = await Promise.all([
-          prisma.rentalBooking.count({
-            where: {
-              vehicleCategory: parsed.data.vehicleCategory,
-              status: { in: ['CONFIRMED', 'ACTIVE'] },
-              pickupDate: { lte: pickupDate },
-              dropoffDate: { gte: pickupDate },
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const jsonRaw = await req.json();
+  const json = stripTenantOwnershipFields(jsonRaw);
+        const parsed = bodySchema.safeParse(json);
+        if (!parsed.success) {
+          return NextResponse.json(
+            {
+              error: 'Validation failed',
+              details: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })),
             },
-          }),
-          prisma.vehicle.count({
-            where: {
-              type: parsed.data.vehicleCategory,
-              status: { not: 'INACTIVE' },
-              deletedAt: null,
-            },
-          }),
-        ]);
-        utilizationPct = fleetSize > 0 ? Math.min(100, Math.round((activeBookings / fleetSize) * 100)) : 0;
-      } catch {
-        utilizationPct = undefined; // engine handles undefined gracefully
+            { status: 400 },
+          );
+        }
+
+        const pickupDate = new Date(parsed.data.pickupDate);
+        const dropoffDate = new Date(parsed.data.dropoffDate);
+        if (Number.isNaN(pickupDate.getTime()) || Number.isNaN(dropoffDate.getTime())) {
+          return NextResponse.json({ error: 'Invalid pickup/dropoff date' }, { status: 400 });
+        }
+        if (dropoffDate <= pickupDate) {
+          return NextResponse.json({ error: 'dropoffDate must be after pickupDate' }, { status: 400 });
+        }
+
+        // Pull pricing rules for this category. Schema columns vary; we project
+        // only what the engine needs.
+        const ruleRows = await tx.pricingRule.findMany({
+          where: {
+            // PricingRule schema doesn't have an isActive field consistently —
+            // use what's available.
+            vehicleCategory: parsed.data.vehicleCategory,
+          },
+        });
+        const rules: YieldRule[] = ruleRows.map((r: any) => ({
+          id: r.id,
+          name: r.name ?? null,
+          vehicleCategory: r.vehicleCategory ?? r.vehicle_category,
+          baseDailyRate: Number(r.baseDailyRate ?? r.base_daily_rate ?? 0),
+          weekendDailyRate: r.weekendDailyRate ? Number(r.weekendDailyRate) : null,
+          isActive: r.isActive ?? true,
+        }));
+
+        // Pull events that overlap the pickup date.
+        const eventRows = await tx.rateEvent.findMany({
+          where: {
+            isActive: true,
+            deletedAt: null,
+            dateFrom: { lte: pickupDate },
+            dateTo: { gte: pickupDate },
+          },
+        });
+        const events: RateEventSnapshot[] = eventRows.map(e => ({
+          id: e.id,
+          eventCode: e.eventCode,
+          name: e.name,
+          dateFrom: e.dateFrom,
+          dateTo: e.dateTo,
+          multiplier: Number(e.multiplier),
+          applicableCategories: e.applicableCategories,
+          applicableChannels: e.applicableChannels,
+          priority: e.priority ?? 0,
+          isActive: e.isActive ?? true,
+        }));
+
+        // Auto-calculate utilization if not provided. Heuristic: count rentals
+        // currently occupying vehicles in this category vs total fleet of this
+        // category. Simple snapshot, refined in v1.1.
+        let utilizationPct = parsed.data.fleetUtilizationPct;
+        if (utilizationPct == null) {
+          try {
+            const now = new Date();
+            const [activeBookings, fleetSize] = await Promise.all([
+              tx.rentalBooking.count({
+                where: {
+                  vehicleCategory: parsed.data.vehicleCategory,
+                  status: { in: ['CONFIRMED', 'ACTIVE'] },
+                  pickupDate: { lte: pickupDate },
+                  dropoffDate: { gte: pickupDate },
+                },
+              }),
+              tx.vehicle.count({
+                where: {
+                  type: parsed.data.vehicleCategory,
+                  status: { not: 'INACTIVE' },
+                  deletedAt: null,
+                },
+              }),
+            ]);
+            utilizationPct = fleetSize > 0 ? Math.min(100, Math.round((activeBookings / fleetSize) * 100)) : 0;
+          } catch {
+            utilizationPct = undefined; // engine handles undefined gracefully
+          }
+        }
+
+        const result = calculateYieldRate({
+          request: {
+            vehicleCategory: parsed.data.vehicleCategory,
+            pickupDate,
+            dropoffDate,
+            channel: parsed.data.channel,
+            fleetUtilizationPct: utilizationPct,
+          },
+          rules,
+          events,
+        });
+
+        return NextResponse.json({
+          ok: true,
+          result,
+          diagnostics: {
+            rulesConsidered: rules.length,
+            eventsConsidered: events.length,
+            utilizationPctUsed: utilizationPct,
+            utilizationAuto: parsed.data.fleetUtilizationPct == null,
+          },
+        });
+        } catch (err) {
+        captureException(err, { context: 'rental.rates.yield' });
+        console.error('[rental yield] error:', err);
+        return NextResponse.json({ error: 'Yield calculation failed' }, { status: 500 });
       }
-    }
-
-    const result = calculateYieldRate({
-      request: {
-        vehicleCategory: parsed.data.vehicleCategory,
-        pickupDate,
-        dropoffDate,
-        channel: parsed.data.channel,
-        fleetUtilizationPct: utilizationPct,
-      },
-      rules,
-      events,
-    });
-
-    return NextResponse.json({
-      ok: true,
-      result,
-      diagnostics: {
-        rulesConsidered: rules.length,
-        eventsConsidered: events.length,
-        utilizationPctUsed: utilizationPct,
-        utilizationAuto: parsed.data.fleetUtilizationPct == null,
-      },
-    });
-  } catch (err) {
-    captureException(err, { context: 'rental.rates.yield' });
-    console.error('[rental yield] error:', err);
-    return NextResponse.json({ error: 'Yield calculation failed' }, { status: 500 });
-  }
+  });
 }
+

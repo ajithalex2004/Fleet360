@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { listWorkflows, createWorkflow } from '@/lib/workflow-db';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
       tenantId:      searchParams.get('tenantId')      ?? undefined,
     });
     return NextResponse.json(workflows);
-  } catch (e: any) {
+  } catch (e) {
     return NextResponse.json({ error: e?.message }, { status: 500 });
   }
 }
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
       scopeId:       scopeId ?? null,
     });
     return NextResponse.json({ id }, { status: 201 });
-  } catch (e: any) {
+    } catch (e) {
     return NextResponse.json({ error: e?.message }, { status: 500 });
   }
 }

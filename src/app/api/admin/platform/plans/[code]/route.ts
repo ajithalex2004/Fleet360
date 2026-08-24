@@ -12,10 +12,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { invalidatePlanCache } from '@/lib/plans';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 interface RouteParams { params: Promise<{ code: string }>; }
 
 function requireSuperAdmin(req: NextRequest): { ok: true; userId: string } | { ok: false; res: NextResponse } {
@@ -90,12 +90,13 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: 'code is required' }, { status: 400 });
   }
 
-  let body: UpdateBody;
+  let bodyRaw: UpdateBody;
   try {
-    body = await req.json() as UpdateBody;
+    bodyRaw = await req.json() as UpdateBody;
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
+  const body = stripTenantOwnershipFields(bodyRaw);
 
   // Build a SET clause from the keys that are actually present
   const setClauses: string[] = [];
@@ -129,7 +130,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     }
     invalidatePlanCache();
     return NextResponse.json({ ok: true, updated: code });
-  } catch (err) {
+    } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },
       { status: 500 },
@@ -166,7 +167,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     }
     invalidatePlanCache();
     return NextResponse.json({ ok: true, retired: code });
-  } catch (err) {
+    } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },
       { status: 500 },

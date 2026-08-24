@@ -12,29 +12,34 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const { searchParams } = new URL(req.url);
-    const contractId = searchParams.get('contractId');
-    const items = await prisma.leaseEarlyTermination.findMany({
-      where: {
-        tenantId,
-        ...(contractId
-          ? { contract: { id: contractId, tenantId } }
-          : {}),
-      },
-      include: { contract: { select: { contractNumber: true, monthlyRate: true, endDate: true } } },
-      orderBy: { createdAt: 'desc' },
-    });
-    return NextResponse.json(items);
-  } catch (e) {
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
-  }
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const { searchParams } = new URL(req.url);
+        const contractId = searchParams.get('contractId');
+        const items = await tx.leaseEarlyTermination.findMany({
+          where: {
+            tenantId,
+            ...(contractId
+              ? { contract: { id: contractId, tenantId } }
+              : {}),
+          },
+          include: { contract: { select: { contractNumber: true, monthlyRate: true, endDate: true } } },
+          orderBy: { createdAt: 'desc' },
+        });
+        return NextResponse.json(items);
+      } catch (e) {
+        return NextResponse.json({ error: 'Failed' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant(req);
@@ -43,7 +48,8 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const contract = await prisma.leaseContract2.findFirst({
       where: { id: body.contractId, tenantId },
       select: { id: true },
@@ -66,7 +72,7 @@ export async function POST(req: NextRequest) {
     }),
     );
     return NextResponse.json(et, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     return NextResponse.json({ error: 'Failed' }, { status: 500 });
   }
 }

@@ -19,10 +19,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { geocode, GeocodeError } from '@/lib/logistics/geocoder';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 interface ShipmentRow {
   id: string;
   origin_name: string | null;
@@ -40,8 +41,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
   const shipmentId = params.id;
 
   try {
@@ -106,13 +106,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       confidence: result.confidence,
       source: result.source,
     });
-  } catch (e) {
+    } catch (e) {
     if (e instanceof GeocodeError) {
       const friendly = e.kind === 'no_token'
         ? 'Map service is not configured (NEXT_PUBLIC_MAPBOX_TOKEN / MAPBOX_TOKEN). Ask your admin to set it up, or pin the pickup on the map manually.'
         : e.kind === 'no_match'
           ? 'Could not find a map location for this address. Try a more specific origin, or pin it on the map manually.'
-          : 'The map service returned an error. Try again in a moment, or pin the pickup on the map manually.';
+          : 'The map service returned an e. Try again in a moment, or pin the pickup on the map manually.';
       return NextResponse.json({ error: friendly, kind: e.kind }, { status: 422 });
     }
     console.error('[logistics/shipments/:id/geocode-pickup POST]', e);

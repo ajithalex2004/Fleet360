@@ -199,7 +199,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ dryRun: false, summary });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'leasing.fuel.import' });
     return NextResponse.json({ error: 'Import failed' }, { status: 500 });
   }

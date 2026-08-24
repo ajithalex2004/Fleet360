@@ -8,7 +8,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -16,10 +16,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
   const { tenantId } = authz;
 
-  const tenantId = req.headers.get('x-tenant-id') ?? '';
-  if (!tenantId) {
-    return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
-  }
   const permError = requireBusOpsAdminAccess(req, 'planning-core');
   if (permError) return permError;
   try {
@@ -38,7 +34,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }, {
       headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' },
     });
-  } catch (e) {
+    } catch (e) {
     console.error('[plan get]', e);
     return NextResponse.json({ error: 'Failed to fetch plan' }, { status: 500 });
   }

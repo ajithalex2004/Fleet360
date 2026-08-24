@@ -29,7 +29,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const stepOrder = currentStepOrder ?? instance.currentStepOrder;
     const result = await advanceWorkflow(params.id, stepOrder, action, comments ?? '', actionedByEmail);
     return NextResponse.json(result);
-  } catch (e: any) {
+  } catch (e) {
     console.error('POST /api/workflow/instances/[id]/action error:', e?.message);
     return NextResponse.json({ error: e?.message ?? 'Failed' }, { status: 500 });
   }
@@ -46,7 +46,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     const instance = await getWorkflowInstanceWithHistory(params.id);
     if (!instance) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(instance);
-  } catch (e: any) {
+  } catch (e) {
     return NextResponse.json({ error: e?.message }, { status: 500 });
   }
 }

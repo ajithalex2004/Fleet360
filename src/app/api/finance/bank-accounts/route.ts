@@ -3,9 +3,10 @@
  * Manages bank accounts registered for reconciliation
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const INIT = `
   CREATE TABLE IF NOT EXISTS finance_bank_accounts (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -29,52 +30,61 @@ const INIT = `
 type BankRow = Record<string, unknown>;
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  await prisma.$executeRawUnsafe(INIT).catch(() => {});
-  const sp     = req.nextUrl.searchParams;
-  const active = sp.get('active');
-  let where    = `WHERE deleted_at IS NULL`;
-  if (active === 'true') where += ` AND is_active = TRUE`;
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    await tx.$executeRawUnsafe(INIT).catch(() => {});
+      const sp     = req.nextUrl.searchParams;
+      const active = sp.get('active');
+      let where    = `WHERE deleted_at IS NULL`;
+      if (active === 'true') where += ` AND is_active = TRUE`;
 
-  const rows = await prisma.$queryRawUnsafe<BankRow[]>(
-    `SELECT * FROM finance_bank_accounts ${where} ORDER BY is_default DESC, bank_name ASC`
-  ).catch(() => []);
-  return NextResponse.json({ data: rows });
+      const rows = await tx.$queryRawUnsafe<BankRow[]>(
+        `SELECT * FROM finance_bank_accounts ${where} ORDER BY is_default DESC, bank_name ASC`
+      ).catch(() => []);
+      return NextResponse.json({ data: rows });
+  });
 }
+
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  await prisma.$executeRawUnsafe(INIT).catch(() => {});
-  const body = await req.json();
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    await tx.$executeRawUnsafe(INIT).catch(() => {});
+      const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
 
-  // Unset existing default if setting new default
-  if (body.isDefault) {
-    await prisma.$executeRawUnsafe(
-      `UPDATE finance_bank_accounts SET is_default=FALSE WHERE deleted_at IS NULL`
-    ).catch(() => {});
-  }
+      // Unset existing default if setting new default
+      if (body.isDefault) {
+        await tx.$executeRawUnsafe(
+          `UPDATE finance_bank_accounts SET is_default=FALSE WHERE deleted_at IS NULL`
+        ).catch(() => {});
+      }
 
-  const [row] = await prisma.$queryRawUnsafe<BankRow[]>(
-    `INSERT INTO finance_bank_accounts
-       (bank_name, account_name, account_number, iban, currency,
-        branch_name, swift_code, is_default, current_balance)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-    body.bankName, body.accountName, body.accountNumber,
-    body.iban ?? null, body.currency ?? 'AED',
-    body.branchName ?? null, body.swiftCode ?? null,
-    body.isDefault ?? false, body.currentBalance ?? 0,
-  ).catch(() => []);
+      const [row] = await tx.$queryRawUnsafe<BankRow[]>(
+        `INSERT INTO finance_bank_accounts
+           (bank_name, account_name, account_number, iban, currency,
+            branch_name, swift_code, is_default, current_balance)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+        body.bankName, body.accountName, body.accountNumber,
+        body.iban ?? null, body.currency ?? 'AED',
+        body.branchName ?? null, body.swiftCode ?? null,
+        body.isDefault ?? false, body.currentBalance ?? 0,
+      ).catch(() => []);
 
-  if (!row) return NextResponse.json({ error: 'Failed to create bank account' }, { status: 500 });
-  return NextResponse.json(row, { status: 201 });
+      if (!row) return NextResponse.json({ error: 'Failed to create bank account' }, { status: 500 });
+      return NextResponse.json(row, { status: 201 });
+  });
 }
+

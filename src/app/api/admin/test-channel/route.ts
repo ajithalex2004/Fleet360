@@ -7,8 +7,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function POST(request: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -34,8 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ error: `Unknown channel: ${channel}` }, { status: 400 });
-
-  } catch (err) {
+    } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[test-channel]', msg);
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -176,8 +176,7 @@ async function testSmtp(
       message: `Test email delivered to ${recipient}`,
       messageId: info.messageId,
     });
-
-  } catch (err) {
+    } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[test-channel/smtp]', msg);
 
@@ -230,7 +229,7 @@ async function testSms(settings: Record<string, string>): Promise<NextResponse> 
         throw new Error((data as { message?: string }).message ?? `HTTP ${res.status}`);
       }
       return NextResponse.json({ ok: true, message: 'Twilio credentials verified successfully.' });
-    } catch (err) {
+      } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return NextResponse.json({ error: `Twilio verification failed: ${msg}` }, { status: 502 });
     }

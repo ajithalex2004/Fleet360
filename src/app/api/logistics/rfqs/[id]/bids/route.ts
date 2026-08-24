@@ -9,9 +9,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { listCarrierBids } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -23,13 +24,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   try {
     const data = await listCarrierBids({ tenantId, rfqId: params.id, limit: 200 });
     return NextResponse.json({ data }, { headers: { 'Cache-Control': 'private, max-age=10' } });
-  } catch (e) {
+    } catch (e) {
     console.error('[logistics/rfqs/:id/bids GET]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to list bids' },

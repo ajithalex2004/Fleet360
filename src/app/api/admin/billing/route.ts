@@ -9,7 +9,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { withTenantRls } from '@/lib/rls';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { getTenantBilling } from '@/lib/billing';
 import { getUsage } from '@/lib/plan-usage';
 import { getLimits } from '@/lib/plan-limits';

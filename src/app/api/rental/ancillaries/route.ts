@@ -29,23 +29,28 @@ const bodySchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const cat = req.nextUrl.searchParams.get('category');
-    const items = await prisma.rentalAncillary.findMany({
-      where: { tenantId, deletedAt: null, ...(cat ? { category: cat } : {}) },
-      orderBy: [{ sortOrder: 'asc' }, { nameEn: 'asc' }],
-    });
-    return NextResponse.json(items);
-  } catch (err) {
-    captureException(err, { context: 'rental.ancillaries.GET' });
-    return NextResponse.json({ error: 'Failed to fetch ancillaries' }, { status: 500 });
-  }
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const cat = req.nextUrl.searchParams.get('category');
+        const items = await tx.rentalAncillary.findMany({
+          where: { tenantId, deletedAt: null, ...(cat ? { category: cat } : {}) },
+          orderBy: [{ sortOrder: 'asc' }, { nameEn: 'asc' }],
+        });
+        return NextResponse.json(items);
+      } catch (err) {
+        captureException(err, { context: 'rental.ancillaries.GET' });
+        return NextResponse.json({ error: 'Failed to fetch ancillaries' }, { status: 500 });
+      }
+  });
 }
+
 
 export const POST = withAudit(
   async (req: NextRequest) => {
@@ -68,7 +73,7 @@ export const POST = withAudit(
       }
       const item = await withTenantRls(prisma, tenantId, async (tx) =>
         tx.rentalAncillary.upsert({
-        where: { code: parsed.data.code },
+        where: { code: parsed.data.code, tenantId },
         update: {
           nameEn: parsed.data.nameEn,
           nameAr: parsed.data.nameAr ?? null,
@@ -83,6 +88,7 @@ export const POST = withAudit(
           notes: parsed.data.notes ?? null,
         },
         create: {
+          tenantId,
           code: parsed.data.code,
           nameEn: parsed.data.nameEn,
           nameAr: parsed.data.nameAr ?? null,
@@ -99,7 +105,7 @@ export const POST = withAudit(
       }),
       );
       return NextResponse.json(item, { status: 201 });
-    } catch (err) {
+      } catch (err) {
       captureException(err, { context: 'rental.ancillaries.POST' });
       return NextResponse.json({ error: 'Failed to save ancillary' }, { status: 500 });
     }

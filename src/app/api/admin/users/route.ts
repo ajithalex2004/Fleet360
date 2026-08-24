@@ -10,13 +10,13 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { randomUUID } from 'crypto';
 import { requireUnderQuota } from '@/lib/plan-limits';
 import { cacheRead, publicCacheControl, revalidateCache } from '@/lib/server-cache';
 import type { PlanCode } from '@/lib/billing';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'users:list';
 
 // All modules in the platform — used for moduleAccess validation
@@ -110,7 +110,7 @@ export async function GET(req: NextRequest) {
         headers: { 'Cache-Control': publicCacheControl(60) },
       });
     });
-  } catch (e) {
+    } catch (e) {
     console.error('[Admin Hub] GET /api/admin/users error:', e);
     return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
   }
@@ -124,7 +124,8 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
 
     const {
       id, username, email,
@@ -212,7 +213,7 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({ ...user, userTenant }, { status: 201 });
     });
-  } catch (e: unknown) {
+    } catch (e) {
     console.error('[Admin Hub] POST /api/admin/users error:', e);
     const err = e as { code?: string; meta?: { target?: string[] } };
     if (err?.code === 'P2002') {

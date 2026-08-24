@@ -12,9 +12,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { generateScheduleTemplate } from '@/lib/bus-ops/generate-schedule-template';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 interface GenBody { from?: string; to?: string }
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
   const { id } = await ctx.params;
 
   let body: GenBody;
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   try {
     const stats = await generateScheduleTemplate({ templateId: id, tenantId, from, to });
     return NextResponse.json({ ok: true, ...stats });
-  } catch (e) {
+    } catch (e) {
     const msg = e instanceof Error ? e.message : 'Generation failed';
     if (msg.includes('not found')) return NextResponse.json({ error: msg }, { status: 404 });
     console.error('[schedule-templates/generate.POST]', e);

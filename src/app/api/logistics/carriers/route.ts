@@ -9,9 +9,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { createCarrier, listCarriers } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
@@ -23,8 +24,7 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   const sp = req.nextUrl.searchParams;
   const status = sp.get('status') ?? 'ACTIVE';
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   try {
     const data = await listCarriers({ tenantId, status, search, limit });
     return NextResponse.json({ data }, { headers: { 'Cache-Control': 'private, max-age=30' } });
-  } catch (e) {
+    } catch (e) {
     console.error('[logistics/carriers GET]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to list carriers' },
@@ -69,8 +69,7 @@ export async function POST(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   let body: CarrierBody;
   try { body = (await req.json()) as CarrierBody; }
@@ -100,7 +99,7 @@ export async function POST(req: NextRequest) {
       capacityProfile: body.capacityProfile ?? {},
     });
     return NextResponse.json({ data }, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     console.error('[logistics/carriers POST]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to save carrier' },

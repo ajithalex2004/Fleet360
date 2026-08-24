@@ -38,7 +38,7 @@ import { withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 import { evaluatePlanApply } from '@/lib/planning/apply-gate';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import {
   assignVehiclesToBlocks,
   VEHICLE_GROUP_CONFLICT,
@@ -94,11 +94,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-
-  const tenantId = req.headers.get('x-tenant-id') ?? '';
-  if (!tenantId) {
-    return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
-  }
   const permError = requireBusOpsAdminAccess(req, 'planning-core');
   if (permError) return permError;
 
@@ -302,7 +297,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           }
         : { verdict: 'DISABLED' as const },
     });
-  } catch (e) {
+    } catch (e) {
     console.error('[plan apply]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'Apply failed' },

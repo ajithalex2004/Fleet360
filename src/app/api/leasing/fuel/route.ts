@@ -11,30 +11,35 @@ import { withTenantRls } from '@/lib/rls';
  * surface.
  */
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const { searchParams } = new URL(req.url);
-    const contractId = searchParams.get('contractId');
-    const billingStatus = searchParams.get('billingStatus');
-    const logs = await prisma.leaseFuelLog.findMany({
-      where: {
-        tenantId,
-        ...(contractId ? { contractId } : {}),
-        ...(billingStatus ? { billingStatus } : {}),
-      },
-      include: { contract: { select: { contractNumber: true } } },
-      orderBy: { fuelDate: 'desc' },
-    });
-    return NextResponse.json(logs);
-  } catch (e) {
-    console.error('GET /api/leasing/fuel error:', e);
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
-  }
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const { searchParams } = new URL(req.url);
+        const contractId = searchParams.get('contractId');
+        const billingStatus = searchParams.get('billingStatus');
+        const logs = await tx.leaseFuelLog.findMany({
+          where: {
+            tenantId,
+            ...(contractId ? { contractId } : {}),
+            ...(billingStatus ? { billingStatus } : {}),
+          },
+          include: { contract: { select: { contractNumber: true } } },
+          orderBy: { fuelDate: 'desc' },
+        });
+        return NextResponse.json(logs);
+      } catch (e) {
+        console.error('GET /api/leasing/fuel error:', e);
+        return NextResponse.json({ error: 'Failed' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant(req);
@@ -43,7 +48,8 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     if (body.contractId) {
       const contract = await prisma.leaseContract2.findFirst({
         where: { id: body.contractId, tenantId },
@@ -60,7 +66,7 @@ export async function POST(req: NextRequest) {
     }),
     );
     return NextResponse.json(log, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     console.error('POST /api/leasing/fuel error:', e);
     return NextResponse.json({ error: 'Failed' }, { status: 500 });
   }

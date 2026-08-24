@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { fetchShipmentById } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface DocumentBody {
@@ -41,6 +42,7 @@ async function ensureTable() {
 }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -49,48 +51,53 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
-  const shipment = await fetchShipmentById(params.id, tenantId);
-  if (!shipment) return NextResponse.json({ error: 'Shipment not found' }, { status: 404 });
+  return withTenantRls(prisma, tenantId, async (tx) => {
 
-  await ensureTable();
-  const docs = await prisma.$queryRawUnsafe<Array<{
-    id: string;
-    doc_type: string;
-    doc_name: string;
-    file_url: string | null;
-    mime_type: string | null;
-    file_size: bigint | number | null;
-    uploaded_by: string | null;
-    notes: string | null;
-    created_at: Date;
-  }>>(
-    `SELECT id, doc_type, doc_name, file_url, mime_type, file_size, uploaded_by, notes, created_at
-       FROM logistics_shipment_documents
-      WHERE tenant_id = $1 AND shipment_order_id = $2
-      ORDER BY created_at DESC`,
-    tenantId,
-    params.id,
-  );
+      const shipment = await fetchShipmentById(params.id, tenantId);
+      if (!shipment) return NextResponse.json({ error: 'Shipment not found' }, { status: 404 });
 
-  return NextResponse.json({
-    shipment,
-    data: docs.map(doc => ({
-      id: doc.id,
-      doc_type: doc.doc_type,
-      doc_name: doc.doc_name,
-      file_url: doc.file_url,
-      mime_type: doc.mime_type,
-      file_size: doc.file_size != null ? Number(doc.file_size) : null,
-      uploaded_by: doc.uploaded_by,
-      notes: doc.notes,
-      uploaded_at: doc.created_at instanceof Date ? doc.created_at.toISOString() : doc.created_at,
-    })),
+      await ensureTable();
+      const docs = await tx.$queryRawUnsafe<Array<{
+        id: string;
+        doc_type: string;
+        doc_name: string;
+        file_url: string | null;
+        mime_type: string | null;
+        file_size: bigint | number | null;
+        uploaded_by: string | null;
+        notes: string | null;
+        created_at: Date;
+      }>>(
+        `SELECT id, doc_type, doc_name, file_url, mime_type, file_size, uploaded_by, notes, created_at
+           FROM logistics_shipment_documents
+          WHERE tenant_id = $1 AND shipment_order_id = $2
+          ORDER BY created_at DESC`,
+        tenantId,
+        params.id,
+      );
+
+      return NextResponse.json({
+        shipment,
+        data: docs.map(doc => ({
+          id: doc.id,
+          doc_type: doc.doc_type,
+          doc_name: doc.doc_name,
+          file_url: doc.file_url,
+          mime_type: doc.mime_type,
+          file_size: doc.file_size != null ? Number(doc.file_size) : null,
+          uploaded_by: doc.uploaded_by,
+          notes: doc.notes,
+          uploaded_at: doc.created_at instanceof Date ? doc.created_at.toISOString() : doc.created_at,
+        })),
+      });
   });
 }
 
+
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -99,40 +106,46 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
-  let body: DocumentBody;
-  try { body = (await req.json()) as DocumentBody; }
-  catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
+  return withTenantRls(prisma, tenantId, async (tx) => {
 
-  if (!body.docType || !body.docName) {
-    return NextResponse.json({ error: 'docType and docName are required' }, { status: 400 });
-  }
-  if (body.fileData && body.fileSize && body.fileSize > 5 * 1024 * 1024) {
-    return NextResponse.json({ error: 'File too large for inline storage (max 5 MB). Use fileUrl instead.' }, { status: 413 });
-  }
+      let bodyRaw: DocumentBody;
+      try {
+        bodyRaw = await req.json() as DocumentBody;
+      } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
+      const body = stripTenantOwnershipFields(bodyRaw);
 
-  const shipment = await fetchShipmentById(params.id, tenantId);
-  if (!shipment) return NextResponse.json({ error: 'Shipment not found' }, { status: 404 });
+      if (!body.docType || !body.docName) {
+        return NextResponse.json({ error: 'docType and docName are required' }, { status: 400 });
+      }
+      if (body.fileData && body.fileSize && body.fileSize > 5 * 1024 * 1024) {
+        return NextResponse.json({ error: 'File too large for inline storage (max 5 MB). Use fileUrl instead.' }, { status: 413 });
+      }
 
-  await ensureTable();
-  const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-    `INSERT INTO logistics_shipment_documents
-       (tenant_id, shipment_order_id, doc_type, doc_name, file_url, file_data, mime_type, file_size, uploaded_by, notes, metadata)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb)
-     RETURNING id`,
-    tenantId,
-    params.id,
-    body.docType,
-    body.docName,
-    body.fileUrl ?? null,
-    body.fileData ?? null,
-    body.mimeType ?? null,
-    body.fileSize ?? null,
-    body.uploadedBy ?? req.headers.get('x-user-id') ?? 'Operations',
-    body.notes ?? null,
-    JSON.stringify({ source: 'shipment-documents' }),
-  );
+      const shipment = await fetchShipmentById(params.id, tenantId);
+      if (!shipment) return NextResponse.json({ error: 'Shipment not found' }, { status: 404 });
 
-  return NextResponse.json({ success: true, id: rows[0]?.id ?? null }, { status: 201 });
+      await ensureTable();
+      const rows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `INSERT INTO logistics_shipment_documents
+           (tenant_id, shipment_order_id, doc_type, doc_name, file_url, file_data, mime_type, file_size, uploaded_by, notes, metadata)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb)
+         RETURNING id`,
+        tenantId,
+        params.id,
+        body.docType,
+        body.docName,
+        body.fileUrl ?? null,
+        body.fileData ?? null,
+        body.mimeType ?? null,
+        body.fileSize ?? null,
+        body.uploadedBy ?? req.headers.get('x-user-id') ?? 'Operations',
+        body.notes ?? null,
+        JSON.stringify({ source: 'shipment-documents' }),
+      );
+
+      return NextResponse.json({ success: true, id: rows[0]?.id ?? null }, { status: 201 });
+  });
 }
+

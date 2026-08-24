@@ -5,10 +5,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureSpmSchema } from '@/lib/assets/spm-schema';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -104,7 +105,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     return NextResponse.json({ error: 'Provide ids[] or mark_all + user_id' }, { status: 400 });
-  } catch (err) {
+    } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

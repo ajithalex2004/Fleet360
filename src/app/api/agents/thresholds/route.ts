@@ -8,9 +8,10 @@
  * Table is created by /api/agents/ecosystem on first load.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // Default thresholds per agent — used when no row exists yet
 const DEFAULTS: Record<string, Record<string, unknown>> = {
   'predictive-maintenance': {
@@ -61,60 +62,70 @@ const DDL = `
 `;
 
 export async function GET() {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  await prisma.$executeRawUnsafe(DDL).catch(() => {});
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    await tx.$executeRawUnsafe(DDL).catch(() => {});
 
-  const rows = await prisma.$queryRawUnsafe<{ agent_id: string; thresholds: string }[]>(
-    `SELECT agent_id, thresholds::text FROM agent_configs`,
-  ).catch(() => []);
+      const rows = await tx.$queryRawUnsafe<{ agent_id: string; thresholds: string }[]>(
+        `SELECT agent_id, thresholds::text FROM agent_configs`,
+      ).catch(() => []);
 
-  const stored: Record<string, Record<string, unknown>> = {};
-  for (const row of rows) {
-    try { stored[row.agent_id] = JSON.parse(row.thresholds); } catch { /* skip */ }
-  }
+      const stored: Record<string, Record<string, unknown>> = {};
+      for (const row of rows) {
+        try { stored[row.agent_id] = JSON.parse(row.thresholds); } catch { /* skip */ }
+      }
 
-  // Merge stored over defaults
-  const result: Record<string, Record<string, unknown>> = {};
-  for (const [agentId, defaults] of Object.entries(DEFAULTS)) {
-    result[agentId] = { ...defaults, ...(stored[agentId] ?? {}) };
-  }
+      // Merge stored over defaults
+      const result: Record<string, Record<string, unknown>> = {};
+      for (const [agentId, defaults] of Object.entries(DEFAULTS)) {
+        result[agentId] = { ...defaults, ...(stored[agentId] ?? {}) };
+      }
 
-  return NextResponse.json({ thresholds: result });
+      return NextResponse.json({ thresholds: result });
+  });
 }
+
 
 export async function PATCH(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const { agentId, thresholds } = await req.json() as {
-    agentId: string;
-    thresholds: Record<string, unknown>;
-  };
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const bodyRaw = await req.json() as {
+        agentId: string;
+        thresholds: Record<string, unknown>;
+      };
+    const body = stripTenantOwnershipFields(bodyRaw);
+    const { agentId, thresholds } = body;
 
-  if (!agentId || !DEFAULTS[agentId]) {
-    return NextResponse.json({ error: 'Unknown agentId' }, { status: 400 });
-  }
+      if (!agentId || !DEFAULTS[agentId]) {
+        return NextResponse.json({ error: 'Unknown agentId' }, { status: 400 });
+      }
 
-  await prisma.$executeRawUnsafe(DDL).catch(() => {});
+      await tx.$executeRawUnsafe(DDL).catch(() => {});
 
-  // Upsert — merge incoming thresholds with existing
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO agent_configs (agent_id, thresholds, updated_at)
-     VALUES ($1, $2::jsonb, NOW())
-     ON CONFLICT (agent_id) DO UPDATE
-       SET thresholds = agent_configs.thresholds || $2::jsonb,
-           updated_at = NOW()`,
-    agentId,
-    JSON.stringify(thresholds),
-  );
+      // Upsert — merge incoming thresholds with existing
+      await tx.$executeRawUnsafe(
+        `INSERT INTO agent_configs (agent_id, thresholds, updated_at)
+         VALUES ($1, $2::jsonb, NOW())
+         ON CONFLICT (agent_id) DO UPDATE
+           SET thresholds = agent_configs.thresholds || $2::jsonb,
+               updated_at = NOW()`,
+        agentId,
+        JSON.stringify(thresholds),
+      );
 
-  return NextResponse.json({ ok: true, agentId, thresholds });
+      return NextResponse.json({ ok: true, agentId, thresholds });
+  });
 }
+

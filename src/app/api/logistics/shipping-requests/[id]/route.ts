@@ -10,9 +10,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { getShippingRequest, updateShippingRequestStatus, LogisticsValidationError } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -24,12 +25,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
   try {
     const request = await getShippingRequest({ tenantId, requestId: params.id });
     if (!request) return NextResponse.json({ error: 'Shipping request not found' }, { status: 404 });
     return NextResponse.json({ data: request }, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (e) {
+    } catch (e) {
     console.error('[logistics/shipping-requests/:id GET]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to load shipping request' },
@@ -47,7 +48,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
   const actorUserId = req.headers.get('x-user-id');
 
   let body: { status?: string; reviewNotes?: string | null };
@@ -67,7 +68,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       actorUserId,
     });
     return NextResponse.json({ data: request });
-  } catch (e) {
+    } catch (e) {
     if (e instanceof LogisticsValidationError) {
       return NextResponse.json({ error: e.message, issues: e.issues }, { status: 422 });
     }

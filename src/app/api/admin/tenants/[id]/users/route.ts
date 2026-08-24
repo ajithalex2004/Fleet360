@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls, withPlatformAdmin } from '@/lib/rls';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -55,7 +55,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const { tenantId } = authz;
 
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const { userId, roleId } = body;
 
     if (!userId) return NextResponse.json({ error: 'userId is required' }, { status: 400 });
@@ -95,7 +96,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
       return NextResponse.json(ut, { status: 201 });
     });
-  } catch (e: any) {
+    } catch (e) {
     console.error('POST /api/admin/tenants/[id]/users error:', e);
     if (e?.code === 'P2002') {
       return NextResponse.json({ error: 'User is already assigned to this tenant' }, { status: 409 });
@@ -123,7 +124,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       tx.userTenant.deleteMany({ where: { tenantId: params.id, userId } })
     );
     return NextResponse.json({ success: true });
-  } catch (e: any) {
+    } catch (e) {
     console.error('DELETE /api/admin/tenants/[id]/users error:', e);
     return NextResponse.json({ error: e?.message ?? 'Failed' }, { status: 500 });
   }

@@ -14,9 +14,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { recomputeShipmentEta } from '@/lib/logistics/eta-notifier';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -28,8 +29,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   const { id } = await params;
   try {
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json(result.prediction, {
       headers: { 'Cache-Control': 'private, max-age=15' },
     });
-  } catch (e) {
+    } catch (e) {
     console.error('[shipments/[id]/eta]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'ETA computation failed' },

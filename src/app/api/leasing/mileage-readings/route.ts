@@ -27,25 +27,30 @@ import { captureException } from '@/lib/sentry';
 const DEFAULT_OVERAGE_RATE_AED_PER_KM = 0.50;
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const { searchParams } = new URL(req.url);
-    const contractId = searchParams.get('contractId');
-    const readings = await prisma.leaseMileageReading.findMany({
-      where: { tenantId, ...(contractId ? { contractId } : {}) },
-      include: { contract: { select: { contractNumber: true, mileageCap: true } } },
-      orderBy: { readingDate: 'desc' },
-    });
-    return NextResponse.json(readings);
-  } catch (e) {
-    captureException(e, { context: 'leasing.mileage-readings.GET' });
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
-  }
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const { searchParams } = new URL(req.url);
+        const contractId = searchParams.get('contractId');
+        const readings = await tx.leaseMileageReading.findMany({
+          where: { tenantId, ...(contractId ? { contractId } : {}) },
+          include: { contract: { select: { contractNumber: true, mileageCap: true } } },
+          orderBy: { readingDate: 'desc' },
+        });
+        return NextResponse.json(readings);
+      } catch (e) {
+        captureException(e, { context: 'leasing.mileage-readings.GET' });
+        return NextResponse.json({ error: 'Failed' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant(req);
@@ -54,7 +59,8 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
 
     // Cross-tenant guard: the contract the reading is being posted
     // against must belong to this tenant. Otherwise we'd create a

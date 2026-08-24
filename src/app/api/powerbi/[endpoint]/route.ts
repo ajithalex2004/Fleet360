@@ -49,10 +49,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ endp
   if (!ENDPOINTS.has(endpoint)) {
     return NextResponse.json({ error: 'Unknown endpoint' }, { status: 404 });
   }
-  const tenantId = req.headers.get('x-tenant-id') ?? '';
-  if (!tenantId) {
-    return NextResponse.json({ error: 'No tenant context' }, { status: 401 });
-  }
   const sp = new URL(req.url).searchParams;
   const from = sp.get('from') ? new Date(sp.get('from')!) : null;
   const to   = sp.get('to')   ? new Date(sp.get('to')!)   : null;

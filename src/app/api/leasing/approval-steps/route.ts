@@ -11,30 +11,35 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const { searchParams } = new URL(req.url);
-    const entityId = searchParams.get('entityId');
-    const entityType = searchParams.get('entityType');
 
-    const steps = await prisma.leaseApprovalStep.findMany({
-      where: {
-        tenantId,
-        ...(entityId ? { entityId } : {}),
-        ...(entityType ? { entityType } : {}),
-      },
-      orderBy: [{ entityId: 'asc' }, { stepOrder: 'asc' }],
-    });
-    return NextResponse.json(steps);
-  } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const { searchParams } = new URL(req.url);
+        const entityId = searchParams.get('entityId');
+        const entityType = searchParams.get('entityType');
+
+        const steps = await tx.leaseApprovalStep.findMany({
+          where: {
+            tenantId,
+            ...(entityId ? { entityId } : {}),
+            ...(entityType ? { entityType } : {}),
+          },
+          orderBy: [{ entityId: 'asc' }, { stepOrder: 'asc' }],
+        });
+        return NextResponse.json(steps);
+      } catch (e) {
+        console.error(e);
+        return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant(req);
@@ -43,16 +48,17 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const step = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.leaseApprovalStep.create({
       data: { ...body, tenantId },
     }),
     );
     return NextResponse.json(step, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
   }
 }
 
@@ -63,7 +69,8 @@ export async function PATCH(req: NextRequest) {
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const { id, action, approverName, comments, ...data } = body;
 
     const existing = await prisma.leaseApprovalStep.findFirst({
@@ -96,6 +103,6 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json(step);
   } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
   }
 }

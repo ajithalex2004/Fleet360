@@ -22,7 +22,7 @@ export async function GET() {
         }, 'alex@exlsolutions.ae');
 
         return NextResponse.json({ success: true, message: 'Triggered notification logic', result });
-    } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        } catch (e) {
+        return NextResponse.json({ error: e.message }, { status: 500 });
     }
 }

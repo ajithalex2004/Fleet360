@@ -6,11 +6,12 @@
  * The orchestrator routes it to the correct agent.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { dispatch } from '@/lib/agents/orchestrator';
 import { AgentEvent } from '@/lib/agents/types';
 import { ensureAgentSchema } from '@/lib/agents/schema';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {

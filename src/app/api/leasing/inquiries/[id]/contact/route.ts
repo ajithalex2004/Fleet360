@@ -36,7 +36,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const channel = String(body?.channel ?? '').toUpperCase();
     const message = String(body?.body ?? '').trim();
     const subject = body?.subject ? String(body.subject).trim() : null;
@@ -120,7 +121,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
 
     return NextResponse.json({ ok: true, sent: true, activityId: activity.id });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'leasing.inquiries.contact', tags: { inquiryId: params.id } });
     return NextResponse.json({ error: 'Send failed' }, { status: 500 });
   }

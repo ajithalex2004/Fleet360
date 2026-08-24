@@ -185,7 +185,7 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ document: doc, storage: stored }, { status: 201 });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'leasing.documents.upload' });
     console.error('[documents upload] error:', err);
     return NextResponse.json({ error: 'Failed to upload document' }, { status: 500 });

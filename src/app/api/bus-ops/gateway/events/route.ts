@@ -47,6 +47,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import {
   verifyGatewaySignatureWithSecret,
@@ -59,7 +60,7 @@ import {
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 import type { BoardingEventSource } from '@prisma/client';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import {
   recordBoarding,
   logAlightEvent,
@@ -99,242 +100,246 @@ interface IngestSummary {
 }
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const rawBody = await req.text();
-  const sig = req.headers.get('x-gateway-signature');
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const rawBody = await req.text();
+      const sig = req.headers.get('x-gateway-signature');
 
-  // Peek gatewayId from body BEFORE HMAC verify so we can resolve the
-  // per-gateway secret. The JSON parse is a read-only side-effect-free
-  // op; nothing downstream acts on payload until HMAC verifies below.
-  let payload: { gatewayId?: string; events?: ProcessedGatewayEvent[]; scanWindow?: RawScanWindow; location?: { lat: number; lng: number } };
-  try {
-    payload = JSON.parse(rawBody);
-  } catch {
-    return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
-  }
-  const gatewayId = payload?.gatewayId?.trim();
-  if (!gatewayId) {
-    return NextResponse.json({ ok: false, error: 'gatewayId is required' }, { status: 400 });
-  }
+      // Peek gatewayId from body BEFORE HMAC verify so we can resolve the
+      // per-gateway secret. The JSON parse is a read-only side-effect-free
+      // op; nothing downstream acts on payload until HMAC verifies below.
+      let payload: { gatewayId?: string; events?: ProcessedGatewayEvent[]; scanWindow?: RawScanWindow; location?: { lat: number; lng: number } };
+      try {
+        payload = JSON.parse(rawBody);
+      } catch {
+        return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 });
+      }
+      const gatewayId = payload?.gatewayId?.trim();
+      if (!gatewayId) {
+        return NextResponse.json({ ok: false, error: 'gatewayId is required' }, { status: 400 });
+      }
 
-  const gateway = await prisma.bleGateway.findUnique({
-    where: { gatewayId },
-    select: {
-      vehicleId: true, tenantId: true, isActive: true,
-      rssiThresholdDbm: true, presenceGraceSeconds: true,
-      // Per-gateway secret. When null, resolveGatewaySecret falls back
-      // to the BLE_GATEWAY_SHARED_SECRET env var for backward compat
-      // during the per-secret rollout.
-      secret: true,
-    },
-  });
-  // Unregistered/inactive gateway and bad signature deliberately return
-  // the SAME 401 with the same body. This endpoint is unauthenticated at
-  // the middleware layer, so a distinguishable "not registered" response
-  // lets anyone enumerate which gateway ids exist by posting a garbage
-  // signature and watching for 404 vs 401 — the same oracle that
-  // returning 403 instead of 404 gives on a tenant-scoped lookup.
-  // A legitimate operator debugging real hardware has the server logs;
-  // an anonymous prober learns nothing either way.
-  //
-  // resolveGatewaySecret returns null when the row has no secret and no
-  // BLE_GATEWAY_SHARED_SECRET fallback is configured, and
-  // verifyGatewaySignatureWithSecret treats a null secret as failure —
-  // so a secret-less gateway fails closed, not open.
-  const authOk =
-    gateway != null &&
-    gateway.isActive !== false &&
-    verifyGatewaySignatureWithSecret(rawBody, sig, resolveGatewaySecret(gateway.secret));
+      const gateway = await tx.bleGateway.findUnique({
+        where: { gatewayId },
+        select: {
+          vehicleId: true, tenantId: true, isActive: true,
+          rssiThresholdDbm: true, presenceGraceSeconds: true,
+          // Per-gateway secret. When null, resolveGatewaySecret falls back
+          // to the BLE_GATEWAY_SHARED_SECRET env var for backward compat
+          // during the per-secret rollout.
+          secret: true,
+        },
+      });
+      // Unregistered/inactive gateway and bad signature deliberately return
+      // the SAME 401 with the same body. This endpoint is unauthenticated at
+      // the middleware layer, so a distinguishable "not registered" response
+      // lets anyone enumerate which gateway ids exist by posting a garbage
+      // signature and watching for 404 vs 401 — the same oracle that
+      // returning 403 instead of 404 gives on a tenant-scoped lookup.
+      // A legitimate operator debugging real hardware has the server logs;
+      // an anonymous prober learns nothing either way.
+      //
+      // resolveGatewaySecret returns null when the row has no secret and no
+      // BLE_GATEWAY_SHARED_SECRET fallback is configured, and
+      // verifyGatewaySignatureWithSecret treats a null secret as failure —
+      // so a secret-less gateway fails closed, not open.
+      const authOk =
+        gateway != null &&
+        gateway.isActive !== false &&
+        verifyGatewaySignatureWithSecret(rawBody, sig, resolveGatewaySecret(gateway.secret));
 
-  // `!gateway ||` is redundant with authOk at runtime but narrows the
-  // type for every gateway.* access below.
-  if (!gateway || !authOk) {
-    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
-  }
+      // `!gateway ||` is redundant with authOk at runtime but narrows the
+      // type for every gateway.* access below.
+      if (!gateway || !authOk) {
+        return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+      }
 
-  // tenantId is derived from the gateway row — hardware devices authenticate
-  // via HMAC and never send x-tenant-id. May be null for pre-migration rows;
-  // those are still allowed through (RLS tenant_id IS NULL branch covers them).
-  const tenantId = gateway.tenantId ?? null;
+      // tenantId is derived from the gateway row — hardware devices authenticate
+      // via HMAC and never send x-tenant-id. May be null for pre-migration rows;
+      // those are still allowed through (RLS tenant_id IS NULL branch covers them).
+      const tenantId = gateway.tenantId ?? null;
 
-  // Heartbeat the gateway up-front, even if the payload is empty.
-  await prisma.bleGateway.update({
-    where: { gatewayId },
-    data: { lastSeenAt: new Date() },
-  }).catch(() => {});
+      // Heartbeat the gateway up-front, even if the payload is empty.
+      await tx.bleGateway.update({
+        where: { gatewayId },
+        data: { lastSeenAt: new Date() },
+      }).catch(() => {});
 
-  const summary: IngestSummary = {
-    gatewayId,
-    vehicleId: gateway.vehicleId,
-    scheduleId: null,
-    payload: 'EMPTY',
-    transitionsApplied: 0,
-    unknownTags: [],
-    noActiveTrip: 0,
-    duplicates: 0,
-    errors: 0,
-  };
-
-  try {
-    // Determine the active trip for this vehicle right now.
-    const now = new Date();
-    const activeTrip = await prisma.tripSchedule.findFirst({
-      where: {
+      const summary: IngestSummary = {
+        gatewayId,
         vehicleId: gateway.vehicleId,
-        deletedAt: null,
-        status: { in: ['SCHEDULED', 'DEPARTED', 'IN_TRANSIT'] },
-        // Trip is "active" if it's within ±2h of departure, or currently in
-        // transit. Simple heuristic — adjust if shifts are longer than 4h.
-        departureTime: { lte: new Date(now.getTime() + 2 * 60 * 60 * 1000) },
-      },
-      orderBy: { departureTime: 'desc' },
-      select: { id: true, status: true },
-    });
-    summary.scheduleId = activeTrip?.id ?? null;
-
-    /* ─ Path A: pre-processed events ─────────────────────────────────── */
-    if (Array.isArray(payload.events) && payload.events.length > 0) {
-      summary.payload = 'PROCESSED';
-      for (const ev of payload.events) {
-        await applyTransition(
-          { tagId: ev.tagId, kind: ev.kind, occurredAt: new Date(ev.occurredAt), rssiDbm: ev.rssiDbm, location: ev.location ?? payload.location },
-          gateway.vehicleId,
-          activeTrip?.id ?? null,
-          gatewayId,
-          tenantId,
-          summary,
-        );
-      }
-    }
-    /* ─ Path B: raw scan window — server-side detection ─────────────── */
-    else if (payload.scanWindow) {
-      summary.payload = 'RAW';
-      const window = payload.scanWindow;
-
-      // Load prior presence for these tags on the active trip.
-      const tagIds = window.observations.map(o => o.tagId);
-      const priorRows = activeTrip
-        ? await prisma.bleGatewayPresence.findMany({
-            where: { gatewayId, tagId: { in: tagIds }, scheduleId: activeTrip.id },
-          })
-        : [];
-      const prior = new Map<string, PresenceState>(
-        priorRows.map(r => [r.tagId, {
-          tagId: r.tagId,
-          scheduleId: r.scheduleId,
-          isPresent: r.isPresent,
-          lastSeenAt: r.lastSeenAt,
-        }]),
-      );
-
-      const config = {
-        rssiThresholdDbm: gateway.rssiThresholdDbm ?? -75,
-        minSampleCount: 3,
-        presenceGraceSeconds: gateway.presenceGraceSeconds ?? 10,
+        scheduleId: null,
+        payload: 'EMPTY',
+        transitionsApplied: 0,
+        unknownTags: [],
+        noActiveTrip: 0,
+        duplicates: 0,
+        errors: 0,
       };
-      const { transitions, nextPresence } = detectTransitions(window, prior, config);
 
-      // Apply transitions.
-      for (const t of transitions) {
-        await applyTransition(
-          { tagId: t.tagId, kind: t.kind, occurredAt: t.occurredAt, rssiDbm: t.rssiDbm, location: window.location },
-          gateway.vehicleId,
-          activeTrip?.id ?? null,
-          gatewayId,
-          tenantId,
-          summary,
-        );
-      }
+      try {
+        // Determine the active trip for this vehicle right now.
+        const now = new Date();
+        const activeTrip = await tx.tripSchedule.findFirst({
+          where: {
+            vehicleId: gateway.vehicleId,
+            deletedAt: null,
+            status: { in: ['SCHEDULED', 'DEPARTED', 'IN_TRANSIT'] },
+            // Trip is "active" if it's within ±2h of departure, or currently in
+            // transit. Simple heuristic — adjust if shifts are longer than 4h.
+            departureTime: { lte: new Date(now.getTime() + 2 * 60 * 60 * 1000) },
+          },
+          orderBy: { departureTime: 'desc' },
+          select: { id: true, status: true },
+        });
+        summary.scheduleId = activeTrip?.id ?? null;
 
-      // Persist presence cache for next window.
-      if (activeTrip) {
-        for (const obs of window.observations) {
-          const state = nextPresence.get(obs.tagId);
-          if (!state) continue;
-          await prisma.bleGatewayPresence.upsert({
-            where: { gatewayId_tagId_scheduleId: { gatewayId, tagId: obs.tagId, scheduleId: activeTrip.id } },
-            update: {
-              firstSeenAt: state.isPresent ? state.lastSeenAt : new Date(obs.firstSeenAt),
-              lastSeenAt: state.lastSeenAt,
-              lastRssiDbm: obs.rssiMaxDbm,
-              isPresent: state.isPresent,
-              alightedAt: state.isPresent ? null : new Date(window.endedAt),
-            },
-            create: {
+        /* ─ Path A: pre-processed events ─────────────────────────────────── */
+        if (Array.isArray(payload.events) && payload.events.length > 0) {
+          summary.payload = 'PROCESSED';
+          for (const ev of payload.events) {
+            await applyTransition(
+              { tagId: ev.tagId, kind: ev.kind, occurredAt: new Date(ev.occurredAt), rssiDbm: ev.rssiDbm, location: ev.location ?? payload.location },
+              gateway.vehicleId,
+              activeTrip?.id ?? null,
               gatewayId,
-              vehicleId: gateway.vehicleId,
-              tagId: obs.tagId,
-              scheduleId: activeTrip.id,
-              firstSeenAt: new Date(obs.firstSeenAt),
-              lastSeenAt: state.lastSeenAt,
-              lastRssiDbm: obs.rssiMaxDbm,
-              isPresent: state.isPresent,
-              ...(tenantId ? { tenantId } : {}),
-            },
-          }).catch(err => {
-            summary.errors += 1;
-            captureException(err, { context: 'bus-gateway.presence.upsert', tags: { gatewayId, tagId: obs.tagId } });
+              tenantId,
+              summary,
+            );
+          }
+        }
+        /* ─ Path B: raw scan window — server-side detection ─────────────── */
+        else if (payload.scanWindow) {
+          summary.payload = 'RAW';
+          const window = payload.scanWindow;
+
+          // Load prior presence for these tags on the active trip.
+          const tagIds = window.observations.map(o => o.tagId);
+          const priorRows = activeTrip
+            ? await tx.bleGatewayPresence.findMany({
+                where: { gatewayId, tagId: { in: tagIds }, scheduleId: activeTrip.id },
+              })
+            : [];
+          const prior = new Map<string, PresenceState>(
+            priorRows.map(r => [r.tagId, {
+              tagId: r.tagId,
+              scheduleId: r.scheduleId,
+              isPresent: r.isPresent,
+              lastSeenAt: r.lastSeenAt,
+            }]),
+          );
+
+          const config = {
+            rssiThresholdDbm: gateway.rssiThresholdDbm ?? -75,
+            minSampleCount: 3,
+            presenceGraceSeconds: gateway.presenceGraceSeconds ?? 10,
+          };
+          const { transitions, nextPresence } = detectTransitions(window, prior, config);
+
+          // Apply transitions.
+          for (const t of transitions) {
+            await applyTransition(
+              { tagId: t.tagId, kind: t.kind, occurredAt: t.occurredAt, rssiDbm: t.rssiDbm, location: window.location },
+              gateway.vehicleId,
+              activeTrip?.id ?? null,
+              gatewayId,
+              tenantId,
+              summary,
+            );
+          }
+
+          // Persist presence cache for next window.
+          if (activeTrip) {
+            for (const obs of window.observations) {
+              const state = nextPresence.get(obs.tagId);
+              if (!state) continue;
+              await tx.bleGatewayPresence.upsert({
+                where: { gatewayId_tagId_scheduleId: { gatewayId, tagId: obs.tagId, scheduleId: activeTrip.id } },
+                update: {
+                  firstSeenAt: state.isPresent ? state.lastSeenAt : new Date(obs.firstSeenAt),
+                  lastSeenAt: state.lastSeenAt,
+                  lastRssiDbm: obs.rssiMaxDbm,
+                  isPresent: state.isPresent,
+                  alightedAt: state.isPresent ? null : new Date(window.endedAt),
+                },
+                create: {
+                  gatewayId,
+                  vehicleId: gateway.vehicleId,
+                  tagId: obs.tagId,
+                  scheduleId: activeTrip.id,
+                  firstSeenAt: new Date(obs.firstSeenAt),
+                  lastSeenAt: state.lastSeenAt,
+                  lastRssiDbm: obs.rssiMaxDbm,
+                  isPresent: state.isPresent,
+                  ...(tenantId ? { tenantId } : {}),
+                },
+              }).catch(err => {
+                summary.errors += 1;
+                captureException(err, { context: 'bus-gateway.presence.upsert', tags: { gatewayId, tagId: obs.tagId } });
+              });
+            }
+          }
+        }
+
+        if (summary.transitionsApplied > 0) {
+          await tx.bleGateway.update({
+            where: { gatewayId },
+            data: { lastEventAt: new Date() },
+          }).catch(() => {});
+        }
+
+        // Also audit batches that only produced errors. Previously this was
+        // gated on transitionsApplied > 0, so a batch where every event
+        // failed left no audit trail at all — combined with the hardcoded
+        // ok: true, a totally broken ingest was invisible from both ends.
+        if (summary.transitionsApplied > 0 || summary.errors > 0) {
+          void logAudit({
+            userId: `gateway:${gatewayId}`,
+            userRole: 'GATEWAY',
+            entityType: 'TripSchedule',
+            entityId: activeTrip?.id,
+            action: 'UPDATE',
+            details: `Gateway ingest (${summary.payload}): ${summary.transitionsApplied} transitions, ${summary.duplicates} dedup, ${summary.unknownTags.length} unknown, ${summary.noActiveTrip} no-trip, ${summary.errors} errors.`,
           });
         }
+
+        // `ok` reflects whether every event in the batch was actually
+        // recorded — NOT merely that the request was parsed and authorised.
+        //
+        // This previously returned a hardcoded `ok: true` whenever the
+        // handler didn't throw, while per-event failures were swallowed into
+        // summary.errors by the catch inside applyTransition. A gateway
+        // pushing boardings therefore saw 200 { ok: true } while every event
+        // was discarded — the exact failure mode the BLE_METHOD bug above
+        // produced, invisible for as long as nobody read the summary.
+        //
+        // The batch still returns 200: partial success is a real outcome
+        // (one unknown tag shouldn't fail nineteen good boardings), and a
+        // 5xx would make gateways retry events that were stored fine. The
+        // signal moves into the body instead, where a client can act on it.
+        const ok = summary.errors === 0;
+        return NextResponse.json({
+          ok,
+          // Flat counters alongside the summary so a gateway can alert on
+          // partial failure without understanding the nested shape.
+          processed: summary.transitionsApplied + summary.duplicates + summary.errors,
+          boarded:   summary.transitionsApplied,
+          errors:    summary.errors,
+          summary,
+        });
+        } catch (err) {
+        captureException(err, { context: 'bus-ops.gateway.events', tags: { gatewayId } });
+        return NextResponse.json({ ok: false, error: 'Ingest failed', summary }, { status: 500 });
       }
-    }
-
-    if (summary.transitionsApplied > 0) {
-      await prisma.bleGateway.update({
-        where: { gatewayId },
-        data: { lastEventAt: new Date() },
-      }).catch(() => {});
-    }
-
-    // Also audit batches that only produced errors. Previously this was
-    // gated on transitionsApplied > 0, so a batch where every event
-    // failed left no audit trail at all — combined with the hardcoded
-    // ok: true, a totally broken ingest was invisible from both ends.
-    if (summary.transitionsApplied > 0 || summary.errors > 0) {
-      void logAudit({
-        userId: `gateway:${gatewayId}`,
-        userRole: 'GATEWAY',
-        entityType: 'TripSchedule',
-        entityId: activeTrip?.id,
-        action: 'UPDATE',
-        details: `Gateway ingest (${summary.payload}): ${summary.transitionsApplied} transitions, ${summary.duplicates} dedup, ${summary.unknownTags.length} unknown, ${summary.noActiveTrip} no-trip, ${summary.errors} errors.`,
-      });
-    }
-
-    // `ok` reflects whether every event in the batch was actually
-    // recorded — NOT merely that the request was parsed and authorised.
-    //
-    // This previously returned a hardcoded `ok: true` whenever the
-    // handler didn't throw, while per-event failures were swallowed into
-    // summary.errors by the catch inside applyTransition. A gateway
-    // pushing boardings therefore saw 200 { ok: true } while every event
-    // was discarded — the exact failure mode the BLE_METHOD bug above
-    // produced, invisible for as long as nobody read the summary.
-    //
-    // The batch still returns 200: partial success is a real outcome
-    // (one unknown tag shouldn't fail nineteen good boardings), and a
-    // 5xx would make gateways retry events that were stored fine. The
-    // signal moves into the body instead, where a client can act on it.
-    const ok = summary.errors === 0;
-    return NextResponse.json({
-      ok,
-      // Flat counters alongside the summary so a gateway can alert on
-      // partial failure without understanding the nested shape.
-      processed: summary.transitionsApplied + summary.duplicates + summary.errors,
-      boarded:   summary.transitionsApplied,
-      errors:    summary.errors,
-      summary,
-    });
-  } catch (err) {
-    captureException(err, { context: 'bus-ops.gateway.events', tags: { gatewayId } });
-    return NextResponse.json({ ok: false, error: 'Ingest failed', summary }, { status: 500 });
-  }
+  });
 }
+
 
 /* ── Apply one resolved transition (BOARD or ALIGHT) ──────────────────── */
 

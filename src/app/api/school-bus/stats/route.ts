@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'school-bus:stats';
 
 const zero = () => Promise.resolve([{ count: BigInt(0) }]);
@@ -92,12 +93,11 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   try {
-    const tenantId = req.headers.get('x-tenant-id') ?? 'unknown';
     const data = await getSchoolBusStats(tenantId);
     return NextResponse.json(data, {
       headers: { 'Cache-Control': privateCacheControl(30, 120) },
     });
-  } catch (err) {
+    } catch (err) {
     console.error('[school-bus/stats]', err);
     return NextResponse.json({
       totalVehicles: 0, availableVehicles: 0, inMaintenance: 0,

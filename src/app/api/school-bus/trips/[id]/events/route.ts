@@ -20,10 +20,11 @@
  *   BREAKDOWN       — vehicle breakdown reported
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureTripTables } from '../../route';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const ser = (r: Row): Row => {
   const o: Row = {};
@@ -36,143 +37,152 @@ const ser = (r: Row): Row => {
 const SAFETY_EVENTS = ['SPEEDING', 'HARSH_BRAKING', 'GEOFENCE_EXIT', 'INCIDENT', 'BREAKDOWN'];
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    await ensureTripTables();
-    const { id } = await params;
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        await ensureTripTables();
+        const { id } = await params;
 
-    const events = await prisma.$queryRawUnsafe<Row[]>(
-      `SELECT * FROM school_bus_trip_events WHERE trip_id = $1::uuid ORDER BY event_time ASC`, id,
-    );
-    return NextResponse.json({ events: events.map(ser), total: events.length });
-  } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
-  }
+        const events = await tx.$queryRawUnsafe<Row[]>(
+          `SELECT * FROM school_bus_trip_events WHERE trip_id = $1::uuid ORDER BY event_time ASC`, id,
+        );
+        return NextResponse.json({ events: events.map(ser), total: events.length });
+        } catch (err) {
+        return NextResponse.json({ error: String(err) }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    await ensureTripTables();
-    const { id: tripId } = await params;
-    const body = await req.json();
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        await ensureTripTables();
+        const { id: tripId } = await params;
+        const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
 
-    const {
-      tenantId = 'default', eventType,
-      lat, lng, speedKmh,
-      stopId, stopName,
-      studentId, studentName,
-      studentsCount,
-      description,
-      metadata = {},
-      eventTime,
-    } = body;
+        const {
+          tenantId = 'default', eventType,
+          lat, lng, speedKmh,
+          stopId, stopName,
+          studentId, studentName,
+          studentsCount,
+          description,
+          metadata = {},
+          eventTime,
+        } = body;
 
-    if (!eventType) return NextResponse.json({ error: 'eventType is required' }, { status: 400 });
+        if (!eventType) return NextResponse.json({ error: 'eventType is required' }, { status: 400 });
 
-    // Validate trip exists
-    const [trip] = await prisma.$queryRawUnsafe<Row[]>(
-      `SELECT id, status FROM school_bus_trips WHERE id = $1::uuid AND tenant_id = $2`, tripId, tenantId,
-    );
-    if (!trip) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
-
-    // Insert the event
-    const [event] = await prisma.$queryRawUnsafe<Row[]>(`
-      INSERT INTO school_bus_trip_events
-        (tenant_id, trip_id, event_type, event_time, lat, lng, speed_kmh,
-         stop_id, stop_name, student_id, student_name, students_count, description, metadata)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-      RETURNING *
-    `,
-      tenantId, tripId, eventType,
-      eventTime ?? new Date().toISOString(),
-      lat ?? null, lng ?? null, speedKmh ?? null,
-      stopId ?? null, stopName ?? null,
-      studentId ?? null, studentName ?? null,
-      studentsCount ?? null, description ?? null,
-      JSON.stringify(metadata),
-    );
-
-    // Side-effects: update trip counters based on event type
-    const updates: string[] = [];
-    if (eventType === 'DEPARTURE')    updates.push(`status = 'IN_PROGRESS', actual_start = NOW()`);
-    if (eventType === 'ARRIVAL')      updates.push(`status = 'COMPLETED', actual_end = NOW()`);
-    if (eventType === 'BREAKDOWN')    updates.push(`status = 'BREAKDOWN'`);
-    if (eventType === 'BOARDING')     updates.push(`students_boarded = students_boarded + 1`);
-    if (eventType === 'ALIGHTING')    updates.push(`students_dropped = students_dropped + 1`);
-    if (eventType === 'STOP_DEPARTURE') updates.push(`stops_completed = stops_completed + 1`);
-    if (eventType === 'SPEEDING')     updates.push(`speeding_events = speeding_events + 1`);
-    if (eventType === 'HARSH_BRAKING') updates.push(`harsh_braking = harsh_braking + 1`);
-    if (eventType === 'GEOFENCE_EXIT') updates.push(`geofence_exits = geofence_exits + 1`);
-
-    if (updates.length > 0) {
-      await prisma.$executeRawUnsafe(
-        `UPDATE school_bus_trips SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $1::uuid`,
-        tripId,
-      ).catch(() => {});
-    }
-
-    // ── Guardian notifications ─────────────────────────────────────────
-    // Fire-and-forget. Never blocks event creation. Only events that
-    // map to guardian-meaningful messages.
-    if (studentId && ['BOARDING', 'ALIGHTING'].includes(eventType)) {
-      const { loadStudentForNotify, notifyGuardians } = await import('@/lib/school-bus-notify');
-      const student = await loadStudentForNotify(studentId);
-      if (student) {
-        const stopLabel = stopName ?? null;
-        const whenLabel = new Date(eventTime ?? Date.now()).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-        void notifyGuardians(eventType === 'BOARDING' ? 'BOARDED' : 'ALIGHTED', student, {
-          stopName: stopLabel, whenLabel,
-        });
-      }
-    }
-    // Bus-wide events without a single student: notify ALL guardians of
-    // students on the route. Used for DEPARTURE and INCIDENT.
-    if (['DEPARTURE', 'INCIDENT'].includes(eventType)) {
-      const { loadStudentForNotify, notifyGuardians } = await import('@/lib/school-bus-notify');
-      const studentsOnRoute = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-        `SELECT s.id FROM school_bus_students s
-         JOIN school_bus_trips t ON t.route_id = s.route_id
-         WHERE t.id = $1::uuid AND s.deleted_at IS NULL AND s.is_active = true`,
-        tripId,
-      ).catch(() => [] as Array<{ id: string }>);
-      // Also skip students marked EXCUSED today (parent-recorded absence).
-      const todayDate = new Date().toISOString().slice(0, 10);
-      const excused = await prisma.$queryRawUnsafe<Array<{ student_id: string }>>(
-        `SELECT student_id::text FROM school_bus_attendance
-         WHERE date = $1::date AND status = 'EXCUSED'`,
-        todayDate,
-      ).catch(() => [] as Array<{ student_id: string }>);
-      const excusedSet = new Set(excused.map(e => e.student_id));
-      for (const row of studentsOnRoute) {
-        if (excusedSet.has(row.id)) continue;
-        const student = await loadStudentForNotify(row.id);
-        if (!student) continue;
-        void notifyGuardians(
-          eventType === 'DEPARTURE' ? 'DEPARTURE' : 'INCIDENT',
-          student,
-          { details: description ?? null },
+        // Validate trip exists
+        const [trip] = await tx.$queryRawUnsafe<Row[]>(
+          `SELECT id, status FROM school_bus_trips WHERE id = $1::uuid AND tenant_id = $2`, tripId, tenantId,
         );
-      }
-    }
+        if (!trip) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
 
-    return NextResponse.json({
-      ok: true,
-      event: ser(event),
-      isSafetyAlert: SAFETY_EVENTS.includes(eventType),
-    }, { status: 201 });
-  } catch (err) {
-    console.error('[trip-events POST]', err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
-  }
+        // Insert the event
+        const [event] = await tx.$queryRawUnsafe<Row[]>(`
+          INSERT INTO school_bus_trip_events
+            (tenant_id, trip_id, event_type, event_time, lat, lng, speed_kmh,
+             stop_id, stop_name, student_id, student_name, students_count, description, metadata)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+          RETURNING *
+        `,
+          tenantId, tripId, eventType,
+          eventTime ?? new Date().toISOString(),
+          lat ?? null, lng ?? null, speedKmh ?? null,
+          stopId ?? null, stopName ?? null,
+          studentId ?? null, studentName ?? null,
+          studentsCount ?? null, description ?? null,
+          JSON.stringify(metadata),
+        );
+
+        // Side-effects: update trip counters based on event type
+        const updates: string[] = [];
+        if (eventType === 'DEPARTURE')    updates.push(`status = 'IN_PROGRESS', actual_start = NOW()`);
+        if (eventType === 'ARRIVAL')      updates.push(`status = 'COMPLETED', actual_end = NOW()`);
+        if (eventType === 'BREAKDOWN')    updates.push(`status = 'BREAKDOWN'`);
+        if (eventType === 'BOARDING')     updates.push(`students_boarded = students_boarded + 1`);
+        if (eventType === 'ALIGHTING')    updates.push(`students_dropped = students_dropped + 1`);
+        if (eventType === 'STOP_DEPARTURE') updates.push(`stops_completed = stops_completed + 1`);
+        if (eventType === 'SPEEDING')     updates.push(`speeding_events = speeding_events + 1`);
+        if (eventType === 'HARSH_BRAKING') updates.push(`harsh_braking = harsh_braking + 1`);
+        if (eventType === 'GEOFENCE_EXIT') updates.push(`geofence_exits = geofence_exits + 1`);
+
+        if (updates.length > 0) {
+          await tx.$executeRawUnsafe(
+            `UPDATE school_bus_trips SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $1::uuid`,
+            tripId,
+          ).catch(() => {});
+        }
+
+        // ── Guardian notifications ─────────────────────────────────────────
+        // Fire-and-forget. Never blocks event creation. Only events that
+        // map to guardian-meaningful messages.
+        if (studentId && ['BOARDING', 'ALIGHTING'].includes(eventType)) {
+          const { loadStudentForNotify, notifyGuardians } = await import('@/lib/school-bus-notify');
+          const student = await loadStudentForNotify(studentId);
+          if (student) {
+            const stopLabel = stopName ?? null;
+            const whenLabel = new Date(eventTime ?? Date.now()).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+            void notifyGuardians(eventType === 'BOARDING' ? 'BOARDED' : 'ALIGHTED', student, {
+              stopName: stopLabel, whenLabel,
+            });
+          }
+        }
+        // Bus-wide events without a single student: notify ALL guardians of
+        // students on the route. Used for DEPARTURE and INCIDENT.
+        if (['DEPARTURE', 'INCIDENT'].includes(eventType)) {
+          const { loadStudentForNotify, notifyGuardians } = await import('@/lib/school-bus-notify');
+          const studentsOnRoute = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+            `SELECT s.id FROM school_bus_students s
+             JOIN school_bus_trips t ON t.route_id = s.route_id
+             WHERE t.id = $1::uuid AND s.deleted_at IS NULL AND s.is_active = true`,
+            tripId,
+          ).catch(() => [] as Array<{ id: string }>);
+          // Also skip students marked EXCUSED today (parent-recorded absence).
+          const todayDate = new Date().toISOString().slice(0, 10);
+          const excused = await tx.$queryRawUnsafe<Array<{ student_id: string }>>(
+            `SELECT student_id::text FROM school_bus_attendance
+             WHERE date = $1::date AND status = 'EXCUSED'`,
+            todayDate,
+          ).catch(() => [] as Array<{ student_id: string }>);
+          const excusedSet = new Set(excused.map(e => e.student_id));
+          for (const row of studentsOnRoute) {
+            if (excusedSet.has(row.id)) continue;
+            const student = await loadStudentForNotify(row.id);
+            if (!student) continue;
+            void notifyGuardians(
+              eventType === 'DEPARTURE' ? 'DEPARTURE' : 'INCIDENT',
+              student,
+              { details: description ?? null },
+            );
+          }
+        }
+
+        return NextResponse.json({
+          ok: true,
+          event: ser(event),
+          isSafetyAlert: SAFETY_EVENTS.includes(eventType),
+        }, { status: 201 });
+        } catch (err) {
+        console.error('[trip-events POST]', err);
+        return NextResponse.json({ error: String(err) }, { status: 500 });
+      }
+  });
 }
+

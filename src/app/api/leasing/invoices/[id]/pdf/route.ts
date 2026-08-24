@@ -6,6 +6,7 @@
  */
 
 import { createElement } from 'react';
+import { withTenantRls } from '@/lib/rls';
 import { NextRequest } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
@@ -26,64 +27,69 @@ const VENDOR = {
 };
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  const { id } = await params;
-  if (!tenantId) {
-    return jsonErr('Not authenticated', 401);
-  }
-  const lang: Lang = req.nextUrl.searchParams.get('lang') === 'ar' ? 'ar' : 'en';
-  const download = req.nextUrl.searchParams.get('download') === '1';
 
-  try {
-    const inv = await prisma.leaseInvoice.findFirst({
-      where: { id, tenantId },
-      include: { lines: true, lessee: true },
-    });
-    if (!inv) return jsonErr('Invoice not found', 404);
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const { id } = await params;
+      if (!tenantId) {
+        return jsonErr('Not authenticated', 401);
+      }
+      const lang: Lang = req.nextUrl.searchParams.get('lang') === 'ar' ? 'ar' : 'en';
+      const download = req.nextUrl.searchParams.get('download') === '1';
 
-    const data: InvoicePdfData = {
-      invoiceNo: inv.invoiceNo ?? `INV-${id.slice(0, 8)}`,
-      issueDate: inv.issueDate,
-      dueDate: inv.dueDate,
-      billingPeriod: inv.billingPeriod,
-      vendor: VENDOR,
-      lessee: {
-        name: inv.lessee?.name ?? '—',
-        type: inv.lessee?.type === 'corporate' ? 'corporate' : 'individual',
-        address: inv.lessee?.address ?? null,
-        email: inv.lessee?.email ?? null,
-        phone: inv.lessee?.phone ?? null,
-        tradeLicense: inv.lessee?.tradeLicense ?? null,
-        emiratesId: inv.lessee?.emiratesId ?? null,
-        trn: null,
-      },
-      contractRef: null,
-      lines: (inv.lines ?? []).map((l) => ({
-        description: l.description,
-        quantity: l.quantity,
-        unitAmount: Number(l.unitAmount ?? 0),
-        totalAmount: Number(l.totalAmount ?? 0),
-        lineType: l.lineType,
-      })),
-      subTotal: Number(inv.subTotal ?? 0),
-      vatPct: inv.vatPct ? Number(inv.vatPct) : 5,
-      vatAmount: Number(inv.vatAmount ?? 0),
-      totalAmount: Number(inv.totalAmount ?? 0),
-      currency: inv.currency ?? 'AED',
-      notes: inv.notes,
-    };
+      try {
+        const inv = await tx.leaseInvoice.findFirst({
+          where: { id, tenantId },
+          include: { lines: true, lessee: true },
+        });
+        if (!inv) return jsonErr('Invoice not found', 404);
 
-    const buffer = await renderPdf(createElement(InvoicePdf, { data, lang }));
-    return pdfResponse(buffer, `${data.invoiceNo}_${lang}.pdf`, download);
-  } catch (err) {
-    captureException(err, { context: 'leasing.invoice.pdf', tags: { invoiceId: id, lang } });
-    return jsonErr('Failed to generate invoice PDF', 500);
-  }
+        const data: InvoicePdfData = {
+          invoiceNo: inv.invoiceNo ?? `INV-${id.slice(0, 8)}`,
+          issueDate: inv.issueDate,
+          dueDate: inv.dueDate,
+          billingPeriod: inv.billingPeriod,
+          vendor: VENDOR,
+          lessee: {
+            name: inv.lessee?.name ?? '—',
+            type: inv.lessee?.type === 'corporate' ? 'corporate' : 'individual',
+            address: inv.lessee?.address ?? null,
+            email: inv.lessee?.email ?? null,
+            phone: inv.lessee?.phone ?? null,
+            tradeLicense: inv.lessee?.tradeLicense ?? null,
+            emiratesId: inv.lessee?.emiratesId ?? null,
+            trn: null,
+          },
+          contractRef: null,
+          lines: (inv.lines ?? []).map((l) => ({
+            description: l.description,
+            quantity: l.quantity,
+            unitAmount: Number(l.unitAmount ?? 0),
+            totalAmount: Number(l.totalAmount ?? 0),
+            lineType: l.lineType,
+          })),
+          subTotal: Number(inv.subTotal ?? 0),
+          vatPct: inv.vatPct ? Number(inv.vatPct) : 5,
+          vatAmount: Number(inv.vatAmount ?? 0),
+          totalAmount: Number(inv.totalAmount ?? 0),
+          currency: inv.currency ?? 'AED',
+          notes: inv.notes,
+        };
+
+        const buffer = await renderPdf(createElement(InvoicePdf, { data, lang }));
+        return pdfResponse(buffer, `${data.invoiceNo}_${lang}.pdf`, download);
+      } catch (err) {
+        captureException(err, { context: 'leasing.invoice.pdf', tags: { invoiceId: id, lang } });
+        return jsonErr('Failed to generate invoice PDF', 500);
+      }
+  });
 }
+
 
 function jsonErr(error: string, status: number) {
   return new Response(JSON.stringify({ error }), { status, headers: { 'Content-Type': 'application/json' } });

@@ -9,9 +9,10 @@
  * Used by the Routes New/Edit modal and the Reassignment panel.
  */
 import { NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
 function serialize(rows: Row[]): Row[] {
@@ -25,70 +26,74 @@ function serialize(rows: Row[]): Row[] {
 }
 
 export async function GET() {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    const [vehicles, drivers, attendants] = await Promise.all([
-      // Vehicles suitable for school bus routes
-      prisma.$queryRawUnsafe<Row[]>(`
-        SELECT
-          id::text                         AS id,
-          COALESCE(registration_number, plate_number, id::text) AS reg,
-          type,
-          make,
-          model,
-          COALESCE(capacity, seat_capacity, 0) AS capacity,
-          status,
-          COALESCE(color, '')              AS color
-        FROM vehicles
-        WHERE deleted_at IS NULL
-          AND type IN ('SCHOOL_BUS','MINIBUS','BUS','VAN','COASTER')
-        ORDER BY registration_number ASC NULLS LAST
-        LIMIT 200
-      `).catch(() => [] as Row[]),
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const [vehicles, drivers, attendants] = await Promise.all([
+          // Vehicles suitable for school bus routes
+          tx.$queryRawUnsafe<Row[]>(`
+            SELECT
+              id::text                         AS id,
+              COALESCE(registration_number, plate_number, id::text) AS reg,
+              type,
+              make,
+              model,
+              COALESCE(capacity, seat_capacity, 0) AS capacity,
+              status,
+              COALESCE(color, '')              AS color
+            FROM vehicles
+            WHERE deleted_at IS NULL
+              AND type IN ('SCHOOL_BUS','MINIBUS','BUS','VAN','COASTER')
+            ORDER BY registration_number ASC NULLS LAST
+            LIMIT 200
+          `).catch(() => [] as Row[]),
 
-      // All active drivers
-      prisma.$queryRawUnsafe<Row[]>(`
-        SELECT
-          id::text                                           AS id,
-          first_name || ' ' || last_name                    AS full_name,
-          COALESCE(phone, mobile, '')                        AS phone,
-          COALESCE(licence_number, license_number, '')       AS licence,
-          COALESCE(status, 'ACTIVE')                         AS status,
-          COALESCE(employee_id, id::text)                    AS employee_id
-        FROM drivers
-        WHERE deleted_at IS NULL
-        ORDER BY first_name ASC, last_name ASC
-        LIMIT 200
-      `).catch(() => [] as Row[]),
+          // All active drivers
+          tx.$queryRawUnsafe<Row[]>(`
+            SELECT
+              id::text                                           AS id,
+              first_name || ' ' || last_name                    AS full_name,
+              COALESCE(phone, mobile, '')                        AS phone,
+              COALESCE(licence_number, license_number, '')       AS licence,
+              COALESCE(status, 'ACTIVE')                         AS status,
+              COALESCE(employee_id, id::text)                    AS employee_id
+            FROM drivers
+            WHERE deleted_at IS NULL
+            ORDER BY first_name ASC, last_name ASC
+            LIMIT 200
+          `).catch(() => [] as Row[]),
 
-      // School bus attendants (nannies)
-      prisma.$queryRawUnsafe<Row[]>(`
-        SELECT
-          id::text                                       AS id,
-          first_name || ' ' || last_name                AS full_name,
-          employee_id,
-          COALESCE(phone, '')                            AS phone,
-          status,
-          COALESCE(route_name, '')                       AS current_route
-        FROM school_bus_attendants
-        WHERE is_active = TRUE
-        ORDER BY first_name ASC, last_name ASC
-        LIMIT 200
-      `).catch(() => [] as Row[]),
-    ]);
+          // School bus attendants (nannies)
+          tx.$queryRawUnsafe<Row[]>(`
+            SELECT
+              id::text                                       AS id,
+              first_name || ' ' || last_name                AS full_name,
+              employee_id,
+              COALESCE(phone, '')                            AS phone,
+              status,
+              COALESCE(route_name, '')                       AS current_route
+            FROM school_bus_attendants
+            WHERE is_active = TRUE
+            ORDER BY first_name ASC, last_name ASC
+            LIMIT 200
+          `).catch(() => [] as Row[]),
+        ]);
 
-    return NextResponse.json({
-      vehicles:   serialize(vehicles),
-      drivers:    serialize(drivers),
-      attendants: serialize(attendants),
-    });
-  } catch (err) {
-    console.error('[school-bus/routes/options GET]', err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
-  }
+        return NextResponse.json({
+          vehicles:   serialize(vehicles),
+          drivers:    serialize(drivers),
+          attendants: serialize(attendants),
+        });
+        } catch (err) {
+        console.error('[school-bus/routes/options GET]', err);
+        return NextResponse.json({ error: String(err) }, { status: 500 });
+      }
+  });
 }
+

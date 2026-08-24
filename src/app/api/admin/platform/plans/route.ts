@@ -14,10 +14,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { listPlans, invalidatePlanCache } from '@/lib/plans';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 function requireSuperAdmin(req: NextRequest): { ok: true; userId: string } | { ok: false; res: NextResponse } {
   const role   = req.headers.get('x-user-role')   ?? '';
   const userId = req.headers.get('x-user-id')     ?? '';
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
   try {
     const plans = await listPlans({ activeOnly: false });
     return NextResponse.json({ plans });
-  } catch (err) {
+    } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },
       { status: 500 },
@@ -84,12 +84,13 @@ export async function POST(req: NextRequest) {
   const auth = requireSuperAdmin(req);
   if (!auth.ok) return auth.res;
 
-  let body: CreateBody;
+  let bodyRaw: CreateBody;
   try {
-    body = await req.json() as CreateBody;
+    bodyRaw = await req.json() as CreateBody;
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
+  const body = stripTenantOwnershipFields(bodyRaw);
 
   // Validate required fields + the code shape (uppercase alphanumeric + underscore)
   const code = String(body.code ?? '').trim().toUpperCase();
@@ -157,7 +158,7 @@ export async function POST(req: NextRequest) {
     }
     invalidatePlanCache();
     return NextResponse.json(result, { status: 201 });
-  } catch (err) {
+    } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },
       { status: 500 },

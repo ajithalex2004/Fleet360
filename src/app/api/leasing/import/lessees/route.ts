@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json(result, { status: 200 });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'leasing.import.lessees' });
     console.error('[import lessees] error:', err);
     return NextResponse.json({ error: 'Failed to import lessees' }, { status: 500 });

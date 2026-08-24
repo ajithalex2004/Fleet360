@@ -15,6 +15,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import {
   setShipmentTrackingOverride,
@@ -24,7 +25,7 @@ import {
 } from '@/lib/shipper-portal/visibility';
 import { logAudit } from '@/lib/audit';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -36,8 +37,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   }
 
-  const { tenantId, userId } = authz;, { status: 401 });
-  }
+  const { tenantId, userId } = authz;
 
   try {
     const { id: shipmentId } = await params;
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       effectiveLevel: effective,
       shipmentOverride: newLevel,
     });
-  } catch (e) {
+    } catch (e) {
     console.error('[shipments/tracking-visibility] POST', e);
     return NextResponse.json({ error: 'Failed to update visibility' }, { status: 500 });
   }

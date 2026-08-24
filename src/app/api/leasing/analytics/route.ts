@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
@@ -213,7 +214,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(data, {
       headers: { 'Cache-Control': privateCacheControl(60, 300) },
     });
-  } catch (e) {
+    } catch (e) {
     console.error(e);
     return NextResponse.json({ error: 'Failed' }, { status: 500 });
   }

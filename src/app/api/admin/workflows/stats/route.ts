@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { getWorkflowStats } from '@/lib/workflow-db';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function GET() {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {

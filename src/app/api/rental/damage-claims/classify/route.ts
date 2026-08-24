@@ -13,6 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { classifyDamage } from '@/lib/agents/damage-classifier/agent';
 import { logAudit } from '@/lib/audit';
@@ -91,7 +92,7 @@ export async function POST(req: NextRequest) {
         durationMs: result.durationMs,
       },
     });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'rental.damage-claims.classify' });
     console.error('[damage classifier] error:', err);
     return NextResponse.json({ error: 'Classification failed' }, { status: 500 });

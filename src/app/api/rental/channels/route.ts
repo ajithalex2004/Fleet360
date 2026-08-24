@@ -7,6 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { CHANNELS } from '@/lib/rental-channels';
@@ -19,29 +20,32 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  // Aggregate booking counts per channel.
-  const grouped = await prisma.rentalBooking.groupBy({
-    by: ['channel'],
-    where: { tenantId, deletedAt: null },
-    _count: { _all: true },
-    _max: { createdAt: true },
-  });
-  const byKey = new Map(grouped.map((g) => [g.channel ?? 'DIRECT', g]));
 
-  const out = CHANNELS.map((c) => {
-    const stat = byKey.get(c.key);
-    return {
-      key: c.key,
-      label: c.label,
-      category: c.category,
-      supportsInboundWebhook: c.supportsInboundWebhook,
-      supportsOutboundSync: c.supportsOutboundSync,
-      configured: c.secretEnvVar ? Boolean(process.env[c.secretEnvVar]) : true,
-      description: c.description,
-      bookingCount: stat?._count._all ?? 0,
-      lastBookingAt: stat?._max.createdAt ?? null,
-    };
-  });
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    // Aggregate booking counts per channel.
+    const grouped = await tx.rentalBooking.groupBy({
+      by: ['channel'],
+      where: { tenantId, deletedAt: null },
+      _count: { _all: true },
+      _max: { createdAt: true },
+    });
+    const byKey = new Map(grouped.map((g) => [g.channel ?? 'DIRECT', g]));
 
-  return NextResponse.json(out);
+    const out = CHANNELS.map((c) => {
+      const stat = byKey.get(c.key);
+      return {
+        key: c.key,
+        label: c.label,
+        category: c.category,
+        supportsInboundWebhook: c.supportsInboundWebhook,
+        supportsOutboundSync: c.supportsOutboundSync,
+        configured: c.secretEnvVar ? Boolean(process.env[c.secretEnvVar]) : true,
+        description: c.description,
+        bookingCount: stat?._count._all ?? 0,
+        lastBookingAt: stat?._max.createdAt ?? null,
+      };
+    });
+
+    return NextResponse.json(out);
+  });
 }

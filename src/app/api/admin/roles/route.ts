@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { cacheRead, publicCacheControl, revalidateCache } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'roles:all';
 
 /**
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(roles, {
       headers: { 'Cache-Control': publicCacheControl() },
     });
-  } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+    } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
 
 export async function POST(req: NextRequest) {
@@ -55,7 +55,8 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const { permissionIds = [], ...roleData } = body;
     const role = await withPlatformAdmin(prisma, (tx) =>
       tx.role.create({
@@ -71,5 +72,5 @@ export async function POST(req: NextRequest) {
     // New role means the cached role list is now stale.
     await revalidateCache(CACHE_TAG);
     return NextResponse.json(role, { status: 201 });
-  } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+    } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }

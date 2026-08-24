@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { fetchShipmentById, listShipmentExecutionTimeline, recordLogisticsFieldOpsEvent } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface PodBody {
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       pod: result?.pods?.[0] ?? null,
       shipment: result?.shipment ?? null,
     }, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     console.error('[logistics/shipments/:id/pod POST]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'Failed to save POD' },

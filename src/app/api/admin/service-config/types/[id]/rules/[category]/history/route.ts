@@ -22,7 +22,7 @@ import { RULE_CATEGORIES, type RuleCategory } from '@/types/service-rules';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string; category: string }>; }
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     });
 
     return NextResponse.json({ ok: true, rules: result.rules });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'service-config.rules.rollback', tags: { category } });
     return NextResponse.json({ ok: false, error: 'Rollback failed' }, { status: 500 });
   }

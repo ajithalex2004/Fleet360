@@ -17,37 +17,42 @@ import { paginate, paginatedResponse } from '@/lib/pagination';
 import { assertCanWrite } from '@/lib/access-control';
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const sp = req.nextUrl.searchParams;
-    const status = sp.get('status');
-    const lesseeId = sp.get('lesseeId');
-    const { take, skip, page, limit } = paginate(sp);
-    const where = {
-      tenantId,
-      deletedAt: null,
-      ...(status ? { status } : {}),
-      ...(lesseeId ? { lesseeId } : {}),
-    };
-    const [data, total] = await Promise.all([
-      prisma.leaseContract2.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        take,
-        skip,
-      }),
-      prisma.leaseContract2.count({ where }),
-    ]);
-    return NextResponse.json(paginatedResponse(data, total, page, limit));
-  } catch (error) {
-    console.error('Error fetching contracts:', error);
-    return NextResponse.json({ error: 'Failed to fetch contracts' }, { status: 500 });
-  }
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const sp = req.nextUrl.searchParams;
+        const status = sp.get('status');
+        const lesseeId = sp.get('lesseeId');
+        const { take, skip, page, limit } = paginate(sp);
+        const where = {
+          tenantId,
+          deletedAt: null,
+          ...(status ? { status } : {}),
+          ...(lesseeId ? { lesseeId } : {}),
+        };
+        const [data, total] = await Promise.all([
+          tx.leaseContract2.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            take,
+            skip,
+          }),
+          tx.leaseContract2.count({ where }),
+        ]);
+        return NextResponse.json(paginatedResponse(data, total, page, limit));
+      } catch (e) {
+        console.error('Error fetching contracts:', e);
+        return NextResponse.json({ error: 'Failed to fetch contracts' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest) {
   const guard = assertCanWrite(req, 'leasing');
@@ -60,15 +65,16 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const contract = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.leaseContract2.create({
       data: { ...body, tenantId },
     }),
     );
     return NextResponse.json(contract, { status: 201 });
-  } catch (error) {
-    console.error('Error creating contract:', error);
+    } catch (e) {
+    console.error('Error creating contract:', e);
     return NextResponse.json({ error: 'Failed to create contract' }, { status: 500 });
   }
 }

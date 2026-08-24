@@ -19,7 +19,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const { agreementType, openingBranchId, closingBranchId, startDate, lesseeId } = body;
 
     const quotation = await prisma.leaseQuotation.findFirst({
@@ -133,8 +134,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     );
 
     return NextResponse.json({ contract, paymentsCreated: payments.length });
-  } catch (e) {
+    } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
   }
 }

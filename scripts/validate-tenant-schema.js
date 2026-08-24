@@ -81,8 +81,7 @@ function findRecentMigrations() {
 
   const migrations = fs.readdirSync(MIGRATIONS_DIR)
     .filter(name => fs.statSync(path.join(MIGRATIONS_DIR, name)).isDirectory())
-    .sort()
-    .slice(-20); // Check last 20 migrations
+    .sort(); // Check all migrations to ensure we don't miss any tenant isolation work
 
   return migrations.map(name => ({
     name,
@@ -91,10 +90,19 @@ function findRecentMigrations() {
 }
 
 function checkMigrationConstraints(migrations, modelName) {
-  const tableName = modelName
+  // Convert model name to snake_case (e.g., RentalCustomer -> rental_customer)
+  let tableName = modelName
     .replace(/([A-Z])/g, '_$1')
     .toLowerCase()
     .replace(/^_/, '');
+
+  // Prisma pluralizes table names by default - add 's'
+  // Handle special cases: if ends in 'y', replace with 'ies', otherwise add 's'
+  if (tableName.endsWith('y')) {
+    tableName = tableName.slice(0, -1) + 'ies';
+  } else {
+    tableName = tableName + 's';
+  }
 
   const checks = {
     hasNotNull: false,
@@ -108,11 +116,12 @@ function checkMigrationConstraints(migrations, modelName) {
     const sql = fs.readFileSync(migration.path, 'utf8');
 
     // Check for NOT NULL constraint on tenant_id
-    const notNullRegex = new RegExp(
-      `ALTER TABLE\\s+"?${tableName}"?\\s+[^;]*tenant_id[^;]*NOT NULL|` +
-      `CREATE TABLE\\s+"?${tableName}"?[^;]*tenant_id[^;()]*NOT NULL`,
-      'i'
-    );
+    // Handle both quoted and unquoted table/column names
+    const notNullPattern =
+      'ALTER\\s+TABLE\\s+["\']?' + tableName + '["\']?\\s+[^;]*tenant_id[^;]*NOT\\s+NULL|' +
+      'ALTER\\s+TABLE\\s+["\']?' + tableName + '["\']?\\s+ALTER\\s+COLUMN\\s+["\']?tenant_id["\']?\\s+SET\\s+NOT\\s+NULL|' +
+      'CREATE\\s+TABLE\\s+["\']?' + tableName + '["\']?[^;]*tenant_id[^;()]*NOT\\s+NULL';
+    const notNullRegex = new RegExp(notNullPattern, 'i');
 
     if (notNullRegex.test(sql)) {
       checks.hasNotNull = true;

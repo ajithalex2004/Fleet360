@@ -14,10 +14,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { listFreightRfqs, createFreightRfq } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface ShipmentLaneRow {
@@ -41,8 +42,7 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   const sp = req.nextUrl.searchParams;
   const status = sp.get('status');
@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
 
     const data = rfqs.map(r => ({ ...r, shipment: laneById.get(r.shipmentOrderId) ?? null }));
     return NextResponse.json({ data }, { headers: { 'Cache-Control': 'private, max-age=15' } });
-  } catch (e) {
+    } catch (e) {
     console.error('[logistics/rfqs GET]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to list RFQs' },
@@ -105,8 +105,7 @@ export async function POST(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   let body: PostLoadBody;
   try { body = (await req.json()) as PostLoadBody; }
@@ -135,7 +134,7 @@ export async function POST(req: NextRequest) {
       status: 'OPEN',
     });
     return NextResponse.json(rfq, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     console.error('[logistics/rfqs POST]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to post the load' },

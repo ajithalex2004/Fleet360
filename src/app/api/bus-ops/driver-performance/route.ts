@@ -8,67 +8,72 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { gradeFromScore } from '@/lib/bus-driver-scoring';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const monthArg = req.nextUrl.searchParams.get('month');
-  const now = new Date();
-  let year = now.getFullYear();
-  let month = now.getMonth() + 1;
-  if (monthArg && /^\d{4}-\d{2}$/.test(monthArg)) {
-    year = parseInt(monthArg.slice(0, 4), 10);
-    month = parseInt(monthArg.slice(5, 7), 10);
-  }
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const monthArg = req.nextUrl.searchParams.get('month');
+      const now = new Date();
+      let year = now.getFullYear();
+      let month = now.getMonth() + 1;
+      if (monthArg && /^\d{4}-\d{2}$/.test(monthArg)) {
+        year = parseInt(monthArg.slice(0, 4), 10);
+        month = parseInt(monthArg.slice(5, 7), 10);
+      }
 
-  const perf = await prisma.driverPerformance.findMany({
-    where: { periodYear: year, periodMonth: month },
+      const perf = await tx.driverPerformance.findMany({
+        where: { periodYear: year, periodMonth: month },
+      });
+      const driverIds = perf.map(p => p.driverId);
+      const drivers = driverIds.length > 0
+        ? await tx.driver.findMany({
+            where: { id: { in: driverIds } },
+            select: {
+              id: true, name: true, firstName: true, lastName: true,
+              contactNumber: true, licenseNumber: true, licenseType: true, status: true,
+            },
+          })
+        : [];
+      const driverMap = new Map(drivers.map(d => [d.id, d]));
+
+      const rows = perf.map(p => {
+        const d = driverMap.get(p.driverId);
+        return {
+          driverId: p.driverId,
+          name: d?.name ?? [d?.firstName, d?.lastName].filter(Boolean).join(' ') ?? null,
+          licenseNumber: d?.licenseNumber ?? null,
+          licenseType: d?.licenseType ?? null,
+          status: d?.status ?? null,
+          score: p.score,
+          grade: gradeFromScore(p.score),
+          onTimePct: p.onTimePct,
+          incidentCount: p.incidentCount,
+          fuelEfficiency: p.fuelEfficiency,
+          totalTrips: p.totalTrips,
+          totalKm: p.totalKm,
+        };
+      });
+
+      rows.sort((a, b) => {
+        if (a.score == null && b.score == null) return 0;
+        if (a.score == null) return 1;
+        if (b.score == null) return -1;
+        return b.score - a.score;
+      });
+
+      return NextResponse.json({ period: { year, month }, drivers: rows });
   });
-  const driverIds = perf.map(p => p.driverId);
-  const drivers = driverIds.length > 0
-    ? await prisma.driver.findMany({
-        where: { id: { in: driverIds } },
-        select: {
-          id: true, name: true, firstName: true, lastName: true,
-          contactNumber: true, licenseNumber: true, licenseType: true, status: true,
-        },
-      })
-    : [];
-  const driverMap = new Map(drivers.map(d => [d.id, d]));
-
-  const rows = perf.map(p => {
-    const d = driverMap.get(p.driverId);
-    return {
-      driverId: p.driverId,
-      name: d?.name ?? [d?.firstName, d?.lastName].filter(Boolean).join(' ') ?? null,
-      licenseNumber: d?.licenseNumber ?? null,
-      licenseType: d?.licenseType ?? null,
-      status: d?.status ?? null,
-      score: p.score,
-      grade: gradeFromScore(p.score),
-      onTimePct: p.onTimePct,
-      incidentCount: p.incidentCount,
-      fuelEfficiency: p.fuelEfficiency,
-      totalTrips: p.totalTrips,
-      totalKm: p.totalKm,
-    };
-  });
-
-  rows.sort((a, b) => {
-    if (a.score == null && b.score == null) return 0;
-    if (a.score == null) return 1;
-    if (b.score == null) return -1;
-    return b.score - a.score;
-  });
-
-  return NextResponse.json({ period: { year, month }, drivers: rows });
 }
+

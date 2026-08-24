@@ -24,7 +24,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const fine = await prisma.leaseTrafficFine.findFirst({
       where: { id: params.id, tenantId },
     });

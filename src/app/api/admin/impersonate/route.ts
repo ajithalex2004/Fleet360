@@ -14,12 +14,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { signSession } from '@/lib/tenant-session';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const COOKIE_NAME              = 'xl-session';
@@ -43,7 +43,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'No session' }, { status: 401 });
     }
 
-    const body = await req.json().catch(() => ({}));
+    const bodyRaw = await req.json().catch(() => ({}));
+    const body = stripTenantOwnershipFields(bodyRaw);
     const tenantId    = String(body?.tenantId ?? '').trim();
     const targetUserId = body?.userId ? String(body.userId).trim() : null;
     if (!tenantId) {
@@ -129,7 +130,7 @@ export async function POST(req: NextRequest) {
       }
       return res;
     });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'admin.impersonate.start' });
     return NextResponse.json({ ok: false, error: 'Impersonation failed' }, { status: 500 });
   }

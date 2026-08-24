@@ -1,37 +1,42 @@
 import { NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // GET /api/maintenance/work-orders/[id]/job-cards
 // Returns all job cards (with tasks) for the given work order.
 export async function GET(
     _request: Request,
     { params }: { params: { id: string } },
 ) {
+
     const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
     const { tenantId } = authz;
 
+  return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        const { id } = params;
+            const { id } = params;
 
-        const cards = await prisma.jobCard.findMany({
-            where:   { workOrderId: id },
-            include: { tasks: { orderBy: { createdAt: 'asc' } } },
-            orderBy: { createdAt: 'asc' },
-        });
+            const cards = await tx.jobCard.findMany({
+                where:   { workOrderId: id },
+                include: { tasks: { orderBy: { createdAt: 'asc' } } },
+                orderBy: { createdAt: 'asc' },
+            });
 
-        return NextResponse.json(JSON.parse(JSON.stringify(cards)));
-    } catch (error) {
-        console.error('Failed to fetch job cards:', error);
-        return NextResponse.json(
-            { error: 'Internal Server Error', details: String(error) },
-            { status: 500 },
-        );
-    }
+            return NextResponse.json(JSON.parse(JSON.stringify(cards)));
+        } catch (e) {
+            console.error('Failed to fetch job cards:', e);
+            return NextResponse.json(
+                { error: 'Internal Server Error', details: String(e) },
+                { status: 500 },
+            );
+        }
+  });
 }
+
 
 // POST /api/maintenance/work-orders/[id]/job-cards
 // Creates a new job card (optionally with initial tasks).
@@ -40,43 +45,47 @@ export async function POST(
     request: Request,
     { params }: { params: { id: string } },
 ) {
+
     const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
     const { tenantId } = authz;
 
+  return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        const { id } = params;
-        const body = await request.json();
+            const { id } = params;
+            const body = await request.json();
 
-        const card = await prisma.jobCard.create({
-            data: {
-                workOrderId:    id,
-                title:          body.title,
-                description:    body.description    ?? null,
-                technicianId:   body.technicianId   ?? null,
-                technicianName: body.technicianName ?? null,
-                status:         body.status         ?? 'PENDING',
-                estimatedHours: body.estimatedHours ?? null,
-                tasks: {
-                    create: ((body.tasks ?? []) as string[]).map((desc: string) => ({
-                        description: desc,
-                    })),
+            const card = await tx.jobCard.create({
+                data: {
+                    workOrderId:    id,
+                    title:          body.title,
+                    description:    body.description    ?? null,
+                    technicianId:   body.technicianId   ?? null,
+                    technicianName: body.technicianName ?? null,
+                    status:         body.status         ?? 'PENDING',
+                    estimatedHours: body.estimatedHours ?? null,
+                    tasks: {
+                        create: ((body.tasks ?? []) as string[]).map((desc: string) => ({
+                            description: desc,
+                        })),
+                    },
                 },
-            },
-            include: { tasks: true },
-        });
+                include: { tasks: true },
+            });
 
-        return NextResponse.json(
-            JSON.parse(JSON.stringify(card)),
-            { status: 201 },
-        );
-    } catch (error) {
-        console.error('Failed to create job card:', error);
-        return NextResponse.json(
-            { error: 'Internal Server Error', details: String(error) },
-            { status: 500 },
-        );
-    }
+            return NextResponse.json(
+                JSON.parse(JSON.stringify(card)),
+                { status: 201 },
+            );
+        } catch (e) {
+            console.error('Failed to create job card:', e);
+            return NextResponse.json(
+                { error: 'Internal Server Error', details: String(e) },
+                { status: 500 },
+            );
+        }
+  });
 }
+

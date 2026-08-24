@@ -12,30 +12,35 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    // Verify contract ownership before exposing exchange history.
-    const contract = await prisma.leaseContract2.findFirst({
-      where: { id: params.id, tenantId },
-      select: { id: true },
-    });
-    if (!contract) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    }
-    const exchanges = await prisma.leaseVehicleExchange.findMany({
-      where: { tenantId, contractId: params.id },
-      orderBy: { exchangeDate: 'desc' },
-    });
-    return NextResponse.json(exchanges);
-  } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        // Verify contract ownership before exposing exchange history.
+        const contract = await tx.leaseContract2.findFirst({
+          where: { id: params.id, tenantId },
+          select: { id: true },
+        });
+        if (!contract) {
+          return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        }
+        const exchanges = await tx.leaseVehicleExchange.findMany({
+          where: { tenantId, contractId: params.id },
+          orderBy: { exchangeDate: 'desc' },
+        });
+        return NextResponse.json(exchanges);
+      } catch (e) {
+        console.error(e);
+        return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const authz = requireAuthorizedTenant(req);
@@ -44,7 +49,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
 
     const contract = await prisma.leaseContract2.findFirst({
       where: { id: params.id, tenantId },
@@ -80,8 +86,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     return NextResponse.json(exchange, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
   }
 }

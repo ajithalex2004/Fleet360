@@ -30,6 +30,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { loadConsolidationFacts } from '@/lib/planning/route-consolidation-facts';
 import { analyzeVehicleReuseOpportunities } from '@/lib/planning/route-consolidation-vehicle-reuse';
@@ -40,7 +41,7 @@ import {
 import { resolveZoneFallbackKm } from '@/lib/planning/zone-compat-policy';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
   const permError = requireBusOpsAdminAccess(req, 'vehicle-resource-optimization');
   if (permError) return permError;
 
@@ -99,7 +100,7 @@ export async function POST(req: NextRequest) {
       policy: { minimumTurnaroundMinutes, maxReuseWindowMinutes, zoneFallbackKm },
       ...result,
     });
-  } catch (e) {
+    } catch (e) {
     console.error('[route-consolidation.vehicle-reuse]', e);
     return NextResponse.json({ error: 'Analysis failed' }, { status: 500 });
   }

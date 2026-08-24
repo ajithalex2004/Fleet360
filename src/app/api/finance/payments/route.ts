@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 /**
  * GET  /api/finance/payments — list payments with invoice reconciliation data
  * POST /api/finance/payments — record a payment and reconcile against finance_invoices
@@ -20,8 +21,7 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   const { searchParams } = new URL(req.url);
   const invoiceId = searchParams.get('invoiceId') ?? '';
@@ -107,8 +107,7 @@ export async function POST(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   try {
     const body = await req.json();
@@ -170,7 +169,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ success: true, id: row.id, newInvoiceStatus: newStatus }, { status: 201 });
-  } catch (err) {
+    } catch (err) {
     console.error('[finance/payments POST]', err);
     return NextResponse.json({ error: 'Failed to create payment' }, { status: 500 });
   }

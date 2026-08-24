@@ -11,19 +11,24 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  const item = await prisma.leaseEarlyTermination.findFirst({
-    where: { id: params.id, tenantId },
-    include: { contract: true },
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const item = await tx.leaseEarlyTermination.findFirst({
+        where: { id: params.id, tenantId },
+        include: { contract: true },
+      });
+      return item
+        ? NextResponse.json(item)
+        : NextResponse.json({ error: 'Not found' }, { status: 404 });
   });
-  return item
-    ? NextResponse.json(item)
-    : NextResponse.json({ error: 'Not found' }, { status: 404 });
 }
+
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const authz = requireAuthorizedTenant(req);
@@ -39,7 +44,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!existing) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const { contract, ...data } = body;
     if (data.status === 'APPROVED' && !data.approvedAt) data.approvedAt = new Date();
     const item = await withTenantRls(prisma, tenantId, async (tx) =>

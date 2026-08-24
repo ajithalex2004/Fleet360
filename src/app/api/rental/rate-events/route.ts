@@ -28,29 +28,35 @@ const bodySchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const sp = req.nextUrl.searchParams;
-    const from = sp.get('from');
-    const to = sp.get('to');
-    const events = await prisma.rateEvent.findMany({
-      where: {
-        deletedAt: null,
-        ...(from ? { dateTo: { gte: new Date(from) } } : {}),
-        ...(to ? { dateFrom: { lte: new Date(to) } } : {}),
-      },
-      orderBy: { dateFrom: 'asc' },
-    });
-    return NextResponse.json(events);
-  } catch (err) {
-    captureException(err, { context: 'rental.rate-events.GET' });
-    return NextResponse.json({ error: 'Failed to fetch events' }, { status: 500 });
-  }
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const sp = req.nextUrl.searchParams;
+        const from = sp.get('from');
+        const to = sp.get('to');
+        const events = await tx.rateEvent.findMany({
+          where: {
+            tenantId,
+            deletedAt: null,
+            ...(from ? { dateTo: { gte: new Date(from) } } : {}),
+            ...(to ? { dateFrom: { lte: new Date(to) } } : {}),
+          },
+          orderBy: { dateFrom: 'asc' },
+        });
+        return NextResponse.json(events);
+      } catch (err) {
+        captureException(err, { context: 'rental.rate-events.GET' });
+        return NextResponse.json({ error: 'Failed to fetch events' }, { status: 500 });
+      }
+  });
 }
+
 
 export const POST = withAudit(
   async (req: NextRequest) => {
@@ -80,7 +86,7 @@ export const POST = withAudit(
 
       const event = await withTenantRls(prisma, tenantId, async (tx) =>
         tx.rateEvent.upsert({
-        where: { eventCode: parsed.data.eventCode },
+        where: { eventCode: parsed.data.eventCode, tenantId },
         update: {
           name: parsed.data.name,
           description: parsed.data.description ?? null,
@@ -94,6 +100,7 @@ export const POST = withAudit(
           notes: parsed.data.notes ?? null,
         },
         create: {
+          tenantId,
           eventCode: parsed.data.eventCode,
           name: parsed.data.name,
           description: parsed.data.description ?? null,
@@ -109,7 +116,7 @@ export const POST = withAudit(
       }),
       );
       return NextResponse.json(event, { status: 201 });
-    } catch (err) {
+      } catch (err) {
       captureException(err, { context: 'rental.rate-events.POST' });
       return NextResponse.json({ error: 'Failed to save event' }, { status: 500 });
     }

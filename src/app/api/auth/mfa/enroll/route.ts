@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       issuer,
       account: user.email,
     });
-  } catch (err) {
+    } catch (err) {
     if (err instanceof NextResponse) return err;
     captureException(err, { context: 'auth.mfa.enroll' });
     return NextResponse.json({ ok: false, error: 'Failed to start MFA enrolment' }, { status: 500 });

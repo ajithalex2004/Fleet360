@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
       limit: Math.min(Math.max(parseInt(sp.get('limit') ?? '100', 10) || 100, 1), 300),
     });
     return NextResponse.json({ carrierId: device.carrierId, data }, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (e) {
+    } catch (e) {
     console.error('[carrier-portal/app/loads GET]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to load carrier loads' },
@@ -190,7 +190,7 @@ export async function POST(req: NextRequest) {
       status: 'SUBMITTED',
     });
     return NextResponse.json({ data: bid }, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     console.error('[carrier-portal/app/loads POST]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to submit bid' },

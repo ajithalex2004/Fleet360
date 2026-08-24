@@ -16,6 +16,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { classifyDocument } from '@/lib/agents/doc-classifier/agent';
 import { logAudit } from '@/lib/audit';
@@ -82,7 +83,7 @@ export async function POST(req: NextRequest) {
         durationMs: result.durationMs,
       },
     });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'leasing.documents.classify' });
     console.error('[doc classifier] error:', err);
     return NextResponse.json({ error: 'Classification failed' }, { status: 500 });

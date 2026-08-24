@@ -14,9 +14,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const VALID_STATUSES = new Set(['ACTIVE', 'INACTIVE']);
 
 /**
@@ -41,6 +42,7 @@ function pickupDropoffValid(body: { pickupTime?: string; dropoffTime?: string })
 }
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -49,32 +51,37 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
-  const sp = req.nextUrl.searchParams;
-  const routeId       = sp.get('routeId');
-  const staffMemberId = sp.get('staffMemberId');
-  const status        = sp.get('status');
+  return withTenantRls(prisma, tenantId, async (tx) => {
 
-  try {
-    const rows = await prisma.routePassenger.findMany({
-      where: {
-        tenantId,
-        deletedAt: null,
-        ...(routeId       ? { routeId }       : {}),
-        ...(staffMemberId ? { staffMemberId } : {}),
-        ...(status && VALID_STATUSES.has(status) ? { status } : {}),
-      },
-      orderBy: [{ effectiveFrom: 'desc' }, { createdAt: 'desc' }],
-    });
-    return NextResponse.json(rows, { headers: { 'Cache-Control': 'private, max-age=15' } });
-  } catch (e) {
-    console.error('[route-passengers.GET]', e);
-    return NextResponse.json({ error: 'Failed to fetch route passengers' }, { status: 500 });
-  }
+      const sp = req.nextUrl.searchParams;
+      const routeId       = sp.get('routeId');
+      const staffMemberId = sp.get('staffMemberId');
+      const status        = sp.get('status');
+
+      try {
+        const rows = await tx.routePassenger.findMany({
+          where: {
+            tenantId,
+            deletedAt: null,
+            ...(routeId       ? { routeId }       : {}),
+            ...(staffMemberId ? { staffMemberId } : {}),
+            ...(status && VALID_STATUSES.has(status) ? { status } : {}),
+          },
+          orderBy: [{ effectiveFrom: 'desc' }, { createdAt: 'desc' }],
+        });
+        return NextResponse.json(rows, { headers: { 'Cache-Control': 'private, max-age=15' } });
+        } catch (e) {
+        console.error('[route-passengers.GET]', e);
+        return NextResponse.json({ error: 'Failed to fetch route passengers' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -83,69 +90,75 @@ export async function POST(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  const createdBy = req.headers.get('x-user-id') ?? null;
+  const { tenantId } = authz;
 
-  try {
-    const body = await req.json();
-    if (!body.routeId)        return NextResponse.json({ error: 'routeId is required' }, { status: 400 });
-    if (!body.staffMemberId)  return NextResponse.json({ error: 'staffMemberId is required' }, { status: 400 });
-    if (body.status && !VALID_STATUSES.has(body.status)) {
-      return NextResponse.json({ error: 'status must be ACTIVE or INACTIVE' }, { status: 400 });
-    }
-    const timeErr = pickupDropoffValid(body);
-    if (timeErr) return NextResponse.json({ error: timeErr }, { status: 400 });
+  return withTenantRls(prisma, tenantId, async (tx) => {
 
-    const effectiveFrom = parseDateUtcMidnight(body.effectiveFrom) ?? parseDateUtcMidnight(new Date().toISOString())!;
-    const effectiveTo   = parseDateUtcMidnight(body.effectiveTo);
-    if (effectiveTo && effectiveTo < effectiveFrom) {
-      return NextResponse.json({ error: 'effectiveTo must be on or after effectiveFrom' }, { status: 400 });
-    }
+      const createdBy = req.headers.get('x-user-id') ?? null;
 
-    // Block overlapping ACTIVE roster entries for the same (route, employee).
-    // Overlap check: another active row exists whose window intersects ours.
-    const active = body.status ?? 'ACTIVE';
-    if (active === 'ACTIVE') {
-      const overlaps = await prisma.routePassenger.findMany({
-        where: {
-          tenantId, deletedAt: null,
-          routeId: body.routeId, staffMemberId: body.staffMemberId,
-          status: 'ACTIVE',
-          effectiveFrom: { lte: effectiveTo ?? new Date('9999-12-31') },
-          OR: [
-            { effectiveTo: null },
-            { effectiveTo: { gte: effectiveFrom } },
-          ],
-        },
-        select: { id: true, effectiveFrom: true, effectiveTo: true },
-      });
-      if (overlaps.length > 0) {
-        return NextResponse.json({
-          error: 'This employee already has an active roster assignment on this route in the given date range.',
-          overlaps,
-        }, { status: 409 });
+      try {
+        const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
+        if (!body.routeId)        return NextResponse.json({ error: 'routeId is required' }, { status: 400 });
+        if (!body.staffMemberId)  return NextResponse.json({ error: 'staffMemberId is required' }, { status: 400 });
+        if (body.status && !VALID_STATUSES.has(body.status)) {
+          return NextResponse.json({ error: 'status must be ACTIVE or INACTIVE' }, { status: 400 });
+        }
+        const timeErr = pickupDropoffValid(body);
+        if (timeErr) return NextResponse.json({ error: timeErr }, { status: 400 });
+
+        const effectiveFrom = parseDateUtcMidnight(body.effectiveFrom) ?? parseDateUtcMidnight(new Date().toISOString())!;
+        const effectiveTo   = parseDateUtcMidnight(body.effectiveTo);
+        if (effectiveTo && effectiveTo < effectiveFrom) {
+          return NextResponse.json({ error: 'effectiveTo must be on or after effectiveFrom' }, { status: 400 });
+        }
+
+        // Block overlapping ACTIVE roster entries for the same (route, employee).
+        // Overlap check: another active row exists whose window intersects ours.
+        const active = body.status ?? 'ACTIVE';
+        if (active === 'ACTIVE') {
+          const overlaps = await tx.routePassenger.findMany({
+            where: {
+              tenantId, deletedAt: null,
+              routeId: body.routeId, staffMemberId: body.staffMemberId,
+              status: 'ACTIVE',
+              effectiveFrom: { lte: effectiveTo ?? new Date('9999-12-31') },
+              OR: [
+                { effectiveTo: null },
+                { effectiveTo: { gte: effectiveFrom } },
+              ],
+            },
+            select: { id: true, effectiveFrom: true, effectiveTo: true },
+          });
+          if (overlaps.length > 0) {
+            return NextResponse.json({
+              error: 'This employee already has an active roster assignment on this route in the given date range.',
+              overlaps,
+            }, { status: 409 });
+          }
+        }
+
+        const row = await tx.routePassenger.create({
+          data: {
+            tenantId,                       // stamped from session
+            routeId:       body.routeId,
+            staffMemberId: body.staffMemberId,
+            pickupStopId:  body.pickupStopId  || null,
+            pickupTime:    body.pickupTime    || null,
+            dropoffStopId: body.dropoffStopId || null,
+            dropoffTime:   body.dropoffTime   || null,
+            effectiveFrom,
+            effectiveTo,
+            status: active,
+            notes:  body.notes?.trim() || null,
+            createdBy,
+          },
+        });
+        return NextResponse.json(row, { status: 201 });
+        } catch (e) {
+        console.error('[route-passengers.POST]', e);
+        return NextResponse.json({ error: 'Failed to create route passenger' }, { status: 500 });
       }
-    }
-
-    const row = await prisma.routePassenger.create({
-      data: {
-        tenantId,                       // stamped from session
-        routeId:       body.routeId,
-        staffMemberId: body.staffMemberId,
-        pickupStopId:  body.pickupStopId  || null,
-        pickupTime:    body.pickupTime    || null,
-        dropoffStopId: body.dropoffStopId || null,
-        dropoffTime:   body.dropoffTime   || null,
-        effectiveFrom,
-        effectiveTo,
-        status: active,
-        notes:  body.notes?.trim() || null,
-        createdBy,
-      },
-    });
-    return NextResponse.json(row, { status: 201 });
-  } catch (e) {
-    console.error('[route-passengers.POST]', e);
-    return NextResponse.json({ error: 'Failed to create route passenger' }, { status: 500 });
-  }
+  });
 }
+

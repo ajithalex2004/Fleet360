@@ -29,7 +29,7 @@ import { revalidateCache } from '@/lib/server-cache';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 import { expandHeadway, daysToMask, maskToDays } from '@/lib/headway/service';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 /**
  * Every method is gated on bus-ops:admin:headway. Headway rules define the
  * published service frequency and each one can bind to a CBA rule-set via
@@ -76,8 +76,6 @@ export async function GET(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  const tenantId = req.headers.get('x-tenant-id') ?? '';
-  if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   const permError = requireBusOpsAdminAccess(req, HEADWAY_RESOURCE);
   if (permError) return permError;
   const sp = new URL(req.url).searchParams;
@@ -106,7 +104,7 @@ export async function GET(req: NextRequest) {
     const departures = expandHeadway(shaped, from, to, tz);
     return NextResponse.json({ rules: shaped, departures, from, to, tz },
       { headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' } });
-  } catch (e) {
+      } catch (e) {
     console.error('[headway GET]', e);
     return NextResponse.json({ error: 'Failed to list' }, { status: 500 });
   }
@@ -119,22 +117,18 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  const tenantId = req.headers.get('x-tenant-id') ?? '';
-  if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   const permError = requireBusOpsAdminAccess(req, HEADWAY_RESOURCE);
   if (permError) return permError;
   try {
-    const body = await req.json() as {
-      routeId: string;
-      dayMask?: string;
+    const bodyRaw = await req.json() as { routeId: string; dayMask?: string;
       days?: number[];
       startTime: string;
       endTime: string;
       headwayMinutes: number;
       anchorTime?: string | null;
       cbaRuleSetId?: string | null;
-      notes?: string;
-    };
+      notes?: string; };
+        const body = stripTenantOwnershipFields(bodyRaw);
     if (!body.routeId || !body.startTime || !body.endTime || !body.headwayMinutes) {
       return NextResponse.json({ error: 'routeId, startTime, endTime, headwayMinutes are required' }, { status: 400 });
     }
@@ -156,7 +150,7 @@ export async function POST(req: NextRequest) {
     );
     revalidateCache([CACHE_TAG]);
     return NextResponse.json(shapeRule(created as unknown as RuleRow), { status: 201 });
-  } catch (e) {
+    } catch (e) {
     console.error('[headway POST]', e);
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed' }, { status: 500 });
   }
@@ -169,8 +163,6 @@ export async function DELETE(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  const tenantId = req.headers.get('x-tenant-id') ?? '';
-  if (!tenantId) return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
   const permError = requireBusOpsAdminAccess(req, HEADWAY_RESOURCE);
   if (permError) return permError;
   const id = new URL(req.url).searchParams.get('id');
@@ -181,7 +173,7 @@ export async function DELETE(req: NextRequest) {
     );
     revalidateCache([CACHE_TAG]);
     return NextResponse.json({ success: true });
-  } catch (e) {
+    } catch (e) {
     console.error('[headway DELETE]', e);
     return NextResponse.json({ error: 'Failed to delete' }, { status: 500 });
   }

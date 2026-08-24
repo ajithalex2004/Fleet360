@@ -10,9 +10,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { listLogisticsMasterData } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
   const sp = req.nextUrl.searchParams;
   const type = sp.get('type');
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
   try {
     const data = await listLogisticsMasterData({ tenantId, type, status: 'ACTIVE', search });
     return NextResponse.json({ data }, { headers: { 'Cache-Control': 'private, max-age=60' } });
-  } catch (e) {
+    } catch (e) {
     console.error('[logistics/master-data GET]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to list master data' },

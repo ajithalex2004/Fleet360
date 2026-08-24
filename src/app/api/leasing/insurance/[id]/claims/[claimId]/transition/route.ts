@@ -37,7 +37,8 @@ export async function POST(
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const to = body?.to as ClaimStatus | undefined;
     if (!to) {
       return NextResponse.json({ error: 'Missing required body field: to' }, { status: 400 });

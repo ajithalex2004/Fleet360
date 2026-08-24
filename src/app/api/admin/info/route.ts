@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { MODULES, MODULE_BY_KEY } from '@/lib/modules';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // Platform modules — derived from the canonical registry so the admin info
 // endpoint stays in sync with the platform home, the admin tenants matrix,
 // the access-control layer, and the RBAC permission matrix. Editing the
@@ -124,7 +124,7 @@ export async function GET() {
       dbStats,
     });
     });
-  } catch (e) {
+    } catch (e) {
     console.error(e);
     return NextResponse.json({ error: 'Failed' }, { status: 500 });
   }

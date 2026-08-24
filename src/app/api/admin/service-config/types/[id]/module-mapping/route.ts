@@ -19,7 +19,7 @@ import { LINKED_MODULES, type LinkedModule } from '@/types/service-config';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string }>; }
@@ -126,7 +126,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     approvalEngineEnabled?: boolean; financeEngineEnabled?: boolean;
     dispatchEngineEnabled?: boolean;
   };
-  try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
+  try { const bodyRaw = await req.json(); body = stripTenantOwnershipFields(bodyRaw); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
 
   if (!body.linkedModule || !(LINKED_MODULES as readonly string[]).includes(body.linkedModule)) {
     return NextResponse.json({ ok: false, error: `linkedModule must be one of ${LINKED_MODULES.join(', ')}` }, { status: 400 });
@@ -169,7 +169,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     });
 
     return NextResponse.json({ ok: true, mapping: updated[0] });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'service-config.mapping.put' });
     return NextResponse.json({ ok: false, error: 'Update failed' }, { status: 500 });
   }

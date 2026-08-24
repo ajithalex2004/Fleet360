@@ -4,9 +4,10 @@
  * UAE-specific: Held → Deposited → Cleared | Bounced lifecycle
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const INIT = `
   CREATE TABLE IF NOT EXISTS finance_pdc_cheques (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -43,74 +44,83 @@ type PdcRow = {
 };
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  await prisma.$executeRawUnsafe(INIT).catch(() => {});
-  const sp = req.nextUrl.searchParams;
-  const status = sp.get('status');
-  const direction = sp.get('direction');
-  const from = sp.get('from');
-  const to   = sp.get('to');
-  const page = Math.max(1, parseInt(sp.get('page') ?? '1'));
-  const limit = Math.min(100, parseInt(sp.get('limit') ?? '50'));
-  const offset = (page - 1) * limit;
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    await tx.$executeRawUnsafe(INIT).catch(() => {});
+      const sp = req.nextUrl.searchParams;
+      const status = sp.get('status');
+      const direction = sp.get('direction');
+      const from = sp.get('from');
+      const to   = sp.get('to');
+      const page = Math.max(1, parseInt(sp.get('page') ?? '1'));
+      const limit = Math.min(100, parseInt(sp.get('limit') ?? '50'));
+      const offset = (page - 1) * limit;
 
-  let where = `WHERE deleted_at IS NULL`;
-  const params: unknown[] = [];
-  let pi = 1;
-  if (status)    { where += ` AND status = $${pi++}`;         params.push(status); }
-  if (direction) { where += ` AND direction = $${pi++}`;      params.push(direction); }
-  if (from)      { where += ` AND cheque_date >= $${pi++}`;   params.push(from); }
-  if (to)        { where += ` AND cheque_date <= $${pi++}`;   params.push(to); }
+      let where = `WHERE deleted_at IS NULL`;
+      const params: unknown[] = [];
+      let pi = 1;
+      if (status)    { where += ` AND status = $${pi++}`;         params.push(status); }
+      if (direction) { where += ` AND direction = $${pi++}`;      params.push(direction); }
+      if (from)      { where += ` AND cheque_date >= $${pi++}`;   params.push(from); }
+      if (to)        { where += ` AND cheque_date <= $${pi++}`;   params.push(to); }
 
-  const [rows, counts] = await Promise.all([
-    prisma.$queryRawUnsafe<PdcRow[]>(
-      `SELECT * FROM finance_pdc_cheques ${where} ORDER BY cheque_date ASC LIMIT $${pi} OFFSET $${pi+1}`,
-      ...params, limit, offset
-    ).catch(() => [] as PdcRow[]),
-    prisma.$queryRawUnsafe<{status: string; count: string; total: string}[]>(
-      `SELECT status, COUNT(*) as count, COALESCE(SUM(amount),0)::text as total
-         FROM finance_pdc_cheques WHERE deleted_at IS NULL GROUP BY status`
-    ).catch(() => []),
-  ]);
+      const [rows, counts] = await Promise.all([
+        tx.$queryRawUnsafe<PdcRow[]>(
+          `SELECT * FROM finance_pdc_cheques ${where} ORDER BY cheque_date ASC LIMIT $${pi} OFFSET $${pi+1}`,
+          ...params, limit, offset
+        ).catch(() => [] as PdcRow[]),
+        tx.$queryRawUnsafe<{status: string; count: string; total: string}[]>(
+          `SELECT status, COUNT(*) as count, COALESCE(SUM(amount),0)::text as total
+             FROM finance_pdc_cheques WHERE deleted_at IS NULL GROUP BY status`
+        ).catch(() => []),
+      ]);
 
-  // Maturity alerts: cheques due within 7 days still HELD
-  const today = new Date();
-  const in7   = new Date(today); in7.setDate(today.getDate() + 7);
-  const maturingSoon = rows.filter(r =>
-    r.status === 'HELD' && new Date(r.cheque_date) >= today && new Date(r.cheque_date) <= in7
-  ).length;
+      // Maturity alerts: cheques due within 7 days still HELD
+      const today = new Date();
+      const in7   = new Date(today); in7.setDate(today.getDate() + 7);
+      const maturingSoon = rows.filter(r =>
+        r.status === 'HELD' && new Date(r.cheque_date) >= today && new Date(r.cheque_date) <= in7
+      ).length;
 
-  return NextResponse.json({ data: rows, counts, maturingSoon, page, limit });
+      return NextResponse.json({ data: rows, counts, maturingSoon, page, limit });
+  });
 }
+
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  await prisma.$executeRawUnsafe(INIT).catch(() => {});
-  const body = await req.json();
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    await tx.$executeRawUnsafe(INIT).catch(() => {});
+      const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
 
-  const [row] = await prisma.$queryRawUnsafe<PdcRow[]>(
-    `INSERT INTO finance_pdc_cheques
-       (cheque_number, bank_name, account_name, cheque_date, amount, currency,
-        direction, client_name, client_ref, linked_invoice_id, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-     RETURNING *`,
-    body.chequeNumber, body.bankName, body.accountName ?? null,
-    body.chequeDate, body.amount, body.currency ?? 'AED',
-    body.direction ?? 'INCOMING', body.clientName ?? null,
-    body.clientRef ?? null, body.linkedInvoiceId ?? null,
-    body.notes ?? null, body.createdBy ?? null,
-  ).catch(() => [] as PdcRow[]);
+      const [row] = await tx.$queryRawUnsafe<PdcRow[]>(
+        `INSERT INTO finance_pdc_cheques
+           (cheque_number, bank_name, account_name, cheque_date, amount, currency,
+            direction, client_name, client_ref, linked_invoice_id, notes, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+         RETURNING *`,
+        body.chequeNumber, body.bankName, body.accountName ?? null,
+        body.chequeDate, body.amount, body.currency ?? 'AED',
+        body.direction ?? 'INCOMING', body.clientName ?? null,
+        body.clientRef ?? null, body.linkedInvoiceId ?? null,
+        body.notes ?? null, body.createdBy ?? null,
+      ).catch(() => [] as PdcRow[]);
 
-  if (!row) return NextResponse.json({ error: 'Failed to create cheque' }, { status: 500 });
-  return NextResponse.json(row, { status: 201 });
+      if (!row) return NextResponse.json({ error: 'Failed to create cheque' }, { status: 500 });
+      return NextResponse.json(row, { status: 201 });
+  });
 }
+

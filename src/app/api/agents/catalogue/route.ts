@@ -4,9 +4,10 @@
  * Returns the full agent registry — used by the Intelligence Hub UI.
  */
 import { NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { AGENT_CATALOGUE } from '@/lib/agents/registry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function GET() {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {

@@ -24,7 +24,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!existing) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
-    const { lessee, ...data } = await req.json();
+    const bodyRaw = await req.json();
+    const body = stripTenantOwnershipFields(bodyRaw);
+    const { lessee, ...data } = body;
     const item = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.leaseCreditAssessment.update({
       where: { id: params.id },

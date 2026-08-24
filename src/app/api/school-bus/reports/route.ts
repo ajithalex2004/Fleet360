@@ -9,9 +9,10 @@
  *   months    number — revenue look-back window (default 1)
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
 const q = <T = Row>(sql: string, ...v: unknown[]): Promise<T[]> =>
@@ -395,8 +396,7 @@ export async function GET(req: NextRequest) {
         scheduleDetails: feeScheduleDetails,
       },
     });
-
-  } catch (err) {
+    } catch (err) {
     console.error('[school-bus/reports GET]', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }

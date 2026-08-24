@@ -18,12 +18,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 import { applyDriverTelemetryLimit } from '@/lib/rate-limit-scope';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const EventSchema = z.object({
   id: z.string().uuid(),
   tripId: z.string().uuid().nullable().optional(),
@@ -87,132 +88,141 @@ function computeScoreFromRows(rows: Array<{ type: string; occurred_at: Date; val
 }
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const ctx = await requireDriverSession(req);
-  if (ctx instanceof NextResponse) return ctx;
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const ctx = await requireDriverSession(req);
+      if (ctx instanceof NextResponse) return ctx;
 
-  // R2: per-driver telemetry rate limit. See src/lib/rate-limit-scope.ts
-  // for the design rationale — one driver's flood of events can't block
-  // any other driver, other categories, or the tenant's normal API traffic.
-  const rl = await applyDriverTelemetryLimit(
-    req.nextUrl.pathname,
-    { tenantId: ctx.tenantId, userId: ctx.userId },
-  );
-  if (rl) return rl;
+      // R2: per-driver telemetry rate limit. See src/lib/rate-limit-scope.ts
+      // for the design rationale — one driver's flood of events can't block
+      // any other driver, other categories, or the tenant's normal API traffic.
+      const rl = await applyDriverTelemetryLimit(
+        req.nextUrl.pathname,
+        { tenantId: ctx.tenantId, userId: ctx.userId },
+      );
+      if (rl) return rl;
 
-  const json = await req.json().catch(() => null);
-  const parsed = PostBodySchema.safeParse(json);
-  if (!parsed.success) {
-    return NextResponse.json({ error: 'validation failed', issues: parsed.error.issues }, { status: 400 });
-  }
-  const body = parsed.data;
+      const jsonRaw = await req.json().catch(() => null);
+    const json = jsonRaw ? stripTenantOwnershipFields(jsonRaw) : null;
+      const parsed = PostBodySchema.safeParse(json);
+      if (!parsed.success) {
+        return NextResponse.json({ error: 'validation failed', issues: parsed.error.issues }, { status: 400 });
+      }
+      const body = parsed.data;
 
-  // Idempotency: skip events that already exist (same id).
-  const ids = body.events.map((e) => e.id);
-  const existing = await prisma.$queryRaw<Array<{ id: string }>>`
-    SELECT id FROM behavior_events
-    WHERE id = ANY(${ids}::uuid[])
-      AND tenant_id = ${ctx.tenantId}::uuid
-  `;
-  const existingIds = new Set(existing.map((r) => r.id));
-  const newEvents = body.events.filter((e) => !existingIds.has(e.id));
-
-  let inserted = 0;
-  for (const e of newEvents) {
-    await prisma.$executeRaw`
-      INSERT INTO behavior_events (
-        id, tenant_id, driver_id, shift_id, trip_id, type,
-        value, speed_kph, location_lat, location_lng, note, occurred_at, created_at
-      ) VALUES (
-        ${e.id}::uuid,
-        ${ctx.tenantId}::uuid,
-        ${ctx.userId}::uuid,
-        ${e.shiftId ?? null}::uuid,
-        ${e.tripId ?? null}::uuid,
-        ${e.type},
-        ${e.value ?? null},
-        ${e.speedKmh ?? null},
-        ${e.lat ?? null},
-        ${e.lng ?? null},
-        ${e.note ?? null},
-        ${e.occurredAt}::timestamptz,
-        NOW()
-      )
-      ON CONFLICT (id) DO NOTHING
-    `;
-    inserted++;
-  }
-
-  return NextResponse.json({
-    ok: true,
-    received: body.events.length,
-    inserted,
-    deduped: body.events.length - inserted,
-  }, { status: 201 });
-}
-
-export async function GET(req: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
-  }
-  const { tenantId } = authz;
-
-  const ctx = await requireDriverSession(req);
-  if (ctx instanceof NextResponse) return ctx;
-
-  const url = new URL(req.url);
-  const tripId = url.searchParams.get('tripId');
-  const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? '200'), 1), 1000);
-
-  const rows = tripId
-    ? await prisma.$queryRaw<Array<{
-        id: string; type: string; value: number | null; speed_kph: number | null;
-        location_lat: number | null; location_lng: number | null; note: string | null;
-        occurred_at: Date; shift_id: string | null; trip_id: string | null;
-      }>>`
-        SELECT id, type, value, speed_kph, location_lat, location_lng, note,
-               occurred_at, shift_id, trip_id
-        FROM behavior_events
-        WHERE tenant_id = ${ctx.tenantId}::uuid
-          AND driver_id = ${ctx.userId}::uuid
-          AND trip_id = ${tripId}::uuid
-        ORDER BY occurred_at ASC
-        LIMIT ${limit}
-      `
-    : await prisma.$queryRaw<Array<{
-        id: string; type: string; value: number | null; speed_kph: number | null;
-        location_lat: number | null; location_lng: number | null; note: string | null;
-        occurred_at: Date; shift_id: string | null; trip_id: string | null;
-      }>>`
-        SELECT id, type, value, speed_kph, location_lat, location_lng, note,
-               occurred_at, shift_id, trip_id
-        FROM behavior_events
-        WHERE tenant_id = ${ctx.tenantId}::uuid
-          AND driver_id = ${ctx.userId}::uuid
-          AND occurred_at > NOW() - INTERVAL '7 days'
-        ORDER BY occurred_at DESC
-        LIMIT ${limit}
+      // Idempotency: skip events that already exist (same id).
+      const ids = body.events.map((e) => e.id);
+      const existing = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM behavior_events
+        WHERE id = ANY(${ids}::uuid[])
+          AND tenant_id = ${ctx.tenantId}::uuid
       `;
+      const existingIds = new Set(existing.map((r) => r.id));
+      const newEvents = body.events.filter((e) => !existingIds.has(e.id));
 
-  return NextResponse.json({
-    events: rows.map((r) => ({
-      id: r.id,
-      type: r.type,
-      value: r.value != null ? Number(r.value) : null,
-      speedKmh: r.speed_kph != null ? Number(r.speed_kph) : null,
-      lat: r.location_lat != null ? Number(r.location_lat) : null,
-      lng: r.location_lng != null ? Number(r.location_lng) : null,
-      note: r.note,
-      occurredAt: r.occurred_at.toISOString(),
-      shiftId: r.shift_id,
-      tripId: r.trip_id,
-    })),
-    score: computeScoreFromRows(rows),
+      let inserted = 0;
+      for (const e of newEvents) {
+        await tx.$executeRaw`
+          INSERT INTO behavior_events (
+            id, tenant_id, driver_id, shift_id, trip_id, type,
+            value, speed_kph, location_lat, location_lng, note, occurred_at, created_at
+          ) VALUES (
+            ${e.id}::uuid,
+            ${ctx.tenantId}::uuid,
+            ${ctx.userId}::uuid,
+            ${e.shiftId ?? null}::uuid,
+            ${e.tripId ?? null}::uuid,
+            ${e.type},
+            ${e.value ?? null},
+            ${e.speedKmh ?? null},
+            ${e.lat ?? null},
+            ${e.lng ?? null},
+            ${e.note ?? null},
+            ${e.occurredAt}::timestamptz,
+            NOW()
+          )
+          ON CONFLICT (id) DO NOTHING
+        `;
+        inserted++;
+      }
+
+      return NextResponse.json({
+        ok: true,
+        received: body.events.length,
+        inserted,
+        deduped: body.events.length - inserted,
+      }, { status: 201 });
   });
 }
+
+
+export async function GET(req: NextRequest) {
+
+  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+  const { tenantId } = authz;
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const ctx = await requireDriverSession(req);
+      if (ctx instanceof NextResponse) return ctx;
+
+      const url = new URL(req.url);
+      const tripId = url.searchParams.get('tripId');
+      const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? '200'), 1), 1000);
+
+      const rows = tripId
+        ? await tx.$queryRaw<Array<{
+            id: string; type: string; value: number | null; speed_kph: number | null;
+            location_lat: number | null; location_lng: number | null; note: string | null;
+            occurred_at: Date; shift_id: string | null; trip_id: string | null;
+          }>>`
+            SELECT id, type, value, speed_kph, location_lat, location_lng, note,
+                   occurred_at, shift_id, trip_id
+            FROM behavior_events
+            WHERE tenant_id = ${ctx.tenantId}::uuid
+              AND driver_id = ${ctx.userId}::uuid
+              AND trip_id = ${tripId}::uuid
+            ORDER BY occurred_at ASC
+            LIMIT ${limit}
+          `
+        : await tx.$queryRaw<Array<{
+            id: string; type: string; value: number | null; speed_kph: number | null;
+            location_lat: number | null; location_lng: number | null; note: string | null;
+            occurred_at: Date; shift_id: string | null; trip_id: string | null;
+          }>>`
+            SELECT id, type, value, speed_kph, location_lat, location_lng, note,
+                   occurred_at, shift_id, trip_id
+            FROM behavior_events
+            WHERE tenant_id = ${ctx.tenantId}::uuid
+              AND driver_id = ${ctx.userId}::uuid
+              AND occurred_at > NOW() - INTERVAL '7 days'
+            ORDER BY occurred_at DESC
+            LIMIT ${limit}
+          `;
+
+      return NextResponse.json({
+        events: rows.map((r) => ({
+          id: r.id,
+          type: r.type,
+          value: r.value != null ? Number(r.value) : null,
+          speedKmh: r.speed_kph != null ? Number(r.speed_kph) : null,
+          lat: r.location_lat != null ? Number(r.location_lat) : null,
+          lng: r.location_lng != null ? Number(r.location_lng) : null,
+          note: r.note,
+          occurredAt: r.occurred_at.toISOString(),
+          shiftId: r.shift_id,
+          tripId: r.trip_id,
+        })),
+        score: computeScoreFromRows(rows),
+      });
+  });
+}
+

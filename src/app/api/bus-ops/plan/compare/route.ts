@@ -18,7 +18,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 interface PlanSummary {
   runCount: number;
   blockCount: number;
@@ -91,19 +91,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-
-  const tenantId = req.headers.get('x-tenant-id') ?? '';
-  if (!tenantId) {
-    return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
-  }
   const permError = requireBusOpsAdminAccess(req, 'planning-core');
   if (permError) return permError;
   try {
     // Accept both {leftId, rightId} (internal) and {planIdA, planIdB} (test/UI).
-    const body = (await req.json()) as {
-      leftId?: string; rightId?: string;
-      planIdA?: string; planIdB?: string;
-    };
+    const bodyRaw = await req.json() as { leftId?: string; rightId?: string;
+      planIdA?: string; planIdB?: string; };
+        const body = stripTenantOwnershipFields(bodyRaw);
     const leftId  = body.leftId  ?? body.planIdA;
     const rightId = body.rightId ?? body.planIdB;
     if (!leftId || !rightId) {
@@ -136,7 +130,7 @@ export async function POST(req: NextRequest) {
       planB: planRow(right),
       ...flatDiff(leftSummary, rightSummary),
     });
-  } catch (e) {
+    } catch (e) {
     console.error('[plan compare]', e);
     return NextResponse.json({ error: 'Compare failed' }, { status: 500 });
   }

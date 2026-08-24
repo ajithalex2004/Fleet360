@@ -29,11 +29,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { geocode, GeocodeError, type GeocodeResult } from '@/lib/logistics/geocoder';
 import { computeDistanceMatrix } from '@/lib/logistics/distance-matrix';
 import { computeGoogleDirections } from '@/lib/logistics/google-directions';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface Leg { fromLabel: string; toLabel: string; km: number; min: number }
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
   const { searchParams } = new URL(req.url);
   const origin = searchParams.get('origin')?.trim();
@@ -139,8 +140,8 @@ export async function GET(req: NextRequest) {
           })),
           minGeocodeConfidence: Math.min(...geos.map(g => g.confidence)),
         });
-      } catch (dirErr) {
-        console.warn('[bus-ops/routes/estimate] Google Directions failed, falling back to Distance Matrix:', dirErr instanceof Error ? dirErr.message : dirErr);
+        } catch (e) {
+        console.warn('[bus-ops/routes/estimate] Google Directions failed, falling back to Distance Matrix:', e instanceof Error ? e.message : e);
         // fall through to Distance Matrix path
       }
     }

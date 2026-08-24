@@ -10,10 +10,11 @@
  * licensed driver with school-bus clearance to a fixed scheduled route.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureDispatchSchema } from '@/lib/dispatch/schema';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
 function serialize(r: Row): Row {
@@ -38,44 +39,48 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    await ensureDispatchSchema();
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        await ensureDispatchSchema();
 
-    const { id } = params;
+        const { id } = params;
 
-    const [route] = await prisma.$queryRawUnsafe<Row[]>(`
-      SELECT
-        r.*,
-        v.registration_number AS vehicle_reg,
-        v.type                AS vehicle_type,
-        v.make                AS vehicle_make,
-        v.model               AS vehicle_model,
-        COALESCE(v.capacity, 0) AS vehicle_capacity,
-        d.first_name || ' ' || d.last_name AS driver_name,
-        d.phone                             AS driver_phone,
-        d.licence_number                    AS driver_licence
-      FROM school_bus_routes r
-      LEFT JOIN vehicles v ON v.id::text = r.assigned_vehicle_id AND v.deleted_at IS NULL
-      LEFT JOIN drivers  d ON d.id::text = r.assigned_driver_id  AND d.deleted_at IS NULL
-      WHERE r.id = $1::uuid AND r.status != 'DELETED'
-    `, id);
+        const [route] = await tx.$queryRawUnsafe<Row[]>(`
+          SELECT
+            r.*,
+            v.registration_number AS vehicle_reg,
+            v.type                AS vehicle_type,
+            v.make                AS vehicle_make,
+            v.model               AS vehicle_model,
+            COALESCE(v.capacity, 0) AS vehicle_capacity,
+            d.first_name || ' ' || d.last_name AS driver_name,
+            d.phone                             AS driver_phone,
+            d.licence_number                    AS driver_licence
+          FROM school_bus_routes r
+          LEFT JOIN vehicles v ON v.id::text = r.assigned_vehicle_id AND v.deleted_at IS NULL
+          LEFT JOIN drivers  d ON d.id::text = r.assigned_driver_id  AND d.deleted_at IS NULL
+          WHERE r.id = $1::uuid AND r.status != 'DELETED'
+        `, id);
 
-    if (!route) {
-      return NextResponse.json({ error: 'Route not found' }, { status: 404 });
-    }
+        if (!route) {
+          return NextResponse.json({ error: 'Route not found' }, { status: 404 });
+        }
 
-    return NextResponse.json({ data: serialize(route) });
-  } catch (err) {
-    console.error('[school-bus/routes/[id] GET]', err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
-  }
+        return NextResponse.json({ data: serialize(route) });
+        } catch (err) {
+        console.error('[school-bus/routes/[id] GET]', err);
+        return NextResponse.json({ error: String(err) }, { status: 500 });
+      }
+  });
 }
+
 
 /* ─────────────────────────────────────────────
    POST /api/school-bus/routes/[id]

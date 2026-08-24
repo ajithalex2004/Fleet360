@@ -4,10 +4,11 @@
  * Used by the Admin Dispatch Dashboard for attempt history drill-down.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureDispatchSchema } from '@/lib/dispatch/schema';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
 function serialize(rows: Row[]): Row[] {
@@ -26,35 +27,39 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    await ensureDispatchSchema();
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        await ensureDispatchSchema();
 
-    const { id } = params;
+        const { id } = params;
 
-    const rows = await prisma.$queryRawUnsafe<Row[]>(`
-      SELECT
-        da.*,
-        d.first_name || ' ' || d.last_name AS driver_name,
-        d.phone                             AS driver_phone,
-        d.rating                            AS driver_rating,
-        v.registration_number               AS vehicle_reg,
-        v.type                              AS vehicle_type
-      FROM dispatch_attempts da
-      LEFT JOIN drivers  d ON d.id::text = da.driver_id  AND d.deleted_at IS NULL
-      LEFT JOIN vehicles v ON v.id::text = da.vehicle_id AND v.deleted_at IS NULL
-      WHERE da.dispatch_job_id = $1::uuid
-      ORDER BY da.offered_at ASC
-    `, id);
+        const rows = await tx.$queryRawUnsafe<Row[]>(`
+          SELECT
+            da.*,
+            d.first_name || ' ' || d.last_name AS driver_name,
+            d.phone                             AS driver_phone,
+            d.rating                            AS driver_rating,
+            v.registration_number               AS vehicle_reg,
+            v.type                              AS vehicle_type
+          FROM dispatch_attempts da
+          LEFT JOIN drivers  d ON d.id::text = da.driver_id  AND d.deleted_at IS NULL
+          LEFT JOIN vehicles v ON v.id::text = da.vehicle_id AND v.deleted_at IS NULL
+          WHERE da.dispatch_job_id = $1::uuid
+          ORDER BY da.offered_at ASC
+        `, id);
 
-    return NextResponse.json({ data: serialize(rows), total: rows.length });
-  } catch (err) {
-    console.error('[dispatch/jobs/[id]/attempts GET]', err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
-  }
+        return NextResponse.json({ data: serialize(rows), total: rows.length });
+        } catch (err) {
+        console.error('[dispatch/jobs/[id]/attempts GET]', err);
+        return NextResponse.json({ error: String(err) }, { status: 500 });
+      }
+  });
 }
+

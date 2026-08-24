@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 
@@ -10,43 +11,48 @@ import { prisma } from '@/lib/prisma';
  * existence of rows belonging to other tenants.
  */
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const quotation = await prisma.leaseQuotation.findFirst({
-      where: { id: params.id, tenantId },
-      include: {
-        vehicles: true,
-        lineItems: true,
-      },
-    });
 
-    if (!quotation) {
-      return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
-    }
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const quotation = await tx.leaseQuotation.findFirst({
+          where: { id: params.id, tenantId },
+          include: {
+            vehicles: true,
+            lineItems: true,
+          },
+        });
 
-    // Approval history (audit trail) — also tenant-scoped via the
-    // LeaseApprovalStep.tenantId column added by the same migration.
-    const history = await prisma.leaseApprovalStep.findMany({
-      where: {
-        tenantId,
-        entityId: params.id,
-        entityType: 'QUOTATION',
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
-    });
+        if (!quotation) {
+          return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
+        }
 
-    return NextResponse.json({
-      ...quotation,
-      history,
-    });
-  } catch (error) {
-    console.error('Fetch quotation error:', error);
-    return NextResponse.json({ error: 'Failed to fetch quotation details' }, { status: 500 });
-  }
+        // Approval history (audit trail) — also tenant-scoped via the
+        // LeaseApprovalStep.tenantId column added by the same migration.
+        const history = await tx.leaseApprovalStep.findMany({
+          where: {
+            tenantId,
+            entityId: params.id,
+            entityType: 'QUOTATION',
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        });
+
+        return NextResponse.json({
+          ...quotation,
+          history,
+        });
+        } catch (e) {
+        console.error('Fetch quotation error:', e);
+        return NextResponse.json({ error: 'Failed to fetch quotation details' }, { status: 500 });
+      }
+  });
 }
+

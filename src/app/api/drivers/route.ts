@@ -10,9 +10,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 function serialize(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj;
   if (typeof obj === 'bigint') return obj.toString();
@@ -62,133 +63,141 @@ function complianceFlags(d: {
 }
 
 export async function GET(request: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    const sp       = request.nextUrl.searchParams;
-    const status   = sp.get('status');
-    const type     = sp.get('driverType');
-    const search   = sp.get('search');
-    const expiring = sp.get('expiring'); // 'true' → only compliance-issue drivers
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const sp       = request.nextUrl.searchParams;
+        const status   = sp.get('status');
+        const type     = sp.get('driverType');
+        const search   = sp.get('search');
+        const expiring = sp.get('expiring'); // 'true' → only compliance-issue drivers
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const where: any = { deletedAt: null };
-    if (status) where.status     = status;
-    if (type)   where.driverType = type;
-    if (search) {
-      where.OR = [
-        { name:          { contains: search, mode: 'insensitive' } },
-        { firstName:     { contains: search, mode: 'insensitive' } },
-        { lastName:      { contains: search, mode: 'insensitive' } },
-        { licenseNumber: { contains: search, mode: 'insensitive' } },
-        { email:         { contains: search, mode: 'insensitive' } },
-        { contactNumber: { contains: search, mode: 'insensitive' } },
-      ];
-    }
-    if (expiring === 'true') {
-      const threshold = new Date(Date.now() + 30 * 86400000);
-      where.OR = [
-        { licenseExpiry:    { lte: threshold } },
-        { emiratesIdExpiry: { lte: threshold } },
-        { passportExpiry:   { lte: threshold } },
-        { visaExpiry:       { lte: threshold } },
-      ];
-    }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const where: any = { deletedAt: null };
+        if (status) where.status     = status;
+        if (type)   where.driverType = type;
+        if (search) {
+          where.OR = [
+            { name:          { contains: search, mode: 'insensitive' } },
+            { firstName:     { contains: search, mode: 'insensitive' } },
+            { lastName:      { contains: search, mode: 'insensitive' } },
+            { licenseNumber: { contains: search, mode: 'insensitive' } },
+            { email:         { contains: search, mode: 'insensitive' } },
+            { contactNumber: { contains: search, mode: 'insensitive' } },
+          ];
+        }
+        if (expiring === 'true') {
+          const threshold = new Date(Date.now() + 30 * 86400000);
+          where.OR = [
+            { licenseExpiry:    { lte: threshold } },
+            { emiratesIdExpiry: { lte: threshold } },
+            { passportExpiry:   { lte: threshold } },
+            { visaExpiry:       { lte: threshold } },
+          ];
+        }
 
-    const drivers = await prisma.driver.findMany({
-      where,
-      include: {
-        assignedVehicle: {
-          select: { id: true, make: true, model: true, licensePlate: true },
-        },
-      },
-      orderBy: { name: 'asc' },
-    });
+        const drivers = await tx.driver.findMany({
+          where,
+          include: {
+            assignedVehicle: {
+              select: { id: true, make: true, model: true, licensePlate: true },
+            },
+          },
+          orderBy: { name: 'asc' },
+        });
 
-    const enriched = drivers.map(d => ({
-      ...d,
-      compliance: complianceFlags(d),
-    }));
+        const enriched = drivers.map(d => ({
+          ...d,
+          compliance: complianceFlags(d),
+        }));
 
-    return NextResponse.json(serialize(enriched));
-  } catch (error) {
-    console.error('[Driver Hub] GET /api/drivers:', error);
-    return NextResponse.json(
-      { error: 'Internal Server Error', details: String(error) },
-      { status: 500 }
-    );
-  }
+        return NextResponse.json(serialize(enriched));
+      } catch (e) {
+        console.error('[Driver Hub] GET /api/drivers:', e);
+        return NextResponse.json(
+          { error: 'Internal Server Error', details: String(e) },
+          { status: 500 }
+        );
+      }
+  });
 }
+
 
 export async function POST(request: Request) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    const body = await request.json();
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const body = await request.json();
 
-    // Required fields
-    const missing: string[] = [];
-    if (!body.name && !body.firstName) missing.push('name or firstName');
-    if (!body.licenseNumber)           missing.push('licenseNumber');
-    if (missing.length) {
-      return NextResponse.json(
-        { error: `Missing required fields: ${missing.join(', ')}` },
-        { status: 400 }
-      );
-    }
+        // Required fields
+        const missing: string[] = [];
+        if (!body.name && !body.firstName) missing.push('name or firstName');
+        if (!body.licenseNumber)           missing.push('licenseNumber');
+        if (missing.length) {
+          return NextResponse.json(
+            { error: `Missing required fields: ${missing.join(', ')}` },
+            { status: 400 }
+          );
+        }
 
-    const fullName = body.name
-      ?? [body.firstName, body.lastName].filter(Boolean).join(' ')
-      ?? null;
+        const fullName = body.name
+          ?? [body.firstName, body.lastName].filter(Boolean).join(' ')
+          ?? null;
 
-    const driver = await prisma.driver.create({
-      data: {
-        // TODO: read tenantId from request headers via getTenantContext()
-        tenantId:              '',
-        // Identity
-        name:                  fullName,
-        firstName:             body.firstName              ?? null,
-        lastName:              body.lastName               ?? null,
-        email:                 body.email                  ?? null,
-        contactNumber:         body.contactNumber          ?? null,
-        nationality:           body.nationality            ?? null,
-        dob:                   body.dob ? new Date(body.dob) : null,
+        const driver = await tx.driver.create({
+          data: {
+            // TODO: read tenantId from request headers via getTenantContext()
+            tenantId:              '',
+            // Identity
+            name:                  fullName,
+            firstName:             body.firstName              ?? null,
+            lastName:              body.lastName               ?? null,
+            email:                 body.email                  ?? null,
+            contactNumber:         body.contactNumber          ?? null,
+            nationality:           body.nationality            ?? null,
+            dob:                   body.dob ? new Date(body.dob) : null,
 
-        // Licence & Compliance (hub core)
-        licenseNumber:         body.licenseNumber,
-        licenseExpiry:         body.licenseExpiry     ? new Date(body.licenseExpiry)     : null,
-        licenseType:           body.licenseType            ?? null,
-        emiratesId:            body.emiratesId             ?? null,
-        emiratesIdExpiry:      body.emiratesIdExpiry  ? new Date(body.emiratesIdExpiry)  : null,
-        passportNumber:        body.passportNumber         ?? null,
-        passportExpiry:        body.passportExpiry    ? new Date(body.passportExpiry)    : null,
-        visaExpiry:            body.visaExpiry        ? new Date(body.visaExpiry)        : null,
+            // Licence & Compliance (hub core)
+            licenseNumber:         body.licenseNumber,
+            licenseExpiry:         body.licenseExpiry     ? new Date(body.licenseExpiry)     : null,
+            licenseType:           body.licenseType            ?? null,
+            emiratesId:            body.emiratesId             ?? null,
+            emiratesIdExpiry:      body.emiratesIdExpiry  ? new Date(body.emiratesIdExpiry)  : null,
+            passportNumber:        body.passportNumber         ?? null,
+            passportExpiry:        body.passportExpiry    ? new Date(body.passportExpiry)    : null,
+            visaExpiry:            body.visaExpiry        ? new Date(body.visaExpiry)        : null,
 
-        // Organisational
-        status:                body.status                 ?? 'ACTIVE',
-        driverType:            body.driverType             ?? null,
-        hierarchy:             body.hierarchy              ?? null,
-        communicationLanguage: body.communicationLanguage  ?? null,
-        dateOfJoin:            body.dateOfJoin       ? new Date(body.dateOfJoin)        : null,
-        dallasId:              body.dallasId               ?? null,
-        garageId:              body.garageId               ?? null,
-      },
-    });
+            // Organisational
+            status:                body.status                 ?? 'ACTIVE',
+            driverType:            body.driverType             ?? null,
+            hierarchy:             body.hierarchy              ?? null,
+            communicationLanguage: body.communicationLanguage  ?? null,
+            dateOfJoin:            body.dateOfJoin       ? new Date(body.dateOfJoin)        : null,
+            dallasId:              body.dallasId               ?? null,
+            garageId:              body.garageId               ?? null,
+          },
+        });
 
-    return NextResponse.json(serialize(driver), { status: 201 });
-  } catch (error) {
-    console.error('[Driver Hub] POST /api/drivers:', error);
-    return NextResponse.json(
-      { error: 'Internal Server Error', details: String(error) },
-      { status: 500 }
-    );
-  }
+        return NextResponse.json(serialize(driver), { status: 201 });
+        } catch (e) {
+        console.error('[Driver Hub] POST /api/drivers:', e);
+        return NextResponse.json(
+          { error: 'Internal Server Error', details: String(e) },
+          { status: 500 }
+        );
+      }
+  });
 }
+

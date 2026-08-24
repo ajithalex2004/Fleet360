@@ -10,9 +10,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const VALID_WEEK_TYPES = new Set(['SUN_THU', 'MON_FRI', 'SAT_WED', 'CUSTOM']);
 const VALID_SESSIONS   = new Set(['MORNING', 'EVENING', 'NIGHT', 'SPLIT']);
 const VALID_DIRECTIONS = new Set(['PICKUP', 'DROPOFF']);
@@ -38,6 +39,7 @@ function validateShape(b: {
 }
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -46,29 +48,34 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
-  const sp      = req.nextUrl.searchParams;
-  const routeId = sp.get('routeId');
-  const status  = sp.get('status');
+  return withTenantRls(prisma, tenantId, async (tx) => {
 
-  try {
-    const rows = await prisma.busOpsScheduleTemplate.findMany({
-      where: {
-        tenantId, deletedAt: null,
-        ...(routeId ? { routeId } : {}),
-        ...(status && VALID_STATUSES.has(status) ? { status } : {}),
-      },
-      orderBy: [{ effectiveFrom: 'desc' }, { createdAt: 'desc' }],
-    });
-    return NextResponse.json(rows, { headers: { 'Cache-Control': 'private, max-age=15' } });
-  } catch (e) {
-    console.error('[schedule-templates.GET]', e);
-    return NextResponse.json({ error: 'Failed to fetch schedule templates' }, { status: 500 });
-  }
+      const sp      = req.nextUrl.searchParams;
+      const routeId = sp.get('routeId');
+      const status  = sp.get('status');
+
+      try {
+        const rows = await tx.busOpsScheduleTemplate.findMany({
+          where: {
+            tenantId, deletedAt: null,
+            ...(routeId ? { routeId } : {}),
+            ...(status && VALID_STATUSES.has(status) ? { status } : {}),
+          },
+          orderBy: [{ effectiveFrom: 'desc' }, { createdAt: 'desc' }],
+        });
+        return NextResponse.json(rows, { headers: { 'Cache-Control': 'private, max-age=15' } });
+        } catch (e) {
+        console.error('[schedule-templates.GET]', e);
+        return NextResponse.json({ error: 'Failed to fetch schedule templates' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -77,48 +84,54 @@ export async function POST(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  const createdBy = req.headers.get('x-user-id') ?? null;
+  const { tenantId } = authz;
 
-  try {
-    const body = await req.json();
-    const err = validateShape(body);
-    if (err) return NextResponse.json({ error: err }, { status: 400 });
+  return withTenantRls(prisma, tenantId, async (tx) => {
 
-    const effectiveFrom = body.effectiveFrom ? new Date(body.effectiveFrom) : new Date();
-    const effectiveTo   = body.effectiveTo   ? new Date(body.effectiveTo)   : null;
-    if (effectiveTo && effectiveTo < effectiveFrom) {
-      return NextResponse.json({ error: 'effectiveTo must be on or after effectiveFrom' }, { status: 400 });
-    }
+      const createdBy = req.headers.get('x-user-id') ?? null;
 
-    const exceptionDates: Date[] = Array.isArray(body.exceptionDates)
-      ? body.exceptionDates.map((d: string) => new Date(d)).filter((d: Date) => !isNaN(d.getTime()))
-      : [];
+      try {
+        const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
+        const err = validateShape(body);
+        if (err) return NextResponse.json({ error: err }, { status: 400 });
 
-    const row = await prisma.busOpsScheduleTemplate.create({
-      data: {
-        tenantId,                       // stamped from session
-        name:          body.name.trim(),
-        routeId:       body.routeId,
-        vehicleId:     body.vehicleId  || null,
-        driverId:      body.driverId   || null,
-        weekType:      body.weekType,
-        activeDays:    body.activeDays,
-        session:       body.session,
-        departureTime: body.departureTime,
-        arrivalTime:   body.arrivalTime || null,
-        direction:     body.direction,
-        effectiveFrom,
-        effectiveTo,
-        exceptionDates,
-        status:        body.status || 'ACTIVE',
-        notes:         body.notes?.trim() || null,
-        createdBy,
-      },
-    });
-    return NextResponse.json(row, { status: 201 });
-  } catch (e) {
-    console.error('[schedule-templates.POST]', e);
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to create schedule template' }, { status: 500 });
-  }
+        const effectiveFrom = body.effectiveFrom ? new Date(body.effectiveFrom) : new Date();
+        const effectiveTo   = body.effectiveTo   ? new Date(body.effectiveTo)   : null;
+        if (effectiveTo && effectiveTo < effectiveFrom) {
+          return NextResponse.json({ error: 'effectiveTo must be on or after effectiveFrom' }, { status: 400 });
+        }
+
+        const exceptionDates: Date[] = Array.isArray(body.exceptionDates)
+          ? body.exceptionDates.map((d: string) => new Date(d)).filter((d: Date) => !isNaN(d.getTime()))
+          : [];
+
+        const row = await tx.busOpsScheduleTemplate.create({
+          data: {
+            tenantId,                       // stamped from session
+            name:          body.name.trim(),
+            routeId:       body.routeId,
+            vehicleId:     body.vehicleId  || null,
+            driverId:      body.driverId   || null,
+            weekType:      body.weekType,
+            activeDays:    body.activeDays,
+            session:       body.session,
+            departureTime: body.departureTime,
+            arrivalTime:   body.arrivalTime || null,
+            direction:     body.direction,
+            effectiveFrom,
+            effectiveTo,
+            exceptionDates,
+            status:        body.status || 'ACTIVE',
+            notes:         body.notes?.trim() || null,
+            createdBy,
+          },
+        });
+        return NextResponse.json(row, { status: 201 });
+        } catch (e) {
+        console.error('[schedule-templates.POST]', e);
+        return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to create schedule template' }, { status: 500 });
+      }
+  });
 }
+

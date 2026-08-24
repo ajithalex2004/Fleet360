@@ -12,28 +12,33 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const { searchParams } = new URL(req.url);
-    const entityType = searchParams.get('entityType');
-    const entityId   = searchParams.get('entityId');
-    const docs = await prisma.leaseDocument.findMany({
-      where: {
-        tenantId,
-        ...(entityType ? { entityType } : {}),
-        ...(entityId   ? { entityId   } : {}),
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-    return NextResponse.json(docs);
-  } catch {
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
-  }
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const { searchParams } = new URL(req.url);
+        const entityType = searchParams.get('entityType');
+        const entityId   = searchParams.get('entityId');
+        const docs = await tx.leaseDocument.findMany({
+          where: {
+            tenantId,
+            ...(entityType ? { entityType } : {}),
+            ...(entityId   ? { entityId   } : {}),
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        return NextResponse.json(docs);
+      } catch {
+        return NextResponse.json({ error: 'Failed' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant(req);
@@ -42,7 +47,8 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const doc = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.leaseDocument.create({
       data: { ...body, tenantId },

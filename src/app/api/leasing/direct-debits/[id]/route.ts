@@ -24,7 +24,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!existing) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
-    const { lessee, ...data } = await req.json();
+    const bodyRaw = await req.json();
+    const body = stripTenantOwnershipFields(bodyRaw);
+    const { lessee, ...data } = body;
     if (data.status === 'ACTIVE' && !data.activatedAt) data.activatedAt = new Date();
     const dd = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.leaseDirectDebit.update({

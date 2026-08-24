@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function POST(request: Request) {
     const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
     if (!authz.ok) {
@@ -53,9 +54,8 @@ export async function POST(request: Request) {
 
         const data = await response.json();
         return NextResponse.json({ success: true, data });
-
-    } catch (error) {
-        console.error('Error sending WhatsApp message:', error);
+        } catch (e) {
+        console.error('Error sending WhatsApp message:', e);
         return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
     }
 }

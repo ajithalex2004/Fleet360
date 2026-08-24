@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withWebhookTenant } from '@/lib/rls';
+import { withWebhookTenant, withTenantRls } from '@/lib/rls';
 import {
   getChannel,
   normalizeChannelPayload,
@@ -18,7 +18,7 @@ import {
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ channel: string }> }) {

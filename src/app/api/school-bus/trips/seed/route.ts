@@ -9,9 +9,10 @@
  * Includes: speeding events, harsh braking, geofence exits, stop arrivals, boarding events
  */
 import { NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const exec  = (sql: string, ...v: unknown[]) => prisma.$executeRawUnsafe(sql, ...v).catch(() => 0);
 const query = <T = Row>(sql: string, ...v: unknown[]) => prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -318,7 +319,7 @@ export async function POST() {
       databaseTotals: statusSummary.map(r => ({ status: r.status, count: Number(r.cnt) })),
       message: `✅ Seeded ${tripCount} trips and ${eventCount} telemetry events. ${skipped} already existed.`,
     });
-  } catch (err) {
+    } catch (err) {
     console.error('[school-bus/trips/seed POST]', err);
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
   }

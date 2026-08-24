@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const INIT_TABLE = `
   CREATE TABLE IF NOT EXISTS whatsapp_templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -95,113 +96,127 @@ async function ensureTableAndSeed() {
 }
 
 export async function GET() {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    await ensureTableAndSeed();
-    const templates = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-      `SELECT * FROM whatsapp_templates ORDER BY category, language, created_at`
-    );
-    return NextResponse.json({ templates });
-  } catch (err) {
-    console.error('[Templates GET]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        await ensureTableAndSeed();
+        const templates = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
+          `SELECT * FROM whatsapp_templates ORDER BY category, language, created_at`
+        );
+        return NextResponse.json({ templates });
+      } catch (err) {
+        console.error('[Templates GET]', err);
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    await ensureTableAndSeed();
-    const body = await req.json() as {
-      template_name: string;
-      display_name: string;
-      category: string;
-      language?: string;
-      body_en: string;
-      body_ar?: string;
-      variables?: string[];
-    };
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        await ensureTableAndSeed();
+        const bodyRaw = await req.json() as {
+          template_name: string;
+          display_name: string;
+          category: string;
+          language?: string;
+          body_en: string;
+          body_ar?: string;
+          variables?: string[];
+        };
+        const body = stripTenantOwnershipFields(bodyRaw);
 
-    const { template_name, display_name, category, language = 'en', body_en, body_ar, variables = [] } = body;
+        const { template_name, display_name, category, language = 'en', body_en, body_ar, variables = [] } = body;
 
-    if (!template_name || !display_name || !category || !body_en) {
-      return NextResponse.json({ error: 'template_name, display_name, category, body_en are required' }, { status: 400 });
-    }
+        if (!template_name || !display_name || !category || !body_en) {
+          return NextResponse.json({ error: 'template_name, display_name, category, body_en are required' }, { status: 400 });
+        }
 
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO whatsapp_templates (template_name, display_name, category, language, body_en, body_ar, variables)
-       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)`,
-      template_name, display_name, category, language, body_en, body_ar ?? null, JSON.stringify(variables)
-    );
+        await tx.$executeRawUnsafe(
+          `INSERT INTO whatsapp_templates (template_name, display_name, category, language, body_en, body_ar, variables)
+           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)`,
+          template_name, display_name, category, language, body_en, body_ar ?? null, JSON.stringify(variables)
+        );
 
-    const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-      `SELECT * FROM whatsapp_templates WHERE template_name = $1 LIMIT 1`,
-      template_name
-    );
+        const rows = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
+          `SELECT * FROM whatsapp_templates WHERE template_name = $1 LIMIT 1`,
+          template_name
+        );
 
-    return NextResponse.json({ template: rows[0] }, { status: 201 });
-  } catch (err) {
-    console.error('[Templates POST]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+        return NextResponse.json({ template: rows[0] }, { status: 201 });
+      } catch (err) {
+        console.error('[Templates POST]', err);
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function PATCH(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    const body = await req.json() as {
-      template_name: string;
-      display_name?: string;
-      body_en?: string;
-      body_ar?: string;
-      variables?: string[];
-      is_active?: boolean;
-    };
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const bodyRaw = await req.json() as {
+          template_name: string;
+          display_name?: string;
+          body_en?: string;
+          body_ar?: string;
+          variables?: string[];
+          is_active?: boolean;
+        };
+        const body = stripTenantOwnershipFields(bodyRaw);
 
-    const { template_name, display_name, body_en, body_ar, variables, is_active } = body;
+        const { template_name, display_name, body_en, body_ar, variables, is_active } = body;
 
-    if (!template_name) {
-      return NextResponse.json({ error: 'template_name is required' }, { status: 400 });
-    }
+        if (!template_name) {
+          return NextResponse.json({ error: 'template_name is required' }, { status: 400 });
+        }
 
-    const setClauses: string[] = ['updated_at = NOW()'];
-    const params: unknown[] = [template_name];
-    let idx = 2;
+        const setClauses: string[] = ['updated_at = NOW()'];
+        const params: unknown[] = [template_name];
+        let idx = 2;
 
-    if (display_name !== undefined) { setClauses.push(`display_name = $${idx++}`); params.push(display_name); }
-    if (body_en !== undefined) { setClauses.push(`body_en = $${idx++}`); params.push(body_en); }
-    if (body_ar !== undefined) { setClauses.push(`body_ar = $${idx++}`); params.push(body_ar); }
-    if (variables !== undefined) { setClauses.push(`variables = $${idx++}::jsonb`); params.push(JSON.stringify(variables)); }
-    if (is_active !== undefined) { setClauses.push(`is_active = $${idx++}`); params.push(is_active); }
+        if (display_name !== undefined) { setClauses.push(`display_name = $${idx++}`); params.push(display_name); }
+        if (body_en !== undefined) { setClauses.push(`body_en = $${idx++}`); params.push(body_en); }
+        if (body_ar !== undefined) { setClauses.push(`body_ar = $${idx++}`); params.push(body_ar); }
+        if (variables !== undefined) { setClauses.push(`variables = $${idx++}::jsonb`); params.push(JSON.stringify(variables)); }
+        if (is_active !== undefined) { setClauses.push(`is_active = $${idx++}`); params.push(is_active); }
 
-    await prisma.$executeRawUnsafe(
-      `UPDATE whatsapp_templates SET ${setClauses.join(', ')} WHERE template_name = $1`,
-      ...params
-    );
+        await tx.$executeRawUnsafe(
+          `UPDATE whatsapp_templates SET ${setClauses.join(', ')} WHERE template_name = $1`,
+          ...params
+        );
 
-    const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-      `SELECT * FROM whatsapp_templates WHERE template_name = $1 LIMIT 1`,
-      template_name
-    );
+        const rows = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
+          `SELECT * FROM whatsapp_templates WHERE template_name = $1 LIMIT 1`,
+          template_name
+        );
 
-    return NextResponse.json({ template: rows[0] });
-  } catch (err) {
-    console.error('[Templates PATCH]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+        return NextResponse.json({ template: rows[0] });
+      } catch (err) {
+        console.error('[Templates PATCH]', err);
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+      }
+  });
 }
+

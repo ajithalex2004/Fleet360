@@ -32,9 +32,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface LaneRow {
@@ -56,8 +57,7 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   const sp = req.nextUrl.searchParams;
   const days = Math.min(Math.max(parseInt(sp.get('period') ?? '90', 10) || 90, 1), 365);
@@ -151,7 +151,7 @@ export async function GET(req: NextRequest) {
     }, {
       headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=300' },
     });
-  } catch (e) {
+    } catch (e) {
     console.error('[analytics/lanes]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'lane analytics failed' },

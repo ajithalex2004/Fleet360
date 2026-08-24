@@ -11,9 +11,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const ALLOWED_STATUS = new Set([
@@ -22,6 +23,7 @@ const ALLOWED_STATUS = new Set([
 ]);
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -30,37 +32,41 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
-  const sp = req.nextUrl.searchParams;
-  const statusFilter = sp.get('status');
-  const dateFilter   = sp.get('date');
-  const limitRaw     = sp.get('limit');
-  const limit        = clampInt(limitRaw, 20, 1, 100);
-  if (statusFilter && !ALLOWED_STATUS.has(statusFilter)) {
-    return NextResponse.json({ error: `status must be one of ${[...ALLOWED_STATUS].join('|')}` }, { status: 400 });
-  }
+  return withTenantRls(prisma, tenantId, async (tx) => {
 
-  const where: Record<string, unknown> = { tenantId };
-  if (statusFilter) where.status = statusFilter;
-  if (dateFilter) {
-    const d = new Date(dateFilter);
-    if (isNaN(d.getTime())) return NextResponse.json({ error: 'date must be YYYY-MM-DD' }, { status: 400 });
-    where.targetDate = d;
-  }
+      const sp = req.nextUrl.searchParams;
+      const statusFilter = sp.get('status');
+      const dateFilter   = sp.get('date');
+      const limitRaw     = sp.get('limit');
+      const limit        = clampInt(limitRaw, 20, 1, 100);
+      if (statusFilter && !ALLOWED_STATUS.has(statusFilter)) {
+        return NextResponse.json({ error: `status must be one of ${[...ALLOWED_STATUS].join('|')}` }, { status: 400 });
+      }
 
-  const rows = await prisma.fleetOptimizationRun.findMany({
-    where,
-    orderBy: { createdAt: 'desc' },
-    take: limit,
-    select: {
-      id: true, createdAt: true, updatedAt: true, createdBy: true,
-      status: true, statusReason: true, targetDate: true,
-      metrics: true, publishedAt: true,
-    },
+      const where: Record<string, unknown> = { tenantId };
+      if (statusFilter) where.status = statusFilter;
+      if (dateFilter) {
+        const d = new Date(dateFilter);
+        if (isNaN(d.getTime())) return NextResponse.json({ error: 'date must be YYYY-MM-DD' }, { status: 400 });
+        where.targetDate = d;
+      }
+
+      const rows = await tx.fleetOptimizationRun.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: {
+          id: true, createdAt: true, updatedAt: true, createdBy: true,
+          status: true, statusReason: true, targetDate: true,
+          metrics: true, publishedAt: true,
+        },
+      });
+      return NextResponse.json({ items: rows });
   });
-  return NextResponse.json({ items: rows });
 }
+
 
 function clampInt(raw: string | null, def: number, min: number, max: number): number {
   if (!raw) return def;

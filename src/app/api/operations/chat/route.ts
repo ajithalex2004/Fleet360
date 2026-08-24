@@ -244,7 +244,7 @@ export async function POST(req: NextRequest) {
       Connection: 'keep-alive',
     },
   });
-  } catch (err: unknown) {
+  } catch (err) {
     console.error('[ops-chat] Error:', err);
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: msg }, { status: 500 });

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { MODULES } from '@/lib/permissions';
 import { cacheRead, publicCacheControl, revalidateCache } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'tenants:list';
 
 const getTenants = cacheRead(
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(tenants, {
       headers: { 'Cache-Control': publicCacheControl(30) },
     });
-  } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+    } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
 
 export async function POST(req: NextRequest) {
@@ -61,7 +61,8 @@ export async function POST(req: NextRequest) {
 
   try {
     return await withPlatformAdmin(prisma, async (tx) => {
-      const body = await req.json();
+      const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
       const {
         enabledModules = MODULES,
         localizedName, localizedDesc, bookingTypes,
@@ -96,7 +97,7 @@ export async function POST(req: NextRequest) {
       await revalidateCache(CACHE_TAG);
       return NextResponse.json(tenant, { status: 201 });
     });
-  } catch (e) {
+    } catch (e) {
     console.error('[CREATE TENANT]', e);
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }

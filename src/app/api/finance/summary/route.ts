@@ -17,10 +17,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'finance:summary';
 
 function toNum(val: unknown): number {
@@ -186,13 +187,12 @@ export async function GET(request: NextRequest) {
     const sp   = request.nextUrl.searchParams;
     const fromIso = sp.get('from');
     const toIso   = sp.get('to');
-    const tenantId = request.headers.get('x-tenant-id') ?? 'unknown';
 
     const data = await getFinanceSummary(tenantId, fromIso, toIso);
     return NextResponse.json(data, {
       headers: { 'Cache-Control': privateCacheControl(60, 300) },
     });
-  } catch (err) {
+    } catch (err) {
     console.error('[finance/summary]', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }

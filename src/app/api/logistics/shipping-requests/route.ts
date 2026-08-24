@@ -10,9 +10,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { listShippingRequests, createShippingRequest, LogisticsValidationError } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
   const sp = req.nextUrl.searchParams;
   const status = sp.get('status');
@@ -35,7 +36,7 @@ export async function GET(req: NextRequest) {
   try {
     const data = await listShippingRequests({ tenantId, status, shipperId, search, limit });
     return NextResponse.json({ data }, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (e) {
+    } catch (e) {
     console.error('[logistics/shipping-requests GET]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to list shipping requests' },
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
   const createdBy = req.headers.get('x-user-id');
 
   let body: CreateRequestBody;
@@ -116,7 +117,7 @@ export async function POST(req: NextRequest) {
       createdBy,
     });
     return NextResponse.json({ data: request }, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     if (e instanceof LogisticsValidationError) {
       return NextResponse.json({ error: e.message, issues: e.issues }, { status: 422 });
     }

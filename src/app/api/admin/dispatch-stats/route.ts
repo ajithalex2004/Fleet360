@@ -20,9 +20,9 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const n = (v: unknown) => parseFloat(String(v ?? 0)) || 0;
 const s = (v: unknown) => String(v ?? '');
@@ -76,23 +76,27 @@ export async function GET(req: NextRequest) {
 
     return await withPlatformAdmin(prisma, async (tx) => {
       const sp       = new URL(req.url).searchParams;
-      const tenantId = sp.get('tenantId') ?? '';
+      const filterTenantId = sp.get('tenantId') ?? '';
       const days     = Math.min(30, Math.max(1, parseInt(sp.get('days') ?? '7')));
 
-      const tenantFilter = tenantId ? `AND dj.tenant_id = '${tenantId.replace(/'/g, "''")}'` : '';
-      const daFilter     = tenantId ? `AND da.tenant_id = '${tenantId.replace(/'/g, "''")}'` : '';
+      // Build parameterized tenant filters for defense-in-depth
+      const tenantFilterClause = filterTenantId ? 'AND dj.tenant_id = $2' : '';
+      const daFilterClause     = filterTenantId ? 'AND da.tenant_id = $2' : '';
+      const tenantParams = filterTenantId ? [filterTenantId] : [];
 
       // ── 1. Overall job status breakdown ──────────────────────────────────────
-      const statusRows = await tx.$queryRawUnsafe<Row[]>(`
-        SELECT
+      const statusRows = await tx.$queryRawUnsafe<Row[]>(
+        `SELECT
           status,
           COUNT(*) AS cnt
         FROM dispatch_jobs dj
-        WHERE created_at >= NOW() - INTERVAL '${days} days'
-          ${tenantFilter}
+        WHERE created_at >= NOW() - INTERVAL '$1 days'
+          ${tenantFilterClause}
         GROUP BY status
-        ORDER BY cnt DESC
-      `).catch(() => [] as Row[]);
+        ORDER BY cnt DESC`,
+        days,
+        ...tenantParams
+      ).catch(() => [] as Row[]);
 
       const statusMap: Record<string, number> = {};
       for (const r of statusRows) statusMap[s(r.status)] = n(r.cnt);
@@ -106,14 +110,15 @@ export async function GET(req: NextRequest) {
       const acceptanceRate = total > 0 ? Math.round(((completed + inProgress) / total) * 100) : 0;
 
       // ── 2. Driver pool stats ──────────────────────────────────────────────────
-      const driverRows = await tx.$queryRawUnsafe<Row[]>(`
-        SELECT
+      const driverRows = await tx.$queryRawUnsafe<Row[]>(
+        `SELECT
           status,
           COUNT(*) AS cnt
         FROM driver_availability da
-        WHERE 1=1 ${daFilter}
-        GROUP BY status
-      `).catch(() => [] as Row[]);
+        WHERE 1=1 ${daFilterClause}
+        GROUP BY status`,
+        ...tenantParams
+      ).catch(() => [] as Row[]);
 
       const driverMap: Record<string, number> = {};
       for (const r of driverRows) driverMap[s(r.status)] = n(r.cnt);
@@ -125,18 +130,20 @@ export async function GET(req: NextRequest) {
       const totalDrivers     = driversAvailable + driversBusy + driversOnBreak + driversOffDuty;
 
       // ── 3. Service type breakdown ─────────────────────────────────────────────
-      const svcRows = await tx.$queryRawUnsafe<Row[]>(`
-        SELECT
+      const svcRows = await tx.$queryRawUnsafe<Row[]>(
+        `SELECT
           service_type,
           COUNT(*) AS total,
           COUNT(*) FILTER (WHERE status = 'COMPLETED')  AS completed,
           COUNT(*) FILTER (WHERE status IN ('FAILED','ESCALATED')) AS failed
         FROM dispatch_jobs dj
-        WHERE created_at >= NOW() - INTERVAL '${days} days'
-          ${tenantFilter}
+        WHERE created_at >= NOW() - INTERVAL '$1 days'
+          ${tenantFilterClause}
         GROUP BY service_type
-        ORDER BY total DESC
-      `).catch(() => [] as Row[]);
+        ORDER BY total DESC`,
+        days,
+        ...tenantParams
+      ).catch(() => [] as Row[]);
 
       const serviceBreakdown = svcRows.map(r => ({
         serviceType: s(r.service_type),
@@ -147,18 +154,20 @@ export async function GET(req: NextRequest) {
       }));
 
       // ── 4. Daily trend (jobs created per day) ────────────────────────────────
-      const trendRows = await tx.$queryRawUnsafe<Row[]>(`
-        SELECT
+      const trendRows = await tx.$queryRawUnsafe<Row[]>(
+        `SELECT
           DATE(created_at AT TIME ZONE 'Asia/Dubai') AS day,
           COUNT(*) AS total,
           COUNT(*) FILTER (WHERE status = 'COMPLETED') AS completed,
           COUNT(*) FILTER (WHERE status IN ('FAILED','ESCALATED')) AS failed
         FROM dispatch_jobs dj
-        WHERE created_at >= NOW() - INTERVAL '${days} days'
-          ${tenantFilter}
+        WHERE created_at >= NOW() - INTERVAL '$1 days'
+          ${tenantFilterClause}
         GROUP BY day
-        ORDER BY day ASC
-      `).catch(() => [] as Row[]);
+        ORDER BY day ASC`,
+        days,
+        ...tenantParams
+      ).catch(() => [] as Row[]);
 
       const trend = trendRows.map(r => ({
         day:       s(r.day).split('T')[0],
@@ -168,23 +177,25 @@ export async function GET(req: NextRequest) {
       }));
 
       // ── 5. Escalated / failed jobs requiring attention ───────────────────────
-      const urgentRows = await tx.$queryRawUnsafe<Row[]>(`
-        SELECT
+      const urgentRows = await tx.$queryRawUnsafe<Row[]>(
+        `SELECT
           id, tenant_id, service_type, priority, status,
           current_attempt, max_attempts,
           created_at, updated_at
         FROM dispatch_jobs dj
         WHERE status IN ('ESCALATED','FAILED')
-          AND created_at >= NOW() - INTERVAL '${days} days'
-          ${tenantFilter}
+          AND created_at >= NOW() - INTERVAL '$1 days'
+          ${tenantFilterClause}
         ORDER BY
           CASE priority
             WHEN 'EMERGENCY' THEN 1 WHEN 'P1' THEN 2 WHEN 'P2' THEN 3
             WHEN 'URGENT'    THEN 4 ELSE 5
           END,
           created_at DESC
-        LIMIT 20
-      `).catch(() => [] as Row[]);
+        LIMIT 20`,
+        days,
+        ...tenantParams
+      ).catch(() => [] as Row[]);
 
       const urgentJobs = urgentRows.map(r => ({
         id:             s(r.id),
@@ -205,9 +216,9 @@ export async function GET(req: NextRequest) {
         acceptanceRate: number;
       }[] = [];
 
-      if (!tenantId) {
-        const tenantRows = await tx.$queryRawUnsafe<Row[]>(`
-          SELECT
+      if (!filterTenantId) {
+        const tenantRows = await tx.$queryRawUnsafe<Row[]>(
+          `SELECT
             dj.tenant_id,
             COALESCE(t.name, dj.tenant_id) AS tenant_name,
             COUNT(*) AS total,
@@ -216,11 +227,12 @@ export async function GET(req: NextRequest) {
             COUNT(*) FILTER (WHERE dj.status IN ('PENDING','SEARCHING','OFFERED','RETRYING','IN_PROGRESS')) AS active
           FROM dispatch_jobs dj
           LEFT JOIN "Tenant" t ON t.id = dj.tenant_id
-          WHERE dj.created_at >= NOW() - INTERVAL '${days} days'
+          WHERE dj.created_at >= NOW() - INTERVAL '$1 days'
           GROUP BY dj.tenant_id, t.name
           ORDER BY total DESC
-          LIMIT 20
-        `).catch(() => [] as Row[]);
+          LIMIT 20`,
+          days
+        ).catch(() => [] as Row[]);
 
         tenantBreakdown = tenantRows.map(r => ({
           tenantId:       s(r.tenant_id),
@@ -234,14 +246,16 @@ export async function GET(req: NextRequest) {
       }
 
       // ── 7. Avg response / completion time ────────────────────────────────────
-      const [timeRow] = await tx.$queryRawUnsafe<Row[]>(`
-        SELECT
+      const [timeRow] = await tx.$queryRawUnsafe<Row[]>(
+        `SELECT
           AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 60) FILTER (WHERE status = 'COMPLETED') AS avg_complete_min,
           AVG(current_attempt) FILTER (WHERE status = 'COMPLETED') AS avg_attempts
         FROM dispatch_jobs dj
-        WHERE created_at >= NOW() - INTERVAL '${days} days'
-          ${tenantFilter}
-      `).catch(() => [{}] as Row[]);
+        WHERE created_at >= NOW() - INTERVAL '$1 days'
+          ${tenantFilterClause}`,
+        days,
+        ...tenantParams
+      ).catch(() => [{}] as Row[]);
 
       const avgCompletionMin = Math.round(n(timeRow?.avg_complete_min) * 10) / 10;
       const avgAttempts      = Math.round(n(timeRow?.avg_attempts) * 10) / 10;
@@ -268,7 +282,7 @@ export async function GET(req: NextRequest) {
         tenantBreakdown,
       });
     });
-  } catch (err) {
+    } catch (err) {
     console.error('[admin/dispatch-stats GET]', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }

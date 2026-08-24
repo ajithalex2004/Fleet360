@@ -12,27 +12,32 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const { searchParams } = new URL(req.url);
-    const status = searchParams.get('status');
-    const renewals = await prisma.leaseRenewal.findMany({
-      where: {
-        tenantId,
-        ...(status ? { status } : {}),
-      },
-      include: { originalContract: { select: { contractNumber: true, endDate: true, monthlyRate: true } } },
-      orderBy: { createdAt: 'desc' },
-    });
-    return NextResponse.json(renewals);
-  } catch (e) {
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
-  }
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const { searchParams } = new URL(req.url);
+        const status = searchParams.get('status');
+        const renewals = await tx.leaseRenewal.findMany({
+          where: {
+            tenantId,
+            ...(status ? { status } : {}),
+          },
+          include: { originalContract: { select: { contractNumber: true, endDate: true, monthlyRate: true } } },
+          orderBy: { createdAt: 'desc' },
+        });
+        return NextResponse.json(renewals);
+      } catch (e) {
+        return NextResponse.json({ error: 'Failed' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant(req);
@@ -41,7 +46,8 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const contract = await prisma.leaseContract2.findFirst({
       where: { id: body.originalContractId, tenantId },
       select: { id: true },
@@ -57,7 +63,7 @@ export async function POST(req: NextRequest) {
     }),
     );
     return NextResponse.json(renewal, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     return NextResponse.json({ error: 'Failed' }, { status: 500 });
   }
 }

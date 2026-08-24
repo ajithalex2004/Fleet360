@@ -16,11 +16,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { revertConsolidation, type RevertConsolidationInput } from '@/lib/planning/route-consolidation-apply';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
   const permError = requireBusOpsAdminAccess(req, 'route-consolidation');
   if (permError) return permError;
   const userId = req.headers.get('x-user-id');
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
     const result = await revertConsolidation(prisma, input);
     if (result.status === 'REVERTED') return NextResponse.json(result);
     return NextResponse.json(result, { status: 409 });
-  } catch (e) {
+    } catch (e) {
     console.error('[route-consolidation.revert]', e);
     return NextResponse.json({ error: 'Revert failed' }, { status: 500 });
   }

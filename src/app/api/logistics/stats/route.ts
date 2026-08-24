@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'logistics:stats';
 
 const activeShipmentStatuses = ['DISPATCHED', 'ENROUTE_PICKUP', 'LOADED', 'ENROUTE_DELIVERY', 'ACTIVE'];
@@ -150,17 +151,14 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;,
-      { status: 401, headers: { 'Cache-Control': 'private, no-store' } },
-    );
-  }
+  const { tenantId } = authz;
 
   try {
     const data = await getLogisticsStats(tenantId);
     return NextResponse.json(data, {
       headers: { 'Cache-Control': privateCacheControl(30, 120) },
     });
-  } catch (err) {
+    } catch (err) {
     console.error('[logistics/stats]', err);
     return NextResponse.json(
       {

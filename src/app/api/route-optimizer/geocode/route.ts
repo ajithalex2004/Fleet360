@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({ results });
-  } catch (err) {
+    } catch (err) {
     console.error('[route-optimizer/geocode]', err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },

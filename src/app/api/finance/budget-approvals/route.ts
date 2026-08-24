@@ -4,9 +4,10 @@
  * Departments submit → Finance Manager reviews → CFO approves for large budgets
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const INIT_BUDGET_SUBMISSIONS = `
   CREATE TABLE IF NOT EXISTS finance_budget_submissions (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -50,181 +51,194 @@ function nextSubmissionNo(year: number, count: number): string {
 }
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  await prisma.$executeRawUnsafe(INIT_BUDGET_SUBMISSIONS).catch(()=>{});
-  await prisma.$executeRawUnsafe(INIT_BUDGET_COMMENTS).catch(()=>{});
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    await tx.$executeRawUnsafe(INIT_BUDGET_SUBMISSIONS).catch(()=>{});
+      await tx.$executeRawUnsafe(INIT_BUDGET_COMMENTS).catch(()=>{});
 
-  const sp      = req.nextUrl.searchParams;
-  const year    = sp.get('year');
-  const dept    = sp.get('department');
-  const status  = sp.get('status');
-  const id      = sp.get('id');
+      const sp      = req.nextUrl.searchParams;
+      const year    = sp.get('year');
+      const dept    = sp.get('department');
+      const status  = sp.get('status');
+      const id      = sp.get('id');
 
-  if (id) {
-    const [sub] = await prisma.$queryRawUnsafe<Record<string,unknown>[]>(
-      `SELECT * FROM finance_budget_submissions WHERE id=$1 AND deleted_at IS NULL`, id
-    ).catch(()=>[]);
-    if (!sub) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    const comments = await prisma.$queryRawUnsafe<Record<string,unknown>[]>(
-      `SELECT * FROM finance_budget_comments WHERE submission_id=$1 ORDER BY created_at ASC`, id
-    ).catch(()=>[]);
-    return NextResponse.json({ ...sub, comments });
-  }
+      if (id) {
+        const [sub] = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
+          `SELECT * FROM finance_budget_submissions WHERE id=$1 AND deleted_at IS NULL`, id
+        ).catch(()=>[]);
+        if (!sub) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        const comments = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
+          `SELECT * FROM finance_budget_comments WHERE submission_id=$1 ORDER BY created_at ASC`, id
+        ).catch(()=>[]);
+        return NextResponse.json({ ...sub, comments });
+      }
 
-  let where = 'WHERE deleted_at IS NULL';
-  const params: unknown[] = [];
-  let pi = 1;
-  if (year)   { where += ` AND fiscal_year = $${pi++}`;  params.push(parseInt(year)); }
-  if (dept)   { where += ` AND department = $${pi++}`;   params.push(dept); }
-  if (status) { where += ` AND status = $${pi++}`;       params.push(status); }
+      let where = 'WHERE deleted_at IS NULL';
+      const params: unknown[] = [];
+      let pi = 1;
+      if (year)   { where += ` AND fiscal_year = $${pi++}`;  params.push(parseInt(year)); }
+      if (dept)   { where += ` AND department = $${pi++}`;   params.push(dept); }
+      if (status) { where += ` AND status = $${pi++}`;       params.push(status); }
 
-  const subs = await prisma.$queryRawUnsafe<Record<string,unknown>[]>(
-    `SELECT * FROM finance_budget_submissions ${where} ORDER BY created_at DESC`, ...params
-  ).catch(()=>[]);
+      const subs = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
+        `SELECT * FROM finance_budget_submissions ${where} ORDER BY created_at DESC`, ...params
+      ).catch(()=>[]);
 
-  // Status summary
-  const statusCounts = await prisma.$queryRawUnsafe<{status:string; count:string; total_requested:string}[]>(
-    `SELECT status, COUNT(*)::text as count, COALESCE(SUM(total_requested),0)::text as total_requested
-     FROM finance_budget_submissions WHERE deleted_at IS NULL GROUP BY status`
-  ).catch(()=>[]);
+      // Status summary
+      const statusCounts = await tx.$queryRawUnsafe<{status:string; count:string; total_requested:string}[]>(
+        `SELECT status, COUNT(*)::text as count, COALESCE(SUM(total_requested),0)::text as total_requested
+         FROM finance_budget_submissions WHERE deleted_at IS NULL GROUP BY status`
+      ).catch(()=>[]);
 
-  return NextResponse.json({ data: subs, statusCounts });
+      return NextResponse.json({ data: subs, statusCounts });
+  });
 }
+
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  await prisma.$executeRawUnsafe(INIT_BUDGET_SUBMISSIONS).catch(()=>{});
-  await prisma.$executeRawUnsafe(INIT_BUDGET_COMMENTS).catch(()=>{});
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    await tx.$executeRawUnsafe(INIT_BUDGET_SUBMISSIONS).catch(()=>{});
+      await tx.$executeRawUnsafe(INIT_BUDGET_COMMENTS).catch(()=>{});
 
-  const body = await req.json();
+      const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
 
-  if (body.action === 'submit') {
-    // Dept head submits draft for FM review
-    const [row] = await prisma.$queryRawUnsafe<Record<string,unknown>[]>(
-      `UPDATE finance_budget_submissions
-       SET status='SUBMITTED', submitted_at=NOW(), updated_at=NOW()
-       WHERE id=$1 AND status='DRAFT' RETURNING *`, body.submissionId
-    ).catch(()=>[]);
-    if (row) {
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO finance_budget_comments (submission_id, author, role, comment, action)
-         VALUES ($1,$2,'DEPT_HEAD','Budget submitted for Finance Manager review','SUBMITTED')`,
-        body.submissionId, body.performedBy ?? 'Dept Head'
-      ).catch(()=>{});
-    }
-    return NextResponse.json(row ?? {});
-  }
+      if (body.action === 'submit') {
+        // Dept head submits draft for FM review
+        const [row] = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
+          `UPDATE finance_budget_submissions
+           SET status='SUBMITTED', submitted_at=NOW(), updated_at=NOW()
+           WHERE id=$1 AND status='DRAFT' RETURNING *`, body.submissionId
+        ).catch(()=>[]);
+        if (row) {
+          await tx.$executeRawUnsafe(
+            `INSERT INTO finance_budget_comments (submission_id, author, role, comment, action)
+             VALUES ($1,$2,'DEPT_HEAD','Budget submitted for Finance Manager review','SUBMITTED')`,
+            body.submissionId, body.performedBy ?? 'Dept Head'
+          ).catch(()=>{});
+        }
+        return NextResponse.json(row ?? {});
+      }
 
-  if (body.action === 'fm_review') {
-    // FM approves → CFO_REVIEW (if > 500k) or APPROVED; or rejects / requests revision
-    const { submissionId, decision, notes, approvedAmount, reviewedBy } = body;
-    let newStatus = 'CFO_REVIEW';
-    const [current] = await prisma.$queryRawUnsafe<{total_requested: string}[]>(
-      `SELECT total_requested FROM finance_budget_submissions WHERE id=$1`, submissionId
-    ).catch(()=>[{total_requested:'0'}]);
-    const amount = parseFloat(current?.total_requested ?? '0');
+      if (body.action === 'fm_review') {
+        // FM approves → CFO_REVIEW (if > 500k) or APPROVED; or rejects / requests revision
+        const { submissionId, decision, notes, approvedAmount, reviewedBy } = body;
+        let newStatus = 'CFO_REVIEW';
+        const [current] = await tx.$queryRawUnsafe<{total_requested: string}[]>(
+          `SELECT total_requested FROM finance_budget_submissions WHERE id=$1`, submissionId
+        ).catch(()=>[{total_requested:'0'}]);
+        const amount = parseFloat(current?.total_requested ?? '0');
 
-    if (decision === 'APPROVE') {
-      newStatus = amount > 500_000 ? 'CFO_REVIEW' : 'APPROVED';
-    } else if (decision === 'REJECT') {
-      newStatus = 'REJECTED';
-    } else {
-      newStatus = 'REVISION_REQUIRED';
-    }
+        if (decision === 'APPROVE') {
+          newStatus = amount > 500_000 ? 'CFO_REVIEW' : 'APPROVED';
+        } else if (decision === 'REJECT') {
+          newStatus = 'REJECTED';
+        } else {
+          newStatus = 'REVISION_REQUIRED';
+        }
 
-    const [row] = await prisma.$queryRawUnsafe<Record<string,unknown>[]>(
-      `UPDATE finance_budget_submissions
-       SET status=$2, fm_reviewed_at=NOW(), fm_reviewed_by=$3, fm_notes=$4,
-           total_approved=COALESCE($5,total_requested), updated_at=NOW()
-       WHERE id=$1 RETURNING *`,
-      submissionId, newStatus, reviewedBy ?? 'Finance Manager', notes ?? null, approvedAmount ?? null
-    ).catch(()=>[]);
-    if (row) {
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO finance_budget_comments (submission_id, author, role, comment, action)
-         VALUES ($1,$2,'FM',$3,$4)`,
-        submissionId, reviewedBy ?? 'Finance Manager',
-        notes ?? `FM ${decision}D budget`,
-        `FM_${decision === 'APPROVE' ? 'APPROVED' : 'REJECTED'}`
-      ).catch(()=>{});
-    }
-    return NextResponse.json(row ?? {});
-  }
+        const [row] = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
+          `UPDATE finance_budget_submissions
+           SET status=$2, fm_reviewed_at=NOW(), fm_reviewed_by=$3, fm_notes=$4,
+               total_approved=COALESCE($5,total_requested), updated_at=NOW()
+           WHERE id=$1 RETURNING *`,
+          submissionId, newStatus, reviewedBy ?? 'Finance Manager', notes ?? null, approvedAmount ?? null
+        ).catch(()=>[]);
+        if (row) {
+          await tx.$executeRawUnsafe(
+            `INSERT INTO finance_budget_comments (submission_id, author, role, comment, action)
+             VALUES ($1,$2,'FM',$3,$4)`,
+            submissionId, reviewedBy ?? 'Finance Manager',
+            notes ?? `FM ${decision}D budget`,
+            `FM_${decision === 'APPROVE' ? 'APPROVED' : 'REJECTED'}`
+          ).catch(()=>{});
+        }
+        return NextResponse.json(row ?? {});
+      }
 
-  if (body.action === 'cfo_decision') {
-    const { submissionId, decision, notes, approvedAmount, decidedBy } = body;
-    const newStatus = decision === 'APPROVE' ? 'APPROVED' : decision === 'REJECT' ? 'REJECTED' : 'REVISION_REQUIRED';
-    const [row] = await prisma.$queryRawUnsafe<Record<string,unknown>[]>(
-      `UPDATE finance_budget_submissions
-       SET status=$2, cfo_approved_at=NOW(), cfo_approved_by=$3, cfo_notes=$4,
-           total_approved=COALESCE($5,total_approved), updated_at=NOW()
-       WHERE id=$1 RETURNING *`,
-      submissionId, newStatus, decidedBy ?? 'CFO', notes ?? null, approvedAmount ?? null
-    ).catch(()=>[]);
-    if (row) {
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO finance_budget_comments (submission_id, author, role, comment, action)
-         VALUES ($1,$2,'CFO',$3,$4)`,
-        submissionId, decidedBy ?? 'CFO',
-        notes ?? `CFO ${decision}D budget`,
-        `CFO_${decision === 'APPROVE' ? 'APPROVED' : 'REJECTED'}`
-      ).catch(()=>{});
-    }
-    return NextResponse.json(row ?? {});
-  }
+      if (body.action === 'cfo_decision') {
+        const { submissionId, decision, notes, approvedAmount, decidedBy } = body;
+        const newStatus = decision === 'APPROVE' ? 'APPROVED' : decision === 'REJECT' ? 'REJECTED' : 'REVISION_REQUIRED';
+        const [row] = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
+          `UPDATE finance_budget_submissions
+           SET status=$2, cfo_approved_at=NOW(), cfo_approved_by=$3, cfo_notes=$4,
+               total_approved=COALESCE($5,total_approved), updated_at=NOW()
+           WHERE id=$1 RETURNING *`,
+          submissionId, newStatus, decidedBy ?? 'CFO', notes ?? null, approvedAmount ?? null
+        ).catch(()=>[]);
+        if (row) {
+          await tx.$executeRawUnsafe(
+            `INSERT INTO finance_budget_comments (submission_id, author, role, comment, action)
+             VALUES ($1,$2,'CFO',$3,$4)`,
+            submissionId, decidedBy ?? 'CFO',
+            notes ?? `CFO ${decision}D budget`,
+            `CFO_${decision === 'APPROVE' ? 'APPROVED' : 'REJECTED'}`
+          ).catch(()=>{});
+        }
+        return NextResponse.json(row ?? {});
+      }
 
-  if (body.action === 'add_comment') {
-    const [row] = await prisma.$queryRawUnsafe<Record<string,unknown>[]>(
-      `INSERT INTO finance_budget_comments (submission_id, author, role, comment)
-       VALUES ($1,$2,$3,$4) RETURNING *`,
-      body.submissionId, body.author, body.role ?? 'FM', body.comment
-    ).catch(()=>[]);
-    return NextResponse.json(row ?? {}, { status: 201 });
-  }
+      if (body.action === 'add_comment') {
+        const [row] = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
+          `INSERT INTO finance_budget_comments (submission_id, author, role, comment)
+           VALUES ($1,$2,$3,$4) RETURNING *`,
+          body.submissionId, body.author, body.role ?? 'FM', body.comment
+        ).catch(()=>[]);
+        return NextResponse.json(row ?? {}, { status: 201 });
+      }
 
-  // Create new budget submission
-  const { fiscalYear, department, departmentHead, lineItems, notes } = body;
-  const totalRequested = (lineItems ?? []).reduce((s: number, i: {amount: number}) => s + (i.amount ?? 0), 0);
+      // Create new budget submission
+      const { fiscalYear, department, departmentHead, lineItems, notes } = body;
+      const totalRequested = (lineItems ?? []).reduce((s: number, i: {amount: number}) => s + (i.amount ?? 0), 0);
 
-  const [countRow] = await prisma.$queryRawUnsafe<{count:string}[]>(
-    `SELECT COUNT(*)::text as count FROM finance_budget_submissions WHERE fiscal_year=$1`, fiscalYear
-  ).catch(()=>[{count:'0'}]);
-  const submissionNo = nextSubmissionNo(fiscalYear, parseInt(countRow?.count ?? '0'));
+      const [countRow] = await tx.$queryRawUnsafe<{count:string}[]>(
+        `SELECT COUNT(*)::text as count FROM finance_budget_submissions WHERE fiscal_year=$1`, fiscalYear
+      ).catch(()=>[{count:'0'}]);
+      const submissionNo = nextSubmissionNo(fiscalYear, parseInt(countRow?.count ?? '0'));
 
-  const [row] = await prisma.$queryRawUnsafe<Record<string,unknown>[]>(
-    `INSERT INTO finance_budget_submissions
-       (submission_no, fiscal_year, department, department_head, total_requested, line_items, notes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-    submissionNo, fiscalYear, department, departmentHead, totalRequested,
-    JSON.stringify(lineItems ?? []), notes ?? null
-  ).catch(()=>[]);
+      const [row] = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
+        `INSERT INTO finance_budget_submissions
+           (submission_no, fiscal_year, department, department_head, total_requested, line_items, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+        submissionNo, fiscalYear, department, departmentHead, totalRequested,
+        JSON.stringify(lineItems ?? []), notes ?? null
+      ).catch(()=>[]);
 
-  if (!row) return NextResponse.json({ error: 'Failed to create submission' }, { status: 500 });
-  return NextResponse.json(row, { status: 201 });
+      if (!row) return NextResponse.json({ error: 'Failed to create submission' }, { status: 500 });
+      return NextResponse.json(row, { status: 201 });
+  });
 }
+
 
 export async function DELETE(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const sp = req.nextUrl.searchParams;
-  const id = sp.get('id');
-  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
-  await prisma.$executeRawUnsafe(
-    `UPDATE finance_budget_submissions SET deleted_at=NOW() WHERE id=$1 AND status='DRAFT'`, id
-  ).catch(()=>{});
-  return NextResponse.json({ ok: true });
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const sp = req.nextUrl.searchParams;
+      const id = sp.get('id');
+      if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+      await tx.$executeRawUnsafe(
+        `UPDATE finance_budget_submissions SET deleted_at=NOW() WHERE id=$1 AND status='DRAFT'`, id
+      ).catch(()=>{});
+      return NextResponse.json({ ok: true });
+  });
 }
+

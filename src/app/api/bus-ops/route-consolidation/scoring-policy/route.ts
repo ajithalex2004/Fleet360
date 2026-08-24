@@ -13,6 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import {
   resolveScoringPolicy,
@@ -24,7 +25,7 @@ import {
 import { hasPermission, buildPermissionKey, SYSTEM_ROLES } from '@/lib/permissions';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
   const permError = requireBusOpsAdminAccess(req, 'route-consolidation');
   if (permError) return permError;
 
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
   const userId = req.headers.get('x-user-id') ?? null;
 
   const permError = requireScoringPolicyEditPermission(req);
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
       userId,
     });
     return NextResponse.json(policy, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     console.error('[route-consolidation.scoring-policy.POST]', e);
     return NextResponse.json({ error: 'Failed to activate scoring policy' }, { status: 500 });
   }

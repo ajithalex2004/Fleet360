@@ -15,6 +15,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import {
   resolveTicketFormFieldsBatch,
 } from '@/lib/service-config/resolvers';
@@ -27,7 +28,7 @@ import {
 import type { ServiceTone } from '@/types/service-config';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export interface ServiceTypeConfig {
@@ -59,7 +60,7 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
   try {
     const enabled = await getTenantEnabledTypes(tenantId);
@@ -97,7 +98,7 @@ export async function GET(req: NextRequest) {
     for (const entry of cfgEntries) if (entry) typeConfig[entry[0]] = entry[1];
 
     return NextResponse.json({ ok: true, formFields, typeConfig });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'service-tickets.form-fields.list' });
     return NextResponse.json({ ok: false, error: 'Failed to resolve form fields' }, { status: 500 });
   }

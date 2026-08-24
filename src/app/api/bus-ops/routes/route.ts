@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'bus-ops:routes';
 
 const getRoutes = cacheRead(
@@ -31,20 +32,21 @@ export async function GET(req: NextRequest) {
 
     }
 
-    const { tenantId } = authz;, { status: 401 });
+    const { tenantId } = authz;
     const { searchParams } = new URL(req.url);
     const active = searchParams.get('active');
     const routes = await getRoutes(tenantId, active);
     return NextResponse.json(routes, {
       headers: { 'Cache-Control': privateCacheControl(30, 120) },
     });
-  } catch (error) {
-    console.error('Error fetching routes:', error);
+    } catch (e) {
+    console.error('Error fetching routes:', e);
     return NextResponse.json({ error: 'Failed to fetch routes' }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
+
   try {
     const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -54,23 +56,29 @@ export async function POST(req: NextRequest) {
 
     }
 
-    const { tenantId } = authz;, { status: 401 });
-    const body = await req.json();
-    const { stops, ...routeData } = body;
-    const route = await prisma.busRoute.create({
-      data: {
-        ...routeData,
-        tenantId,
-        stops: stops?.length
-          ? { create: stops.map((s: any, i: number) => ({ ...s, sequence: s.sequence ?? i + 1 })) }
-          : undefined,
-      },
-      include: { stops: { orderBy: { sequence: 'asc' } } },
+    const { tenantId } = authz;
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+
+        const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
+        const { stops, ...routeData } = body;
+        const route = await tx.busRoute.create({
+          data: {
+            ...routeData,
+            tenantId,
+            stops: stops?.length
+              ? { create: stops.map((s: any, i: number) => ({ ...s, sequence: s.sequence ?? i + 1 })) }
+              : undefined,
+          },
+          include: { stops: { orderBy: { sequence: 'asc' } } },
+        });
+        revalidateCache([CACHE_TAG]);
+        return NextResponse.json(route, { status: 201 });
     });
-    revalidateCache([CACHE_TAG]);
-    return NextResponse.json(route, { status: 201 });
-  } catch (error) {
-    console.error('Error creating route:', error);
+  } catch (e) {
+    console.error('Error creating route:', e);
     return NextResponse.json({ error: 'Failed to create route' }, { status: 500 });
   }
 }
+

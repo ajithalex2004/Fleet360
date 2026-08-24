@@ -21,9 +21,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma }                    from '@/lib/prisma';
-import { withPlatformAdmin }         from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
@@ -34,7 +34,8 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   try {
-    const body = await req.json().catch(() => ({}));
+    const bodyRaw = await req.json().catch(() => ({}));
+    const body = stripTenantOwnershipFields(bodyRaw);
     const { eventIds, dryRun = false }: { eventIds?: string[]; dryRun?: boolean } = body;
 
     // Validate eventIds if provided
@@ -133,7 +134,7 @@ export async function POST(req: NextRequest) {
         message:   `${replayedIds.length} event(s) re-queued — will be picked up on the next outbox-publisher poll`,
       });
     });
-  } catch (err) {
+    } catch (err) {
     console.error('[admin/events/outbox/replay POST]', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }

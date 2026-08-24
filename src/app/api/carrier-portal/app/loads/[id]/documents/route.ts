@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { fetchShipmentById, resolveCarrierAppDevice } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withTenantRls } from '@/lib/rls';
 export const runtime = 'nodejs';
 
 interface DocumentBody {
@@ -67,9 +68,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const auth = await requireAssignedShipment(req, params.id);
   if ('error' in auth) return auth.error;
 
-  let body: DocumentBody;
-  try { body = (await req.json()) as DocumentBody; }
-  catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
+  let bodyRaw: DocumentBody;
+  try {
+    bodyRaw = await req.json() as DocumentBody;
+  } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
+  const body = stripTenantOwnershipFields(bodyRaw);
 
   if (!body.docType || !body.docName) {
     return NextResponse.json({ error: 'docType and docName are required' }, { status: 400 });
@@ -82,31 +85,33 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   try {
-    await ensureTable();
-    const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-      `INSERT INTO logistics_shipment_documents
-         (tenant_id, shipment_order_id, doc_type, doc_name, file_url, file_data, mime_type, file_size, uploaded_by, notes, metadata)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb)
-       RETURNING id`,
-      auth.device.tenantId,
-      params.id,
-      body.docType,
-      body.docName,
-      body.fileUrl ?? null,
-      body.fileData ?? null,
-      body.mimeType ?? null,
-      body.fileSize ?? null,
-      `carrier:${auth.device.carrierId}`,
-      body.notes ?? null,
-      JSON.stringify({
-        source: 'carrier-app',
-        carrierId: auth.device.carrierId,
-        deviceId: auth.device.deviceId,
-      }),
-    );
+    return await withTenantRls(prisma, tenantId, async (tx) => {
+      await ensureTable();
+      const rows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `INSERT INTO logistics_shipment_documents
+           (tenant_id, shipment_order_id, doc_type, doc_name, file_url, file_data, mime_type, file_size, uploaded_by, notes, metadata)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb)
+         RETURNING id`,
+        auth.device.tenantId,
+        params.id,
+        body.docType,
+        body.docName,
+        body.fileUrl ?? null,
+        body.fileData ?? null,
+        body.mimeType ?? null,
+        body.fileSize ?? null,
+        `carrier:${auth.device.carrierId}`,
+        body.notes ?? null,
+        JSON.stringify({
+          source: 'carrier-app',
+          carrierId: auth.device.carrierId,
+          deviceId: auth.device.deviceId,
+        }),
+      );
 
-    return NextResponse.json({ success: true, id: rows[0]?.id ?? null }, { status: 201 });
-  } catch (e) {
+      return NextResponse.json({ success: true, id: rows[0]?.id ?? null }, { status: 201 });
+    });
+    } catch (e) {
     console.error('[carrier-portal/app/loads/:id/documents POST]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to attach carrier document' },

@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
       status: 'SUBMITTED',
     });
     return NextResponse.json(bid, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     // Governance / policy / closed-RFQ rejections are caller-fixable → 400.
     console.error('[carrier-portal/bid POST]', e);
     return NextResponse.json(

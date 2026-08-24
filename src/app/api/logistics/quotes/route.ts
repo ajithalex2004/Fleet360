@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 /**
  * Freight Quotation API
  * GET  /api/logistics/quotes        — list all quotes
@@ -132,111 +133,117 @@ async function ensureTable() {
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 export async function GET() {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    await ensureTable();
-    const quotes = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
-      `SELECT id, quote_no, customer_name, customer_email, origin, destination,
-              distance_km, weight_tonnes, shipment_type, total_aed, status,
-              valid_days, booking_id, created_at
-       FROM logistics_quotes
-       ORDER BY created_at DESC
-       LIMIT 100`
-    ).catch(() => [] as Array<Record<string, unknown>>);
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        await ensureTable();
+        const quotes = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
+          `SELECT id, quote_no, customer_name, customer_email, origin, destination,
+                  distance_km, weight_tonnes, shipment_type, total_aed, status,
+                  valid_days, booking_id, created_at
+           FROM logistics_quotes
+           ORDER BY created_at DESC
+           LIMIT 100`
+        ).catch(() => [] as Array<Record<string, unknown>>);
 
-    return NextResponse.json(quotes.map(q => ({
-      ...q,
-      distance_km:   q.distance_km   != null ? Number(q.distance_km)   : null,
-      weight_tonnes: q.weight_tonnes != null ? Number(q.weight_tonnes) : null,
-      total_aed:     q.total_aed     != null ? Number(q.total_aed)     : null,
-      created_at:    q.created_at instanceof Date ? q.created_at.toISOString() : q.created_at,
-    })));
-  } catch (err) {
-    console.error('[quotes GET]', err);
-    return NextResponse.json([]);
-  }
+        return NextResponse.json(quotes.map(q => ({
+          ...q,
+          distance_km:   q.distance_km   != null ? Number(q.distance_km)   : null,
+          weight_tonnes: q.weight_tonnes != null ? Number(q.weight_tonnes) : null,
+          total_aed:     q.total_aed     != null ? Number(q.total_aed)     : null,
+          created_at:    q.created_at instanceof Date ? q.created_at.toISOString() : q.created_at,
+        })));
+      } catch (err) {
+        console.error('[quotes GET]', err);
+        return NextResponse.json([]);
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    await ensureTable();
-    const body = await req.json() as {
-      action?: 'calculate' | 'save';
-      customerName?: string;
-      customerEmail?: string;
-      customerPhone?: string;
-      origin?: string;
-      destination?: string;
-      distanceKm: number;
-      weightTonnes: number;
-      shipmentType: string;
-      vehicleType?: string;
-      cargoDesc?: string;
-      cargoValueAED?: number;
-      isUrgent?: boolean;
-      isHazmat?: boolean;
-      requiresInsurance?: boolean;
-      requiresCustoms?: boolean;
-      validDays?: number;
-      notes?: string;
-    };
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        await ensureTable();
+        const bodyRaw = await req.json() as { action?: 'calculate' | 'save'; customerName?: string;
+          customerEmail?: string;
+          customerPhone?: string;
+          origin?: string;
+          destination?: string;
+          distanceKm: number;
+          weightTonnes: number;
+          shipmentType: string;
+          vehicleType?: string;
+          cargoDesc?: string;
+          cargoValueAED?: number;
+          isUrgent?: boolean;
+          isHazmat?: boolean;
+          requiresInsurance?: boolean;
+          requiresCustoms?: boolean;
+          validDays?: number;
+          notes?: string; };
+        const body = stripTenantOwnershipFields(bodyRaw);
 
-    const calc = calculateFreight({
-      distanceKm:         body.distanceKm,
-      weightTonnes:       body.weightTonnes,
-      shipmentType:       body.shipmentType,
-      vehicleType:        body.vehicleType,
-      isUrgent:           body.isUrgent,
-      isHazmat:           body.isHazmat,
-      requiresInsurance:  body.requiresInsurance,
-      requiresCustoms:    body.requiresCustoms,
-      cargoValueAED:      body.cargoValueAED,
-    });
+        const calc = calculateFreight({
+          distanceKm:         body.distanceKm,
+          weightTonnes:       body.weightTonnes,
+          shipmentType:       body.shipmentType,
+          vehicleType:        body.vehicleType,
+          isUrgent:           body.isUrgent,
+          isHazmat:           body.isHazmat,
+          requiresInsurance:  body.requiresInsurance,
+          requiresCustoms:    body.requiresCustoms,
+          cargoValueAED:      body.cargoValueAED,
+        });
 
-    // Calculate-only mode
-    if (body.action === 'calculate') {
-      return NextResponse.json(calc);
-    }
+        // Calculate-only mode
+        if (body.action === 'calculate') {
+          return NextResponse.json(calc);
+        }
 
-    // Save quote
-    const dateStr = new Date().toISOString().replace(/\D/g, '').slice(0, 8);
-    const rand    = Math.floor(Math.random() * 9000 + 1000);
-    const quoteNo = `QT-${dateStr}-${rand}`;
+        // Save quote
+        const dateStr = new Date().toISOString().replace(/\D/g, '').slice(0, 8);
+        const rand    = Math.floor(Math.random() * 9000 + 1000);
+        const quoteNo = `QT-${dateStr}-${rand}`;
 
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO logistics_quotes (
-         quote_no, customer_name, customer_email, customer_phone,
-         origin, destination, distance_km, weight_tonnes, shipment_type, vehicle_type,
-         cargo_desc, cargo_value_aed, is_urgent, is_hazmat, requires_insurance, requires_customs,
-         base_freight, fuel_surcharge, urgency_surch, hazmat_surch, insurance_fee, customs_fee,
-         total_aed, valid_days, notes
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)`,
-      quoteNo,
-      body.customerName ?? null, body.customerEmail ?? null, body.customerPhone ?? null,
-      body.origin ?? null, body.destination ?? null,
-      body.distanceKm, body.weightTonnes, body.shipmentType, body.vehicleType ?? null,
-      body.cargoDesc ?? null, body.cargoValueAED ?? 0,
-      body.isUrgent ?? false, body.isHazmat ?? false,
-      body.requiresInsurance ?? false, body.requiresCustoms ?? false,
-      calc.baseFreight, calc.fuelSurcharge, calc.urgencySurcharge, calc.hazmatSurcharge,
-      calc.insuranceFee, calc.customsFee, calc.totalAED,
-      body.validDays ?? 7, body.notes ?? null
-    );
+        await tx.$executeRawUnsafe(
+          `INSERT INTO logistics_quotes (
+             quote_no, customer_name, customer_email, customer_phone,
+             origin, destination, distance_km, weight_tonnes, shipment_type, vehicle_type,
+             cargo_desc, cargo_value_aed, is_urgent, is_hazmat, requires_insurance, requires_customs,
+             base_freight, fuel_surcharge, urgency_surch, hazmat_surch, insurance_fee, customs_fee,
+             total_aed, valid_days, notes
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)`,
+          quoteNo,
+          body.customerName ?? null, body.customerEmail ?? null, body.customerPhone ?? null,
+          body.origin ?? null, body.destination ?? null,
+          body.distanceKm, body.weightTonnes, body.shipmentType, body.vehicleType ?? null,
+          body.cargoDesc ?? null, body.cargoValueAED ?? 0,
+          body.isUrgent ?? false, body.isHazmat ?? false,
+          body.requiresInsurance ?? false, body.requiresCustoms ?? false,
+          calc.baseFreight, calc.fuelSurcharge, calc.urgencySurcharge, calc.hazmatSurcharge,
+          calc.insuranceFee, calc.customsFee, calc.totalAED,
+          body.validDays ?? 7, body.notes ?? null
+        );
 
-    return NextResponse.json({ success: true, quoteNo, ...calc }, { status: 201 });
-  } catch (err) {
-    console.error('[quotes POST]', err);
-    return NextResponse.json({ error: 'Failed to process quote' }, { status: 500 });
-  }
+        return NextResponse.json({ success: true, quoteNo, ...calc }, { status: 201 });
+        } catch (err) {
+        console.error('[quotes POST]', err);
+        return NextResponse.json({ error: 'Failed to process quote' }, { status: 500 });
+      }
+  });
 }
+

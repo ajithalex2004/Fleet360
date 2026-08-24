@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { getShipmentFinanceSummary, postFreightSettlementToFinance } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
@@ -13,14 +14,13 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   const limit = Math.min(Math.max(parseInt(req.nextUrl.searchParams.get('limit') ?? '200', 10) || 200, 1), 500);
   try {
     const data = await getShipmentFinanceSummary({ tenantId, limit });
     return NextResponse.json(data, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (e) {
+    } catch (e) {
     console.error('[logistics/settlements GET]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to load settlement summary' },
@@ -38,8 +38,7 @@ export async function POST(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   let body: { shipmentOrderId?: string };
   try { body = await req.json(); }
@@ -56,7 +55,7 @@ export async function POST(req: NextRequest) {
       actorUserId: req.headers.get('x-user-id') ?? null,
     });
     return NextResponse.json(data, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     console.error('[logistics/settlements POST]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to post settlement' },

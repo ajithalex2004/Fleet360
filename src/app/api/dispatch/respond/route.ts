@@ -6,11 +6,12 @@
  * GET version is used by the WhatsApp accept link (opens in browser).
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { handleDriverResponse } from '@/lib/dispatch/engine';
 import { prisma }               from '@/lib/prisma';
 import { dispatch as agentDispatch } from '@/lib/agents/orchestrator';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 async function handle(token: string, action: string, reason: string | undefined, baseUrl: string) {
   if (!token)  return NextResponse.json({ error: 'token is required' },  { status: 400 });
   if (!action) return NextResponse.json({ error: 'action is required' }, { status: 400 });

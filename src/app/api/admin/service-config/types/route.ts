@@ -15,7 +15,7 @@ import { SERVICE_TONES } from '@/types/service-config';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface TypeRow {
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     categoryId?: string; key?: string; name?: string; description?: string;
     icon?: string; tone?: string; defaultPriority?: string; sortOrder?: number;
   };
-  try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
+  try { const bodyRaw = await req.json(); body = stripTenantOwnershipFields(bodyRaw); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
 
   const categoryId = String(body.categoryId ?? '').trim();
   const key  = String(body.key  ?? '').trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ ok: true, type: t }, { status: 201 });
-  } catch (err) {
+    } catch (err) {
     if (err instanceof Error && /unique/i.test(err.message)) {
       return NextResponse.json({ ok: false, error: `Key "${key}" already exists.` }, { status: 409 });
     }

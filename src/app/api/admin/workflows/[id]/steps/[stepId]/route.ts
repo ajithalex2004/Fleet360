@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { updateStep, deleteStep } from '@/lib/workflow-db';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function PUT(req: NextRequest, { params }: { params: { stepId: string } }) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -13,7 +14,7 @@ export async function PUT(req: NextRequest, { params }: { params: { stepId: stri
     const body = await req.json();
     await updateStep(params.stepId, body);
     return NextResponse.json({ success: true });
-  } catch (e: any) {
+    } catch (e: any) {
     return NextResponse.json({ error: e?.message }, { status: 500 });
   }
 }
@@ -28,7 +29,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { stepId: 
   try {
     await deleteStep(params.stepId);
     return NextResponse.json({ success: true });
-  } catch (e: any) {
+    } catch (e: any) {
     return NextResponse.json({ error: e?.message }, { status: 500 });
   }
 }

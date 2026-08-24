@@ -10,52 +10,52 @@ import { withTenantRls } from '@/lib/rls';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 
-async function guardTenant(req: NextRequest, id: string) {
-  if (!tenantId) {
-    return { tenantId: null, owned: false } as const;
-  }
+async function guardTenant(tenantId: string, id: string) {
   const owned = await prisma.leaseInquiry.findFirst({
     where: { id, tenantId },
     select: { id: true },
   });
-  return { tenantId, owned: !!owned } as const;
+  return { owned: !!owned } as const;
 }
 
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const { tenantId, owned } = await guardTenant(req, params.id);
-    if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    if (!owned) return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
-    const inquiry = await prisma.leaseInquiry.findUnique({ where: { id: params.id } });
-    if (!inquiry) return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
-    return NextResponse.json(inquiry);
-  } catch (error) {
-    console.error('GET inquiry error:', error);
-    return NextResponse.json({ error: 'Failed to fetch inquiry' }, { status: 500 });
-  }
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const { owned } = await guardTenant(tenantId, params.id);
+        if (!owned) return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
+        const inquiry = await tx.leaseInquiry.findUnique({ where: { id: params.id } });
+        if (!inquiry) return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
+        return NextResponse.json(inquiry);
+      } catch (e) {
+        console.error('GET inquiry error:', e);
+        return NextResponse.json({ error: 'Failed to fetch inquiry' }, { status: 500 });
+      }
+  });
 }
+
 
 // PATCH: safe partial update — only updates whitelisted fields
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authz = requireAuthorizedTenant(req);
+  const authz = requireAuthorizedTenant(request);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
   try {
-    const { tenantId, owned } = await guardTenant(request, params.id);
-    if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const { owned } = await guardTenant(tenantId, params.id);
     if (!owned) return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
 
     const body = await request.json();
@@ -81,10 +81,10 @@ export async function PATCH(
     }),
     );
     return NextResponse.json(inquiry);
-  } catch (error: any) {
-    console.error('PATCH inquiry error:', error);
+  } catch (e) {
+    console.error('PATCH inquiry error:', e);
     return NextResponse.json(
-      { error: error?.message ?? 'Failed to update inquiry' },
+      { error: e?.message ?? 'Failed to update inquiry' },
       { status: 500 }
     );
   }
@@ -95,11 +95,10 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authz = requireAuthorizedTenant(req);
+  const authz = requireAuthorizedTenant(request);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
   return PATCH(request, { params });
 }
 
@@ -113,8 +112,7 @@ export async function DELETE(
   }
   const { tenantId } = authz;
   try {
-    const { tenantId, owned } = await guardTenant(req, params.id);
-    if (!tenantId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const { owned } = await guardTenant(tenantId, params.id);
     if (!owned) return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
 
     await withTenantRls(prisma, tenantId, async (tx) =>
@@ -124,8 +122,8 @@ export async function DELETE(
     }),
     );
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    console.error('DELETE inquiry error:', error);
+    } catch (e) {
+    console.error('DELETE inquiry error:', e);
     return NextResponse.json({ error: 'Failed to delete inquiry' }, { status: 500 });
   }
 }

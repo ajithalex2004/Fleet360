@@ -18,7 +18,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import {
@@ -54,10 +54,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
     const customerName = customerRows[0].name_en;
 
-    const body = await req.json().catch(() => ({})) as {
+    const bodyRaw = await req.json().catch(() => ({})) as {
       email?: string; fullName?: string; phone?: string;
       role?: 'SHIPPER_USER' | 'SHIPPER_ADMIN';
     };
+    const body = stripTenantOwnershipFields(bodyRaw);
     const email = String(body.email ?? '').trim().toLowerCase();
     if (!email || !/.+@.+\..+/.test(email)) {
       return NextResponse.json({ error: 'Valid email required' }, { status: 400 });
@@ -149,7 +150,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
   try {
     const { id: customerId } = await params;

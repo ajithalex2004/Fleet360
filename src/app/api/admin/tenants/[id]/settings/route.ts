@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { randomUUID } from 'crypto';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -42,7 +42,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' },
       });
     });
-  } catch (e) {
+    } catch (e) {
     console.error('GET tenant settings error:', e);
     return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 });
   }
@@ -68,7 +68,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       });
       return NextResponse.json(settings);
     });
-  } catch (e: any) {
+    } catch (e) {
     console.error('PUT tenant settings error:', e);
     return NextResponse.json({ error: e?.message ?? 'Failed to save settings' }, { status: 500 });
   }

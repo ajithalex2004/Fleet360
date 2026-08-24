@@ -4,92 +4,103 @@
  * Automatically updates paid_amount / balance_due and transitions status.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    const rows = await prisma.$queryRawUnsafe<any[]>(
-      "SELECT * FROM rental_invoice_payments WHERE invoice_id = $1 ORDER BY payment_date DESC",
-      params.id
-    );
-    return NextResponse.json(rows);
-  } catch (e) {
-    return NextResponse.json({ error: 'Failed to fetch payments' }, { status: 500 });
-  }
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const rows = await tx.$queryRawUnsafe<any[]>(
+          "SELECT * FROM rental_invoice_payments WHERE invoice_id = $1 ORDER BY payment_date DESC",
+          params.id
+        );
+        return NextResponse.json(rows);
+      } catch (e) {
+        return NextResponse.json({ error: 'Failed to fetch payments' }, { status: 500 });
+      }
+  });
 }
 
+
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const body = await req.json();
-    const { amount, paymentMethod, paymentDate, referenceNo, notes, receivedBy } = body;
 
-    if (!amount || Number(amount) <= 0) {
-      return NextResponse.json({ error: 'amount must be a positive number' }, { status: 400 });
-    }
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
+        const { amount, paymentMethod, paymentDate, referenceNo, notes, receivedBy } = body;
 
-    // Fetch current invoice
-    const rows = await prisma.$queryRawUnsafe<any[]>(
-      "SELECT * FROM rental_invoices WHERE id = $1 AND deleted_at IS NULL", params.id
-    );
-    if (!rows.length) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
+        if (!amount || Number(amount) <= 0) {
+          return NextResponse.json({ error: 'amount must be a positive number' }, { status: 400 });
+        }
 
-    const inv = rows[0];
-    if (['VOID', 'CANCELLED'].includes(inv.status)) {
-      return NextResponse.json({ error: 'Cannot record payment on a ' + inv.status + ' invoice' }, { status: 422 });
-    }
+        // Fetch current invoice
+        const rows = await tx.$queryRawUnsafe<any[]>(
+          "SELECT * FROM rental_invoices WHERE id = $1 AND deleted_at IS NULL", params.id
+        );
+        if (!rows.length) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
 
-    const paymentId  = crypto.randomUUID();
-    const receiptNo  = 'RRCPT-' + String(Math.floor(Math.random() * 999999)).padStart(6, '0');
-    const now        = new Date().toISOString();
-    const paidDate   = paymentDate ?? now;
-    const paidAmt    = Number(amount);
+        const inv = rows[0];
+        if (['VOID', 'CANCELLED'].includes(inv.status)) {
+          return NextResponse.json({ error: 'Cannot record payment on a ' + inv.status + ' invoice' }, { status: 422 });
+        }
 
-    // Insert payment record
-    await prisma.$executeRawUnsafe(
-      "INSERT INTO rental_invoice_payments " +
-      "(id, invoice_id, receipt_no, payment_date, amount, payment_method, reference_no, notes, received_by, created_at) " +
-      "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
-      paymentId, params.id, receiptNo, paidDate,
-      paidAmt,
-      paymentMethod ?? 'CASH',
-      referenceNo  ?? null,
-      notes        ?? null,
-      receivedBy   ?? null,
-      now,
-    );
+        const paymentId  = crypto.randomUUID();
+        const receiptNo  = 'RRCPT-' + String(Math.floor(Math.random() * 999999)).padStart(6, '0');
+        const now        = new Date().toISOString();
+        const paidDate   = paymentDate ?? now;
+        const paidAmt    = Number(amount);
 
-    // Update invoice paid_amount and balance_due
-    const newPaid    = parseFloat((Number(inv.paid_amount ?? 0) + paidAmt).toFixed(2));
-    const newBalance = parseFloat((Number(inv.total_amount) - newPaid).toFixed(2));
-    const newStatus  = newBalance <= 0 ? 'PAID' : (newPaid > 0 ? 'PARTIALLY_PAID' : inv.status);
+        // Insert payment record
+        await tx.$executeRawUnsafe(
+          "INSERT INTO rental_invoice_payments " +
+          "(id, invoice_id, receipt_no, payment_date, amount, payment_method, reference_no, notes, received_by, created_at) " +
+          "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+          paymentId, params.id, receiptNo, paidDate,
+          paidAmt,
+          paymentMethod ?? 'CASH',
+          referenceNo  ?? null,
+          notes        ?? null,
+          receivedBy   ?? null,
+          now,
+        );
 
-    await prisma.$executeRawUnsafe(
-      "UPDATE rental_invoices SET paid_amount=$1, balance_due=$2, status=$3, updated_at=$4 WHERE id=$5",
-      newPaid, newBalance, newStatus, now, params.id
-    );
+        // Update invoice paid_amount and balance_due
+        const newPaid    = parseFloat((Number(inv.paid_amount ?? 0) + paidAmt).toFixed(2));
+        const newBalance = parseFloat((Number(inv.total_amount) - newPaid).toFixed(2));
+        const newStatus  = newBalance <= 0 ? 'PAID' : (newPaid > 0 ? 'PARTIALLY_PAID' : inv.status);
 
-    const updated = await prisma.$queryRawUnsafe<any[]>(
-      "SELECT * FROM rental_invoices WHERE id = $1", params.id
-    );
+        await tx.$executeRawUnsafe(
+          "UPDATE rental_invoices SET paid_amount=$1, balance_due=$2, status=$3, updated_at=$4 WHERE id=$5",
+          newPaid, newBalance, newStatus, now, params.id
+        );
 
-    return NextResponse.json({
-      payment: { id: paymentId, receiptNo, amount: paidAmt, paymentDate: paidDate },
-      invoice: updated[0],
-    }, { status: 201 });
-  } catch (e: any) {
-    console.error('Invoice payment error:', e);
-    return NextResponse.json({ error: e.message ?? 'Failed to record payment' }, { status: 500 });
-  }
+        const updated = await tx.$queryRawUnsafe<any[]>(
+          "SELECT * FROM rental_invoices WHERE id = $1", params.id
+        );
+
+        return NextResponse.json({
+          payment: { id: paymentId, receiptNo, amount: paidAmt, paymentDate: paidDate },
+          invoice: updated[0],
+        }, { status: 201 });
+        } catch (e) {
+        console.error('Invoice payment error:', e);
+        return NextResponse.json({ error: e.message ?? 'Failed to record payment' }, { status: 500 });
+      }
+  });
 }
+

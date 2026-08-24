@@ -18,7 +18,7 @@ import { SERVICE_TONES, type ServiceTone, type ServiceCategoryWithTypes, type Se
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface CategoryRow {
@@ -130,7 +130,7 @@ export async function GET(req: NextRequest) {
     }));
 
     return NextResponse.json({ ok: true, categories, mappings: Array.from(mappingByType.values()) });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'service-config.categories.list' });
     return NextResponse.json({ ok: false, error: 'Failed to load service config' }, { status: 500 });
   }
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
   if (!adminCheck.ok) return adminCheck.res;
 
   let body: { key?: string; name?: string; description?: string; icon?: string; tone?: string; sortOrder?: number };
-  try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
+  try { const bodyRaw = await req.json(); body = stripTenantOwnershipFields(bodyRaw); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
 
   const key  = String(body.key  ?? '').trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
   const name = String(body.name ?? '').trim();
@@ -181,7 +181,7 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ ok: true, category: catRowToApi(cat) }, { status: 201 });
-  } catch (err) {
+    } catch (err) {
     if (err instanceof Error && /unique/i.test(err.message)) {
       return NextResponse.json({ ok: false, error: `Key "${key}" already exists.` }, { status: 409 });
     }

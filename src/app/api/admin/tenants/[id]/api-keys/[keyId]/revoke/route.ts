@@ -10,7 +10,7 @@ import { ensureApiKeyTable } from '@/lib/api-keys';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string; keyId: string }>; }
@@ -20,8 +20,6 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
-
   const { id: tenantId, keyId } = await params;
 
   const role     = req.headers.get('x-user-role') ?? '';
@@ -54,7 +52,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     });
 
     return NextResponse.json({ ok: true, changed: result });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'admin.api-keys.revoke' });
     return NextResponse.json({ ok: false, error: 'Revoke failed' }, { status: 500 });
   }

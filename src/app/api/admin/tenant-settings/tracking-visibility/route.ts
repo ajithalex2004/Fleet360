@@ -21,7 +21,7 @@ import {
 import { ensureShipperPortalTables } from '@/lib/shipper-portal/schema';
 import { logAudit } from '@/lib/audit';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
@@ -33,8 +33,7 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
   try {
     await ensureShipperPortalTables();
     // tenant_settings has tenant_id with RLS.
@@ -65,8 +64,7 @@ export async function PUT(req: NextRequest) {
 
   }
 
-  const { tenantId, userId } = authz;, { status: 401 });
-  }
+  const { tenantId, userId } = authz;
 
   try {
     const body = await req.json().catch(() => ({})) as { level?: string };

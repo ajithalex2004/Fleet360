@@ -1,0 +1,693 @@
+{
+  "timestamp": "2026-08-24T06:16:53.683Z",
+  "total": 135,
+  "categories": {
+    "needs_fix": [],
+    "super_admin": [
+      {
+        "file": "src/app/api/admin/events/outbox/replay/route.ts",
+        "handler": "POST",
+        "reason": "Super admin route - may need tenant_id in body"
+      },
+      {
+        "file": "src/app/api/admin/impersonate/route.ts",
+        "handler": "POST",
+        "reason": "Super admin route - may need tenant_id in body"
+      },
+      {
+        "file": "src/app/api/admin/roles/[id]/permissions/route.ts",
+        "handler": "PUT",
+        "reason": "Super admin route - may need tenant_id in body"
+      },
+      {
+        "file": "src/app/api/admin/roles/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Super admin route - may need tenant_id in body"
+      },
+      {
+        "file": "src/app/api/admin/tenants/[id]/api-keys/route.ts",
+        "handler": "POST",
+        "reason": "Super admin route - may need tenant_id in body"
+      },
+      {
+        "file": "src/app/api/admin/tenants/[id]/branding/route.ts",
+        "handler": "PUT",
+        "reason": "Super admin route - may need tenant_id in body"
+      },
+      {
+        "file": "src/app/api/admin/tenants/[id]/invitations/route.ts",
+        "handler": "POST",
+        "reason": "Super admin route - may need tenant_id in body"
+      },
+      {
+        "file": "src/app/api/admin/tenants/[id]/sso/route.ts",
+        "handler": "PUT",
+        "reason": "Super admin route - may need tenant_id in body"
+      }
+    ],
+    "no_body_parsing": [
+      {
+        "file": "src/app/api/admin/nav-permissions/route.ts",
+        "handler": "PUT",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/admin/notification-rules/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/admin/notification-rules/route.ts",
+        "handler": "PUT",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/admin/notification-templates/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/admin/notification-templates/route.ts",
+        "handler": "PUT",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/admin/seed/leasing/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/admin/seed/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/admin/tenants/[id]/api-keys/[keyId]/revoke/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/admin/tenants/[id]/branding/logo/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/admin/tenants/[id]/hard-delete/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/admin/tenants/[id]/invitations/[invId]/revoke/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/admin/users/set-password/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/admin/users/[id]/hard-delete/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/alert-configs/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/alert-configs/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/alerts/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/alerts/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/bus-ops/driver-performance/recompute/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/bus-ops/fleet-optimizer/runs/[id]/cancel/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/bus-ops/fleet-optimizer/runs/[id]/publish/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/bus-ops/gateway/events/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/bus-ops/gateways/[id]/rotate-secret/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/bus-ops/plan/[id]/apply/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/bus-ops/schedules/sweep-waitlist/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/bus-ops/schedules/[id]/expand-roster/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/dispatcher/reports/[id]/acknowledge/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/dispatcher/trips/[id]/cancel/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/driver-app/auth/biometric/register/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/driver-app/reports/[id]/cancel/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/driver-app/shift/[id]/end/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/drivers/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/finance/budgets/seed/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/garages/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/garages/[id]/route.ts",
+        "handler": "PUT",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/leasing/contracts-v2/[id]/payments/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/leasing/contracts-v2/[id]/vehicles/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/leasing/documents/upload/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/leasing/fuel/import/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/leasing/fuel/sweep-bill/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/leasing/import/lessees/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/leasing/import/vehicles/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/leasing/inquiries/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/leasing/inquiries/sweep-followups/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/leasing/inquiries/[id]/activities/[activityId]/done/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/leasing/inquiries/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/leasing/insurance/sweep-expiry/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/leasing/lead-channels/[channel]/webhook/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/leasing/mileage-readings/sweep-stale/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/leasing/quotations/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/leasing/receivables/dunning/sweep/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/leasing/traffic-fines/sweep-bill/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/maintenance/breakdown-reports/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/maintenance/breakdown-reports/[id]/dispatch-recovery/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/maintenance/breakdown-reports/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/maintenance/pm-plans/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/maintenance/pm-plans/[id]/generate-requests/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/maintenance/pm-plans/[id]/route.ts",
+        "handler": "PUT",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/maintenance/warranties/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/maintenance/warranty-claims/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/maintenance/work-orders/[id]/job-cards/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/maintenance/work-orders/[id]/job-cards/[cardId]/route.ts",
+        "handler": "PUT",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/maintenance/[id]/quality-inspection/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/maintenance-requests/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/maintenance-requests/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/notifications/history/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/notifications/send/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/places/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/quotations/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/quotations/[id]/route.ts",
+        "handler": "PUT",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/rental/bookings/sweep-penalties/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/rental/channels/[channel]/webhook/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/school-bus/attendance/sweep-no-show/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/service-requests/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/service-requests/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/tenants/pre-verify-domain/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/tenants/provision/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/tenants/verify-domain/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/users/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/users/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/vehicles/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Does not parse request body"
+      },
+      {
+        "file": "src/app/api/work-orders/route.ts",
+        "handler": "POST",
+        "reason": "Does not parse request body"
+      }
+    ],
+    "complex_parsing": [
+      {
+        "file": "src/app/api/admin/customers/[id]/portal-invitations/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/admin/service-config/categories/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/admin/service-config/categories/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/admin/service-config/types/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/admin/service-config/types/[id]/module-mapping/route.ts",
+        "handler": "PUT",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/admin/service-config/types/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/agents/route-results/[id]/apply/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/bus-ops/planning/optimize/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/bus-ops/planning-constraints/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/bus-ops/planning-constraints/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/bus-ops/route-passengers/bulk-import/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/bus-ops/routes/bulk-import/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/dispatch/jobs/[id]/reassign/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/driver-app/behavior-events/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/driver-app/dvir/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/driver-app/expenses/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/driver-app/fuel-entries/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/driver-app/reports/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/driver-app/shift/current/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/driver-app/shift/[id]/checklist/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/driver-app/trips/[id]/end/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/driver-app/trips/[id]/start/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/leasing/drivers/allocations/[allocationId]/release/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/leasing/quotations/[id]/submit/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/push/test/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/rental/agreements/[id]/generate-invoice/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/rental/invoices/[id]/send/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/service-tickets/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/service-tickets/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Complex body parsing pattern"
+      },
+      {
+        "file": "src/app/api/whatsapp/send/route.ts",
+        "handler": "POST",
+        "reason": "Complex body parsing pattern"
+      }
+    ],
+    "needs_review": [
+      {
+        "file": "src/app/api/admin/tenants/[id]/modules/route.ts",
+        "handler": "PUT",
+        "reason": "Requires manual review"
+      },
+      {
+        "file": "src/app/api/admin/tenants/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Requires manual review"
+      },
+      {
+        "file": "src/app/api/agents/thresholds/route.ts",
+        "handler": "PATCH",
+        "reason": "Requires manual review"
+      },
+      {
+        "file": "src/app/api/dispatch/location/route.ts",
+        "handler": "POST",
+        "reason": "Requires manual review"
+      },
+      {
+        "file": "src/app/api/dispatch/merge-candidates/route.ts",
+        "handler": "POST",
+        "reason": "Requires manual review"
+      },
+      {
+        "file": "src/app/api/dispatch/merge-suggestions/route.ts",
+        "handler": "PATCH",
+        "reason": "Requires manual review"
+      },
+      {
+        "file": "src/app/api/incidents/[id]/notes/route.ts",
+        "handler": "POST",
+        "reason": "Requires manual review"
+      },
+      {
+        "file": "src/app/api/leasing/credit-assessments/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Requires manual review"
+      },
+      {
+        "file": "src/app/api/leasing/direct-debits/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Requires manual review"
+      },
+      {
+        "file": "src/app/api/leasing/insurance/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Requires manual review"
+      },
+      {
+        "file": "src/app/api/leasing/invoices/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Requires manual review"
+      },
+      {
+        "file": "src/app/api/leasing/lessees/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Requires manual review"
+      },
+      {
+        "file": "src/app/api/leasing/mileage-overages/[id]/route.ts",
+        "handler": "PATCH",
+        "reason": "Requires manual review"
+      }
+    ],
+    "no_handler": [
+      {
+        "file": "src/app/api/admin/migrate/fleet-phase1/route.ts",
+        "handler": "POST",
+        "reason": "No POST handler found"
+      },
+      {
+        "file": "src/app/api/admin/migrate/indexes/route.ts",
+        "handler": "POST",
+        "reason": "No POST handler found"
+      },
+      {
+        "file": "src/app/api/admin/migrate/rac-phase1/route.ts",
+        "handler": "POST",
+        "reason": "No POST handler found"
+      }
+    ],
+    "not_found": []
+  }
+}

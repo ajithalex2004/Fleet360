@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'tenants:list';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' },
       });
     });
-  } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+    } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -40,7 +40,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   try {
     return await withTenantRls(prisma, params.id, async (tx) => {
-      const { modules, userTenants, roles, ...data } = await req.json();
+      const bodyRaw = await req.json();
+    const body = stripTenantOwnershipFields(bodyRaw);
+    const { modules, userTenants, roles, ...data } = body;
       const tenant = await tx.tenant.update({
         where: { id: params.id },
         data: { ...data, updatedAt: new Date() },
@@ -50,7 +52,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       revalidateCache([CACHE_TAG]);
       return NextResponse.json(tenant);
     });
-  } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+    } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
@@ -66,5 +68,5 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       revalidateCache([CACHE_TAG]);
       return NextResponse.json({ success: true });
     });
-  } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+    } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }

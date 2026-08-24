@@ -36,10 +36,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const ROLES_TAG = 'roles:all';
 
 export async function POST(req: NextRequest) {
@@ -58,7 +58,8 @@ export async function POST(req: NextRequest) {
     const role = req.headers.get('x-user-role') ?? 'TENANT_ADMIN';
     const isSuperAdmin = role === 'SUPER_ADMIN';
 
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const { sourceRoleId, tenantId: bodyTenantId } = body as {
       sourceRoleId?: string;
       tenantId?: string;
@@ -139,7 +140,7 @@ export async function POST(req: NextRequest) {
     // New override means the cached role list (per tenant) is stale.
     await revalidateCache(ROLES_TAG);
     return NextResponse.json(result.role, { status: 201 });
-  } catch (e: unknown) {
+    } catch (e) {
     console.error('[POST /api/admin/roles/override]', e);
     const message = e instanceof Error ? e.message : 'Failed to create override';
     return NextResponse.json({ error: message }, { status: 500 });

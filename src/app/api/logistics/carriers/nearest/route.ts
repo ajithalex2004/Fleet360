@@ -15,9 +15,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { findNearestIdleCarriers } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
@@ -29,8 +30,7 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   const sp = req.nextUrl.searchParams;
   const lat = Number(sp.get('lat'));
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
       limit: numParam('limit'),
     });
     return NextResponse.json({ data }, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (e) {
+    } catch (e) {
     console.error('[carriers/nearest GET]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to find nearby drivers' },

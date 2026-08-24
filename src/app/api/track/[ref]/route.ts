@@ -149,7 +149,7 @@ export async function GET(_req: Request, { params }: { params: { ref: string } }
         gps: pod.gps,
       } : null,
     });
-  } catch (err) {
+    } catch (err) {
     console.error('[track GET]', err);
     return NextResponse.json({ error: 'Unable to retrieve tracking information.' }, { status: 500 });
   }

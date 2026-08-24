@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureSpmSchema } from '@/lib/assets/spm-schema';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest) {
     );
 
     return NextResponse.json(ser(row), { status: 201 });
-  } catch (err) {
+    } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
@@ -96,7 +97,7 @@ export async function DELETE(req: NextRequest) {
     await exec(`DELETE FROM spm_checklist_templates WHERE id = $1 AND tenant_id = 'default'`, id);
 
     return NextResponse.json({ success: true, deleted_id: id });
-  } catch (err) {
+    } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

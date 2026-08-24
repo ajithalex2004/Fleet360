@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { updateShipmentOrder } from '@/lib/logistics/domain';
 import { getEventBus }      from '@/events/event-bus';
 import { SHIPMENT_CLOSED }  from '@/events/registry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -43,8 +44,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   let body: { currentStatus?: string | null; status?: string; note?: string | null };
   try { body = await req.json(); }
@@ -89,7 +89,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
 
     return NextResponse.json({ success: true, data: shipment });
-  } catch (e) {
+    } catch (e) {
     console.error('[logistics/shipments/:id/status PATCH]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to update shipment status' },

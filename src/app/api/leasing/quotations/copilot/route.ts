@@ -14,6 +14,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { z } from 'zod';
 import { generateQuotationSuggestion } from '@/lib/agents/quotation-copilot/agent';
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
         durationMs: result.durationMs,
       },
     });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'leasing.quotations.copilot' });
     console.error('[copilot] error:', err);
     return NextResponse.json({ error: 'Co-pilot request failed' }, { status: 500 });

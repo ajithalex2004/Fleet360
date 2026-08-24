@@ -25,7 +25,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const { action, approverName, comments, targetStatus: requestedTarget, recipientEmail: customRecipient } = body;
     // action: 'APPROVE' | 'REJECT'
 
@@ -187,6 +188,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json(updated);
   } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
   }
 }

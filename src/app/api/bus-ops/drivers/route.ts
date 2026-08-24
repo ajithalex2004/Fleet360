@@ -16,12 +16,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -30,38 +32,42 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
-  try {
-    const drivers = await prisma.driver.findMany({
-      where: {
-        tenantId,
-        deletedAt: null,
-        status: 'ACTIVE',
-      },
-      select: {
-        id: true,
-        name: true,
-        firstName: true,
-        lastName: true,
-        licenseType: true,
-      },
-      orderBy: { name: 'asc' },
-    });
+  return withTenantRls(prisma, tenantId, async (tx) => {
 
-    // Prefer the pre-composed `name`; fall back to "First Last" if the record
-    // was written by a code path that populated only the split fields.
-    const shaped = drivers.map(d => ({
-      id: d.id,
-      name: d.name ?? ([d.firstName, d.lastName].filter(Boolean).join(' ') || '(unnamed)'),
-      licenseType: d.licenseType,
-    }));
+      try {
+        const drivers = await tx.driver.findMany({
+          where: {
+            tenantId,
+            deletedAt: null,
+            status: 'ACTIVE',
+          },
+          select: {
+            id: true,
+            name: true,
+            firstName: true,
+            lastName: true,
+            licenseType: true,
+          },
+          orderBy: { name: 'asc' },
+        });
 
-    return NextResponse.json(shaped, {
-      headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' },
-    });
-  } catch (e) {
-    console.error('[bus-ops/drivers GET]', e);
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to load drivers' }, { status: 500 });
-  }
+        // Prefer the pre-composed `name`; fall back to "First Last" if the record
+        // was written by a code path that populated only the split fields.
+        const shaped = drivers.map(d => ({
+          id: d.id,
+          name: d.name ?? ([d.firstName, d.lastName].filter(Boolean).join(' ') || '(unnamed)'),
+          licenseType: d.licenseType,
+        }));
+
+        return NextResponse.json(shaped, {
+          headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' },
+        });
+        } catch (e) {
+        console.error('[bus-ops/drivers GET]', e);
+        return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to load drivers' }, { status: 500 });
+      }
+  });
 }
+

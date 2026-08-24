@@ -12,9 +12,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { convertShippingRequest, LogisticsValidationError } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -26,13 +27,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
   const actorUserId = req.headers.get('x-user-id');
 
   try {
     const result = await convertShippingRequest({ tenantId, requestId: params.id, actorUserId });
     return NextResponse.json({ data: result }, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     if (e instanceof LogisticsValidationError) {
       return NextResponse.json({ error: e.message, issues: e.issues }, { status: 422 });
     }

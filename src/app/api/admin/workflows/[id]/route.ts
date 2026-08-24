@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { getWorkflowWithSteps, updateWorkflow, deleteWorkflow } from '@/lib/workflow-db';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -13,7 +14,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     const wf = await getWorkflowWithSteps(params.id);
     if (!wf) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(wf);
-  } catch (e: any) {
+  } catch (e) {
     return NextResponse.json({ error: e?.message }, { status: 500 });
   }
 }
@@ -29,7 +30,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     const body = await req.json();
     await updateWorkflow(params.id, body);
     return NextResponse.json({ success: true });
-  } catch (e: any) {
+    } catch (e) {
     return NextResponse.json({ error: e?.message }, { status: 500 });
   }
 }
@@ -44,7 +45,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   try {
     await deleteWorkflow(params.id);
     return NextResponse.json({ success: true });
-  } catch (e: any) {
+    } catch (e) {
     return NextResponse.json({ error: e?.message }, { status: 500 });
   }
 }

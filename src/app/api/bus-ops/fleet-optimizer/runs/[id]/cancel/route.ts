@@ -11,9 +11,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const CANCELLABLE_STATES = new Set(['PENDING', 'VALIDATING', 'SOLVING']);
@@ -21,6 +22,7 @@ const CANCELLABLE_STATES = new Set(['PENDING', 'VALIDATING', 'SOLVING']);
 type IdCtx = { params: Promise<{ id: string }> };
 
 export async function POST(req: NextRequest, { params }: IdCtx) {
+
   const { id } = await params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -30,27 +32,31 @@ export async function POST(req: NextRequest, { params }: IdCtx) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
-  const existing = await prisma.fleetOptimizationRun.findFirst({
-    where: { id, tenantId },
-    select: { id: true, status: true },
+  return withTenantRls(prisma, tenantId, async (tx) => {
+
+      const existing = await tx.fleetOptimizationRun.findFirst({
+        where: { id, tenantId },
+        select: { id: true, status: true },
+      });
+      if (!existing) return NextResponse.json({ error: 'Run not found' }, { status: 404 });
+
+      if (!CANCELLABLE_STATES.has(existing.status)) {
+        return NextResponse.json(
+          { error: `Cannot cancel a run in status ${existing.status}` },
+          { status: 409 },
+        );
+      }
+
+      await tx.fleetOptimizationRun.update({
+        where: { id },
+        data: {
+          status: 'CANCELLED',
+          statusReason: 'Cancelled by operator',
+        },
+      });
+      return NextResponse.json({ id, status: 'CANCELLED' });
   });
-  if (!existing) return NextResponse.json({ error: 'Run not found' }, { status: 404 });
-
-  if (!CANCELLABLE_STATES.has(existing.status)) {
-    return NextResponse.json(
-      { error: `Cannot cancel a run in status ${existing.status}` },
-      { status: 409 },
-    );
-  }
-
-  await prisma.fleetOptimizationRun.update({
-    where: { id },
-    data: {
-      status: 'CANCELLED',
-      statusReason: 'Cancelled by operator',
-    },
-  });
-  return NextResponse.json({ id, status: 'CANCELLED' });
 }
+

@@ -18,7 +18,7 @@ import { requirePlan } from '@/lib/plan-limits';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string }>; }
@@ -39,8 +39,6 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
-
   const { id: tenantId } = await params;
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;
@@ -92,8 +90,6 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
-
   const { id: tenantId } = await params;
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;
@@ -102,7 +98,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   if (gate) return gate;
 
   let body: { name?: string; scopes?: unknown };
-  try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
+  try { const bodyRaw = await req.json(); body = stripTenantOwnershipFields(bodyRaw); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
 
   const name   = String(body.name ?? '').trim();
   const scopes = Array.isArray(body.scopes)
@@ -158,7 +154,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
           plaintext,  // ⚠ shown ONCE
         },
       });
-    } catch (err) {
+      } catch (err) {
       captureException(err, { context: 'admin.api-keys.create' });
       return NextResponse.json({ ok: false, error: 'Failed to create API key' }, { status: 500 });
     }

@@ -13,30 +13,35 @@ import { withAudit } from '@/lib/with-audit';
  * `20260627000001_add_tenant_id_to_leasing_tables`.
  */
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const { searchParams } = new URL(req.url);
-    const lesseeId = searchParams.get('lesseeId');
-    const status   = searchParams.get('status');
-    const invoices = await prisma.leaseInvoice.findMany({
-      where: {
-        tenantId,
-        ...(lesseeId ? { lesseeId } : {}),
-        ...(status ? { status } : {}),
-      },
-      include: { lessee: { select: { name: true } }, lines: true },
-      orderBy: { issueDate: 'desc' },
-    });
-    return NextResponse.json(invoices);
-  } catch (e) {
-    console.error('GET /api/leasing/invoices error:', e);
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
-  }
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const { searchParams } = new URL(req.url);
+        const lesseeId = searchParams.get('lesseeId');
+        const status   = searchParams.get('status');
+        const invoices = await tx.leaseInvoice.findMany({
+          where: {
+            tenantId,
+            ...(lesseeId ? { lesseeId } : {}),
+            ...(status ? { status } : {}),
+          },
+          include: { lessee: { select: { name: true } }, lines: true },
+          orderBy: { issueDate: 'desc' },
+        });
+        return NextResponse.json(invoices);
+      } catch (e) {
+        console.error('GET /api/leasing/invoices error:', e);
+        return NextResponse.json({ error: 'Failed' }, { status: 500 });
+      }
+  });
 }
+
 
 export const POST = withAudit(
   async (req: NextRequest) => {
@@ -71,7 +76,7 @@ export const POST = withAudit(
       }),
       );
       return NextResponse.json(invoice, { status: 201 });
-    } catch (e) {
+      } catch (e) {
       console.error('POST /api/leasing/invoices error:', e);
       return NextResponse.json({ error: 'Failed' }, { status: 500 });
     }

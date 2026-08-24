@@ -43,7 +43,8 @@
         "test:isolation:tenant001": "vitest run tests/unit/tenant-authorized-context.test.ts tests/integration/tenant-001-leasing-rental-isolation.test.ts",
         "tenant:check-auth": "node scripts/check-tenant-auth.js",
         "tenant:check-schema": "node scripts/validate-tenant-schema.js",
-        "tenant:audit": "npm run tenant:check-auth && npm run tenant:check-schema"
+        "tenant:check-rls": "node scripts/check-tenant-rls.js",
+        "tenant:audit": "npm run tenant:check-auth && npm run tenant:check-schema && npm run tenant:check-rls"
     },
     "dependencies": {
         "@capacitor-community/sqlite": "^8.1.1",
@@ -87,6 +88,7 @@
         "qrcode": "^1.5.4",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
+        "server-only": "^0.0.1",
         "stripe": "^22.1.1",
         "uuid": "^13.0.0",
         "web-push": "^3.6.7",

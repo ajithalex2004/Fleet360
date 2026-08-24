@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const INDEXES = [
   // MaintenanceRequest
   'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_maintenance_requests_vehicle_id ON maintenance_requests(vehicle_id)',
@@ -69,7 +69,7 @@ export async function POST() {
       try {
         await tx.$executeRawUnsafe(sql);
         results.push({ index: name, status: 'created' });
-      } catch (e: any) {
+        } catch (e: any) {
         results.push({ index: name, status: 'skipped', error: e.message?.slice(0, 80) });
       }
     }

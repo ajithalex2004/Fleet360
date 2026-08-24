@@ -21,9 +21,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface CoverageRow {
@@ -44,8 +45,7 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   const sp = req.nextUrl.searchParams;
   const days = Math.min(Math.max(parseInt(sp.get('period') ?? '30', 10) || 30, 1), 365);
@@ -129,7 +129,7 @@ export async function GET(req: NextRequest) {
     }, {
       headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=300' },
     });
-  } catch (e) {
+    } catch (e) {
     console.error('[rates/coverage]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'coverage report failed' },

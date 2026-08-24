@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       recoveryCodes: plaintext,  // shown ONCE — never returned again
     });
-  } catch (err) {
+    } catch (err) {
     if (err instanceof NextResponse) return err;
     captureException(err, { context: 'auth.mfa.enroll.verify' });
     return NextResponse.json({ ok: false, error: 'Verification failed' }, { status: 500 });

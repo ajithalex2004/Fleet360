@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { fetchShipmentById } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 async function ensureTable() {
@@ -26,6 +27,7 @@ async function ensureTable() {
 }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string; docId: string } }) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -34,31 +36,36 @@ export async function GET(req: NextRequest, { params }: { params: { id: string; 
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
-  const shipment = await fetchShipmentById(params.id, tenantId);
-  if (!shipment) return NextResponse.json({ error: 'Shipment not found' }, { status: 404 });
+  return withTenantRls(prisma, tenantId, async (tx) => {
 
-  await ensureTable();
-  const rows = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
-    `SELECT * FROM logistics_shipment_documents
-      WHERE tenant_id = $1 AND shipment_order_id = $2 AND id = $3
-      LIMIT 1`,
-    tenantId,
-    params.id,
-    params.docId,
-  );
+      const shipment = await fetchShipmentById(params.id, tenantId);
+      if (!shipment) return NextResponse.json({ error: 'Shipment not found' }, { status: 404 });
 
-  if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  const doc = rows[0];
-  return NextResponse.json({
-    ...doc,
-    file_size: doc.file_size != null ? Number(doc.file_size as bigint | number) : null,
-    uploaded_at: doc.created_at instanceof Date ? doc.created_at.toISOString() : doc.created_at,
+      await ensureTable();
+      const rows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
+        `SELECT * FROM logistics_shipment_documents
+          WHERE tenant_id = $1 AND shipment_order_id = $2 AND id = $3
+          LIMIT 1`,
+        tenantId,
+        params.id,
+        params.docId,
+      );
+
+      if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      const doc = rows[0];
+      return NextResponse.json({
+        ...doc,
+        file_size: doc.file_size != null ? Number(doc.file_size as bigint | number) : null,
+        uploaded_at: doc.created_at instanceof Date ? doc.created_at.toISOString() : doc.created_at,
+      });
   });
 }
 
+
 export async function DELETE(req: NextRequest, { params }: { params: { id: string; docId: string } }) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -67,18 +74,22 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
-  const shipment = await fetchShipmentById(params.id, tenantId);
-  if (!shipment) return NextResponse.json({ error: 'Shipment not found' }, { status: 404 });
+  return withTenantRls(prisma, tenantId, async (tx) => {
 
-  await ensureTable();
-  await prisma.$executeRawUnsafe(
-    `DELETE FROM logistics_shipment_documents
-      WHERE tenant_id = $1 AND shipment_order_id = $2 AND id = $3`,
-    tenantId,
-    params.id,
-    params.docId,
-  );
-  return NextResponse.json({ success: true });
+      const shipment = await fetchShipmentById(params.id, tenantId);
+      if (!shipment) return NextResponse.json({ error: 'Shipment not found' }, { status: 404 });
+
+      await ensureTable();
+      await tx.$executeRawUnsafe(
+        `DELETE FROM logistics_shipment_documents
+          WHERE tenant_id = $1 AND shipment_order_id = $2 AND id = $3`,
+        tenantId,
+        params.id,
+        params.docId,
+      );
+      return NextResponse.json({ success: true });
+  });
 }
+

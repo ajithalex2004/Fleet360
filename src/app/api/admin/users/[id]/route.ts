@@ -7,10 +7,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'users:list';
 
 type Params = { params: Promise<{ id: string }> };
@@ -43,7 +43,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
       return NextResponse.json({ ...user, tenants });
     });
-  } catch (e) {
+    } catch (e) {
     console.error('[Admin Hub] GET /api/admin/users/[id]:', e);
     return NextResponse.json({ error: 'Failed to fetch user' }, { status: 500 });
   }
@@ -58,7 +58,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   try {
     const { id } = await params;
-    const body    = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
 
     const {
       username, email, firstName, lastName,
@@ -126,7 +127,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     );
     revalidateCache([CACHE_TAG]);
     return NextResponse.json({ success: true, message: 'User deactivated', user });
-  } catch (e) {
+    } catch (e) {
     console.error('[Admin Hub] DELETE /api/admin/users/[id]:', e);
     return NextResponse.json({ error: 'Failed to deactivate user' }, { status: 500 });
   }

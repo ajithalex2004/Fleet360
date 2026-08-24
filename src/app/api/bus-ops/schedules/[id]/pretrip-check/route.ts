@@ -9,82 +9,92 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { assessChecklist, PRETRIP_CHECKLIST } from '@/lib/bus-pretrip-checklist';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const latest = await prisma.busPreTripCheck.findFirst({
-    where: { scheduleId: params.id },
-    orderBy: { performedAt: 'desc' },
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const latest = await tx.busPreTripCheck.findFirst({
+        where: { scheduleId: params.id },
+        orderBy: { performedAt: 'desc' },
+      });
+      return NextResponse.json({ check: latest, checklist: PRETRIP_CHECKLIST });
   });
-  return NextResponse.json({ check: latest, checklist: PRETRIP_CHECKLIST });
 }
+
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    const body = await req.json();
-    const items = Array.isArray(body?.items) ? body.items : [];
-    if (items.length === 0) {
-      return NextResponse.json({ error: 'items[] is required' }, { status: 400 });
-    }
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
+        const items = Array.isArray(body?.items) ? body.items : [];
+        if (items.length === 0) {
+          return NextResponse.json({ error: 'items[] is required' }, { status: 400 });
+        }
 
-    const schedule = await prisma.tripSchedule.findUnique({ where: { id: params.id } });
-    if (!schedule) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
+        const schedule = await tx.tripSchedule.findUnique({ where: { id: params.id } });
+        if (!schedule) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
 
-    const assessment = assessChecklist(items);
+        const assessment = assessChecklist(items);
 
-    const check = await prisma.busPreTripCheck.create({
-      data: {
-        scheduleId: params.id,
-        vehicleId: schedule.vehicleId ?? null,
-        driverId: schedule.driverId ?? null,
-        performedBy: req.headers.get('x-user-id') ?? body.performedBy ?? null,
-        checkItems: items,
-        overallPass: assessment.overallPass,
-        failCount: assessment.failCount,
-        notes: body.notes ?? null,
-        signatureData: body.signatureData ?? null,
-      },
-    });
+        const check = await tx.busPreTripCheck.create({
+          data: {
+            scheduleId: params.id,
+            vehicleId: schedule.vehicleId ?? null,
+            driverId: schedule.driverId ?? null,
+            performedBy: req.headers.get('x-user-id') ?? body.performedBy ?? null,
+            checkItems: items,
+            overallPass: assessment.overallPass,
+            failCount: assessment.failCount,
+            notes: body.notes ?? null,
+            signatureData: body.signatureData ?? null,
+          },
+        });
 
-    if (!assessment.overallPass) {
-      const warning = `[${new Date().toISOString().slice(0, 16)}] UNSAFE TO DEPART — pre-trip check FAILED on: ${assessment.blockingFailures.map(f => f.label).join('; ')}`;
-      await prisma.tripSchedule.update({
-        where: { id: params.id },
-        data: { notes: [schedule.notes, warning].filter(Boolean).join('\n') },
-      });
-    }
+        if (!assessment.overallPass) {
+          const warning = `[${new Date().toISOString().slice(0, 16)}] UNSAFE TO DEPART — pre-trip check FAILED on: ${assessment.blockingFailures.map(f => f.label).join('; ')}`;
+          await tx.tripSchedule.update({
+            where: { id: params.id },
+            data: { notes: [schedule.notes, warning].filter(Boolean).join('\n') },
+          });
+        }
 
-    void logAudit({
-      tenantId: req.headers.get('x-tenant-id') ?? undefined,
-      userId: req.headers.get('x-user-id') ?? 'system',
-      userRole: req.headers.get('x-user-role') ?? 'DRIVER',
-      entityType: 'TripSchedule',
-      entityId: params.id,
-      action: 'UPDATE',
-      details: `Pre-trip check ${assessment.overallPass ? 'PASS' : `FAIL (${assessment.blockingFailures.length} blocking)`} — ${items.filter((i: { ok: boolean }) => i.ok).length}/${items.length} items OK.`,
-    });
+        void logAudit({
+          tenantId: req.headers.get('x-tenant-id') ?? undefined,
+          userId: req.headers.get('x-user-id') ?? 'system',
+          userRole: req.headers.get('x-user-role') ?? 'DRIVER',
+          entityType: 'TripSchedule',
+          entityId: params.id,
+          action: 'UPDATE',
+          details: `Pre-trip check ${assessment.overallPass ? 'PASS' : `FAIL (${assessment.blockingFailures.length} blocking)`} — ${items.filter((i: { ok: boolean }) => i.ok).length}/${items.length} items OK.`,
+        });
 
-    return NextResponse.json({ check, assessment }, { status: 201 });
-  } catch (err) {
-    captureException(err, { context: 'bus-ops.pretrip-check.create', tags: { scheduleId: params.id } });
-    return NextResponse.json({ error: 'Failed to record check' }, { status: 500 });
-  }
+        return NextResponse.json({ check, assessment }, { status: 201 });
+        } catch (err) {
+        captureException(err, { context: 'bus-ops.pretrip-check.create', tags: { scheduleId: params.id } });
+        return NextResponse.json({ error: 'Failed to record check' }, { status: 500 });
+      }
+  });
 }
+

@@ -8,14 +8,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 type IdCtx = { params: Promise<{ id: string }> };
 
 export async function GET(req: NextRequest, { params }: IdCtx) {
+
   const { id } = await params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -25,18 +27,22 @@ export async function GET(req: NextRequest, { params }: IdCtx) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
-  const run = await prisma.fleetOptimizationRun.findFirst({
-    where: { id, tenantId },
-    include: {
-      routes: {
-        orderBy: { sequenceInRun: 'asc' },
-        include: { stops: { orderBy: { sequence: 'asc' } } },
-      },
-      unassigned: true,
-    },
+  return withTenantRls(prisma, tenantId, async (tx) => {
+
+      const run = await tx.fleetOptimizationRun.findFirst({
+        where: { id, tenantId },
+        include: {
+          routes: {
+            orderBy: { sequenceInRun: 'asc' },
+            include: { stops: { orderBy: { sequence: 'asc' } } },
+          },
+          unassigned: true,
+        },
+      });
+      if (!run) return NextResponse.json({ error: 'Run not found' }, { status: 404 });
+      return NextResponse.json(run);
   });
-  if (!run) return NextResponse.json({ error: 'Run not found' }, { status: 404 });
-  return NextResponse.json(run);
 }
+

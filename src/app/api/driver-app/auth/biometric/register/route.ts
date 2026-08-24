@@ -30,11 +30,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { getTenantContextOrNull } from '@/lib/tenant-session';
 import { generateRegistrationOptions } from '@simplewebauthn/server';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // Lazy import: we don't want to add @simplewebauthn/server as a hard dep
 // for the admin app. The first registration in a tenant pulls it in.
 let _rpID: string | null = null;
@@ -62,70 +63,74 @@ async function rp() {
 }
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const ctx = getTenantContextOrNull(req);
-  if (!ctx) {
-    return NextResponse.json({ error: 'session required' }, { status: 401 });
-  }
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const ctx = getTenantContextOrNull(req);
+      if (!ctx) {
+        return NextResponse.json({ error: 'session required' }, { status: 401 });
+      }
 
-  // Use the Prisma-generated client where possible. The webauthn
-  // credentials table is custom (no model), so we go through raw SQL.
-  const userId = ctx.userId;
-  const existing = await prisma.$queryRaw<Array<{ id: string }>>`
-    SELECT id FROM webauthn_credentials
-    WHERE user_id = ${userId}::uuid
-    ORDER BY created_at DESC
-  `;
-  const excludeCredentials = existing.map((c) => ({ id: c.id }));
+      // Use the Prisma-generated client where possible. The webauthn
+      // credentials table is custom (no model), so we go through raw SQL.
+      const userId = ctx.userId;
+      const existing = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM webauthn_credentials
+        WHERE user_id = ${userId}::uuid
+        ORDER BY created_at DESC
+      `;
+      const excludeCredentials = existing.map((c) => ({ id: c.id }));
 
-  const { rpID, rpName, origin } = await rp();
+      const { rpID, rpName, origin } = await rp();
 
-  const options = await generateRegistrationOptions({
-    rpName,
-    rpID,
-    // v10 of @simplewebauthn/server requires userID to be a stable
-    // Uint8Array, not a string. We derive a stable 32-byte buffer
-    // from the UUID by base64-encoding the hex representation and
-    // slicing — this gives a deterministic 22-byte (176-bit) ID per
-    // user that the platform authenticator stores in its keychain.
-    // It's not a secret (it's the user id, just in a different
-    // encoding) and the authenticator uses it for the userHandle
-    // returned during login.
-    userID: new TextEncoder().encode(userId),
-    userName: ctx.userId,
-    userDisplayName: 'Driver',
-    timeout: 60_000,
-    attestationType: 'none',
-    authenticatorSelection: {
-      // `platform` = use the device's built-in authenticator
-      // (TouchID / FaceID / Android BiometricPrompt). `crossPlatform`
-      // would allow security keys; we don't want that for a driver app
-      // because the user would need to carry the key.
-      authenticatorAttachment: 'platform',
-      // `required` = the device MUST verify the user is present (face /
-      // fingerprint / device PIN). `preferred` would let the device skip
-      // biometric if unavailable. We want the strict mode for drivers
-      // because the consequence of a stolen PIN is a stolen shift.
-      userVerification: 'required',
-      // `true` = the credential is bound to this device only. We want
-      // this because drivers typically use one work phone; cross-device
-      // roaming is a security risk.
-      residentKey: 'preferred',
-    },
-    excludeCredentials,
+      const options = await generateRegistrationOptions({
+        rpName,
+        rpID,
+        // v10 of @simplewebauthn/server requires userID to be a stable
+        // Uint8Array, not a string. We derive a stable 32-byte buffer
+        // from the UUID by base64-encoding the hex representation and
+        // slicing — this gives a deterministic 22-byte (176-bit) ID per
+        // user that the platform authenticator stores in its keychain.
+        // It's not a secret (it's the user id, just in a different
+        // encoding) and the authenticator uses it for the userHandle
+        // returned during login.
+        userID: new TextEncoder().encode(userId),
+        userName: ctx.userId,
+        userDisplayName: 'Driver',
+        timeout: 60_000,
+        attestationType: 'none',
+        authenticatorSelection: {
+          // `platform` = use the device's built-in authenticator
+          // (TouchID / FaceID / Android BiometricPrompt). `crossPlatform`
+          // would allow security keys; we don't want that for a driver app
+          // because the user would need to carry the key.
+          authenticatorAttachment: 'platform',
+          // `required` = the device MUST verify the user is present (face /
+          // fingerprint / device PIN). `preferred` would let the device skip
+          // biometric if unavailable. We want the strict mode for drivers
+          // because the consequence of a stolen PIN is a stolen shift.
+          userVerification: 'required',
+          // `true` = the credential is bound to this device only. We want
+          // this because drivers typically use one work phone; cross-device
+          // roaming is a security risk.
+          residentKey: 'preferred',
+        },
+        excludeCredentials,
+      });
+
+      // Persist the challenge so the finish endpoint can verify the signed
+      // credential against it. We use a short-lived row in the same table.
+      await tx.$executeRaw`
+        INSERT INTO webauthn_challenges (challenge, user_id, kind, expires_at)
+        VALUES (${options.challenge}, ${userId}::uuid, 'register', NOW() + INTERVAL '2 minutes')
+      `;
+
+      return NextResponse.json(options);
   });
-
-  // Persist the challenge so the finish endpoint can verify the signed
-  // credential against it. We use a short-lived row in the same table.
-  await prisma.$executeRaw`
-    INSERT INTO webauthn_challenges (challenge, user_id, kind, expires_at)
-    VALUES (${options.challenge}, ${userId}::uuid, 'register', NOW() + INTERVAL '2 minutes')
-  `;
-
-  return NextResponse.json(options);
 }
+

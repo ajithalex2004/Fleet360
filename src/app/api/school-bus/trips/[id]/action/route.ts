@@ -14,10 +14,11 @@
  * Returns: { ok, trip: { id, status, actual_start, actual_end } }
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureTripTables } from '../../route';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query  = <T = Row>(sql: string, ...v: unknown[]) => prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
 const exec   = (sql: string, ...v: unknown[]) => prisma.$executeRawUnsafe(sql, ...v).catch(() => 0);
@@ -210,8 +211,7 @@ export async function POST(
     return NextResponse.json({
       error: `Unknown action: "${action}". Valid actions: start, complete, cancel, breakdown`,
     }, { status: 400 });
-
-  } catch (err) {
+    } catch (err) {
     console.error('[school-bus/trips/[id]/action POST]', err);
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
   }

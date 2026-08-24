@@ -17,12 +17,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { runExpirySweep } from '@/lib/leasing/expiry-sweep';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 import { env } from '@/lib/env';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
       env: env.NODE_ENV,
       runAt: new Date().toISOString(),
     });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'leasing.documents.sweep-expiry' });
     console.error('[sweep-expiry] error:', err);
     return NextResponse.json({ error: 'Sweep failed' }, { status: 500 });

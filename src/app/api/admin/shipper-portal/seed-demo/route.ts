@@ -23,7 +23,7 @@ import { createPortalUser } from '@/lib/shipper-portal/portal-users-store';
 import { createInvitation } from '@/lib/shipper-portal/invitations';
 import { ensureShipperPortalTables } from '@/lib/shipper-portal/schema';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
@@ -35,8 +35,7 @@ export async function POST(req: NextRequest) {
 
   }
 
-  const { tenantId, userId, role } = authz;, { status: 401 });
-  }
+  const { tenantId, userId, role } = authz;
 
   const force = req.nextUrl.searchParams.get('force') === 'true';
   if (process.env.NODE_ENV === 'production' && !(force && role === 'SUPER_ADMIN')) {
@@ -120,7 +119,7 @@ export async function POST(req: NextRequest) {
       shipmentsCreated: created,
       note: 'Open setupUrl in an incognito window to log in as the demo shipper.',
     }, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     console.error('[admin/shipper-portal/seed-demo]', e);
     return NextResponse.json({
       error: e instanceof Error ? e.message : 'Seed failed',

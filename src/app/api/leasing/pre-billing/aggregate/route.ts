@@ -52,7 +52,8 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
   try {
-    const json = await req.json();
+    const jsonRaw = await req.json();
+  const json = stripTenantOwnershipFields(jsonRaw);
     const parsed = bodySchema.safeParse(json);
     if (!parsed.success) {
       return NextResponse.json(

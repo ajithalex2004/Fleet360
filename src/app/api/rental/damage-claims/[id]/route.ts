@@ -4,22 +4,27 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const claim = await prisma.damageClaim.findUnique({
-      where: { id: params.id },
-      include: { booking: { include: { customer: true } } },
-    });
-    if (!claim) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.json(claim);
-  } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
-  }
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const claim = await tx.damageClaim.findUnique({
+          where: { id: params.id, tenantId },
+          include: { booking: { include: { customer: true } } },
+        });
+        if (!claim) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        return NextResponse.json(claim);
+      } catch (e) {
+        return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const authz = requireAuthorizedTenant(req);
@@ -28,13 +33,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const { booking, ...data } = body;
     const claim = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.damageClaim.update({ where: { id: params.id }, data }),
+      tx.damageClaim.update({ where: { id: params.id, tenantId }, data }),
     );
     return NextResponse.json(claim);
-  } catch (error) {
+  } catch (e) {
     return NextResponse.json({ error: 'Failed to update' }, { status: 500 });
   }
 }
@@ -47,10 +53,10 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   const { tenantId } = authz;
   try {
     await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.damageClaim.delete({ where: { id: params.id } }),
+      tx.damageClaim.delete({ where: { id: params.id, tenantId } }),
     );
     return NextResponse.json({ success: true });
-  } catch (error) {
+    } catch (e) {
     return NextResponse.json({ error: 'Failed to delete' }, { status: 500 });
   }
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 
@@ -135,231 +136,248 @@ function mapTransfer(r: TransferRow) {
 }
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    await ensureTable();
-    const sp         = req.nextUrl.searchParams;
-    const status     = sp.get('status')      ?? '';
-    const fromBranch = sp.get('from_branch') ?? '';
-    const toBranch   = sp.get('to_branch')   ?? '';
-    const search     = sp.get('search')      ?? '';
-    const page       = Math.max(1, Number(sp.get('page')  ?? 1));
-    const limit      = Math.min(100, Number(sp.get('limit') ?? 20));
-    const offset     = (page - 1) * limit;
 
-    const conds: string[] = [];
-    const params: unknown[] = [];
-    let pi = 1;
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        await ensureTable();
+        const sp         = req.nextUrl.searchParams;
+        const status     = sp.get('status')      ?? '';
+        const fromBranch = sp.get('from_branch') ?? '';
+        const toBranch   = sp.get('to_branch')   ?? '';
+        const search     = sp.get('search')      ?? '';
+        const page       = Math.max(1, Number(sp.get('page')  ?? 1));
+        const limit      = Math.min(100, Number(sp.get('limit') ?? 20));
+        const offset     = (page - 1) * limit;
 
-    if (status)     { conds.push(`t.status = $${pi++}`);               params.push(status); }
-    if (fromBranch) { conds.push(`t.from_branch_name ILIKE $${pi++}`); params.push(`%${fromBranch}%`); }
-    if (toBranch)   { conds.push(`t.to_branch_name ILIKE $${pi++}`);   params.push(`%${toBranch}%`); }
-    if (search) {
-      conds.push(`(t.vehicle_no ILIKE $${pi} OR t.transfer_no ILIKE $${pi} OR t.vehicle_name ILIKE $${pi})`);
-      params.push(`%${search}%`);
-      pi++;
-    }
+        const conds: string[] = [];
+        const params: unknown[] = [];
+        let pi = 1;
 
-    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+        if (status)     { conds.push(`t.status = $${pi++}`);               params.push(status); }
+        if (fromBranch) { conds.push(`t.from_branch_name ILIKE $${pi++}`); params.push(`%${fromBranch}%`); }
+        if (toBranch)   { conds.push(`t.to_branch_name ILIKE $${pi++}`);   params.push(`%${toBranch}%`); }
+        if (search) {
+          conds.push(`(t.vehicle_no ILIKE $${pi} OR t.transfer_no ILIKE $${pi} OR t.vehicle_name ILIKE $${pi})`);
+          params.push(`%${search}%`);
+          pi++;
+        }
 
-    const [rows, countRows, statusCounts] = await Promise.all([
-      prisma.$queryRawUnsafe<TransferRow[]>(
-        `SELECT t.* FROM rental_vehicle_transfers t ${where} ORDER BY t.created_at DESC LIMIT $${pi} OFFSET $${pi + 1}`,
-        ...params, limit, offset
-      ).catch(() => [] as TransferRow[]),
+        const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
 
-      prisma.$queryRawUnsafe<[{ cnt: bigint }]>(
-        `SELECT COUNT(*) AS cnt FROM rental_vehicle_transfers t ${where}`,
-        ...params
-      ).catch(() => [{ cnt: BigInt(0) }]),
+        const [rows, countRows, statusCounts] = await Promise.all([
+          tx.$queryRawUnsafe<TransferRow[]>(
+            `SELECT t.* FROM rental_vehicle_transfers t ${where} ORDER BY t.created_at DESC LIMIT $${pi} OFFSET $${pi + 1}`,
+            ...params, limit, offset
+          ).catch(() => [] as TransferRow[]),
 
-      prisma.$queryRawUnsafe<CountRow[]>(
-        `SELECT status, COUNT(*) AS cnt FROM rental_vehicle_transfers GROUP BY status`
-      ).catch(() => [] as CountRow[]),
-    ]);
+          tx.$queryRawUnsafe<[{ cnt: bigint }]>(
+            `SELECT COUNT(*) AS cnt FROM rental_vehicle_transfers t ${where}`,
+            ...params
+          ).catch(() => [{ cnt: BigInt(0) }]),
 
-    const now = new Date();
-    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-    const [completedThisMonth] = await prisma.$queryRawUnsafe<[{ cnt: bigint }]>(
-      `SELECT COUNT(*) AS cnt FROM rental_vehicle_transfers WHERE status = 'COMPLETED' AND arrived_at >= $1`,
-      firstOfMonth
-    ).catch(() => [{ cnt: BigInt(0) }]);
+          tx.$queryRawUnsafe<CountRow[]>(
+            `SELECT status, COUNT(*) AS cnt FROM rental_vehicle_transfers GROUP BY status`
+          ).catch(() => [] as CountRow[]),
+        ]);
 
-    const total = Number(countRows[0]?.cnt ?? 0);
-    const statusMap = Object.fromEntries(statusCounts.map(s => [s.status, Number(s.cnt)]));
+        const now = new Date();
+        const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+        const [completedThisMonth] = await tx.$queryRawUnsafe<[{ cnt: bigint }]>(
+          `SELECT COUNT(*) AS cnt FROM rental_vehicle_transfers WHERE status = 'COMPLETED' AND arrived_at >= $1`,
+          firstOfMonth
+        ).catch(() => [{ cnt: BigInt(0) }]);
 
-    return NextResponse.json({
-      data: rows.map(mapTransfer),
-      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
-      summary: {
-        byStatus: statusMap,
-        requested:          statusMap['REQUESTED']  ?? 0,
-        approved:           statusMap['APPROVED']   ?? 0,
-        inTransit:          statusMap['IN_TRANSIT'] ?? 0,
-        completed:          statusMap['COMPLETED']  ?? 0,
-        cancelled:          statusMap['CANCELLED']  ?? 0,
-        completedThisMonth: Number(completedThisMonth?.cnt ?? 0),
-      },
-    });
-  } catch (err) {
-    console.error('[rental/transfers GET]', err);
-    return NextResponse.json({ error: 'Failed to load transfers' }, { status: 500 });
-  }
+        const total = Number(countRows[0]?.cnt ?? 0);
+        const statusMap = Object.fromEntries(statusCounts.map(s => [s.status, Number(s.cnt)]));
+
+        return NextResponse.json({
+          data: rows.map(mapTransfer),
+          pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+          summary: {
+            byStatus: statusMap,
+            requested:          statusMap['REQUESTED']  ?? 0,
+            approved:           statusMap['APPROVED']   ?? 0,
+            inTransit:          statusMap['IN_TRANSIT'] ?? 0,
+            completed:          statusMap['COMPLETED']  ?? 0,
+            cancelled:          statusMap['CANCELLED']  ?? 0,
+            completedThisMonth: Number(completedThisMonth?.cnt ?? 0),
+          },
+        });
+        } catch (err) {
+        console.error('[rental/transfers GET]', err);
+        return NextResponse.json({ error: 'Failed to load transfers' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    await ensureTable();
-    const body = await req.json();
 
-    const {
-      vehicleId, vehicleNo, vehicleName, vehicleMake, vehicleModel,
-      fromBranchId, fromBranchName, fromEmirate,
-      toBranchId, toBranchName, toEmirate,
-      transferDate, reason,
-      fuelLevel, odometerReading, conditionNotes,
-      driverName, driverPhone,
-      requestedBy, notes,
-    } = body;
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        await ensureTable();
+        const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
 
-    if (!vehicleNo?.trim())      return NextResponse.json({ error: 'vehicle_no is required' },       { status: 400 });
-    if (!fromBranchName?.trim()) return NextResponse.json({ error: 'from_branch_name is required' }, { status: 400 });
-    if (!toBranchName?.trim())   return NextResponse.json({ error: 'to_branch_name is required' },   { status: 400 });
-    if (!transferDate)           return NextResponse.json({ error: 'transfer_date is required' },     { status: 400 });
-    if (!reason)                 return NextResponse.json({ error: 'reason is required' },            { status: 400 });
+        const {
+          vehicleId, vehicleNo, vehicleName, vehicleMake, vehicleModel,
+          fromBranchId, fromBranchName, fromEmirate,
+          toBranchId, toBranchName, toEmirate,
+          transferDate, reason,
+          fuelLevel, odometerReading, conditionNotes,
+          driverName, driverPhone,
+          requestedBy, notes,
+        } = body;
 
-    const validReasons = ['REBALANCING', 'CUSTOMER_DROPOFF', 'MAINTENANCE', 'OVERFLOW', 'OTHER'];
-    if (!validReasons.includes(reason)) {
-      return NextResponse.json({ error: `reason must be one of: ${validReasons.join(', ')}` }, { status: 400 });
-    }
+        if (!vehicleNo?.trim())      return NextResponse.json({ error: 'vehicle_no is required' },       { status: 400 });
+        if (!fromBranchName?.trim()) return NextResponse.json({ error: 'from_branch_name is required' }, { status: 400 });
+        if (!toBranchName?.trim())   return NextResponse.json({ error: 'to_branch_name is required' },   { status: 400 });
+        if (!transferDate)           return NextResponse.json({ error: 'transfer_date is required' },     { status: 400 });
+        if (!reason)                 return NextResponse.json({ error: 'reason is required' },            { status: 400 });
 
-    // Generate transfer_no: RVT-YYYYMM-XXXX
-    const yyyymm = new Date().toISOString().slice(0, 7).replace('-', '');
-    const [seqRow] = await prisma.$queryRawUnsafe<SeqRow[]>(
-      `SELECT COUNT(*) + 1 AS seq FROM rental_vehicle_transfers WHERE transfer_no LIKE $1`,
-      `RVT-${yyyymm}-%`
-    );
-    const seq = String(Number(seqRow?.seq ?? 1)).padStart(4, '0');
-    const transferNo = `RVT-${yyyymm}-${seq}`;
+        const validReasons = ['REBALANCING', 'CUSTOMER_DROPOFF', 'MAINTENANCE', 'OVERFLOW', 'OTHER'];
+        if (!validReasons.includes(reason)) {
+          return NextResponse.json({ error: `reason must be one of: ${validReasons.join(', ')}` }, { status: 400 });
+        }
 
-    type NewRow = { id: string; transfer_no: string };
-    const [row] = await prisma.$queryRawUnsafe<NewRow[]>(
-      `INSERT INTO rental_vehicle_transfers
-         (transfer_no, vehicle_id, vehicle_no, vehicle_name, vehicle_make, vehicle_model,
-          from_branch_id, from_branch_name, from_emirate,
-          to_branch_id, to_branch_name, to_emirate,
-          transfer_date, reason, fuel_level, odometer_reading, condition_notes,
-          driver_name, driver_phone, requested_by, notes, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,'REQUESTED')
-       RETURNING id, transfer_no`,
-      transferNo,
-      vehicleId      || null,
-      vehicleNo.trim(),
-      vehicleName    || null,
-      vehicleMake    || null,
-      vehicleModel   || null,
-      fromBranchId   || null,
-      fromBranchName.trim(),
-      fromEmirate    || null,
-      toBranchId     || null,
-      toBranchName.trim(),
-      toEmirate      || null,
-      transferDate,
-      reason,
-      fuelLevel       !== undefined && fuelLevel !== '' ? Number(fuelLevel)       : null,
-      odometerReading !== undefined && odometerReading !== '' ? Number(odometerReading) : null,
-      conditionNotes || null,
-      driverName     || null,
-      driverPhone    || null,
-      requestedBy    || null,
-      notes          || null
-    );
+        // Generate transfer_no: RVT-YYYYMM-XXXX
+        const yyyymm = new Date().toISOString().slice(0, 7).replace('-', '');
+        const [seqRow] = await tx.$queryRawUnsafe<SeqRow[]>(
+          `SELECT COUNT(*) + 1 AS seq FROM rental_vehicle_transfers WHERE transfer_no LIKE $1`,
+          `RVT-${yyyymm}-%`
+        );
+        const seq = String(Number(seqRow?.seq ?? 1)).padStart(4, '0');
+        const transferNo = `RVT-${yyyymm}-${seq}`;
 
-    return NextResponse.json({ id: row.id, transferNo: row.transfer_no }, { status: 201 });
-  } catch (err) {
-    console.error('[rental/transfers POST]', err);
-    return NextResponse.json({ error: 'Failed to create transfer' }, { status: 500 });
-  }
+        type NewRow = { id: string; transfer_no: string };
+        const [row] = await tx.$queryRawUnsafe<NewRow[]>(
+          `INSERT INTO rental_vehicle_transfers
+             (transfer_no, vehicle_id, vehicle_no, vehicle_name, vehicle_make, vehicle_model,
+              from_branch_id, from_branch_name, from_emirate,
+              to_branch_id, to_branch_name, to_emirate,
+              transfer_date, reason, fuel_level, odometer_reading, condition_notes,
+              driver_name, driver_phone, requested_by, notes, status)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,'REQUESTED')
+           RETURNING id, transfer_no`,
+          transferNo,
+          vehicleId      || null,
+          vehicleNo.trim(),
+          vehicleName    || null,
+          vehicleMake    || null,
+          vehicleModel   || null,
+          fromBranchId   || null,
+          fromBranchName.trim(),
+          fromEmirate    || null,
+          toBranchId     || null,
+          toBranchName.trim(),
+          toEmirate      || null,
+          transferDate,
+          reason,
+          fuelLevel       !== undefined && fuelLevel !== '' ? Number(fuelLevel)       : null,
+          odometerReading !== undefined && odometerReading !== '' ? Number(odometerReading) : null,
+          conditionNotes || null,
+          driverName     || null,
+          driverPhone    || null,
+          requestedBy    || null,
+          notes          || null
+        );
+
+        return NextResponse.json({ id: row.id, transferNo: row.transfer_no }, { status: 201 });
+        } catch (err) {
+        console.error('[rental/transfers POST]', err);
+        return NextResponse.json({ error: 'Failed to create transfer' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function PATCH(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    await ensureTable();
-    const id = req.nextUrl.searchParams.get('id');
-    if (!id) return NextResponse.json({ error: 'id query param required' }, { status: 400 });
 
-    const body = await req.json();
-    const { action, approvedBy, cancelledReason } = body;
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        await ensureTable();
+        const id = req.nextUrl.searchParams.get('id');
+        if (!id) return NextResponse.json({ error: 'id query param required' }, { status: 400 });
 
-    const [current] = await prisma.$queryRawUnsafe<TransferRow[]>(
-      `SELECT * FROM rental_vehicle_transfers WHERE id = $1`, id
-    );
-    if (!current) return NextResponse.json({ error: 'Transfer not found' }, { status: 404 });
+        const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
+        const { action, approvedBy, cancelledReason } = body;
 
-    const now = new Date().toISOString();
+        const [current] = await tx.$queryRawUnsafe<TransferRow[]>(
+          `SELECT * FROM rental_vehicle_transfers WHERE id = $1`, id
+        );
+        if (!current) return NextResponse.json({ error: 'Transfer not found' }, { status: 404 });
 
-    if (action === 'APPROVE') {
-      if (current.status !== 'REQUESTED') {
-        return NextResponse.json({ error: 'Only REQUESTED transfers can be approved' }, { status: 400 });
-      }
-      if (!approvedBy?.trim()) {
-        return NextResponse.json({ error: 'approved_by is required' }, { status: 400 });
-      }
-      await prisma.$executeRawUnsafe(
-        `UPDATE rental_vehicle_transfers SET status='APPROVED', approved_by=$1, approved_at=$2, updated_at=$3 WHERE id=$4`,
-        approvedBy.trim(), now, now, id
-      );
-    } else if (action === 'DEPART') {
-      if (current.status !== 'APPROVED') {
-        return NextResponse.json({ error: 'Only APPROVED transfers can be departed' }, { status: 400 });
-      }
-      await prisma.$executeRawUnsafe(
-        `UPDATE rental_vehicle_transfers SET status='IN_TRANSIT', departed_at=$1, updated_at=$2 WHERE id=$3`,
-        now, now, id
-      );
-    } else if (action === 'ARRIVE') {
-      if (current.status !== 'IN_TRANSIT') {
-        return NextResponse.json({ error: 'Only IN_TRANSIT transfers can be completed' }, { status: 400 });
-      }
-      await prisma.$executeRawUnsafe(
-        `UPDATE rental_vehicle_transfers SET status='COMPLETED', arrived_at=$1, updated_at=$2 WHERE id=$3`,
-        now, now, id
-      );
-    } else if (action === 'CANCEL') {
-      if (current.status === 'COMPLETED') {
-        return NextResponse.json({ error: 'Completed transfers cannot be cancelled' }, { status: 400 });
-      }
-      if (!cancelledReason?.trim()) {
-        return NextResponse.json({ error: 'cancelled_reason is required' }, { status: 400 });
-      }
-      await prisma.$executeRawUnsafe(
-        `UPDATE rental_vehicle_transfers SET status='CANCELLED', cancelled_reason=$1, updated_at=$2 WHERE id=$3`,
-        cancelledReason.trim(), now, id
-      );
-    } else {
-      return NextResponse.json({ error: 'action must be one of: APPROVE, DEPART, ARRIVE, CANCEL' }, { status: 400 });
-    }
+        const now = new Date().toISOString();
 
-    const [updated] = await prisma.$queryRawUnsafe<TransferRow[]>(
-      `SELECT * FROM rental_vehicle_transfers WHERE id = $1`, id
-    );
-    return NextResponse.json(mapTransfer(updated));
-  } catch (err) {
-    console.error('[rental/transfers PATCH]', err);
-    return NextResponse.json({ error: 'Failed to update transfer' }, { status: 500 });
-  }
+        if (action === 'APPROVE') {
+          if (current.status !== 'REQUESTED') {
+            return NextResponse.json({ error: 'Only REQUESTED transfers can be approved' }, { status: 400 });
+          }
+          if (!approvedBy?.trim()) {
+            return NextResponse.json({ error: 'approved_by is required' }, { status: 400 });
+          }
+          await tx.$executeRawUnsafe(
+            `UPDATE rental_vehicle_transfers SET status='APPROVED', approved_by=$1, approved_at=$2, updated_at=$3 WHERE id=$4`,
+            approvedBy.trim(), now, now, id
+          );
+        } else if (action === 'DEPART') {
+          if (current.status !== 'APPROVED') {
+            return NextResponse.json({ error: 'Only APPROVED transfers can be departed' }, { status: 400 });
+          }
+          await tx.$executeRawUnsafe(
+            `UPDATE rental_vehicle_transfers SET status='IN_TRANSIT', departed_at=$1, updated_at=$2 WHERE id=$3`,
+            now, now, id
+          );
+        } else if (action === 'ARRIVE') {
+          if (current.status !== 'IN_TRANSIT') {
+            return NextResponse.json({ error: 'Only IN_TRANSIT transfers can be completed' }, { status: 400 });
+          }
+          await tx.$executeRawUnsafe(
+            `UPDATE rental_vehicle_transfers SET status='COMPLETED', arrived_at=$1, updated_at=$2 WHERE id=$3`,
+            now, now, id
+          );
+        } else if (action === 'CANCEL') {
+          if (current.status === 'COMPLETED') {
+            return NextResponse.json({ error: 'Completed transfers cannot be cancelled' }, { status: 400 });
+          }
+          if (!cancelledReason?.trim()) {
+            return NextResponse.json({ error: 'cancelled_reason is required' }, { status: 400 });
+          }
+          await tx.$executeRawUnsafe(
+            `UPDATE rental_vehicle_transfers SET status='CANCELLED', cancelled_reason=$1, updated_at=$2 WHERE id=$3`,
+            cancelledReason.trim(), now, id
+          );
+        } else {
+          return NextResponse.json({ error: 'action must be one of: APPROVE, DEPART, ARRIVE, CANCEL' }, { status: 400 });
+        }
+
+        const [updated] = await tx.$queryRawUnsafe<TransferRow[]>(
+          `SELECT * FROM rental_vehicle_transfers WHERE id = $1`, id
+        );
+        return NextResponse.json(mapTransfer(updated));
+      } catch (err) {
+        console.error('[rental/transfers PATCH]', err);
+        return NextResponse.json({ error: 'Failed to update transfer' }, { status: 500 });
+      }
+  });
 }
+

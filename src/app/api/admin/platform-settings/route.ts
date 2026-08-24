@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 /* ── Bootstrap table ─────────────────────────────────────── */
 async function ensureTable() {
   await prisma.$executeRawUnsafe(`
@@ -89,7 +89,7 @@ export async function GET() {
       return out;
     });
     return NextResponse.json({ settings });
-  } catch (err: unknown) {
+    } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
@@ -104,7 +104,8 @@ export async function PATCH(req: NextRequest) {
   const { tenantId } = authz;
 
   try {
-    const body = await req.json() as Record<string, string>;
+    const bodyRaw = await req.json() as Record<string, string>;
+  const body = stripTenantOwnershipFields(bodyRaw);
     return await withPlatformAdmin(prisma, async (tx) => {
       await ensureTable();
       for (const [key, value] of Object.entries(body)) {
@@ -116,7 +117,7 @@ export async function PATCH(req: NextRequest) {
       }
       return NextResponse.json({ ok: true });
     });
-  } catch (err: unknown) {
+    } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: msg }, { status: 500 });
   }

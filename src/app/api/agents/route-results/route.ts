@@ -8,72 +8,77 @@
  *   offset   — default 0
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureAgentSchema } from '@/lib/agents/schema';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    await ensureAgentSchema();
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        await ensureAgentSchema();
 
-    const { searchParams } = new URL(req.url);
-    const status = searchParams.get('status');
-    const limit  = Math.min(parseInt(searchParams.get('limit')  ?? '50', 10), 200);
-    const offset = parseInt(searchParams.get('offset') ?? '0', 10);
+        const { searchParams } = new URL(req.url);
+        const status = searchParams.get('status');
+        const limit  = Math.min(parseInt(searchParams.get('limit')  ?? '50', 10), 200);
+        const offset = parseInt(searchParams.get('offset') ?? '0', 10);
 
-    const whereClause = status ? `WHERE status = '${status.replace(/'/g, "''")}'` : '';
+        const whereClause = status ? `WHERE status = '${status.replace(/'/g, "''")}'` : '';
 
-    const rows = await prisma.$queryRawUnsafe<RouteResultRow[]>(`
-      SELECT
-        id::text,
-        route_id::text,
-        route_name,
-        route_number,
-        original_stop_count,
-        matched_stop_count,
-        original_distance_km::float8,
-        optimised_distance_km::float8,
-        distance_saved_km::float8,
-        distance_saved_pct::float8,
-        iterations_2opt,
-        solver_duration_ms,
-        estimated_duration_min,
-        original_sequence,
-        optimised_sequence,
-        status,
-        applied_at,
-        rejected_at,
-        rejected_by,
-        created_at,
-        updated_at
-      FROM route_optimisation_results
-      ${whereClause}
-      ORDER BY distance_saved_pct DESC
-      LIMIT ${limit} OFFSET ${offset}
-    `);
+        const rows = await tx.$queryRawUnsafe<RouteResultRow[]>(`
+          SELECT
+            id::text,
+            route_id::text,
+            route_name,
+            route_number,
+            original_stop_count,
+            matched_stop_count,
+            original_distance_km::float8,
+            optimised_distance_km::float8,
+            distance_saved_km::float8,
+            distance_saved_pct::float8,
+            iterations_2opt,
+            solver_duration_ms,
+            estimated_duration_min,
+            original_sequence,
+            optimised_sequence,
+            status,
+            applied_at,
+            rejected_at,
+            rejected_by,
+            created_at,
+            updated_at
+          FROM route_optimisation_results
+          ${whereClause}
+          ORDER BY distance_saved_pct DESC
+          LIMIT ${limit} OFFSET ${offset}
+        `);
 
-    // Summary counts
-    const counts = await prisma.$queryRaw<CountRow[]>`
-      SELECT status, COUNT(*)::int AS count
-      FROM route_optimisation_results
-      GROUP BY status
-    `;
+        // Summary counts
+        const counts = await tx.$queryRaw<CountRow[]>`
+          SELECT status, COUNT(*)::int AS count
+          FROM route_optimisation_results
+          GROUP BY status
+        `;
 
-    const summary: Record<string, number> = {};
-    for (const c of counts) summary[c.status] = c.count;
+        const summary: Record<string, number> = {};
+        for (const c of counts) summary[c.status] = c.count;
 
-    return NextResponse.json({ data: rows, summary, total: Object.values(summary).reduce((a, b) => a + b, 0) });
-  } catch (err) {
-    console.error('route-results GET error:', err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
-  }
+        return NextResponse.json({ data: rows, summary, total: Object.values(summary).reduce((a, b) => a + b, 0) });
+        } catch (err) {
+        console.error('route-results GET error:', err);
+        return NextResponse.json({ error: String(err) }, { status: 500 });
+      }
+  });
 }
+
 
 interface RouteResultRow {
   id: string;

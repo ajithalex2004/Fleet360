@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { ensureAuditTable, logAudit, AuditPayload } from '@/lib/audit';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // ---------------------------------------------------------------------------
 // GET /api/admin/audit-logs
 // Query params:
@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
 
       return NextResponse.json({ data, total, page, limit, pages: Math.ceil(total / limit) });
     });
-  } catch (err) {
+    } catch (err) {
     console.error('[audit-logs GET]', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
 
     await logAudit(body);
     return NextResponse.json({ ok: true });
-  } catch (err) {
+    } catch (err) {
     console.error('[audit-logs POST]', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }

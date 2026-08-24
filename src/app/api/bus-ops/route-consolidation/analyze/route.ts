@@ -47,6 +47,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { loadConsolidationFacts } from '@/lib/planning/route-consolidation-facts';
 import { analyzeConsolidations, type ConsolidationObjective } from '@/lib/planning/route-consolidation';
@@ -55,7 +56,7 @@ import { resolveScoringPolicy } from '@/lib/planning/route-consolidation-scoring
 import { resolveZoneFallbackKm } from '@/lib/planning/zone-compat-policy';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -65,7 +66,7 @@ export async function POST(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
   const permError = requireBusOpsAdminAccess(req, 'route-consolidation');
   if (permError) return permError;
 

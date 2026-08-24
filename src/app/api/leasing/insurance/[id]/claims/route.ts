@@ -13,24 +13,29 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  const policy = await prisma.leaseInsurancePolicy.findFirst({
-    where: { id: params.id, tenantId },
-    select: { id: true },
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const policy = await tx.leaseInsurancePolicy.findFirst({
+        where: { id: params.id, tenantId },
+        select: { id: true },
+      });
+      if (!policy) {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      }
+      const claims = await tx.leaseInsuranceClaim.findMany({
+        where: { tenantId, policyId: params.id },
+        orderBy: { createdAt: 'desc' },
+      });
+      return NextResponse.json(claims);
   });
-  if (!policy) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  }
-  const claims = await prisma.leaseInsuranceClaim.findMany({
-    where: { tenantId, policyId: params.id },
-    orderBy: { createdAt: 'desc' },
-  });
-  return NextResponse.json(claims);
 }
+
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const authz = requireAuthorizedTenant(req);
@@ -46,7 +51,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!policy) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const count = await prisma.leaseInsuranceClaim.count({ where: { tenantId } });
     const claimNo = `CLM-${String(count + 1).padStart(5, '0')}`;
     const claim = await withTenantRls(prisma, tenantId, async (tx) =>
@@ -55,7 +61,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }),
     );
     return NextResponse.json(claim, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     return NextResponse.json({ error: 'Failed' }, { status: 500 });
   }
 }

@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json(result, { status: 200 });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'leasing.import.vehicles' });
     console.error('[import vehicles] error:', err);
     return NextResponse.json({ error: 'Failed to import vehicles' }, { status: 500 });

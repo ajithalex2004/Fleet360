@@ -12,9 +12,10 @@
  *   modules             Comma-separated module filter (RAC,LEASING,LOGISTICS,SCHOOL_BUS)
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 function toN(v: unknown): number { return parseFloat(String(v ?? 0)) || 0; }
 
 // ── Core query helpers (param-based so they can run for two periods) ──────────
@@ -207,159 +208,163 @@ async function buildPeriod(
 }
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const sp   = req.nextUrl.searchParams;
-  const type = sp.get('type') ?? 'income_statement';
-  const from = sp.get('from') ?? `${new Date().getFullYear()}-01-01`;
-  const to   = sp.get('to')   ?? new Date().toISOString().slice(0, 10);
-  const compFrom = sp.get('compFrom');
-  const compTo   = sp.get('compTo');
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const sp   = req.nextUrl.searchParams;
+      const type = sp.get('type') ?? 'income_statement';
+      const from = sp.get('from') ?? `${new Date().getFullYear()}-01-01`;
+      const to   = sp.get('to')   ?? new Date().toISOString().slice(0, 10);
+      const compFrom = sp.get('compFrom');
+      const compTo   = sp.get('compTo');
 
-  const rawTenantId  = sp.get('tenantId');
-  const tenantId     = rawTenantId ? rawTenantId.replace(/[^a-zA-Z0-9_-]/g, '') : null;
-  const modulesParam = sp.get('modules');
-  const activeModules = modulesParam
-    ? modulesParam.split(',').map(m => m.trim().toUpperCase()).filter(Boolean)
-    : [];
+      const rawTenantId  = sp.get('tenantId');
+      const tenantId     = rawTenantId ? rawTenantId.replace(/[^a-zA-Z0-9_-]/g, '') : null;
+      const modulesParam = sp.get('modules');
+      const activeModules = modulesParam
+        ? modulesParam.split(',').map(m => m.trim().toUpperCase()).filter(Boolean)
+        : [];
 
-  // ── Module Breakdown ───────────────────────────────────────────────────────
-  if (type === 'module_breakdown') {
-    const q = async (sql: string, ...p: unknown[]): Promise<number> => {
-      const [r] = await (prisma.$queryRawUnsafe as (...a: unknown[]) => Promise<{ t: string }[]>)(sql, ...p).catch(() => [{ t: '0' }]);
-      return toN(r?.t);
-    };
-    const tp = (extra: unknown[] = []) => tenantId ? [...extra, tenantId] : extra;
-    const tc = (len: number) => tenantId ? ` AND tenant_id = $${len + 1}` : '';
+      // ── Module Breakdown ───────────────────────────────────────────────────────
+      if (type === 'module_breakdown') {
+        const q = async (sql: string, ...p: unknown[]): Promise<number> => {
+          const [r] = await (tx.$queryRawUnsafe as (...a: unknown[]) => Promise<{ t: string }[]>)(sql, ...p).catch(() => [{ t: '0' }]);
+          return toN(r?.t);
+        };
+        const tp = (extra: unknown[] = []) => tenantId ? [...extra, tenantId] : extra;
+        const tc = (len: number) => tenantId ? ` AND tenant_id = $${len + 1}` : '';
 
-    const [racAmt, lsAmt, lgAmt, fiAmt, schoolAmt] = await Promise.all([
-      q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM rental_invoices WHERE deleted_at IS NULL AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
-      q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM lease_invoices WHERE deleted_at IS NULL AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
-      q(`SELECT COALESCE(SUM(customer_rate_amount),0)::text AS t FROM logistics_shipment_orders WHERE deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED') AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
-      q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND invoice_number NOT LIKE 'SUB-%' AND module NOT IN ('RAC','LEASING','LOGISTICS','SCHOOL_BUS') AND issue_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
-      q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND module = 'SCHOOL_BUS' AND issue_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
-    ]);
+        const [racAmt, lsAmt, lgAmt, fiAmt, schoolAmt] = await Promise.all([
+          q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM rental_invoices WHERE deleted_at IS NULL AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
+          q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM lease_invoices WHERE deleted_at IS NULL AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
+          q(`SELECT COALESCE(SUM(customer_rate_amount),0)::text AS t FROM logistics_shipment_orders WHERE deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED') AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
+          q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND invoice_number NOT LIKE 'SUB-%' AND module NOT IN ('RAC','LEASING','LOGISTICS','SCHOOL_BUS') AND issue_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
+          q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND module = 'SCHOOL_BUS' AND issue_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
+        ]);
 
-    const modules = [
-      { module: 'RAC',        label: 'Rent-A-Car',        amount: racAmt,    color: '#6366f1' },
-      { module: 'LEASING',    label: 'Vehicle Leasing',   amount: lsAmt,     color: '#8b5cf6' },
-      { module: 'LOGISTICS',  label: 'Logistics & Freight', amount: lgAmt,   color: '#06b6d4' },
-      { module: 'SCHOOL_BUS', label: 'School Bus Fees',   amount: schoolAmt, color: '#f59e0b' },
-      { module: 'OTHER',      label: 'Other Services',    amount: fiAmt,     color: '#10b981' },
-    ].filter(m => m.amount > 0);
+        const modules = [
+          { module: 'RAC',        label: 'Rent-A-Car',        amount: racAmt,    color: '#6366f1' },
+          { module: 'LEASING',    label: 'Vehicle Leasing',   amount: lsAmt,     color: '#8b5cf6' },
+          { module: 'LOGISTICS',  label: 'Logistics & Freight', amount: lgAmt,   color: '#06b6d4' },
+          { module: 'SCHOOL_BUS', label: 'School Bus Fees',   amount: schoolAmt, color: '#f59e0b' },
+          { module: 'OTHER',      label: 'Other Services',    amount: fiAmt,     color: '#10b981' },
+        ].filter(m => m.amount > 0);
 
-    const total = modules.reduce((s, m) => s + m.amount, 0);
-    return NextResponse.json({
-      type: 'module_breakdown',
-      period: { from, to },
-      total,
-      modules: modules.map(m => ({
-        ...m,
-        pct: total > 0 ? Math.round((m.amount / total) * 1000) / 10 : 0,
-      })),
-    });
-  }
+        const total = modules.reduce((s, m) => s + m.amount, 0);
+        return NextResponse.json({
+          type: 'module_breakdown',
+          period: { from, to },
+          total,
+          modules: modules.map(m => ({
+            ...m,
+            pct: total > 0 ? Math.round((m.amount / total) * 1000) / 10 : 0,
+          })),
+        });
+      }
 
-  // ── Income Statement ───────────────────────────────────────────────────────
-  if (type === 'income_statement') {
-    const current = await buildPeriod(from, to, tenantId, activeModules);
-    const currentResult = computeIncomeSummary(current.revenues, current.expenses);
+      // ── Income Statement ───────────────────────────────────────────────────────
+      if (type === 'income_statement') {
+        const current = await buildPeriod(from, to, tenantId, activeModules);
+        const currentResult = computeIncomeSummary(current.revenues, current.expenses);
 
-    let comparisonResult = null;
-    if (compFrom && compTo) {
-      const comp = await buildPeriod(compFrom, compTo, tenantId, activeModules);
-      comparisonResult = computeIncomeSummary(comp.revenues, comp.expenses);
-    }
+        let comparisonResult = null;
+        if (compFrom && compTo) {
+          const comp = await buildPeriod(compFrom, compTo, tenantId, activeModules);
+          comparisonResult = computeIncomeSummary(comp.revenues, comp.expenses);
+        }
 
-    return NextResponse.json({
-      type: 'income_statement',
-      period: { from, to },
-      compPeriod: compFrom && compTo ? { from: compFrom, to: compTo } : null,
-      source: current.source,
-      tenantId: tenantId ?? null,
-      modules: activeModules.length > 0 ? activeModules : null,
-      ...currentResult,
-      comparison: comparisonResult,
-    });
-  }
+        return NextResponse.json({
+          type: 'income_statement',
+          period: { from, to },
+          compPeriod: compFrom && compTo ? { from: compFrom, to: compTo } : null,
+          source: current.source,
+          tenantId: tenantId ?? null,
+          modules: activeModules.length > 0 ? activeModules : null,
+          ...currentResult,
+          comparison: comparisonResult,
+        });
+      }
 
-  // ── Cash Flow Statement (Indirect Method) ─────────────────────────────────
-  const current = await buildPeriod(from, to, tenantId, activeModules);
-  const revenues = current.revenues;
-  const expenses = current.expenses;
-  const totalRevenue  = revenues.reduce((s, r) => s + r.amount, 0);
-  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
-  const depreciation  = expenses.find(e => e.code === '5150')?.amount ?? 0;
-  const netProfit     = totalRevenue - totalExpenses;
-  const r2 = (n: number) => Math.round(n * 100) / 100;
+      // ── Cash Flow Statement (Indirect Method) ─────────────────────────────────
+      const current = await buildPeriod(from, to, tenantId, activeModules);
+      const revenues = current.revenues;
+      const expenses = current.expenses;
+      const totalRevenue  = revenues.reduce((s, r) => s + r.amount, 0);
+      const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+      const depreciation  = expenses.find(e => e.code === '5150')?.amount ?? 0;
+      const netProfit     = totalRevenue - totalExpenses;
+      const r2 = (n: number) => Math.round(n * 100) / 100;
 
-  const q = async (sql: string, ...p: unknown[]): Promise<number> => {
-    const [r] = await (prisma.$queryRawUnsafe as (...a: unknown[]) => Promise<{ t: string }[]>)(sql, ...p).catch(() => [{ t: '0' }]);
-    return toN(r?.t);
-  };
-  const tp = (extra: unknown[] = []) => tenantId ? [...extra, tenantId] : extra;
-  const tc = (len: number) => tenantId ? ` AND tenant_id = $${len + 1}` : '';
+      const q = async (sql: string, ...p: unknown[]): Promise<number> => {
+        const [r] = await (tx.$queryRawUnsafe as (...a: unknown[]) => Promise<{ t: string }[]>)(sql, ...p).catch(() => [{ t: '0' }]);
+        return toN(r?.t);
+      };
+      const tp = (extra: unknown[] = []) => tenantId ? [...extra, tenantId] : extra;
+      const tc = (len: number) => tenantId ? ` AND tenant_id = $${len + 1}` : '';
 
-  // Working capital
-  const [arChange, expPayable] = await Promise.all([
-    q(`SELECT COALESCE(SUM(total_amount - paid_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND invoice_number NOT LIKE 'SUB-%' AND issue_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
-    q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_expenses WHERE deleted_at IS NULL AND status='APPROVED' AND expense_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
-  ]);
+      // Working capital
+      const [arChange, expPayable] = await Promise.all([
+        q(`SELECT COALESCE(SUM(total_amount - paid_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND invoice_number NOT LIKE 'SUB-%' AND issue_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
+        q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_expenses WHERE deleted_at IS NULL AND status='APPROVED' AND expense_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
+      ]);
 
-  // CapEx & disposals
-  let capexAmount = 0;
-  let disposalAmount = 0;
-  if (!tenantId) {
-    [capexAmount, disposalAmount] = await Promise.all([
-      q(`SELECT COALESCE(SUM(acquisition_cost),0)::text AS t FROM finance_fixed_assets WHERE deleted_at IS NULL AND acquisition_date BETWEEN $1 AND $2`, from, to),
-      q(`SELECT COALESCE(SUM(disposal_proceeds),0)::text AS t FROM finance_fixed_assets WHERE deleted_at IS NULL AND disposal_date BETWEEN $1 AND $2`, from, to),
-    ]);
-  } else {
-    [capexAmount, disposalAmount] = await Promise.all([
-      q(`SELECT COALESCE(SUM(acquisition_cost),0)::text AS t FROM finance_fixed_assets WHERE deleted_at IS NULL AND tenant_id = $1 AND acquisition_date BETWEEN $2 AND $3`, tenantId, from, to),
-      q(`SELECT COALESCE(SUM(disposal_proceeds),0)::text AS t FROM finance_fixed_assets WHERE deleted_at IS NULL AND tenant_id = $1 AND disposal_date BETWEEN $2 AND $3`, tenantId, from, to),
-    ]);
-  }
+      // CapEx & disposals
+      let capexAmount = 0;
+      let disposalAmount = 0;
+      if (!tenantId) {
+        [capexAmount, disposalAmount] = await Promise.all([
+          q(`SELECT COALESCE(SUM(acquisition_cost),0)::text AS t FROM finance_fixed_assets WHERE deleted_at IS NULL AND acquisition_date BETWEEN $1 AND $2`, from, to),
+          q(`SELECT COALESCE(SUM(disposal_proceeds),0)::text AS t FROM finance_fixed_assets WHERE deleted_at IS NULL AND disposal_date BETWEEN $1 AND $2`, from, to),
+        ]);
+      } else {
+        [capexAmount, disposalAmount] = await Promise.all([
+          q(`SELECT COALESCE(SUM(acquisition_cost),0)::text AS t FROM finance_fixed_assets WHERE deleted_at IS NULL AND tenant_id = $1 AND acquisition_date BETWEEN $2 AND $3`, tenantId, from, to),
+          q(`SELECT COALESCE(SUM(disposal_proceeds),0)::text AS t FROM finance_fixed_assets WHERE deleted_at IS NULL AND tenant_id = $1 AND disposal_date BETWEEN $2 AND $3`, tenantId, from, to),
+        ]);
+      }
 
-  // Financing — pull from leasing (loan drawdowns and repayments)
-  const [leasingDrawdowns, leasingRepayments] = await Promise.all([
-    q(`SELECT COALESCE(SUM(financed_amount),0)::text AS t FROM lease_contracts WHERE deleted_at IS NULL AND start_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
-    q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM lease_invoices WHERE deleted_at IS NULL AND status='PAID' AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
-  ]);
+      // Financing — pull from leasing (loan drawdowns and repayments)
+      const [leasingDrawdowns, leasingRepayments] = await Promise.all([
+        q(`SELECT COALESCE(SUM(financed_amount),0)::text AS t FROM lease_contracts WHERE deleted_at IS NULL AND start_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
+        q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM lease_invoices WHERE deleted_at IS NULL AND status='PAID' AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
+      ]);
 
-  const operatingCashFlow  = netProfit + depreciation - arChange + expPayable;
-  const investingCashFlow  = disposalAmount - capexAmount;
-  const financingCashFlow  = leasingDrawdowns - leasingRepayments;
-  const netCashFlow        = operatingCashFlow + investingCashFlow + financingCashFlow;
+      const operatingCashFlow  = netProfit + depreciation - arChange + expPayable;
+      const investingCashFlow  = disposalAmount - capexAmount;
+      const financingCashFlow  = leasingDrawdowns - leasingRepayments;
+      const netCashFlow        = operatingCashFlow + investingCashFlow + financingCashFlow;
 
-  return NextResponse.json({
-    type: 'cash_flow',
-    period: { from, to },
-    source: current.source,
-    tenantId: tenantId ?? null,
-    modules: activeModules.length > 0 ? activeModules : null,
-    operating: {
-      netProfit:            r2(netProfit),
-      addDepreciation:      r2(depreciation),
-      changeInReceivables:  r2(-arChange),
-      changeInPayables:     r2(expPayable),
-      netOperatingCashFlow: r2(operatingCashFlow),
-    },
-    investing: {
-      capitalExpenditures:  r2(-capexAmount),
-      assetDisposals:       r2(disposalAmount),
-      netInvestingCashFlow: r2(investingCashFlow),
-    },
-    financing: {
-      newBorrowings:        r2(leasingDrawdowns),
-      loanRepayments:       r2(-leasingRepayments),
-      dividendsPaid:        0,
-      netFinancingCashFlow: r2(financingCashFlow),
-    },
-    summary: { netCashFlow: r2(netCashFlow) },
+      return NextResponse.json({
+        type: 'cash_flow',
+        period: { from, to },
+        source: current.source,
+        tenantId: tenantId ?? null,
+        modules: activeModules.length > 0 ? activeModules : null,
+        operating: {
+          netProfit:            r2(netProfit),
+          addDepreciation:      r2(depreciation),
+          changeInReceivables:  r2(-arChange),
+          changeInPayables:     r2(expPayable),
+          netOperatingCashFlow: r2(operatingCashFlow),
+        },
+        investing: {
+          capitalExpenditures:  r2(-capexAmount),
+          assetDisposals:       r2(disposalAmount),
+          netInvestingCashFlow: r2(investingCashFlow),
+        },
+        financing: {
+          newBorrowings:        r2(leasingDrawdowns),
+          loanRepayments:       r2(-leasingRepayments),
+          dividendsPaid:        0,
+          netFinancingCashFlow: r2(financingCashFlow),
+        },
+        summary: { netCashFlow: r2(netCashFlow) },
+      });
   });
 }
+

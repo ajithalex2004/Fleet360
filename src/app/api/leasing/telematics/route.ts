@@ -10,21 +10,26 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const items = await prisma.leaseTelematics.findMany({
-      where: { tenantId },
-      orderBy: { lastUpdateAt: 'desc' },
-    });
-    return NextResponse.json(items);
-  } catch (e) {
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
-  }
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const items = await tx.leaseTelematics.findMany({
+          where: { tenantId },
+          orderBy: { lastUpdateAt: 'desc' },
+        });
+        return NextResponse.json(items);
+      } catch (e) {
+        return NextResponse.json({ error: 'Failed' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant(req);
@@ -33,7 +38,8 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
 
     // The schema doesn't define a compound unique on (tenantId, vehicleId),
     // so we look up the existing row for this (tenant, vehicle) and either
@@ -65,7 +71,7 @@ export async function POST(req: NextRequest) {
     }),
     );
     return NextResponse.json(created, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     return NextResponse.json({ error: 'Failed' }, { status: 500 });
   }
 }

@@ -22,10 +22,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { loadPlanFacts, type ExistingTripInput, type ProposedTripInput } from '@/lib/planning/facts';
 import { evaluatePlan } from '@/lib/planning/evaluate-plan';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const ROLES = new Set(['source', 'merged', 'standalone']);
 
 export async function POST(req: NextRequest) {
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
   let body: unknown;
   try {
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
     const result = evaluatePlan(facts);
     const status = result.verdict === 'BLOCK' ? 409 : 200;
     return NextResponse.json(result, { status });
-  } catch (e) {
+    } catch (e) {
     console.error('[planning.evaluate]', e);
     return NextResponse.json({ error: 'Plan evaluation failed' }, { status: 500 });
   }

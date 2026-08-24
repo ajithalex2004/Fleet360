@@ -30,6 +30,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { createHash } from 'crypto';
 import {
@@ -38,7 +39,7 @@ import {
 } from '@/lib/bus-ops/allocate-route-code';
 import { revalidateCache } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const ROUTES_CACHE_TAG = 'bus-ops:routes';
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -82,6 +83,7 @@ interface ImportResult {
 }
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -90,155 +92,159 @@ export async function POST(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
-  const url = new URL(req.url);
-  const dryRun = url.searchParams.get('dryRun') === 'true';
-  const idempotencyKey = url.searchParams.get('idempotencyKey')?.trim() || null;
-  if (idempotencyKey && idempotencyKey.length > IDEMPOTENCY_KEY_MAX_LEN) {
-    return NextResponse.json(
-      { error: `idempotencyKey must be ≤ ${IDEMPOTENCY_KEY_MAX_LEN} chars` },
-      { status: 400 },
-    );
-  }
+  return withTenantRls(prisma, tenantId, async (tx) => {
 
-  let body: { rows?: InputRow[] };
-  try { body = await req.json(); }
-  catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
-  const rows = Array.isArray(body.rows) ? body.rows : [];
-  if (rows.length === 0) return NextResponse.json({ error: 'rows array is required' }, { status: 400 });
-  if (rows.length > MAX_ROWS) {
-    return NextResponse.json({ error: `Max ${MAX_ROWS} rows per import` }, { status: 400 });
-  }
-
-  // Idempotency replay — dryRun requests are NOT cached (they are cheap and
-  // callers should be able to preview repeatedly without cache confusion).
-  // Table is `bulk_import_jobs` (raw-migration only, no Prisma model — see
-  // prisma/migrations/20260813110000_bulk_import_idempotency).
-  const bodyHash = createHash('sha256').update(JSON.stringify(rows)).digest('hex');
-  if (idempotencyKey && !dryRun) {
-    const cached = await prisma.$queryRawUnsafe<Array<{ result: ImportResult; body_hash: string }>>(
-      `SELECT result, body_hash FROM bulk_import_jobs
-       WHERE tenant_id = $1::uuid AND idempotency_key = $2
-         AND expires_at > NOW()
-       LIMIT 1`,
-      tenantId, idempotencyKey,
-    ).catch(() => []);
-    if (cached.length > 0) {
-      if (cached[0].body_hash !== bodyHash) {
+      const url = new URL(req.url);
+      const dryRun = url.searchParams.get('dryRun') === 'true';
+      const idempotencyKey = url.searchParams.get('idempotencyKey')?.trim() || null;
+      if (idempotencyKey && idempotencyKey.length > IDEMPOTENCY_KEY_MAX_LEN) {
         return NextResponse.json(
-          {
-            error: 'idempotencyKey was already used with a different request body',
-            hint: 'Generate a fresh key per logical import, or omit the key to force re-execution.',
-          },
-          { status: 409 },
+          { error: `idempotencyKey must be ≤ ${IDEMPOTENCY_KEY_MAX_LEN} chars` },
+          { status: 400 },
         );
       }
-      return NextResponse.json({ ...cached[0].result, idempotencyKey, replayed: true });
-    }
-  }
 
-  const errors: RowError[] = [];
-  const created: string[] = [];
-  let plannedRoutes = 0;
-
-  for (let i = 0; i < rows.length; i++) {
-    const raw = rows[i];
-    const rowNum = i + 1;
-    const validated = validateRow(raw);
-    if (!validated.ok) {
-      errors.push({ row: rowNum, input: raw, error: validated.error });
-      continue;
-    }
-    const v = validated.value;
-
-    // Build both direction plans up-front so we can report per-direction errors.
-    const outbound = buildOutbound(v);
-    const inbound = buildInbound(v);
-    plannedRoutes += 2;
-
-    if (dryRun) continue;
-
-    for (const plan of [outbound, inbound]) {
-      try {
-        const code =
-          plan.explicitCode ??
-          (await allocateNextRouteCode(prisma, tenantId, 'STAFF'));
-        const route = await prisma.busRoute.create({
-          data: {
-            tenantId,
-            name: plan.name,
-            code,
-            origin: plan.origin,
-            destination: plan.destination,
-            routeType: 'STAFF',
-            requiredVehicleGroup: plan.requiredVehicleGroup ?? null,
-            requiredLicenseType: plan.requiredLicenseType ?? null,
-            capacity: plan.capacity ?? null,
-            direction: plan.direction,
-            shiftType: plan.shiftType,
-            departureTime: plan.departureTime,
-            expectedArrivalTime: plan.expectedArrivalTime,
-            isActive: true,
-            notes: plan.notes ?? null,
-            stops: {
-              create: plan.stops.map((s, si) => ({
-                stopName: s.stopName,
-                sequence: si + 1,
-                gpsLat: s.gpsLat,
-                gpsLng: s.gpsLng,
-                tenantId,
-              })),
-            },
-          },
-          select: { id: true },
-        });
-        created.push(route.id);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        const friendly = isUniqueConstraintError(e)
-          ? `Route code collision (${plan.direction}) — retry`
-          : msg;
-        errors.push({ row: rowNum, direction: plan.direction, input: raw, error: friendly });
+      let body: { rows?: InputRow[] };
+      try { const bodyRaw = await req.json(); body = stripTenantOwnershipFields(bodyRaw); }
+      catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
+      const rows = Array.isArray(body.rows) ? body.rows : [];
+      if (rows.length === 0) return NextResponse.json({ error: 'rows array is required' }, { status: 400 });
+      if (rows.length > MAX_ROWS) {
+        return NextResponse.json({ error: `Max ${MAX_ROWS} rows per import` }, { status: 400 });
       }
-    }
-  }
 
-  const result: ImportResult = {
-    total: rows.length,
-    plannedRoutes,
-    created: created.length,
-    skipped: plannedRoutes - created.length - errors.filter(e => e.direction).length,
-    errored: errors.length,
-    errors,
-    dryRun,
-    ...(idempotencyKey ? { idempotencyKey } : {}),
-  };
+      // Idempotency replay — dryRun requests are NOT cached (they are cheap and
+      // callers should be able to preview repeatedly without cache confusion).
+      // Table is `bulk_import_jobs` (raw-migration only, no Prisma model — see
+      // prisma/migrations/20260813110000_bulk_import_idempotency).
+      const bodyHash = createHash('sha256').update(JSON.stringify(rows)).digest('hex');
+      if (idempotencyKey && !dryRun) {
+        const cached = await tx.$queryRawUnsafe<Array<{ result: ImportResult; body_hash: string }>>(
+          `SELECT result, body_hash FROM bulk_import_jobs
+           WHERE tenant_id = $1::uuid AND idempotency_key = $2
+             AND expires_at > NOW()
+           LIMIT 1`,
+          tenantId, idempotencyKey,
+        ).catch(() => []);
+        if (cached.length > 0) {
+          if (cached[0].body_hash !== bodyHash) {
+            return NextResponse.json(
+              {
+                error: 'idempotencyKey was already used with a different request body',
+                hint: 'Generate a fresh key per logical import, or omit the key to force re-execution.',
+              },
+              { status: 409 },
+            );
+          }
+          return NextResponse.json({ ...cached[0].result, idempotencyKey, replayed: true });
+        }
+      }
 
-  // Bust the routes cache so the Routes page sees the new rows immediately
-  // (not after the 30 s unstable_cache TTL expires).
-  if (!dryRun && created.length > 0) {
-    await revalidateCache([ROUTES_CACHE_TAG]);
-  }
+      const errors: RowError[] = [];
+      const created: string[] = [];
+      let plannedRoutes = 0;
 
-  if (idempotencyKey && !dryRun) {
-    // Store result for replay. Failure to persist is non-fatal — worst case
-    // a duplicate submit does the work twice.
-    const expiresAt = new Date(Date.now() + IDEMPOTENCY_TTL_HOURS * 60 * 60 * 1000);
-    prisma.$executeRawUnsafe(
-      `INSERT INTO bulk_import_jobs (tenant_id, idempotency_key, body_hash, result, expires_at)
-       VALUES ($1::uuid, $2, $3, $4::jsonb, $5::timestamptz)
-       ON CONFLICT (tenant_id, idempotency_key) DO UPDATE
-         SET body_hash = EXCLUDED.body_hash,
-             result = EXCLUDED.result,
-             expires_at = EXCLUDED.expires_at,
-             updated_at = NOW()`,
-      tenantId, idempotencyKey, bodyHash, JSON.stringify(result), expiresAt.toISOString(),
-    ).catch(() => { /* best-effort */ });
-  }
+      for (let i = 0; i < rows.length; i++) {
+        const raw = rows[i];
+        const rowNum = i + 1;
+        const validated = validateRow(raw);
+        if (!validated.ok) {
+          errors.push({ row: rowNum, input: raw, error: validated.error });
+          continue;
+        }
+        const v = validated.value;
 
-  return NextResponse.json(result);
+        // Build both direction plans up-front so we can report per-direction errors.
+        const outbound = buildOutbound(v);
+        const inbound = buildInbound(v);
+        plannedRoutes += 2;
+
+        if (dryRun) continue;
+
+        for (const plan of [outbound, inbound]) {
+          try {
+            const code =
+              plan.explicitCode ??
+              (await allocateNextRouteCode(prisma, tenantId, 'STAFF'));
+            const route = await tx.busRoute.create({
+              data: {
+                tenantId,
+                name: plan.name,
+                code,
+                origin: plan.origin,
+                destination: plan.destination,
+                routeType: 'STAFF',
+                requiredVehicleGroup: plan.requiredVehicleGroup ?? null,
+                requiredLicenseType: plan.requiredLicenseType ?? null,
+                capacity: plan.capacity ?? null,
+                direction: plan.direction,
+                shiftType: plan.shiftType,
+                departureTime: plan.departureTime,
+                expectedArrivalTime: plan.expectedArrivalTime,
+                isActive: true,
+                notes: plan.notes ?? null,
+                stops: {
+                  create: plan.stops.map((s, si) => ({
+                    stopName: s.stopName,
+                    sequence: si + 1,
+                    gpsLat: s.gpsLat,
+                    gpsLng: s.gpsLng,
+                    tenantId,
+                  })),
+                },
+              },
+              select: { id: true },
+            });
+            created.push(route.id);
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            const friendly = isUniqueConstraintError(e)
+              ? `Route code collision (${plan.direction}) — retry`
+              : msg;
+            errors.push({ row: rowNum, direction: plan.direction, input: raw, error: friendly });
+          }
+        }
+      }
+
+      const result: ImportResult = {
+        total: rows.length,
+        plannedRoutes,
+        created: created.length,
+        skipped: plannedRoutes - created.length - errors.filter(e => e.direction).length,
+        errored: errors.length,
+        errors,
+        dryRun,
+        ...(idempotencyKey ? { idempotencyKey } : {}),
+      };
+
+      // Bust the routes cache so the Routes page sees the new rows immediately
+      // (not after the 30 s unstable_cache TTL expires).
+      if (!dryRun && created.length > 0) {
+        await revalidateCache([ROUTES_CACHE_TAG]);
+      }
+
+      if (idempotencyKey && !dryRun) {
+        // Store result for replay. Failure to persist is non-fatal — worst case
+        // a duplicate submit does the work twice.
+        const expiresAt = new Date(Date.now() + IDEMPOTENCY_TTL_HOURS * 60 * 60 * 1000);
+        tx.$executeRawUnsafe(
+          `INSERT INTO bulk_import_jobs (tenant_id, idempotency_key, body_hash, result, expires_at)
+           VALUES ($1::uuid, $2, $3, $4::jsonb, $5::timestamptz)
+           ON CONFLICT (tenant_id, idempotency_key) DO UPDATE
+             SET body_hash = EXCLUDED.body_hash,
+                 result = EXCLUDED.result,
+                 expires_at = EXCLUDED.expires_at,
+                 updated_at = NOW()`,
+          tenantId, idempotencyKey, bodyHash, JSON.stringify(result), expiresAt.toISOString(),
+        ).catch(() => { /* best-effort */ });
+      }
+
+      return NextResponse.json(result);
+  });
 }
+
 
 // ── validation ──────────────────────────────────────────────────────────────
 

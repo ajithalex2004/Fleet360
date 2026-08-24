@@ -11,33 +11,38 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const contract = await prisma.leaseContract2.findFirst({
-      where: { id: params.id, tenantId, deletedAt: null },
-      include: {
-        lessee: true,
-        vehicles: true,
-        payments2: { orderBy: { dueDate: 'asc' } },
-        receipts: { orderBy: { createdAt: 'desc' } },
-        exchanges: { orderBy: { exchangeDate: 'desc' } },
-        alerts: { orderBy: { createdAt: 'desc' } },
-        openingBranch: true,
-        closingBranch: true,
-        quotation: true,
-      },
-    });
-    if (!contract) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.json(contract);
-  } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const contract = await tx.leaseContract2.findFirst({
+          where: { id: params.id, tenantId, deletedAt: null },
+          include: {
+            lessee: true,
+            vehicles: true,
+            payments2: { orderBy: { dueDate: 'asc' } },
+            receipts: { orderBy: { createdAt: 'desc' } },
+            exchanges: { orderBy: { exchangeDate: 'desc' } },
+            alerts: { orderBy: { createdAt: 'desc' } },
+            openingBranch: true,
+            closingBranch: true,
+            quotation: true,
+          },
+        });
+        if (!contract) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        return NextResponse.json(contract);
+      } catch (e) {
+        console.error(e);
+        return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const authz = requireAuthorizedTenant(req);
@@ -46,7 +51,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     // Refuse to PATCH contracts from another tenant — the read-before-write
     // guard returns 404 instead of leaking the row exists.
     const existing = await prisma.leaseContract2.findFirst({
@@ -65,7 +71,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json(contract);
   } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
   }
 }
 
@@ -90,8 +96,8 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     }),
     );
     return NextResponse.json({ success: true });
-  } catch (e) {
+    } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
   }
 }

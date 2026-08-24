@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const ROLES_TAG = 'roles:all';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -33,7 +33,9 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   const { tenantId } = authz;
 
   try {
-    const { permissionIds }: { permissionIds: string[] } = await req.json();
+    const bodyRaw = await req.json();
+    const body = stripTenantOwnershipFields(bodyRaw);
+    const { permissionIds }: { permissionIds: string[] } = body;
     const perms = await withPlatformAdmin(prisma, async (tx) => {
       await tx.rolePermission.deleteMany({ where: { roleId: params.id } });
       if (permissionIds.length > 0) {

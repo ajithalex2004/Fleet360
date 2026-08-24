@@ -16,9 +16,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 interface StopInput {
   stopType: 'PICKUP' | 'DELIVERY' | 'INTERMEDIATE' | string;
   sequenceNo?: number;
@@ -39,8 +40,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
   const shipmentId = params.id;
 
   let body: { stops?: StopInput[] };
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     return NextResponse.json({ ok: true, count: stops.length });
-  } catch (e) {
+    } catch (e) {
     console.error('[logistics/shipments/:id/stops POST]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to save stops' },

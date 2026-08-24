@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'fleet:documents-expiring';
 
 const toCamel = (s: string) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
@@ -46,14 +47,13 @@ export async function GET(req: NextRequest) {
     const sp = req.nextUrl.searchParams;
     const days = parseInt(sp.get('days') ?? '30', 10);
     const limit = Math.min(200, Math.max(1, parseInt(sp.get('limit') ?? '10', 10)));
-    const tenantId = req.headers.get('x-tenant-id') ?? 'unknown';
 
     const data = await getExpiringDocs(tenantId, days, limit);
     return NextResponse.json(data, {
       headers: { 'Cache-Control': privateCacheControl(60, 300) },
     });
-  } catch (error) {
-    console.error('Error fetching expiring documents:', error);
+    } catch (e) {
+    console.error('Error fetching expiring documents:', e);
     return NextResponse.json({ error: 'Failed to fetch expiring documents' }, { status: 500 });
   }
 }

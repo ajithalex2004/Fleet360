@@ -10,33 +10,38 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { issueQrToken } from '@/lib/bus-checkin';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const ttlSeconds = Math.max(60, Number(req.nextUrl.searchParams.get('ttlSeconds') ?? 900));
-  const schedule = await prisma.tripSchedule.findUnique({
-    where: { id: params.id },
-    select: { id: true, status: true },
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const ttlSeconds = Math.max(60, Number(req.nextUrl.searchParams.get('ttlSeconds') ?? 900));
+      const schedule = await tx.tripSchedule.findUnique({
+        where: { id: params.id },
+        select: { id: true, status: true },
+      });
+      if (!schedule) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
+      if (['COMPLETED', 'CANCELLED'].includes(schedule.status ?? '')) {
+        return NextResponse.json({ error: `Trip is ${schedule.status} — QR not issued` }, { status: 409 });
+      }
+      try {
+        const token = issueQrToken(params.id, ttlSeconds);
+        const expiresAt = parseInt(token.split('.')[1], 10);
+        return NextResponse.json({ token, expiresAt, ttlSeconds });
+        } catch (err) {
+        return NextResponse.json({ error: err instanceof Error ? err.message : 'QR signing failed' }, { status: 500 });
+      }
   });
-  if (!schedule) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
-  if (['COMPLETED', 'CANCELLED'].includes(schedule.status ?? '')) {
-    return NextResponse.json({ error: `Trip is ${schedule.status} — QR not issued` }, { status: 409 });
-  }
-  try {
-    const token = issueQrToken(params.id, ttlSeconds);
-    const expiresAt = parseInt(token.split('.')[1], 10);
-    return NextResponse.json({ token, expiresAt, ttlSeconds });
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'QR signing failed' }, { status: 500 });
-  }
 }
+

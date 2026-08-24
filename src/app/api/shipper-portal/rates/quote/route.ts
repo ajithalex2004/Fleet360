@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
       tenantId: auth.tenantId,
       role: 'TENANT_ADMIN',
     });
-  } catch (err) {
+    } catch (err) {
     console.warn('[shipper-portal/rates/quote] backend JWT sign failed:', err instanceof Error ? err.message : err);
     return NextResponse.json({ error: 'Rate engine is not available right now.' }, { status: 503 });
   }
@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
       status: res.status,
       headers: { 'Content-Type': res.headers.get('content-type') ?? 'application/json' },
     });
-  } catch (err) {
+    } catch (err) {
     console.error('[shipper-portal/rates/quote] upstream call failed', err);
     return NextResponse.json({ error: 'Rate engine is unreachable.' }, { status: 502 });
   }

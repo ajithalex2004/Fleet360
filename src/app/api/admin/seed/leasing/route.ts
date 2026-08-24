@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { randomUUID } from 'crypto';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 function addMonths(d: Date, m: number) { const r = new Date(d); r.setMonth(r.getMonth() + m); return r; }
 function ago(days: number) { return new Date(Date.now() - days * 86400000); }
 
@@ -588,8 +588,7 @@ export async function POST(req: NextRequest) {
       message: `UAE Leasing demo data seeded successfully. ${total} records created/updated.`,
       breakdown: results,
     });
-
-  } catch (e: any) {
+    } catch (e) {
     console.error('Seed error:', e);
     return NextResponse.json({ error: e?.message ?? 'Seed failed', stack: e?.stack }, { status: 500 });
   }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 
@@ -52,222 +53,239 @@ const EMIRATE_PREFIX: Record<string, string> = {
 };
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    await ensureTable();
-    const { searchParams } = new URL(req.url);
-    const status  = searchParams.get('status')  ?? '';
-    const emirate = searchParams.get('emirate') ?? '';
-    const search  = searchParams.get('search')  ?? '';
-    const limit   = Math.min(200, Number(searchParams.get('limit') ?? 100));
 
-    const conds: string[] = ['b.deleted_at IS NULL'];
-    const params: unknown[] = [];
-    let pi = 1;
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        await ensureTable();
+        const { searchParams } = new URL(req.url);
+        const status  = searchParams.get('status')  ?? '';
+        const emirate = searchParams.get('emirate') ?? '';
+        const search  = searchParams.get('search')  ?? '';
+        const limit   = Math.min(200, Number(searchParams.get('limit') ?? 100));
 
-    if (status && status !== 'ALL') {
-      conds.push(`b.status = $${pi++}`);
-      params.push(status);
-    }
+        const conds: string[] = ['b.deleted_at IS NULL'];
+        const params: unknown[] = [];
+        let pi = 1;
 
-    if (emirate && emirate !== 'ALL') {
-      conds.push(`b.emirate = $${pi++}`);
-      params.push(emirate);
-    }
+        if (status && status !== 'ALL') {
+          conds.push(`b.status = $${pi++}`);
+          params.push(status);
+        }
 
-    if (search) {
-      conds.push(`(b.branch_name ILIKE $${pi} OR b.branch_code ILIKE $${pi} OR b.manager_name ILIKE $${pi})`);
-      params.push(`%${search}%`);
-      pi++;
-    }
+        if (emirate && emirate !== 'ALL') {
+          conds.push(`b.emirate = $${pi++}`);
+          params.push(emirate);
+        }
 
-    const where = `WHERE ${conds.join(' AND ')}`;
+        if (search) {
+          conds.push(`(b.branch_name ILIKE $${pi} OR b.branch_code ILIKE $${pi} OR b.manager_name ILIKE $${pi})`);
+          params.push(`%${search}%`);
+          pi++;
+        }
 
-    type BranchRow = {
-      id: string;
-      branch_code: string;
-      branch_name: string;
-      emirate: string;
-      address: string | null;
-      phone: string | null;
-      email: string | null;
-      manager_name: string | null;
-      operating_hours: string;
-      vehicle_capacity: number;
-      status: string;
-      latitude: string | null;
-      longitude: string | null;
-      notes: string | null;
-      created_at: string;
-      updated_at: string;
-    };
+        const where = `WHERE ${conds.join(' AND ')}`;
 
-    const branches = await prisma.$queryRawUnsafe<BranchRow[]>(
-      `SELECT b.*
-         FROM rental_branches b
-         ${where}
-         ORDER BY b.emirate ASC, b.branch_name ASC
-         LIMIT $${pi}`,
-      ...params, limit
-    ).catch(() => [] as BranchRow[]);
+        type BranchRow = {
+          id: string;
+          branch_code: string;
+          branch_name: string;
+          emirate: string;
+          address: string | null;
+          phone: string | null;
+          email: string | null;
+          manager_name: string | null;
+          operating_hours: string;
+          vehicle_capacity: number;
+          status: string;
+          latitude: string | null;
+          longitude: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
 
-    // KPI Stats
-    type StatRow = {
-      total: bigint;
-      active: bigint;
-      emirates_covered: bigint;
-      total_capacity: bigint;
-    };
-    const [stats] = await prisma.$queryRawUnsafe<StatRow[]>(`
-      SELECT
-        COUNT(*) FILTER (WHERE deleted_at IS NULL) AS total,
-        COUNT(*) FILTER (WHERE deleted_at IS NULL AND status = 'ACTIVE') AS active,
-        COUNT(DISTINCT emirate) FILTER (WHERE deleted_at IS NULL AND status = 'ACTIVE') AS emirates_covered,
-        COALESCE(SUM(vehicle_capacity) FILTER (WHERE deleted_at IS NULL AND status = 'ACTIVE'), 0) AS total_capacity
-      FROM rental_branches
-    `).catch(() => [{ total: 0n, active: 0n, emirates_covered: 0n, total_capacity: 0n }]);
+        const branches = await tx.$queryRawUnsafe<BranchRow[]>(
+          `SELECT b.*
+             FROM rental_branches b
+             ${where}
+             ORDER BY b.emirate ASC, b.branch_name ASC
+             LIMIT $${pi}`,
+          ...params, limit
+        ).catch(() => [] as BranchRow[]);
 
-    return NextResponse.json({
-      branches: branches.map(b => ({
-        id: b.id,
-        branchCode: b.branch_code,
-        branchName: b.branch_name,
-        emirate: b.emirate,
-        address: b.address,
-        phone: b.phone,
-        email: b.email,
-        managerName: b.manager_name,
-        operatingHours: b.operating_hours,
-        vehicleCapacity: b.vehicle_capacity,
-        status: b.status,
-        latitude: b.latitude ? Number(b.latitude) : null,
-        longitude: b.longitude ? Number(b.longitude) : null,
-        notes: b.notes,
-        createdAt: b.created_at,
-        updatedAt: b.updated_at,
-      })),
-      stats: {
-        total: Number(stats.total),
-        active: Number(stats.active),
-        emiratesCovered: Number(stats.emirates_covered),
-        totalCapacity: Number(stats.total_capacity),
-      },
-    });
-  } catch (err) {
-    console.error('[branches GET]', err);
-    return NextResponse.json({ error: 'Failed to load branches' }, { status: 500 });
-  }
+        // KPI Stats
+        type StatRow = {
+          total: bigint;
+          active: bigint;
+          emirates_covered: bigint;
+          total_capacity: bigint;
+        };
+        const [stats] = await tx.$queryRawUnsafe<StatRow[]>(`
+          SELECT
+            COUNT(*) FILTER (WHERE deleted_at IS NULL) AS total,
+            COUNT(*) FILTER (WHERE deleted_at IS NULL AND status = 'ACTIVE') AS active,
+            COUNT(DISTINCT emirate) FILTER (WHERE deleted_at IS NULL AND status = 'ACTIVE') AS emirates_covered,
+            COALESCE(SUM(vehicle_capacity) FILTER (WHERE deleted_at IS NULL AND status = 'ACTIVE'), 0) AS total_capacity
+          FROM rental_branches
+        `).catch(() => [{ total: 0n, active: 0n, emirates_covered: 0n, total_capacity: 0n }]);
+
+        return NextResponse.json({
+          branches: branches.map(b => ({
+            id: b.id,
+            branchCode: b.branch_code,
+            branchName: b.branch_name,
+            emirate: b.emirate,
+            address: b.address,
+            phone: b.phone,
+            email: b.email,
+            managerName: b.manager_name,
+            operatingHours: b.operating_hours,
+            vehicleCapacity: b.vehicle_capacity,
+            status: b.status,
+            latitude: b.latitude ? Number(b.latitude) : null,
+            longitude: b.longitude ? Number(b.longitude) : null,
+            notes: b.notes,
+            createdAt: b.created_at,
+            updatedAt: b.updated_at,
+          })),
+          stats: {
+            total: Number(stats.total),
+            active: Number(stats.active),
+            emiratesCovered: Number(stats.emirates_covered),
+            totalCapacity: Number(stats.total_capacity),
+          },
+        });
+        } catch (err) {
+        console.error('[branches GET]', err);
+        return NextResponse.json({ error: 'Failed to load branches' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    await ensureTable();
-    const body = await req.json();
-    const {
-      branchName, emirate, address, phone, email,
-      managerName, operatingHours = '8:00 AM - 8:00 PM',
-      vehicleCapacity = 0, latitude, longitude, notes,
-    } = body;
 
-    if (!branchName?.trim()) return NextResponse.json({ error: 'Branch name is required' }, { status: 400 });
-    if (!emirate?.trim())    return NextResponse.json({ error: 'Emirate is required' }, { status: 400 });
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        await ensureTable();
+        const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
+        const {
+          branchName, emirate, address, phone, email,
+          managerName, operatingHours = '8:00 AM - 8:00 PM',
+          vehicleCapacity = 0, latitude, longitude, notes,
+        } = body;
 
-    const prefix = EMIRATE_PREFIX[emirate] ?? 'RAC';
+        if (!branchName?.trim()) return NextResponse.json({ error: 'Branch name is required' }, { status: 400 });
+        if (!emirate?.trim())    return NextResponse.json({ error: 'Emirate is required' }, { status: 400 });
 
-    // Find next sequential number for this prefix
-    type CountRow = { cnt: bigint };
-    const [countRow] = await prisma.$queryRawUnsafe<CountRow[]>(
-      `SELECT COUNT(*) AS cnt FROM rental_branches WHERE branch_code LIKE $1`,
-      `${prefix}-%`
-    );
-    const seq = String(Number(countRow.cnt) + 1).padStart(3, '0');
-    const branchCode = `${prefix}-${seq}`;
+        const prefix = EMIRATE_PREFIX[emirate] ?? 'RAC';
 
-    type NewBranch = { id: string; branch_code: string };
-    const [branch] = await prisma.$queryRawUnsafe<NewBranch[]>(
-      `INSERT INTO rental_branches
-         (branch_code, branch_name, emirate, address, phone, email,
-          manager_name, operating_hours, vehicle_capacity, latitude, longitude, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-       RETURNING id, branch_code`,
-      branchCode,
-      branchName.trim(),
-      emirate.trim(),
-      address || null,
-      phone || null,
-      email || null,
-      managerName || null,
-      operatingHours,
-      Number(vehicleCapacity),
-      latitude ? Number(latitude) : null,
-      longitude ? Number(longitude) : null,
-      notes || null
-    );
+        // Find next sequential number for this prefix
+        type CountRow = { cnt: bigint };
+        const [countRow] = await tx.$queryRawUnsafe<CountRow[]>(
+          `SELECT COUNT(*) AS cnt FROM rental_branches WHERE branch_code LIKE $1`,
+          `${prefix}-%`
+        );
+        const seq = String(Number(countRow.cnt) + 1).padStart(3, '0');
+        const branchCode = `${prefix}-${seq}`;
 
-    return NextResponse.json({ id: branch.id, branchCode: branch.branch_code }, { status: 201 });
-  } catch (err) {
-    console.error('[branches POST]', err);
-    return NextResponse.json({ error: 'Failed to create branch' }, { status: 500 });
-  }
+        type NewBranch = { id: string; branch_code: string };
+        const [branch] = await tx.$queryRawUnsafe<NewBranch[]>(
+          `INSERT INTO rental_branches
+             (branch_code, branch_name, emirate, address, phone, email,
+              manager_name, operating_hours, vehicle_capacity, latitude, longitude, notes)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+           RETURNING id, branch_code`,
+          branchCode,
+          branchName.trim(),
+          emirate.trim(),
+          address || null,
+          phone || null,
+          email || null,
+          managerName || null,
+          operatingHours,
+          Number(vehicleCapacity),
+          latitude ? Number(latitude) : null,
+          longitude ? Number(longitude) : null,
+          notes || null
+        );
+
+        return NextResponse.json({ id: branch.id, branchCode: branch.branch_code }, { status: 201 });
+        } catch (err) {
+        console.error('[branches POST]', err);
+        return NextResponse.json({ error: 'Failed to create branch' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function PATCH(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    await ensureTable();
-    const body = await req.json();
-    const { id, ...fields } = body;
 
-    if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        await ensureTable();
+        const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
+        const { id, ...fields } = body;
 
-    const colMap: Record<string, string> = {
-      branchName:      'branch_name',
-      emirate:         'emirate',
-      address:         'address',
-      phone:           'phone',
-      email:           'email',
-      managerName:     'manager_name',
-      operatingHours:  'operating_hours',
-      vehicleCapacity: 'vehicle_capacity',
-      status:          'status',
-      latitude:        'latitude',
-      longitude:       'longitude',
-      notes:           'notes',
-    };
+        if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
-    const setClauses: string[] = ['updated_at = NOW()'];
-    const params: unknown[] = [];
-    let pi = 1;
+        const colMap: Record<string, string> = {
+          branchName:      'branch_name',
+          emirate:         'emirate',
+          address:         'address',
+          phone:           'phone',
+          email:           'email',
+          managerName:     'manager_name',
+          operatingHours:  'operating_hours',
+          vehicleCapacity: 'vehicle_capacity',
+          status:          'status',
+          latitude:        'latitude',
+          longitude:       'longitude',
+          notes:           'notes',
+        };
 
-    for (const [key, col] of Object.entries(colMap)) {
-      if (key in fields) {
-        setClauses.push(`${col} = $${pi++}`);
-        params.push(fields[key] === '' ? null : fields[key]);
+        const setClauses: string[] = ['updated_at = NOW()'];
+        const params: unknown[] = [];
+        let pi = 1;
+
+        for (const [key, col] of Object.entries(colMap)) {
+          if (key in fields) {
+            setClauses.push(`${col} = $${pi++}`);
+            params.push(fields[key] === '' ? null : fields[key]);
+          }
+        }
+
+        params.push(id);
+        await tx.$executeRawUnsafe(
+          `UPDATE rental_branches SET ${setClauses.join(', ')} WHERE id = $${pi}`,
+          ...params
+        );
+
+        return NextResponse.json({ success: true });
+        } catch (err) {
+        console.error('[branches PATCH]', err);
+        return NextResponse.json({ error: 'Failed to update branch' }, { status: 500 });
       }
-    }
-
-    params.push(id);
-    await prisma.$executeRawUnsafe(
-      `UPDATE rental_branches SET ${setClauses.join(', ')} WHERE id = $${pi}`,
-      ...params
-    );
-
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error('[branches PATCH]', err);
-    return NextResponse.json({ error: 'Failed to update branch' }, { status: 500 });
-  }
+  });
 }
+

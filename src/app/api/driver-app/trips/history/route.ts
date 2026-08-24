@@ -23,10 +23,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 interface TripRow {
   id: string;
   trip_number: string | null;
@@ -89,38 +90,42 @@ const SQL = `
 `;
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const ctx = await requireDriverSession(req);
-  if (ctx instanceof NextResponse) return ctx;
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const ctx = await requireDriverSession(req);
+      if (ctx instanceof NextResponse) return ctx;
 
-  const url = new URL(req.url);
-  const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? '20'), 1), 100);
+      const url = new URL(req.url);
+      const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? '20'), 1), 100);
 
-  const rows = await prisma.$queryRawUnsafe<TripRow[]>(SQL, ctx.tenantId, ctx.userId, limit);
+      const rows = await tx.$queryRawUnsafe<TripRow[]>(SQL, ctx.tenantId, ctx.userId, limit);
 
-  return NextResponse.json({
-    trips: rows.map((r) => ({
-      id: r.id,
-      tripNumber: r.trip_number,
-      departureTime: r.departure_time.toISOString(),
-      arrivalTime: r.arrival_time.toISOString(),
-      status: r.status,
-      shiftType: r.shift_type,
-      direction: r.direction,
-      capacity: r.capacity,
-      confirmedCount: r.confirmed_count,
-      vehicleId: r.vehicle_id,
-      vehiclePlate: r.vehicle_plate,
-      dvirCount: r.dvir_count,
-      fuelCount: r.fuel_count,
-      expenseCount: r.expense_count,
-      expenseTotalMinor: Number(r.expense_total_minor),
-      expenseCurrency: r.expense_currency ?? 'AED',
-    })),
+      return NextResponse.json({
+        trips: rows.map((r) => ({
+          id: r.id,
+          tripNumber: r.trip_number,
+          departureTime: r.departure_time.toISOString(),
+          arrivalTime: r.arrival_time.toISOString(),
+          status: r.status,
+          shiftType: r.shift_type,
+          direction: r.direction,
+          capacity: r.capacity,
+          confirmedCount: r.confirmed_count,
+          vehicleId: r.vehicle_id,
+          vehiclePlate: r.vehicle_plate,
+          dvirCount: r.dvir_count,
+          fuelCount: r.fuel_count,
+          expenseCount: r.expense_count,
+          expenseTotalMinor: Number(r.expense_total_minor),
+          expenseCurrency: r.expense_currency ?? 'AED',
+        })),
+      });
   });
 }
+

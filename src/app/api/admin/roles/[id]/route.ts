@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'roles:all';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -33,7 +33,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const { tenantId } = authz;
 
   try {
-    const { permissions, ...data } = await req.json();
+    const bodyRaw = await req.json();
+    const body = stripTenantOwnershipFields(bodyRaw);
+    const { permissions, ...data } = body;
     // Super Admin can update any role including system roles
     // This allows editing name, description, isSystem flag etc.
     const role = await withPlatformAdmin(prisma, (tx) =>
@@ -44,7 +46,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     );
     await revalidateCache(CACHE_TAG);
     return NextResponse.json(role);
-  } catch (e: any) {
+  } catch (e) {
     console.error('PATCH /api/admin/roles/[id] error:', e);
     return NextResponse.json({ error: e?.message ?? 'Failed to update role' }, { status: 500 });
   }
@@ -65,7 +67,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     );
     await revalidateCache(CACHE_TAG);
     return NextResponse.json({ success: true });
-  } catch (e: any) {
+    } catch (e) {
     console.error('DELETE /api/admin/roles/[id] error:', e);
     if (e?.code === 'P2003' || e?.code === 'P2014') {
       return NextResponse.json(

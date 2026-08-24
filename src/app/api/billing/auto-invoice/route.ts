@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // ---------------------------------------------------------------------------
 // billing_runs and the finance_invoices columns this route uses are owned
 // by Prisma migrations:
@@ -164,6 +165,7 @@ async function computeBilling(sub: Subscription, tenantName: string): Promise<{
 // ---------------------------------------------------------------------------
 export async function GET(_req: NextRequest) {
 
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -174,49 +176,51 @@ export async function GET(_req: NextRequest) {
 
   const { tenantId } = authz;
 
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    type RunRow = {
+        id: string;
+        created_at: Date;
+        run_date: Date;
+        status: string;
+        total_tenants: number | bigint;
+        invoices_created: number | bigint;
+        total_amount: string | number;
+        errors: unknown;
+        completed_at: Date | null;
+      };
 
-  type RunRow = {
-    id: string;
-    created_at: Date;
-    run_date: Date;
-    status: string;
-    total_tenants: number | bigint;
-    invoices_created: number | bigint;
-    total_amount: string | number;
-    errors: unknown;
-    completed_at: Date | null;
-  };
+      const runs = await tx.$queryRawUnsafe<RunRow[]>(
+        `SELECT * FROM billing_runs ORDER BY created_at DESC LIMIT 20`
+      ).catch(() => [] as RunRow[]);
 
-  const runs = await prisma.$queryRawUnsafe<RunRow[]>(
-    `SELECT * FROM billing_runs ORDER BY created_at DESC LIMIT 20`
-  ).catch(() => [] as RunRow[]);
+      const serializedRuns = runs.map(r => ({
+        ...r,
+        total_tenants:    Number(r.total_tenants),
+        invoices_created: Number(r.invoices_created),
+        total_amount:     Number(r.total_amount),
+        run_date:         (r.run_date as Date)?.toISOString?.().split('T')[0] ?? r.run_date,
+        created_at:       (r.created_at as Date)?.toISOString?.() ?? r.created_at,
+        completed_at:     r.completed_at ? (r.completed_at as Date)?.toISOString?.() ?? r.completed_at : null,
+      }));
 
-  const serializedRuns = runs.map(r => ({
-    ...r,
-    total_tenants:    Number(r.total_tenants),
-    invoices_created: Number(r.invoices_created),
-    total_amount:     Number(r.total_amount),
-    run_date:         (r.run_date as Date)?.toISOString?.().split('T')[0] ?? r.run_date,
-    created_at:       (r.created_at as Date)?.toISOString?.() ?? r.created_at,
-    completed_at:     r.completed_at ? (r.completed_at as Date)?.toISOString?.() ?? r.completed_at : null,
-  }));
+      const lastRun = serializedRuns[0] ?? null;
 
-  const lastRun = serializedRuns[0] ?? null;
+      // Pending subscriptions count (due today or overdue, still active)
+      type PendingRow = { cnt: bigint };
+      const [pendingRow] = await tx.$queryRawUnsafe<PendingRow[]>(
+        `SELECT COUNT(*) AS cnt FROM tenant_module_subscriptions
+          WHERE status = 'ACTIVE' AND next_billing_date <= CURRENT_DATE`
+      ).catch(() => [{ cnt: BigInt(0) }]);
 
-  // Pending subscriptions count (due today or overdue, still active)
-  type PendingRow = { cnt: bigint };
-  const [pendingRow] = await prisma.$queryRawUnsafe<PendingRow[]>(
-    `SELECT COUNT(*) AS cnt FROM tenant_module_subscriptions
-      WHERE status = 'ACTIVE' AND next_billing_date <= CURRENT_DATE`
-  ).catch(() => [{ cnt: BigInt(0) }]);
-
-  return NextResponse.json({
-    runs:              serializedRuns,
-    last_run:          lastRun,
-    pending_to_bill:   Number(pendingRow?.cnt ?? 0),
-    total_runs:        serializedRuns.length,
+      return NextResponse.json({
+        runs:              serializedRuns,
+        last_run:          lastRun,
+        pending_to_bill:   Number(pendingRow?.cnt ?? 0),
+        total_runs:        serializedRuns.length,
+      });
   });
 }
+
 
 // ---------------------------------------------------------------------------
 // POST /api/billing/auto-invoice
@@ -225,6 +229,7 @@ export async function GET(_req: NextRequest) {
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
 
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -235,196 +240,198 @@ export async function POST(req: NextRequest) {
 
   const { tenantId } = authz;
 
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
+        const action = body.action ?? 'run_billing';
 
-  try {
-    const body   = await req.json();
-    const action = body.action ?? 'run_billing';
-
-    if (action !== 'run_billing' && action !== 'preview') {
-      return NextResponse.json({ error: 'action must be run_billing or preview' }, { status: 400 });
-    }
-
-    const today   = new Date().toISOString().split('T')[0];
-    const isDryRun = action === 'preview';
-
-    // ── 1. Create billing_run record (only for real runs) ──────────────────
-    let runId: string | null = null;
-
-    if (!isDryRun) {
-      type RunInsRow = { id: string };
-      const [runRow] = await prisma.$queryRawUnsafe<RunInsRow[]>(
-        `INSERT INTO billing_runs (run_date, status) VALUES ($1::date, 'RUNNING') RETURNING id`,
-        today
-      );
-      runId = runRow.id;
-    }
-
-    // ── 2. Query all due ACTIVE subscriptions ──────────────────────────────
-    const subscriptions = await prisma.$queryRawUnsafe<Subscription[]>(
-      `SELECT s.*
-         FROM tenant_module_subscriptions s
-        WHERE s.status = 'ACTIVE'
-          AND s.next_billing_date <= CURRENT_DATE
-        ORDER BY s.tenant_id, s.module_code`
-    ).catch(() => [] as Subscription[]);
-
-    // ── 3. Process each subscription ──────────────────────────────────────
-    const previews:     BillingPreview[] = [];
-    const errors:       Array<{ subscription_id: string; error: string }> = [];
-    let   invoicesCreated = 0;
-    let   totalAmount     = 0;
-    const tenantsSeen     = new Set<string>();
-
-    for (const sub of subscriptions) {
-      try {
-        tenantsSeen.add(sub.tenant_id);
-
-        // 3a. Get tenant name
-        type TenantRow = { name: string; contact_email: string | null };
-        const [tenant] = await prisma.$queryRawUnsafe<TenantRow[]>(
-          `SELECT name, contact_email FROM tenants WHERE id = $1`,
-          sub.tenant_id
-        ).catch(() => [] as TenantRow[]);
-
-        const tenantName  = tenant?.name  ?? `Tenant ${sub.tenant_id}`;
-        const tenantEmail = tenant?.contact_email ?? null;
-
-        // 3b. Compute line items
-        const { lineItems, subtotal, vatAmount, total } = await computeBilling(sub, tenantName);
-
-        // Next billing date calculation
-        const currentNbd = (sub.next_billing_date instanceof Date)
-          ? sub.next_billing_date.toISOString().split('T')[0]
-          : String(sub.next_billing_date).split('T')[0];
-
-        const nextNbd = sub.billing_cycle === 'ANNUAL'
-          ? (() => { const d = new Date(currentNbd); d.setFullYear(d.getFullYear() + 1); return d.toISOString().split('T')[0]; })()
-          : (() => { const d = new Date(currentNbd); d.setMonth(d.getMonth() + 1); return d.toISOString().split('T')[0]; })();
-
-        totalAmount += total;
-
-        if (isDryRun) {
-          // Preview only — generate a mock invoice number
-          const previewNumber = `SUB-${today.slice(0, 7).replace('-', '')}-PREVIEW`;
-          previews.push({
-            subscription_id:   sub.id,
-            tenant_id:         sub.tenant_id,
-            tenant_name:       tenantName,
-            module_code:       sub.module_code,
-            invoice_number:    previewNumber,
-            line_items:        lineItems,
-            subtotal,
-            vat_amount:        vatAmount,
-            total_amount:      total,
-            currency:          sub.currency,
-            billing_cycle:     sub.billing_cycle,
-            next_billing_date: nextNbd,
-          });
-          invoicesCreated++;
-          continue;
+        if (action !== 'run_billing' && action !== 'preview') {
+          return NextResponse.json({ error: 'action must be run_billing or preview' }, { status: 400 });
         }
 
-        // 3c/3d. Generate invoice number and INSERT into finance_invoices
-        const invoiceNumber = await nextInvoiceNumber();
-        const issueDate     = today;
-        const dueDate       = (() => {
-          const d = new Date(today);
-          d.setDate(d.getDate() + 30);
-          return d.toISOString().split('T')[0];
-        })();
+        const today   = new Date().toISOString().split('T')[0];
+        const isDryRun = action === 'preview';
 
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO finance_invoices
-             (invoice_number, client_name, client_email, module_source,
-              issue_date, due_date,
-              subtotal, vat_amount, total_amount,
-              payment_status, notes, line_items_json, tenant_id,
-              currency, vat_rate, discount_amount, paid_amount,
-              service_type, module, line_items)
-           VALUES ($1, $2, $3, $4,
-                   $5::date, $6::date,
-                   $7, $8, $9,
-                   'SENT', $10, $11::jsonb, $12,
-                   $13, 5, 0, 0,
-                   'SUBSCRIPTION', $14, $15::jsonb)`,
-          invoiceNumber,
-          tenantName,
-          tenantEmail,
-          sub.module_code,
-          issueDate,
-          dueDate,
-          subtotal,
-          vatAmount,
-          total,
-          `Auto-generated subscription invoice for ${sub.module_code} — ${sub.plan_tier}`,
-          JSON.stringify(lineItems),
-          sub.tenant_id,
-          sub.currency,
-          sub.module_code,
-          JSON.stringify(lineItems)
-        );
+        // ── 1. Create billing_run record (only for real runs) ──────────────────
+        let runId: string | null = null;
 
-        // 3e. Update subscription: next_billing_date + last_billed_date
-        await prisma.$executeRawUnsafe(
-          `UPDATE tenant_module_subscriptions
-              SET next_billing_date = $1::date,
-                  last_billed_date  = $2::date,
-                  updated_at        = NOW()
-            WHERE id = $3`,
-          nextNbd, today, sub.id
-        );
+        if (!isDryRun) {
+          type RunInsRow = { id: string };
+          const [runRow] = await tx.$queryRawUnsafe<RunInsRow[]>(
+            `INSERT INTO billing_runs (run_date, status) VALUES ($1::date, 'RUNNING') RETURNING id`,
+            today
+          );
+          runId = runRow.id;
+        }
 
-        invoicesCreated++;
+        // ── 2. Query all due ACTIVE subscriptions ──────────────────────────────
+        const subscriptions = await tx.$queryRawUnsafe<Subscription[]>(
+          `SELECT s.*
+             FROM tenant_module_subscriptions s
+            WHERE s.status = 'ACTIVE'
+              AND s.next_billing_date <= CURRENT_DATE
+            ORDER BY s.tenant_id, s.module_code`
+        ).catch(() => [] as Subscription[]);
 
-      } catch (subErr) {
-        console.error(`[auto-invoice] Sub ${sub.id} failed:`, subErr);
-        errors.push({ subscription_id: sub.id, error: String(subErr) });
+        // ── 3. Process each subscription ──────────────────────────────────────
+        const previews:     BillingPreview[] = [];
+        const errors:       Array<{ subscription_id: string; error: string }> = [];
+        let   invoicesCreated = 0;
+        let   totalAmount     = 0;
+        const tenantsSeen     = new Set<string>();
+
+        for (const sub of subscriptions) {
+          try {
+            tenantsSeen.add(sub.tenant_id);
+
+            // 3a. Get tenant name
+            type TenantRow = { name: string; contact_email: string | null };
+            const [tenant] = await tx.$queryRawUnsafe<TenantRow[]>(
+              `SELECT name, contact_email FROM tenants WHERE id = $1`,
+              sub.tenant_id
+            ).catch(() => [] as TenantRow[]);
+
+            const tenantName  = tenant?.name  ?? `Tenant ${sub.tenant_id}`;
+            const tenantEmail = tenant?.contact_email ?? null;
+
+            // 3b. Compute line items
+            const { lineItems, subtotal, vatAmount, total } = await computeBilling(sub, tenantName);
+
+            // Next billing date calculation
+            const currentNbd = (sub.next_billing_date instanceof Date)
+              ? sub.next_billing_date.toISOString().split('T')[0]
+              : String(sub.next_billing_date).split('T')[0];
+
+            const nextNbd = sub.billing_cycle === 'ANNUAL'
+              ? (() => { const d = new Date(currentNbd); d.setFullYear(d.getFullYear() + 1); return d.toISOString().split('T')[0]; })()
+              : (() => { const d = new Date(currentNbd); d.setMonth(d.getMonth() + 1); return d.toISOString().split('T')[0]; })();
+
+            totalAmount += total;
+
+            if (isDryRun) {
+              // Preview only — generate a mock invoice number
+              const previewNumber = `SUB-${today.slice(0, 7).replace('-', '')}-PREVIEW`;
+              previews.push({
+                subscription_id:   sub.id,
+                tenant_id:         sub.tenant_id,
+                tenant_name:       tenantName,
+                module_code:       sub.module_code,
+                invoice_number:    previewNumber,
+                line_items:        lineItems,
+                subtotal,
+                vat_amount:        vatAmount,
+                total_amount:      total,
+                currency:          sub.currency,
+                billing_cycle:     sub.billing_cycle,
+                next_billing_date: nextNbd,
+              });
+              invoicesCreated++;
+              continue;
+            }
+
+            // 3c/3d. Generate invoice number and INSERT into finance_invoices
+            const invoiceNumber = await nextInvoiceNumber();
+            const issueDate     = today;
+            const dueDate       = (() => {
+              const d = new Date(today);
+              d.setDate(d.getDate() + 30);
+              return d.toISOString().split('T')[0];
+            })();
+
+            await tx.$executeRawUnsafe(
+              `INSERT INTO finance_invoices
+                 (invoice_number, client_name, client_email, module_source,
+                  issue_date, due_date,
+                  subtotal, vat_amount, total_amount,
+                  payment_status, notes, line_items_json, tenant_id,
+                  currency, vat_rate, discount_amount, paid_amount,
+                  service_type, module, line_items)
+               VALUES ($1, $2, $3, $4,
+                       $5::date, $6::date,
+                       $7, $8, $9,
+                       'SENT', $10, $11::jsonb, $12,
+                       $13, 5, 0, 0,
+                       'SUBSCRIPTION', $14, $15::jsonb)`,
+              invoiceNumber,
+              tenantName,
+              tenantEmail,
+              sub.module_code,
+              issueDate,
+              dueDate,
+              subtotal,
+              vatAmount,
+              total,
+              `Auto-generated subscription invoice for ${sub.module_code} — ${sub.plan_tier}`,
+              JSON.stringify(lineItems),
+              sub.tenant_id,
+              sub.currency,
+              sub.module_code,
+              JSON.stringify(lineItems)
+            );
+
+            // 3e. Update subscription: next_billing_date + last_billed_date
+            await tx.$executeRawUnsafe(
+              `UPDATE tenant_module_subscriptions
+                  SET next_billing_date = $1::date,
+                      last_billed_date  = $2::date,
+                      updated_at        = NOW()
+                WHERE id = $3`,
+              nextNbd, today, sub.id
+            );
+
+            invoicesCreated++;
+
+          } catch (e) {
+            console.error(`[auto-invoice] Sub ${sub.id} failed:`, e);
+            errors.push({ subscription_id: sub.id, error: String(e) });
+          }
+        }
+
+        // ── 4. Mark billing_run as COMPLETED ──────────────────────────────────
+        if (!isDryRun && runId) {
+          await tx.$executeRawUnsafe(
+            `UPDATE billing_runs
+                SET status           = $1,
+                    total_tenants    = $2,
+                    invoices_created = $3,
+                    total_amount     = $4,
+                    errors           = $5::jsonb,
+                    completed_at     = NOW()
+              WHERE id = $6`,
+            errors.length > 0 ? 'FAILED' : 'COMPLETED',
+            tenantsSeen.size,
+            invoicesCreated,
+            totalAmount,
+            JSON.stringify(errors),
+            runId
+          );
+        }
+
+        // ── Response ───────────────────────────────────────────────────────────
+        if (isDryRun) {
+          return NextResponse.json({
+            preview:          true,
+            subscriptions_due: subscriptions.length,
+            unique_tenants:   tenantsSeen.size,
+            invoices_to_create: previews.length,
+            total_amount:     Math.round(totalAmount * 100) / 100,
+            previews,
+          });
+        }
+
+        return NextResponse.json({
+          success:          true,
+          run_id:           runId,
+          total_tenants:    tenantsSeen.size,
+          invoices_created: invoicesCreated,
+          total_amount:     Math.round(totalAmount * 100) / 100,
+          errors,
+        });
+        } catch (err) {
+        console.error('[auto-invoice POST]', err);
+        return NextResponse.json({ error: 'Billing run failed', detail: String(err) }, { status: 500 });
       }
-    }
-
-    // ── 4. Mark billing_run as COMPLETED ──────────────────────────────────
-    if (!isDryRun && runId) {
-      await prisma.$executeRawUnsafe(
-        `UPDATE billing_runs
-            SET status           = $1,
-                total_tenants    = $2,
-                invoices_created = $3,
-                total_amount     = $4,
-                errors           = $5::jsonb,
-                completed_at     = NOW()
-          WHERE id = $6`,
-        errors.length > 0 ? 'FAILED' : 'COMPLETED',
-        tenantsSeen.size,
-        invoicesCreated,
-        totalAmount,
-        JSON.stringify(errors),
-        runId
-      );
-    }
-
-    // ── Response ───────────────────────────────────────────────────────────
-    if (isDryRun) {
-      return NextResponse.json({
-        preview:          true,
-        subscriptions_due: subscriptions.length,
-        unique_tenants:   tenantsSeen.size,
-        invoices_to_create: previews.length,
-        total_amount:     Math.round(totalAmount * 100) / 100,
-        previews,
-      });
-    }
-
-    return NextResponse.json({
-      success:          true,
-      run_id:           runId,
-      total_tenants:    tenantsSeen.size,
-      invoices_created: invoicesCreated,
-      total_amount:     Math.round(totalAmount * 100) / 100,
-      errors,
-    });
-
-  } catch (err) {
-    console.error('[auto-invoice POST]', err);
-    return NextResponse.json({ error: 'Billing run failed', detail: String(err) }, { status: 500 });
-  }
+  });
 }
+

@@ -80,7 +80,7 @@ async function handle(request: NextRequest) {
       durationMs,
       ...result,
     });
-  } catch (err) {
+    } catch (err) {
     const durationMs = Date.now() - start;
     console.error(`[outbox-publish] tick threw after ${durationMs}ms:`, err);
     return NextResponse.json(

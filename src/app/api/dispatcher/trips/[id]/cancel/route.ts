@@ -36,7 +36,7 @@ import { verifySession } from '@/lib/tenant-session';
 import { withTenantRls } from '@/lib/rls';
 import { evaluateTransition, type TripStatus } from '@/lib/trip-state';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const BodySchema = z.object({
   reason: z.string().max(500).optional(),
   at: z.string().datetime().optional(),

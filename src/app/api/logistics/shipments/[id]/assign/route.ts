@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { createShipmentAssignment } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface AssignBody {
@@ -22,8 +23,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   let body: AssignBody;
   try { body = (await req.json()) as AssignBody; }
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       },
     });
     return NextResponse.json({ data }, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     const err = e as Error & { blockers?: unknown };
     if (Array.isArray(err.blockers)) {
       return NextResponse.json({ error: err.message, blockers: err.blockers }, { status: 409 });

@@ -14,9 +14,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma }                    from '@/lib/prisma';
-import { withPlatformAdmin }         from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const n = (v: unknown) => parseFloat(String(v ?? 0)) || 0;
 const s = (v: unknown) => String(v ?? '');
@@ -241,7 +241,7 @@ export async function GET(req: NextRequest) {
         byEventType,
       });
     });
-  } catch (err) {
+    } catch (err) {
     console.error('[admin/events/outbox GET]', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }

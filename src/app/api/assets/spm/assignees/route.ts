@@ -6,59 +6,64 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    const search = req.nextUrl.searchParams.get('search') ?? '';
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const search = req.nextUrl.searchParams.get('search') ?? '';
 
-    const where: Record<string, unknown> = { isActive: true };
-    if (search.trim()) {
-      where.OR = [
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName:  { contains: search, mode: 'insensitive' } },
-        { username:  { contains: search, mode: 'insensitive' } },
-        { email:     { contains: search, mode: 'insensitive' } },
-        { department:{ contains: search, mode: 'insensitive' } },
-      ];
-    }
+        const where: Record<string, unknown> = { isActive: true };
+        if (search.trim()) {
+          where.OR = [
+            { firstName: { contains: search, mode: 'insensitive' } },
+            { lastName:  { contains: search, mode: 'insensitive' } },
+            { username:  { contains: search, mode: 'insensitive' } },
+            { email:     { contains: search, mode: 'insensitive' } },
+            { department:{ contains: search, mode: 'insensitive' } },
+          ];
+        }
 
-    const users = await prisma.user.findMany({
-      where,
-      select: {
-        id: true,
-        username: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        department: true,
-        position: true,
-      },
-      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
-      take: 30,
-    });
+        const users = await tx.user.findMany({
+          where,
+          select: {
+            id: true,
+            username: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            department: true,
+            position: true,
+          },
+          orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+          take: 30,
+        });
 
-    // Shape for the picker: id, display_name, email, department, initials
-    const result = users.map(u => ({
-      id:           u.id,
-      display_name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username,
-      username:     u.username,
-      email:        u.email ?? '',
-      department:   u.department ?? '',
-      position:     u.position ?? '',
-      initials:     [u.firstName?.[0], u.lastName?.[0]].filter(Boolean).join('').toUpperCase()
-                    || u.username.slice(0, 2).toUpperCase(),
-    }));
+        // Shape for the picker: id, display_name, email, department, initials
+        const result = users.map(u => ({
+          id:           u.id,
+          display_name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username,
+          username:     u.username,
+          email:        u.email ?? '',
+          department:   u.department ?? '',
+          position:     u.position ?? '',
+          initials:     [u.firstName?.[0], u.lastName?.[0]].filter(Boolean).join('').toUpperCase()
+                        || u.username.slice(0, 2).toUpperCase(),
+        }));
 
-    return NextResponse.json(result);
-  } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
-  }
+        return NextResponse.json(result);
+      } catch (err) {
+        return NextResponse.json({ error: String(err) }, { status: 500 });
+      }
+  });
 }
+

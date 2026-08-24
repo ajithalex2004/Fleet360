@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     if (!email) return NextResponse.json({ error: 'email query param required' }, { status: 400 });
     const approvals = await getMyPendingApprovals(email);
     return NextResponse.json(approvals);
-  } catch (e: any) {
+  } catch (e) {
     return NextResponse.json({ error: e?.message }, { status: 500 });
   }
 }

@@ -11,9 +11,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 function num(v: string | number | null | undefined): number | null {
@@ -34,8 +35,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   const { id } = await params;
   try {
@@ -108,7 +108,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }, {
       headers: { 'Cache-Control': 'private, max-age=15' },
     });
-  } catch (e) {
+    } catch (e) {
     console.error('[tracking-map]', e);
     return NextResponse.json({ error: e instanceof Error ? e.message : 'failed' }, { status: 500 });
   }

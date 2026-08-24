@@ -9,6 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { getTenantAccessMatrix, replaceTenantAccessMatrix } from '@/lib/service-tickets/access';
 import { loadServiceConfig } from '@/lib/service-config/load';
 import { TICKET_TYPES_ORDER } from '@/types/service-tickets';
@@ -17,7 +18,7 @@ import type { ServiceTone } from '@/types/service-config';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string }>; }
@@ -38,8 +39,6 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
-
   const { id: tenantId } = await params;
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;
@@ -71,8 +70,6 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
-
   const { id: tenantId } = await params;
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;
@@ -115,7 +112,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
     const matrix = await getTenantAccessMatrix(tenantId);
     return NextResponse.json({ ok: true, matrix });
-  } catch (err) {
+    } catch (err) {
     if (err instanceof Error && /Unknown ticketType|slaOverrideHours/.test(err.message)) {
       return NextResponse.json({ ok: false, error: err.message }, { status: 400 });
     }

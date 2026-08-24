@@ -21,7 +21,7 @@ import { requirePlan } from '@/lib/plan-limits';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string }>; }
@@ -42,8 +42,6 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
-
   const { id: tenantId } = await params;
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;
@@ -60,8 +58,6 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
-
   const { id: tenantId } = await params;
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;
@@ -75,7 +71,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     defaultRoleId?: string | null;
     jitEnabled?: boolean; isActive?: boolean;
   };
-  try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
+  try { const bodyRaw = await req.json(); body = stripTenantOwnershipFields(bodyRaw); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
 
   const issuer   = String(body.issuer ?? '').trim();
   const clientId = String(body.clientId ?? '').trim();
@@ -180,7 +176,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
       const fresh = await getSsoConfigPublic(tenantId);
       return NextResponse.json({ ok: true, config: fresh });
-    } catch (err) {
+      } catch (err) {
       captureException(err, { context: 'admin.sso.put' });
       return NextResponse.json({ ok: false, error: 'Failed to save SSO config' }, { status: 500 });
     }
@@ -192,8 +188,6 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
-
   const { id: tenantId } = await params;
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;

@@ -11,6 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth';
 import { ensureSeededForTenant } from '@/lib/service-config/schema';
 import { listScopes, createScope } from '@/lib/service-config/scopes-schema';
@@ -18,7 +19,7 @@ import { SCOPE_LEVELS, type ScopeLevel } from '@/types/service-config';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
@@ -37,7 +38,7 @@ export async function GET(req: NextRequest) {
   try {
     const scopes = await listScopes(auth.tenantId);
     return NextResponse.json({ ok: true, scopes });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'service-config.scopes.list' });
     return NextResponse.json({ ok: false, error: 'Failed to load scopes' }, { status: 500 });
   }
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ ok: true, scope }, { status: 201 });
-  } catch (err) {
+    } catch (err) {
     if (err instanceof Error && /unique/i.test(err.message)) {
       return NextResponse.json({ ok: false, error: `Key "${key}" already exists for this tenant.` }, { status: 409 });
     }

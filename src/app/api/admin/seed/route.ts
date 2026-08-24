@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { ALL_PERMISSIONS, SYSTEM_ROLES } from '@/lib/permissions';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // ── GET: quick DB health check ────────────────────────────────────────────────
 export async function GET() {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -22,8 +22,8 @@ export async function GET() {
       const roleCount  = await tx.role.count();
       return NextResponse.json({ db: 'ok', permissions: permCount, roles: roleCount });
     });
-  } catch (e) {
-    return NextResponse.json({ db: 'error', error: String(e) }, { status: 500 });
+    } catch (e) {
+    return NextResponse.json({ db: 'e', error: String(e) }, { status: 500 });
   }
 }
 
@@ -109,7 +109,7 @@ export async function POST(_req: NextRequest) {
 
       return NextResponse.json({ success: true, permissions: permCount, roles: roleCount });
     });
-  } catch (e) {
+    } catch (e) {
     console.error('[SEED ERROR]', e);
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }

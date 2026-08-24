@@ -5,11 +5,12 @@
  * Body: { agent_id: AgentId, entity_id?: string, tenant_id?: string }
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { triggerFullScan } from '@/lib/agents/orchestrator';
 import { AgentId } from '@/lib/agents/types';
 import { ensureAgentSchema } from '@/lib/agents/schema';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
 
     const result = await triggerFullScan(agent_id, tenant_id ?? 'default');
     return NextResponse.json(result, { status: result.status === 'FAILED' ? 500 : 200 });
-  } catch (err) {
+    } catch (err) {
     console.error('[agents/run]', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }

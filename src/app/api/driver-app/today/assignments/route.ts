@@ -16,11 +16,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { requireDriverSession } from '@/lib/driver-session';
 import { privateCacheControl } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 interface TripRow {
   id: string;
   status: string;
@@ -88,102 +89,106 @@ function computeScore(rows: ScoreRow[]): ScoreBreakdown {
 }
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const ctx = await requireDriverSession(req);
-  if (ctx instanceof NextResponse) return ctx;
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const ctx = await requireDriverSession(req);
+      if (ctx instanceof NextResponse) return ctx;
 
-  // 1) Today's trips for this driver
-  const trips = await prisma.$queryRaw<TripRow[]>`
-    SELECT
-      ts.id,
-      ts.status,
-      ts.departure_time,
-      ts.arrival_time,
-      ts.direction,
-      ts.trip_number,
-      ts.capacity,
-      ts.confirmed_count,
-      ts.route_id,
-      ts.actual_departure_at,
-      ts.actual_arrival_at,
-      ts.started_by_driver_id,
-      ts.ended_by_driver_id,
-      ts.late_minutes,
-      ts.duration_minutes,
-      br.name AS route_name,
-      COALESCE(
-        v.license_plate,
-        NULLIF(TRIM(COALESCE(v.plate_code, '') || ' ' || COALESCE(v.plate_number, '')), ''),
-        v.registration_no
-      ) AS vehicle_plate
-    FROM trip_schedules ts
-    LEFT JOIN bus_routes br ON br.id = ts.route_id
-    LEFT JOIN vehicles v ON v.id = ts.vehicle_id
-    WHERE ts.tenant_id = ${ctx.tenantId}::uuid
-      AND ts.driver_id = ${ctx.userId}::text
-      AND ts.deleted_at IS NULL
-      AND DATE(ts.departure_time AT TIME ZONE 'UTC') = DATE(NOW() AT TIME ZONE 'UTC')
-    ORDER BY ts.departure_time ASC
-  `;
+      // 1) Today's trips for this driver
+      const trips = await tx.$queryRaw<TripRow[]>`
+        SELECT
+          ts.id,
+          ts.status,
+          ts.departure_time,
+          ts.arrival_time,
+          ts.direction,
+          ts.trip_number,
+          ts.capacity,
+          ts.confirmed_count,
+          ts.route_id,
+          ts.actual_departure_at,
+          ts.actual_arrival_at,
+          ts.started_by_driver_id,
+          ts.ended_by_driver_id,
+          ts.late_minutes,
+          ts.duration_minutes,
+          br.name AS route_name,
+          COALESCE(
+            v.license_plate,
+            NULLIF(TRIM(COALESCE(v.plate_code, '') || ' ' || COALESCE(v.plate_number, '')), ''),
+            v.registration_no
+          ) AS vehicle_plate
+        FROM trip_schedules ts
+        LEFT JOIN bus_routes br ON br.id = ts.route_id
+        LEFT JOIN vehicles v ON v.id = ts.vehicle_id
+        WHERE ts.tenant_id = ${ctx.tenantId}::uuid
+          AND ts.driver_id = ${ctx.userId}::text
+          AND ts.deleted_at IS NULL
+          AND DATE(ts.departure_time AT TIME ZONE 'UTC') = DATE(NOW() AT TIME ZONE 'UTC')
+        ORDER BY ts.departure_time ASC
+      `;
 
-  if (trips.length === 0) {
-    return NextResponse.json({ trips: [], generatedAt: new Date().toISOString() });
-  }
+      if (trips.length === 0) {
+        return NextResponse.json({ trips: [], generatedAt: new Date().toISOString() });
+      }
 
-  // 2) Per-trip behaviour events — single batch query
-  const tripIds = trips.map((t) => t.id);
-  const events = await prisma.$queryRaw<ScoreRow[]>`
-    SELECT trip_id, type, occurred_at
-    FROM behavior_events
-    WHERE tenant_id = ${ctx.tenantId}::uuid
-      AND driver_id = ${ctx.userId}::uuid
-      AND trip_id = ANY(${tripIds}::uuid[])
-    ORDER BY trip_id, occurred_at ASC
-  `;
+      // 2) Per-trip behaviour events — single batch query
+      const tripIds = trips.map((t) => t.id);
+      const events = await tx.$queryRaw<ScoreRow[]>`
+        SELECT trip_id, type, occurred_at
+        FROM behavior_events
+        WHERE tenant_id = ${ctx.tenantId}::uuid
+          AND driver_id = ${ctx.userId}::uuid
+          AND trip_id = ANY(${tripIds}::uuid[])
+        ORDER BY trip_id, occurred_at ASC
+      `;
 
-  // 3) Group by trip + score
-  const byTrip = new Map<string, ScoreRow[]>();
-  for (const e of events) {
-    if (!e.trip_id) continue;
-    const arr = byTrip.get(e.trip_id) ?? [];
-    arr.push(e);
-    byTrip.set(e.trip_id, arr);
-  }
+      // 3) Group by trip + score
+      const byTrip = new Map<string, ScoreRow[]>();
+      for (const e of events) {
+        if (!e.trip_id) continue;
+        const arr = byTrip.get(e.trip_id) ?? [];
+        arr.push(e);
+        byTrip.set(e.trip_id, arr);
+      }
 
-  const result = trips.map((t) => {
-    const tripEvents = byTrip.get(t.id) ?? [];
-    const breakdown = computeScore(tripEvents);
-    return {
-      id: t.id,
-      status: t.status,
-      departureTime: t.departure_time.toISOString(),
-      arrivalTime: t.arrival_time.toISOString(),
-      direction: t.direction,
-      tripNumber: t.trip_number,
-      routeId: t.route_id,
-      routeName: t.route_name,
-      vehiclePlate: t.vehicle_plate,
-      capacity: t.capacity,
-      confirmedCount: t.confirmed_count,
-      // Driver-controlled lifecycle
-      actualDepartureAt: t.actual_departure_at?.toISOString() ?? null,
-      actualArrivalAt: t.actual_arrival_at?.toISOString() ?? null,
-      startedByDriverId: t.started_by_driver_id,
-      endedByDriverId: t.ended_by_driver_id,
-      lateMinutes: t.late_minutes,
-      durationMinutes: t.duration_minutes,
-      score: breakdown,
-      eventCount: tripEvents.length,
-    };
+      const result = trips.map((t) => {
+        const tripEvents = byTrip.get(t.id) ?? [];
+        const breakdown = computeScore(tripEvents);
+        return {
+          id: t.id,
+          status: t.status,
+          departureTime: t.departure_time.toISOString(),
+          arrivalTime: t.arrival_time.toISOString(),
+          direction: t.direction,
+          tripNumber: t.trip_number,
+          routeId: t.route_id,
+          routeName: t.route_name,
+          vehiclePlate: t.vehicle_plate,
+          capacity: t.capacity,
+          confirmedCount: t.confirmed_count,
+          // Driver-controlled lifecycle
+          actualDepartureAt: t.actual_departure_at?.toISOString() ?? null,
+          actualArrivalAt: t.actual_arrival_at?.toISOString() ?? null,
+          startedByDriverId: t.started_by_driver_id,
+          endedByDriverId: t.ended_by_driver_id,
+          lateMinutes: t.late_minutes,
+          durationMinutes: t.duration_minutes,
+          score: breakdown,
+          eventCount: tripEvents.length,
+        };
+      });
+
+      return NextResponse.json(
+        { trips: result, generatedAt: new Date().toISOString() },
+        { headers: { 'Cache-Control': privateCacheControl(30, 30) } },
+      );
   });
-
-  return NextResponse.json(
-    { trips: result, generatedAt: new Date().toISOString() },
-    { headers: { 'Cache-Control': privateCacheControl(30, 30) } },
-  );
 }
+

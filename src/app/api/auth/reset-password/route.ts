@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ ok: true });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'auth.reset-password' });
     return NextResponse.json({ ok: false, error: 'Reset failed' }, { status: 500 });
   }

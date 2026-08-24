@@ -17,7 +17,7 @@ import { withTenantRls } from '@/lib/rls';
 import { ensureShipperPortalTables } from '@/lib/shipper-portal/schema';
 import { DEFAULT_TRACKING_LEVEL } from '@/lib/shipper-portal/visibility';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface CustomerRow {
@@ -40,8 +40,7 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
-  }
+  const { tenantId } = authz;
 
   try {
     await ensureShipperPortalTables();
@@ -102,7 +101,7 @@ export async function GET(req: NextRequest) {
     }, {
       headers: { 'Cache-Control': 'private, max-age=15, stale-while-revalidate=30' },
     });
-  } catch (e) {
+    } catch (e) {
     console.error('[admin/customers/portal-status]', e);
     return NextResponse.json({ customers: [] });
   }

@@ -18,7 +18,7 @@ import { requirePlan } from '@/lib/plan-limits';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string }>; }
@@ -42,8 +42,6 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
-
   const { id: tenantId } = await params;
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;
@@ -93,7 +91,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
     const fresh = await getBranding(tenantId);
     return NextResponse.json({ ok: true, branding: fresh, logoUrl: stored.url });
-  } catch (err) {
+    } catch (err) {
     captureException(err, { context: 'admin.branding.logo' });
     return NextResponse.json({ ok: false, error: 'Upload failed.' }, { status: 500 });
   }

@@ -64,6 +64,11 @@ export default defineConfig({
     alias: {
       // Map @/ imports to ./src/ — matches tsconfig paths
       '@': path.resolve(__dirname, './src'),
+      // The real `server-only` package throws unconditionally outside
+      // Next.js's webpack server/client bundling — swap in a no-op so
+      // tests that transitively import a server-only-marked module
+      // (e.g. src/lib/prisma.ts -> src/lib/rls-scope.ts) don't crash.
+      'server-only': path.resolve(__dirname, './tests/stubs/server-only.ts'),
     },
   },
 });

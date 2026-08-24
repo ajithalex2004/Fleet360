@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ ok: true });
-  } catch (err) {
+    } catch (err) {
     if (err instanceof NextResponse) return err;
     captureException(err, { context: 'auth.mfa.disable' });
     return NextResponse.json({ ok: false, error: 'Disable failed' }, { status: 500 });

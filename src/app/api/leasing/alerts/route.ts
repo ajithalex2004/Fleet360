@@ -15,35 +15,40 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const { searchParams } = new URL(req.url);
-    const severity = searchParams.get('severity');
-    const status = searchParams.get('status');
-    const contractId = searchParams.get('contractId');
 
-    const alerts = await prisma.leaseAlert.findMany({
-      where: {
-        tenantId,
-        ...(severity ? { severity } : {}),
-        ...(status ? { status } : {}),
-        ...(contractId
-          ? { contract: { id: contractId, tenantId } }
-          : {}),
-      },
-      include: { contract: { select: { contractNumber: true, lesseeId: true } } },
-      orderBy: [{ severity: 'asc' }, { createdAt: 'desc' }],
-    });
-    return NextResponse.json(alerts);
-  } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const { searchParams } = new URL(req.url);
+        const severity = searchParams.get('severity');
+        const status = searchParams.get('status');
+        const contractId = searchParams.get('contractId');
+
+        const alerts = await tx.leaseAlert.findMany({
+          where: {
+            tenantId,
+            ...(severity ? { severity } : {}),
+            ...(status ? { status } : {}),
+            ...(contractId
+              ? { contract: { id: contractId, tenantId } }
+              : {}),
+          },
+          include: { contract: { select: { contractNumber: true, lesseeId: true } } },
+          orderBy: [{ severity: 'asc' }, { createdAt: 'desc' }],
+        });
+        return NextResponse.json(alerts);
+      } catch (e) {
+        console.error(e);
+        return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant(req);
@@ -52,13 +57,14 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const alert = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.leaseAlert.create({ data: { ...body, tenantId } }),
     );
     return NextResponse.json(alert, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
   }
 }

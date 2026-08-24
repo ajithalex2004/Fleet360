@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureHosSchema } from '@/lib/fleet/hos-schema';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
@@ -95,8 +96,8 @@ export async function GET(req: NextRequest) {
         hasMore: offset + rows.length < total,
       }),
     );
-  } catch (error) {
-    console.error('Error fetching HoS violations:', error);
+  } catch (e) {
+    console.error('Error fetching HoS violations:', e);
     return NextResponse.json({ error: 'Failed to fetch HoS violations' }, { status: 500 });
   }
 }
@@ -155,8 +156,8 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json(
       ser({ updated: updated.length, records: updated }),
     );
-  } catch (error) {
-    console.error('Error updating HoS violations:', error);
+  } catch (e) {
+    console.error('Error updating HoS violations:', e);
     return NextResponse.json({ error: 'Failed to update HoS violations' }, { status: 500 });
   }
 }

@@ -38,7 +38,7 @@ import {
 import { resolveZoneFallbackKm } from '@/lib/planning/zone-compat-policy';
 import { resolveCbaWorkRules } from '@/lib/cba/engine';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'staff-transport-plans';
 
 export async function POST(req: NextRequest) {
@@ -49,14 +49,11 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   try {
-    const tenantId = req.headers.get('x-tenant-id') ?? '';
-    if (!tenantId) {
-      return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
-    }
     const permError = requireBusOpsAdminAccess(req, 'planning-core');
     if (permError) return permError;
 
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const {
       dateFrom,
       dateTo,
@@ -272,7 +269,7 @@ export async function POST(req: NextRequest) {
         unassignedRosterRunIds: rosterResult.unassignedRunIds,
       },
     });
-  } catch (e) {
+    } catch (e) {
     console.error('[plan/compute]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'Plan compute failed' },

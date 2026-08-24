@@ -18,14 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runTripReminders } from '@/lib/push/scheduler';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function POST(req: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
-  }
-  const { tenantId } = authz;
-
   const secret = process.env.PUSH_CRON_SECRET;
   if (secret) {
     const supplied = req.headers.get('x-push-cron-secret') ?? new URL(req.url).searchParams.get('secret');

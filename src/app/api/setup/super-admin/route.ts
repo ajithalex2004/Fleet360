@@ -57,7 +57,7 @@ export async function GET() {
         ? 'A Super Admin account exists. Use the platform login to sign in.'
         : 'No Super Admin found. POST to this endpoint with your SETUP_SECRET to create one.',
     });
-  } catch (e) {
+    } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
 }
@@ -197,8 +197,7 @@ export async function POST(request: NextRequest) {
       loginAt:  '/login',
       note:     'Use this email + the password you provided to log in. Delete or disable this endpoint after first use.',
     });
-
-  } catch (err) {
+    } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[setup/super-admin]', msg);
     return NextResponse.json({ error: msg }, { status: 500 });

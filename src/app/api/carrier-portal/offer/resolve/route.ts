@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'This offer link is invalid or has expired.' }, { status: 404 });
     }
     return NextResponse.json(ctx, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (e) {
+    } catch (e) {
     console.error('[carrier-portal/offer/resolve]', e);
     return NextResponse.json({ error: e instanceof Error ? e.message : 'failed to load offer' }, { status: 500 });
   }

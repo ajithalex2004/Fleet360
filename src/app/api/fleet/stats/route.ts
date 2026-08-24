@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { cachedJson } from '@/lib/response-helpers';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'fleet:stats';
 
 const zero = () => Promise.resolve([{ count: BigInt(0) }]);
@@ -115,13 +116,12 @@ export async function GET(req: NextRequest) {
   try {
     // tenantId is the per-tenant cache key — see server-cache.ts for the
     // security rationale (public CDN would leak data across tenants).
-    const tenantId = req.headers.get('x-tenant-id') ?? 'unknown';
     const stats = await getFleetStats(tenantId);
     return NextResponse.json(stats, {
       headers: { 'Cache-Control': privateCacheControl(60, 300) },
     });
-  } catch (error) {
-    console.error('Error fetching fleet stats:', error);
+    } catch (e) {
+    console.error('Error fetching fleet stats:', e);
     return NextResponse.json({ error: 'Failed to fetch fleet stats' }, { status: 500 });
   }
 }

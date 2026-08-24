@@ -24,7 +24,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!existing) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
-    const body = await req.json();
+    const bodyRaw = await req.json();
+  const body = stripTenantOwnershipFields(bodyRaw);
     const { originalContract, ...data } = body;
     if (data.status === 'ACCEPTED' && !data.customerResponseAt) data.customerResponseAt = new Date();
     const renewal = await withTenantRls(prisma, tenantId, async (tx) =>

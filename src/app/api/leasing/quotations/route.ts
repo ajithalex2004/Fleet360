@@ -12,34 +12,39 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
  * `20260627000001_add_tenant_id_to_leasing_tables`.
  */
 export async function GET(req: NextRequest) {
+
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const quotations = await prisma.leaseQuotation.findMany({
-      where: { tenantId, deletedAt: null },
-      include: {
-        lineItems: true,
-        vehicles:  true,
-        lessee:    true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
 
-    const safe = (quotations as any[]).map(q => ({
-      ...q,
-      vehicles:  Array.isArray(q.vehicles)  ? q.vehicles  : [],
-      lineItems: Array.isArray(q.lineItems) ? q.lineItems : [],
-    }));
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+        const quotations = await tx.leaseQuotation.findMany({
+          where: { tenantId, deletedAt: null },
+          include: {
+            lineItems: true,
+            vehicles:  true,
+            lessee:    true,
+          },
+          orderBy: { createdAt: 'desc' },
+        });
 
-    return NextResponse.json(safe);
-  } catch (error) {
-    console.error('GET /api/leasing/quotations error:', error);
-    return NextResponse.json({ error: 'Failed to fetch quotations' }, { status: 500 });
-  }
+        const safe = (quotations as any[]).map(q => ({
+          ...q,
+          vehicles:  Array.isArray(q.vehicles)  ? q.vehicles  : [],
+          lineItems: Array.isArray(q.lineItems) ? q.lineItems : [],
+        }));
+
+        return NextResponse.json(safe);
+      } catch (e) {
+        console.error('GET /api/leasing/quotations error:', e);
+        return NextResponse.json({ error: 'Failed to fetch quotations' }, { status: 500 });
+      }
+  });
 }
+
 
 export async function POST(request: NextRequest) {
   const authz = requireAuthorizedTenant(req);
@@ -88,10 +93,10 @@ export async function POST(request: NextRequest) {
       vehicles:  Array.isArray(quotation.vehicles)  ? quotation.vehicles  : [],
       lineItems: Array.isArray(quotation.lineItems) ? quotation.lineItems : [],
     }, { status: 201 });
-  } catch (error: any) {
-    console.error('POST /api/leasing/quotations error:', error?.message);
+    } catch (e) {
+    console.error('POST /api/leasing/quotations error:', e?.message);
     return NextResponse.json(
-      { error: error?.message ?? 'Failed to create quotation' },
+      { error: e?.message ?? 'Failed to create quotation' },
       { status: 500 }
     );
   }

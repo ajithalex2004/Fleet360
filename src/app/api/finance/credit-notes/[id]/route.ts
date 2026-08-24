@@ -3,9 +3,10 @@
  * DRAFT → ISSUED → APPLIED | REFUNDED | VOIDED
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const INIT = `
   CREATE TABLE IF NOT EXISTS finance_credit_notes (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -39,69 +40,82 @@ const INIT = `
 type CnRow = Record<string, unknown>;
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  await prisma.$executeRawUnsafe(INIT).catch(() => {});
-  const [row] = await prisma.$queryRawUnsafe<CnRow[]>(
-    `SELECT * FROM finance_credit_notes WHERE id=$1 AND deleted_at IS NULL`, params.id
-  ).catch(() => [] as CnRow[]);
-  if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  return NextResponse.json(row);
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    await tx.$executeRawUnsafe(INIT).catch(() => {});
+      const [row] = await tx.$queryRawUnsafe<CnRow[]>(
+        `SELECT * FROM finance_credit_notes WHERE id=$1 AND deleted_at IS NULL`, params.id
+      ).catch(() => [] as CnRow[]);
+      if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      return NextResponse.json(row);
+  });
 }
+
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const body = await req.json();
-  const { action } = body;
-  const now = new Date().toISOString();
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const bodyRaw = await req.json();
+      const body = stripTenantOwnershipFields(bodyRaw);
+      const { action } = body;
+      const now = new Date().toISOString();
 
-  let sql = '';
-  let sqlParams: unknown[] = [];
+      let sql = '';
+      let sqlParams: unknown[] = [];
 
-  switch (action) {
-    case 'issue':
-      sql = `UPDATE finance_credit_notes SET status='ISSUED', issued_by=$2, updated_at=$3 WHERE id=$1 RETURNING *`;
-      sqlParams = [params.id, body.issuedBy ?? 'Finance', now];
-      break;
-    case 'apply':
-      sql = `UPDATE finance_credit_notes SET status='APPLIED', applied_amount=$2, updated_at=$3, notes=COALESCE($4,notes) WHERE id=$1 RETURNING *`;
-      sqlParams = [params.id, body.appliedAmount, now, body.notes ?? null];
-      break;
-    case 'refund':
-      sql = `UPDATE finance_credit_notes SET status='REFUNDED', refunded_at=$2, refund_method=$3, updated_at=$4, notes=COALESCE($5,notes) WHERE id=$1 RETURNING *`;
-      sqlParams = [params.id, now, body.refundMethod ?? 'Bank Transfer', now, body.notes ?? null];
-      break;
-    case 'void':
-      sql = `UPDATE finance_credit_notes SET status='VOIDED', updated_at=$2, notes=COALESCE($3,notes) WHERE id=$1 RETURNING *`;
-      sqlParams = [params.id, now, body.notes ?? null];
-      break;
-    default:
-      return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
-  }
+      switch (action) {
+        case 'issue':
+          sql = `UPDATE finance_credit_notes SET status='ISSUED', issued_by=$2, updated_at=$3 WHERE id=$1 RETURNING *`;
+          sqlParams = [params.id, body.issuedBy ?? 'Finance', now];
+          break;
+        case 'apply':
+          sql = `UPDATE finance_credit_notes SET status='APPLIED', applied_amount=$2, updated_at=$3, notes=COALESCE($4,notes) WHERE id=$1 RETURNING *`;
+          sqlParams = [params.id, body.appliedAmount, now, body.notes ?? null];
+          break;
+        case 'refund':
+          sql = `UPDATE finance_credit_notes SET status='REFUNDED', refunded_at=$2, refund_method=$3, updated_at=$4, notes=COALESCE($5,notes) WHERE id=$1 RETURNING *`;
+          sqlParams = [params.id, now, body.refundMethod ?? 'Bank Transfer', now, body.notes ?? null];
+          break;
+        case 'void':
+          sql = `UPDATE finance_credit_notes SET status='VOIDED', updated_at=$2, notes=COALESCE($3,notes) WHERE id=$1 RETURNING *`;
+          sqlParams = [params.id, now, body.notes ?? null];
+          break;
+        default:
+          return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
+      }
 
-  const [row] = await prisma.$queryRawUnsafe<CnRow[]>(sql, ...sqlParams).catch(() => [] as CnRow[]);
-  if (!row) return NextResponse.json({ error: 'Update failed' }, { status: 500 });
-  return NextResponse.json(row);
+      const [row] = await tx.$queryRawUnsafe<CnRow[]>(sql, ...sqlParams).catch(() => [] as CnRow[]);
+      if (!row) return NextResponse.json({ error: 'Update failed' }, { status: 500 });
+      return NextResponse.json(row);
+  });
 }
+
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  await prisma.$executeRawUnsafe(
-    `UPDATE finance_credit_notes SET deleted_at=NOW() WHERE id=$1`, params.id
-  ).catch(() => {});
-  return NextResponse.json({ ok: true });
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    await tx.$executeRawUnsafe(
+        `UPDATE finance_credit_notes SET deleted_at=NOW() WHERE id=$1`, params.id
+      ).catch(() => {});
+      return NextResponse.json({ ok: true });
+  });
 }
+

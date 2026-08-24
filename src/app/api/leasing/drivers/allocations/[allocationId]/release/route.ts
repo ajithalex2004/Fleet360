@@ -33,7 +33,8 @@ export async function POST(
   }
   const { tenantId } = authz;
   try {
-    const body = await req.json().catch(() => ({}));
+    const bodyRaw = await req.json().catch(() => ({}));
+    const body = stripTenantOwnershipFields(bodyRaw);
     const allocation = await prisma.leaseDriverAllocation.findFirst({
       where: { id: params.allocationId, tenantId },
     });

@@ -12,9 +12,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { withTenantRls } from '@/lib/rls';
 import { listShipperOnboarding, onboardShipperCustomer, LogisticsValidationError } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
@@ -26,7 +27,7 @@ export async function GET(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
   const sp = req.nextUrl.searchParams;
   const onboardingStatus = sp.get('onboardingStatus');
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
   try {
     const data = await listShipperOnboarding({ tenantId, onboardingStatus, search, limit });
     return NextResponse.json({ data }, { headers: { 'Cache-Control': 'private, max-age=15' } });
-  } catch (e) {
+    } catch (e) {
     console.error('[logistics/shippers GET]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to list shippers' },
@@ -65,7 +66,7 @@ export async function POST(req: NextRequest) {
 
   }
 
-  const { tenantId } = authz;, { status: 401 });
+  const { tenantId } = authz;
 
   let body: OnboardBody;
   try { body = (await req.json()) as OnboardBody; }
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest) {
       complianceStatus: body.complianceStatus ?? null,
     });
     return NextResponse.json({ data: shipper }, { status: 201 });
-  } catch (e) {
+    } catch (e) {
     if (e instanceof LogisticsValidationError) {
       return NextResponse.json({ error: e.message, issues: e.issues }, { status: 422 });
     }

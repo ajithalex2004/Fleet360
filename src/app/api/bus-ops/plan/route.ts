@@ -14,7 +14,7 @@ import { withTenantRls } from '@/lib/rls';
 import { cacheRead, publicCacheControl, revalidateCache } from '@/lib/server-cache';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'staff-transport-plans';
 
 interface PlanRow {
@@ -64,10 +64,6 @@ export async function GET(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  const tenantId = req.headers.get('x-tenant-id') ?? '';
-  if (!tenantId) {
-    return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
-  }
   const permError = requireBusOpsAdminAccess(req, 'planning-core');
   if (permError) return permError;
   try {
@@ -75,7 +71,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(plans, {
       headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' },
     });
-  } catch (e) {
+    } catch (e) {
     console.error('[plan list]', e);
     return NextResponse.json({ error: 'Failed to list plans' }, { status: 500 });
   }
@@ -109,16 +105,10 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  const tenantId = req.headers.get('x-tenant-id') ?? '';
-  if (!tenantId) {
-    return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
-  }
   const permError = requireBusOpsAdminAccess(req, 'planning-core');
   if (permError) return permError;
   try {
-    const body = await req.json() as {
-      name?: string;
-      description?: string;
+    const bodyRaw = await req.json() as { name?: string; description?: string;
       dateFrom?: string;
       dateTo?: string;
       workRules?: unknown;
@@ -126,8 +116,8 @@ export async function POST(req: NextRequest) {
       runs?: unknown;
       blocks?: unknown;
       rosters?: unknown;
-      summary?: unknown;
-    };
+      summary?: unknown; };
+        const body = stripTenantOwnershipFields(bodyRaw);
     if (!body.name) {
       return NextResponse.json({ error: 'name is required' }, { status: 400 });
     }
@@ -181,10 +171,6 @@ export async function DELETE(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  const tenantId = req.headers.get('x-tenant-id') ?? '';
-  if (!tenantId) {
-    return NextResponse.json({ error: 'No tenant context' }, { status: 400 });
-  }
   const permError = requireBusOpsAdminAccess(req, 'planning-core');
   if (permError) return permError;
   try {
@@ -199,7 +185,7 @@ export async function DELETE(req: NextRequest) {
     );
     revalidateCache([CACHE_TAG]);
     return NextResponse.json({ success: true });
-  } catch (e) {
+    } catch (e) {
     console.error('[plan delete]', e);
     return NextResponse.json({ error: 'Failed to archive plan' }, { status: 500 });
   }
