@@ -96,9 +96,11 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
       });
       await tx.routeConsolidation.delete({ where: { id: consolidationId } });
 
-      // Deleting an audit row is itself auditable. Fire-and-forget so a
-      // logging failure can't roll back a completed delete.
-      void logAudit({
+      // Deleting an audit row is itself auditable, so this is awaited rather
+      // than fire-and-forget: an un-awaited promise here was silently dropped
+      // when the handler returned, and the entry never landed. logAudit
+      // swallows its own errors, so awaiting still can't fail the delete.
+      await logAudit({
         tenantId,
         userId,
         userRole: req.headers.get('x-user-role') ?? undefined,
