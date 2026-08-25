@@ -13,7 +13,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { History, RefreshCw, Undo2, CheckCircle2, XCircle } from 'lucide-react';
+import { History, RefreshCw, Undo2, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
 import RouteConsolidationRevertModal, { type ConsolidationForRevert } from '@/components/bus-ops/RouteConsolidationRevertModal';
 import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
 
@@ -40,6 +40,10 @@ export default function RouteConsolidationHistoryPanel() {
   const [error, setError] = useState<string | null>(null);
   const [reverting, setReverting] = useState<ConsolidationForRevert | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  /** Rows queued for permanent deletion, pending confirmation. */
+  const [deleting, setDeleting] = useState<HistoryRow[] | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -56,6 +60,45 @@ export default function RouteConsolidationHistoryPanel() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  /**
+   * Deletes the confirmed rows one at a time and reports partial outcomes.
+   * Sequential rather than Promise.all so a mid-batch failure leaves a
+   * clear "N of M" result instead of an indeterminate mix — and so the
+   * server isn't hit with a burst of writes against the same table.
+   */
+  const confirmDelete = useCallback(async () => {
+    if (!deleting?.length) return;
+    setDeleteBusy(true); setDeleteError(null);
+    const failures: string[] = [];
+    let ok = 0;
+
+    for (const row of deleting) {
+      try {
+        const res = await fetch(`/api/bus-ops/route-consolidations/${row.id}`, { method: 'DELETE' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) failures.push(`${row.id.slice(0, 8)}: ${data?.error ?? `HTTP ${res.status}`}`);
+        else ok++;
+      } catch (e) {
+        failures.push(`${row.id.slice(0, 8)}: ${e instanceof Error ? e.message : 'request failed'}`);
+      }
+    }
+
+    setDeleteBusy(false);
+    if (failures.length) {
+      // Keep the panel open so the operator sees exactly which failed.
+      setDeleteError(`Deleted ${ok} of ${deleting.length}. Failed — ${failures.join('; ')}`);
+    } else {
+      setDeleting(null);
+    }
+    // Clear selection for rows that are gone, then refresh either way.
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      for (const row of deleting) next.delete(row.id);
+      return next;
+    });
+    await load();
+  }, [deleting, load]);
 
   const historyColumns: DataGridColumn<HistoryRow>[] = [
     { key: 'status', header: 'Status', accessor: r => r.status, filter: 'select',
@@ -103,10 +146,24 @@ export default function RouteConsolidationHistoryPanel() {
         ) : r.status === 'APPLIED' && !withinWindow ? (
           <span className="text-xs text-slate-500" title={`Revert window (${REVERT_WINDOW_HOURS}h) elapsed`}>outside window</span>
         ) : (
-          <span className="text-xs text-slate-600">—</span>
+          // REVERTED — the merge is already undone, so there is nothing left
+          // to revert. The row is an audit record; deleting it is permanent.
+          <button
+            onClick={() => setDeleting([r])}
+            title="Permanently delete this reverted consolidation's audit record"
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-2 py-1 text-xs text-slate-300 hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-200"
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Delete
+          </button>
         );
       } },
   ];
+
+  // Only REVERTED rows are deletable — an APPLIED row is live state and the
+  // API rejects it with 409. Filtering here keeps the bulk action honest
+  // rather than firing calls that are guaranteed to fail.
+  const selectedDeletable = rows.filter(r => selectedIds.has(r.id) && r.status === 'REVERTED');
+  const selectedBlocked = selectedIds.size - selectedDeletable.length;
 
   return (
     <div className="space-y-3">
@@ -149,6 +206,26 @@ export default function RouteConsolidationHistoryPanel() {
             actions: selectedIds.size > 0 ? (
               <span className="inline-flex items-center gap-2 text-xs text-violet-300">
                 {selectedIds.size} selected
+                {selectedDeletable.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setDeleting(selectedDeletable)}
+                    title={
+                      selectedBlocked > 0
+                        ? `${selectedBlocked} selected row(s) are still APPLIED and cannot be deleted — revert them first`
+                        : undefined
+                    }
+                    className="inline-flex items-center gap-1 rounded-lg border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-rose-200 hover:bg-rose-500/20"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete {selectedDeletable.length} reverted
+                  </button>
+                )}
+                {selectedBlocked > 0 && (
+                  <span className="text-slate-500">
+                    ({selectedBlocked} still applied — revert first)
+                  </span>
+                )}
                 <button type="button" onClick={() => setSelectedIds(new Set())}
                   className="text-slate-400 hover:text-white underline underline-offset-2">
                   Clear
@@ -165,6 +242,62 @@ export default function RouteConsolidationHistoryPanel() {
           onClose={() => setReverting(null)}
           onReverted={async () => { setReverting(null); await load(); }}
         />
+      )}
+
+      {deleting && deleting.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-xl">
+            <h4 className="flex items-center gap-2 text-sm font-semibold text-rose-200">
+              <Trash2 className="h-4 w-4" />
+              Delete {deleting.length} reverted consolidation{deleting.length === 1 ? '' : 's'}?
+            </h4>
+
+            <p className="mt-3 text-sm text-slate-300">
+              This permanently removes the audit record and its source and
+              enrolment-migration rows. It cannot be undone.
+            </p>
+            <p className="mt-2 text-xs text-slate-400">
+              The merges themselves were already reverted — routes and enrolments
+              are unaffected. Only the history entry is removed.
+            </p>
+
+            <ul className="mt-3 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/60 p-2 text-xs text-slate-400">
+              {deleting.map(r => (
+                <li key={r.id} className="truncate">
+                  <span className="font-mono text-slate-500">{r.id.slice(0, 8)}</span>
+                  {' · '}
+                  {r.mergedRoute?.name ?? '(merged route removed)'}
+                </li>
+              ))}
+            </ul>
+
+            {deleteError && (
+              <div className="mt-3 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={deleteBusy}
+                onClick={() => { setDeleting(null); setDeleteError(null); }}
+                className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleteBusy}
+                onClick={() => void confirmDelete()}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/40 bg-rose-500/20 px-3 py-1.5 text-xs text-rose-100 hover:bg-rose-500/30 disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                {deleteBusy ? 'Deleting…' : 'Delete permanently'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
