@@ -1,0 +1,112 @@
+name: Migration Safety
+
+# Blocks destructive SQL from entering prisma/migrations/.
+#
+# prisma/schema.prisma does not model large parts of the live database, so
+# `prisma migrate dev` will happily generate a migration that drops ~174 real
+# tables (including finance.finance_chart_of_accounts, the Workflow* and admin_*
+# tables, and tenant_id isolation columns). The dangerous path is not malice —
+# it is a dev adding one field, Prisma quietly generating the drops alongside it,
+# and the PR being reviewed as "add one field".
+#
+# See scripts/check-destructive-migrations.js for the allowlist mechanism.
+
+on:
+  pull_request:
+    paths:
+      - 'prisma/**'
+      - 'scripts/check-destructive-migrations.js'
+      - '.github/workflows/migration-safety.yml'
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'prisma/**'
+
+jobs:
+  check-destructive-migrations:
+    name: Destructive Migration Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Deliberately no `npm ci` — the checker is dependency-free so this job
+      # stays fast and cannot be broken by an unrelated install failure.
+      - name: Check migrations for destructive SQL
+        id: check
+        run: |
+          set +e
+          node scripts/check-destructive-migrations.js > migration-report.txt 2>&1
+          EXIT_CODE=$?
+          set -e
+
+          cat migration-report.txt
+
+          {
+            echo "## Migration Safety Check"
+            echo ""
+            echo '```'
+            cat migration-report.txt
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
+
+          exit $EXIT_CODE
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-safety-report
+          path: migration-report.txt
+          retention-days: 30
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' && failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('migration-report.txt', 'utf8');
+            const body = [
+              '## 🛑 Destructive migration detected',
+              '',
+              'This PR adds a migration containing `DROP TABLE`, `DROP COLUMN`,',
+              '`DROP SCHEMA`, `DROP DATABASE`, or `TRUNCATE`.',
+              '',
+              '**If Prisma generated this for you, do not merge it.**',
+              '`prisma/schema.prisma` does not model large parts of the live',
+              'database, so `prisma migrate dev` produces migrations that drop',
+              'real tables — including the `tenant_id` columns that enforce',
+              'tenant isolation.',
+              '',
+              'Hand-write an additive migration instead. See',
+              '`prisma/migrations/20260903000000_add_breakdown_reports` for the',
+              'pattern (`CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`).',
+              '',
+              'If the deletion is genuinely intended, add the migration to',
+              '`ALLOWLIST` in `scripts/check-destructive-migrations.js` with a',
+              'reason so it is reviewed as a deliberate data deletion.',
+              '',
+              '<details><summary>Full report</summary>',
+              '',
+              '```',
+              report,
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
