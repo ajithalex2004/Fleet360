@@ -551,17 +551,54 @@ export default function RoutesBulkImportModal({
                 </div>
               )}
 
+              {/* A preview and a completed import previously rendered the same
+                  layout, differing only in a colour and the words "Server
+                  preview: " vs "Import complete: ". A preview reporting
+                  "0 created, 14 planned, 0 errored" reads as success, and an
+                  operator who stops there leaves believing the routes are
+                  saved when nothing was written. The two states are now
+                  visually and verbally distinct, and the preview names the
+                  exact button still to be pressed. */}
               {(previewResult || commitResult) && (
                 <div className={`rounded-lg border px-3 py-2 text-xs ${
                   commitResult
                     ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
-                    : 'border-sky-500/40 bg-sky-500/10 text-sky-200'
+                    : 'border-amber-500/40 bg-amber-500/10 text-amber-200'
                 }`}>
-                  {commitResult ? <CheckCircle2 className="w-4 h-4 inline mr-1" /> : null}
-                  {(commitResult ?? previewResult)!.dryRun ? 'Server preview: ' : 'Import complete: '}
-                  <b>{(commitResult ?? previewResult)!.created}</b> created,
-                  {' '}<b>{(commitResult ?? previewResult)!.plannedRoutes}</b> planned,
-                  {' '}<b>{(commitResult ?? previewResult)!.errored}</b> errored.
+                  <div className="flex items-start gap-1.5">
+                    {commitResult
+                      ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-px" />
+                      : <AlertTriangle className="w-4 h-4 shrink-0 mt-px" />}
+                    <div>
+                      <div className="font-semibold">
+                        {commitResult
+                          ? (commitResult.replayed
+                              ? 'Already imported — this file was submitted before'
+                              : 'Import complete — routes saved')
+                          : 'Preview only — nothing has been saved yet'}
+                      </div>
+                      <div className="mt-0.5">
+                        {commitResult ? (
+                          <>
+                            <b>{commitResult.created}</b> created
+                            {commitResult.skipped > 0 && <>, <b>{commitResult.skipped}</b> skipped</>}
+                            {commitResult.errored > 0 && <>, <b>{commitResult.errored}</b> errored</>}.
+                          </>
+                        ) : (
+                          <>
+                            <b>{previewResult!.plannedRoutes}</b> route(s) would be created
+                            {previewResult!.errored > 0 && <>, <b>{previewResult!.errored}</b> would fail</>}.
+                          </>
+                        )}
+                      </div>
+                      {!commitResult && (
+                        <div className="mt-1">
+                          Nothing has been written to the database. Click{' '}
+                          <b>Import {validRows.length * 2} routes</b> to save them.
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
             </>
