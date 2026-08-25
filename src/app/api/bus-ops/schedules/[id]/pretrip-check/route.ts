@@ -46,7 +46,12 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  // Built inside the transaction, written after it commits — auditing from
+  // inside one either loses the entry (fire-and-forget promise abandoned on
+  // return) or holds this transaction's connection while logAudit checks out
+  // a second one from the same pool.
+  let audit: Parameters<typeof logAudit>[0] | null = null;
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
@@ -82,7 +87,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           });
         }
 
-        void logAudit({
+        audit = {
           tenantId: req.headers.get('x-tenant-id') ?? undefined,
           userId: req.headers.get('x-user-id') ?? 'system',
           userRole: req.headers.get('x-user-role') ?? 'DRIVER',
@@ -90,7 +95,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           entityId: params.id,
           action: 'UPDATE',
           details: `Pre-trip check ${assessment.overallPass ? 'PASS' : `FAIL (${assessment.blockingFailures.length} blocking)`} — ${items.filter((i: { ok: boolean }) => i.ok).length}/${items.length} items OK.`,
-        });
+        };
 
         return NextResponse.json({ check, assessment }, { status: 201 });
         } catch (err) {
@@ -98,5 +103,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         return NextResponse.json({ error: 'Failed to record check' }, { status: 500 });
       }
   });
+  if (audit) await logAudit(audit);
+  return response;
+
 }
 

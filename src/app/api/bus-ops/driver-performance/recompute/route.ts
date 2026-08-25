@@ -32,7 +32,13 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  // Built inside the transaction, written after it commits — auditing from
+  // inside one either loses the entry (fire-and-forget promise abandoned on
+  // return) or holds this transaction's connection while logAudit checks out
+  // a second one from the same pool.
+  let audit: Parameters<typeof logAudit>[0] | null = null;
+
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     const cronSecret = process.env.CRON_SECRET;
       if (cronSecret && !req.headers.get('x-tenant-id')) {
         const auth = req.headers.get('authorization');
@@ -143,13 +149,13 @@ export async function POST(req: NextRequest) {
         }
 
         if (upserted > 0) {
-          void logAudit({
+          audit = {
             userId: req.headers.get('x-user-id') ?? 'system:cron',
             userRole: 'SYSTEM',
             entityType: 'DriverPerformance',
             action: 'UPDATE',
             details: `Driver performance recomputed for ${year}-${String(month).padStart(2, '0')}: ${upserted} drivers scored, ${errors} errors.`,
-          });
+          };
         }
 
         return NextResponse.json({
@@ -161,5 +167,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Recompute failed' }, { status: 500 });
       }
   });
+
+  if (audit) await logAudit(audit);
+  return response;
 }
 

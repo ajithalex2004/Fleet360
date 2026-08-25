@@ -78,9 +78,16 @@ export async function PUT(req: NextRequest) {
     const newLevel = body.level;
 
     await ensureShipperPortalTables();
+    // Built inside the transaction, written after it commits. Auditing from
+    // inside an interactive transaction loses the entry: a fire-and-forget
+    // promise is abandoned when the callback returns, and awaiting it holds
+    // this transaction's connection while logAudit checks out a second one
+    // from the same pool.
+    let audit: Parameters<typeof logAudit>[0] | null = null;
+
     // Read the previous value for the audit entry, then write — all under
     // the tenant-scoped transaction.
-    return await withTenantRls(prisma, tenantId, async (tx) => {
+    const response = await withTenantRls(prisma, tenantId, async (tx) => {
       const prevRows = await tx.$queryRawUnsafe<Array<{ level: string | null }>>(
         `SELECT default_portal_tracking_level AS level FROM tenant_settings WHERE tenant_id = $1 LIMIT 1`,
         tenantId,
@@ -89,7 +96,7 @@ export async function PUT(req: NextRequest) {
 
       await setTenantTrackingDefault({ tenantId, level: newLevel });
 
-      void logAudit({
+      audit = {
         tenantId,
         userId,
         userRole: req.headers.get('x-user-role') ?? 'TENANT_ADMIN',
@@ -98,10 +105,13 @@ export async function PUT(req: NextRequest) {
         entityName: 'Portal tracking default',
         action: 'UPDATE',
         details: `Set tenant-wide default portal tracking visibility to ${newLevel} (was ${previousLevel})`,
-      });
+      };
 
       return NextResponse.json({ ok: true, level: newLevel });
     });
+
+    if (audit) await logAudit(audit);
+    return response;
   } catch (e) {
     console.error('[admin/tenant-settings/tracking-visibility] PUT', e);
     return NextResponse.json({ error: 'Failed to update' }, { status: 500 });

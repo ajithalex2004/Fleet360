@@ -40,7 +40,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  // Built inside the transaction, written after it commits — auditing from
+  // inside one either loses the entry (fire-and-forget promise abandoned on
+  // return) or holds this transaction's connection while logAudit checks out
+  // a second one from the same pool.
+  let audit: Parameters<typeof logAudit>[0] | null = null;
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     const { id } = await params;
       const lang: Lang = req.nextUrl.searchParams.get('lang') === 'ar' ? 'ar' : 'en';
       const download = req.nextUrl.searchParams.get('download') === '1';
@@ -112,7 +117,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
         const buffer = await renderPdf(createElement(BusManifestPdf, { data, lang }));
 
-        void logAudit({
+        audit = {
           tenantId: req.headers.get('x-tenant-id') ?? undefined,
           userId: req.headers.get('x-user-id') ?? 'system',
           userRole: req.headers.get('x-user-role') ?? 'STAFF',
@@ -120,7 +125,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           entityId: id,
           action: 'EXPORT',
           details: `Manifest PDF (${lang.toUpperCase()}) exported for trip ${schedule.tripNumber ?? id.slice(0, 8)} — ${passengers.length} passengers.`,
-        });
+        };
 
         const filename = `manifest-${data.manifestNo}.pdf`;
         return new Response(buffer, {
@@ -136,6 +141,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         return jsonErr('Failed to generate manifest', 500);
       }
   });
+  if (audit) await logAudit(audit);
+  return response;
+
 }
 
 

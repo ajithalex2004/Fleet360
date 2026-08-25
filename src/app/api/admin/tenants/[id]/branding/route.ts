@@ -89,8 +89,14 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   if (body.primaryColor && body.primaryColor.trim() && primaryColor === null) return NextResponse.json({ ok: false, error: 'primaryColor must be #rgb or #rrggbb.' }, { status: 400 });
   if (body.accentColor  && body.accentColor.trim()  && accentColor  === null) return NextResponse.json({ ok: false, error: 'accentColor must be #rgb or #rrggbb.' }, { status: 400 });
 
+  // Built inside the transaction, written after it commits — auditing from
+  // inside one either loses the entry (fire-and-forget promise abandoned on
+  // return) or holds this transaction's connection while logAudit checks out
+  // a second one from the same pool.
+  let audit: Parameters<typeof logAudit>[0] | null = null;
+
   try {
-    return await withTenantRls(prisma, tenantId, async (tx) => {
+    const response = await withTenantRls(prisma, tenantId, async (tx) => {
       await ensureBrandingColumns();
       const tenant = await tx.tenant.findUnique({
         where: { id: tenantId },
@@ -114,7 +120,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         tenantId,
       );
 
-      void logAudit({
+      audit = {
         tenantId, tenantName: tenant.name,
         userId: auth.userId, userRole: 'TENANT_ADMIN',
         entityType: 'Branding',
@@ -125,11 +131,14 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
           accentColor  ? `accent=${accentColor}`   : null,
           logoUrl ? 'logoUrl set' : null,
         ].filter(Boolean).join('; ') || 'cleared'}.`,
-      });
+      };
 
       const fresh = await getBranding(tenantId);
       return NextResponse.json({ ok: true, branding: fresh });
     });
+
+    if (audit) await logAudit(audit);
+    return response;
     } catch (err) {
     captureException(err, { context: 'admin.branding.put' });
     return NextResponse.json({ ok: false, error: 'Failed to save branding' }, { status: 500 });
