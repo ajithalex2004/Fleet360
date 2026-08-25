@@ -20,6 +20,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 import crypto from 'crypto';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
@@ -111,12 +112,17 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 2. Ensure SUPER_ADMIN role exists on the platform tenant
-    let role = await prisma.role.findFirst({
-      where: { code: 'SUPER_ADMIN', tenantId: tenant.id },
-    });
-    if (!role) {
-      role = await prisma.role.create({
+    // 2. Ensure SUPER_ADMIN role exists on the platform tenant.
+    //    roles is RLS-protected and this is the install-time bootstrap — there
+    //    is no session or tenant context yet — so it runs under platform scope.
+    //    Unscoped, the find returns nothing and the create is refused by
+    //    WITH CHECK once the app connects as a non-bypassing role.
+    const role = await withPlatformAdmin(prisma, async (tx) => {
+      const found = await tx.role.findFirst({
+        where: { code: 'SUPER_ADMIN', tenantId: tenant.id },
+      });
+      if (found) return found;
+      return tx.role.create({
         data: {
           id:          crypto.randomUUID(),
           name:        'Super Admin',
@@ -126,7 +132,7 @@ export async function POST(request: NextRequest) {
           description: 'Full platform-wide administrative access',
         },
       });
-    }
+    });
 
     // 3. Find or create the user
     let user = await prisma.user.findUnique({ where: { email } });
@@ -160,27 +166,32 @@ export async function POST(request: NextRequest) {
       } catch { /* try next */ }
     }
 
-    // 5. Upsert user-tenant assignment with SUPER_ADMIN role
-    const existingUT = await prisma.userTenant.findUnique({
-      where: { userId_tenantId: { userId: user.id, tenantId: tenant.id } },
-    });
+    // 5. Upsert user-tenant assignment with SUPER_ADMIN role.
+    //    user_tenants is RLS-protected; same bootstrap reasoning as step 2.
+    //    Grouping the read and write also makes this atomic, which it was not.
+    const boundUser = user;
+    await withPlatformAdmin(prisma, async (tx) => {
+      const existingUT = await tx.userTenant.findUnique({
+        where: { userId_tenantId: { userId: boundUser.id, tenantId: tenant.id } },
+      });
 
-    if (existingUT) {
-      await prisma.userTenant.update({
-        where: { id: existingUT.id },
-        data:  { roleId: role.id, isActive: true },
-      });
-    } else {
-      await prisma.userTenant.create({
-        data: {
-          id:       crypto.randomUUID(),
-          userId:   user.id,
-          tenantId: tenant.id,
-          roleId:   role.id,
-          isActive: true,
-        },
-      });
-    }
+      if (existingUT) {
+        await tx.userTenant.update({
+          where: { id: existingUT.id },
+          data:  { roleId: role.id, isActive: true },
+        });
+      } else {
+        await tx.userTenant.create({
+          data: {
+            id:       crypto.randomUUID(),
+            userId:   boundUser.id,
+            tenantId: tenant.id,
+            roleId:   role.id,
+            isActive: true,
+          },
+        });
+      }
+    });
 
     // 6. Ensure password_hash column exists
     try {

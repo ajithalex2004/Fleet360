@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const STATUS_LABEL: Record<string, string> = {
@@ -48,7 +49,15 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ ref: str
   if (!ref) return NextResponse.json({ error: 'Missing reference' }, { status: 400 });
 
   try {
-    const shipment = await findShipmentByPublicRef(ref);
+    // Scoped with withTenantRls: logistics_shipment_orders,
+    // logistics_tracking_events and logistics_pod_events are all
+    // RLS-protected. Despite the "public tracking" framing in the docblock
+    // above, this route requires an authorised tenant, so scoping to it is
+    // consistent — a caller can only track their own tenant's shipments.
+    // Unscoped, the lookup finds nothing and this returns
+    // "Tracking reference not found" for every reference.
+    return await withTenantRls(prisma, tenantId, async (tx) => {
+    const shipment = await findShipmentByPublicRef(tx, ref);
     if (!shipment) {
       return NextResponse.json({ error: 'Tracking reference not found.' }, { status: 404 });
     }
@@ -56,7 +65,7 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ ref: str
     const status = LEGACY_STATUS[shipment.status] ?? shipment.status ?? 'PENDING';
     const currentIdx = STATUS_ORDER.indexOf(status);
     const [events, podRows] = await Promise.all([
-      prisma.$queryRawUnsafe<Array<{
+      tx.$queryRawUnsafe<Array<{
         event_type: string;
         status: string | null;
         occurred_at: Date;
@@ -70,7 +79,7 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ ref: str
         shipment.tenant_id,
         shipment.id,
       ).catch(() => []),
-      prisma.$queryRawUnsafe<Array<{
+      tx.$queryRawUnsafe<Array<{
         delivered_at: Date | null;
         recipient_name: string | null;
         gps: unknown;
@@ -150,14 +159,18 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ ref: str
         gps: pod.gps,
       } : null,
     });
+    });
     } catch (err) {
     console.error('[track GET]', err);
     return NextResponse.json({ error: 'Unable to retrieve tracking information.' }, { status: 500 });
   }
 }
 
-async function findShipmentByPublicRef(ref: string) {
-  const rows = await prisma.$queryRawUnsafe<Array<{
+async function findShipmentByPublicRef(
+  client: { $queryRawUnsafe: <T>(sql: string, ...a: unknown[]) => Promise<T> },
+  ref: string,
+) {
+  const rows = await client.$queryRawUnsafe<Array<{
     id: string;
     tenant_id: string;
     shipment_no: string;

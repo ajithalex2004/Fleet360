@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 import { ensureInvitationTable, hashInvitationToken } from '@/lib/invitations';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
@@ -24,7 +25,13 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
   await ensureInvitationTable();
   const tokenHash = hashInvitationToken(token);
 
-  const rows = await prisma.$queryRawUnsafe<Array<{
+  // withPlatformAdmin: an invitation is resolved BY ITS TOKEN, before the
+  // recipient has any tenant context — the tenant is what this lookup
+  // returns. tenant_invitations, roles and tenants are all RLS-protected, so
+  // unscoped this finds nothing once the app connects as a role that doesn't
+  // bypass RLS, and the .catch() below turns that into "Invitation not found".
+  // The security boundary is the token hash, which is unguessable.
+  const rows = await withPlatformAdmin(prisma, (tx) => tx.$queryRawUnsafe<Array<{
     id: string; tenant_id: string; email: string; role_id: string; role_name: string;
     tenant_name: string; tenant_active: boolean;
     expires_at: string; used_at: string | null; revoked: boolean;
@@ -42,7 +49,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
      WHERE i.token_hash = $1
      LIMIT 1`,
     tokenHash,
-  ).catch(() => []);
+  )).catch(() => []);
 
   if (rows.length === 0) {
     return NextResponse.json({ ok: false, error: 'Invitation not found.' }, { status: 404 });

@@ -16,6 +16,7 @@ import {
   hashPassword, verifyPassword, validatePassword, DEFAULT_PASSWORD_POLICY,
 } from '@/lib/password-policy';
 import { signSession } from '@/lib/tenant-session';
+import { withPlatformAdmin } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -43,7 +44,11 @@ export async function POST(req: NextRequest) {
   await ensureInvitationTable();
   const tokenHash = hashInvitationToken(token);
 
-  const rows = await prisma.$queryRawUnsafe<Array<{
+  // Resolved BY TOKEN, before the recipient has any tenant context — the
+  // tenant is what this returns. tenant_invitations is RLS-protected, so
+  // unscoped this finds nothing under enforcement and the .catch() turns that
+  // into "Invitation not found". The token hash is the security boundary.
+  const rows = await withPlatformAdmin(prisma, (tx) => tx.$queryRawUnsafe<Array<{
     id: string; tenant_id: string; email: string; role_id: string;
     expires_at: string; used_at: string | null; revoked: boolean;
   }>>(
@@ -52,7 +57,7 @@ export async function POST(req: NextRequest) {
      WHERE token_hash = $1
      LIMIT 1`,
     tokenHash,
-  ).catch(() => []);
+  )).catch(() => []);
 
   if (rows.length === 0) {
     return NextResponse.json({ ok: false, error: 'Invitation not found.' }, { status: 404 });
@@ -65,10 +70,12 @@ export async function POST(req: NextRequest) {
   }
 
   // Confirm tenant + role still exist and are valid.
-  const [tenant, role] = await Promise.all([
-    prisma.tenant.findUnique({ where: { id: inv.tenant_id }, select: { id: true, name: true, plan: true, isActive: true } }),
-    prisma.role.findUnique({ where: { id: inv.role_id }, select: { id: true, code: true } }),
-  ]);
+  // roles is RLS-protected; tenants is not. Both read under platform scope
+  // since the invitee still has no tenant context of their own.
+  const [tenant, role] = await withPlatformAdmin(prisma, (tx) => Promise.all([
+    tx.tenant.findUnique({ where: { id: inv.tenant_id }, select: { id: true, name: true, plan: true, isActive: true } }),
+    tx.role.findUnique({ where: { id: inv.role_id }, select: { id: true, code: true } }),
+  ]));
   if (!tenant || !tenant.isActive) {
     return NextResponse.json({ ok: false, error: 'Organisation is no longer active.' }, { status: 400 });
   }
@@ -91,28 +98,37 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: false, error: 'Existing account is disabled. Ask your administrator.' }, { status: 403 });
       }
 
-      // Add UserTenant if missing; if dormant, reactivate.
-      const existingMembership = await prisma.userTenant.findUnique({
-        where: { userId_tenantId: { userId: existing.id, tenantId: tenant.id } },
-      }).catch(() => null);
+      // Add UserTenant if missing; if dormant, reactivate. Then consume the
+      // invitation.
+      //
+      // Grouped under one withPlatformAdmin: user_tenants and
+      // tenant_invitations are both RLS-protected, and these ran unscoped and
+      // non-atomically before — a failure between granting membership and
+      // marking the invitation used left a reusable invitation. This matches
+      // how the new-user path below already works.
+      await withPlatformAdmin(prisma, async (tx) => {
+        const existingMembership = await tx.userTenant.findUnique({
+          where: { userId_tenantId: { userId: existing.id, tenantId: tenant.id } },
+        }).catch(() => null);
 
-      if (existingMembership) {
-        if (!existingMembership.isActive) {
-          await prisma.userTenant.update({
-            where: { id: existingMembership.id },
-            data:  { isActive: true, roleId: role.id },
+        if (existingMembership) {
+          if (!existingMembership.isActive) {
+            await tx.userTenant.update({
+              where: { id: existingMembership.id },
+              data:  { isActive: true, roleId: role.id },
+            });
+          }
+        } else {
+          await tx.userTenant.create({
+            data: { id: crypto.randomUUID(), userId: existing.id, tenantId: tenant.id, roleId: role.id, isActive: true },
           });
         }
-      } else {
-        await prisma.userTenant.create({
-          data: { id: crypto.randomUUID(), userId: existing.id, tenantId: tenant.id, roleId: role.id, isActive: true },
-        });
-      }
 
-      await prisma.$executeRawUnsafe(
-        `UPDATE tenant_invitations SET used_at = NOW() WHERE id = $1::uuid`,
-        inv.id,
-      );
+        await tx.$executeRawUnsafe(
+          `UPDATE tenant_invitations SET used_at = NOW() WHERE id = $1::uuid`,
+          inv.id,
+        );
+      });
 
       void logAudit({
         tenantId: tenant.id, tenantName: tenant.name,
@@ -153,7 +169,12 @@ export async function POST(req: NextRequest) {
     const newUserId = crypto.randomUUID();
     const pwHash    = hashPassword(password);
 
-    await prisma.$transaction(async (tx) => {
+    // withPlatformAdmin rather than a bare $transaction: this writes
+    // user_tenants and tenant_invitations, both RLS-protected, and a plain
+    // transaction sets no app.tenant_id. Under enforcement the membership
+    // insert would be refused by WITH CHECK and the invitation update would
+    // match zero rows. Still one transaction, so atomicity is unchanged.
+    await withPlatformAdmin(prisma, async (tx) => {
       await tx.user.create({
         data: {
           id:        newUserId,
