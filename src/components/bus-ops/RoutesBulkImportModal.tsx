@@ -187,6 +187,33 @@ interface ImportResult {
   replayed?: boolean;
 }
 
+/**
+ * Turn a failed import response into something an operator can act on.
+ *
+ * A 401 here is almost always an expired session (24 h — see maxAge in
+ * auth/login). middleware.ts rejects the request before it reaches the route,
+ * returning a bare `{ error: 'Unauthorized' }`, and this modal used to render
+ * that one word verbatim. A document navigation would have been redirected to
+ * /login, but an in-page POST just surfaces the string, so a tab left open
+ * overnight dead-ends with no hint that signing in again is the fix.
+ *
+ * The parsed rows survive: parsing is entirely client-side, so re-authenticating
+ * in another tab and clicking Import again works without re-picking the file.
+ * Say so, because nothing else on screen indicates it.
+ */
+function describeRequestFailure(
+  status: number,
+  data: { error?: string; message?: string },
+): string {
+  if (status === 401) {
+    return 'Your session has expired. Sign in again — in another tab is fine — then click Import. Your file is still loaded.';
+  }
+  if (status === 403) {
+    return data.error ?? 'You do not have permission to import routes.';
+  }
+  return data.error ?? data.message ?? `HTTP ${status}`;
+}
+
 // ── Parser ──────────────────────────────────────────────────────────────────
 
 function parseWorkbook(buffer: ArrayBuffer): { headers: string[]; unknownHeaders: string[]; rows: CanonicalRow[] } {
@@ -400,8 +427,8 @@ export default function RoutesBulkImportModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows: validRows.map(({ __row, __errors, ...r }) => r) }),
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? `HTTP ${res.status}`); return; }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(describeRequestFailure(res.status, data)); return; }
       setPreviewResult(data as ImportResult);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -418,8 +445,8 @@ export default function RoutesBulkImportModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows: validRows.map(({ __row, __errors, ...r }) => r) }),
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? `HTTP ${res.status}`); return; }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(describeRequestFailure(res.status, data)); return; }
       setCommitResult(data as ImportResult);
       onImported();
     } catch (e) {
