@@ -323,4 +323,72 @@ describe('analyzeConsolidations — ranking', () => {
     expect(r.totals.pairsRecommended).toBe(1);
     expect(r.totals.pairsInfeasible).toBe(0);
   });
+
+  // ─── Unknown / malformed timing ────────────────────────────────────
+  //
+  // Regression cover for the failure behind the 2026-08-20 revert, where a
+  // 03:45 route was recommended for merging with a 12:00 one. The proximity
+  // filter now exists, but two ways of evading it remained: an unparseable
+  // value compared as "0 minutes apart", and an absent value skipped the
+  // check with no trace in the output.
+
+  it('skips a pair when a departure time exists but is not valid HH:MM', async () => {
+    const r = await analyze(facts([
+      route({ id: 'r1', representativeDepartureTime: '03:45' }),
+      // Realistic corruption: a value that kept its seconds component.
+      // parseTimeToMinutes rejects it, which used to mean "0 apart".
+      route({ id: 'r2', representativeDepartureTime: '12:00:00' }),
+    ]));
+    expect(r.totals.pairsSurvivingFilters).toBe(0);
+    expect(r.skipped).toHaveLength(1);
+    expect(r.skipped[0].reason).toBe('UNKNOWN_DEPARTURE_TIME');
+    expect(r.skipped[0].detail).toContain('unparseable');
+    expect(r.skipped[0].detail).toContain('12:00:00');
+  });
+
+  it('still enforces the proximity threshold on well-formed far-apart times', async () => {
+    const r = await analyze(facts([
+      route({ id: 'r1', representativeDepartureTime: '03:45' }),
+      route({ id: 'r2', representativeDepartureTime: '12:00' }),
+    ]));
+    expect(r.totals.pairsSurvivingFilters).toBe(0);
+    expect(r.skipped[0].reason).toBe('DEPARTURE_TIME_TOO_FAR');
+    expect(r.skipped[0].detail).toContain('495 min apart'); // not 945 — wraps
+  });
+
+  it('treats an absent departure time as inert by default', async () => {
+    const r = await analyze(facts([
+      route({ id: 'r1', representativeDepartureTime: null }),
+      route({ id: 'r2', representativeDepartureTime: '12:00' }),
+    ]));
+    // Long-standing behaviour: a route with no time recorded is simply not
+    // timing-checked, so the pair proceeds on the remaining filters.
+    expect(r.totals.pairsSurvivingFilters).toBe(1);
+  });
+
+  it('skips an absent departure time when requireKnownTimes is set', async () => {
+    const r = await analyze(
+      facts([
+        route({ id: 'r1', representativeDepartureTime: null }),
+        route({ id: 'r2', representativeDepartureTime: '12:00' }),
+      ]),
+      { requireKnownTimes: true },
+    );
+    expect(r.totals.pairsSurvivingFilters).toBe(0);
+    expect(r.skipped[0].reason).toBe('UNKNOWN_DEPARTURE_TIME');
+    expect(r.skipped[0].detail).toContain('no time recorded for route A');
+  });
+
+  it('reports malformed times even when requireKnownTimes is off', async () => {
+    // The opt-in gates *absent* times only; corruption is always disqualifying.
+    const r = await analyze(
+      facts([
+        route({ id: 'r1', representativeDepartureTime: 'not-a-time' }),
+        route({ id: 'r2', representativeDepartureTime: null }),
+      ]),
+      { requireKnownTimes: false },
+    );
+    expect(r.skipped[0].reason).toBe('UNKNOWN_DEPARTURE_TIME');
+    expect(r.skipped[0].detail).toContain('unparseable');
+  });
 });

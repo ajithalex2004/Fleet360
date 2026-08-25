@@ -90,6 +90,8 @@ type SkipReason =
   | 'DIFFERENT_DIRECTION'
   | 'DEPARTURE_TIME_TOO_FAR'
   | 'ARRIVAL_TIME_TOO_FAR'
+  | 'UNKNOWN_DEPARTURE_TIME'
+  | 'UNKNOWN_ARRIVAL_TIME'
   | 'PICKUP_ZONE_INCOMPATIBLE'
   | 'DROPOFF_ZONE_INCOMPATIBLE'
   | 'ZONE_DATA_UNAVAILABLE'
@@ -621,6 +623,8 @@ function describeSkipReason(reason: SkipReason): string {
     case 'DIFFERENT_DIRECTION':      return 'Representative TripSchedule directions differ (INBOUND vs OUTBOUND).';
     case 'DEPARTURE_TIME_TOO_FAR':    return 'Routes\' departure times are further apart than the tenant\'s departure-proximity threshold.';
     case 'ARRIVAL_TIME_TOO_FAR':      return 'Routes leave close together but their arrival times are further apart than the tenant\'s arrival-proximity threshold — likely very different trip durations.';
+    case 'UNKNOWN_DEPARTURE_TIME':    return 'Departure timing couldn\'t be checked — a route has no departure time recorded, or the stored value isn\'t valid HH:MM. Set the route\'s departure time (or give it a TripSchedule) and re-analyse.';
+    case 'UNKNOWN_ARRIVAL_TIME':      return 'Arrival timing couldn\'t be checked — a route has no expected arrival time recorded, or the stored value isn\'t valid HH:MM. Set it (or give the route a TripSchedule) and re-analyse.';
     case 'PICKUP_ZONE_INCOMPATIBLE':  return 'Pickup ends are in different spatial zones, or too far apart under the distance fallback.';
     case 'DROPOFF_ZONE_INCOMPATIBLE': return 'Dropoff ends are in different spatial zones, or too far apart under the distance fallback.';
     case 'ZONE_DATA_UNAVAILABLE':     return 'Neither placeId nor GPS coords are usable on at least one route end. Backfill spatial.places or stop coordinates.';
