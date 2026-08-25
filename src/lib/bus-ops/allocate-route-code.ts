@@ -26,6 +26,15 @@ export function routeCodePrefix(routeType?: string | null): RouteCodePrefix {
  * Next code for this tenant + prefix: PREFIX-0001, PREFIX-0002, …
  * Only considers codes matching ^PREFIX-digits$ so free-form overrides
  * don't break the sequence.
+ *
+ * Deliberately counts soft-deleted routes. The unique index above has no
+ * `deleted_at IS NULL` clause, so a soft-deleted row keeps owning its code —
+ * skipping those here would hand out a code the index still refuses, and every
+ * create would fail with P2002. That is not theoretical: a tenant that had
+ * soft-deleted all of its routes got `max = 0` and was issued RT-0001 for every
+ * row of a 14-route import, all of which collided with the deleted RT-0001.
+ * Codes are cheap; reusing a deleted route's code would also make audit and
+ * consolidation history ambiguous.
  */
 export async function allocateNextRouteCode(
   db: Db,
@@ -40,7 +49,6 @@ export async function allocateNextRouteCode(
   const rows = await db.busRoute.findMany({
     where: {
       tenantId,
-      deletedAt: null,
       code: { not: null },
     },
     select: { code: true },

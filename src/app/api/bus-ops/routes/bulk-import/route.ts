@@ -165,9 +165,15 @@ export async function POST(req: NextRequest) {
 
         for (const plan of [outbound, inbound]) {
           try {
+            // Must allocate through `tx`, not the outer `prisma`: the outer
+            // client checks out a second pool connection while this
+            // transaction still holds one (an exhaustion risk under
+            // concurrency), and it cannot see routes created earlier in this
+            // same transaction — so every row in a batch would be handed the
+            // same code and all but the first would collide.
             const code =
               plan.explicitCode ??
-              (await allocateNextRouteCode(prisma, tenantId, 'STAFF'));
+              (await allocateNextRouteCode(tx, tenantId, 'STAFF'));
             const route = await tx.busRoute.create({
               data: {
                 tenantId,
@@ -229,7 +235,13 @@ export async function POST(req: NextRequest) {
         // Store result for replay. Failure to persist is non-fatal — worst case
         // a duplicate submit does the work twice.
         const expiresAt = new Date(Date.now() + IDEMPOTENCY_TTL_HOURS * 60 * 60 * 1000);
-        tx.$executeRawUnsafe(
+        // Must be awaited. An un-awaited promise inside an interactive
+        // transaction callback is abandoned when the callback returns, so the
+        // ledger row usually never lands and replay protection silently does
+        // nothing — the same floating-promise failure as the `void logAudit`
+        // pattern fixed elsewhere in this codebase. Still best-effort: the
+        // .catch keeps a ledger failure from failing the import itself.
+        await tx.$executeRawUnsafe(
           `INSERT INTO bulk_import_jobs (tenant_id, idempotency_key, body_hash, result, expires_at)
            VALUES ($1::uuid, $2, $3, $4::jsonb, $5::timestamptz)
            ON CONFLICT (tenant_id, idempotency_key) DO UPDATE
