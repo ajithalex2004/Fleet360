@@ -72,12 +72,19 @@ export default function RouteConsolidationHistoryPanel() {
     setDeleteBusy(true); setDeleteError(null);
     const failures: string[] = [];
     let ok = 0;
+    let gone = 0;
 
     for (const row of deleting) {
       try {
         const res = await fetch(`/api/bus-ops/route-consolidations/${row.id}`, { method: 'DELETE' });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) failures.push(`${row.id.slice(0, 8)}: ${data?.error ?? `HTTP ${res.status}`}`);
+        // 404 means the row is already absent, which is the outcome the
+        // operator asked for — delete is idempotent. This list is only
+        // refetched on mount, so a tab left open while the rows were removed
+        // elsewhere will offer stale ids; reporting that as a failure makes a
+        // successful state look broken. Count it and let load() reconcile.
+        if (res.status === 404) gone++;
+        else if (!res.ok) failures.push(`${row.id.slice(0, 8)}: ${data?.error ?? `HTTP ${res.status}`}`);
         else ok++;
       } catch (e) {
         failures.push(`${row.id.slice(0, 8)}: ${e instanceof Error ? e.message : 'request failed'}`);
@@ -87,7 +94,8 @@ export default function RouteConsolidationHistoryPanel() {
     setDeleteBusy(false);
     if (failures.length) {
       // Keep the panel open so the operator sees exactly which failed.
-      setDeleteError(`Deleted ${ok} of ${deleting.length}. Failed — ${failures.join('; ')}`);
+      const staleNote = gone ? ` ${gone} had already been removed.` : '';
+      setDeleteError(`Deleted ${ok} of ${deleting.length}.${staleNote} Failed — ${failures.join('; ')}`);
     } else {
       setDeleting(null);
     }
@@ -290,7 +298,7 @@ export default function RouteConsolidationHistoryPanel() {
                 type="button"
                 disabled={deleteBusy}
                 onClick={() => void confirmDelete()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/40 bg-rose-500/20 px-3 py-1.5 text-xs text-rose-100 hover:bg-rose-500/30 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/40 bg-rose-500/20 px-3 py-1.5 text-xs font-semibold text-rose-200 hover:bg-rose-500/30 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 {deleteBusy ? 'Deleting…' : 'Delete permanently'}

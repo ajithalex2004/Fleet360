@@ -463,13 +463,13 @@ export default function RoutesBulkImportModal({
               onClick={downloadTemplateXlsx}
               className="inline-flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 text-sm"
             >
-              <Download className="w-4 h-4" /> Template (.xlsx)
+              <Download className="w-4 h-4" /> Download Template (.xlsx)
             </button>
             <button
               onClick={downloadTemplateCsv}
               className="inline-flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 text-sm"
             >
-              <Download className="w-4 h-4" /> Template (.csv)
+              <Download className="w-4 h-4" /> Download Template (.csv)
             </button>
             {fileName && <span className="text-xs text-slate-400 truncate">{fileName}</span>}
           </div>
