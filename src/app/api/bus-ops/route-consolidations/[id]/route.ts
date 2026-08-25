@@ -57,8 +57,17 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
     return NextResponse.json({ error: 'consolidation id is required' }, { status: 400 });
   }
 
+  // Filled inside the transaction, written after it commits. Auditing from
+  // inside an interactive transaction is unsafe in both directions: a
+  // fire-and-forget promise is abandoned when the callback returns (the entry
+  // silently never lands), and awaiting it holds the transaction's connection
+  // while logAudit checks out a second one from the same pool — which can
+  // exhaust the pool under concurrency. Recording the payload and writing it
+  // once the transaction has closed avoids both.
+  let auditDetails: string | null = null;
+
   try {
-    return await withTenantRls(prisma, tenantId, async (tx) => {
+    const response = await withTenantRls(prisma, tenantId, async (tx) => {
       // Read inside the transaction, scoped by tenant. findFirst (not
       // findUnique) so another tenant's id reads as absent rather than
       // forbidden — same 404 either way, nothing leaks.
@@ -96,26 +105,14 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
       });
       await tx.routeConsolidation.delete({ where: { id: consolidationId } });
 
-      // Deleting an audit row is itself auditable, so this is awaited rather
-      // than fire-and-forget: an un-awaited promise here was silently dropped
-      // when the handler returned, and the entry never landed. logAudit
-      // swallows its own errors, so awaiting still can't fail the delete.
-      await logAudit({
-        tenantId,
-        userId,
-        userRole: req.headers.get('x-user-role') ?? undefined,
-        entityType: 'RouteConsolidation',
-        entityId: consolidationId,
-        action: 'DELETE',
-        details:
-          `Deleted REVERTED consolidation ${consolidationId.slice(0, 8)} ` +
-          `(applied ${existing.appliedAt.toISOString()}` +
-          `${existing.mergedRouteId ? `, merged route ${existing.mergedRouteId.slice(0, 8)}` : ''}) — ` +
-          `${sourcesDeleted.count} source row(s), ` +
-          `${enrollmentMigrationsDeleted.count} enrolment-migration row(s).`,
-        ipAddress: req.headers.get('x-forwarded-for') ?? undefined,
-        userAgent: req.headers.get('user-agent') ?? undefined,
-      });
+      // Deleting an audit row is itself auditable. Only the message is built
+      // here; the write happens after the transaction closes (see above).
+      auditDetails =
+        `Deleted REVERTED consolidation ${consolidationId.slice(0, 8)} ` +
+        `(applied ${existing.appliedAt.toISOString()}` +
+        `${existing.mergedRouteId ? `, merged route ${existing.mergedRouteId.slice(0, 8)}` : ''}) — ` +
+        `${sourcesDeleted.count} source row(s), ` +
+        `${enrollmentMigrationsDeleted.count} enrolment-migration row(s).`;
 
       return NextResponse.json({
         deleted: true,
@@ -124,6 +121,25 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
         enrollmentMigrationsDeleted: enrollmentMigrationsDeleted.count,
       });
     });
+
+    // Transaction has committed and released its connection. Awaiting here is
+    // safe and makes the audit trail authoritative for a destructive action —
+    // logAudit swallows its own errors, so it still cannot fail the delete.
+    if (auditDetails) {
+      await logAudit({
+        tenantId,
+        userId,
+        userRole: req.headers.get('x-user-role') ?? undefined,
+        entityType: 'RouteConsolidation',
+        entityId: consolidationId,
+        action: 'DELETE',
+        details: auditDetails,
+        ipAddress: req.headers.get('x-forwarded-for') ?? undefined,
+        userAgent: req.headers.get('user-agent') ?? undefined,
+      });
+    }
+
+    return response;
   } catch (e) {
     console.error('[route-consolidations.delete]', e);
     return NextResponse.json({ error: 'Delete failed' }, { status: 500 });
