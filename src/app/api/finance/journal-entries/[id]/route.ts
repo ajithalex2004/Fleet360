@@ -1,6 +1,8 @@
 /**
  * Journal Entry individual operations — status transitions + reversal
- * All reads and writes are scoped to the tenant from x-tenant-id.
+ *
+ * All reads and writes are scoped to the tenantId returned by
+ * requireAuthorizedTenant, never to the raw x-tenant-id header.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
@@ -8,10 +10,6 @@ import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type JeRow = Record<string, unknown>;
-
-function getTenant(req: NextRequest): string | null {
-  return req.headers.get('x-tenant-id');
-}
 
 // ── GET /api/finance/journal-entries/:id ─────────────────────────────────────
 
@@ -25,10 +23,10 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    const tenantId = getTenant(req);
-      if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-      const tenantClause = tenantId === '*' ? '' : `AND je.tenant_id = '${tenantId}'`;
+      // Interpolation is safe here: tenantId comes from requireAuthorizedTenant,
+      // which runs it through sanitizeTenantId() ([a-zA-Z0-9_-] only). The raw
+      // x-tenant-id header must never be used for this — it is unsanitised.
+      const tenantClause = `AND je.tenant_id = '${tenantId}'`;
 
       const [je] = await tx.$queryRawUnsafe<JeRow[]>(
         `SELECT je.*,
@@ -70,11 +68,6 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    const tenantId = getTenant(req);
-      if (!tenantId || tenantId === '*') {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
-
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
       const { action } = body;
@@ -86,7 +79,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       >(
         `SELECT status, je_number, entry_date, narration, total_debit, tenant_id
            FROM finance_journal_entries
-          WHERE id = $1 AND deleted_at IS NULL AND tenant_id = $2`,
+          WHERE id::text = $1 AND deleted_at IS NULL AND tenant_id = $2`,
         params.id, tenantId,
       ).catch(() => []);
 
@@ -102,7 +95,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           }
           sql = `UPDATE finance_journal_entries
                     SET status = 'SUBMITTED', updated_at = $2
-                  WHERE id = $1 AND tenant_id = $3
+                  WHERE id::text = $1 AND tenant_id = $3
                   RETURNING *`;
           sqlParams = [params.id, now, tenantId];
           break;
@@ -113,7 +106,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           }
           sql = `UPDATE finance_journal_entries
                     SET status = 'APPROVED', approved_by = $2, approved_at = $3, updated_at = $3
-                  WHERE id = $1 AND tenant_id = $4
+                  WHERE id::text = $1 AND tenant_id = $4
                   RETURNING *`;
           sqlParams = [params.id, body.approvedBy ?? req.headers.get('x-user-id') ?? 'Finance Manager', now, tenantId];
           break;
@@ -124,7 +117,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           }
           sql = `UPDATE finance_journal_entries
                     SET status = 'POSTED', posted_by = $2, posted_at = $3, updated_at = $3
-                  WHERE id = $1 AND tenant_id = $4
+                  WHERE id::text = $1 AND tenant_id = $4
                   RETURNING *`;
           sqlParams = [params.id, body.postedBy ?? req.headers.get('x-user-id') ?? 'Finance Manager', now, tenantId];
           break;
@@ -138,7 +131,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           }
           sql = `UPDATE finance_journal_entries
                     SET status = 'VOID', updated_at = $2, notes = COALESCE($3, notes)
-                  WHERE id = $1 AND tenant_id = $4
+                  WHERE id::text = $1 AND tenant_id = $4
                   RETURNING *`;
           sqlParams = [params.id, now, body.notes ?? null, tenantId];
           break;
@@ -218,7 +211,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           await tx.$executeRawUnsafe(
             `UPDATE finance_journal_entries
                 SET status = 'REVERSED', reversal_je_id = $2, updated_at = $3
-              WHERE id = $1 AND tenant_id = $4`,
+              WHERE id::text = $1 AND tenant_id = $4`,
             params.id, revId, now, tenantId,
           ).catch(() => {});
 
@@ -248,13 +241,8 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    const tenantId = getTenant(req);
-      if (!tenantId || tenantId === '*') {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
-
       const [je] = await tx.$queryRawUnsafe<{ status: string }[]>(
-        `SELECT status FROM finance_journal_entries WHERE id = $1 AND tenant_id = $2`,
+        `SELECT status FROM finance_journal_entries WHERE id::text = $1 AND tenant_id = $2`,
         params.id, tenantId,
       ).catch(() => [] as { status: string }[]);
 
@@ -267,7 +255,7 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
       }
 
       await tx.$executeRawUnsafe(
-        `UPDATE finance_journal_entries SET deleted_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+        `UPDATE finance_journal_entries SET deleted_at = NOW() WHERE id::text = $1 AND tenant_id = $2`,
         params.id, tenantId,
       ).catch(() => {});
 
