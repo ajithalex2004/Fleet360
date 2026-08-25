@@ -112,9 +112,18 @@ export async function withPlatformAdmin<T>(
 // limit the iteration to a single tenant (e.g. when a logged-in user
 // triggers a sweep manually for their own tenant).
 //
-// Inside `fn`, you can call `tx.$transaction(...)` (savepoint) to make
-// per-record work atomic — the outer wrap holds the connection and the
-// GUC, the savepoint gives you atomicity for one record.
+// Do NOT call `tx.$transaction(...)` inside `fn`. Prisma removes it from a
+// TransactionClient at runtime — the denylist is
+// ["$connect","$disconnect","$on","$transaction","$use","$extends"] — so the
+// call throws "tx.$transaction is not a function", which handlers typically
+// catch and report as a generic 500. (An earlier version of this comment
+// claimed savepoints worked here; that was wrong, and several handlers were
+// written against it.)
+//
+// You don't need one: everything `fn` does already runs inside the single
+// transaction this wrapper opened, so it is atomic as a whole. If you need a
+// genuine savepoint for per-record recovery, issue SAVEPOINT / ROLLBACK TO
+// via tx.$executeRawUnsafe.
 
 export interface SystemJobContext {
   tx: TxClient;

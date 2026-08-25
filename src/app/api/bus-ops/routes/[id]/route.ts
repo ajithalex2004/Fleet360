@@ -80,15 +80,26 @@ export async function PATCH(req: NextRequest, { params }: IdCtx) {
         // recreate from the payload so the DB matches what the operator saved in
         // the modal / planner. Skip when stops is undefined (e.g. Deactivate,
         // rename-only edits — no stop churn intended).
-        const route = Array.isArray(stops)
-          ? await tx.$transaction(async (tx) => {
-              await tx.routeStop.deleteMany({ where: { routeId: id } });
-              return tx.busRoute.update({
-                where: { id },
-                data: {
-                  ...data,
-                  updatedAt: new Date(),
-                  stops: stops.length > 0 ? {
+        // No inner transaction here: withTenantRls has already opened one, and
+        // Prisma strips $transaction from a TransactionClient at runtime
+        // (denylist: $connect, $disconnect, $on, $transaction, $use, $extends).
+        // Calling tx.$transaction threw "tx.$transaction is not a function",
+        // which the catch below turned into a bare 500 "Failed to update" — so
+        // saving from the Route Planner failed while rename/deactivate edits,
+        // which send no `stops` and skipped this branch, kept working.
+        // The delete and the update are atomic regardless: both run inside the
+        // transaction withTenantRls already holds.
+        if (Array.isArray(stops)) {
+          await tx.routeStop.deleteMany({ where: { routeId: id } });
+        }
+        const route = await tx.busRoute.update({
+          where: { id },
+          data: {
+            ...data,
+            updatedAt: new Date(),
+            ...(Array.isArray(stops) && stops.length > 0
+              ? {
+                  stops: {
                     create: stops.map((s: Record<string, unknown>, i: number) => ({
                       stopName:             (s.stopName as string) ?? '',
                       sequence:             (s.sequence as number | undefined) ?? i + 1,
@@ -97,16 +108,12 @@ export async function PATCH(req: NextRequest, { params }: IdCtx) {
                       landmark:             (s.landmark as string | null | undefined) ?? null,
                       estimatedArrivalMins: (s.estimatedArrivalMins as number | null | undefined) ?? null,
                     })),
-                  } : undefined,
-                },
-                include: { stops: { orderBy: { sequence: 'asc' } } },
-              });
-            })
-          : await tx.busRoute.update({
-              where: { id },
-              data: { ...data, updatedAt: new Date() },
-              include: { stops: { orderBy: { sequence: 'asc' } } },
-            });
+                  },
+                }
+              : {}),
+          },
+          include: { stops: { orderBy: { sequence: 'asc' } } },
+        });
 
         // Bust the list cache so the next GET reflects this write immediately.
         // Without this, the operator would see Deactivate silently "fail" for up
