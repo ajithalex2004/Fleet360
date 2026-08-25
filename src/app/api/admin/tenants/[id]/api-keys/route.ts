@@ -112,7 +112,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ ok: false, error: 'Too many scopes (max 32).' }, { status: 400 });
   }
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  // Built inside the transaction, written after it commits — auditing from
+  // inside one either loses the entry (fire-and-forget promise abandoned on
+  // return) or holds this transaction's connection while logAudit checks out
+  // a second one from the same pool.
+  let audit: Parameters<typeof logAudit>[0] | null = null;
+
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     const tenant = await tx.tenant.findUnique({
       where: { id: tenantId },
       select: { id: true, name: true, isActive: true },
@@ -133,7 +139,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       );
       const id = inserted[0]?.id;
 
-      void logAudit({
+      audit = {
         tenantId, tenantName: tenant.name,
         userId: auth.userId,
         userRole: 'TENANT_ADMIN',
@@ -142,7 +148,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         entityName: name,
         action: 'CREATE',
         details: `API key "${name}" created (prefix ${prefix}, scopes: ${scopes.join(',') || 'none'}).`,
-      });
+      };
 
       return NextResponse.json({
         ok: true,
@@ -159,4 +165,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ ok: false, error: 'Failed to create API key' }, { status: 500 });
     }
   });
+
+  if (audit) await logAudit(audit);
+  return response;
 }

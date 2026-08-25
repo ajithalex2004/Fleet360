@@ -94,7 +94,13 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   const jitEnabled    = body.jitEnabled !== false; // default true
   const isActive      = body.isActive   !== false; // default true
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  // Built inside the transaction, written after it commits — auditing from
+  // inside one either loses the entry (fire-and-forget promise abandoned on
+  // return) or holds this transaction's connection while logAudit checks out
+  // a second one from the same pool.
+  let audit: Parameters<typeof logAudit>[0] | null = null;
+
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     // Validate role belongs to tenant or is global.
     if (defaultRoleId) {
       const role = await tx.role.findFirst({
@@ -166,13 +172,13 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         );
       }
 
-      void logAudit({
+      audit = {
         tenantId, tenantName: tenant.name,
         userId: auth.userId, userRole: 'TENANT_ADMIN',
         entityType: 'SsoConfig', entityName: clientId,
         action: wasUpdate ? 'UPDATE' : 'CREATE',
         details: `OIDC SSO ${wasUpdate ? 'updated' : 'configured'} for issuer ${issuer}; domains: ${domains.join(',')}.`,
-      });
+      };
 
       const fresh = await getSsoConfigPublic(tenantId);
       return NextResponse.json({ ok: true, config: fresh });
@@ -181,6 +187,9 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ ok: false, error: 'Failed to save SSO config' }, { status: 500 });
     }
   });
+
+  if (audit) await logAudit(audit);
+  return response;
 }
 
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
