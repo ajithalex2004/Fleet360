@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 import { signSession } from '@/lib/tenant-session';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
@@ -43,8 +44,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Look up the UserTenant record and include tenant + role
-    const userTenant = await prisma.userTenant.findUnique({
+    // Look up the UserTenant record and include tenant + role.
+    //
+    // Runs under withPlatformAdmin because this route ESTABLISHES the tenant
+    // session — there is no tenant context yet to scope by, and user_tenants
+    // is RLS-protected. Without it this lookup returns nothing once the app
+    // connects as a role that doesn't bypass RLS, and every login fails.
+    // Same reasoning as api/admin/session. The security boundary here is the
+    // membership check below, not RLS.
+    const userTenant = await withPlatformAdmin(prisma, (tx) => tx.userTenant.findUnique({
       where: { userId_tenantId: { userId, tenantId } },
       include: {
         tenant: {
@@ -64,7 +72,7 @@ export async function POST(request: NextRequest) {
           select: { id: true, name: true, code: true },
         },
       },
-    });
+    }));
 
     if (!userTenant) {
       return NextResponse.json(

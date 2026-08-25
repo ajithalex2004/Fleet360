@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { isDbConnectionError, prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 import { signSession } from '@/lib/tenant-session';
 import { signJwtForBackend } from '@/lib/auth/jwt';
 import { ensureMfaColumns } from '@/lib/auth-mfa-schema';
@@ -136,8 +137,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 3. Find an active UserTenant record for this user
-    const userTenants = await prisma.userTenant.findMany({
+    // 3. Find an active UserTenant record for this user.
+    //
+    // withPlatformAdmin because login is what ESTABLISHES the tenant context —
+    // there is none yet to scope by, and user_tenants is RLS-protected. Left
+    // unscoped this returns nothing once the app connects as a role that
+    // doesn't bypass RLS, and every login fails with "No active tenant
+    // access". The security boundary is the password check above and the
+    // isActive filter here, not RLS.
+    const userTenants = await withPlatformAdmin(prisma, (tx) => tx.userTenant.findMany({
       where: { userId: user.id, isActive: true },
       include: {
         tenant: {
@@ -161,7 +169,7 @@ export async function POST(request: NextRequest) {
         },
       },
       orderBy: { createdAt: 'desc' },
-    });
+    }));
 
     if (userTenants.length === 0) {
       return NextResponse.json(
