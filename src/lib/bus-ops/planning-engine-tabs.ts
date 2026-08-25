@@ -10,7 +10,7 @@
 // Kept in the same order as the TABS array in planning-engine/page.tsx —
 // this is a second source of truth for tab identity, not just a list of
 // valid ids, so letting the two orderings drift would be misleading.
-export const PLANNING_ENGINE_TAB_IDS = ['cba', 'constraints', 'core', 'headway'] as const;
+export const PLANNING_ENGINE_TAB_IDS = ['cba', 'constraints', 'core', 'headway', 'optimizer'] as const;
 
 export type PlanningEngineTabId = typeof PLANNING_ENGINE_TAB_IDS[number];
 

@@ -167,12 +167,12 @@ export const MODULES: ModuleDef[] = [
       // P0 planning surface. Listed here for parity with the other Planning
       // entries.
       //
-      // Planning Constraints is a tab of it rather than its own entry — the
-      // same treatment as CBA rules and Headway, which are also tabs and
-      // deliberately absent from this list. /bus-ops/planning-constraints
-      // still resolves; it redirects to ?tab=constraints.
+      // Planning Constraints and Planning Optimizer are tabs of it rather
+      // than their own entries — the same treatment as CBA rules and
+      // Headway, which are also tabs and deliberately absent from this
+      // list. Both old paths still resolve, redirecting to ?tab=constraints
+      // and ?tab=optimizer respectively.
       { label: 'Planning Engine',     href: '/bus-ops/planning-engine',     icon: Sparkles,        group: 'Planning' },
-      { label: 'Planning Optimizer',  href: '/bus-ops/planning-optimizer',  icon: Sparkles,        group: 'Planning' },
       { label: 'Route Consolidation', href: '/bus-ops/route-consolidation', icon: GitMerge,        group: 'Planning' },
       { label: 'Transport Calendars', href: '/bus-ops/transport-calendars', icon: CalendarCheck2,  group: 'Planning' },
 
