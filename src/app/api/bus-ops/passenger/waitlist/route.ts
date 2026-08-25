@@ -37,7 +37,12 @@ export async function POST(req: NextRequest) {
 
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  // Built inside the transaction, written after it commits — auditing from
+  // inside one either loses the entry (fire-and-forget promise abandoned on
+  // return) or holds this transaction's connection while logAudit checks out
+  // a second one from the same pool.
+  let audit: Parameters<typeof logAudit>[0] | null = null;
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
 
       try {
         const bodyRaw = await req.json();
@@ -86,7 +91,7 @@ export async function POST(req: NextRequest) {
           },
         });
 
-        void logAudit({
+        audit = {
           tenantId,
           userId: req.headers.get('x-user-id') ?? 'system',
           userRole: req.headers.get('x-user-role') ?? 'STAFF',
@@ -94,7 +99,7 @@ export async function POST(req: NextRequest) {
           entityId: passenger.id,
           action: 'CREATE',
           details: `Waitlist join: ${staff.name} (${staff.employeeId}) → trip ${tripId.slice(0, 8)}`,
-        });
+        };
 
         return NextResponse.json({ ok: true, passengerId: passenger.id });
         } catch (err) {
@@ -102,5 +107,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Waitlist failed' }, { status: 500 });
       }
   });
+  if (audit) await logAudit(audit);
+  return response;
+
 }
 
