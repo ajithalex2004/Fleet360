@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { requireShipperPortal } from '@/lib/shipper-portal/auth';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
@@ -15,9 +16,14 @@ export const runtime = 'nodejs';
 
 interface StatsRow { c: bigint }
 
-async function safeCount(sql: string, ...args: unknown[]): Promise<number> {
+/** Takes the client so callers can pass a tenant-scoped transaction. */
+async function safeCount(
+  client: { $queryRawUnsafe: <T>(sql: string, ...args: unknown[]) => Promise<T> },
+  sql: string,
+  ...args: unknown[]
+): Promise<number> {
   try {
-    const rows = await prisma.$queryRawUnsafe<StatsRow[]>(sql, ...args);
+    const rows = await client.$queryRawUnsafe<StatsRow[]>(sql, ...args);
     return Number(rows[0]?.c ?? 0);
   } catch {
     return 0;
@@ -36,31 +42,41 @@ export async function GET(req: NextRequest) {
 
   // Active = not delivered/closed/cancelled. Done = delivered or closed.
   // Counts last 30 days for "this month" card.
-  const [total, active, delivered, thisMonth] = await Promise.all([
-    safeCount(
+  // Scoped to auth.tenantId — the shipper token's tenant — NOT the tenantId
+  // from requireAuthorizedTenant above, which is unused here. Every query
+  // below already filters on auth.tenantId, so the RLS scope must match it or
+  // the counts come back empty. logistics_shipment_orders is RLS-protected,
+  // and safeCount swallows errors into 0, so unscoped this would silently
+  // render a dashboard of zeros rather than fail.
+  const [total, active, delivered, thisMonth] = await withTenantRls(
+    prisma,
+    auth.tenantId,
+    async (tx) => Promise.all([
+    safeCount(tx,
       `SELECT COUNT(*)::bigint AS c FROM logistics_shipment_orders
         WHERE tenant_id = $1 AND cargo_owner_customer_id = $2 AND deleted_at IS NULL`,
       auth.tenantId, auth.customerId,
     ),
-    safeCount(
+    safeCount(tx,
       `SELECT COUNT(*)::bigint AS c FROM logistics_shipment_orders
         WHERE tenant_id = $1 AND cargo_owner_customer_id = $2 AND deleted_at IS NULL
           AND status NOT IN ('DELIVERED','POD_SUBMITTED','CLOSED','CANCELLED','REJECTED')`,
       auth.tenantId, auth.customerId,
     ),
-    safeCount(
+    safeCount(tx,
       `SELECT COUNT(*)::bigint AS c FROM logistics_shipment_orders
         WHERE tenant_id = $1 AND cargo_owner_customer_id = $2 AND deleted_at IS NULL
           AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')`,
       auth.tenantId, auth.customerId,
     ),
-    safeCount(
+    safeCount(tx,
       `SELECT COUNT(*)::bigint AS c FROM logistics_shipment_orders
         WHERE tenant_id = $1 AND cargo_owner_customer_id = $2 AND deleted_at IS NULL
           AND created_at >= NOW() - INTERVAL '30 days'`,
       auth.tenantId, auth.customerId,
     ),
-  ]);
+    ]),
+  );
 
   return NextResponse.json(
     { total, active, delivered, last30Days: thisMonth },
