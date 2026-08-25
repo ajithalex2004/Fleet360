@@ -3,6 +3,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { validateResourceAssignment } from '@/lib/bus-ops/validate-assignment';
 import { isValidationEnabled, withAssignmentLocks } from '@/lib/bus-ops/assignment-txn';
+import { logAudit } from '@/lib/audit';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 /**
@@ -173,19 +174,67 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
 
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  // Filled inside the transaction, written after it commits. Auditing from
+  // inside an interactive transaction is unsafe in both directions: a
+  // fire-and-forget promise is abandoned when the callback returns (the entry
+  // silently never lands), and awaiting it holds the transaction's connection
+  // while logAudit checks out a second one from the same pool — which can
+  // exhaust the pool under concurrency.
+  let auditDetails: string | null = null;
+  let auditTripName: string | null = null;
+
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
 
       try {
-        const existing = await tx.tripSchedule.findFirst({ where: { id: params.id, tenantId, deletedAt: null }, select: { id: true } });
+        // Selects more than the existence check needs: these fields describe
+        // what was destroyed and are what an auditor would ask for, so they
+        // are captured here rather than lost behind the deletedAt filter.
+        const existing = await tx.tripSchedule.findFirst({
+          where: { id: params.id, tenantId, deletedAt: null },
+          select: {
+            id: true, tripNumber: true, status: true,
+            routeId: true, departureTime: true, confirmedCount: true,
+          },
+        });
         if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
         await tx.tripSchedule.update({
           where: { id: params.id },
           data: { deletedAt: new Date(), status: 'CANCELLED' },
         });
+
+        // Deleting a trip schedule is auditable. Only the message is built
+        // here; the write happens once the transaction has closed (see above).
+        auditTripName = existing.tripNumber ?? null;
+        auditDetails =
+          `Soft-deleted trip schedule ${existing.tripNumber ?? params.id.slice(0, 8)} ` +
+          `(was ${existing.status ?? 'unknown'}, route ${existing.routeId.slice(0, 8)}, ` +
+          `departure ${existing.departureTime ? existing.departureTime.toISOString() : 'none'}, ` +
+          `${existing.confirmedCount ?? 0} confirmed passenger(s)); deletedAt set, status CANCELLED.`;
+
         return NextResponse.json({ success: true });
         } catch (e) {
         return NextResponse.json({ error: 'Failed to delete' }, { status: 500 });
       }
   });
+
+  // Transaction has committed and released its connection. Awaiting here is
+  // safe and makes the audit trail authoritative for a destructive action —
+  // logAudit swallows its own errors, so it still cannot fail the delete.
+  if (auditDetails) {
+    await logAudit({
+      tenantId,
+      userId:   req.headers.get('x-user-id') ?? undefined,
+      userRole: req.headers.get('x-user-role') ?? undefined,
+      entityType: 'TripSchedule',
+      entityId:   params.id,
+      entityName: auditTripName ?? undefined,
+      action:     'DELETE',
+      details:    auditDetails,
+      ipAddress:  req.headers.get('x-forwarded-for') ?? undefined,
+      userAgent:  req.headers.get('user-agent') ?? undefined,
+    });
+  }
+
+  return response;
 }
 
