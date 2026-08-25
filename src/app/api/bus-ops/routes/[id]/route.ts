@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { revalidateCache } from '@/lib/server-cache';
+import { logAudit } from '@/lib/audit';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // Must match the tag used by the list endpoint's cacheRead — every write
@@ -133,7 +134,16 @@ export async function DELETE(req: NextRequest, { params }: IdCtx) {
 
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  // Filled inside the transaction, written after it commits. Auditing from
+  // inside an interactive transaction is unsafe in both directions: a
+  // fire-and-forget promise is abandoned when the callback returns (the entry
+  // silently never lands), and awaiting it holds the transaction's connection
+  // while logAudit checks out a second one from the same pool — which can
+  // exhaust the pool under concurrency.
+  let auditDetails: string | null = null;
+  let auditRouteName: string | null = null;
+
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
 
       try {
         // Load the route first so we can enforce the two-step delete protocol:
@@ -183,6 +193,12 @@ export async function DELETE(req: NextRequest, { params }: IdCtx) {
           where: { id },
           data: { deletedAt: new Date(), isActive: false },
         });
+
+        // Deleting a route is auditable. Only the message is built here; the
+        // write happens once the transaction has closed (see above).
+        auditRouteName = route.name;
+        auditDetails = `Soft-deleted route "${route.name}" (${id.slice(0, 8)}); deletedAt set, isActive false. No trip schedules referenced it.`;
+
         // Same reason as PATCH above — bust the list cache so the deleted row
         // disappears from the grid immediately, not after the 30 s TTL expires.
         revalidateCache([CACHE_TAG]);
@@ -191,5 +207,25 @@ export async function DELETE(req: NextRequest, { params }: IdCtx) {
         return NextResponse.json({ error: 'Failed to delete' }, { status: 500 });
       }
   });
+
+  // Transaction has committed and released its connection. Awaiting here is
+  // safe and makes the audit trail authoritative for a destructive action —
+  // logAudit swallows its own errors, so it still cannot fail the delete.
+  if (auditDetails) {
+    await logAudit({
+      tenantId,
+      userId:   req.headers.get('x-user-id') ?? undefined,
+      userRole: req.headers.get('x-user-role') ?? undefined,
+      entityType: 'BusRoute',
+      entityId:   id,
+      entityName: auditRouteName ?? undefined,
+      action:     'DELETE',
+      details:    auditDetails,
+      ipAddress:  req.headers.get('x-forwarded-for') ?? undefined,
+      userAgent:  req.headers.get('user-agent') ?? undefined,
+    });
+  }
+
+  return response;
 }
 
