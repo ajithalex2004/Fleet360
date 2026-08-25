@@ -162,11 +162,16 @@ export const MODULES: ModuleDef[] = [
       { label: 'Route Optimization',  href: '/bus-ops/route-planner',       icon: Route,           group: 'Planning' },
       { label: 'Schedules',           href: '/bus-ops/schedules',           icon: Calendar,        group: 'Planning' },
       { label: 'Schedule Templates',  href: '/bus-ops/schedule-templates',  icon: Repeat,          group: 'Planning' },
-      // Planning Engine (runcut/block/roster + CBA + headway) was reachable
-      // only from a dashboard tile despite being the P0 planning surface.
-      // Listed here for parity with the other Planning entries.
+      // Planning Engine (runcut/block/roster + CBA + PCE constraints +
+      // headway) was reachable only from a dashboard tile despite being the
+      // P0 planning surface. Listed here for parity with the other Planning
+      // entries.
+      //
+      // Planning Constraints is a tab of it rather than its own entry — the
+      // same treatment as CBA rules and Headway, which are also tabs and
+      // deliberately absent from this list. /bus-ops/planning-constraints
+      // still resolves; it redirects to ?tab=constraints.
       { label: 'Planning Engine',     href: '/bus-ops/planning-engine',     icon: Sparkles,        group: 'Planning' },
-      { label: 'Planning Constraints',href: '/bus-ops/planning-constraints',icon: Shield,          group: 'Planning' },
       { label: 'Planning Optimizer',  href: '/bus-ops/planning-optimizer',  icon: Sparkles,        group: 'Planning' },
       { label: 'Route Consolidation', href: '/bus-ops/route-consolidation', icon: GitMerge,        group: 'Planning' },
       { label: 'Transport Calendars', href: '/bus-ops/transport-calendars', icon: CalendarCheck2,  group: 'Planning' },

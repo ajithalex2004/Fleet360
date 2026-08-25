@@ -222,19 +222,30 @@ export interface PlanningCorePanelProps {
    * underneath the operator.
    */
   cbaRevision?: number;
-  /** Opens the PCE rules drawer. Omitted when the user can't edit PCE. */
+  /**
+   * Bumped when the Constraints tab mutates a PCE rule.
+   *
+   * Unlike cbaRevision this pre-fills nothing here — PCE constraints gate
+   * the apply rather than seed the form. What it invalidates is a plan that
+   * has already been computed: its verdict came from rules that have since
+   * changed. So it only matters once `plan` exists, and the only remedy is
+   * a recompute.
+   */
+  pceRevision?: number;
+  /** Switches to the Constraints tab. Omitted when the user can't edit PCE. */
   onEditPceRules?: () => void;
 }
 
 /**
  * Tab 3 of the Planning Engine, and the default landing tab — this is
- * the daily-driver task, whereas CBA and Headway are configured rarely.
+ * the daily-driver task, whereas CBA, Constraints and Headway are
+ * configured rarely.
  *
  * No RequireTenantAdmin wrapper here any more: the shell guards the whole
  * page on bus-ops:admin:planning-core, so wrapping again would just
  * double-render the permission check.
  */
-export function PlanningCorePanel({ cbaRevision = 0, onEditPceRules }: PlanningCorePanelProps = {}) {
+export function PlanningCorePanel({ cbaRevision = 0, pceRevision = 0, onEditPceRules }: PlanningCorePanelProps = {}) {
   // Date range: today → today+6 by default
   const [dateFrom, setDateFrom] = useState(todayIso());
   const [dateTo,   setDateTo]   = useState(addDays(todayIso(), 6));
@@ -323,6 +334,17 @@ export function PlanningCorePanel({ cbaRevision = 0, onEditPceRules }: PlanningC
     // if it were in the dep array.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cbaRevision, workRulesTouched]);
+
+  // PCE equivalent of the CBA handshake above. Only flags a plan that has
+  // already been computed — with no plan on screen there is nothing stale,
+  // and firing on arrival would nag every operator who opens the tab.
+  const [pceStale, setPceStale] = useState(false);
+  const seenPceRevision = useRef(pceRevision);
+  useEffect(() => {
+    if (pceRevision === seenPceRevision.current) return;
+    seenPceRevision.current = pceRevision;
+    if (plan) setPceStale(true);
+  }, [pceRevision, plan]);
 
   /** Discard local pay-rule edits and take the current CBA default. */
   const reloadCbaDefaults = () => {
@@ -469,7 +491,7 @@ export function PlanningCorePanel({ cbaRevision = 0, onEditPceRules }: PlanningC
           {onEditPceRules && (
             <button onClick={onEditPceRules}
               className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:bg-white/10">
-              <SlidersHorizontal className="w-4 h-4" /> Edit PCE Rules
+              <SlidersHorizontal className="w-4 h-4" /> Planning Constraints
             </button>
           )}
           <button onClick={compute} disabled={computing}
@@ -495,6 +517,29 @@ export function PlanningCorePanel({ cbaRevision = 0, onEditPceRules }: PlanningC
             <button onClick={() => setCbaStale(false)}
               className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-white/5">
               Keep mine
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* PCE rules moved while this plan was on screen. The plan itself is
+          still valid input — it is the verdict that is stale, since apply is
+          gated on constraints that have since changed. Recompute rather than
+          silently leaving a result that no longer reflects the rules. */}
+      {pceStale && (
+        <div className="flex items-start justify-between gap-4 flex-wrap rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+          <p className="text-sm text-amber-200">
+            Planning constraints changed on the <strong>Planning Constraints</strong> tab. This plan
+            was evaluated against the previous rules — recompute to re-check it.
+          </p>
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={() => { setPceStale(false); void compute(); }}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white">
+              <RefreshCw className="w-3.5 h-3.5" /> Recompute
+            </button>
+            <button onClick={() => setPceStale(false)}
+              className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-white/5">
+              Dismiss
             </button>
           </div>
         </div>

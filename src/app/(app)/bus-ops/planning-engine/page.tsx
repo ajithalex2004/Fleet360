@@ -2,25 +2,32 @@
 /**
  * /bus-ops/planning-engine — the Planning Engine.
  *
- * One page, three tabs, consolidating what used to be three separate
+ * One page, four tabs, consolidating what used to be four separate
  * routes:
  *
- *   /bus-ops/cba-rules  →  ?tab=cba       Operational Rules Engine
- *   /bus-ops/plan       →  ?tab=core      Planning Core   ← default
- *   /bus-ops/headway    →  ?tab=headway   Headway Management
+ *   /bus-ops/cba-rules            →  ?tab=cba          Operational Rules Engine
+ *   /bus-ops/planning-constraints →  ?tab=constraints  Planning Constraints (PCE)
+ *   /bus-ops/plan                 →  ?tab=core         Planning Core   ← default
+ *   /bus-ops/headway              →  ?tab=headway      Headway Management
  *
- * All three old paths still resolve; they redirect here preserving the
+ * All four old paths still resolve; they redirect here preserving the
  * tab, so bookmarks and the dashboard tiles keep working.
  *
  * Visual order and default tab are deliberate and independent — changing
  * one doesn't imply the other. Operational Rules Engine (CBA) sits first
  * because it is upstream in the mental model — operational rules feed the
  * plan, and Planning Core literally pre-fills its WorkRules from the
- * default rule-set via cbaToWorkRules. Planning Core is the tab that
- * opens, because it is the daily-driver task while the other two are
- * configured rarely; landing on a config screen would tax the frequent
- * job every time. Headway's position (last) is a product decision, not
- * derived from the data-flow reasoning above.
+ * default rule-set via cbaToWorkRules. Planning Constraints follows for
+ * the same reason: PCE rules gate what the plan is allowed to become.
+ * Planning Core is the tab that opens, because it is the daily-driver task
+ * while the other three are configured rarely; landing on a config screen
+ * would tax the frequent job every time. Headway's position (last) is a
+ * product decision, not derived from the data-flow reasoning above.
+ *
+ * The Constraints tab is permission-filtered rather than merely gated by
+ * the page wrapper — it needs bus-ops:admin:planning-constraints, which is
+ * a separate resource from the planning-core one guarding this page and is
+ * documented in permissions.ts as independently restrictable.
  *
  * Guarded as a whole on bus-ops:admin:planning-core. That tightens CBA
  * and Headway, which previously had no page guard at all — their APIs
@@ -30,20 +37,30 @@
 
 import React, { Suspense, useCallback, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Sparkles, ShieldCheck, Clock } from 'lucide-react';
+import { Sparkles, ShieldCheck, Shield, Clock } from 'lucide-react';
 import { PageHeader, TabStrip, type TabDef } from '@/components/bus-ops/theme';
 import RequireTenantAdmin, { useBusOpsAdminAccess } from '@/components/bus-ops/RequireTenantAdmin';
 import { CbaRulesPanel } from '@/components/bus-ops/planning-engine/CbaRulesPanel';
 import { HeadwayPanel } from '@/components/bus-ops/planning-engine/HeadwayPanel';
 import { PlanningCorePanel } from '@/components/bus-ops/planning-engine/PlanningCorePanel';
-import PceRulesDrawer from '@/components/bus-ops/planning-engine/PceRulesDrawer';
+import { PlanningConstraintsPanel } from '@/components/bus-ops/planning-engine/PlanningConstraintsPanel';
 import { resolvePlanningEngineTab } from '@/lib/bus-ops/planning-engine-tabs';
 
-/** Visual order. `core` is the default active tab — see the file header. */
-const TABS: TabDef[] = [
-  { id: 'cba',     label: 'Operational Rules Engine', icon: ShieldCheck },
-  { id: 'core',    label: 'Planning Core',            icon: Sparkles },
-  { id: 'headway', label: 'Headway',                  icon: Clock },
+/**
+ * Visual order. `core` is the default active tab — see the file header.
+ *
+ * Kept in the same order as PLANNING_ENGINE_TAB_IDS, which is a second
+ * source of truth for tab identity rather than just a validity list.
+ *
+ * `constraints` is only offered to users who hold bus-ops:admin:planning-
+ * constraints — a different permission from the planning-core one gating
+ * this page, and deliberately grantable on its own. See buildTabs below.
+ */
+const BASE_TABS: TabDef[] = [
+  { id: 'cba',         label: 'Operational Rules Engine', icon: ShieldCheck },
+  { id: 'constraints', label: 'Planning Constraints',     icon: Shield },
+  { id: 'core',        label: 'Planning Core',            icon: Sparkles },
+  { id: 'headway',     label: 'Headway',                  icon: Clock },
 ];
 
 export default function PlanningEnginePage() {
@@ -94,16 +111,34 @@ function PlanningEngineInner() {
   const [cbaRevision, setCbaRevision] = useState(0);
   const onRuleSetsChanged = useCallback(() => setCbaRevision(n => n + 1), []);
 
-  // The PCE drawer writes to /api/bus-ops/planning-constraints, which is
-  // gated on its own resource. Offer the button only when the user can
-  // actually use it.
+  // The Constraints tab writes to /api/bus-ops/planning-constraints, gated
+  // on its own resource — a different one from the planning-core permission
+  // wrapping this page. Gate the tab itself rather than leaning on the page
+  // wrapper: BUS_OPS_ADMIN_ONLY_RESOURCES is empty today so both land on the
+  // same roles, but permissions.ts documents restricting a single resource
+  // as a one-line change, and folding PCE under planning-core would quietly
+  // break that.
   const pce = useBusOpsAdminAccess('planning-constraints');
-  const [pceOpen, setPceOpen] = useState(false);
+  const canEditPce = pce.allowed && !pce.loading;
+
+  const tabs = useMemo(
+    () => BASE_TABS.filter(t => t.id !== 'constraints' || canEditPce),
+    [canEditPce],
+  );
+
+  // Bumped whenever the Constraints tab mutates a rule. Planning Core stays
+  // mounted on its own tab holding a plan computed against the old rules, so
+  // without this it would keep showing a stale result with nothing to say it
+  // moved. Same handshake as cbaRevision — it offers a recompute, it does
+  // not silently discard in-progress work.
+  const [pceRevision, setPceRevision] = useState(0);
+  const onConstraintsChanged = useCallback(() => setPceRevision(n => n + 1), []);
 
   const subtitle = useMemo(() => {
     switch (activeId) {
-      case 'cba':     return 'Operational rules, service frequency, and the runcut/blocking/rostering engine — in the order they feed each other.';
-      case 'headway': return 'Operational rules, service frequency, and the runcut/blocking/rostering engine — in the order they feed each other.';
+      case 'cba':         return 'Operational rules, service frequency, and the runcut/blocking/rostering engine — in the order they feed each other.';
+      case 'headway':     return 'Operational rules, service frequency, and the runcut/blocking/rostering engine — in the order they feed each other.';
+      case 'constraints': return 'Rules the planner must respect — evaluated on every plan apply and every route merge.';
       default:        return 'Runcut, block and roster staff transport — with the operational and frequency rules that feed it one tab away.';
     }
   }, [activeId]);
@@ -118,7 +153,7 @@ function PlanningEngineInner() {
       />
 
       <TabStrip
-        tabs={TABS}
+        tabs={tabs}
         activeId={activeId}
         onChange={setTab}
         accent="violet"
@@ -138,7 +173,7 @@ function PlanningEngineInner() {
 
           Lazy-mount keeps the cost honest — an unvisited tab issues no
           fetches. */}
-      {TABS.filter(t => visited.has(t.id)).map(t => (
+      {tabs.filter(t => visited.has(t.id)).map(t => (
         <div
           key={t.id}
           role="tabpanel"
@@ -150,19 +185,26 @@ function PlanningEngineInner() {
         >
           {t.id === 'cba'     && <CbaRulesPanel onRuleSetsChanged={onRuleSetsChanged} />}
           {t.id === 'headway' && <HeadwayPanel />}
+          {t.id === 'constraints' && (
+            <PlanningConstraintsPanel onConstraintsChanged={onConstraintsChanged} />
+          )}
           {t.id === 'core'    && (
             <PlanningCorePanel
               cbaRevision={cbaRevision}
-              onEditPceRules={pce.allowed && !pce.loading ? () => setPceOpen(true) : undefined}
+              pceRevision={pceRevision}
+              // Switches tabs rather than opening a drawer. PceRulesDrawer
+              // used to cover the four constraints that bound Planning Core,
+              // because deep-linking to the old standalone page discarded the
+              // in-progress plan. A tab cannot: panels here are never
+              // unmounted, so Planning Core keeps its state while the
+              // operator edits rules on the Constraints tab. Kept as an
+              // affordance so the route from "my plan is gated" to "edit the
+              // rule" stays one click.
+              onEditPceRules={canEditPce ? () => setTab('constraints') : undefined}
             />
           )}
         </div>
       ))}
-
-      <PceRulesDrawer
-        open={pceOpen}
-        onClose={() => setPceOpen(false)}
-      />
     </div>
   );
 }
