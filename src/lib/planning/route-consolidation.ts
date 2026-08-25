@@ -114,6 +114,22 @@ export type ConsolidationObjective = {
    * PlanningConstraint kind ARRIVAL_TIME_PROXIMITY, fallback 45 minutes).
    */
   maxArrivalTimeDiffMinutes?: number;
+  /**
+   * Require both routes to have a recorded departure/arrival time before a
+   * pair is eligible. Default false, which preserves long-standing
+   * behaviour: a route with no time recorded simply isn't timing-checked.
+   *
+   * Opt in when a tenant's routes are fully configured and you want the
+   * proximity filters to be authoritative — pairs missing a time are then
+   * skipped as UNKNOWN_DEPARTURE_TIME / UNKNOWN_ARRIVAL_TIME and surface
+   * in the skipped[] breakdown, prompting the operator to fill the gap
+   * rather than silently receiving an untimed recommendation.
+   *
+   * Note this does NOT gate malformed values. A time that exists but can't
+   * be parsed as HH:MM is corrupt rather than absent, and always skips the
+   * pair regardless of this setting.
+   */
+  requireKnownTimes?: boolean;
 };
 
 // ─── Result shapes ──────────────────────────────────────────────────
@@ -124,6 +140,20 @@ export type CandidateSkipReason =
   | 'DIFFERENT_DIRECTION'
   | 'DEPARTURE_TIME_TOO_FAR'
   | 'ARRIVAL_TIME_TOO_FAR'
+  /**
+   * Timing could not be evaluated.
+   *
+   * Always emitted when a stored value exists but isn't parseable as HH:MM
+   * — that used to compare as "0 minutes apart" and satisfied every
+   * proximity check, so a 03:45 route could be recommended for merging
+   * with a 12:00 one.
+   *
+   * Also emitted for a simply-absent time, but only under
+   * objective.requireKnownTimes; by default an unset time leaves the pair
+   * untimed rather than skipped, which is the long-standing behaviour.
+   */
+  | 'UNKNOWN_DEPARTURE_TIME'
+  | 'UNKNOWN_ARRIVAL_TIME'
   | 'PICKUP_ZONE_INCOMPATIBLE'
   | 'DROPOFF_ZONE_INCOMPATIBLE'
   | 'ZONE_DATA_UNAVAILABLE'
@@ -305,10 +335,24 @@ function passesCheapFilters(
   // Departure time proximity check — routes with times too far apart can't
   // realistically share a vehicle (passengers would wait hours). Skip before
   // any expensive zone / PCE work.
+  //
+  // Unknown timing is reported rather than silently ignored. Malformed
+  // values always skip (a time that exists but can't be read is corrupt,
+  // and previously compared as "0 minutes apart" — passing every check).
+  // Absent values only skip under requireKnownTimes, since "no time
+  // recorded yet" is a normal state for a partly-configured route.
+  const unknownDeparture = describeUnknownTime(
+    a.representativeDepartureTime,
+    b.representativeDepartureTime,
+    { requireKnown: objective.requireKnownTimes ?? false },
+  );
+  if (unknownDeparture) {
+    return { skip: 'UNKNOWN_DEPARTURE_TIME', detail: unknownDeparture };
+  }
   if (a.representativeDepartureTime && b.representativeDepartureTime) {
     const maxDiffMinutes = objective.maxDepartureTimeDiffMinutes ?? 60;
     const timeDiffMinutes = parseTimeDifference(a.representativeDepartureTime, b.representativeDepartureTime);
-    if (timeDiffMinutes > maxDiffMinutes) {
+    if (timeDiffMinutes !== null && timeDiffMinutes > maxDiffMinutes) {
       return {
         skip: 'DEPARTURE_TIME_TOO_FAR',
         detail: `${timeDiffMinutes} min apart (max ${maxDiffMinutes})`,
@@ -320,10 +364,18 @@ function passesCheapFilters(
   // that leave close together yet run very different durations (a short
   // hop merged with a long cross-town route still strands the short
   // route's riders for the extra time, even though departures matched).
+  const unknownArrival = describeUnknownTime(
+    a.representativeArrivalTime,
+    b.representativeArrivalTime,
+    { requireKnown: objective.requireKnownTimes ?? false },
+  );
+  if (unknownArrival) {
+    return { skip: 'UNKNOWN_ARRIVAL_TIME', detail: unknownArrival };
+  }
   if (a.representativeArrivalTime && b.representativeArrivalTime) {
     const maxDiffMinutes = objective.maxArrivalTimeDiffMinutes ?? 45;
     const timeDiffMinutes = parseTimeDifference(a.representativeArrivalTime, b.representativeArrivalTime);
-    if (timeDiffMinutes > maxDiffMinutes) {
+    if (timeDiffMinutes !== null && timeDiffMinutes > maxDiffMinutes) {
       return {
         skip: 'ARRIVAL_TIME_TOO_FAR',
         detail: `${timeDiffMinutes} min apart (max ${maxDiffMinutes})`,
@@ -613,13 +665,49 @@ function parseTimeToMinutes(time: string): number | null {
  * Calculate absolute time difference in minutes between two HH:MM times.
  * Returns the shortest distance (wraps across midnight if needed).
  */
-function parseTimeDifference(timeA: string, timeB: string): number {
+function parseTimeDifference(timeA: string, timeB: string): number | null {
   const minA = parseTimeToMinutes(timeA);
   const minB = parseTimeToMinutes(timeB);
-  if (minA === null || minB === null) return 0;
+  // null, not 0. Returning 0 for an unparseable time claimed the routes
+  // departed simultaneously, which silently satisfied every proximity
+  // check. Callers must decide what an unknown difference means; none of
+  // them may treat it as "close enough".
+  if (minA === null || minB === null) return null;
   const diff = Math.abs(minA - minB);
   // Take the shorter path (e.g., 23:00 to 01:00 is 2 hours, not 22 hours)
   return Math.min(diff, 1440 - diff);
+}
+
+/**
+ * Explains why a pair's timing can't be compared, or null if it can be.
+ *
+ * Two distinct data problems, deliberately treated differently:
+ *   - malformed — a value exists but isn't HH:MM. Always disqualifying;
+ *     it used to compare as "0 minutes apart" and satisfy every check.
+ *   - absent — no value recorded. Only disqualifying under requireKnown,
+ *     because a partly-configured route legitimately has no time yet.
+ *
+ * Malformed is checked first so a corrupt value is never masked by the
+ * other route merely being blank.
+ */
+function describeUnknownTime(
+  timeA: string | null,
+  timeB: string | null,
+  opts: { requireKnown: boolean },
+): string | null {
+  const bad: string[] = [];
+  if (timeA && parseTimeToMinutes(timeA) === null) bad.push(`route A ("${timeA}")`);
+  if (timeB && parseTimeToMinutes(timeB) === null) bad.push(`route B ("${timeB}")`);
+  if (bad.length) return `unparseable time (expected HH:MM) on ${bad.join(' and ')}`;
+
+  if (opts.requireKnown) {
+    const missing: string[] = [];
+    if (!timeA) missing.push('route A');
+    if (!timeB) missing.push('route B');
+    if (missing.length) return `no time recorded for ${missing.join(' and ')}`;
+  }
+
+  return null;
 }
 
 /**
