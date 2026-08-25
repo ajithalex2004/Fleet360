@@ -562,19 +562,25 @@ export default function RoutesBulkImportModal({
               {(previewResult || commitResult) && (
                 <div className={`rounded-lg border px-3 py-2 text-xs ${
                   commitResult
-                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+                    ? (commitResult.created === 0 && commitResult.errored > 0
+                        ? 'border-rose-500/40 bg-rose-500/10 text-rose-200'
+                        : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200')
                     : 'border-amber-500/40 bg-amber-500/10 text-amber-200'
                 }`}>
                   <div className="flex items-start gap-1.5">
-                    {commitResult
+                    {commitResult && commitResult.created > 0
                       ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-px" />
                       : <AlertTriangle className="w-4 h-4 shrink-0 mt-px" />}
                     <div>
                       <div className="font-semibold">
                         {commitResult
-                          ? (commitResult.replayed
-                              ? 'Already imported — this file was submitted before'
-                              : 'Import complete — routes saved')
+                          ? (commitResult.created === 0 && commitResult.errored > 0
+                              ? 'Import failed — nothing was saved'
+                              : commitResult.replayed
+                                ? 'Already imported — this file was submitted before'
+                                : commitResult.errored > 0
+                                  ? 'Partially imported — some rows failed'
+                                  : 'Import complete — routes saved')
                           : 'Preview only — nothing has been saved yet'}
                       </div>
                       <div className="mt-0.5">
