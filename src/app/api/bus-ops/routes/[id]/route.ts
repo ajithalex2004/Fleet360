@@ -152,16 +152,30 @@ export async function DELETE(req: NextRequest, { params }: IdCtx) {
           );
         }
 
-        // Refuse to delete a route that still has live (non-deleted) trip schedules.
+        // Refuse to delete a route that still has non-deleted trip schedules.
         // Without this guard a soft-deleted route would leave orphan schedules whose
         // route.deletedAt filter now hides the parent — the schedule stays visible
         // on dispatch/plan pages but its origin/destination context vanishes.
-        const activeScheduleCount = await tx.tripSchedule.count({
-          where: { routeId: id, deletedAt: null },
+        //
+        // Note this counts CANCELLED-but-not-deleted schedules too, and that is
+        // deliberate: analytics still reads cancelled trips (see the CANCELLED
+        // count in analytics/route.ts), so they would lose route context just the
+        // same. Cancelling therefore does NOT release the route — POST
+        // schedules/[id]/cancel sets status only and leaves deletedAt null. The
+        // message below must not suggest otherwise; only DELETE schedules/[id]
+        // (which sets deletedAt) or reassigning routeId clears this.
+        const blockingScheduleCount = await tx.tripSchedule.count({
+          where: { routeId: id, tenantId, deletedAt: null },
         });
-        if (activeScheduleCount > 0) {
+        if (blockingScheduleCount > 0) {
+          const one = blockingScheduleCount === 1;
           return NextResponse.json(
-            { error: `Cannot delete: ${activeScheduleCount} live trip schedule${activeScheduleCount === 1 ? '' : 's'} still reference this route. Cancel or reassign them first.` },
+            {
+              error:
+                `Cannot delete: ${blockingScheduleCount} trip schedule${one ? '' : 's'} ` +
+                `still ${one ? 'references' : 'reference'} this route. Delete or reassign ` +
+                `${one ? 'it' : 'them'} first — cancelling alone does not release the route.`,
+            },
             { status: 409 },
           );
         }
