@@ -7,8 +7,10 @@
  * Schema is owned by migration 20260809000000_adopt_finance_tables_with_rls.
  * Runtime CREATE TABLE DDL removed — tables are guaranteed present at boot.
  *
- * All queries are scoped to the tenant from the x-tenant-id header set by
- * middleware. Platform admins (x-tenant-id = '*') see all tenants.
+ * All queries are scoped to the tenantId returned by requireAuthorizedTenant,
+ * never to the raw x-tenant-id header. There is no platform-admin ('*') bypass
+ * on this route: sanitizeTenantId() strips the wildcard and an empty tenant is
+ * rejected with a 403, so '*' can never reach a query.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
@@ -18,10 +20,6 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 type JeRow   = Record<string, unknown>;
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-
-function getTenant(req: NextRequest): string | null {
-  return req.headers.get('x-tenant-id');
-}
 
 async function nextJeNumber(): Promise<string> {
   const [row] = await prisma.$queryRawUnsafe<{ count: string }[]>(
@@ -44,11 +42,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    const tenantId = getTenant(req);
-      if (!tenantId) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
-
       const sp     = req.nextUrl.searchParams;
       const status = sp.get('status');
       const source = sp.get('source');
@@ -58,19 +51,19 @@ export async function GET(req: NextRequest) {
       const limit  = Math.min(100, parseInt(sp.get('limit') ?? '50'));
       const offset = (page - 1) * limit;
 
-      // Build WHERE clause — always scope by tenant unless platform admin.
-      let where = `WHERE je.deleted_at IS NULL`;
-      const params: unknown[] = [];
-      let pi = 1;
-
-      if (tenantId !== '*') {
-        where += ` AND je.tenant_id = $${pi++}`;
-        params.push(tenantId);
-      }
+      // Always scope by tenant. requireAuthorizedTenant never yields '*' —
+      // sanitizeTenantId() strips the wildcard, and an empty tenant is
+      // rejected with a 403 — so there is no platform-admin bypass here.
+      let where = `WHERE je.deleted_at IS NULL AND je.tenant_id = $1`;
+      const params: unknown[] = [tenantId];
+      let pi = 2;
       if (status) { where += ` AND je.status = $${pi++}`;      params.push(status); }
       if (source) { where += ` AND je.source_type = $${pi++}`; params.push(source); }
-      if (from)   { where += ` AND je.entry_date >= $${pi++}`; params.push(from); }
-      if (to)     { where += ` AND je.entry_date <= $${pi++}`; params.push(to); }
+      // entry_date is a DATE column and these params arrive as text, so the
+      // cast is required — without it Postgres raises 42883 (date >= text),
+      // which the .catch() below would silently turn into an empty result.
+      if (from)   { where += ` AND je.entry_date >= $${pi++}::date`; params.push(from); }
+      if (to)     { where += ` AND je.entry_date <= $${pi++}::date`; params.push(to); }
 
       const [entries, counts] = await Promise.all([
         tx.$queryRawUnsafe<JeRow[]>(
@@ -98,18 +91,12 @@ export async function GET(req: NextRequest) {
         ).catch(() => [] as JeRow[]),
 
         tx.$queryRawUnsafe<{ status: string; count: string; total_debit: string }[]>(
-          tenantId === '*'
-            ? `SELECT status, COUNT(*)::text AS count,
-                      COALESCE(SUM(total_debit), 0)::text AS total_debit
-                 FROM finance_journal_entries
-                WHERE deleted_at IS NULL
-                GROUP BY status`
-            : `SELECT status, COUNT(*)::text AS count,
-                      COALESCE(SUM(total_debit), 0)::text AS total_debit
-                 FROM finance_journal_entries
-                WHERE deleted_at IS NULL AND tenant_id = $1
-                GROUP BY status`,
-          ...(tenantId !== '*' ? [tenantId] : []),
+          `SELECT status, COUNT(*)::text AS count,
+                  COALESCE(SUM(total_debit), 0)::text AS total_debit
+             FROM finance_journal_entries
+            WHERE deleted_at IS NULL AND tenant_id = $1
+            GROUP BY status`,
+          tenantId,
         ).catch(() => []),
       ]);
 
@@ -129,11 +116,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    const tenantId = getTenant(req);
-      if (!tenantId || tenantId === '*') {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
-
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
 
