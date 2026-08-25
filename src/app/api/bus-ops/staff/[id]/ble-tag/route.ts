@@ -40,7 +40,13 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  // Built inside the transaction, written after it commits — auditing from
+  // inside one either loses the entry (fire-and-forget promise abandoned on
+  // return) or holds this transaction's connection while logAudit checks out
+  // a second one from the same pool.
+  let audit: Parameters<typeof logAudit>[0] | null = null;
+
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
       const tagId = String(body?.tagId ?? '').trim();
@@ -70,7 +76,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
         },
       });
 
-      void logAudit({
+      audit = {
         tenantId: req.headers.get('x-tenant-id') ?? undefined,
         userId: req.headers.get('x-user-id') ?? 'system',
         userRole: req.headers.get('x-user-role') ?? 'STAFF',
@@ -78,10 +84,13 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
         entityId: tag.id,
         action: 'UPDATE',
         details: `BLE tag ${tagId} (${body?.formFactor ?? 'unspecified'}) issued to staff ${params.id}`,
-      });
+      };
 
       return NextResponse.json(tag);
   });
+
+  if (audit) await logAudit(audit);
+  return response;
 }
 
 
@@ -94,20 +103,26 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  // See the note in PUT — the audit write must happen after the transaction.
+  let audit: Parameters<typeof logAudit>[0] | null = null;
+
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     await tx.staffBleTag.update({
         where: { staffMemberId: params.id },
         data: { isActive: false },
       }).catch(() => null);
-      void logAudit({
+      audit = {
         tenantId: req.headers.get('x-tenant-id') ?? undefined,
         userId: req.headers.get('x-user-id') ?? 'system',
         userRole: req.headers.get('x-user-role') ?? 'STAFF',
         entityType: 'StaffBleTag',
         action: 'DELETE',
         details: `BLE tag disabled (lost / returned) for staff ${params.id}`,
-      });
+      };
       return NextResponse.json({ ok: true });
   });
+
+  if (audit) await logAudit(audit);
+  return response;
 }
 
