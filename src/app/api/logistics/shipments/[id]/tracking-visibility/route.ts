@@ -56,14 +56,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Verify the shipment belongs to this tenant before mutating.
-    const own = await prisma.$queryRawUnsafe<Array<{ id: string; customer_id: string; current_level: string | null; no: string | null }>>(
-      `SELECT id::text, cargo_owner_customer_id AS customer_id,
-              portal_tracking_level AS current_level,
-              shipment_no AS no
-         FROM logistics_shipment_orders
-        WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
-        LIMIT 1`,
-      shipmentId, tenantId,
+    //
+    // Only this read is wrapped. The three calls below it
+    // (setShipmentTrackingOverride, logAudit, resolveTrackingLevel) reach the
+    // database through their own lib helpers on the base client, so they are
+    // not the handler's to wrap — they need the same treatment at their own
+    // definitions.
+    const own = await withTenantRls(prisma, tenantId, async (tx) =>
+      tx.$queryRawUnsafe<Array<{ id: string; customer_id: string; current_level: string | null; no: string | null }>>(
+        `SELECT id::text, cargo_owner_customer_id AS customer_id,
+                portal_tracking_level AS current_level,
+                shipment_no AS no
+           FROM logistics_shipment_orders
+          WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
+          LIMIT 1`,
+        shipmentId, tenantId,
+      ),
     );
     if (!own[0]) {
       return NextResponse.json({ error: 'Shipment not found' }, { status: 404 });

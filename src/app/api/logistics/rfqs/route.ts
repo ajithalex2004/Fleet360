@@ -58,11 +58,21 @@ export async function GET(req: NextRequest) {
     const laneById = new Map<string, { origin: string | null; destination: string | null; customerName: string | null; vehicleType: string | null; metadata: Record<string, unknown> | null }>();
     if (shipmentIds.length > 0) {
       const ph = shipmentIds.map((_, i) => `$${i + 2}`).join(',');
-      const rows = await prisma.$queryRawUnsafe<ShipmentLaneRow[]>(
-        `SELECT id, origin_name, destination_name, cargo_owner_name, requested_vehicle_type, metadata
-           FROM logistics_shipment_orders
-          WHERE tenant_id = $1 AND deleted_at IS NULL AND id IN (${ph})`,
-        tenantId, ...shipmentIds,
+      // Only this query is wrapped, not the listFreightRfqs call above it:
+      // that helper starts with ensureLogisticsDomainTables(), and running DDL
+      // inside a tenant transaction is not something to do casually.
+      //
+      // The .catch stays outside the wrapper on purpose. A rejection now rolls
+      // the transaction back first and the fallback is applied after, which is
+      // the same observable behaviour as before without leaving an aborted
+      // transaction open.
+      const rows = await withTenantRls(prisma, tenantId, async (tx) =>
+        tx.$queryRawUnsafe<ShipmentLaneRow[]>(
+          `SELECT id, origin_name, destination_name, cargo_owner_name, requested_vehicle_type, metadata
+             FROM logistics_shipment_orders
+            WHERE tenant_id = $1 AND deleted_at IS NULL AND id IN (${ph})`,
+          tenantId, ...shipmentIds,
+        ),
       ).catch(() => [] as ShipmentLaneRow[]);
       for (const r of rows) {
         laneById.set(r.id, {
