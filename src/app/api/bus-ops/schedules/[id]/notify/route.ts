@@ -122,7 +122,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         const staffIds = [...new Set(recipients.map(p => p.staffMemberId).filter(Boolean) as string[])];
         const staff = staffIds.length > 0
           ? await tx.staffMember.findMany({
-              where: { id: { in: staffIds } },
+              where: { id: { in: staffIds }, tenantId },
               select: { id: true, name: true, email: true, contactNumber: true },
             })
           : [];

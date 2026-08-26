@@ -45,7 +45,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
         // Find the latest trip log and update it
         const latestLog = await tx.tripLog.findFirst({
-          where: { scheduleId: params.id },
+          // Schedule already resolved within the tenant above; tenantId here
+          // keeps that guarantee local to the statement.
+          where: { scheduleId: params.id, tenantId },
           orderBy: { createdAt: 'desc' },
         });
 

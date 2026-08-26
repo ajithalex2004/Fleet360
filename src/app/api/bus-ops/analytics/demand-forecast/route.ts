@@ -64,6 +64,12 @@ export async function GET(req: NextRequest) {
         // Pull trip schedules with their passenger counts in the window.
         const trips = await tx.tripSchedule.findMany({
           where: {
+            // Without tenantId this aggregated every tenant's trips into one
+            // forecast — a cross-tenant read whose output was also simply
+            // wrong, since the demand curve included other organisations'
+            // ridership. RLS does not catch it: the database role holds
+            // BYPASSRLS, so this WHERE clause is the only boundary.
+            tenantId,
             deletedAt: null,
             departureTime: { gte: historyStart, lte: now },
           },

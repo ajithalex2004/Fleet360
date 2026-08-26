@@ -49,6 +49,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
           const passingCheck = await tx.busPreTripCheck.findFirst({
             where: {
+              // Schedule already resolved within the tenant above.
+              tenantId,
               scheduleId: params.id,
               performedAt: { gte: todayStart },
               overallPass: true,
@@ -87,7 +89,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             },
           }),
           tx.tripPassenger.updateMany({
-            where: { tripId: params.id, status: 'CONFIRMED', deletedAt: null },
+            where: { tripId: params.id, tenantId, status: 'CONFIRMED', deletedAt: null },
             data: { status: 'NO_SHOW', updatedAt: new Date() },
           }),
         ]);

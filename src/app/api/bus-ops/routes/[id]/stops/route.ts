@@ -7,8 +7,20 @@
  * available for cross-module queries.
  *
  * Also fixed a pre-existing gap: RouteStop.tenantId was never populated
- * on create/replace, leaving stops orphaned from tenant scoping. Now
- * derived from the BusRoute's tenantId on every write.
+ * on create/replace, leaving stops orphaned from tenant scoping.
+ *
+ * That fix originally read the tenant off the BusRoute row and used it to
+ * stamp the stops. It populated the column, but it took the tenant from the
+ * RESOURCE rather than the CALLER — and shadowed the authenticated tenantId
+ * with it. The route id comes from the URL and nothing checked ownership, so
+ * any authenticated user could read, replace, or append stops on any route in
+ * any organisation, and the written rows carried the victim's tenant_id,
+ * making the result indistinguishable from a legitimate edit. RLS would
+ * normally have blocked it; the database role holds BYPASSRLS, so it did not.
+ *
+ * Every handler here now resolves the route scoped by the authenticated
+ * tenant and returns 404 when it isn't theirs — 404 rather than 403 so the
+ * endpoint cannot be used to enumerate which route ids exist.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -29,7 +41,7 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const stops = await tx.routeStop.findMany({
-          where: { routeId: params.id },
+          where: { routeId: params.id, tenantId },
           orderBy: { sequence: 'asc' },
         });
         return NextResponse.json(stops);
@@ -60,32 +72,42 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const stops = (body.stops ?? body) as any[];
 
-        // Resolve the route's tenantId once so we can stamp it on every stop
-        // (fixes the pre-existing bug where stops landed with null tenant).
-        const route = await tx.busRoute.findUnique({ where: { id: params.id }, select: { tenantId: true } });
-        const tenantId = route?.tenantId ?? null;
+        // Prove the route belongs to the caller before touching anything. The
+        // previous version read the route's own tenantId and shadowed the
+        // authenticated one with it, which turned "stamp the tenant" into
+        // "adopt whatever tenant owns this row" — see the file header.
+        const route = await tx.busRoute.findFirst({
+          where: { id: params.id, tenantId, deletedAt: null },
+          select: { id: true },
+        });
+        if (!route) {
+          return NextResponse.json({ error: 'Route not found' }, { status: 404 });
+        }
 
-        await tx.$transaction([
-          tx.routeStop.deleteMany({ where: { routeId: params.id } }),
-          tx.routeStop.createMany({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            data: stops.map((s: any, i: number) => ({
-              routeId: params.id,
-              tenantId,
-              stopName: s.stopName,
-              sequence: s.sequence ?? i + 1,
-              gpsLat: s.gpsLat ?? null,
-              gpsLng: s.gpsLng ?? null,
-              geofenceRadiusM: s.geofenceRadiusM ?? null,
-              estimatedArrivalMins: s.estimatedArrivalMins ?? null,
-              landmark: s.landmark ?? null,
-            })),
-          }),
-        ]);
+        // No inner $transaction here. withTenantRls has already opened one and
+        // Prisma strips $transaction from a TransactionClient at runtime, so
+        // the previous tx.$transaction([...]) would have thrown
+        // "tx.$transaction is not a function". These two statements are atomic
+        // regardless — they run inside the transaction withTenantRls holds.
+        await tx.routeStop.deleteMany({ where: { routeId: params.id, tenantId } });
+        await tx.routeStop.createMany({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          data: stops.map((s: any, i: number) => ({
+            routeId: params.id,
+            tenantId,
+            stopName: s.stopName,
+            sequence: s.sequence ?? i + 1,
+            gpsLat: s.gpsLat ?? null,
+            gpsLng: s.gpsLng ?? null,
+            geofenceRadiusM: s.geofenceRadiusM ?? null,
+            estimatedArrivalMins: s.estimatedArrivalMins ?? null,
+            landmark: s.landmark ?? null,
+          })),
+        });
 
         // Reload with ids assigned by createMany, then dual-write Places.
         const newStops = await tx.routeStop.findMany({
-          where: { routeId: params.id },
+          where: { routeId: params.id, tenantId },
           orderBy: { sequence: 'asc' },
         });
         void syncStopPlaces(newStops, tenantId).catch(() => { /* best-effort */ });
@@ -111,11 +133,19 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
+        // Route resolved within the caller's tenant, and the authenticated
+        // tenantId is no longer shadowed by the route's own — see the file
+        // header for what that shadowing allowed.
         const [route, maxSeq] = await Promise.all([
-          tx.busRoute.findUnique({ where: { id: params.id }, select: { tenantId: true } }),
-          tx.routeStop.aggregate({ where: { routeId: params.id }, _max: { sequence: true } }),
+          tx.busRoute.findFirst({
+            where: { id: params.id, tenantId, deletedAt: null },
+            select: { id: true },
+          }),
+          tx.routeStop.aggregate({ where: { routeId: params.id, tenantId }, _max: { sequence: true } }),
         ]);
-        const tenantId = route?.tenantId ?? null;
+        if (!route) {
+          return NextResponse.json({ error: 'Route not found' }, { status: 404 });
+        }
 
         const stop = await tx.routeStop.create({
           data: {
