@@ -110,6 +110,10 @@ export async function POST(req: NextRequest) {
                 staffMemberId: ar.staffMemberId,
                 status: { in: ['CONFIRMED'] }, // BOARDED won't happen for tomorrow
                 trip: { departureTime: { gte: target, lt: targetEnd }, deletedAt: null },
+                // Same tenantScope filter the absence query above applies.
+                // Omitting it here meant a scoped run still swept passenger
+                // rows belonging to other tenants.
+                ...(tenantScope ? { tenantId: tenantScope } : {}),
               },
               select: { id: true, tripId: true },
             });
@@ -190,14 +194,22 @@ export async function POST(req: NextRequest) {
 
             // Capacity headroom = capacity - count(CONFIRMED|BOARDED).
             const filled = await tx.tripPassenger.count({
-              where: { tripId: tid, status: { in: ['CONFIRMED', 'BOARDED'] } },
+              where: {
+                tripId: tid,
+                status: { in: ['CONFIRMED', 'BOARDED'] },
+                ...(tenantScope ? { tenantId: tenantScope } : {}),
+              },
             });
             const headroom = (trip.capacity ?? 0) - filled;
             if (headroom <= 0) continue;
 
             // Promote in FIFO order.
             const waitlisted = await tx.tripPassenger.findMany({
-              where: { tripId: tid, status: 'WAITLISTED' },
+              where: {
+                tripId: tid,
+                status: 'WAITLISTED',
+                ...(tenantScope ? { tenantId: tenantScope } : {}),
+              },
               orderBy: { createdAt: 'asc' },
               take: headroom,
               select: { id: true, staffMemberId: true },

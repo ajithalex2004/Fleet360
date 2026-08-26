@@ -28,8 +28,12 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
+    // Unlike the depart and complete handlers, nothing here resolves the
+    // schedule within the tenant first, so scheduleId arrives from the URL
+    // unchecked. tenantId is what stops this returning another organisation's
+    // safety inspection.
     const latest = await tx.busPreTripCheck.findFirst({
-        where: { scheduleId: params.id },
+        where: { scheduleId: params.id, tenantId },
         orderBy: { performedAt: 'desc' },
       });
       return NextResponse.json({ check: latest, checklist: PRETRIP_CHECKLIST });
@@ -60,7 +64,12 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           return NextResponse.json({ error: 'items[] is required' }, { status: 400 });
         }
 
-        const schedule = await tx.tripSchedule.findUnique({ where: { id: params.id } });
+        // findFirst with tenantId, not findUnique on the id alone: this
+        // previously accepted any schedule id and recorded a pre-trip safety
+        // check against another organisation's trip.
+        const schedule = await tx.tripSchedule.findFirst({
+          where: { id: params.id, tenantId, deletedAt: null },
+        });
         if (!schedule) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
 
         const assessment = assessChecklist(items);
