@@ -105,6 +105,7 @@ const SEVERITY = [
   'UNKNOWN_EXPRESSION',       // checker cannot parse it — never assumed safe
   'BROAD_POLICY',             // a branch of the expression does not constrain
   'MISSING_COMMAND_COVERAGE', // default-deny; loud breakage after the switch
+  'NULLABLE_ESCAPE_LIVE',     // readable by every tenant, and not allowlisted
   'DENIED',                   // deliberately denied, e.g. append-only tables
   'SCOPED',
 ];
@@ -118,6 +119,7 @@ const SEVERITY = [
 // today and prevents the category reappearing unnoticed.
 const FAILING = new Set([
   'OPEN_NO_RLS',
+  'NULLABLE_ESCAPE_LIVE',
   'UNKNOWN_EXPRESSION',
   'BROAD_POLICY',
   'MISSING_COMMAND_COVERAGE',
@@ -129,6 +131,40 @@ const FAILING = new Set([
 // without a written reason — same rule as RULE_EXEMPTIONS in
 // scripts/check-tenant-rls.js. Entries are { table, reason }.
 const ROLE_RESTRICTED_ALLOWLIST = [];
+
+// Tables where a LIVE `tenant_id IS NULL` escape is a deliberate global-data
+// model rather than a leak. Anything live and not listed here fails the run.
+//
+// A justification is mandatory. These are the rows every tenant can read, so
+// the reason has to survive being read out loud.
+const GLOBAL_NULL_ALLOWLIST = [
+  {
+    table: 'roles',
+    reason:
+      `The platform-role model. 11 NULL-tenant rows are is_system=true role ` +
+      `templates, and admin/session/route.ts grants "*:*:*" on exactly ` +
+      `role.code === "SUPER_ADMIN" && role.tenantId === null. Enforced by ` +
+      `chk_roles_system_template: (tenant_id IS NULL) = is_system.`,
+  },
+  {
+    table: 'finance.finance_tax_categories',
+    reason:
+      `UAE VAT reference data — STANDARD 5%, ZERO, EXEMPT, OUT_OF_SCOPE. Every ` +
+      `tenant needs to read these and removing the escape is a functional ` +
+      `regression, not a security fix. NOTE: the same four categories also ` +
+      `exist with tenant_id = "__global". Two competing conventions for a ` +
+      `shared row are live at once; that needs normalising, but not during RLS ` +
+      `activation.`,
+  },
+  {
+    table: 'auth_login_attempts',
+    reason:
+      'Write-side only. USING has no NULL branch, so unattributable failed ' +
+      'logins are readable in platform context alone; WITH CHECK keeps it so ' +
+      'they can still be RECORDED. Removing that would trade an information ' +
+      'leak for a security-telemetry gap. See 20260910000003.',
+  },
+];
 
 // Which policy commands apply to which statement. '*' (ALL) applies to all four.
 const APPLIES = {
@@ -538,16 +574,21 @@ async function main() {
   // whole search_path, so a checker that inspects one schema is not inspecting
   // what the application actually reaches.
   const spRaw = (await prisma.$queryRawUnsafe(`SHOW search_path`))[0].search_path;
-  const me = (await prisma.$queryRawUnsafe(`SELECT current_user AS u`))[0].u;
-  const wanted = spRaw.split(',')
-    .map(x => x.trim().replace(/^"|"$/g, ''))
-    .map(x => (x === '$user' ? me : x));
-  const existing = await prisma.$queryRawUnsafe(
-    `SELECT nspname FROM pg_namespace WHERE nspname = ANY($1::text[])`, wanted);
-  const SCHEMAS = wanted.filter(x => existing.some(e => e.nspname === x));
+  const found = await prisma.$queryRawUnsafe(`
+    SELECT DISTINCT n.nspname
+      FROM pg_namespace n
+      JOIN pg_class c ON c.relnamespace = n.oid AND c.relkind = 'r'
+     WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+       AND n.nspname NOT LIKE 'pg_toast%'
+       AND n.nspname NOT LIKE 'pg_temp%'
+       AND EXISTS (SELECT 1 FROM pg_attribute a
+                    WHERE a.attrelid = c.oid AND a.attname = 'tenant_id'
+                      AND a.attnum > 0 AND NOT a.attisdropped)
+     ORDER BY 1`);
+  const SCHEMAS = found.map(r => r.nspname);
   console.log(`
 search_path: ${spRaw}`);
-  console.log(`scanning schemas: ${SCHEMAS.join(', ')}`);
+  console.log(`schemas containing tenant-bearing tables: ${SCHEMAS.join(', ') || '(none)'}`);
 
   // Tenant-owned tables: public, ordinary tables carrying a tenant_id column.
   const tables = await prisma.$queryRawUnsafe(`
@@ -612,8 +653,27 @@ search_path: ${spRaw}`);
     // does not apply to the runtime role is not protection, and below the
     // categories that describe an actual hole.
     const allowlisted = ROLE_RESTRICTED_ALLOWLIST.some(a => a.table === t.name);
-    const worst = SEVERITY.find(s => verdicts.includes(s))
-      ?? (roleScoped.length > 0 && !allowlisted ? 'ROLE_RESTRICTED' : 'SCOPED');
+    const qualified = t.schema === 'public' ? t.name : `${t.schema}.${t.name}`;
+
+    // A live NULL escape on the READ side is exposure unless it is an
+    // explicitly justified global-data model. Dead escapes (NOT NULL column)
+    // and write-side-only escapes are not exposure and do not gate.
+    const globalOk = GLOBAL_NULL_ALLOWLIST.some(a => a.table === qualified);
+    const liveRead = t.tenant_nullable === 'YES' && escUsing && !globalOk;
+
+    // Only the per-command categories can come from `verdicts`. SCOPED is one
+    // of them and sits in SEVERITY, so `SEVERITY.find(...)` always matched it
+    // and the ?? fallback never ran — which meant NULLABLE_ESCAPE_LIVE and
+    // ROLE_RESTRICTED could never be assigned to a table, and both reported 0
+    // no matter what the data was. Table-level categories have to be decided
+    // separately from command-level ones.
+    const HARD = ['OPEN_NO_RLS', 'UNKNOWN_EXPRESSION', 'BROAD_POLICY', 'MISSING_COMMAND_COVERAGE'];
+    const worst =
+      HARD.find(h => verdicts.includes(h))
+      ?? (liveRead ? 'NULLABLE_ESCAPE_LIVE'
+        : (roleScoped.length > 0 && !allowlisted) ? 'ROLE_RESTRICTED'
+        : verdicts.includes('DENIED') ? 'DENIED'
+        : 'SCOPED');
 
     report.push({ table: t.schema === 'public' ? t.name : `${t.schema}.${t.name}`, forced: t.forced, nullable: t.tenant_nullable === 'YES', escUsing, escCheck, worst, commands, roleScoped: roleScoped.map(p => p.name) });
   }
@@ -639,6 +699,7 @@ Effective RLS coverage — ${report.length} tenant-owned tables, as role '${ROLE
     SCOPED:                   'every command constrained to the tenant',
     DENIED:                   'command deliberately denied (append-only tables)',
     MISSING_COMMAND_COVERAGE: 'default-deny — breaks LOUDLY after the role switch',
+    NULLABLE_ESCAPE_LIVE:     'nullable tenant_id + IS NULL in USING, not allowlisted as global',
     ROLE_RESTRICTED:          `policy does not apply to '${ROLE}' — protects nothing at runtime`,
     BROAD_POLICY:             'a branch of the expression does not constrain the tenant',
     UNKNOWN_EXPRESSION:       'expression not recognised — failing closed',
@@ -675,24 +736,39 @@ Effective RLS coverage — ${report.length} tenant-owned tables, as role '${ROLE
   // overstates the exposure — and this output is the pre-activation gate, so
   // overstating it is as unhelpful as understating it.
   const hasEscape = report.filter(r => r.escUsing || r.escCheck);
-  const live = hasEscape.filter(r => r.nullable);
-  const readable = live.filter(r => r.escUsing);
-  const writeOnly = live.filter(r => !r.escUsing && r.escCheck);
-  if (hasEscape.length > 0) {
-    console.log(`
-   tenant_id IS NULL escape present on ${hasEscape.length} table(s):`);
-    console.log(`      ${hasEscape.length - live.length} unreachable (tenant_id is NOT NULL) - no exposure`);
-    if (readable.length > 0) {
-      console.log(`      ⚠️  ${readable.length} READABLE by every tenant (escape is in USING):`);
-      console.log(`             ${readable.map(r => r.table).join(', ')}`);
-    } else {
-      console.log(`      0 readable by every tenant`);
+  const liveAll = hasEscape.filter(r => r.nullable && r.escUsing);
+  const writeOnly = hasEscape.filter(r => r.nullable && !r.escUsing && r.escCheck);
+  const dead = hasEscape.length - liveAll.length - writeOnly.length;
+
+  console.log('');
+  console.log(`  NULLABLE_ESCAPE_LIVE  ${String(liveAll.length).padStart(4)}   readable by every tenant`);
+  console.log(`  NULLABLE_ESCAPE_DEAD  ${String(dead).padStart(4)}   IS NULL branch present but tenant_id is NOT NULL`);
+  if (writeOnly.length) {
+    console.log(`  NULLABLE_ESCAPE_WRITE ${String(writeOnly.length).padStart(4)}   recordable with a NULL tenant, readable only in platform context`);
+  }
+
+  if (liveAll.length > 0) {
+    console.log('');
+    for (const r of liveAll) {
+      const a = GLOBAL_NULL_ALLOWLIST.find(x => x.table === r.table);
+      if (a) {
+        console.log(`  ALLOWLISTED  ${r.table}`);
+        console.log(`     └─ ${a.reason}`);
+      } else {
+        console.log(`  🔴 NOT ALLOWLISTED  ${r.table} — every tenant can read its untenanted rows`);
+      }
     }
-    if (writeOnly.length > 0) {
-      console.log(`      ${writeOnly.length} write-side only (USING is scoped; WITH CHECK permits a NULL tenant`);
-      console.log(`             so the row can be recorded but only platform context can read it):`);
-      console.log(`             ${writeOnly.map(r => r.table).join(', ')}`);
-    }
+  }
+
+  // A stale allowlist entry is one that no longer suppresses anything, which
+  // means nobody is reviewing it any more. Same rule as RULE_EXEMPTIONS.
+  const staleGlobal = GLOBAL_NULL_ALLOWLIST.filter(
+    a => !report.some(r => r.table === a.table && r.nullable && (r.escUsing || r.escCheck)));
+  if (staleGlobal.length > 0) {
+    console.log('');
+    console.log(`  🔴 STALE GLOBAL_NULL_ALLOWLIST entries — no longer match a live escape:`);
+    staleGlobal.forEach(a => console.log(`     ${a.table}`));
+    staleGlobal.forEach(a => failed.push({ table: a.table, worst: 'STALE_ALLOWLIST' }));
   }
 
   if (failed.length === 0) {
