@@ -107,13 +107,29 @@ export async function POST(req: NextRequest) {
         const vehicleId = data.vehicleId ?? booking.vehicleId ?? null;
 
         // Atomic: update booking, create agreement, create inspection.
-        const result = await tx.$transaction(async (tx) => {
+        // No inner transaction: withTenantRls has already opened one and
+        // Prisma strips $transaction from a TransactionClient, so this threw
+        // "tx.$transaction is not a function" on every handover. Everything
+        // below is already atomic inside the outer transaction.
+        const result = await (async () => {
           const totalDays = booking.totalDays ?? Math.max(1, Math.ceil(
             (booking.dropoffDate.getTime() - booking.pickupDate.getTime()) / 86400000,
           ));
 
-          const agreementCount = await tx.rentalAgreement.count();
-          const agreementNo = `RA-${String(agreementCount + 1).padStart(6, '0')}`;
+          // Per-tenant and derived from the highest number issued — the same
+          // fix as REQ-/TRP-/BRK- in 20260906000000, guarded now by
+          // uniq_rental_agreements_tenant_agreement_no.
+          //
+          // $1::uuid because rental_agreements.tenant_id is uuid, as
+          // trip_schedules is; most of this schema uses text. Without the cast
+          // this fails with 42883 "operator does not exist: uuid = text".
+          const [{ max }] = await tx.$queryRawUnsafe<Array<{ max: number | null }>>(
+            `SELECT MAX(NULLIF(regexp_replace(agreement_no, '^RA-', ''), '')::int) AS max
+               FROM rental_agreements
+              WHERE tenant_id = $1::uuid AND agreement_no ~ '^RA-[0-9]+$'`,
+            tenantId,
+          );
+          const agreementNo = `RA-${String((max ?? 0) + 1).padStart(6, '0')}`;
 
           const agreement = await tx.rentalAgreement.upsert({
             where: { bookingId: data.bookingId },
@@ -176,7 +192,7 @@ export async function POST(req: NextRequest) {
           });
 
           return { agreement, inspection, signatureUrl };
-        });
+        })();
 
         void logAudit({
           tenantId: req.headers.get('x-tenant-id') ?? undefined,
