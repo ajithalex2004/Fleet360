@@ -85,33 +85,33 @@ jobs:
 
               const comment = `## ❌ Tenant RLS Compliance Check Failed
 
-**${violations} violation(s) found** in API routes.
+            **${violations} violation(s) found** in API routes.
 
-### Violations:
-\`\`\`
-${violationSection.trim().substring(0, 2000)}
-\`\`\`
+            ### Violations:
+            \`\`\`
+            ${violationSection.trim().substring(0, 2000)}
+            \`\`\`
 
-### How to Fix:
+            ### How to Fix:
 
-1. **Missing \`requireAuthorizedTenant()\`:**
-   - Add authorization check at the start of your handler
-   - Import from \`@/lib/tenant-context\`
+            1. **Missing \`requireAuthorizedTenant()\`:**
+               - Add authorization check at the start of your handler
+               - Import from \`@/lib/tenant-context\`
 
-2. **Missing RLS wrapper:**
-   - Wrap database operations with \`withTenantRls(prisma, tenantId, async (tx) => { ... })\`
-   - Import from \`@/lib/rls\`
+            2. **Missing RLS wrapper:**
+               - Wrap database operations with \`withTenantRls(prisma, tenantId, async (tx) => { ... })\`
+               - Import from \`@/lib/rls\`
 
-3. **Missing body sanitization:**
-   - Use \`stripTenantOwnershipFields()\` on request bodies
-   - Prevents tenant_id injection
+            3. **Missing body sanitization:**
+               - Use \`stripTenantOwnershipFields()\` on request bodies
+               - Prevents tenant_id injection
 
-### Resources:
-- [Migration Guide](../blob/main/MIGRATION_PROGRESS.md)
-- [RLS Wrapper Documentation](../blob/main/docs/rls-wrappers.md)
+            ### Resources:
+            - [Migration Guide](../blob/main/MIGRATION_PROGRESS.md)
+            - [RLS Wrapper Documentation](../blob/main/docs/rls-wrappers.md)
 
-Run locally: \`npm run tenant:check-rls\`
-`;
+            Run locally: \`npm run tenant:check-rls\`
+            `;
 
               github.rest.issues.createComment({
                 issue_number: context.issue.number,
