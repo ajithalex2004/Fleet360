@@ -197,7 +197,9 @@ export async function POST(req: NextRequest) {
     if (rosterOpts?.driverIds && rosterOpts.driverIds.length > 0) {
       const drivers = await withTenantRls(prisma, tenantId, async (tx) => {
         const rows = await tx.driver.findMany({
-          where: { id: { in: rosterOpts.driverIds }, deletedAt: null, status: { not: 'INACTIVE' } },
+          // driverIds arrive in the request body, so without tenantId a
+          // caller could roster another organisation's drivers into a plan.
+          where: { tenantId, id: { in: rosterOpts.driverIds }, deletedAt: null, status: { not: 'INACTIVE' } },
           select: { id: true, firstName: true, lastName: true, name: true, licenseType: true },
         });
         return rows.map((d) => ({

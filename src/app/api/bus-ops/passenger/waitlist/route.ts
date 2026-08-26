@@ -68,8 +68,10 @@ export async function POST(req: NextRequest) {
         });
         if (!staff || staff.deletedAt) return NextResponse.json({ error: 'Staff not found' }, { status: 404 });
 
+        // staffMemberId is resolved within the tenant above, but tripId comes
+        // from the request body unchecked.
         const existing = await tx.tripPassenger.findFirst({
-          where: { tripId, staffMemberId },
+          where: { tripId, staffMemberId, tenantId },
           select: { id: true, status: true },
         });
         if (existing) {

@@ -57,7 +57,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         const code = (e as { code?: string } | null)?.code;
         if (code === 'P2002') {
           const existing = await tx.transportCalendarEntry.findFirst({
-            where: { calendarId, entryDate: new Date((await req.json())?.entryDate ?? new Date()) },
+            where: { tenantId, calendarId, entryDate: new Date((await req.json())?.entryDate ?? new Date()) },
           });
           return NextResponse.json(existing, { status: 200 });
         }

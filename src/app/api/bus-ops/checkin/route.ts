@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
         let passengerId: string | null = body?.passengerId ?? null;
         if (!passengerId && staffMemberId) {
           const p = await tx.tripPassenger.findFirst({
-            where: { tripId: scheduleId, staffMemberId },
+            where: { tripId: scheduleId, staffMemberId, tenantId },
             select: { id: true },
           });
           passengerId = p?.id ?? null;

@@ -90,7 +90,9 @@ export async function PATCH(req: NextRequest, { params }: IdCtx) {
         // The delete and the update are atomic regardless: both run inside the
         // transaction withTenantRls already holds.
         if (Array.isArray(stops)) {
-          await tx.routeStop.deleteMany({ where: { routeId: id } });
+          // Route ownership is proven by the findFirst above; tenantId here
+          // keeps this destructive delete scoped in its own right.
+          await tx.routeStop.deleteMany({ where: { routeId: id, tenantId } });
         }
         const route = await tx.busRoute.update({
           where: { id },
