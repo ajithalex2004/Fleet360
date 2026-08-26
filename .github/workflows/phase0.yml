@@ -6,15 +6,27 @@ name: Phase 0 — Cross-tenant isolation tests
 # tenant_id — the foundational guarantee Phase 0 ships. If a future
 # commit breaks this isolation, this workflow fails the PR.
 #
-# Required secret: NEON_DATABASE_URL — connection string to a Postgres
-# database used as the integration test target. Set in the repo's
-# GitHub Actions secrets. Use a dedicated branch/schema so concurrent
-# PRs don't trample each other.
+# REQUIRED SECRET: PHASE0_DATABASE_URL
 #
-# Failure mode: any test failure exits non-zero, which GitHub renders
-# as a red ✗ on the PR. The job summary includes the failing test
-# names + error excerpts so the developer doesn't have to dig through
-# the log.
+# This job used to gate the integration step on `if: env.NEON_DATABASE_URL
+# != ''` while no such secret was configured, so the step never ran and the
+# check reported SUCCESS having executed zero cross-tenant assertions. It was
+# green from 2026-04 onward while proving only that Go compiled.
+#
+# The secret is now mandatory: a missing one FAILS the job. No database, no app
+# role, no assertions = red. Not skipped, not a warning.
+#
+# The connection string must point at the fleet360_app role, NOT the
+# application's current DATABASE_URL. That one connects as neondb_owner, which
+# holds rolbypassrls, and under it every isolation assertion passes on
+# application WHERE clauses alone while RLS contributes nothing — a green run
+# that proves the opposite of what it claims. The suite's preflight rejects a
+# BYPASSRLS role for exactly this reason, so CI becomes the first place RLS is
+# genuinely exercised, before the application runtime is switched.
+#
+# Use a dedicated branch or schema so concurrent PRs don't trample each other.
+#
+# Failure mode: any test failure exits non-zero and GitHub renders a red ✗.
 
 on:
   push:
@@ -32,10 +44,11 @@ jobs:
     timeout-minutes: 10
 
     env:
-      # Defaults so unit tests can run without DB. The integration
-      # tests skip themselves when DATABASE_URL is absent — see
-      # requireDB() in backend/phasegate/phasegate_test.go.
       GOFLAGS: -mod=readonly
+      # Turns every skip path in the suite into a hard failure. See
+      # requireDB() and TestMain() in backend/phasegate/phasegate_test.go.
+      PHASE0_REQUIRE_DB: "1"
+      PHASE0_EXPECTED_ROLE: fleet360_app
 
     steps:
       - name: Checkout
@@ -59,27 +72,72 @@ jobs:
       # Unit tests run always — no DB required. These verify the gate
       # state machine, middleware routing, escape hatch, and the
       # recheckLoop logic with mocked check functions. Fast (~3s).
+      # Unit tests deliberately run OUTSIDE required mode: they need no
+      # database, and PHASE0_REQUIRE_DB would fail them for not having one.
       - name: Unit tests
         working-directory: backend
+        env:
+          PHASE0_REQUIRE_DB: "0"
+          SKIP_DB_TESTS: "1"
         run: go test ./phasegate/... -count=1 -timeout 60s -v
 
-      # Integration tests run only when NEON_DATABASE_URL is set. They
-      # exercise the actual auth.WithTenant(c) GORM scope against a
-      # live database — the closest canary to "Phase 0 isn't broken"
-      # we have without deploying the binary. ~30s on Neon.
-      - name: Integration tests (live DB)
-        if: ${{ env.NEON_DATABASE_URL != '' }}
+      # The secret is checked BEFORE the tests, so a missing one reads as
+      # "not configured" rather than surfacing later as a confusing Go
+      # failure. Deliberately not an `if:` — a conditional step that does not
+      # run is reported as success, which is the whole defect being removed.
+      - name: Require the database secret
+        env:
+          PHASE0_DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+        run: |
+          if [ -z "$PHASE0_DATABASE_URL" ]; then
+            echo "::error title=PHASE0_DATABASE_URL is not configured::The cross-tenant isolation suite cannot run without it. This job fails rather than reporting a green tick for a suite that never executed."
+            echo "Set the repository secret PHASE0_DATABASE_URL to a connection string for the"
+            echo "fleet360_app role — NOT the application's DATABASE_URL, which connects as"
+            echo "neondb_owner and holds rolbypassrls. Under a BYPASSRLS role every isolation"
+            echo "assertion passes whether or not isolation actually works."
+            exit 1
+          fi
+          echo "secret present (${#PHASE0_DATABASE_URL} chars)"
+
+      # Exercises the real auth.WithTenant(c) GORM scope against a live
+      # database as a non-BYPASSRLS role. TestMain fails the run if the role
+      # holds BYPASSRLS, or if zero cross-tenant assertions execute.
+      - name: Integration tests (live DB, fleet360_app)
         working-directory: backend
         env:
-          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
         run: go test ./phasegate/... -count=1 -timeout 180s -v -run Integration
 
-      # Smoke check on the run itself — confirms the package still
-      # compiles + tests still match, even if NEON_DATABASE_URL is
-      # absent. This catches the "tests were deleted by mistake"
-      # failure mode.
+      # Re-assert the preflight facts in the job summary so the evidence is
+      # visible without opening the log.
+      - name: Record the isolation evidence
+        if: always()
+        env:
+          SECRET_PRESENT: ${{ secrets.PHASE0_DATABASE_URL != '' }}
+        run: |
+          {
+            echo "### Phase 0 — cross-tenant isolation"
+            echo ""
+            echo "| check | value |"
+            echo "|---|---|"
+            echo "| expected role | \`$PHASE0_EXPECTED_ROLE\` |"
+            echo "| secret configured | $SECRET_PRESENT |"
+            echo "| skips permitted | no (PHASE0_REQUIRE_DB=1) |"
+            echo ""
+            echo "Assertion count and connected role are printed by the suite itself"
+            echo "under PHASE 0 PREFLIGHT and PHASE 0 SUMMARY in the job log."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Smoke check on the run itself — catches the "tests were deleted by
+      # mistake" failure mode.
+      #
+      # Runs outside required mode: `go test -list` still executes TestMain,
+      # which would fail for having no DATABASE_URL of its own.
       - name: List phasegate tests (smoke check)
         working-directory: backend
+        env:
+          PHASE0_REQUIRE_DB: "0"
+          SKIP_DB_TESTS: "1"
         run: go test ./phasegate/... -list '.*' | head -50
 
   # Companion job: verifies the dispatch migration + Phase 0 SQL

@@ -13,7 +13,7 @@
 //     - Middleware() 503 vs 200 routing
 //     - Middleware() response body shape (error message, Retry-After)
 //
-//   INTEGRATION (requires DATABASE_URL, skipped if absent):
+//   INTEGRATION (requires DATABASE_URL; FAILS if absent, never skips):
 //     - ensureTestTenants creates stable, idempotent test rows
 //     - testTenantIsolation passes for vehicles / drivers / garages
 //     - testTenantIsolation CATCHES a deliberate breach (inserting
@@ -58,10 +58,13 @@ import (
 
 // â”€â”€ Test fixtures & helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-// TestMain is the entry point for `go test ./phasegate/...`. It loads
-// .env so integration tests can read DATABASE_URL without requiring
-// the operator to export it manually. SKIP_DB_TESTS=1 disables the
-// load entirely (and the integration tests skip themselves).
+// TestMain is the entry point for `go test ./phasegate/...`. It loads .env so
+// integration tests can read DATABASE_URL without the operator exporting it.
+//
+// Under PHASE0_REQUIRE_DB=1 it also enforces the three conditions that make the
+// result mean something: a database must be configured, the connected role must
+// not hold BYPASSRLS, and at least one cross-tenant assertion must actually
+// execute. Any of those failing exits non-zero rather than reporting success.
 func TestMain(m *testing.M) {
 	if os.Getenv("SKIP_DB_TESTS") != "1" {
 		// Try several .env paths so the test runs the same way from
@@ -78,7 +81,44 @@ func TestMain(m *testing.M) {
 			database.Connect()
 		}
 	}
-	os.Exit(m.Run())
+
+	// In required mode the run must be incapable of passing without having
+	// done the work. Three gates, all before and after m.Run rather than
+	// inside any single test, because a test that never starts cannot fail.
+	required := os.Getenv("PHASE0_REQUIRE_DB") == "1"
+
+	if required && os.Getenv("DATABASE_URL") == "" {
+		fmt.Fprintln(os.Stderr,
+			"FATAL: PHASE0_REQUIRE_DB=1 but DATABASE_URL is empty. The CI database "+
+				"secret is missing. This job must not report success without it.")
+		os.Exit(1)
+	}
+
+	if err := preflight(); err != nil {
+		fmt.Fprintf(os.Stderr, "FATAL: phase 0 preflight failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	code := m.Run()
+
+	// A suite that executed zero cross-tenant assertions has proved nothing,
+	// however green it looks. This is the specific failure that let
+	// "Cross-tenant isolation" report success for months.
+	if required {
+		n := crossTenantAssertions.Load()
+		fmt.Printf("\n=== PHASE 0 SUMMARY ===\ncross_tenant_assertions_executed = %d\n", n)
+		if n == 0 {
+			fmt.Fprintln(os.Stderr,
+				"FATAL: zero cross-tenant assertions executed. The suite did not test isolation, "+
+					"so its result means nothing. Failing rather than reporting a green tick.")
+			os.Exit(1)
+		}
+		if code == 0 {
+			fmt.Printf("verdict = PASS (%d assertions against a non-BYPASSRLS role)\n", n)
+		}
+	}
+
+	os.Exit(code)
 }
 
 
@@ -100,20 +140,109 @@ func resetGateForTest(t *testing.T) {
 	lastError.Store("")
 }
 
-// requireDB skips the test if no DB is available. Integration tests
-// call this as their first line. Allows CI without a Postgres to skip
-// gracefully while devs with a DATABASE_URL set get full coverage.
+// requireDB gates an integration test on a usable database.
+//
+// It used to t.Skip on three separate conditions, which is a large part of why
+// the "Cross-tenant isolation" CI check reported success for months without
+// ever executing a cross-tenant assertion: the secret was never configured, so
+// the step was gated off, and the tests would have skipped themselves even if
+// it had run.
+//
+// PHASE0_REQUIRE_DB=1 - set by CI - turns each of those into a hard failure,
+// SKIP_DB_TESTS included, so the gate cannot be disarmed from inside the repo.
 func requireDB(t *testing.T) {
 	t.Helper()
+	required := os.Getenv("PHASE0_REQUIRE_DB") == "1"
+
+	// SKIP_DB_TESTS must not be able to disarm the gate from inside the repo.
 	if os.Getenv("SKIP_DB_TESTS") == "1" {
-		t.Skip("SKIP_DB_TESTS=1 â€” integration test skipped")
+		if required {
+			t.Fatal("PHASE0_REQUIRE_DB=1 but SKIP_DB_TESTS=1 - the isolation suite may not be disabled in required mode")
+		}
+		t.Skip("SKIP_DB_TESTS=1 - explicitly disabled by the operator")
 	}
+
+	// An absent DATABASE_URL is a failure in every mode. In CI it means the
+	// secret is missing; locally it means the operator did not opt out. Silence
+	// is the thing being removed.
 	if os.Getenv("DATABASE_URL") == "" {
-		t.Skip("DATABASE_URL not set â€” integration test skipped. Set it or use SKIP_DB_TESTS=1 to be explicit.")
+		t.Fatal("DATABASE_URL is not set - the isolation suite cannot run. " +
+			"In CI this means the database secret is missing. Locally, set DATABASE_URL " +
+			"or set SKIP_DB_TESTS=1 to opt out explicitly.")
 	}
 	if database.DB == nil {
-		t.Skip("database.DB not initialized â€” integration test skipped")
+		t.Fatal("database.DB is nil - DATABASE_URL is set but no connection was established")
 	}
+}
+
+// crossTenantAssertions counts the cross-tenant assertions that ACTUALLY
+// EXECUTED. TestMain fails the run if it is still zero in required mode.
+//
+// "The suite passed" and "the suite ran" are different claims. This job
+// reported success while every integration test skipped itself, so the green
+// tick proved only that Go compiled.
+var crossTenantAssertions atomic.Int64
+
+// assertTenantIsolation runs one cross-tenant assertion and records it. Every
+// isolation test goes through here, so the count reflects work done rather
+// than tests entered.
+func assertTenantIsolation(t *testing.T, ctx context.Context, db *gorm.DB, a, b uuid.UUID, marker, table string) {
+	t.Helper()
+	if err := testTenantIsolation(ctx, db, a, b, marker, table); err != nil {
+		t.Fatalf("testTenantIsolation(%s): %v", table, err)
+	}
+	crossTenantAssertions.Add(1)
+}
+
+// preflight proves the suite is running against the role it is meant to test,
+// and prints that proof into the CI log.
+//
+// Running as a BYPASSRLS role is the failure mode that matters most: every
+// assertion would pass on application-level WHERE clauses alone while RLS
+// contributed nothing, and the result would be indistinguishable from real
+// isolation. That is exactly the state the application runtime is in today,
+// which is why CI must not inherit its connection string.
+func preflight() error {
+	if os.Getenv("PHASE0_REQUIRE_DB") != "1" {
+		return nil
+	}
+	if database.DB == nil {
+		return fmt.Errorf("PHASE0_REQUIRE_DB=1 but no database connection was established")
+	}
+
+	var row struct {
+		CurrentUser string
+		BypassRls   bool
+	}
+	if err := database.DB.Raw(
+		`SELECT current_user AS current_user,
+		        COALESCE((SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user), false) AS bypass_rls`,
+	).Scan(&row).Error; err != nil {
+		return fmt.Errorf("preflight query failed: %w", err)
+	}
+
+	expected := os.Getenv("PHASE0_EXPECTED_ROLE")
+	if expected == "" {
+		expected = "fleet360_app"
+	}
+
+	fmt.Printf("\n=== PHASE 0 PREFLIGHT ===\n")
+	fmt.Printf("connected_role = %s\n", row.CurrentUser)
+	fmt.Printf("expected_role  = %s\n", expected)
+	fmt.Printf("bypassrls      = %v\n", row.BypassRls)
+
+	if row.BypassRls {
+		return fmt.Errorf(
+			"connected as %q which holds rolbypassrls - RLS is not enforced for it, so every "+
+				"isolation assertion would pass regardless of whether isolation works. "+
+				"Point the CI secret at a non-BYPASSRLS role (%s)", row.CurrentUser, expected)
+	}
+	if row.CurrentUser != expected {
+		return fmt.Errorf(
+			"connected as %q but expected %q - set PHASE0_EXPECTED_ROLE if this is deliberate",
+			row.CurrentUser, expected)
+	}
+	return nil
 }
 
 // uniqueMarker returns a marker string unique to this test invocation,
@@ -403,9 +532,7 @@ func TestIntegration_TestTenantIsolation_Vehicles(t *testing.T) {
 	t.Cleanup(cleanupSmokeTenants)
 
 	marker := uniqueMarker(t)
-	if err := testTenantIsolation(ctx, db, pair.A, pair.B, marker, "vehicles"); err != nil {
-		t.Fatalf("testTenantIsolation(vehicles): %v", err)
-	}
+	assertTenantIsolation(t, ctx, db, pair.A, pair.B, marker, "vehicles")
 }
 
 func TestIntegration_TestTenantIsolation_Drivers(t *testing.T) {
@@ -422,9 +549,7 @@ func TestIntegration_TestTenantIsolation_Drivers(t *testing.T) {
 	t.Cleanup(cleanupSmokeTenants)
 
 	marker := uniqueMarker(t)
-	if err := testTenantIsolation(ctx, db, pair.A, pair.B, marker, "drivers"); err != nil {
-		t.Fatalf("testTenantIsolation(drivers): %v", err)
-	}
+	assertTenantIsolation(t, ctx, db, pair.A, pair.B, marker, "drivers")
 }
 
 func TestIntegration_TestTenantIsolation_Garages(t *testing.T) {
@@ -441,9 +566,7 @@ func TestIntegration_TestTenantIsolation_Garages(t *testing.T) {
 	t.Cleanup(cleanupSmokeTenants)
 
 	marker := uniqueMarker(t)
-	if err := testTenantIsolation(ctx, db, pair.A, pair.B, marker, "garages"); err != nil {
-		t.Fatalf("testTenantIsolation(garages): %v", err)
-	}
+	assertTenantIsolation(t, ctx, db, pair.A, pair.B, marker, "garages")
 }
 
 func TestIntegration_TestTenantIsolation_RejectsBuggyQuery(t *testing.T) {
@@ -528,9 +651,7 @@ func TestIntegration_TestTenantIsolation_CleanupRuns(t *testing.T) {
 	var before int64
 	_ = db.Raw(`SELECT COUNT(*) FROM vehicles WHERE notes LIKE ?`, marker+"%").Scan(&before).Error
 
-	if err := testTenantIsolation(ctx, db, pair.A, pair.B, marker, "vehicles"); err != nil {
-		t.Fatalf("testTenantIsolation: %v", err)
-	}
+	assertTenantIsolation(t, ctx, db, pair.A, pair.B, marker, "vehicles")
 
 	// Count AFTER â€” the defer in testTenantIsolation should have
 	// deleted the sentinel row. Allow marker-based detection even
