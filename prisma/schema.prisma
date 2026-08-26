@@ -2796,6 +2796,7 @@ model Place {
 
 model VehicleDocument {
   id         String    @id @default(uuid())
+  tenantId   String    @map("tenant_id")
   createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt  DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   vehicleId  String    @map("vehicle_id")
@@ -2813,10 +2814,12 @@ model VehicleDocument {
   @@index([expiryDate], map: "idx_vehicle_documents_expiry_date")
   @@map("vehicle_documents")
   @@schema("public")
+  @@index([tenantId])
 }
 
 model FuelLog {
   id           String    @id @default(uuid())
+  tenantId   String    @map("tenant_id")
   createdAt    DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   vehicleId    String    @map("vehicle_id")
   driverId     String?   @map("driver_id")
@@ -2834,10 +2837,12 @@ model FuelLog {
   @@index([fuelDate], map: "idx_fuel_logs_fuel_date")
   @@map("fuel_logs")
   @@schema("public")
+  @@index([tenantId])
 }
 
 model FuelCard {
   id             String    @id @default(uuid())
+  tenantId   String    @map("tenant_id")
   cardNumber     String    @unique @map("card_number")
   vehicleId      String?   @map("vehicle_id")
   driverId       String?   @map("driver_id")
@@ -2848,10 +2853,12 @@ model FuelCard {
 
   @@map("fuel_cards")
   @@schema("public")
+  @@index([tenantId])
 }
 
 model TrafficFine {
   id          String    @id @default(uuid())
+  tenantId   String    @map("tenant_id")
   createdAt   DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   vehicleId   String?   @map("vehicle_id")
   driverId    String?   @map("driver_id")
@@ -2869,6 +2876,7 @@ model TrafficFine {
   @@index([status], map: "idx_traffic_fines_status")
   @@map("traffic_fines")
   @@schema("public")
+  @@index([tenantId])
 }
 
 // ============================================================
@@ -2877,6 +2885,7 @@ model TrafficFine {
 
 model DriverDocument {
   id         String    @id @default(uuid())
+  tenantId   String    @map("tenant_id")
   createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   driverId   String    @map("driver_id")
   docType    String    @map("doc_type") // LICENSE|PASSPORT|VISA|EMIRATES_ID|MEDICAL|OTHER
@@ -2889,10 +2898,12 @@ model DriverDocument {
   @@index([expiryDate], map: "idx_driver_documents_expiry_date")
   @@map("driver_documents")
   @@schema("public")
+  @@index([tenantId])
 }
 
 model DriverShift {
   id         String    @id @default(uuid())
+  tenantId   String    @map("tenant_id")
   createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   driverId   String    @map("driver_id")
   shiftDate  DateTime  @map("shift_date") @db.Timestamptz(6)
@@ -2907,6 +2918,7 @@ model DriverShift {
   @@index([shiftDate], map: "idx_driver_shifts_shift_date")
   @@map("driver_shifts")
   @@schema("public")
+  @@index([tenantId])
 }
 
 model DriverTraining {
