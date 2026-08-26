@@ -11,6 +11,10 @@ interface PreviewRow {
   routeName: string;
   /** BusRoute.code (RT-0001 …). Nullable — see the fallback at the render site. */
   routeCode: string | null;
+  /** ISO timestamp of when these distances were computed; null when skipped. */
+  computedAt: string | null;
+  /** Served from the stored result (free) rather than freshly computed (paid). */
+  cached: boolean;
   stopCount: number;
   geoStopCount: number;
   originalDistanceKm: number;
@@ -62,8 +66,8 @@ export default function OptimisationPage() {
       <PageHeader
         title="Route Optimisation"
         subtitle={data
-          ? `${data.routesScanned} routes scanned · ${data.routesWithMeaningfulSavings} with ≥5% savings · ${data.totalPotentialSavingsKm.toLocaleString()} km potential`
-          : 'Re-orders existing route stops to minimise total distance — Nearest-Neighbour + 2-opt TSP solver.'}
+          ? `${data.routesScanned} routes scanned · ${data.routesWithMeaningfulSavings} with ≥5% savings · ${data.totalPotentialSavingsKm.toLocaleString()} km potential (driving distance)`
+          : 'Re-orders existing route stops to minimise driving distance, measured on real roads via the Routes API.'}
         icon={Recycle}
         accent="violet"
         actions={
@@ -87,8 +91,12 @@ export default function OptimisationPage() {
               <tr className="border-b border-white/5">
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Route</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Stops</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Current km</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">After km</th>
+                {/* "driving" is load-bearing, not decoration: these used to be
+                    straight-line kilometres while the Route Planner one click
+                    away showed road kilometres for the same route — a ~54%
+                    disagreement with nothing on screen to explain it. */}
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Current km<span className="block font-normal text-slate-500">driving</span></th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">After km<span className="block font-normal text-slate-500">driving</span></th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Saving</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Action</th>
               </tr>
