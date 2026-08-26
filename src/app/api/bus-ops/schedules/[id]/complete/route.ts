@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, runSequential } from '@/lib/rls';
 import { prisma }          from '@/lib/prisma';
 import { getEventBus }     from '@/events/event-bus';
 import { TRIP_COMPLETED }  from '@/events/registry';
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           }));
         }
 
-        const results = await tx.$transaction(ops);
+        const results = await runSequential(ops);
 
         // Propagate end-mileage to the Vehicle so the existing Maintenance
         // alert engine (Maintenance/alert-config + ServiceSchedule) can see

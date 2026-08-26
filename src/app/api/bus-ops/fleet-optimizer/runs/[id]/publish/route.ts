@@ -164,7 +164,12 @@ export async function POST(req: NextRequest, { params }: IdCtx) {
       // Transactional publish. Either everything lands or nothing changes —
       // an operator interrupting halfway shouldn't leave the DB with 2 of 5
       // schedules + a still-SUCCESS run.
-      const result = await tx.$transaction(async (tx) => {
+      // No inner transaction: withTenantRls / withPlatformAdmin has already
+      // opened one, and Prisma strips $transaction from a TransactionClient,
+      // so this threw "tx.$transaction is not a function". The IIFE keeps the
+      // callback's `tx` parameter so the body is unchanged; atomicity already
+      // comes from the outer transaction.
+      const result = await (async (tx) => {
         const created: string[] = [];
         for (const spec of specs) {
           const s = await tx.tripSchedule.create({
@@ -197,7 +202,7 @@ export async function POST(req: NextRequest, { params }: IdCtx) {
           routesPerDay:    run.routes.length,
           tripScheduleIds: created,
         };
-      });
+      })(tx);
 
       return NextResponse.json(result);
   });

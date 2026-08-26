@@ -201,3 +201,34 @@ export async function withWebhookTenant<T>(
     handleFn({ tx, tenantId }),
   );
 }
+
+/**
+ * Run an array of Prisma operations sequentially inside the transaction the
+ * caller already holds.
+ *
+ * Replaces `tx.$transaction([...])` / `tx.$transaction(ops)`. Prisma removes
+ * $transaction from a TransactionClient at runtime — the denylist is
+ * ["$connect","$disconnect","$on","$transaction","$use","$extends"] — so those
+ * calls threw "tx.$transaction is not a function" and took their whole handler
+ * with them. Several endpoints were failing outright rather than merely
+ * lacking atomicity.
+ *
+ * Atomicity is not lost by removing the inner transaction: everything inside a
+ * withTenantRls / withSystemJob / withPlatformAdmin callback already runs in
+ * one transaction, and that is what rolls back.
+ *
+ * Sequential, not Promise.all: these share a single connection, and firing
+ * them concurrently on it is not something Prisma supports. Prisma promises
+ * are lazy, so building the array does not execute anything — the awaits here
+ * are what run them, in the order given.
+ *
+ * The mapped return type preserves tuple positions so existing destructuring
+ * (`const [a, b] = await ...`) keeps its types.
+ */
+export async function runSequential<T extends readonly PromiseLike<unknown>[]>(
+  ops: T,
+): Promise<{ -readonly [K in keyof T]: Awaited<T[K]> }> {
+  const out: unknown[] = [];
+  for (const op of ops) out.push(await op);
+  return out as { -readonly [K in keyof T]: Awaited<T[K]> };
+}

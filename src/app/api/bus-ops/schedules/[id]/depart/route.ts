@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, runSequential } from '@/lib/rls';
 import { prisma }         from '@/lib/prisma';
 import { getEventBus }    from '@/events/event-bus';
 import { TRIP_DEPARTED }  from '@/events/registry';
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         //      attendance / occupancy stats were wrong. The gate is intentionally
         //      strict (status = 'CONFIRMED') so we don't stomp on an ABSENT flag
         //      the passenger set earlier or a manual override the driver made.
-        const [updated, tripLog, noShowResult] = await tx.$transaction([
+        const [updated, tripLog, noShowResult] = await runSequential([
           tx.tripSchedule.update({
             where: { id: params.id },
             data: { status: 'STARTED', updatedAt: new Date() },

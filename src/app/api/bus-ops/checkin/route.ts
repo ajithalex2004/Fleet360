@@ -25,7 +25,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, runSequential } from '@/lib/rls';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import {
@@ -159,7 +159,7 @@ export async function POST(req: NextRequest) {
         const performedBy = req.headers.get('x-user-id') ?? body?.performedBy ?? null;
         const performedAt = body?.performedAt ? new Date(body.performedAt) : new Date();
 
-        const [event, passenger] = await tx.$transaction([
+        const [event, passenger] = await runSequential([
           tx.boardingEvent.create({
             data: {
               scheduleId,

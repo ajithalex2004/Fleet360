@@ -116,7 +116,12 @@ export async function POST(
       const lateMinutes = timing.deltaMinutes > 0 ? timing.deltaMinutes : null;
 
       // 4) Persist in a single transaction
-      await tx.$transaction(async (tx) => {
+      // No inner transaction: withTenantRls / withPlatformAdmin has already
+      // opened one, and Prisma strips $transaction from a TransactionClient,
+      // so this threw "tx.$transaction is not a function". The IIFE keeps the
+      // callback's `tx` parameter so the body is unchanged; atomicity already
+      // comes from the outer transaction.
+      await (async (tx) => {
         if (trip.status === 'SCHEDULED') {
           await tx.$executeRaw`
             UPDATE trip_schedules
@@ -141,7 +146,7 @@ export async function POST(
         // If status was already IN_PROGRESS, this is the idempotent
         // re-tap. Don't write a new transition or overwrite the original
         // actual_departure_at — the first one is the source of truth.
-      });
+      })(tx);
 
       return NextResponse.json({
         ok: true,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, runSequential } from '@/lib/rls';
 
 // POST /api/rental/bookings/[id]/complete
 // Closes/completes a booking on vehicle return, records return inspection
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           );
         }
 
-        const results = await tx.$transaction(ops);
+        const results = await runSequential(ops);
         return NextResponse.json({ booking: results[0] });
         } catch (e) {
         console.error('Error completing booking:', e);

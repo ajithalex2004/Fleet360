@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, runSequential } from '@/lib/rls';
 import { sendBookingConfirmedWhatsApp } from '@/lib/whatsapp';
 
 // POST /api/rental/bookings/[id]/confirm
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         const count = await tx.rentalAgreement.count({ where: { tenantId } });
         const agreementNo = `AGR-${String(count + 1).padStart(5, '0')}`;
 
-        const [updatedBooking, agreement] = await tx.$transaction([
+        const [updatedBooking, agreement] = await runSequential([
           tx.rentalBooking.update({
             where: { id: params.id, tenantId },
             data: { status: 'CONFIRMED', updatedAt: new Date() },

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, runSequential } from '@/lib/rls';
 import { sendBookingActivatedWhatsApp } from '@/lib/whatsapp';
 
 // POST /api/rental/bookings/[id]/activate
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           );
         }
 
-        const results = await tx.$transaction(ops as any);
+        const results = await runSequential(ops as any);
 
         // Best-effort WhatsApp activation message.
         void sendBookingActivatedWhatsApp(
