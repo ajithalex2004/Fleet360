@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const fuelCards = await tx.fuelCard.findMany({
+          where: { tenantId },
           orderBy: { cardNumber: 'asc' },
         });
         return NextResponse.json(fuelCards);
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
     try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        const fuelCard = await tx.fuelCard.create({ data: body });
+        const fuelCard = await tx.fuelCard.create({ data: { ...body, tenantId } });
         return NextResponse.json(fuelCard, { status: 201 });
         } catch (e) {
         console.error('Error creating fuel card:', e);

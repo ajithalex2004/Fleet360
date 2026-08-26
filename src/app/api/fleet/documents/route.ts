@@ -21,7 +21,11 @@ export async function GET(req: NextRequest) {
         const vehicleId = sp.get('vehicleId');
         const status = sp.get('status');
         const { take, skip, page, limit } = paginate(sp);
-        const where = { ...(vehicleId ? { vehicleId } : {}), ...(status ? { status } : {}) };
+        // tenantId scopes both the page and the count. These tables had no
+        // tenant column until 20260907000000 — the driverId/vehicleId filters
+        // are optional query params, so with neither supplied this listed
+        // every organisation's rows.
+        const where = { tenantId, ...(vehicleId ? { vehicleId } : {}), ...(status ? { status } : {}) };
         const [data, total] = await Promise.all([
           tx.vehicleDocument.findMany({
             where,
@@ -52,7 +56,7 @@ export async function POST(req: NextRequest) {
     try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        const document = await tx.vehicleDocument.create({ data: body });
+        const document = await tx.vehicleDocument.create({ data: { ...body, tenantId } });
         // A new document can shift the expiring-docs list and the fleet-stats
         // counters. Bust the cache so the dashboard and document widgets
         // pick up the change on the next render.
