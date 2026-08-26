@@ -76,6 +76,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
         const check = await tx.busPreTripCheck.create({
           data: {
+            tenantId,
             scheduleId: params.id,
             vehicleId: schedule.vehicleId ?? null,
             driverId: schedule.driverId ?? null,

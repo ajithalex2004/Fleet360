@@ -105,9 +105,9 @@ export async function POST(req: NextRequest) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+  const { tenantId: authTenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  return withTenantRls(prisma, authTenantId, async (tx) => {
     const rawBody = await req.text();
       const sig = req.headers.get('x-gateway-signature');
 
@@ -161,9 +161,15 @@ export async function POST(req: NextRequest) {
       }
 
       // tenantId is derived from the gateway row — hardware devices authenticate
-      // via HMAC and never send x-tenant-id. May be null for pre-migration rows;
-      // those are still allowed through (RLS tenant_id IS NULL branch covers them).
-      const tenantId = gateway.tenantId ?? null;
+      // via HMAC and never send x-tenant-id.
+      //
+      // This used to fall back to null for pre-migration gateway rows and relied
+      // on the policy's `tenant_id IS NULL` branch to let those through. That
+      // branch was removed in 20260910000000 precisely because it made such rows
+      // readable by every tenant, so the fallback is now the authenticated
+      // tenant. That is strictly more correct in any case: `gateway` is read
+      // inside withTenantRls, so the row already belongs to authTenantId.
+      const tenantId: string = gateway.tenantId ?? authTenantId;
 
       // Heartbeat the gateway up-front, even if the payload is empty.
       await tx.bleGateway.update({
@@ -191,7 +197,7 @@ export async function POST(req: NextRequest) {
             // Derived from the gateway row above — see the tenantId comment
             // there. Conditional so pre-migration gateways with a null tenant
             // keep working, matching the pattern used elsewhere in this file.
-            ...(tenantId ? { tenantId } : {}),
+            tenantId,
             vehicleId: gateway.vehicleId,
             deletedAt: null,
             status: { in: ['SCHEDULED', 'DEPARTED', 'IN_TRANSIT'] },
@@ -227,7 +233,7 @@ export async function POST(req: NextRequest) {
           const tagIds = window.observations.map(o => o.tagId);
           const priorRows = activeTrip
             ? await tx.bleGatewayPresence.findMany({
-                where: { gatewayId, tagId: { in: tagIds }, scheduleId: activeTrip.id, ...(tenantId ? { tenantId } : {}) },
+                where: { gatewayId, tagId: { in: tagIds }, scheduleId: activeTrip.id, tenantId },
               })
             : [];
           const prior = new Map<string, PresenceState>(
@@ -281,7 +287,7 @@ export async function POST(req: NextRequest) {
                   lastSeenAt: state.lastSeenAt,
                   lastRssiDbm: obs.rssiMaxDbm,
                   isPresent: state.isPresent,
-                  ...(tenantId ? { tenantId } : {}),
+                  tenantId,
                 },
               }).catch(err => {
                 summary.errors += 1;
@@ -352,7 +358,7 @@ async function applyTransition(
   vehicleId: string,
   activeTripId: string | null,
   gatewayId: string,
-  tenantId: string | null,
+  tenantId: string,
   summary: IngestSummary,
 ) {
   if (!activeTripId) {
@@ -363,7 +369,7 @@ async function applyTransition(
   // Resolve tag → staff member. Use findFirst (not findUnique) so we can
   // scope by tenantId when known — prevents cross-tenant tag collisions.
   const tag = await prisma.staffBleTag.findFirst({
-    where: { tagId: t.tagId, ...(tenantId ? { tenantId } : {}) },
+    where: { tagId: t.tagId, tenantId },
     select: { staffMemberId: true, isActive: true },
   });
   if (!tag || tag.isActive === false) {
@@ -375,7 +381,7 @@ async function applyTransition(
   // tenantId is already a parameter of this helper (see the signature) and
   // was used for the tag lookup above but not here.
   const passenger = await prisma.tripPassenger.findFirst({
-    where: { tripId: activeTripId, staffMemberId: tag.staffMemberId, ...(tenantId ? { tenantId } : {}) },
+    where: { tripId: activeTripId, staffMemberId: tag.staffMemberId, tenantId },
     select: { id: true, status: true },
   });
   if (!passenger) {
@@ -388,7 +394,7 @@ async function applyTransition(
   const dedupWindowEnd = new Date(t.occurredAt.getTime() + 5_000);
   const dup = await prisma.boardingEvent.findFirst({
     where: {
-      ...(tenantId ? { tenantId } : {}),
+      tenantId,
       scheduleId: activeTripId,
       passengerId: passenger.id,
       direction: t.kind,

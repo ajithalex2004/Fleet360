@@ -74,6 +74,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         //      attendance / occupancy stats were wrong. The gate is intentionally
         //      strict (status = 'CONFIRMED') so we don't stomp on an ABSENT flag
         //      the passenger set earlier or a manual override the driver made.
+        // `as const` so TypeScript infers a tuple rather than an array of the
+        // union of the three result types — without it, destructuring gives
+        // every binding `TripSchedule | TripLog | BatchPayload` and each
+        // property access below fails.
         const [updated, tripLog, noShowResult] = await runSequential([
           tx.tripSchedule.update({
             where: { id: params.id },
@@ -81,6 +85,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           }),
           tx.tripLog.create({
             data: {
+              tenantId,
               scheduleId: params.id,
               actualDepartureTime: body.departureTime ? new Date(body.departureTime) : new Date(),
               startMileage: body.startMileage ?? null,
@@ -92,7 +97,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             where: { tripId: params.id, tenantId, status: 'CONFIRMED', deletedAt: null },
             data: { status: 'NO_SHOW', updatedAt: new Date() },
           }),
-        ]);
+        ] as const);
 
         // Publish to outbox — downstream consumers pick this up asynchronously.
         // tenantId from the schedule row; null is safe (NULL::uuid in event_outbox).

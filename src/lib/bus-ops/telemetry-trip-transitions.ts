@@ -438,6 +438,10 @@ export function destinationDwellSustained(
 
 type ScheduleWithStops = {
   id: string;
+  // Both loaders use `include`, so every scalar comes back at runtime — this
+  // hand-written shape just never listed it. applyDecision needs it to stamp
+  // trip_logs.tenant_id, which is NOT NULL as of 20260910000000.
+  tenantId: string;
   status: string | null;
   vehicleId: string | null;
   departureTime: Date | null;
@@ -780,6 +784,10 @@ async function applyDecision(
   db: PrismaClient,
   decision: Extract<TelemetryDecision, { action: 'STARTED' | 'EN_ROUTE' | 'COMPLETED' }>,
   now: Date,
+  // trip_logs.tenant_id is NOT NULL as of 20260910000000. Taken from the
+  // schedule the decision was made against rather than resolved again here, so
+  // the log cannot be attributed to a different tenant than the trip.
+  tenantId: string,
 ): Promise<void> {
   const { scheduleId, to, action, reason } = decision;
 
@@ -792,6 +800,7 @@ async function applyDecision(
     await db.tripLog
       .create({
         data: {
+          tenantId,
           scheduleId,
           actualDepartureTime: now,
           driverNotes: `Auto-started by telemetry (${TELEMETRY_SOURCE}): ${reason}`,
@@ -811,6 +820,7 @@ async function applyDecision(
     await db.tripLog
       .create({
         data: {
+          tenantId,
           scheduleId,
           actualArrivalTime: now,
           driverNotes: `Auto-completed by telemetry (${TELEMETRY_SOURCE}): ${reason}`,
@@ -865,7 +875,7 @@ export async function evaluateTelemetryTripTransitions(
   }
 
   try {
-    await applyDecision(db, decision, now);
+    await applyDecision(db, decision, now, schedule.tenantId);
     console.info(
       JSON.stringify({
         tag: 'telemetry.trip.live',

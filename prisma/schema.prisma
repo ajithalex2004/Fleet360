@@ -1363,7 +1363,7 @@ model DamageClaim {
 // -- Enhanced Rate Engine ---------------------------------------
 model PricingRule {
   id              String    @id @default(uuid())
-  tenantId   String?   @map("tenant_id")
+  tenantId   String   @map("tenant_id")
   createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   name            String? // friendly label
@@ -1814,7 +1814,7 @@ model BusRoute {
   createdAt             DateTime?         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt             DateTime?         @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt             DateTime?         @map("deleted_at") @db.Timestamptz(6)
-  tenantId              String?           @map("tenant_id")
+  tenantId              String           @map("tenant_id")
   name                  String
   // Optional short code (e.g. "RT-001"). Tenant-scoped unique via
   // uniq_bus_routes_tenant_code (partial index — allows multiple NULLs).
@@ -1951,7 +1951,7 @@ model BusRouteVariantVersion {
 
 model RouteStop {
   id                   String                  @id @default(uuid())
-  tenantId             String?                 @map("tenant_id")
+  tenantId             String                 @map("tenant_id")
   routeId              String                  @map("route_id")
   stopName             String                  @map("stop_name")
   sequence             Int
@@ -2121,7 +2121,7 @@ model TransportCalendarEntry {
 model BusRouteType {
   id        String    @id @default(uuid())
   createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  tenantId  String?   @map("tenant_id")
+  tenantId  String   @map("tenant_id")
   name      String
   isSystem  Boolean?  @default(false) @map("is_system")
 
@@ -2166,7 +2166,7 @@ model TripStopVisit {
   id                 String    @id @default(uuid())
   createdAt          DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  tenantId           String?   @map("tenant_id")
+  tenantId           String   @map("tenant_id")
   scheduleId         String    @map("schedule_id")
   stopId             String    @map("stop_id")
   // Ping crossed the approach radius (default 800m). Used to gate approach
@@ -2193,7 +2193,7 @@ model TripSchedule {
   /// ops script; declared here so the Prisma client exposes `tenantId` and
   /// future migrations track it. Nullable until `phase0_backfill_safety.sql`
   /// is run on the target environment.
-  tenantId              String?                 @map("tenant_id")
+  tenantId              String                 @map("tenant_id")
   tripNumber            String?                 @map("trip_number")
   // Back-reference to the recurring template this instance was generated
   // from (null = ad-hoc one-off trip created directly, not from a template).
@@ -2255,7 +2255,7 @@ model HeadwayRule {
   createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt      DateTime? @map("deleted_at")
-  tenantId       String?   @map("tenant_id")
+  tenantId       String   @map("tenant_id")
   routeId        String    @map("route_id")
   // Optional link to a trip_schedules row when the rule was authored from
   // a specific scheduled trip (lets the UI round-trip without losing the
@@ -2311,7 +2311,7 @@ model CbaRuleSet {
   createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at")
-  tenantId  String?   @map("tenant_id")
+  tenantId  String   @map("tenant_id")
 
   // Display name — e.g. "UAE Federal Labour Law 2024", "DPC 2024 CBA",
   // "Weekend Only".
@@ -2370,7 +2370,7 @@ model TripLog {
   createdAt           DateTime?    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime?    @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt           DateTime?    @map("deleted_at") @db.Timestamptz(6)
-  tenantId            String?      @map("tenant_id")
+  tenantId            String      @map("tenant_id")
   scheduleId          String       @map("schedule_id")
   loggedBy            String?      @map("logged_by")
   actualDepartureTime DateTime?    @map("actual_departure_time") @db.Timestamptz(6)
@@ -2401,7 +2401,7 @@ model StaffTransportPlan {
   id        String    @id @default(uuid())
   createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
-  tenantId  String?   @map("tenant_id")
+  tenantId  String   @map("tenant_id")
 
   // Human-readable name for the planner UI — e.g. "Scenario A — 60min deadhead"
   name        String
@@ -2507,7 +2507,7 @@ model StaffTransportRequest {
   id             String      @id @default(uuid())
   createdAt      DateTime?   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime?   @updatedAt @map("updated_at") @db.Timestamptz(6)
-  tenantId       String?     @map("tenant_id")
+  tenantId       String     @map("tenant_id")
   requestNo      String?     @map("request_no")
   staffMemberId  String      @map("staff_member_id")
   requestType    String      @map("request_type") // ADHOC|ROUTE_CHANGE|NEW_ROUTE|TEMPORARY
@@ -2557,7 +2557,7 @@ model BleGateway {
 model StaffBleTag {
   id                String    @id @default(uuid())
   createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  tenantId          String?   @map("tenant_id")
+  tenantId          String   @map("tenant_id")
   staffMemberId     String    @unique @map("staff_member_id")
   tagId             String    @unique @map("tag_id")
   formFactor        String?   @map("form_factor")
@@ -2577,7 +2577,7 @@ model BleGatewayPresence {
   createdAt     DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
-  tenantId      String?   @map("tenant_id")
+  tenantId      String   @map("tenant_id")
   gatewayId     String    @map("gateway_id")
   vehicleId     String    @map("vehicle_id")
   tagId         String    @map("tag_id")
@@ -2629,7 +2629,7 @@ model BoardingEvent {
   createdAt     DateTime?           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime?           @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt     DateTime?           @map("deleted_at") @db.Timestamptz(6)
-  tenantId      String?             @map("tenant_id")
+  tenantId      String             @map("tenant_id")
   scheduleId    String              @map("schedule_id")
   passengerId   String?             @map("passenger_id")
   staffMemberId String?             @map("staff_member_id")
@@ -2658,7 +2658,7 @@ model BusPreTripCheck {
   createdAt     DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
-  tenantId      String?   @map("tenant_id")
+  tenantId      String   @map("tenant_id")
   scheduleId    String    @map("schedule_id")
   vehicleId     String?   @map("vehicle_id")
   driverId      String?   @map("driver_id")
@@ -3041,7 +3041,7 @@ model FinanceBudget {
 
 model VatReturn {
   id             String    @id @default(uuid())
-  tenantId   String?   @map("tenant_id")
+  tenantId   String   @map("tenant_id")
   createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   // Period bounds — the canonical periodFrom/periodTo plus periodStart/
   // periodEnd aliases. Pre-2.7 route code referenced periodStart/periodEnd
@@ -4765,7 +4765,7 @@ model TenantFeatureOverride {
 model AuditEvent {
   id             String   @id @default(uuid())
   occurredAt     DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
-  tenantId       String?  @map("tenant_id")
+  tenantId       String  @map("tenant_id")
   actorUserId    String?  @map("actor_user_id")
   actorRole      String?  @map("actor_role")
   actorIp        String?  @map("actor_ip")
@@ -4905,7 +4905,7 @@ model PushSubscription {
   createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(6)
-  tenantId          String?   @map("tenant_id")
+  tenantId          String   @map("tenant_id")
   staffMemberId     String    @map("staff_member_id")
   endpoint          String    @unique
   p256dh            String
@@ -5389,7 +5389,7 @@ model DvirDefect {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  tenantId                   String? @map("tenant_id")
+  tenantId                   String @map("tenant_id")
   dvirId                     String  @map("dvir_id")
   component                  String // BRAKES | LIGHTS | TIRES | STEERING | EXHAUST | ... (free-form for now)
   position                   String? // FRONT_LEFT | REAR_RIGHT | CENTER | GENERIC
@@ -5420,7 +5420,7 @@ model VehicleIssueReport {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  tenantId        String?   @map("tenant_id")
+  tenantId        String   @map("tenant_id")
   vehicleId       String    @map("vehicle_id")
   driverId        String?   @map("driver_id")
   issueType       String    @map("issue_type") // MECHANICAL | ELECTRICAL | BODY | DAMAGE | CLEANLINESS | ODOR | OTHER
@@ -5452,7 +5452,7 @@ model CustomerInteraction {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  tenantId         String?   @map("tenant_id")
+  tenantId         String   @map("tenant_id")
   customerId       String    @map("customer_id")
   driverId         String?   @map("driver_id")
   tripId           String?   @map("trip_id") // soft reference to TripLog (no FK to allow multi-table trip references)
