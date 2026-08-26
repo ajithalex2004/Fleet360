@@ -23,6 +23,11 @@ export async function GET(req: NextRequest) {
 
   const { tenantId } = authz;
 
+  // Wrapped so app.tenant_id is set for this handler's database work. The
+  // queries already pass tenantId explicitly; the wrapper is what keeps that
+  // true once the connection role no longer holds BYPASSRLS.
+  return withTenantRls(prisma, tenantId, async (tx) => {
+
   const p         = req.nextUrl.searchParams;
   const view      = p.get('view') ?? 'vehicle';   // vehicle | customer | branch
   const branch    = p.get('branch');
@@ -51,7 +56,7 @@ export async function GET(req: NextRequest) {
 
   // ── Vehicle Profitability ─────────────────────────────────────────────────
   if (view === 'vehicle') {
-    const revenue = await prisma.$queryRawUnsafe(`
+    const revenue = await tx.$queryRawUnsafe(`
       SELECT
         COALESCE(vehicle_no, 'UNASSIGNED') AS vehicle_no,
         module,
@@ -71,7 +76,7 @@ export async function GET(req: NextRequest) {
     `, ...params) as Record<string, unknown>[];
 
     // Maintenance costs per vehicle (cross-module; no tenant scope on this table yet)
-    const maint_costs = await prisma.$queryRawUnsafe(`
+    const maint_costs = await tx.$queryRawUnsafe(`
       SELECT
         COALESCE(vehicle_registration, vehicle_id::text, 'UNKNOWN') AS vehicle_no,
         COALESCE(SUM(invoice_amount), 0) AS total_maint_cost,
@@ -87,7 +92,7 @@ export async function GET(req: NextRequest) {
     });
 
     // Depreciation per vehicle from fixed_assets
-    const depreciation = await prisma.$queryRawUnsafe(`
+    const depreciation = await tx.$queryRawUnsafe(`
       SELECT
         COALESCE(registration_no, asset_tag, asset_name) AS vehicle_no,
         COALESCE(SUM(accumulated_depreciation), 0)        AS total_depreciation
@@ -143,7 +148,7 @@ export async function GET(req: NextRequest) {
 
   // ── Customer Profitability (LTV) ──────────────────────────────────────────
   if (view === 'customer') {
-    const customers = await prisma.$queryRawUnsafe(`
+    const customers = await tx.$queryRawUnsafe(`
       SELECT
         client_name,
         client_email,
@@ -188,7 +193,7 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Branch Revenue Breakdown ──────────────────────────────────────────────
-  const branches = await prisma.$queryRawUnsafe(`
+  const branches = await tx.$queryRawUnsafe(`
     SELECT
       COALESCE(branch, 'Unassigned') AS branch,
       module,
@@ -214,5 +219,6 @@ export async function GET(req: NextRequest) {
       vat_amount:     Number(b.vat_amount ?? 0),
       customer_count: Number(b.customer_count),
     })),
+  });
   });
 }

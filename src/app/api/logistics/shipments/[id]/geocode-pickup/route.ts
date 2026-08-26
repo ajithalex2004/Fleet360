@@ -43,10 +43,15 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   }
 
   const { tenantId } = authz;
+
+  // Wrapped so app.tenant_id is set for this handler's database work. The
+  // queries already pass tenantId explicitly; the wrapper is what keeps that
+  // true once the connection role no longer holds BYPASSRLS.
+  return withTenantRls(prisma, tenantId, async (tx) => {
   const shipmentId = params.id;
 
   try {
-    const owned = await prisma.$queryRawUnsafe<ShipmentRow[]>(
+    const owned = await tx.$queryRawUnsafe<ShipmentRow[]>(
       `SELECT id, origin_name, origin_address
          FROM logistics_shipment_orders
         WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
@@ -67,7 +72,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
     const result = await geocode(address, tenantId);
 
-    const existing = await prisma.$queryRawUnsafe<StopRow[]>(
+    const existing = await tx.$queryRawUnsafe<StopRow[]>(
       `SELECT id FROM logistics_shipment_stops
         WHERE tenant_id = $1 AND shipment_order_id = $2 AND stop_type = 'PICKUP'
         ORDER BY sequence_no ASC LIMIT 1`,
@@ -75,7 +80,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     );
 
     if (existing[0]) {
-      await prisma.$executeRawUnsafe(
+      await tx.$executeRawUnsafe(
         `UPDATE logistics_shipment_stops
             SET latitude = $1, longitude = $2,
                 location_name = COALESCE(location_name, $3),
@@ -88,7 +93,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         existing[0].id,
       );
     } else {
-      await prisma.$executeRawUnsafe(
+      await tx.$executeRawUnsafe(
         `INSERT INTO logistics_shipment_stops
            (tenant_id, shipment_order_id, sequence_no, stop_type, location_name, address, latitude, longitude)
          VALUES ($1, $2, 1, 'PICKUP', $3, $4, $5, $6)`,
@@ -122,4 +127,5 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       { status: 500 },
     );
   }
+  });
 }

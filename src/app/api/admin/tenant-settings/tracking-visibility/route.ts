@@ -67,7 +67,9 @@ export async function PUT(req: NextRequest) {
   const { tenantId, userId } = authz;
 
   try {
-    const body = await req.json().catch(() => ({})) as { level?: string };
+    const body = stripTenantOwnershipFields(
+      (await req.json().catch(() => ({}))) as Record<string, unknown>,
+    ) as { level?: string };
     if (!body.level || !isTrackingLevel(body.level)) {
       return NextResponse.json({
         error: `level must be one of: ${TRACKING_LEVELS.join(', ')}`,

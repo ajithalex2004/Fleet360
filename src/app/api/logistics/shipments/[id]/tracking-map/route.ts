@@ -37,9 +37,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { tenantId } = authz;
 
+  // Wrapped so app.tenant_id is set for this handler's database work. The
+  // queries already pass tenantId explicitly; the wrapper is what keeps that
+  // true once the connection role no longer holds BYPASSRLS.
+  return withTenantRls(prisma, tenantId, async (tx) => {
+
   const { id } = await params;
   try {
-    const shipRows = await prisma.$queryRawUnsafe<Array<{ shipment_no: string | null; status: string | null; destination_name: string | null }>>(
+    const shipRows = await tx.$queryRawUnsafe<Array<{ shipment_no: string | null; status: string | null; destination_name: string | null }>>(
       `SELECT shipment_no, status, destination_name
          FROM logistics_shipment_orders
         WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL LIMIT 1`,
@@ -47,7 +52,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     ).catch(() => []);
     if (!shipRows[0]) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const stopRows = await prisma.$queryRawUnsafe<Array<{
+    const stopRows = await tx.$queryRawUnsafe<Array<{
       id: string; stop_type: string; sequence_no: number;
       latitude: string | number | null; longitude: string | number | null;
       location_name: string | null; geofence_radius_m: number | null;
@@ -60,7 +65,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       id, tenantId,
     ).catch(() => []);
 
-    const trailRows = await prisma.$queryRawUnsafe<Array<{
+    const trailRows = await tx.$queryRawUnsafe<Array<{
       latitude: string | number; longitude: string | number; occurred_at: string;
     }>>(
       `SELECT latitude::text, longitude::text, occurred_at::text
@@ -73,7 +78,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     ).catch(() => []);
 
     // Latest persisted ETA from the telematics layer (what customer-tracking shows).
-    const etaRows = await prisma.$queryRawUnsafe<Array<{ eta_at: string | null }>>(
+    const etaRows = await tx.$queryRawUnsafe<Array<{ eta_at: string | null }>>(
       `SELECT eta_at::text
          FROM logistics_telematics_events
         WHERE shipment_order_id = $1 AND tenant_id = $2 AND eta_at IS NOT NULL
@@ -112,4 +117,5 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     console.error('[tracking-map]', e);
     return NextResponse.json({ error: e instanceof Error ? e.message : 'failed' }, { status: 500 });
   }
+  });
 }

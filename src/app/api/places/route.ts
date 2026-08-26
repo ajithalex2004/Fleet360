@@ -46,8 +46,14 @@ export async function GET(req: NextRequest) {
   const q = sp.get('q');
   const activeParam = sp.get('active');
 
+  // Wrapped so app.tenant_id is set for the duration of the read. The query
+  // already filters on tenantId; the wrapper is what makes that filter a
+  // second line of defence rather than the only one, for when the connection
+  // role no longer holds BYPASSRLS. The POST handler below was already
+  // wrapped — only GET was missed.
+  return withTenantRls(prisma, tenantId, async (tx) => {
   try {
-    const rows = await prisma.place.findMany({
+    const rows = await tx.place.findMany({
       where: {
         tenantId,
         deletedAt: null,
@@ -67,6 +73,7 @@ export async function GET(req: NextRequest) {
     console.error('[places.GET]', e);
     return bad('Failed to load places', 500);
   }
+  });
 }
 
 export async function POST(req: NextRequest) {

@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   try {
-    const body = await req.json();
+    const body = stripTenantOwnershipFields((await req.json()) as Record<string, unknown>);
     const {
       invoiceId, amount, paymentDate,
       paymentMethod = 'BANK_TRANSFER', reference, notes,
