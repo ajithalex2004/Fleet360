@@ -18,7 +18,11 @@ export async function GET(req: NextRequest) {
         const driverId = sp.get('driverId');
         const status = sp.get('status');
         const { take, skip, page, limit } = paginate(sp);
-        const where = { ...(driverId ? { driverId } : {}), ...(status ? { status } : {}) };
+        // tenantId scopes both the page and the count. These tables had no
+        // tenant column until 20260907000000 — the driverId/vehicleId filters
+        // are optional query params, so with neither supplied this listed
+        // every organisation's rows.
+        const where = { tenantId, ...(driverId ? { driverId } : {}), ...(status ? { status } : {}) };
         const [data, total] = await Promise.all([
           tx.driverDocument.findMany({
             where,
@@ -49,7 +53,7 @@ export async function POST(req: NextRequest) {
     try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        const document = await tx.driverDocument.create({ data: body });
+        const document = await tx.driverDocument.create({ data: { ...body, tenantId } });
         return NextResponse.json(document, { status: 201 });
         } catch (e) {
         console.error('Error creating document:', e);

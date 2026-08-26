@@ -20,7 +20,11 @@ export async function GET(req: NextRequest) {
         const vehicleId = sp.get('vehicleId');
         const driverId = sp.get('driverId');
         const { take, skip, page, limit } = paginate(sp);
-        const where = { ...(vehicleId ? { vehicleId } : {}), ...(driverId ? { driverId } : {}) };
+        // tenantId scopes both the page and the count. These tables had no
+        // tenant column until 20260907000000 — the driverId/vehicleId filters
+        // are optional query params, so with neither supplied this listed
+        // every organisation's rows.
+        const where = { tenantId, ...(vehicleId ? { vehicleId } : {}), ...(driverId ? { driverId } : {}) };
         const [data, total] = await Promise.all([
           tx.fuelLog.findMany({
             where,
@@ -51,10 +55,15 @@ export async function POST(req: NextRequest) {
     try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        const fuelLog = await tx.fuelLog.create({ data: body });
+        const fuelLog = await tx.fuelLog.create({ data: { ...body, tenantId } });
 
         // Publish via outbox — Finance consumer picks this up asynchronously
-        const tenantId = body.tenantId ?? fuelLog.vehicleId ?? 'default';
+        // Publishes under the authenticated tenant. This previously read
+        // `body.tenantId ?? fuelLog.vehicleId ?? 'default'` — and since
+        // stripTenantOwnershipFields removes tenantId from the body above,
+        // the first branch was always undefined, so every FUEL_FILLED event
+        // was published with a VEHICLE id in its tenantId field, routing
+        // Finance consumers to a tenant that does not exist.
         getEventBus().publish({
           eventType:     FUEL_FILLED,
           aggregateType: 'FuelLog',
