@@ -108,7 +108,11 @@ export async function POST(req: NextRequest) {
     }
     const plans = await withTenantRls(prisma, tenantId, async (tx) => {
       return tx.staffTransportPlan.findMany({
-        where: { id: { in: [leftId, rightId] } },
+        // Both ids come from the request. Without tenantId, supplying another
+        // tenant's plan id returned their plan — name, description, work
+        // rules, block options and summary — to whoever asked. RLS does not
+        // intervene; the database role holds BYPASSRLS.
+        where: { tenantId, id: { in: [leftId, rightId] } },
         // The schema uses un-suffixed names for these Json fields.
         select: {
           id: true, name: true, description: true, status: true,

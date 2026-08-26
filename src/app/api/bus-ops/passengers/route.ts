@@ -51,6 +51,25 @@ export async function POST(req: NextRequest) {
 
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
+
+        // tripId arrives from the request body and was previously trusted.
+        // Nothing checked it belonged to the caller: the create attached a
+        // passenger to any trip, the recount below counted across tenants,
+        // and the update overwrote a foreign trip's confirmedCount. RLS would
+        // normally stop that, but the database role holds BYPASSRLS, so it
+        // does not. Resolve the trip within the tenant first and refuse if it
+        // isn't there — 404 rather than 403, so this cannot be used to probe
+        // which trip ids exist.
+        const trip = body.tripId
+          ? await tx.tripSchedule.findFirst({
+              where: { id: body.tripId, tenantId, deletedAt: null },
+              select: { id: true },
+            })
+          : null;
+        if (!trip) {
+          return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
+        }
+
         const passenger = await tx.tripPassenger.create({
           data: { ...body, tenantId },
           include: { trip: true },
@@ -62,10 +81,14 @@ export async function POST(req: NextRequest) {
         // creates + expansions and could double- or under-count on retries.
         // A single point of truth avoids drift.
         const attendance = await tx.tripPassenger.count({
-          where: { tripId: body.tripId, deletedAt: null },
+          where: { tripId: trip.id, tenantId, deletedAt: null },
         });
-        await tx.tripSchedule.update({
-          where: { id: body.tripId },
+        // updateMany, not update: update takes a unique selector and cannot
+        // carry tenantId, so it would still address the row by id alone.
+        // The trip is already proven to be this tenant's above; this keeps
+        // the guarantee visible in the statement itself.
+        await tx.tripSchedule.updateMany({
+          where: { id: trip.id, tenantId },
           data: { confirmedCount: attendance },
         });
         return NextResponse.json(passenger, { status: 201 });
