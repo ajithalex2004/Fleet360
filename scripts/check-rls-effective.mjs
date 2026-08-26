@@ -530,16 +530,38 @@ async function main() {
     try { await prisma.$queryRawUnsafe('SELECT 1'); break; } catch { await new Promise(r => setTimeout(r, 4000)); }
   }
 
+  // Scan EVERY schema on search_path, not just public.
+  //
+  // This checker previously hardcoded 'public' and would have reported
+  // OPEN_NO_RLS = 0 while four tenant-owned tables in the `finance` schema had
+  // RLS switched off entirely. An unqualified table name resolves against the
+  // whole search_path, so a checker that inspects one schema is not inspecting
+  // what the application actually reaches.
+  const spRaw = (await prisma.$queryRawUnsafe(`SHOW search_path`))[0].search_path;
+  const me = (await prisma.$queryRawUnsafe(`SELECT current_user AS u`))[0].u;
+  const wanted = spRaw.split(',')
+    .map(x => x.trim().replace(/^"|"$/g, ''))
+    .map(x => (x === '$user' ? me : x));
+  const existing = await prisma.$queryRawUnsafe(
+    `SELECT nspname FROM pg_namespace WHERE nspname = ANY($1::text[])`, wanted);
+  const SCHEMAS = wanted.filter(x => existing.some(e => e.nspname === x));
+  console.log(`
+search_path: ${spRaw}`);
+  console.log(`scanning schemas: ${SCHEMAS.join(', ')}`);
+
   // Tenant-owned tables: public, ordinary tables carrying a tenant_id column.
   const tables = await prisma.$queryRawUnsafe(`
-    SELECT c.oid::int AS oid, c.relname AS name,
-           c.relrowsecurity AS rls, c.relforcerowsecurity AS forced
+    SELECT c.oid::int AS oid, n.nspname AS schema, c.relname AS name,
+           c.relrowsecurity AS rls, c.relforcerowsecurity AS forced,
+           (SELECT col.is_nullable FROM information_schema.columns col
+             WHERE col.table_schema = n.nspname AND col.table_name = c.relname
+               AND col.column_name = 'tenant_id') AS tenant_nullable
       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-     WHERE n.nspname = 'public' AND c.relkind = 'r'
+     WHERE n.nspname = ANY($1::text[]) AND c.relkind = 'r'
        AND EXISTS (SELECT 1 FROM information_schema.columns col
-                    WHERE col.table_schema = 'public' AND col.table_name = c.relname
+                    WHERE col.table_schema = n.nspname AND col.table_name = c.relname
                       AND col.column_name = 'tenant_id')
-     ORDER BY c.relname`);
+     ORDER BY n.nspname, c.relname`, SCHEMAS);
 
   const policies = await prisma.$queryRawUnsafe(`
     SELECT pol.polrelid::int AS oid, pol.polname AS name, pol.polcmd AS cmd,
@@ -550,7 +572,7 @@ async function main() {
            ARRAY(SELECT rolname FROM pg_roles WHERE oid = ANY(pol.polroles)) AS roles
       FROM pg_policy pol JOIN pg_class c ON c.oid = pol.polrelid
       JOIN pg_namespace n ON n.oid = c.relnamespace
-     WHERE n.nspname = 'public'`);
+     WHERE n.nspname = ANY($1::text[])`, SCHEMAS);
 
   const byTable = new Map();
   for (const p of policies) {
@@ -568,7 +590,7 @@ async function main() {
     const roleScoped = all.filter(p => !p.applies_to_public && !p.roles.includes(ROLE));
 
     if (!t.rls) {
-      report.push({ table: t.name, forced: t.forced, worst: 'OPEN_NO_RLS',
+      report.push({ table: t.schema === 'public' ? t.name : `${t.schema}.${t.name}`, forced: t.forced, nullable: t.tenant_nullable === 'YES', worst: 'OPEN_NO_RLS',
         commands: Object.fromEntries(COMMANDS.map(c => [c, { verdict: 'OPEN_NO_RLS', detail: 'RLS not enabled on the table' }])),
         roleScoped: roleScoped.map(p => p.name) });
       continue;
@@ -576,6 +598,14 @@ async function main() {
 
     const commands = {};
     for (const c of COMMANDS) commands[c] = verdictForCommand(c, applicable);
+
+    // Which SIDE carries the NULL escape. USING governs what a session can
+    // READ; WITH CHECK governs what it may WRITE. auth_login_attempts
+    // deliberately has it on the write side only — unattributable events stay
+    // recordable but are not readable by tenants — and reporting that as
+    // "visible to every tenant" would be wrong.
+    const escUsing = applicable.some(pl => classifyExpr(pl.using_expr) === 'SCOPED_NULLABLE');
+    const escCheck = applicable.some(pl => classifyExpr(writeExpr(pl)) === 'SCOPED_NULLABLE');
 
     const verdicts = COMMANDS.map(c => commands[c].verdict);
     // Severity order. ROLE_RESTRICTED sits above SCOPED because a policy that
@@ -585,7 +615,7 @@ async function main() {
     const worst = SEVERITY.find(s => verdicts.includes(s))
       ?? (roleScoped.length > 0 && !allowlisted ? 'ROLE_RESTRICTED' : 'SCOPED');
 
-    report.push({ table: t.name, forced: t.forced, worst, commands, roleScoped: roleScoped.map(p => p.name) });
+    report.push({ table: t.schema === 'public' ? t.name : `${t.schema}.${t.name}`, forced: t.forced, nullable: t.tenant_nullable === 'YES', escUsing, escCheck, worst, commands, roleScoped: roleScoped.map(p => p.name) });
   }
 
   await prisma.$disconnect();
@@ -640,12 +670,29 @@ Effective RLS coverage — ${report.length} tenant-owned tables, as role '${ROLE
     }
   }
 
-  const nullable = report.filter(r => COMMANDS.some(c => (r.commands[c].detail ?? '').includes('IS NULL rows visible')));
-  if (nullable.length > 0) {
+  // Distinguish a LIVE escape from a dead one. A `tenant_id IS NULL` branch on
+  // a NOT NULL column cannot match anything, so counting both together
+  // overstates the exposure — and this output is the pre-activation gate, so
+  // overstating it is as unhelpful as understating it.
+  const hasEscape = report.filter(r => r.escUsing || r.escCheck);
+  const live = hasEscape.filter(r => r.nullable);
+  const readable = live.filter(r => r.escUsing);
+  const writeOnly = live.filter(r => !r.escUsing && r.escCheck);
+  if (hasEscape.length > 0) {
     console.log(`
-⚠️  ${nullable.length} table(s) admit rows with tenant_id IS NULL to EVERY tenant.`);
-    console.log('   Deliberate in the canonical policy for shared reference rows, but it means');
-    console.log('   any row written without a tenant is globally visible. Worth an inventory.');
+   tenant_id IS NULL escape present on ${hasEscape.length} table(s):`);
+    console.log(`      ${hasEscape.length - live.length} unreachable (tenant_id is NOT NULL) - no exposure`);
+    if (readable.length > 0) {
+      console.log(`      ⚠️  ${readable.length} READABLE by every tenant (escape is in USING):`);
+      console.log(`             ${readable.map(r => r.table).join(', ')}`);
+    } else {
+      console.log(`      0 readable by every tenant`);
+    }
+    if (writeOnly.length > 0) {
+      console.log(`      ${writeOnly.length} write-side only (USING is scoped; WITH CHECK permits a NULL tenant`);
+      console.log(`             so the row can be recorded but only platform context can read it):`);
+      console.log(`             ${writeOnly.map(r => r.table).join(', ')}`);
+    }
   }
 
   if (failed.length === 0) {
