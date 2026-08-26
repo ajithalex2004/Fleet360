@@ -107,23 +107,31 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ var
         const publishNow = body.publishNow !== false;
 
         // Version number = max(existing) + 1.
+        // Variant ownership is proven by the findFirst above; tenantId keeps
+        // that visible here rather than requiring a trace back.
         const last = await tx.busRouteVariantVersion.findFirst({
-          where: { variantId, deletedAt: null },
+          where: { tenantId, variantId, deletedAt: null },
           orderBy: { versionNumber: 'desc' },
           select: { versionNumber: true },
         });
         const versionNumber = (last?.versionNumber ?? 0) + 1;
 
         // The published-version cutover + new-version create + stop
-        // materialisation all run in one transaction so a partial failure
-        // never leaves the variant with two PUBLISHED versions (the partial
-        // unique index would raise, but the transaction gives a cleaner
-        // error surface).
-        const created = await tx.$transaction(async (tx) => {
+        // materialisation must not straddle a partial failure, or the variant
+        // could end up with two PUBLISHED versions. They already don't:
+        // withTenantRls has opened a transaction and everything below runs
+        // inside it.
+        //
+        // This used to call tx.$transaction(...) for that guarantee. Prisma
+        // strips $transaction from a TransactionClient at runtime, so the call
+        // threw "tx.$transaction is not a function" and publishing a version
+        // failed outright — the atomicity it was reaching for was already
+        // there, and asking for it again broke the endpoint.
+        const created = await (async () => {
           let closedPrevious: string | null = null;
           if (publishNow) {
             const prev = await tx.busRouteVariantVersion.findFirst({
-              where: { variantId, status: 'PUBLISHED', deletedAt: null },
+              where: { tenantId, variantId, status: 'PUBLISHED', deletedAt: null },
             });
             if (prev) {
               const yesterday = new Date(effectiveFrom.getTime() - 24 * 3600 * 1000);
@@ -168,7 +176,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ var
           }
 
           return { version, closedPrevious, stopCount: stops.length };
-        });
+        })();
 
         return NextResponse.json(created, { status: 201 });
         } catch (e) {

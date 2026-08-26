@@ -34,12 +34,15 @@ export async function GET(req: NextRequest) {
       }
 
       const perf = await tx.driverPerformance.findMany({
-        where: { periodYear: year, periodMonth: month },
+        // Without tenantId this returned every organisation's driver
+        // performance for the period, and the driver lookup below then
+        // resolved names against that same cross-tenant id set.
+        where: { tenantId, periodYear: year, periodMonth: month },
       });
       const driverIds = perf.map(p => p.driverId);
       const drivers = driverIds.length > 0
         ? await tx.driver.findMany({
-            where: { id: { in: driverIds } },
+            where: { tenantId, id: { in: driverIds } },
             select: {
               id: true, name: true, firstName: true, lastName: true,
               contactNumber: true, licenseNumber: true, licenseType: true, status: true,

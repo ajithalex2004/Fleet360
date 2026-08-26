@@ -188,6 +188,10 @@ export async function POST(req: NextRequest) {
         const now = new Date();
         const activeTrip = await tx.tripSchedule.findFirst({
           where: {
+            // Derived from the gateway row above — see the tenantId comment
+            // there. Conditional so pre-migration gateways with a null tenant
+            // keep working, matching the pattern used elsewhere in this file.
+            ...(tenantId ? { tenantId } : {}),
             vehicleId: gateway.vehicleId,
             deletedAt: null,
             status: { in: ['SCHEDULED', 'DEPARTED', 'IN_TRANSIT'] },
@@ -223,7 +227,7 @@ export async function POST(req: NextRequest) {
           const tagIds = window.observations.map(o => o.tagId);
           const priorRows = activeTrip
             ? await tx.bleGatewayPresence.findMany({
-                where: { gatewayId, tagId: { in: tagIds }, scheduleId: activeTrip.id },
+                where: { gatewayId, tagId: { in: tagIds }, scheduleId: activeTrip.id, ...(tenantId ? { tenantId } : {}) },
               })
             : [];
           const prior = new Map<string, PresenceState>(
@@ -368,8 +372,10 @@ async function applyTransition(
   }
 
   // Resolve passenger row on this trip.
+  // tenantId is already a parameter of this helper (see the signature) and
+  // was used for the tag lookup above but not here.
   const passenger = await prisma.tripPassenger.findFirst({
-    where: { tripId: activeTripId, staffMemberId: tag.staffMemberId },
+    where: { tripId: activeTripId, staffMemberId: tag.staffMemberId, ...(tenantId ? { tenantId } : {}) },
     select: { id: true, status: true },
   });
   if (!passenger) {
@@ -382,6 +388,7 @@ async function applyTransition(
   const dedupWindowEnd = new Date(t.occurredAt.getTime() + 5_000);
   const dup = await prisma.boardingEvent.findFirst({
     where: {
+      ...(tenantId ? { tenantId } : {}),
       scheduleId: activeTripId,
       passengerId: passenger.id,
       direction: t.kind,

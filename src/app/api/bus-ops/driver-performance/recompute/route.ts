@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
         for (const s of scores) {
           try {
             const existing = await tx.driverPerformance.findFirst({
-              where: { driverId: s.driverId, periodYear: year, periodMonth: month },
+              where: { tenantId, driverId: s.driverId, periodYear: year, periodMonth: month },
               select: { id: true },
             });
             const data = {
