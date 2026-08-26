@@ -172,7 +172,22 @@ function analyse(fileName, code) {
         if (arg) {
           const sql = textOf(arg, src);
           const touchesTable = /\b(FROM|JOIN|INTO|UPDATE)\s+[a-z_]+/i.test(sql);
-          if (touchesTable && !/tenant_id/i.test(sql)) {
+          const literallyScoped = /tenant_id/i.test(sql);
+          // A predicate assembled elsewhere and interpolated in:
+          //
+          //     let where = `WHERE deleted_at IS NULL AND tenant_id = $2`;
+          //     await prisma.$queryRawUnsafe(`SELECT ... ${where}`, ...);
+          //
+          // The template carries no literal tenant_id, so a text test calls a
+          // correctly-scoped query a leak. finance/ar-aging alone produced
+          // three of these, and the first full run reported 783 RAW findings
+          // on that basis — a number that would have sent someone auditing
+          // hundreds of correct queries. Interpolation plus any mention of
+          // tenant_id in the same call argument or its file is treated as
+          // scoped-but-unproven and not reported.
+          const interpolated = /\$\{/.test(sql);
+          const fileMentionsTenant = /tenant_id/i.test(code);
+          if (touchesTable && !literallyScoped && !(interpolated && fileMentionsTenant)) {
             const { line } = src.getLineAndCharacterOfPosition(node.getStart(src));
             findings.push({ file: fileName, line: line + 1, call: m, severity: 'RAW' });
           }
@@ -220,6 +235,15 @@ const FIXTURE_VAR_WHERE_BAD = `
   if (status) where.status = status;
   const e = await prisma.tripSchedule.findMany({ where, orderBy: { id: 'asc' } });
 `;
+/**
+ * The RAW false-positive class: predicate built elsewhere and interpolated.
+ * finance/ar-aging does exactly this and must not be reported.
+ */
+const FIXTURE_RAW_INTERPOLATED_GOOD = `
+  let where = \`WHERE deleted_at IS NULL AND tenant_id = $2\`;
+  await prisma.$queryRawUnsafe(\`SELECT id FROM invoices \${where}\`, asOf, tenantId);
+`;
+
 /** Scoped by later assignment rather than in the initialiser. */
 const FIXTURE_VAR_ASSIGNED_GOOD = `
   const where: any = { deletedAt: null };
@@ -237,6 +261,7 @@ function selfTest() {
     ['var where scoped',   FIXTURE_VAR_WHERE_GOOD,    0],
     ['var where unscoped', FIXTURE_VAR_WHERE_BAD,     1],
     ['var assigned scoped',FIXTURE_VAR_ASSIGNED_GOOD, 0],
+    ['raw interpolated scoped', FIXTURE_RAW_INTERPOLATED_GOOD, 0],
   ];
   let ok = true;
   for (const [name, code, expected] of cases) {
@@ -288,8 +313,11 @@ console.log(`Scanned ${files.length} route files under ${ROOT}\n`);
 for (const sev of ['HIGH', 'RAW', 'LOW']) {
   const rows = bySeverity[sev];
   console.log(`${sev} — ${label[sev]}: ${rows.length}`);
-  for (const r of rows.slice(0, 40)) console.log(`   ${r.file}:${r.line}  ${r.call}`);
-  if (rows.length > 40) console.log(`   …and ${rows.length - 40} more`);
+  // Truncated by default so the summary stays readable; --all prints every
+  // finding, which is what you want when counting by module.
+  const cap = process.argv.includes('--all') ? Infinity : 40;
+  for (const r of rows.slice(0, cap)) console.log(`   ${r.file}:${r.line}  ${r.call}`);
+  if (rows.length > cap) console.log(`   …and ${rows.length - cap} more (re-run with --all)`);
   console.log('');
 }
 
