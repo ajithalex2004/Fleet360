@@ -21,8 +21,10 @@ export async function GET(
     try {
             const { id } = params;
 
+            // workOrderId comes from the URL and nothing resolves the work
+            // order first, so tenantId is the only thing scoping this.
             const cards = await tx.jobCard.findMany({
-                where:   { workOrderId: id },
+                where:   { workOrderId: id, tenantId },
                 include: { tasks: { orderBy: { createdAt: 'asc' } } },
                 orderBy: { createdAt: 'asc' },
             });

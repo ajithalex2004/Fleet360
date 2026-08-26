@@ -26,7 +26,7 @@ export async function GET(
             const { id } = params;
 
             const inspections = await tx.qualityInspection.findMany({
-                where: { requestId: id },
+                where: { requestId: id, tenantId },
                 orderBy: { createdAt: 'desc' },
             });
 

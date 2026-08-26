@@ -22,8 +22,10 @@ export async function GET(
     const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    const mr = await tx.maintenanceRequest.findUnique({
-            where: { id: params.id },
+    // findFirst with tenantId, not findUnique on the id alone: this returned
+    // another organisation's maintenance request and its full SLA timeline.
+    const mr = await tx.maintenanceRequest.findFirst({
+            where: { id: params.id, tenantId },
         });
         if (!mr) {
             return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -34,7 +36,7 @@ export async function GET(
         // We reconstruct it from the StatusHistory records if available; otherwise
         // fall back to an empty object.
         const histories = await tx.statusHistory.findMany({
-            where: { maintenanceRequestId: params.id },
+            where: { maintenanceRequestId: params.id, tenantId },
             orderBy: { createdAt: 'asc' },
         });
 

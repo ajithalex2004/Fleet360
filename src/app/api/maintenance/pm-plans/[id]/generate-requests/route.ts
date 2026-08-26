@@ -40,7 +40,7 @@ export async function POST(
             const vehicleIds = plan.scheduleItems.map(i => i.vehicleId);
             const vehicles = vehicleIds.length > 0
                 ? await tx.vehicle.findMany({
-                    where: { id: { in: vehicleIds } },
+                    where: { tenantId, id: { in: vehicleIds } },
                     select: { id: true, currentMileage: true, odometerReading: true },
                 })
                 : [];

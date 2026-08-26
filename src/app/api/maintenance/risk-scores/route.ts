@@ -37,6 +37,11 @@ export async function GET(req: NextRequest) {
         // ── 1. Load all active vehicles ─────────────────────────────────────────
         const vehicles = await tx.vehicle.findMany({
             where: {
+                // The root of this report. Without tenantId it loaded every
+                // organisation's vehicles, and the six queries below all filter
+                // on vehicleIds derived from it — so one missing predicate here
+                // put cross-tenant data into every risk score on the page.
+                tenantId,
                 deletedAt:  null,
                 isActive:   true,
             },
@@ -54,6 +59,7 @@ export async function GET(req: NextRequest) {
         // ── 2. Maintenance requests (last 90d) ──────────────────────────────────
         const recentMRs = await tx.maintenanceRequest.findMany({
             where: {
+                tenantId,
                 vehicleId:  { in: vehicleIds },
                 deletedAt:  null,
                 createdAt:  { gte: ago90 },
@@ -70,6 +76,7 @@ export async function GET(req: NextRequest) {
         // Repeat-job detection: same MR jobs repeated in 180d window
         const recentMRs180 = await tx.maintenanceRequest.findMany({
             where: {
+                tenantId,
                 vehicleId:  { in: vehicleIds },
                 deletedAt:  null,
                 createdAt:  { gte: ago180 },
@@ -83,6 +90,7 @@ export async function GET(req: NextRequest) {
         // Open defects: MRs in early statuses
         const openMRs = await tx.maintenanceRequest.findMany({
             where: {
+                tenantId,
                 vehicleId: { in: vehicleIds },
                 deletedAt: null,
                 status:    { in: ['REQUESTED', 'SUBMITTED', 'ACCEPTED'] },
@@ -93,6 +101,7 @@ export async function GET(req: NextRequest) {
         // Downtime: MRs with UNDER_MAINTENANCE status in last 90d
         const downtimeMRs = await tx.maintenanceRequest.findMany({
             where: {
+                tenantId,
                 vehicleId:  { in: vehicleIds },
                 deletedAt:  null,
                 status:     'UNDER_MAINTENANCE',
@@ -108,6 +117,7 @@ export async function GET(req: NextRequest) {
         // ── 3. Active warranties (today falls between startDate and expiryDate) ─
         const activeWarranties = await tx.vehicleWarranty.findMany({
             where: {
+                tenantId,
                 vehicleId:  { in: vehicleIds },
                 isActive:   true,
                 startDate:  { lte: now },
@@ -119,6 +129,7 @@ export async function GET(req: NextRequest) {
         // ── 4. Failed QC inspections ────────────────────────────────────────────
         const failedInspections = await tx.qualityInspection.findMany({
             where: {
+                tenantId,
                 MaintenanceRequest: {
                     vehicleId: { in: vehicleIds },
                     deletedAt: null,

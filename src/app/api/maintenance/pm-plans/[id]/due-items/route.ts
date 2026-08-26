@@ -19,8 +19,10 @@ export async function GET(
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-            const plan = await tx.maintenancePlan.findUnique({
-                where: { id: params.id },
+            // Scoped: the plan was previously fetched by id alone, so any
+            // plan id returned another organisation's schedule and vehicles.
+            const plan = await tx.maintenancePlan.findFirst({
+                where: { id: params.id, tenantId },
                 include: { triggers: true, scheduleItems: true },
             });
 
@@ -32,7 +34,7 @@ export async function GET(
             const vehicleIds = plan.scheduleItems.map(i => i.vehicleId);
             const vehicles = vehicleIds.length > 0
                 ? await tx.vehicle.findMany({
-                    where: { id: { in: vehicleIds } },
+                    where: { tenantId, id: { in: vehicleIds } },
                     select: { id: true, currentMileage: true, odometerReading: true, make: true, model: true, licensePlate: true },
                 })
                 : [];
