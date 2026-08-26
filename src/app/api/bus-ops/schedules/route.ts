@@ -87,8 +87,21 @@ export async function POST(req: NextRequest) {
 
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        const count = await tx.tripSchedule.count();
-        const tripNumber = body.tripNumber ?? `TRP-${String(count + 1).padStart(5, '0')}`;
+        // Per-tenant, and derived from the highest number issued rather than
+        // a row count — see the note in transport-requests for why both parts
+        // matter. Guarded by uniq_trip_schedules_tenant_trip_number.
+        //
+        // $1::uuid, unlike the sibling generators: trip_schedules.tenant_id is
+        // uuid while staff_transport_requests and breakdown_reports use text.
+        // Without the cast this fails with 42883 "operator does not exist:
+        // uuid = text" on every trip creation.
+        const [{ max }] = await tx.$queryRawUnsafe<Array<{ max: number | null }>>(
+          `SELECT MAX(NULLIF(regexp_replace(trip_number, '^TRP-', ''), '')::int) AS max
+             FROM trip_schedules
+            WHERE tenant_id = $1::uuid AND trip_number ~ '^TRP-[0-9]+$'`,
+          tenantId,
+        );
+        const tripNumber = body.tripNumber ?? `TRP-${String((max ?? 0) + 1).padStart(5, '0')}`;
 
         // Route versioning Phase 1 — snapshot the exact variant version this
         // trip runs. Prefer explicit body.routeVariantVersionId, else derive
