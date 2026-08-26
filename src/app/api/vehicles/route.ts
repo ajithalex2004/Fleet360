@@ -43,7 +43,9 @@ export async function GET(request: NextRequest) {
         const search       = sp.get('search');
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const where: any = { deletedAt: null };
+        // The whole fleet list. Without tenantId this returned every
+        // organisation's vehicles.
+        const where: any = { tenantId, deletedAt: null };
         if (status)       where.status       = status;
         if (vehicleUsage) where.vehicleUsage = vehicleUsage;
         if (search) {

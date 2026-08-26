@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
             const quotations = await tx.quotation.findMany({
-                where: { deletedAt: null },
+                where: { tenantId, deletedAt: null },
                 include: {
                     MaintenanceRequest: true,
                     Garage: true,

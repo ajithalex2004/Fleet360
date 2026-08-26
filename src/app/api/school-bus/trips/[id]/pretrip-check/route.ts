@@ -32,8 +32,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     const { id } = await params;
+      // Same gap as the bus-ops pretrip-check handler: scheduleId comes from
+      // the URL with nothing resolving the trip first, so tenantId is the only
+      // thing preventing another school's safety inspection being returned.
       const latest = await tx.busPreTripCheck.findFirst({
-        where: { scheduleId: id },
+        where: { scheduleId: id, tenantId },
         orderBy: { performedAt: 'desc' },
       });
       return NextResponse.json({ check: latest, checklist: SCHOOL_BUS_PRETRIP_CHECKLIST });

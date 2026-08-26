@@ -18,7 +18,7 @@ export async function GET(
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
             const serviceRequest = await tx.serviceRequest.findFirst({
-                where: { id: params.id, deletedAt: null },
+                where: { tenantId, id: params.id, deletedAt: null },
                 include: {
                     attachments: true,
                     histories: true,

@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
             const alerts = await tx.alert.findMany({
-                where: { deletedAt: null },
+                where: { tenantId, deletedAt: null },
                 orderBy: { dateCreated: 'desc' }
             });
             return NextResponse.json(JSON.parse(JSON.stringify(alerts)));

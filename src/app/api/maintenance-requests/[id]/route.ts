@@ -27,7 +27,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
             const req = await tx.maintenanceRequest.findFirst({
-                where: { id: params.id, deletedAt: null },
+                where: { tenantId, id: params.id, deletedAt: null },
                 include: {
                     Vehicle: true,
                     Garage: true,
