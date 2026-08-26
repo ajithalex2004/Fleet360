@@ -79,7 +79,10 @@ export async function GET(request: NextRequest) {
         const expiring = sp.get('expiring'); // 'true' → only compliance-issue drivers
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const where: any = { deletedAt: null };
+        // tenantId in the filter itself, not left to RLS: the connection role
+        // holds BYPASSRLS, so without it this listed every organisation's
+        // drivers, including their licence and visa expiry dates.
+        const where: any = { tenantId, deletedAt: null };
         if (status) where.status     = status;
         if (type)   where.driverType = type;
         if (search) {

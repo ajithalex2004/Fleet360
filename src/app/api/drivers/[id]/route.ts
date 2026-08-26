@@ -71,8 +71,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const { id } = await params;
+        // id comes from the URL; without tenantId any driver id returned that
+        // driver's full record to any authenticated caller.
         const driver = await tx.driver.findFirst({
-          where: { id, deletedAt: null },
+          where: { id, tenantId, deletedAt: null },
           include: {
             assignedVehicle: {
               select: { id: true, make: true, model: true, licensePlate: true, status: true },

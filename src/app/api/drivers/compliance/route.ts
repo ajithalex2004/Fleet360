@@ -50,8 +50,10 @@ export async function GET(request: NextRequest) {
         const nowMs       = Date.now();
         const thresholdMs = nowMs + withinDays * 86400000;
 
+        // This compliance report listed every tenant's drivers with their
+        // licence, Emirates ID, passport and visa expiry dates.
         const drivers = await tx.driver.findMany({
-          where: { deletedAt: null, status: { not: 'INACTIVE' } },
+          where: { tenantId, deletedAt: null, status: { not: 'INACTIVE' } },
           select: {
             id: true, name: true, firstName: true, lastName: true,
             licenseExpiry: true, emiratesIdExpiry: true,
