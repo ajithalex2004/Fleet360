@@ -18,7 +18,12 @@ export async function GET(req: NextRequest) {
         const status      = sp.get('status');
         const limit       = Math.min(parseInt(sp.get('limit') ?? '200', 10), 500);
 
-        const where: Record<string, unknown> = { deletedAt: null };
+        // NOTE: bookings.tenant_id is uuid (most of this schema uses text) and
+        // every existing row has it NULL, so scoping hides those rows from every
+        // tenant. That is correct — a row belonging to no tenant should not
+        // appear under one — but it means a previously-populated list can go
+        // empty until those rows are assigned an owner.
+        const where: Record<string, unknown> = { tenantId, deletedAt: null };
         if (serviceType) where.serviceType = serviceType;
         if (status)      where.status      = status;
 

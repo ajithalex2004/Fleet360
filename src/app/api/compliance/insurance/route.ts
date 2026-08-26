@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const insurancePolicies = await tx.insurancePolicy.findMany({
+          where: { tenantId },
           orderBy: { createdAt: 'desc' },
         });
         return NextResponse.json(insurancePolicies);

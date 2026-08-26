@@ -72,13 +72,12 @@ export async function POST(req: NextRequest) {
 
         // Pull pricing rules for this category. Schema columns vary; we project
         // only what the engine needs.
-        // NOT tenant-scoped, and cannot be from here: pricing_rules has a
-        // tenant_id column in the database but the PricingRule model in
-        // schema.prisma does not expose it, so Prisma rejects the filter.
-        // This is schema drift, not a decision — pricing rules are read across
-        // tenants until the model is regenerated with the field.
+        // Scoped now that PricingRule exposes tenantId. The column was always
+        // in pricing_rules; only the model was missing it, which is why an
+        // earlier pass had to leave this cross-tenant.
         const ruleRows = await tx.pricingRule.findMany({
           where: {
+            tenantId,
             // PricingRule schema doesn't have an isActive field consistently —
             // use what's available.
             vehicleCategory: parsed.data.vehicleCategory,

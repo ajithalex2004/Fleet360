@@ -123,6 +123,7 @@ export async function GET(req: NextRequest) {
 
       // ── VAT returns list ───────────────────────────────────────────────────────
       const returns = await tx.vatReturn.findMany({
+        where: { tenantId },
         orderBy: { createdAt: 'desc' },
       }).catch(() => []);
 
