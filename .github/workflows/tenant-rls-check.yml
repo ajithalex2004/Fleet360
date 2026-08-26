@@ -26,8 +26,13 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install dependencies
-        run: npm ci
+      # Deliberately no `npm ci` — scripts/check-tenant-rls.js requires only
+      # fs, path and child_process, all Node builtins. Installing pulled the
+      # whole dependency tree in just to run it, and the job then died on an
+      # ERESOLVE between @capacitor-community/sqlite@8.1.1 and
+      # @capacitor/core@^6.2.1 — a conflict with nothing to do with tenant RLS.
+      # Same reasoning as migration-safety.yml: a checker that needs no
+      # dependencies should not be breakable by an unrelated install failure.
 
       - name: Run RLS Compliance Check
         id: rls_check
