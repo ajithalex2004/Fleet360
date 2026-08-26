@@ -9,6 +9,8 @@ import { PageHeader } from '@/components/bus-ops/theme';
 interface PreviewRow {
   routeId: string;
   routeName: string;
+  /** BusRoute.code (RT-0001 …). Nullable — see the fallback at the render site. */
+  routeCode: string | null;
   stopCount: number;
   geoStopCount: number;
   originalDistanceKm: number;
@@ -98,7 +100,14 @@ export default function OptimisationPage() {
                   <tr key={row.routeId} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                     <td className="px-4 py-3 text-sm">
                       <div className="font-medium text-white">{row.routeName}</div>
-                      <div className="text-xs font-mono text-slate-300">{row.routeId.slice(0, 8)}</div>
+                      {/* Route code, not the id. The id prefix meant nothing to
+                          an operator — it can't be searched for, quoted, or
+                          matched against the Routes grid. Falls back to the
+                          truncated id only when a route genuinely has no code,
+                          so the row stays identifiable either way. */}
+                      <div className="text-xs font-mono text-slate-300">
+                        {row.routeCode ?? row.routeId.slice(0, 8)}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-white">
                       {row.geoStopCount}/{row.stopCount}

@@ -75,6 +75,17 @@ function RoutePlannerInner() {
   const [loadingRoute, setLoadingRoute] = useState(!!editId);
   const [initialWaypoints, setInitialWaypoints] = useState<Waypoint[] | null>(editId ? null : []);
   const [editingRouteName, setEditingRouteName] = useState<string | null>(null);
+  /**
+   * Stops loaded from the route that the geocoder could not place.
+   *
+   * They are held here and written back on save. Saving replaces the route's
+   * entire stop set, so a stop absent from the waypoint list is deleted — and
+   * these never reach the waypoint list, because a Waypoint requires numeric
+   * coordinates and the map has nowhere to draw them. Without this they would
+   * disappear the first time an operator opened the planner and pressed save,
+   * with the only warning being a message they may have dismissed.
+   */
+  const [unresolvedStops, setUnresolvedStops] = useState<{ label: string; stopName: string; sequence: number }[]>([]);
 
   // Route name field. Operator can edit any time. Prefilled on edit-open,
   // suggested-from-endpoints on new-route flow (auto-generated when
@@ -148,7 +159,12 @@ function RoutePlannerInner() {
         // ambiguous) and reported via the surfaced errors below.
         const allStops = (route.stops ?? []).sort((a, b) => a.sequence - b.sequence);
 
-        const unresolved: string[] = [];
+        // Stops the geocoder couldn't place. They are kept, not discarded:
+        // saving replaces the route's whole stop set, so anything missing
+        // from the waypoint list is deleted. Dropping a stop because a
+        // third-party geocoder didn't recognise its name would be silent
+        // data loss — the operator typed that name for a reason.
+        const unresolved: { label: string; stopName: string; sequence: number }[] = [];
         const resolved = await Promise.all(allStops.map(async s => {
           if (s.gpsLat != null && s.gpsLng != null) {
             return { id: s.id, stopName: s.stopName, gpsLat: s.gpsLat, gpsLng: s.gpsLng };
@@ -156,7 +172,10 @@ function RoutePlannerInner() {
           // Fall back to route origin/destination names if the stop name
           // itself is empty — happens on legacy stops that had only coords.
           const query = s.stopName?.trim();
-          if (!query) { unresolved.push(`(unnamed stop #${s.sequence})`); return null; }
+          if (!query) {
+            unresolved.push({ label: `(unnamed stop #${s.sequence})`, stopName: s.stopName ?? '', sequence: s.sequence });
+            return null;
+          }
           try {
             const gcRes = await fetch(`/api/route-optimizer/geocode?q=${encodeURIComponent(query)}`);
             const gcData = await gcRes.json();
@@ -165,7 +184,7 @@ function RoutePlannerInner() {
               return { id: s.id, stopName: s.stopName, gpsLat: first.lat, gpsLng: first.lng };
             }
           } catch { /* fall through */ }
-          unresolved.push(query);
+          unresolved.push({ label: query, stopName: s.stopName, sequence: s.sequence });
           return null;
         }));
         if (cancelled) return;
@@ -202,11 +221,14 @@ function RoutePlannerInner() {
         // clobber the loaded name when waypoints come in.
         setRouteNameManuallyEdited(true);
 
+        setUnresolvedStops(unresolved);
         if (unresolved.length > 0) {
           setError(
-            `Loaded ${stops.length} of ${allStops.length} stops. Couldn't resolve ${unresolved.length} `
-            + `(${unresolved.slice(0, 3).join(', ')}${unresolved.length > 3 ? '…' : ''}). `
-            + `Use the map picker (📍) to add coordinates for these before saving.`,
+            `Loaded ${stops.length} of ${allStops.length} stops on the map. Couldn't locate ${unresolved.length} `
+            + `(${unresolved.slice(0, 3).map(u => u.label).join(', ')}${unresolved.length > 3 ? '…' : ''}). `
+            + `These are kept on the route and will be saved with their names, but they have no coordinates, `
+            + `so they are not optimised and the route still counts as under-geocoded. `
+            + `Add them again with the map picker (📍) to include them in the solve.`,
           );
         }
       } catch (e) {
@@ -261,6 +283,18 @@ function RoutePlannerInner() {
             stopName: destination.label, sequence: stops.length + 2,
             gpsLng: destination.lng, gpsLat: destination.lat,
           }] : []),
+          // Stops the geocoder couldn't place, carried through unchanged so
+          // the save doesn't delete them. They keep their names and stay
+          // without coordinates; they sit after the destination because the
+          // solver never saw them and we have no basis for placing them in
+          // the optimised order. Re-picking one on the map replaces it with
+          // a real waypoint on the next load.
+          ...unresolvedStops.map((u, i) => ({
+            stopName: u.stopName,
+            sequence: stops.length + 3 + i,
+            gpsLng: null as number | null,
+            gpsLat: null as number | null,
+          })),
         ],
       };
 

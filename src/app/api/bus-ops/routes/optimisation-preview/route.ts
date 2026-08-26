@@ -28,13 +28,20 @@ export async function GET(req: NextRequest) {
     const routes = await tx.busRoute.findMany({
         where: { deletedAt: null, isActive: true, routeType: { in: ['STAFF', 'BOTH'] } },
         select: {
-          id: true, name: true, totalDistanceKm: true,
+          id: true, name: true, code: true, totalDistanceKm: true,
           stops: { select: { id: true, stopName: true, sequence: true, gpsLat: true, gpsLng: true } },
         },
       });
 
       interface PreviewRow {
         routeId: string; routeName: string;
+        /**
+         * BusRoute.code (RT-0001 …). Nullable in the schema — routes created
+         * before codes existed, and consolidation merge products, can have
+         * none. The UI falls back to a truncated id in that case, so a row is
+         * always identifiable.
+         */
+        routeCode: string | null;
         stopCount: number; geoStopCount: number;
         originalDistanceKm: number; optimisedDistanceKm: number;
         distanceSavedKm: number; distanceSavedPct: number;
@@ -50,7 +57,8 @@ export async function GET(req: NextRequest) {
 
         if (geo.length < 3) {
           rows.push({
-            routeId: r.id, routeName: r.name, stopCount: sorted.length, geoStopCount: geo.length,
+            routeId: r.id, routeName: r.name, routeCode: r.code,
+            stopCount: sorted.length, geoStopCount: geo.length,
             originalDistanceKm: 0, optimisedDistanceKm: 0, distanceSavedKm: 0, distanceSavedPct: 0,
             skipped: true, skipReason: `Only ${geo.length} stops geocoded`,
           });
@@ -59,7 +67,8 @@ export async function GET(req: NextRequest) {
 
         const result = optimiseRoute(geo);
         rows.push({
-          routeId: r.id, routeName: r.name, stopCount: sorted.length, geoStopCount: geo.length,
+          routeId: r.id, routeName: r.name, routeCode: r.code,
+          stopCount: sorted.length, geoStopCount: geo.length,
           originalDistanceKm: round2(result.originalDistanceKm),
           optimisedDistanceKm: round2(result.optimisedDistanceKm),
           distanceSavedKm: round2(result.distanceSavedKm),
