@@ -35,6 +35,51 @@ const EXEMPT_PATTERNS = [
   /^src\/app\/api\/track\//,  // Public tracking (no auth required)
 ];
 
+// Narrow, per-rule exemptions.
+//
+// EXEMPT_PATTERNS above turns off EVERY rule for a whole directory, which is
+// far too blunt when one specific rule is inapplicable to one specific
+// handler. These entries switch off exactly one rule for exactly one file and
+// method, so the remaining rules keep protecting the route.
+//
+// Deliberately kept here rather than as an in-file comment marker: adding an
+// exemption should be a visible edit to the security tooling that gets
+// reviewed on its own, not a line someone can drop into a route while fixing
+// something else.
+//
+// `reason` is mandatory and printed in the summary. If an entry stops matching
+// a real violation it is reported as stale and fails the run — an exemption
+// that has quietly stopped applying is an exemption nobody is reviewing.
+const RULE_EXEMPTIONS = [
+  {
+    file: 'src/app/api/admin/session/route.ts',
+    method: 'GET',
+    type: 'missing_auth',
+    reason:
+      'Session bootstrap. It cannot call requireAuthorizedTenant() for the tenant ' +
+      'context it is in the middle of establishing. It verifies the xl-session cookie ' +
+      'itself, requires a userId and tenantId, and returns 403 when the requested ids ' +
+      'do not match the cookie; the UserTenant lookup then uses withPlatformAdmin ' +
+      'because that read legitimately crosses the tenant boundary.',
+  },
+  {
+    file: 'src/app/api/push/run-scheduler/route.ts',
+    method: 'POST',
+    type: 'missing_auth',
+    reason:
+      'Cron endpoint. Callers authenticate with PUSH_CRON_SECRET and have no session, ' +
+      'so requireAuthorizedTenant() has nothing to read; it fails closed with 503 in ' +
+      'production when the secret is unset. The handler performs no database access of ' +
+      'its own — runTripReminders() does all of it under withSystemJob + withTenantRls.',
+  },
+];
+
+function ruleExemptionFor(relativePath, violation) {
+  return RULE_EXEMPTIONS.find(
+    e => e.file === relativePath && e.method === violation.method && e.type === violation.type,
+  );
+}
+
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const MUTATION_METHODS = ['POST', 'PUT', 'PATCH'];
 
@@ -309,10 +354,25 @@ function analyzeRouteFile(filePath, opts = {}) {
     }
   }
 
+  // Peel off the per-rule exemptions, recording which ones actually fired so
+  // main() can flag any that have gone stale.
+  const exemptedViolations = [];
+  const liveViolations = [];
+  for (const v of violations) {
+    const ex = ruleExemptionFor(relativePath, v);
+    if (ex) {
+      ex._matched = true;
+      exemptedViolations.push({ ...v, reason: ex.reason });
+    } else {
+      liveViolations.push(v);
+    }
+  }
+
   return {
     exempt: false,
     handlers: exportedHandlers,
-    violations,
+    violations: liveViolations,
+    exemptedViolations,
     warnings,
   };
 }
@@ -450,6 +510,23 @@ function printResults(results, opts = {}) {
     }
   }
 
+  // Print the per-rule exemptions that fired. These are not failures, but they
+  // are the checks deliberately switched off, so they get printed every run
+  // rather than quietly disappearing.
+  const exempted = results.filter(r => r.exemptedViolations && r.exemptedViolations.length > 0);
+  if (exempted.length > 0) {
+    console.log('\n🔕 RULE EXEMPTIONS APPLIED:\n');
+    for (const result of exempted) {
+      const relativePath = path.relative(process.cwd(), result.filePath).replace(/\\/g, '/');
+      console.log(`\n🔕 ${relativePath}`);
+      for (const v of result.exemptedViolations) {
+        console.log(`   ${v.message}`);
+        console.log(`   └─ ${v.reason}`);
+      }
+    }
+    console.log('');
+  }
+
   // Success message
   if (allViolations.length === 0) {
     console.log('\n✅ All API routes follow the tenant access pipeline!\n');
@@ -479,7 +556,24 @@ function main() {
     return { filePath, ...result };
   });
 
-  const success = printResults(results, opts);
+  let success = printResults(results, opts);
+
+  // A stale exemption is one that no longer suppresses anything: either the
+  // route was fixed, renamed or deleted. Leaving it in place means the next
+  // person to reintroduce the problem gets a silent pass, so treat it as a
+  // failure of the check rather than housekeeping. Only meaningful on a full
+  // run — under --staged most routes are not examined at all.
+  if (!opts.staged) {
+    const stale = RULE_EXEMPTIONS.filter(e => !e._matched);
+    if (stale.length > 0) {
+      console.log('❌ STALE RULE EXEMPTIONS — these no longer match any violation:\n');
+      for (const e of stale) {
+        console.log(`   ${e.file} [${e.method} / ${e.type}]`);
+      }
+      console.log('\nRemove them from RULE_EXEMPTIONS in scripts/check-tenant-rls.js.\n');
+      success = false;
+    }
+  }
 
   process.exit(success ? 0 : 1);
 }
