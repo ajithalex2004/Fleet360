@@ -91,6 +91,7 @@ export async function POST(req: NextRequest) {
 
         const inquiries = await tx.leaseInquiry.findMany({
           where: {
+            tenantId,
             id: { in: [...byInquiry.keys()] },
             deletedAt: null,
             status: { notIn: ['CONVERTED', 'LOST'] },
@@ -131,8 +132,12 @@ export async function POST(req: NextRequest) {
         let errors = 0;
         for (const a of assessments) {
           try {
+            // tenantId is not just isolation here — this is an idempotency
+            // probe. Unscoped, an OPEN alert with the same title in ANY tenant
+            // suppressed this one, so a tenant could silently never receive an
+            // alert because another organisation already had a matching one.
             const existing = await tx.leaseAlert.findFirst({
-              where: { title: a.title, status: 'OPEN', createdAt: { gte: today } },
+              where: { tenantId, title: a.title, status: 'OPEN', createdAt: { gte: today } },
               select: { id: true },
             });
             if (existing) { alertsSkipped += 1; continue; }

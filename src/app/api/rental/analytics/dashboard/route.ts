@@ -43,6 +43,10 @@ export async function GET(req: NextRequest) {
         // Pull bookings whose period overlaps [periodFrom, periodTo].
         const bookingsRaw = await tx.rentalBooking.findMany({
           where: {
+            // Every figure on this dashboard derived from unscoped queries —
+            // revenue, utilisation and damages were aggregated across all
+            // tenants, so the numbers were both leaked and wrong.
+            tenantId,
             deletedAt: null,
             AND: [
               { pickupDate: { lte: periodTo } },
@@ -68,6 +72,7 @@ export async function GET(req: NextRequest) {
 
         const invoicesRaw = await tx.rentalInvoice.findMany({
           where: {
+            tenantId,
             deletedAt: null,
             invoiceDate: { gte: periodFrom, lte: periodTo },
           },
@@ -77,6 +82,7 @@ export async function GET(req: NextRequest) {
         // Damage claims linked to bookings in the period
         const damagesRaw = await tx.damageClaim.findMany({
           where: {
+            tenantId,
             booking: {
               AND: [
                 { pickupDate: { lte: periodTo } },

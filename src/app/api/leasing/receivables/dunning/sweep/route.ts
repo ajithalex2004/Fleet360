@@ -144,8 +144,12 @@ export async function POST(req: NextRequest) {
           const fingerprint = `dunning:${invoice.id}:${stage}`;
           const existing = !invoice.lesseeId
             ? null
+            // Same idempotency-probe reasoning as the leaseAlert lookups in
+            // the sibling sweeps: unscoped, another tenant's dunning activity
+            // for the same fingerprint would suppress this one.
             : await tx.leaseDunningActivity.findFirst({
                 where: {
+                  tenantId,
                   lesseeId: invoice.lesseeId,
                   notes: { contains: fingerprint },
                   createdAt: { gte: today },

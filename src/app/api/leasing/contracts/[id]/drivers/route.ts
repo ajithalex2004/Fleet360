@@ -46,7 +46,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
 
       const driverIds = [...new Set(allocations.map(a => a.driverId))];
       const drivers = await tx.driver.findMany({
-        where: { id: { in: driverIds } },
+        where: { tenantId, id: { in: driverIds } },
         select: {
           id: true, name: true, firstName: true, lastName: true,
           contactNumber: true, licenseNumber: true, licenseExpiry: true,
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     // Atomically release any current allocation on this (contract, vehicle) and create new.
     const newAllocation = await prisma.$transaction(async (tx) => {
       await tx.leaseDriverAllocation.updateMany({
-        where: { contractId: params.id, contractVehicleId, status: 'ACTIVE' },
+        where: { tenantId, contractId: params.id, contractVehicleId, status: 'ACTIVE' },
         data: {
           status: 'RELEASED',
           releasedAt: new Date(),
