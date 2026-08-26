@@ -21,8 +21,20 @@ on:
     branches:
       - main
       - develop
+    # These three must match the pull_request list above. They did not: the push
+    # filter covered only prisma/**, so an edit to the checker — or to its
+    # ALLOWLIST, which is the change that most needs re-verifying — did not
+    # re-run the check on main. The job kept displaying its last red result
+    # while the fix for it sat merged and unverified.
+    #
+    # Weakening the allowlist is exactly the edit that must not slip through
+    # unchecked.
     paths:
       - 'prisma/**'
+      - 'scripts/check-destructive-migrations.js'
+      - '.github/workflows/migration-safety.yml'
+  # So the check can be re-run on demand without an unrelated prisma/ change.
+  workflow_dispatch:
 
 jobs:
   check-destructive-migrations:
