@@ -425,6 +425,30 @@ export function verdictForCommand(command, policies) {
   };
 }
 
+/**
+ * Roll per-command verdicts plus the two TABLE-level conditions into one
+ * verdict for the table.
+ *
+ * Extracted so the meta-tests below can exercise it. It was previously inline
+ * and written as `SEVERITY.find(s => verdicts.includes(s))` — but SEVERITY
+ * contains SCOPED, which every healthy table has on some command, so the match
+ * always succeeded and the fallback never ran. NULLABLE_ESCAPE_LIVE and
+ * ROLE_RESTRICTED were unreachable: they reported 0 regardless of the data,
+ * and no expression-level test could have caught it because the expression
+ * layer was working correctly the whole time.
+ *
+ * Only these four can come from `verdicts`; the rest are decided here.
+ */
+const COMMAND_LEVEL = ['OPEN_NO_RLS', 'UNKNOWN_EXPRESSION', 'BROAD_POLICY', 'MISSING_COMMAND_COVERAGE'];
+
+export function tableVerdict({ verdicts, liveRead, roleRestricted }) {
+  return COMMAND_LEVEL.find(h => verdicts.includes(h))
+    ?? (liveRead ? 'NULLABLE_ESCAPE_LIVE'
+      : roleRestricted ? 'ROLE_RESTRICTED'
+      : verdicts.includes('DENIED') ? 'DENIED'
+      : 'SCOPED');
+}
+
 // ── Self-tests. The checker refuses to report on the database until it can
 //    prove it classifies known shapes correctly. Every one of these is a shape
 //    that actually appears in this schema, or one that nearly shipped.
@@ -549,6 +573,42 @@ function selfTest() {
       v('INSERT', [P({ name: 'audit_insert_only', cmd: 'a', check_expr: canon })]), 'SCOPED'],
   );
 
+  // ── META-TESTS: every verdict category must be REACHABLE.
+  //
+  // The expression tests above all passed while NULLABLE_ESCAPE_LIVE and
+  // ROLE_RESTRICTED were structurally impossible to assign. A gate that cannot
+  // emit one of its own categories reports a comforting zero forever, and no
+  // amount of parser testing reveals it. One constructed case per category.
+  const tv = (verdicts, opts = {}) => tableVerdict({
+    verdicts, liveRead: false, roleRestricted: false, ...opts });
+  const S = ['SCOPED', 'SCOPED', 'SCOPED', 'SCOPED'];
+  cases.push(
+    ['reachable: SCOPED', tv(S), 'SCOPED'],
+    ['reachable: DENIED', tv(['SCOPED', 'DENIED', 'DENIED', 'SCOPED']), 'DENIED'],
+    ['reachable: OPEN_NO_RLS', tv(['OPEN_NO_RLS', 'SCOPED', 'SCOPED', 'SCOPED']), 'OPEN_NO_RLS'],
+    ['reachable: UNKNOWN_EXPRESSION', tv(['SCOPED', 'UNKNOWN_EXPRESSION', 'SCOPED', 'SCOPED']), 'UNKNOWN_EXPRESSION'],
+    ['reachable: BROAD_POLICY', tv(['SCOPED', 'SCOPED', 'BROAD_POLICY', 'SCOPED']), 'BROAD_POLICY'],
+    ['reachable: MISSING_COMMAND_COVERAGE', tv(['SCOPED', 'SCOPED', 'SCOPED', 'MISSING_COMMAND_COVERAGE']), 'MISSING_COMMAND_COVERAGE'],
+    ['reachable: NULLABLE_ESCAPE_LIVE', tv(S, { liveRead: true }), 'NULLABLE_ESCAPE_LIVE'],
+    ['reachable: ROLE_RESTRICTED', tv(S, { roleRestricted: true }), 'ROLE_RESTRICTED'],
+
+    // Precedence: a command-level failure outranks both table-level ones, and
+    // a live escape outranks a role restriction.
+    ['precedence: OPEN_NO_RLS beats a live escape',
+      tv(['OPEN_NO_RLS', 'SCOPED', 'SCOPED', 'SCOPED'], { liveRead: true }), 'OPEN_NO_RLS'],
+    ['precedence: live escape beats ROLE_RESTRICTED',
+      tv(S, { liveRead: true, roleRestricted: true }), 'NULLABLE_ESCAPE_LIVE'],
+    ['precedence: a live escape is not masked by DENIED',
+      tv(['SCOPED', 'DENIED', 'SCOPED', 'SCOPED'], { liveRead: true }), 'NULLABLE_ESCAPE_LIVE'],
+
+    // Every FAILING category must actually be in FAILING, or it gates nothing.
+    ['all failing categories are wired into FAILING',
+      ['OPEN_NO_RLS', 'UNKNOWN_EXPRESSION', 'BROAD_POLICY', 'MISSING_COMMAND_COVERAGE',
+       'NULLABLE_ESCAPE_LIVE', 'ROLE_RESTRICTED'].every(c => FAILING.has(c)), true],
+    ['passing categories are NOT in FAILING',
+      ['SCOPED', 'DENIED'].some(c => FAILING.has(c)), false],
+  );
+
   const failed = cases.filter(([, got, want]) => got !== want);
   if (failed.length > 0) {
     console.error('SELF-TEST FAILED — refusing to report on the database:\n');
@@ -661,19 +721,11 @@ search_path: ${spRaw}`);
     const globalOk = GLOBAL_NULL_ALLOWLIST.some(a => a.table === qualified);
     const liveRead = t.tenant_nullable === 'YES' && escUsing && !globalOk;
 
-    // Only the per-command categories can come from `verdicts`. SCOPED is one
-    // of them and sits in SEVERITY, so `SEVERITY.find(...)` always matched it
-    // and the ?? fallback never ran — which meant NULLABLE_ESCAPE_LIVE and
-    // ROLE_RESTRICTED could never be assigned to a table, and both reported 0
-    // no matter what the data was. Table-level categories have to be decided
-    // separately from command-level ones.
-    const HARD = ['OPEN_NO_RLS', 'UNKNOWN_EXPRESSION', 'BROAD_POLICY', 'MISSING_COMMAND_COVERAGE'];
-    const worst =
-      HARD.find(h => verdicts.includes(h))
-      ?? (liveRead ? 'NULLABLE_ESCAPE_LIVE'
-        : (roleScoped.length > 0 && !allowlisted) ? 'ROLE_RESTRICTED'
-        : verdicts.includes('DENIED') ? 'DENIED'
-        : 'SCOPED');
+    const worst = tableVerdict({
+      verdicts,
+      liveRead,
+      roleRestricted: roleScoped.length > 0 && !allowlisted,
+    });
 
     report.push({ table: t.schema === 'public' ? t.name : `${t.schema}.${t.name}`, forced: t.forced, nullable: t.tenant_nullable === 'YES', escUsing, escCheck, worst, commands, roleScoped: roleScoped.map(p => p.name) });
   }
