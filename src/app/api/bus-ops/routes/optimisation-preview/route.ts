@@ -207,14 +207,20 @@ export async function GET(req: NextRequest) {
         const savedPct = currentKm > 0 ? (savedKm / currentKm) * 100 : 0;
 
         await tx.$executeRawUnsafe(
+          // `id` is deliberately omitted: it is uuid with a
+          // gen_random_uuid() default. Binding a JS string into it fails with
+          // 42804 ("column id is of type uuid but expression is of type
+          // text") because Postgres will not implicitly cast text to uuid in
+          // a parameter position. Letting the column default fire avoids both
+          // the cast and a redundant client-side id.
           `INSERT INTO route_optimisation_results
-             (id, tenant_id, route_id, route_name, route_number, stops_hash,
+             (tenant_id, route_id, route_name, route_number, stops_hash,
               original_stop_count, matched_stop_count,
               original_distance_km, optimised_distance_km,
               distance_saved_km, distance_saved_pct,
               iterations_2opt, solver_duration_ms,
               original_sequence, optimised_sequence, status, created_at, updated_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,0,0,$13::jsonb,$14::jsonb,'PENDING',NOW(),NOW())
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,0,$12::jsonb,$13::jsonb,'PENDING',NOW(),NOW())
            ON CONFLICT (route_id) DO UPDATE SET
              tenant_id             = EXCLUDED.tenant_id,
              route_name            = EXCLUDED.route_name,
@@ -229,7 +235,7 @@ export async function GET(req: NextRequest) {
              original_sequence     = EXCLUDED.original_sequence,
              optimised_sequence    = EXCLUDED.optimised_sequence,
              updated_at            = NOW()`,
-          crypto.randomUUID(), tenantId, r.id, r.name, r.code, hash,
+          tenantId, r.id, r.name, r.code, hash,
           sorted.length, geo.length,
           round2(currentKm), round2(optimisedKm), round2(savedKm), round2(savedPct),
           JSON.stringify(geo.map(s => s.id)), JSON.stringify(best.order),
