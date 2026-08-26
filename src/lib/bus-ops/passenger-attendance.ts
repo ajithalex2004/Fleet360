@@ -61,7 +61,12 @@ export interface AttendanceContext {
   scheduleId: string;
   passengerId: string;
   staffMemberId?: string | null;
-  tenantId?: string | null;
+  /**
+   * Required. boarding_events.tenant_id is NOT NULL as of 20260910000000; an
+   * event written without a tenant used to be visible to every tenant and now
+   * simply fails.
+   */
+  tenantId: string;
   /** Where it happened. Null for channels with no stop context. */
   stopId?: string | null;
   /** How it was detected. Must be a boarding_event_source enum member. */
@@ -139,7 +144,7 @@ async function applyTransition(
       performedAt:   ctx.occurredAt,
       performedBy:   ctx.performedBy ?? null,
       ...(ctx.rawPayload !== undefined ? { rawPayload: ctx.rawPayload } : {}),
-      ...(ctx.tenantId ? { tenantId: ctx.tenantId } : {}),
+      tenantId:      ctx.tenantId,
     },
   });
 
@@ -227,7 +232,7 @@ export async function logAlightEvent(db: Db, ctx: AttendanceContext): Promise<At
       performedAt:   ctx.occurredAt,
       performedBy:   ctx.performedBy ?? null,
       ...(ctx.rawPayload !== undefined ? { rawPayload: ctx.rawPayload } : {}),
-      ...(ctx.tenantId ? { tenantId: ctx.tenantId } : {}),
+      tenantId:      ctx.tenantId,
     },
   });
 

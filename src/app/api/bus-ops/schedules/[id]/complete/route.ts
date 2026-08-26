@@ -72,6 +72,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         } else {
           ops.push(tx.tripLog.create({
             data: {
+              tenantId,
               scheduleId: params.id,
               actualArrivalTime: new Date(),
               passengersBoarded: body.passengersBoarded ?? null,

@@ -67,6 +67,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
           notes: body?.notes ?? null,
         },
         create: {
+          tenantId,
           staffMemberId: params.id,
           tagId,
           formFactor: body?.formFactor ?? null,

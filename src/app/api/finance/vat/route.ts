@@ -146,6 +146,7 @@ export async function POST(req: NextRequest) {
       const body = stripTenantOwnershipFields(bodyRaw);
         const vatReturn = await tx.vatReturn.create({
           data: {
+            tenantId,
             periodFrom:       new Date(body.periodStart),
             periodTo:         new Date(body.periodEnd),
             periodStart:      new Date(body.periodStart),

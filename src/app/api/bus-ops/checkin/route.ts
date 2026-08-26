@@ -162,6 +162,7 @@ export async function POST(req: NextRequest) {
         const [event, passenger] = await runSequential([
           tx.boardingEvent.create({
             data: {
+              tenantId,
               scheduleId,
               passengerId,
               staffMemberId,
