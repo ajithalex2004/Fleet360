@@ -76,6 +76,22 @@ const ROLE = (() => {
 const CMD_LABEL = { r: 'SELECT', a: 'INSERT', w: 'UPDATE', d: 'DELETE', '*': 'ALL' };
 const COMMANDS = ['SELECT', 'INSERT', 'UPDATE', 'DELETE'];
 
+// Worst-first. The first category present on any command becomes the table's
+// verdict.
+const SEVERITY = [
+  'OPEN_NO_RLS',              // a command admits rows with no tenant predicate
+  'UNKNOWN_EXPRESSION',       // checker cannot parse it — never assumed safe
+  'BROAD_POLICY',             // a branch of the expression does not constrain
+  'MISSING_COMMAND_COVERAGE', // default-deny; loud breakage after the switch
+  'DENIED',                   // deliberately denied, e.g. append-only tables
+  'SCOPED',
+];
+
+// Categories that fail the run. MISSING_COMMAND_COVERAGE and DENIED do not:
+// neither leaks. The first breaks loudly and is reported so the list exists
+// before the switch rather than during it.
+const FAILING = new Set(['OPEN_NO_RLS', 'UNKNOWN_EXPRESSION', 'BROAD_POLICY', 'ROLE_RESTRICTED']);
+
 // Which policy commands apply to which statement. '*' (ALL) applies to all four.
 const APPLIES = {
   SELECT: ['r', '*'],
@@ -85,35 +101,147 @@ const APPLIES = {
 };
 
 /**
- * Classify a policy expression.
+ * Split an expression on a boolean operator at paren depth 0.
  *
- * Deliberately textual, against pg_get_expr output rather than a parsed tree:
- * the set of shapes in this schema is small and a reviewer can confirm the
- * classification by reading the same string the checker read. A parser would be
- * more general and much harder to trust.
+ * pg_get_expr fully parenthesises its output, so the top level of a policy
+ * expression is a clean OR-list or AND-list. Splitting on it lets each term be
+ * judged on its own, which is what makes an OR escape visible.
  */
-export function classifyExpr(expr) {
-  if (expr === null || expr === undefined) return 'ABSENT';
-  const e = String(expr).trim().toLowerCase();
+function splitTop(expr, op) {
+  const out = [];
+  let depth = 0, start = 0, inStr = false;
+  const pad = ` ${op} `;
+  for (let i = 0; i < expr.length; i++) {
+    const ch = expr[i];
+    if (ch === "'") inStr = !inStr;
+    if (inStr) continue;
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    else if (depth === 0 && expr.startsWith(pad, i)) {
+      out.push(expr.slice(start, i));
+      i += pad.length - 1;
+      start = i + 1;
+    }
+  }
+  out.push(expr.slice(start));
+  return out.map(s => s.trim()).filter(Boolean);
+}
+
+function unwrap(s) {
+  let e = s.trim();
+  // Strip one layer of enclosing parens at a time, only when balanced.
+  while (e.startsWith('(') && e.endsWith(')')) {
+    let depth = 0, ok = true;
+    for (let i = 0; i < e.length; i++) {
+      if (e[i] === '(') depth++;
+      else if (e[i] === ')') { depth--; if (depth === 0 && i < e.length - 1) { ok = false; break; } }
+    }
+    if (!ok) break;
+    e = e.slice(1, -1).trim();
+  }
+  return e;
+}
+
+const SETTING = String.raw`current_setting\(\s*'app\.tenant_id'(::text)?\s*,\s*true\s*\)`;
+
+/**
+ * Classify ONE indivisible term.
+ *
+ * Everything not recognised is UNKNOWN — never assumed safe. A checker that
+ * silently certifies an expression it cannot parse is worse than no checker,
+ * because it converts an unreviewed policy into a green tick.
+ */
+export function classifyTerm(term) {
+  const e = unwrap(String(term).trim().toLowerCase()).replace(/\s+/g, ' ');
+
   if (e === 'false') return 'DENY';
   if (e === 'true') return 'OPEN';
 
-  const readsSetting = /current_setting\(\s*'app\.tenant_id'/.test(e);
+  // tenant_id = current_setting('app.tenant_id', true), either order.
+  //
+  // Both sides may carry a cast. Where tenant_id is uuid rather than text —
+  // bookings, behavior_events, damage_claims and 15 others are uuid — the
+  // policy compares (tenant_id)::text, and Postgres renders the cast with the
+  // column parenthesised. An earlier version of this pattern accepted only
+  // `tenant_id::text` and reported all 18 as UNKNOWN_EXPRESSION.
+  // Both sides allow an optional wrapping paren before a cast — Postgres emits
+  // (current_setting(...))::uuid and (tenant_id)::text in that shape.
+  const COL = String.raw`\(?\s*tenant_id\s*\)?(::[a-z_]+)?`;
+  const SET = `\\(?\\s*${SETTING}\\s*\\)?(::[a-z_]+)?`;
+  const eq = new RegExp(`^${COL}\\s*=\\s*${SET}$|^${SET}\\s*=\\s*${COL}$`);
+  if (eq.test(e)) return 'TENANT_MATCH';
 
-  // Strip current_setting(...) calls before looking for the COLUMN. The
-  // setting is literally named 'app.tenant_id', so a naive \btenant_id\b
-  // matches inside it and a wildcard-only policy —
-  //   (current_setting('app.tenant_id', true) = '*')
-  // — reads as tenant-scoped when it constrains nothing at all. The self-test
-  // below caught this; it is the exact shape of the platform-admin escape.
-  const withoutSettings = e.replace(/current_setting\([^)]*\)/g, ' ');
-  const readsColumn = /\btenant_id\b/.test(withoutSettings);
+  // current_setting('app.tenant_id', true) = '*'  — the platform-admin escape.
+  // Expected and deliberate, but it constrains nothing on its own.
+  const admin = new RegExp(`^${SETTING}\\s*=\\s*'\\*'(::text)?$|^'\\*'(::text)?\\s*=\\s*${SETTING}$`);
+  if (admin.test(e)) return 'ADMIN_ESCAPE';
 
-  // Both halves are required. current_setting('app.tenant_id') = '*' on its own
-  // is the platform-admin escape and constrains nothing; a bare tenant_id
-  // comparison against a literal constrains the wrong thing.
-  if (readsSetting && readsColumn) return 'SCOPED';
-  return 'OPEN';
+  // tenant_id IS NULL — rows with no tenant are visible to every tenant. This
+  // is in the canonical policy in src/lib/rls.ts and is deliberate for shared
+  // reference rows, but it IS a widening and is reported as such.
+  if (/^tenant_id(::text)?\s+is\s+null$/.test(e)) return 'NULL_ESCAPE';
+
+  return 'UNKNOWN';
+}
+
+/**
+ * Classify a whole policy expression.
+ *
+ * OR terms widen: the expression is only as tight as its loosest branch.
+ * AND terms narrow: one tenant-matching conjunct is enough.
+ */
+const TENANTY = new Set(['TENANT_MATCH', 'SCOPED', 'SCOPED_NULLABLE']);
+const NULLY = new Set(['NULL_ESCAPE', 'SCOPED_NULLABLE']);
+
+/**
+ * Internal: returns TERM kinds as well as combined ones, so that OR-combination
+ * can tell a deliberate escape from a hole.
+ *
+ * ADMIN_ESCAPE must survive as its own kind through this. It appears in every
+ * canonical policy in the schema —
+ *   (current_setting('app.tenant_id') = '*' OR tenant_id = current_setting(...))
+ * — and collapsing it to BROAD at the term level made the OR-combination report
+ * every correct policy as broad. It widens only into the platform-admin
+ * context, which is what withPlatformAdmin deliberately enters. Alone, with no
+ * tenant predicate beside it, it constrains nothing and IS broad.
+ */
+function analyze(expr) {
+  const e = unwrap(String(expr).trim().toLowerCase());
+
+  const orTerms = splitTop(e, 'or');
+  if (orTerms.length > 1) {
+    const kinds = orTerms.map(analyze);
+    if (kinds.every(k => k === 'DENY')) return 'DENY';
+    // A false branch contributes no rows, so it cannot widen the result.
+    const live = kinds.filter(k => k !== 'DENY');
+    if (live.includes('UNKNOWN')) return 'UNKNOWN';
+    if (live.includes('OPEN')) return 'OPEN';
+    if (live.includes('BROAD')) return 'BROAD';
+    // Only escapes and no tenant predicate: nothing is constrained.
+    if (!live.some(k => TENANTY.has(k))) return 'BROAD';
+    return live.some(k => NULLY.has(k)) ? 'SCOPED_NULLABLE' : 'SCOPED';
+  }
+
+  const andTerms = splitTop(e, 'and');
+  if (andTerms.length > 1) {
+    const kinds = andTerms.map(analyze);
+    if (kinds.includes('DENY')) return 'DENY';
+    // AND only narrows, so one tenant-matching conjunct constrains the whole.
+    if (kinds.some(k => TENANTY.has(k))) return 'SCOPED';
+    if (kinds.includes('UNKNOWN')) return 'UNKNOWN';
+    return 'BROAD';
+  }
+
+  return classifyTerm(e);
+}
+
+export function classifyExpr(expr) {
+  if (expr === null || expr === undefined) return 'ABSENT';
+  const k = analyze(expr);
+  // A lone escape constrains nothing.
+  if (k === 'ADMIN_ESCAPE' || k === 'NULL_ESCAPE') return 'BROAD';
+  if (k === 'TENANT_MATCH') return 'SCOPED';
+  return k;
 }
 
 /**
@@ -140,46 +268,73 @@ export function verdictForCommand(command, policies) {
   const applicable = policies.filter(
     p => p.permissive && APPLIES[command].includes(p.cmd),
   );
-  if (applicable.length === 0) return { verdict: 'NO_POLICY', detail: 'no permissive policy applies' };
+  if (applicable.length === 0) {
+    return { verdict: 'MISSING_COMMAND_COVERAGE', detail: 'no permissive policy applies' };
+  }
 
   const parts = [];
   for (const p of applicable) {
     // Read side: which existing rows the command may touch.
-    const readNeeded = command !== 'INSERT';
-    const readClass = readNeeded ? classifyExpr(p.using_expr) : 'N/A';
-
+    const readClass = command === 'INSERT' ? 'N/A' : classifyExpr(p.using_expr);
     // Write side: what the resulting row may look like.
-    const writeNeeded = command === 'INSERT' || command === 'UPDATE';
-    const writeClass = writeNeeded ? classifyExpr(writeExpr(p)) : 'N/A';
-
+    const writeClass = (command === 'INSERT' || command === 'UPDATE')
+      ? classifyExpr(writeExpr(p)) : 'N/A';
     parts.push({ name: p.name, readClass, writeClass });
   }
 
-  // A policy is fully denying if its read side is DENY — nothing reaches it.
+  // A policy whose read side is DENY admits nothing, so its write side is
+  // unreachable and irrelevant. audit_logs relies on exactly this.
   const nonDenying = parts.filter(p => p.readClass !== 'DENY');
   if (nonDenying.length === 0) {
     return { verdict: 'DENIED', detail: `${parts.map(p => p.name).join(', ')} deny via USING (false)` };
   }
 
-  const open = nonDenying.filter(
-    p =>
-      (p.readClass !== 'N/A' && p.readClass === 'OPEN') ||
-      (p.writeClass !== 'N/A' && (p.writeClass === 'OPEN' || p.writeClass === 'ABSENT')),
-  );
-  if (open.length > 0) {
-    const why = open
-      .map(p => {
-        const bits = [];
-        if (p.readClass === 'OPEN') bits.push('USING unconstrained');
-        if (p.writeClass === 'OPEN') bits.push('write check unconstrained');
-        if (p.writeClass === 'ABSENT') bits.push('no write check and no USING fallback');
-        return `${p.name} (${bits.join('; ')})`;
-      })
-      .join(', ');
-    return { verdict: 'OPEN', detail: why };
+  const sides = (p) => [
+    ['USING', p.readClass],
+    ['write check', p.writeClass],
+  ].filter(([, k]) => k !== 'N/A');
+
+  // Fail closed FIRST. An expression the checker cannot parse must never be
+  // certified, and must outrank the softer categories below it.
+  const unknown = nonDenying.filter(p => sides(p).some(([, k]) => k === 'UNKNOWN'));
+  if (unknown.length > 0) {
+    return {
+      verdict: 'UNKNOWN_EXPRESSION',
+      detail: unknown.map(p =>
+        `${p.name} (${sides(p).filter(([, k]) => k === 'UNKNOWN').map(([s]) => s).join(', ')} not recognised)`).join(', '),
+    };
   }
 
-  return { verdict: 'SCOPED', detail: nonDenying.map(p => p.name).join(', ') };
+  // ABSENT on the write side means a FOR INSERT policy with no WITH CHECK and
+  // no USING to fall back on — it constrains nothing at all.
+  const open = nonDenying.filter(p => sides(p).some(([, k]) => k === 'OPEN' || k === 'ABSENT'));
+  if (open.length > 0) {
+    return {
+      verdict: 'OPEN_NO_RLS',
+      detail: open.map(p => {
+        const bits = sides(p)
+          .filter(([, k]) => k === 'OPEN' || k === 'ABSENT')
+          .map(([s, k]) => k === 'ABSENT' ? `${s} absent with no USING fallback` : `${s} unconstrained`);
+        return `${p.name} (${bits.join('; ')})`;
+      }).join(', '),
+    };
+  }
+
+  const broad = nonDenying.filter(p => sides(p).some(([, k]) => k === 'BROAD'));
+  if (broad.length > 0) {
+    return {
+      verdict: 'BROAD_POLICY',
+      detail: broad.map(p =>
+        `${p.name} (${sides(p).filter(([, k]) => k === 'BROAD').map(([s]) => s).join(', ')} has a branch that does not constrain the tenant)`).join(', '),
+    };
+  }
+
+  const nullable = nonDenying.filter(p => sides(p).some(([, k]) => k === 'SCOPED_NULLABLE'));
+  return {
+    verdict: 'SCOPED',
+    detail: nonDenying.map(p => p.name).join(', ')
+      + (nullable.length ? '  [tenant_id IS NULL rows visible to all tenants]' : ''),
+  };
 }
 
 // ── Self-tests. The checker refuses to report on the database until it can
@@ -187,39 +342,95 @@ export function verdictForCommand(command, policies) {
 //    that actually appears in this schema, or one that nearly shipped.
 function selfTest() {
   const T = (expr) => classifyExpr(expr);
+  const canon = `((current_setting('app.tenant_id'::text, true) = '*'::text) OR (tenant_id = current_setting('app.tenant_id'::text, true)))`;
   const cases = [
-    // classifyExpr
-    ['scoped policy', T(`((current_setting('app.tenant_id'::text, true) = '*'::text) OR (tenant_id = current_setting('app.tenant_id'::text, true)))`), 'SCOPED'],
-    ['deny policy', T('false'), 'DENY'],
+    // ── classifyExpr
+    ['canonical policy', T(canon), 'SCOPED'],
+    ['deny', T('false'), 'DENY'],
     ['open literal', T('true'), 'OPEN'],
     ['absent', T(null), 'ABSENT'],
-    ['wildcard only, no column', T(`(current_setting('app.tenant_id'::text, true) = '*'::text)`), 'OPEN'],
-    ['column but no setting', T(`(tenant_id = 'acme'::text)`), 'OPEN'],
-    ['nullable variant', T(`((tenant_id IS NULL) OR (tenant_id = current_setting('app.tenant_id'::text, true)))`), 'SCOPED'],
+    ['bare equality', T(`(tenant_id = current_setting('app.tenant_id'::text, true))`), 'SCOPED'],
+    ['reversed equality', T(`(current_setting('app.tenant_id'::text, true) = tenant_id)`), 'SCOPED'],
+
+    // uuid tenant_id columns: Postgres renders the cast with the column
+    // parenthesised. 18 tables in this schema use this form.
+    ['uuid column cast, canonical',
+      T(`((tenant_id IS NULL) OR (current_setting('app.tenant_id'::text, true) = '*'::text) OR ((tenant_id)::text = current_setting('app.tenant_id'::text, true)))`), 'SCOPED_NULLABLE'],
+    ['uuid column cast, bare', T(`((tenant_id)::text = current_setting('app.tenant_id'::text, true))`), 'SCOPED'],
+    ['cast on the setting side', T(`(tenant_id = (current_setting('app.tenant_id'::text, true))::uuid)`), 'SCOPED'],
+
+    // The wildcard escape alone constrains nothing. A \btenant_id\b test
+    // matches inside the SETTING NAME, which is how the first version of this
+    // checker certified it as scoped.
+    ['wildcard escape alone is BROAD', T(`(current_setting('app.tenant_id'::text, true) = '*'::text)`), 'BROAD'],
+
+    // The cases that motivated the rewrite: a real tenant predicate with an OR
+    // escape welded on. "Mentions both tokens" called all of these SCOPED.
+    //
+    // An unrecognised branch yields UNKNOWN rather than BROAD — the checker
+    // genuinely does not know what is_public means, and saying so is more
+    // honest than guessing. Both fail the run.
+    ['tenant match OR unrecognised predicate is UNKNOWN',
+      T(`((tenant_id = current_setting('app.tenant_id'::text, true)) OR (is_public = true))`), 'UNKNOWN'],
+    // X OR true is unconditionally true, so OPEN rather than merely BROAD.
+    ['tenant match OR true is OPEN',
+      T(`((tenant_id = current_setting('app.tenant_id'::text, true)) OR true)`), 'OPEN'],
+    // A second escape with no tenant predicate anywhere.
+    ['two escapes and no tenant predicate is BROAD',
+      T(`((current_setting('app.tenant_id'::text, true) = '*'::text) OR (tenant_id IS NULL))`), 'BROAD'],
+    // A DENY branch contributes no rows and must not widen the result.
+    ['false OR tenant match stays SCOPED',
+      T(`(false OR (tenant_id = current_setting('app.tenant_id'::text, true)))`), 'SCOPED'],
+
+    ['nullable canonical is SCOPED_NULLABLE',
+      T(`((tenant_id IS NULL) OR (current_setting('app.tenant_id'::text, true) = '*'::text) OR (tenant_id = current_setting('app.tenant_id'::text, true)))`), 'SCOPED_NULLABLE'],
+
+    // AND narrows, so an extra conjunct keeps it scoped.
+    ['tenant match AND soft-delete filter stays SCOPED',
+      T(`((tenant_id = current_setting('app.tenant_id'::text, true)) AND (deleted_at IS NULL))`), 'SCOPED'],
+
+    // Fail closed.
+    ['unrecognised expression is UNKNOWN', T(`(owner_org = some_function(user_id))`), 'UNKNOWN'],
+    ['unknown OR scoped is UNKNOWN, not SCOPED',
+      T(`((tenant_id = current_setting('app.tenant_id'::text, true)) OR (weird_col = frobnicate()))`), 'UNKNOWN'],
+    ['column compared to a literal is not tenant scoping',
+      T(`(tenant_id = 'acme'::text)`), 'UNKNOWN'],
   ];
 
   const scoped = `(tenant_id = current_setting('app.tenant_id'::text, true))`;
   const P = (o) => ({ permissive: true, using_expr: null, check_expr: null, ...o });
-
-  // verdictForCommand
   const v = (cmd, pols) => verdictForCommand(cmd, pols).verdict;
+
   cases.push(
+    // ── Postgres semantics
     ['ALL policy covers INSERT via USING fallback',
       v('INSERT', [P({ name: 'p', cmd: '*', using_expr: scoped })]), 'SCOPED'],
-    ['INSERT-only policy with no WITH CHECK contributes nothing',
-      v('INSERT', [P({ name: 'p', cmd: 'a', using_expr: null, check_expr: null })]), 'OPEN'],
     ['UPDATE policy falls back to USING for the new row',
       v('UPDATE', [P({ name: 'p', cmd: 'w', using_expr: scoped })]), 'SCOPED'],
-    ['USING(false) on UPDATE is DENIED, not a missing check',
+    ['INSERT-only policy with no WITH CHECK has no USING to fall back on',
+      v('INSERT', [P({ name: 'p', cmd: 'a' })]), 'OPEN_NO_RLS'],
+    ['USING(false) on UPDATE is DENIED, not a missing write check',
       v('UPDATE', [P({ name: 'audit_no_updates', cmd: 'w', using_expr: 'false' })]), 'DENIED'],
-    ['one open permissive policy defeats a scoped one (OR semantics)',
-      v('SELECT', [P({ name: 'ok', cmd: 'r', using_expr: scoped }), P({ name: 'bad', cmd: 'r', using_expr: 'true' })]), 'OPEN'],
-    ['no applicable policy is NO_POLICY, not OPEN',
-      v('DELETE', [P({ name: 'p', cmd: 'r', using_expr: scoped })]), 'NO_POLICY'],
-    ['restrictive policy does not count as coverage',
-      v('SELECT', [{ name: 'r', cmd: 'r', permissive: false, using_expr: scoped, check_expr: null }]), 'NO_POLICY'],
+
+    // ── OR semantics across policies
+    ['one open policy defeats a scoped one',
+      v('SELECT', [P({ name: 'ok', cmd: 'r', using_expr: scoped }), P({ name: 'bad', cmd: 'r', using_expr: 'true' })]), 'OPEN_NO_RLS'],
+    ['one broad policy defeats a scoped one',
+      v('SELECT', [P({ name: 'ok', cmd: 'r', using_expr: scoped }),
+                   P({ name: 'wide', cmd: 'r', using_expr: `(current_setting('app.tenant_id'::text, true) = '*'::text)` })]), 'BROAD_POLICY'],
+
+    // ── Coverage and precedence
+    ['no applicable policy is MISSING_COMMAND_COVERAGE',
+      v('DELETE', [P({ name: 'p', cmd: 'r', using_expr: scoped })]), 'MISSING_COMMAND_COVERAGE'],
+    ['restrictive policy does not provide coverage',
+      v('SELECT', [{ name: 'r', cmd: 'r', permissive: false, using_expr: scoped, check_expr: null }]), 'MISSING_COMMAND_COVERAGE'],
+    ['UNKNOWN outranks BROAD',
+      v('SELECT', [P({ name: 'u', cmd: 'r', using_expr: `(x = f())` }),
+                   P({ name: 'b', cmd: 'r', using_expr: `(current_setting('app.tenant_id'::text, true) = '*'::text)` })]), 'UNKNOWN_EXPRESSION'],
     ['scoped SELECT is SCOPED',
       v('SELECT', [P({ name: 'p', cmd: 'r', using_expr: scoped })]), 'SCOPED'],
+    ['audit_logs shape: append-only and tenant scoped',
+      v('INSERT', [P({ name: 'audit_insert_only', cmd: 'a', check_expr: canon })]), 'SCOPED'],
   );
 
   const failed = cases.filter(([, got, want]) => got !== want);
@@ -277,8 +488,8 @@ async function main() {
     const roleScoped = all.filter(p => !p.applies_to_public && !p.roles.includes(ROLE));
 
     if (!t.rls) {
-      report.push({ table: t.name, forced: t.forced, worst: 'NO_RLS',
-        commands: Object.fromEntries(COMMANDS.map(c => [c, { verdict: 'NO_RLS', detail: 'RLS not enabled' }])),
+      report.push({ table: t.name, forced: t.forced, worst: 'OPEN_NO_RLS',
+        commands: Object.fromEntries(COMMANDS.map(c => [c, { verdict: 'OPEN_NO_RLS', detail: 'RLS not enabled on the table' }])),
         roleScoped: roleScoped.map(p => p.name) });
       continue;
     }
@@ -287,9 +498,11 @@ async function main() {
     for (const c of COMMANDS) commands[c] = verdictForCommand(c, applicable);
 
     const verdicts = COMMANDS.map(c => commands[c].verdict);
-    const worst = verdicts.includes('OPEN') ? 'OPEN'
-      : verdicts.includes('NO_POLICY') ? 'NO_POLICY'
-      : 'SCOPED';
+    // Severity order. ROLE_RESTRICTED sits above SCOPED because a policy that
+    // does not apply to the runtime role is not protection, and below the
+    // categories that describe an actual hole.
+    const worst = SEVERITY.find(s => verdicts.includes(s))
+      ?? (roleScoped.length > 0 ? 'ROLE_RESTRICTED' : 'SCOPED');
 
     report.push({ table: t.name, forced: t.forced, worst, commands, roleScoped: roleScoped.map(p => p.name) });
   }
@@ -297,51 +510,86 @@ async function main() {
   await prisma.$disconnect();
 
   if (AS_JSON) {
-    console.log(JSON.stringify({ role: ROLE, report }, null, 2));
-    process.exit(report.some(r => r.worst === 'OPEN' || r.worst === 'NO_RLS') ? 1 : 0);
+    const failed = report.filter(r => FAILING.has(r.worst));
+    console.log(JSON.stringify({ role: ROLE, selfTests: testCount, report, failing: failed.length }, null, 2));
+    process.exit(failed.length > 0 ? 1 : 0);
   }
 
-  const leaks = report.filter(r => r.worst === 'OPEN' || r.worst === 'NO_RLS');
-  const breaks = report.filter(r => r.worst === 'NO_POLICY');
-  const ok = report.filter(r => r.worst === 'SCOPED');
+  const byCat = {};
+  for (const r of report) (byCat[r.worst] ??= []).push(r);
+  const failed = report.filter(r => FAILING.has(r.worst));
 
-  console.log(`\nEffective RLS coverage — ${report.length} tenant-owned tables, as role '${ROLE}'`);
-  console.log(`${testCount} self-tests passed\n`);
-  console.log('─'.repeat(70));
-  console.log(`  SCOPED    ${String(ok.length).padStart(4)}   every command constrained to the tenant`);
-  console.log(`  NO_POLICY ${String(breaks.length).padStart(4)}   default-deny; app breaks loudly after the role switch`);
-  console.log(`  OPEN/NO_RLS ${String(leaks.length).padStart(2)}   SILENT LEAK — a command admits rows unconstrained`);
-  console.log('─'.repeat(70));
+  console.log(`
+Effective RLS coverage — ${report.length} tenant-owned tables, as role '${ROLE}'`);
+  console.log(`${testCount} self-tests passed
+`);
+  console.log('─'.repeat(72));
+  const LEGEND = {
+    SCOPED:                   'every command constrained to the tenant',
+    DENIED:                   'command deliberately denied (append-only tables)',
+    MISSING_COMMAND_COVERAGE: 'default-deny — breaks LOUDLY after the role switch',
+    ROLE_RESTRICTED:          `policy does not apply to '${ROLE}' — protects nothing at runtime`,
+    BROAD_POLICY:             'a branch of the expression does not constrain the tenant',
+    UNKNOWN_EXPRESSION:       'expression not recognised — failing closed',
+    OPEN_NO_RLS:              'SILENT LEAK — rows admitted with no tenant predicate',
+  };
+  for (const cat of [...SEVERITY, 'ROLE_RESTRICTED']) {
+    const n = (byCat[cat] ?? []).length;
+    if (n === 0 && !FAILING.has(cat)) continue;
+    const mark = FAILING.has(cat) ? (n > 0 ? '🔴' : '  ') : '  ';
+    console.log(`  ${mark} ${cat.padEnd(26)} ${String(n).padStart(4)}   ${LEGEND[cat]}`);
+  }
+  console.log('─'.repeat(72));
 
-  if (leaks.length > 0) {
-    console.log('\n🔴 SILENT LEAKS — fix before switching the runtime role:\n');
-    for (const r of leaks) {
+  for (const cat of SEVERITY.concat('ROLE_RESTRICTED')) {
+    if (!FAILING.has(cat) || !(byCat[cat] ?? []).length) continue;
+    console.log(`
+🔴 ${cat} — must be fixed before switching the runtime role:
+`);
+    for (const r of byCat[cat]) {
       console.log(`  ${r.table}${r.forced ? '' : '  (not FORCEd)'}`);
+      if (cat === 'ROLE_RESTRICTED') {
+        console.log(`     policies not applying to '${ROLE}': ${r.roleScoped.join(', ')}`);
+        continue;
+      }
       for (const c of COMMANDS) {
         const v = r.commands[c];
-        if (v.verdict === 'OPEN' || v.verdict === 'NO_RLS') console.log(`     ${c.padEnd(6)} ${v.verdict}  ${v.detail}`);
+        if (v.verdict === cat) console.log(`     ${c.padEnd(6)} ${v.detail}`);
       }
     }
   }
 
+  const breaks = byCat.MISSING_COMMAND_COVERAGE ?? [];
   if (breaks.length > 0) {
     const show = SHOW_ALL ? breaks : breaks.slice(0, 15);
-    console.log(`\n🟡 DEFAULT-DENY commands — these will start erroring after the switch (${breaks.length}):\n`);
+    console.log(`
+🟡 MISSING_COMMAND_COVERAGE — default-deny, will start erroring after the switch (${breaks.length}):
+`);
     for (const r of show) {
-      const missing = COMMANDS.filter(c => r.commands[c].verdict === 'NO_POLICY');
-      console.log(`  ${r.table.padEnd(44)} ${missing.join(', ')}`);
+      console.log(`  ${r.table.padEnd(44)} ${COMMANDS.filter(c => r.commands[c].verdict === 'MISSING_COMMAND_COVERAGE').join(', ')}`);
     }
     if (!SHOW_ALL && breaks.length > show.length) console.log(`  …and ${breaks.length - show.length} more (--all)`);
   }
 
-  const roleIssues = report.filter(r => r.roleScoped.length > 0);
-  if (roleIssues.length > 0) {
-    console.log(`\n⚠️  Policies that do NOT apply to '${ROLE}' (they protect nothing at runtime):\n`);
-    for (const r of roleIssues) console.log(`  ${r.table}: ${r.roleScoped.join(', ')}`);
+  const nullable = report.filter(r => COMMANDS.some(c => (r.commands[c].detail ?? '').includes('IS NULL rows visible')));
+  if (nullable.length > 0) {
+    console.log(`
+⚠️  ${nullable.length} table(s) admit rows with tenant_id IS NULL to EVERY tenant.`);
+    console.log('   Deliberate in the canonical policy for shared reference rows, but it means');
+    console.log('   any row written without a tenant is globally visible. Worth an inventory.');
   }
 
-  console.log('');
-  process.exit(leaks.length > 0 ? 1 : 0);
+  if (failed.length === 0) {
+    console.log('');
+    console.log('✅ No silent-leak, broad, unparsed, or role-inapplicable policies.');
+    console.log('   Catalog inspection only — this is NOT behavioural proof of isolation.');
+    console.log('');
+  } else {
+    console.log('');
+    console.log(`${failed.length} table(s) must be fixed before the role switch.`);
+    console.log('');
+  }
+  process.exit(failed.length > 0 ? 1 : 0);
 }
 
 main().catch(e => { console.error('ERROR:', e.message?.split('\n')[0] ?? e); process.exit(1); });
