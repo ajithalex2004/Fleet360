@@ -45,7 +45,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   const shipmentId = params.id;
 
   let body: { stops?: StopInput[] };
-  try { body = (await req.json()) as { stops?: StopInput[] }; }
+  try { body = stripTenantOwnershipFields((await req.json()) as Record<string, unknown>) as { stops?: StopInput[] }; }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
 
   const stops = Array.isArray(body.stops) ? body.stops : [];

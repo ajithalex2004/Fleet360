@@ -134,9 +134,15 @@ function extractHandlerBody(content, method) {
 }
 
 function hasRlsWrapper(handlerBody) {
-  // Check if handler uses any RLS wrapper
+  // Check if handler uses any RLS wrapper.
+  //
+  // The optional `<...>` allows an explicit generic type argument between the
+  // name and the call parens. Without it `withSystemJob<PerTenantResult>(` did
+  // not match, and three correctly-wrapped sweep endpoints were reported as
+  // having no RLS wrapper at all. Reporting correct code as a violation is how
+  // a checker gets ignored.
   for (const wrapper of RLS_WRAPPERS) {
-    if (new RegExp(`\\b${wrapper}\\s*\\(`).test(handlerBody)) {
+    if (new RegExp(`\\b${wrapper}\\s*(<[^>()]*>)?\\s*\\(`).test(handlerBody)) {
       return wrapper;
     }
   }

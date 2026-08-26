@@ -41,7 +41,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   try {
     const { id: shipmentId } = await params;
-    const body = await req.json().catch(() => ({})) as { level?: string | null; reason?: string };
+    const body = stripTenantOwnershipFields(
+      (await req.json().catch(() => ({}))) as Record<string, unknown>,
+    ) as { level?: string | null; reason?: string };
 
     // null/empty string explicitly clears the override.
     const newLevel = (body.level === null || body.level === '' || body.level === undefined)
