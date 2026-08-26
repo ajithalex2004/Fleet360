@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
         // Find bookings that overlap the requested period
         const conflictingBookings = await tx.rentalBooking.findMany({
           where: {
+            tenantId,
             deletedAt: null,
             status: { in: ['CONFIRMED', 'ACTIVE'] },
             vehicleId: { not: null },
@@ -38,8 +39,11 @@ export async function GET(req: NextRequest) {
         const bookedVehicleIds = conflictingBookings.map(b => b.vehicleId!);
 
         // Find all active vehicles NOT in the booked list
+        // This listed available vehicles across every tenant — one
+        // organisation's availability search returned another's fleet.
         const availableVehicles = await tx.vehicle.findMany({
           where: {
+            tenantId,
             isActive: true,
             id: { notIn: bookedVehicleIds },
             ...(category ? { category } : {}),

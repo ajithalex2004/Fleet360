@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
       try {
         const bookings = await tx.rentalBooking.findMany({
           where: {
+            tenantId,
             deletedAt: null,
             pickupDate: { gte: new Date(startDate), lte: new Date(endDate + 'T23:59:59Z') },
           },

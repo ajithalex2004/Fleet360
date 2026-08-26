@@ -80,8 +80,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     // sufficient guard.
     if (body.incomingVehicleId && body.outgoingVehicleId) {
       await withTenantRls(prisma, tenantId, async (tx) =>
+        // The source comment claimed LeaseContractVehicle has no tenant
+        // column. It does, in both schema.prisma and the database — so the
+        // guarantee no longer rests solely on the parent contract check.
         tx.leaseContractVehicle.updateMany({
-        where: { contractId: params.id, vehicleId: body.outgoingVehicleId },
+        where: { tenantId, contractId: params.id, vehicleId: body.outgoingVehicleId },
         data: { vehicleId: body.incomingVehicleId, status: 'EXCHANGED' },
       }),
       );

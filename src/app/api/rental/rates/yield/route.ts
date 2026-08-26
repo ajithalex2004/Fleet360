@@ -72,6 +72,11 @@ export async function POST(req: NextRequest) {
 
         // Pull pricing rules for this category. Schema columns vary; we project
         // only what the engine needs.
+        // NOT tenant-scoped, and cannot be from here: pricing_rules has a
+        // tenant_id column in the database but the PricingRule model in
+        // schema.prisma does not expose it, so Prisma rejects the filter.
+        // This is schema drift, not a decision — pricing rules are read across
+        // tenants until the model is regenerated with the field.
         const ruleRows = await tx.pricingRule.findMany({
           where: {
             // PricingRule schema doesn't have an isActive field consistently —
@@ -91,6 +96,7 @@ export async function POST(req: NextRequest) {
         // Pull events that overlap the pickup date.
         const eventRows = await tx.rateEvent.findMany({
           where: {
+            tenantId,
             isActive: true,
             deletedAt: null,
             dateFrom: { lte: pickupDate },
@@ -118,8 +124,11 @@ export async function POST(req: NextRequest) {
           try {
             const now = new Date();
             const [activeBookings, fleetSize] = await Promise.all([
+              // Demand and fleet size feed the yield multiplier. Unscoped,
+              // they priced this tenant's rentals off everyone's occupancy.
               tx.rentalBooking.count({
                 where: {
+                  tenantId,
                   vehicleCategory: parsed.data.vehicleCategory,
                   status: { in: ['CONFIRMED', 'ACTIVE'] },
                   pickupDate: { lte: pickupDate },
@@ -128,6 +137,7 @@ export async function POST(req: NextRequest) {
               }),
               tx.vehicle.count({
                 where: {
+                  tenantId,
                   type: parsed.data.vehicleCategory,
                   status: { not: 'INACTIVE' },
                   deletedAt: null,
