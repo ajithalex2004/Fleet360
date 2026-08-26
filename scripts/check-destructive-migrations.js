@@ -42,6 +42,16 @@ const ALLOWLIST = {
     'Original transport-modules migration; drops the pre-rename Alert/AlertConfig/Attachment/Comment tables.',
   '20260626000001_drop_lease_v1_tables':
     'Intentional removal of superseded lease v1 tables — the whole point of the migration.',
+  '20260910000005_resolve_finance_payments_shadow':
+    'Drops public.finance_payments, an empty shadow of finance.finance_payments. Two ' +
+    'tables shared the name and public precedes finance on search_path, so every ' +
+    'unqualified reference resolved to the copy with no tenant_id and no RLS while the ' +
+    'tenant-isolated one sat unreachable behind it. The dropped table held 0 rows and had ' +
+    'no inbound foreign keys, views or matviews (checked via pg_depend); the surviving ' +
+    'table is a strict superset of its columns. The migration re-checks both ' +
+    'preconditions at run time and raises rather than dropping if either has changed. ' +
+    'Adding a tenant column to the shadow instead would have left two protected tables ' +
+    'and no way to tell which one was real.',
 };
 
 // Statements that can destroy data. DROP INDEX and DROP POLICY are deliberately
