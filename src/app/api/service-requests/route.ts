@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
             const requests = await tx.serviceRequest.findMany({
-                where: { deletedAt: null },
+                where: { tenantId, deletedAt: null },
                 include: {
                     attachments: true,
                     histories: true,

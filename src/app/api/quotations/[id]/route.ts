@@ -17,7 +17,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params;
         try {
             const quotation = await tx.quotation.findFirst({
-                where: { id, deletedAt: null },
+                where: { tenantId, id, deletedAt: null },
                 include: {
                     MaintenanceRequest: true,
                     Garage: true,

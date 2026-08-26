@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const reportSchedules = await tx.reportSchedule.findMany({
+          where: { tenantId },
           orderBy: { createdAt: 'desc' },
         });
         return NextResponse.json(reportSchedules);

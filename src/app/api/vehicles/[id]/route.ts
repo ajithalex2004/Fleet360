@@ -18,7 +18,7 @@ export async function GET(
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
             const vehicle = await tx.vehicle.findFirst({
-                where: { id: params.id, deletedAt: null }
+                where: { tenantId, id: params.id, deletedAt: null }
             });
             if (!vehicle) {
                 return NextResponse.json({ error: 'Vehicle not found' }, { status: 404 });

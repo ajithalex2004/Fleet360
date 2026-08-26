@@ -15,7 +15,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
             const garage = await tx.garage.findFirst({
-                where: { id: params.id, deletedAt: null }
+                where: { tenantId, id: params.id, deletedAt: null }
             });
             if (!garage) {
                 return NextResponse.json({ error: 'Garage not found' }, { status: 404 });
