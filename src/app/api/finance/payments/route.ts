@@ -36,7 +36,9 @@ export async function GET(req: NextRequest) {
 
   if (invoiceId) {
     values.push(invoiceId);
-    conditions.push(`p.invoice_id = $${values.length}`);
+    // ::uuid — finance_payments.invoice_id is uuid and the bound value is a
+    // JS string, which Postgres rejects with 42883 rather than coercing.
+    conditions.push(`p.invoice_id = $${values.length}::uuid`);
   }
   if (q) {
     values.push(`%${q}%`);
@@ -151,24 +153,33 @@ export async function POST(req: NextRequest) {
       if (invoiceId) {
         type OwnRow = { id: string };
         const [owned] = await tx.$queryRawUnsafe<OwnRow[]>(
-          `SELECT id FROM finance_invoices WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+          `SELECT id FROM finance_invoices WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
           invoiceId, tenantId
         );
 
         if (!owned) return { notFound: true as const };
       }
 
-      // Insert payment
+      // Insert payment.
+      //
+      // tenant_id is supplied explicitly. Until 20260910000005 this INSERT had
+      // no tenant column to fill: `finance_payments` resolved to a shadow copy
+      // in `public` that had none, while the correctly tenant-isolated table
+      // sat unreachable in the `finance` schema behind it on search_path. The
+      // shadow is gone, so this now writes to the protected table — and would
+      // fail with 23502 rather than silently landing untenanted if it did not
+      // pass a tenant.
       type InsRow = { id: string };
       const [row] = await tx.$queryRawUnsafe<InsRow[]>(
-        `INSERT INTO finance_payments (invoice_id, amount, payment_date, payment_method, reference, notes)
-         VALUES ($1, $2, $3::date, $4, $5, $6) RETURNING id`,
+        `INSERT INTO finance_payments (tenant_id, invoice_id, amount, payment_date, payment_method, reference, notes)
+         VALUES ($7, $1::uuid, $2, $3::date, $4, $5, $6) RETURNING id`,
         invoiceId ?? null,
         Number(amount),
         paymentDate ?? new Date().toISOString().split('T')[0],
         paymentMethod,
         reference ?? null,
-        notes ?? null
+        notes ?? null,
+        tenantId
       );
 
       // Reconcile against invoice if provided
@@ -177,7 +188,7 @@ export async function POST(req: NextRequest) {
         type InvRow = { total_amount: number; paid_amount: number };
         const [inv] = await tx.$queryRawUnsafe<InvRow[]>(
           `SELECT total_amount, paid_amount FROM finance_invoices
-            WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+            WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
           invoiceId, tenantId
         );
 
@@ -187,7 +198,7 @@ export async function POST(req: NextRequest) {
           await tx.$executeRawUnsafe(
             `UPDATE finance_invoices
                 SET paid_amount = $2, payment_status = $3, updated_at = NOW()
-              WHERE id = $1 AND tenant_id = $4`,
+              WHERE id = $1::uuid AND tenant_id = $4`,
             invoiceId, newPaid, newStatus, tenantId
           );
         }
