@@ -596,7 +596,7 @@ model BreakdownReport {
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  reportNo   String?  @unique @map("report_no") // BRK-YYYYMM-NNNNN
+  reportNo   String?  @map("report_no") // BRK-YYYYMM-NNNNN
   tenantId   String   @map("tenant_id")
   vehicleId  String?  @map("vehicle_id")
   driverId   String?  @map("driver_id")
@@ -636,6 +636,7 @@ model BreakdownReport {
   @@index([deletedAt], map: "idx_breakdown_reports_deleted_at")
   @@map("breakdown_reports")
   @@schema("public")
+  @@unique([tenantId, reportNo])
 }
 
 model QuotationLabor {
@@ -1565,6 +1566,7 @@ model RentalAgreement {
   @@index([tenantId])
   @@map("rental_agreements")
   @@schema("public")
+  @@unique([tenantId, agreementNo])
 }
 
 // Mid-rental vehicle exchange
@@ -2192,7 +2194,7 @@ model TripSchedule {
   /// future migrations track it. Nullable until `phase0_backfill_safety.sql`
   /// is run on the target environment.
   tenantId              String?                 @map("tenant_id")
-  tripNumber            String?                 @unique @map("trip_number")
+  tripNumber            String?                 @map("trip_number")
   // Back-reference to the recurring template this instance was generated
   // from (null = ad-hoc one-off trip created directly, not from a template).
   templateId            String?                 @map("template_id")
@@ -2238,6 +2240,7 @@ model TripSchedule {
   @@index([routeVariantVersionId], map: "idx_trip_schedules_variant_version")
   @@map("trip_schedules")
   @@schema("public")
+  @@unique([tenantId, tripNumber])
 }
 
 // ── Headway rules (per route + direction) ──────────────────────────────────
@@ -2505,7 +2508,7 @@ model StaffTransportRequest {
   createdAt      DateTime?   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime?   @updatedAt @map("updated_at") @db.Timestamptz(6)
   tenantId       String?     @map("tenant_id")
-  requestNo      String?     @unique @map("request_no")
+  requestNo      String?     @map("request_no")
   staffMemberId  String      @map("staff_member_id")
   requestType    String      @map("request_type") // ADHOC|ROUTE_CHANGE|NEW_ROUTE|TEMPORARY
   tripDate       DateTime    @map("trip_date") @db.Timestamptz(6)
@@ -2520,6 +2523,7 @@ model StaffTransportRequest {
 
   @@map("staff_transport_requests")
   @@schema("public")
+  @@unique([tenantId, requestNo])
 }
 
 model BleGateway {
