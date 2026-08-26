@@ -136,7 +136,13 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     const routes = await tx.busRoute.findMany({
-      where: { deletedAt: null, isActive: true, routeType: { in: ['STAFF', 'BOTH'] } },
+      // tenantId is explicit and load-bearing, not belt-and-braces on top of
+      // RLS. Without it this returned every tenant's active staff routes: 45
+      // rows across 32 tenants for a tenant that owns 14. withTenantRls sets
+      // app.tenant_id and the policy is correct, but the database role holds
+      // BYPASSRLS, so the policy never filters anything and the query's own
+      // WHERE clause is the only thing standing between tenants.
+      where: { tenantId, deletedAt: null, isActive: true, routeType: { in: ['STAFF', 'BOTH'] } },
       select: {
         id: true, name: true, code: true, totalDistanceKm: true,
         stops: { select: { id: true, stopName: true, sequence: true, gpsLat: true, gpsLng: true } },
