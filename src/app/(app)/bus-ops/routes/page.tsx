@@ -74,7 +74,15 @@ type NewRouteEndpoint = {
 };
 
 /** Which slot the Google map picker is currently editing. */
-type MapPickerTarget = 'stop' | 'origin' | 'destination';
+/**
+ * 'stop' is the stop draft in the *new route* wizard. 'existing-stop' is the
+ * add-a-stop form on an already-saved route — it had no map at all, so every
+ * stop added there was written with null coordinates and became invisible to
+ * anything that needs geometry (the optimiser skips routes with fewer than
+ * three geocoded stops). The API always accepted gpsLat/gpsLng; only this
+ * form failed to collect them.
+ */
+type MapPickerTarget = 'stop' | 'existing-stop' | 'origin' | 'destination';
 
 const EMPTY_NEW_ROUTE: NewRouteForm = {
   name: '', code: '',
@@ -97,7 +105,7 @@ export default function RoutesPage() {
   const [saving,        setSaving]    = useState(false);
   const [error,         setError]     = useState('');
   const [stops,         setStops]     = useState<RouteStop[]>([]);
-  const [newStop,       setNewStop]   = useState<{ stopName: string; estimatedArrivalMins: string; landmark: string }>({ stopName:'', estimatedArrivalMins:'', landmark:'' });
+  const [newStop,       setNewStop]   = useState<{ stopName: string; estimatedArrivalMins: string; landmark: string; gpsLat?: number; gpsLng?: number }>({ stopName:'', estimatedArrivalMins:'', landmark:'' });
   const [deletingId,    setDeletingId]    = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<BusRoute | null>(null);
 
@@ -177,6 +185,11 @@ export default function RoutesPage() {
       setNewStopDraft(prev => ({ ...prev,
         stopName: payload.name, gpsLat: payload.gpsLat, gpsLng: payload.gpsLng, landmark: payload.landmark,
       }));
+    } else if (target === 'existing-stop') {
+      setNewStop(prev => ({ ...prev,
+        stopName: payload.name, gpsLat: payload.gpsLat, gpsLng: payload.gpsLng,
+        landmark: payload.landmark ?? prev.landmark,
+      }));
     } else if (target === 'origin') {
       setNewRouteOrigin(payload);
     } else {
@@ -191,6 +204,10 @@ export default function RoutesPage() {
       setNewRouteOrigin(prev => ({ ...prev, name: name || prev.name, gpsLat: loc.lat, gpsLng: loc.lng }));
     } else if (mapPickerFor === 'destination') {
       setNewRouteDest(prev => ({ ...prev, name: name || prev.name, gpsLat: loc.lat, gpsLng: loc.lng }));
+    } else if (mapPickerFor === 'existing-stop') {
+      setNewStop(prev => ({ ...prev,
+        stopName: name || prev.stopName, gpsLat: loc.lat, gpsLng: loc.lng,
+      }));
     } else {
       setNewStopDraft(prev => ({ ...prev,
         stopName: name || prev.stopName, gpsLat: loc.lat, gpsLng: loc.lng,
@@ -404,6 +421,11 @@ export default function RoutesPage() {
       sequence: prev.length + 1,
       estimatedArrivalMins: newStop.estimatedArrivalMins ? parseInt(newStop.estimatedArrivalMins) : undefined,
       landmark: newStop.landmark || undefined,
+      // Carried through now. Omitting these is what left stops added here
+      // invisible to the optimiser — it needs three geocoded stops before a
+      // route is worth solving, and a typed name alone gives it nothing.
+      gpsLat: newStop.gpsLat,
+      gpsLng: newStop.gpsLng,
     }]);
     setNewStop({ stopName:'', estimatedArrivalMins:'', landmark:'' });
   };
@@ -929,12 +951,16 @@ export default function RoutesPage() {
             autocomplete clicks to bubble up and close both. */}
         {(() => {
           // Route the picker's initial coords + search query based on which
-          // slot we're editing. Keeps one modal instance serving all three.
+          // slot we're editing. Keeps one modal instance serving all four —
+          // 'existing-stop' is the add-stop form on an already-saved route,
+          // which previously had no picker at all.
           const src = mapPickerFor === 'origin'
             ? { name: newRouteOrigin.name, lat: newRouteOrigin.gpsLat, lng: newRouteOrigin.gpsLng }
             : mapPickerFor === 'destination'
               ? { name: newRouteDest.name, lat: newRouteDest.gpsLat, lng: newRouteDest.gpsLng }
-              : { name: newStopDraft.stopName, lat: newStopDraft.gpsLat, lng: newStopDraft.gpsLng };
+              : mapPickerFor === 'existing-stop'
+                ? { name: newStop.stopName, lat: newStop.gpsLat, lng: newStop.gpsLng }
+                : { name: newStopDraft.stopName, lat: newStopDraft.gpsLat, lng: newStopDraft.gpsLng };
           const title = mapPickerFor === 'origin' ? 'Plot origin on map'
             : mapPickerFor === 'destination' ? 'Plot destination on map'
             : 'Plot stop on map';
@@ -1035,14 +1061,38 @@ export default function RoutesPage() {
                 </div>
               ))}
             </div>
-            <div className="flex gap-2 mb-6">
-              <input type="text" value={newStop.stopName} onChange={e=>setNewStop(p=>({...p,stopName:e.target.value}))} placeholder="New stop name"
-                className="flex-1 px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white text-sm placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
-              <input type="text" value={newStop.landmark} onChange={e=>setNewStop(p=>({...p,landmark:e.target.value}))} placeholder="Landmark"
-                className="w-28 px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white text-sm placeholder-slate-500 focus:outline-none" />
-              <input type="number" value={newStop.estimatedArrivalMins} onChange={e=>setNewStop(p=>({...p,estimatedArrivalMins:e.target.value}))} placeholder="Min"
-                className="w-16 px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white text-sm focus:outline-none" />
-              <button onClick={addStop} className="px-3 py-2 rounded-lg bg-blue-500/30 text-blue-400 border border-blue-500/30 text-sm hover:bg-blue-500/50">+ Add</button>
+            <div className="mb-6 space-y-1.5">
+              <div className="flex gap-2">
+                <input type="text" value={newStop.stopName}
+                  onChange={e=>setNewStop(p=>({...p,stopName:e.target.value, gpsLat:undefined, gpsLng:undefined}))}
+                  placeholder="New stop name"
+                  className="flex-1 px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white text-sm placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+                <input type="text" value={newStop.landmark} onChange={e=>setNewStop(p=>({...p,landmark:e.target.value}))} placeholder="Landmark"
+                  className="w-28 px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white text-sm placeholder-slate-500 focus:outline-none" />
+                <input type="number" value={newStop.estimatedArrivalMins} onChange={e=>setNewStop(p=>({...p,estimatedArrivalMins:e.target.value}))} placeholder="Min"
+                  className="w-16 px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white text-sm focus:outline-none" />
+                {/* This form had no map. A stop added without coordinates is
+                    invisible to the optimiser, so the picker is offered here
+                    the same way the new-route wizard offers it. */}
+                <button onClick={()=>setMapPickerFor('existing-stop')}
+                  className="px-3 py-2 rounded-lg border border-violet-500/40 bg-violet-500/15 text-violet-200 text-sm hover:bg-violet-500/25 inline-flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4" /> Map
+                </button>
+                <button onClick={addStop} className="px-3 py-2 rounded-lg bg-blue-500/30 text-blue-400 border border-blue-500/30 text-sm hover:bg-blue-500/50">+ Add</button>
+              </div>
+              {/* Typing a name clears any previously picked coordinates, so
+                  this always describes what will actually be saved. */}
+              {newStop.stopName.trim() !== '' && (
+                newStop.gpsLat != null && newStop.gpsLng != null ? (
+                  <p className="text-xs text-emerald-300">
+                    Located — {newStop.gpsLat.toFixed(5)}, {newStop.gpsLng.toFixed(5)}
+                  </p>
+                ) : (
+                  <p className="text-xs text-amber-300">
+                    No coordinates yet. Pick this stop on the map, or the optimiser will skip it.
+                  </p>
+                )
+              )}
             </div>
             <div className="flex gap-4 justify-end">
               <button onClick={()=>setShowStops(false)} className="px-6 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5">Cancel</button>
