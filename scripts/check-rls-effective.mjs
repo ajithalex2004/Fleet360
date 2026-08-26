@@ -38,28 +38,50 @@
  *           expression is the fallback; for a FOR INSERT policy there is no
  *           USING, so with_check must be present.
  *
- * VERDICTS
+ * VERDICTS — only SCOPED and DENIED pass.
  *
- *   OPEN       a permissive policy admits rows without a tenant predicate.
- *              This is a leak. Fails the run.
- *   NO_RLS     table has tenant_id but RLS is not enabled. Also a leak.
- *   SCOPED     every applicable permissive policy constrains the tenant.
- *   DENIED     applicable policies evaluate to false. Intentional, safe.
- *   NO_POLICY  no permissive policy applies, so Postgres denies by default.
- *              Not a leak — but the application WILL break on this command the
- *              moment the runtime role stops holding BYPASSRLS. Reported
- *              separately because it is the loud-failure class, not the silent
- *              one, and you want the list before the switch rather than during.
+ *   OPEN_NO_RLS               a command admits rows with no tenant predicate,
+ *                             or RLS is not enabled on the table at all.
+ *   UNKNOWN_EXPRESSION        the checker cannot prove what the expression
+ *                             does. Never assumed safe.
+ *   BROAD_POLICY              a branch of the expression does not constrain
+ *                             the tenant, so the whole expression admits rows
+ *                             the tenant predicate would not.
+ *   MISSING_COMMAND_COVERAGE  no permissive policy applies, so Postgres denies
+ *                             by default. Cannot leak, but nobody decided what
+ *                             the command should do — an explicit DENY policy
+ *                             makes that intent reviewable.
+ *   DENIED                    policies evaluate false. Intentional.
+ *   ROLE_RESTRICTED           a policy exists but does not apply to the runtime
+ *                             role, so it protects nothing at runtime.
+ *   SCOPED                    every applicable permissive policy constrains
+ *                             the tenant.
+ *
+ * THE RULE THE CLASSIFIER ENFORCES: every successful path through the boolean
+ * expression must require either an exact tenant match or the one approved
+ * platform-admin escape. Not "the expression mentions tenant_id somewhere".
+ *
+ *   OR  widens to its loosest branch. tenant_match OR anything-unproven is
+ *       BROAD, because rows satisfying that branch are admitted whatever the
+ *       tenant is, and the branch cannot be shown unsatisfiable.
+ *   AND narrows, so one tenant-matching conjunct constrains the whole.
+ *   false branches admit no rows and therefore cannot widen anything.
+ *
+ * Supported shapes are added ONE AT A TIME with a self-test each. The checker
+ * is deliberately not a SQL theorem prover: EXISTS, CASE, COALESCE and ANY()
+ * are all UNKNOWN until someone models them explicitly. That is the correct
+ * default — the earlier "contains both tokens" heuristic issued false
+ * assurances, and this exists so it cannot happen again.
  *
  * Restrictive policies (polpermissive = false) combine with AND and can only
- * narrow access. They are reported for context but never rescue an OPEN
- * verdict, because a restrictive policy on one command says nothing about
+ * narrow access. They never provide coverage on their own and never rescue an
+ * OPEN verdict, because a restrictive policy on one command says nothing about
  * another.
  *
  * Usage:
  *   node scripts/check-rls-effective.mjs [--role fleet360_app] [--all] [--json]
  *
- * Exit 0 clean, 1 on OPEN/NO_RLS, 2 if the self-tests fail.
+ * Exit 0 clean, 1 on any FAILING category, 2 if the self-tests fail.
  */
 
 import { PrismaClient } from '@prisma/client';
@@ -87,10 +109,26 @@ const SEVERITY = [
   'SCOPED',
 ];
 
-// Categories that fail the run. MISSING_COMMAND_COVERAGE and DENIED do not:
-// neither leaks. The first breaks loudly and is reported so the list exists
-// before the switch rather than during it.
-const FAILING = new Set(['OPEN_NO_RLS', 'UNKNOWN_EXPRESSION', 'BROAD_POLICY', 'ROLE_RESTRICTED']);
+// Categories that fail the run. Only SCOPED and DENIED pass.
+//
+// MISSING_COMMAND_COVERAGE fails even though it cannot leak — a command with
+// no policy is default-deny, which is safe but means nobody decided what that
+// command should do. Requiring an explicit DENY policy instead makes the
+// intent reviewable, and it is currently zero, so the strictness costs nothing
+// today and prevents the category reappearing unnoticed.
+const FAILING = new Set([
+  'OPEN_NO_RLS',
+  'UNKNOWN_EXPRESSION',
+  'BROAD_POLICY',
+  'MISSING_COMMAND_COVERAGE',
+  'ROLE_RESTRICTED',
+]);
+
+// ROLE_RESTRICTED allowlist: tables where a policy is deliberately scoped to
+// roles other than the runtime role. Empty, and it should stay that way
+// without a written reason — same rule as RULE_EXEMPTIONS in
+// scripts/check-tenant-rls.js. Entries are { table, reason }.
+const ROLE_RESTRICTED_ALLOWLIST = [];
 
 // Which policy commands apply to which statement. '*' (ALL) applies to all four.
 const APPLIES = {
@@ -214,11 +252,25 @@ function analyze(expr) {
     if (kinds.every(k => k === 'DENY')) return 'DENY';
     // A false branch contributes no rows, so it cannot widen the result.
     const live = kinds.filter(k => k !== 'DENY');
-    if (live.includes('UNKNOWN')) return 'UNKNOWN';
     if (live.includes('OPEN')) return 'OPEN';
+
+    const hasTenant = live.some(k => TENANTY.has(k));
+    const hasUnknown = live.includes('UNKNOWN');
+
+    // An unrecognised branch sitting BESIDE a tenant predicate is not merely
+    // unknown — it is a proven widening. The expression admits any row
+    // satisfying that branch whether or not the tenant matches, and the
+    // checker cannot prove the branch unsatisfiable. So it is BROAD, which is
+    // the more specific and more actionable label.
+    //
+    // With no tenant predicate anywhere, nothing can be concluded at all, and
+    // UNKNOWN is the honest answer.
+    if (hasTenant && hasUnknown) return 'BROAD';
+    if (hasUnknown) return 'UNKNOWN';
+
     if (live.includes('BROAD')) return 'BROAD';
     // Only escapes and no tenant predicate: nothing is constrained.
-    if (!live.some(k => TENANTY.has(k))) return 'BROAD';
+    if (!hasTenant) return 'BROAD';
     return live.some(k => NULLY.has(k)) ? 'SCOPED_NULLABLE' : 'SCOPED';
   }
 
@@ -370,8 +422,34 @@ function selfTest() {
     // An unrecognised branch yields UNKNOWN rather than BROAD — the checker
     // genuinely does not know what is_public means, and saying so is more
     // honest than guessing. Both fail the run.
-    ['tenant match OR unrecognised predicate is UNKNOWN',
-      T(`((tenant_id = current_setting('app.tenant_id'::text, true)) OR (is_public = true))`), 'UNKNOWN'],
+    // A tenant predicate beside an unrecognised branch is a PROVEN widening:
+    // rows satisfying that branch are admitted regardless of tenant. BROAD is
+    // more specific than UNKNOWN and more actionable.
+    ['tenant match OR unrecognised predicate is BROAD',
+      T(`((tenant_id = current_setting('app.tenant_id'::text, true)) OR (is_public = true))`), 'BROAD'],
+    ['unrecognised with NO tenant predicate stays UNKNOWN',
+      T(`((is_public = true) OR (legacy_flag = 1))`), 'UNKNOWN'],
+
+    // ── Negative tests: near-misses that must NOT be accepted as the approved
+    //    platform-admin escape. Each of these differs from the canonical form
+    //    by one token.
+    ['wildcard against the wrong value is not the approved escape',
+      T(`(current_setting('app.tenant_id'::text, true) = 'admin'::text)`), 'UNKNOWN'],
+    ['wildcard on the wrong setting name is not the approved escape',
+      T(`(current_setting('app.user_id'::text, true) = '*'::text)`), 'UNKNOWN'],
+    ['near-miss escape beside a tenant match is BROAD, not SCOPED',
+      T(`((current_setting('app.tenant_id'::text, true) = 'admin'::text) OR (tenant_id = current_setting('app.tenant_id'::text, true)))`), 'BROAD'],
+    ['a different column matched against the setting is not tenant scoping',
+      T(`(org_id = current_setting('app.tenant_id'::text, true))`), 'UNKNOWN'],
+    ['missing the missing_ok argument is not the approved form',
+      T(`(tenant_id = current_setting('app.tenant_id'::text))`), 'UNKNOWN'],
+
+    // ── Constructs deliberately not modelled. Each must stay UNKNOWN until
+    //    someone adds an explicit pattern and a self-test for it.
+    ['EXISTS subquery is UNKNOWN', T(`(EXISTS (SELECT 1 FROM tenants t WHERE t.id = tenant_id))`), 'UNKNOWN'],
+    ['CASE is UNKNOWN', T(`(CASE WHEN is_admin THEN true ELSE tenant_id = current_setting('app.tenant_id'::text, true) END)`), 'UNKNOWN'],
+    ['COALESCE is UNKNOWN', T(`(COALESCE(tenant_id, 'x'::text) = current_setting('app.tenant_id'::text, true))`), 'UNKNOWN'],
+    ['IN-list is UNKNOWN', T(`(tenant_id = ANY (ARRAY[current_setting('app.tenant_id'::text, true)]))`), 'UNKNOWN'],
     // X OR true is unconditionally true, so OPEN rather than merely BROAD.
     ['tenant match OR true is OPEN',
       T(`((tenant_id = current_setting('app.tenant_id'::text, true)) OR true)`), 'OPEN'],
@@ -391,8 +469,10 @@ function selfTest() {
 
     // Fail closed.
     ['unrecognised expression is UNKNOWN', T(`(owner_org = some_function(user_id))`), 'UNKNOWN'],
-    ['unknown OR scoped is UNKNOWN, not SCOPED',
-      T(`((tenant_id = current_setting('app.tenant_id'::text, true)) OR (weird_col = frobnicate()))`), 'UNKNOWN'],
+    // Function call in an OR branch: still a proven widening beside a tenant
+    // predicate, so BROAD rather than UNKNOWN. Never SCOPED.
+    ['function call OR scoped is BROAD, never SCOPED',
+      T(`((tenant_id = current_setting('app.tenant_id'::text, true)) OR (weird_col = frobnicate()))`), 'BROAD'],
     ['column compared to a literal is not tenant scoping',
       T(`(tenant_id = 'acme'::text)`), 'UNKNOWN'],
   ];
@@ -501,8 +581,9 @@ async function main() {
     // Severity order. ROLE_RESTRICTED sits above SCOPED because a policy that
     // does not apply to the runtime role is not protection, and below the
     // categories that describe an actual hole.
+    const allowlisted = ROLE_RESTRICTED_ALLOWLIST.some(a => a.table === t.name);
     const worst = SEVERITY.find(s => verdicts.includes(s))
-      ?? (roleScoped.length > 0 ? 'ROLE_RESTRICTED' : 'SCOPED');
+      ?? (roleScoped.length > 0 && !allowlisted ? 'ROLE_RESTRICTED' : 'SCOPED');
 
     report.push({ table: t.name, forced: t.forced, worst, commands, roleScoped: roleScoped.map(p => p.name) });
   }
@@ -557,18 +638,6 @@ Effective RLS coverage — ${report.length} tenant-owned tables, as role '${ROLE
         if (v.verdict === cat) console.log(`     ${c.padEnd(6)} ${v.detail}`);
       }
     }
-  }
-
-  const breaks = byCat.MISSING_COMMAND_COVERAGE ?? [];
-  if (breaks.length > 0) {
-    const show = SHOW_ALL ? breaks : breaks.slice(0, 15);
-    console.log(`
-🟡 MISSING_COMMAND_COVERAGE — default-deny, will start erroring after the switch (${breaks.length}):
-`);
-    for (const r of show) {
-      console.log(`  ${r.table.padEnd(44)} ${COMMANDS.filter(c => r.commands[c].verdict === 'MISSING_COMMAND_COVERAGE').join(', ')}`);
-    }
-    if (!SHOW_ALL && breaks.length > show.length) console.log(`  …and ${breaks.length - show.length} more (--all)`);
   }
 
   const nullable = report.filter(r => COMMANDS.some(c => (r.commands[c].detail ?? '').includes('IS NULL rows visible')));
