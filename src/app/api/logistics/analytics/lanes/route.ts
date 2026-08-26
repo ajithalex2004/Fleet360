@@ -59,6 +59,11 @@ export async function GET(req: NextRequest) {
 
   const { tenantId } = authz;
 
+  // Wrapped so app.tenant_id is set for this handler's database work. The
+  // queries already pass tenantId explicitly; the wrapper is what keeps that
+  // true once the connection role no longer holds BYPASSRLS.
+  return withTenantRls(prisma, tenantId, async (tx) => {
+
   const sp = req.nextUrl.searchParams;
   const days = Math.min(Math.max(parseInt(sp.get('period') ?? '90', 10) || 90, 1), 365);
   const status = sp.get('status');
@@ -68,7 +73,7 @@ export async function GET(req: NextRequest) {
   const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
 
   try {
-    const rows = await prisma.$queryRawUnsafe<LaneRow[]>(
+    const rows = await tx.$queryRawUnsafe<LaneRow[]>(
       `SELECT
          COALESCE(NULLIF(TRIM(origin_name), ''), '(unknown)')      AS origin,
          COALESCE(NULLIF(TRIM(destination_name), ''), '(unknown)') AS destination,
@@ -158,6 +163,7 @@ export async function GET(req: NextRequest) {
       { status: 500 },
     );
   }
+  });
 }
 
 function round2(n: number): number { return Math.round(n * 100) / 100; }

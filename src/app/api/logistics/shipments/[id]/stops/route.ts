@@ -42,6 +42,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   }
 
   const { tenantId } = authz;
+
+  // Wrapped so app.tenant_id is set for this handler's database work. The
+  // queries already pass tenantId explicitly; the wrapper is what keeps that
+  // true once the connection role no longer holds BYPASSRLS.
+  return withTenantRls(prisma, tenantId, async (tx) => {
   const shipmentId = params.id;
 
   let body: { stops?: StopInput[] };
@@ -55,7 +60,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
   try {
     // Ownership check — refuse to write stops onto another tenant's shipment.
-    const owned = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    const owned = await tx.$queryRawUnsafe<Array<{ id: string }>>(
       `SELECT id FROM logistics_shipment_orders
         WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
         LIMIT 1`,
@@ -67,14 +72,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
     // Replace any existing stops, then insert the supplied set (idempotent
     // re-submit). Mirrors the column set used by domain.createShipmentOrder.
-    await prisma.$executeRawUnsafe(
+    await tx.$executeRawUnsafe(
       `DELETE FROM logistics_shipment_stops WHERE tenant_id = $1 AND shipment_order_id = $2`,
       tenantId, shipmentId,
     );
     let seq = 0;
     for (const s of stops) {
       seq += 1;
-      await prisma.$executeRawUnsafe(
+      await tx.$executeRawUnsafe(
         `INSERT INTO logistics_shipment_stops
            (tenant_id, shipment_order_id, sequence_no, stop_type, location_name, address,
             latitude, longitude, planned_arrival_at, planned_depart_at)
@@ -100,4 +105,5 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       { status: 500 },
     );
   }
+  });
 }

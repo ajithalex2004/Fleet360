@@ -24,6 +24,12 @@ export async function GET(req: NextRequest) {
 
   const { tenantId } = authz;
 
+  // Wrapped so app.tenant_id is set for these reads. Every query below already
+  // carries `AND tenant_id = $2` in its WHERE, so this is the second line of
+  // defence rather than the first — it is what will still hold once the
+  // connection role stops holding BYPASSRLS.
+  return withTenantRls(prisma, tenantId, async (tx) => {
+
   const p             = req.nextUrl.searchParams;
   const branch        = p.get('branch');
   const module_filter = p.get('module');
@@ -47,7 +53,7 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Detail rows with computed age ──────────────────────────────────────────
-  const rows = await prisma.$queryRawUnsafe(`
+  const rows = await tx.$queryRawUnsafe(`
     SELECT
       id,
       invoice_number,
@@ -77,7 +83,7 @@ export async function GET(req: NextRequest) {
   `, ...params) as Record<string, unknown>[];
 
   // ── Bucket summary ─────────────────────────────────────────────────────────
-  const buckets = await prisma.$queryRawUnsafe(`
+  const buckets = await tx.$queryRawUnsafe(`
     SELECT
       bucket,
       COUNT(*)                         AS invoice_count,
@@ -106,7 +112,7 @@ export async function GET(req: NextRequest) {
   `, ...params) as Record<string, unknown>[];
 
   // ── Customer rollup ────────────────────────────────────────────────────────
-  const by_customer = await prisma.$queryRawUnsafe(`
+  const by_customer = await tx.$queryRawUnsafe(`
     SELECT
       client_name,
       COUNT(*)                            AS invoice_count,
@@ -154,5 +160,6 @@ export async function GET(req: NextRequest) {
       bucket:         r.bucket,
       payment_status: r.payment_status,
     })),
+  });
   });
 }
