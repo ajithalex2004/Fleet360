@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
 
             const reports = await tx.breakdownReport.findMany({
                 where: {
+                    tenantId,
                     deletedAt: null,
                     ...(vehicleId ? { vehicleId } : {}),
                     ...(driverId  ? { driverId }  : {}),

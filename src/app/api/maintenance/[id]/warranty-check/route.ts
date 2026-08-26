@@ -37,6 +37,7 @@ export async function GET(
             const warranties = req.vehicleId
                 ? await tx.vehicleWarranty.findMany({
                       where: {
+                          tenantId,
                           vehicleId:  req.vehicleId,
                           isActive:   true,
                           startDate:  { lte: today },

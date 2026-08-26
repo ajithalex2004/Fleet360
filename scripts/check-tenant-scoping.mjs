@@ -131,6 +131,37 @@ function argIsScoped(arg, src, scopedNames) {
 }
 
 /**
+ * Source ranges of every withPlatformAdmin(...) callback.
+ *
+ * That helper sets app.tenant_id = '*', which the tenant_isolation policies
+ * explicitly allow through:
+ *
+ *     USING (current_setting('app.tenant_id', true) = '*' OR tenant_id = ...)
+ *
+ * Queries inside it are cross-tenant *by design* — platform administration
+ * over every tenant. Flagging them is noise that trains people to ignore the
+ * report: admin/notification-rules, admin/notification-templates and
+ * admin/seed were all reported as leaks when each is doing exactly what it
+ * should. Anything lexically inside such a callback is skipped.
+ */
+function platformAdminRanges(src) {
+  const ranges = [];
+  const visit = (node) => {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      const name = ts.isIdentifier(callee) ? callee.text
+        : ts.isPropertyAccessExpression(callee) ? callee.name.text : '';
+      if (name === 'withPlatformAdmin') {
+        ranges.push([node.getStart(src), node.getEnd()]);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(src);
+  return ranges;
+}
+
+/**
  * Analyse one source file. Returns findings; does not read the filesystem so
  * the self-test can drive it with a string.
  */
@@ -138,6 +169,11 @@ function analyse(fileName, code) {
   const src = ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const findings = [];
   const scopedNames = tenantScopedIdentifiers(src);
+  const adminRanges = platformAdminRanges(src);
+  const inPlatformAdmin = (node) => {
+    const pos = node.getStart(src);
+    return adminRanges.some(([a, b]) => pos >= a && pos <= b);
+  };
 
   const visit = (node) => {
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
@@ -152,7 +188,7 @@ function analyse(fileName, code) {
         // Only Prisma-shaped calls: <client>.<model>.<method>(...)
         if (/^(tx|prisma|db|client)$/.test(client) && !GLOBAL_MODELS.has(model)) {
           const arg = node.arguments[0];
-          if (!argIsScoped(arg, src, scopedNames)) {
+          if (!argIsScoped(arg, src, scopedNames) && !inPlatformAdmin(node)) {
             const { line } = src.getLineAndCharacterOfPosition(node.getStart(src));
             findings.push({
               file: fileName, line: line + 1,
@@ -187,7 +223,7 @@ function analyse(fileName, code) {
           // scoped-but-unproven and not reported.
           const interpolated = /\$\{/.test(sql);
           const fileMentionsTenant = /tenant_id/i.test(code);
-          if (touchesTable && !literallyScoped && !(interpolated && fileMentionsTenant)) {
+          if (touchesTable && !literallyScoped && !(interpolated && fileMentionsTenant) && !inPlatformAdmin(node)) {
             const { line } = src.getLineAndCharacterOfPosition(node.getStart(src));
             findings.push({ file: fileName, line: line + 1, call: m, severity: 'RAW' });
           }
@@ -244,6 +280,20 @@ const FIXTURE_RAW_INTERPOLATED_GOOD = `
   await prisma.$queryRawUnsafe(\`SELECT id FROM invoices \${where}\`, asOf, tenantId);
 `;
 
+/**
+ * withPlatformAdmin sets app.tenant_id = '*', which the policies allow through.
+ * Queries inside it are cross-tenant on purpose and must not be reported.
+ */
+const FIXTURE_PLATFORM_ADMIN_GOOD = `
+  const rules = await withPlatformAdmin(prisma, (tx) =>
+    tx.notificationRule.findMany({ orderBy: { createdAt: 'desc' } }));
+`;
+/** The same query outside that wrapper is still a finding. */
+const FIXTURE_PLATFORM_ADMIN_BAD = `
+  const rules = await withTenantRls(prisma, tenantId, (tx) =>
+    tx.notificationRule.findMany({ orderBy: { createdAt: 'desc' } }));
+`;
+
 /** Scoped by later assignment rather than in the initialiser. */
 const FIXTURE_VAR_ASSIGNED_GOOD = `
   const where: any = { deletedAt: null };
@@ -262,6 +312,8 @@ function selfTest() {
     ['var where unscoped', FIXTURE_VAR_WHERE_BAD,     1],
     ['var assigned scoped',FIXTURE_VAR_ASSIGNED_GOOD, 0],
     ['raw interpolated scoped', FIXTURE_RAW_INTERPOLATED_GOOD, 0],
+    ['platform-admin skipped',  FIXTURE_PLATFORM_ADMIN_GOOD, 0],
+    ['same query outside it',   FIXTURE_PLATFORM_ADMIN_BAD,  1],
   ];
   let ok = true;
   for (const [name, code, expected] of cases) {
