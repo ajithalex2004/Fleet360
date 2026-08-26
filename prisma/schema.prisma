@@ -1362,6 +1362,7 @@ model DamageClaim {
 // -- Enhanced Rate Engine ---------------------------------------
 model PricingRule {
   id              String    @id @default(uuid())
+  tenantId   String?   @map("tenant_id")
   createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   name            String? // friendly label
@@ -1437,6 +1438,7 @@ model PricingRule {
   @@index([isActive], map: "idx_pricing_rules_is_active")
   @@map("pricing_rules")
   @@schema("public")
+  @@index([tenantId])
 }
 
 // Yield-management event calendar â€” applied as a multiplier layer on top of
@@ -2960,6 +2962,7 @@ model DriverPerformance {
 
 model Booking {
   id              String    @id @default(uuid())
+  tenantId   String?   @map("tenant_id") @db.Uuid
   createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   bookingRef      String?   @unique @map("booking_ref")
@@ -2978,6 +2981,7 @@ model Booking {
 
   @@map("bookings")
   @@schema("public")
+  @@index([tenantId])
 }
 
 // ============================================================
@@ -3033,6 +3037,7 @@ model FinanceBudget {
 
 model VatReturn {
   id             String    @id @default(uuid())
+  tenantId   String?   @map("tenant_id")
   createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   // Period bounds — the canonical periodFrom/periodTo plus periodStart/
   // periodEnd aliases. Pre-2.7 route code referenced periodStart/periodEnd
@@ -3060,6 +3065,7 @@ model VatReturn {
 
   @@map("vat_returns")
   @@schema("public")
+  @@index([tenantId])
 }
 
 // ============================================================
@@ -3068,6 +3074,7 @@ model VatReturn {
 
 model ComplianceDocument {
   id           String    @id @default(uuid())
+  tenantId   String    @map("tenant_id")
   createdAt    DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   entityType   String    @map("entity_type") // VEHICLE|DRIVER|COMPANY
@@ -3084,10 +3091,12 @@ model ComplianceDocument {
 
   @@map("compliance_documents")
   @@schema("public")
+  @@index([tenantId])
 }
 
 model InsurancePolicy {
   id           String    @id @default(uuid())
+  tenantId   String    @map("tenant_id")
   createdAt    DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   policyNumber String    @unique @map("policy_number")
   vehicleId    String?   @map("vehicle_id")
@@ -3103,6 +3112,7 @@ model InsurancePolicy {
 
   @@map("insurance_policies")
   @@schema("public")
+  @@index([tenantId])
 }
 
 model SalikAccount {
