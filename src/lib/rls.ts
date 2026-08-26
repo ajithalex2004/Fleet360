@@ -59,7 +59,9 @@ export async function withTenantRls<T>(
     if (!_set[0]?.v || _set[0].v !== tenantId) {
       throw new Error(
         `withTenantRls: set_config returned '${_set[0]?.v ?? 'null'}' (expected '${tenantId}'). ` +
-          `Check DATABASE_URL is direct (no -pooler), role is fleet360_app, and not Prisma Accelerate.`,
+          `The cause is a connection layer that does not keep a transaction pinned to one ` +
+          `backend: Prisma Accelerate / Data Proxy, or a pooler in statement or session mode. ` +
+          `Neon's transaction-mode pooler is NOT a cause — run scripts/prove-pooled-rls.ts.`,
       );
     }
     return runWithRlsScope({ tenantId, mode: 'tenant', tx }, () => fn(tx));
