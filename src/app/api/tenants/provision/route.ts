@@ -301,7 +301,12 @@ export async function POST(request: NextRequest) {
         console.log(`[provision] userTable=${userTable} domainVerifCols=${domainVerifColumnsExist}`);
 
         // ── DB transaction ────────────────────────────────────────────────────────
-        const { tenant, user } = await tx.$transaction(async (tx) => {
+        // No inner transaction: withTenantRls / withPlatformAdmin has already
+        // opened one, and Prisma strips $transaction from a TransactionClient,
+        // so this threw "tx.$transaction is not a function". The IIFE keeps the
+        // callback's `tx` parameter so the body is unchanged; atomicity already
+        // comes from the outer transaction.
+        const { tenant, user } = await (async (tx) => {
 
           // 1. Create Tenant
           const tenant = await tx.tenant.create({
@@ -423,7 +428,7 @@ export async function POST(request: NextRequest) {
           }
 
           return { tenant, user };
-        });
+        })(tx);
 
         // Send verification email only if domain not already pre-verified (fire-and-forget)
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${request.headers.get('host')}`;

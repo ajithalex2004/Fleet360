@@ -87,7 +87,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         // Wrap variant + first DRAFT version in one transaction so we never
         // leave an orphan variant with no versions (which the UI would then
         // show as un-editable).
-        const created = await tx.$transaction(async (tx) => {
+        // No inner transaction: withTenantRls / withPlatformAdmin has already
+        // opened one, and Prisma strips $transaction from a TransactionClient,
+        // so this threw "tx.$transaction is not a function". The IIFE keeps the
+        // callback's `tx` parameter so the body is unchanged; atomicity already
+        // comes from the outer transaction.
+        const created = await (async (tx) => {
           const variant = await tx.busRouteVariant.create({
             data: {
               id: randomUUID(),
@@ -111,7 +116,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             },
           });
           return { variant, version };
-        });
+        })(tx);
 
         return NextResponse.json(created, { status: 201 });
         } catch (e) {
