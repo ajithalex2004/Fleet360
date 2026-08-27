@@ -14,7 +14,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withSystemJob } from '@/lib/rls';
+
 import {
   detectPenalties,
   chargeTypeFor,
@@ -25,6 +25,7 @@ import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { runSweep } from '@/lib/prisma-sweep';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
@@ -57,8 +58,7 @@ export async function POST(req: NextRequest) {
       errors: { bookingId: string; message: string }[];
     };
 
-    const perTenant = await withSystemJob<PerTenantResult>(
-      prisma,
+    const perTenant = await runSweep<PerTenantResult>(
       async ({ tx, tenantId }) => {
         const bookings = await tx.rentalBooking.findMany({
           where: {

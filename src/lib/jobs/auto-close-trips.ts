@@ -4,7 +4,8 @@
  */
 import type { JobContext, JobResult } from '@/lib/jobs/registry';
 import { prisma } from '@/lib/prisma';
-import { withSystemJob } from '@/lib/rls';
+import { runSweep } from '@/lib/prisma-sweep';
+
 
 const STALE_HOURS = 4;
 
@@ -21,7 +22,7 @@ interface StaleTrip {
 export async function runAutoCloseTrips(ctx: JobContext): Promise<JobResult> {
   const tenantHeader = ctx.tenantId ?? undefined;
 
-  const stalePerTenant = await withSystemJob(prisma, async ({ tx, tenantId }) => {
+  const stalePerTenant = await runSweep(async ({ tx, tenantId }) => {
     return tx.$queryRaw<StaleTrip[]>`
       SELECT id, status, departure_time, arrival_time,
              actual_departure_at, driver_id, tenant_id
