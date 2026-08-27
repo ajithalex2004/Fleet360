@@ -38,6 +38,18 @@ import { withTenantRls, withPlatformAdmin, withSystemJob, withWebhookTenant } fr
 
 // ── Test fixtures ───────────────────────────────────────────────────────────
 
+// Every UNIQUE-constrained fixture value must carry this suffix.
+//
+// vehicles.license_plate is unique GLOBALLY, not per tenant. The plates below
+// were hardcoded 'A-001' / 'A-002' / 'B-001' while the tenant ids were
+// timestamped, so the suite was single-use: a second run died in beforeAll with
+// 23505 before reaching any assertion. That is invisible while nothing runs the
+// suite, and becomes a permanent red the moment CI runs it twice.
+//
+// The random component matters as much as the clock: two jobs in a CI matrix
+// can start inside the same millisecond.
+const RUN = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
 const tenantA = `test-tenant-a-${Date.now()}`;
 const tenantB = `test-tenant-b-${Date.now()}`;
 
@@ -84,7 +96,7 @@ beforeAll(async () => {
           tenantId: tenantA,
           make: 'Toyota',
           model: 'Yaris',
-          licensePlate: 'A-001',
+          licensePlate: `A-001-${RUN}`,
           vin: `VIN-A1-${Date.now()}`,
           status: 'ACTIVE',
           deletedAt: null,
@@ -95,7 +107,7 @@ beforeAll(async () => {
           tenantId: tenantA,
           make: 'Honda',
           model: 'Civic',
-          licensePlate: 'A-002',
+          licensePlate: `A-002-${RUN}`,
           vin: `VIN-A2-${Date.now()}`,
           status: 'ACTIVE',
           deletedAt: null,
@@ -106,7 +118,7 @@ beforeAll(async () => {
           tenantId: tenantB,
           make: 'Ford',
           model: 'Focus',
-          licensePlate: 'B-001',
+          licensePlate: `B-001-${RUN}`,
           vin: `VIN-B1-${Date.now()}`,
           status: 'ACTIVE',
           deletedAt: null,
@@ -125,7 +137,7 @@ beforeAll(async () => {
           firstName: 'Alice',
           lastName: 'A',
           email: `alice-a-${Date.now()}@test.example.com`,
-          mobileNumber: '+971500000001',
+          contactNumber: '+971500000001',
           status: 'ACTIVE',
           deletedAt: null,
           updatedAt: new Date(),
@@ -136,7 +148,7 @@ beforeAll(async () => {
           firstName: 'Bob',
           lastName: 'B',
           email: `bob-b-${Date.now()}@test.example.com`,
-          mobileNumber: '+971500000002',
+          contactNumber: '+971500000002',
           status: 'ACTIVE',
           deletedAt: null,
           updatedAt: new Date(),
@@ -148,11 +160,42 @@ beforeAll(async () => {
 
 afterAll(async () => {
   // Cleanup also runs as super-admin so it can delete across tenants.
+  //
+  // CHILDREN BEFORE PARENTS, and every model this file creates must appear
+  // here. leaseInquiry was missing: the WITH CHECK tests create lease
+  // inquiries, lease_inquiries carries a foreign key to tenants, so the tenant
+  // delete failed with 23503 and the rows stayed. Nothing noticed, because
+  // deleteMany does not raise for the rows it could not reach and the failure
+  // was swallowed by the surrounding transaction rolling back at the end.
+  //
+  // The residue is not merely untidy. Those tenants and their vehicles sit in
+  // the database looking like real data, and the next run's plate collision
+  // was a direct consequence.
+  //
+  // If a test starts creating a new model, add it here, above the tenant
+  // delete. The tenant delete failing with 23503 is the signal that something
+  // is missing.
+  const scope = { tenantId: { in: [tenantA, tenantB] } };
   await withPlatformAdmin(basePrisma, async (tx) => {
-    await tx.vehicle.deleteMany({ where: { tenantId: { in: [tenantA, tenantB] } } });
-    await tx.driver.deleteMany({ where: { tenantId: { in: [tenantA, tenantB] } } });
+    await tx.leaseInquiry.deleteMany({ where: scope });
+    await tx.vehicle.deleteMany({ where: scope });
+    await tx.driver.deleteMany({ where: scope });
     await tx.tenant.deleteMany({ where: { id: { in: [tenantA, tenantB] } } });
   });
+
+  // Prove the cleanup actually worked rather than assuming it did. A silent
+  // failure here is what left the previous run's rows behind.
+  const orphans = await withPlatformAdmin(basePrisma, async (tx) =>
+    tx.tenant.count({ where: { id: { in: [tenantA, tenantB] } } }),
+  );
+  if (orphans > 0) {
+    throw new Error(
+      `afterAll left ${orphans} test tenant(s) in the database. A child table ` +
+        `references them and is not in the delete list above — check for a 23503 ` +
+        `foreign-key violation and add the missing model.`,
+    );
+  }
+
   await basePrisma.$disconnect();
 });
 

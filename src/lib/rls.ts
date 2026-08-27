@@ -114,6 +114,12 @@ export async function withPlatformAdmin<T>(
 // limit the iteration to a single tenant (e.g. when a logged-in user
 // triggers a sweep manually for their own tenant).
 //
+// TRANSACTION SHAPE: one short platform-admin transaction to read the tenant
+// list, then one independent transaction per tenant. Nothing is nested. The
+// job is NOT atomic as a whole and never was — if tenant 50 throws, tenants
+// 1-49 have already committed. That is the right shape for a sweep, but it
+// does mean a caller wanting resumability should record its own progress.
+//
 // Do NOT call `tx.$transaction(...)` inside `fn`. Prisma removes it from a
 // TransactionClient at runtime — the denylist is
 // ["$connect","$disconnect","$on","$transaction","$use","$extends"] — so the
@@ -144,26 +150,62 @@ export async function withSystemJob<T>(
   fn: (ctx: SystemJobContext) => Promise<T>,
   opts: SystemJobOptions = {},
 ): Promise<Array<{ tenantId: string; result: T }>> {
-  return withPlatformAdmin(prisma, async (tx) => {
-    const tenants = opts.tenantHeader
-      ? [{ id: opts.tenantHeader }]
-      : await tx.tenant.findMany({
-          where: { isActive: { not: false } },
-          select: { id: true },
-        });
-
-    const results: Array<{ tenantId: string; result: T }> = [];
-    for (const t of tenants) {
-      const result = await withTenantRls(
+  // Resolve the tenant list inside a SHORT platform-admin transaction, then
+  // let it close before any per-tenant work starts.
+  //
+  // This used to wrap the whole loop: withPlatformAdmin opened a transaction,
+  // and every per-tenant withTenantRls opened another one on the base client
+  // from inside that callback. Two problems, both fatal at scale.
+  //
+  //   1. The outer transaction has a 60s timeout. With 187 active tenants at
+  //      up to 30s each, the loop cannot possibly finish inside it. The outer
+  //      transaction times out and closes part-way through, and every
+  //      subsequent statement on that client fails with
+  //      "Transaction not found. Transaction ID is invalid, refers to an old
+  //      closed transaction". The job does not report a timeout — it reports
+  //      an unrelated-looking error from wherever it happened to be.
+  //
+  //   2. Opening a transaction on `prisma` while another is open on `prisma`
+  //      takes a second connection from the pool and holds both. Under a
+  //      bounded pool that is a way to deadlock a sweep against itself.
+  //
+  // Found because the RLS isolation suite's afterAll started failing on its
+  // FIRST statement — the withSystemJob tests had already poisoned the client,
+  // so cleanup never ran and test tenants accumulated in the database.
+  //
+  // Atomicity is unchanged. The per-tenant transactions were always separate
+  // and always committed independently; the outer one only ever wrapped the
+  // tenant-list query and the loop control. Callers already document the
+  // intended semantics as "iterates each tenant in its own transaction", which
+  // is what this now actually does.
+  //
+  // A single-tenant run opens no platform-admin transaction at all.
+  const tenants = opts.tenantHeader
+    ? [{ id: opts.tenantHeader }]
+    : await withPlatformAdmin(
         prisma,
-        t.id,
-        async (tenantTx) => fn({ tx: tenantTx, tenantId: t.id }),
-        { timeoutMs: opts.timeoutMs ?? 30_000 },
+        (tx) =>
+          tx.tenant.findMany({
+            where: { isActive: { not: false } },
+            select: { id: true },
+          }),
+        { timeoutMs: 15_000 },
       );
-      results.push({ tenantId: t.id, result });
-    }
-    return results;
-  });
+
+  // One transaction per tenant, none of them nested inside another. The job as
+  // a whole is now bounded by the number of tenants rather than by a single
+  // 60s ceiling.
+  const results: Array<{ tenantId: string; result: T }> = [];
+  for (const t of tenants) {
+    const result = await withTenantRls(
+      prisma,
+      t.id,
+      async (tenantTx) => fn({ tx: tenantTx, tenantId: t.id }),
+      { timeoutMs: opts.timeoutMs ?? 30_000 },
+    );
+    results.push({ tenantId: t.id, result });
+  }
+  return results;
 }
 
 // ── withWebhookTenant ────────────────────────────────────────────────────────
