@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
 
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        const count = await tx.tripIncident.count();
+        const count = await tx.tripIncident.count({ where: { tenantId } });
         const incidentNo = body.incidentNo ?? `INC-${String(count + 1).padStart(5, '0')}`;
         const source = req.headers.get('x-incident-source') ?? body.source ?? 'ops-ui';
         const incident = await tx.tripIncident.create({

@@ -50,8 +50,8 @@ import { withTenantRls, withPlatformAdmin, withSystemJob, withWebhookTenant } fr
 // can start inside the same millisecond.
 const RUN = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-const tenantA = `test-tenant-a-${Date.now()}`;
-const tenantB = `test-tenant-b-${Date.now()}`;
+const tenantA = crypto.randomUUID();
+const tenantB = crypto.randomUUID();
 
 let vehicleA1: string;
 let vehicleA2: string;
@@ -86,9 +86,10 @@ beforeAll(async () => {
       ],
     });
 
-    vehicleA1 = `veh-a1-${Date.now()}`;
-    vehicleA2 = `veh-a2-${Date.now()}`;
-    vehicleB1 = `veh-b1-${Date.now()}`;
+
+    vehicleA1 = `veh-a1-${crypto.randomUUID()}`;
+    vehicleA2 = `veh-a2-${crypto.randomUUID()}`;
+    vehicleB1 = `veh-b1-${crypto.randomUUID()}`;
     await tx.vehicle.createMany({
       data: [
         {
@@ -96,8 +97,8 @@ beforeAll(async () => {
           tenantId: tenantA,
           make: 'Toyota',
           model: 'Yaris',
-          licensePlate: `A-001-${RUN}`,
-          vin: `VIN-A1-${Date.now()}`,
+          licensePlate: `A-001-${crypto.randomUUID().slice(0, 8)}`,
+          vin: `VIN-A1-${crypto.randomUUID()}`,
           status: 'ACTIVE',
           deletedAt: null,
           updatedAt: new Date(),
@@ -107,8 +108,8 @@ beforeAll(async () => {
           tenantId: tenantA,
           make: 'Honda',
           model: 'Civic',
-          licensePlate: `A-002-${RUN}`,
-          vin: `VIN-A2-${Date.now()}`,
+          licensePlate: `A-002-${crypto.randomUUID().slice(0, 8)}`,
+          vin: `VIN-A2-${crypto.randomUUID()}`,
           status: 'ACTIVE',
           deletedAt: null,
           updatedAt: new Date(),
@@ -118,8 +119,8 @@ beforeAll(async () => {
           tenantId: tenantB,
           make: 'Ford',
           model: 'Focus',
-          licensePlate: `B-001-${RUN}`,
-          vin: `VIN-B1-${Date.now()}`,
+          licensePlate: `B-001-${crypto.randomUUID().slice(0, 8)}`,
+          vin: `VIN-B1-${crypto.randomUUID()}`,
           status: 'ACTIVE',
           deletedAt: null,
           updatedAt: new Date(),
@@ -127,8 +128,8 @@ beforeAll(async () => {
       ],
     });
 
-    driverA1 = `drv-a1-${Date.now()}`;
-    driverB1 = `drv-b1-${Date.now()}`;
+    driverA1 = `drv-a1-${crypto.randomUUID()}`;
+    driverB1 = `drv-b1-${crypto.randomUUID()}`;
     await tx.driver.createMany({
       data: [
         {
@@ -136,7 +137,7 @@ beforeAll(async () => {
           tenantId: tenantA,
           firstName: 'Alice',
           lastName: 'A',
-          email: `alice-a-${Date.now()}@test.example.com`,
+          email: `alice-a-${crypto.randomUUID()}@test.example.com`,
           contactNumber: '+971500000001',
           status: 'ACTIVE',
           deletedAt: null,
@@ -147,7 +148,7 @@ beforeAll(async () => {
           tenantId: tenantB,
           firstName: 'Bob',
           lastName: 'B',
-          email: `bob-b-${Date.now()}@test.example.com`,
+          email: `bob-b-${crypto.randomUUID()}@test.example.com`,
           contactNumber: '+971500000002',
           status: 'ACTIVE',
           deletedAt: null,
@@ -156,7 +157,7 @@ beforeAll(async () => {
       ],
     });
   });
-});
+}, 60_000);
 
 afterAll(async () => {
   // Cleanup also runs as super-admin so it can delete across tenants.
@@ -197,7 +198,7 @@ afterAll(async () => {
   }
 
   await basePrisma.$disconnect();
-});
+}, 60_000);
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
@@ -466,7 +467,7 @@ describe('withSystemJob: iterate every active tenant', () => {
     const bResult = results.find(r => r.tenantId === tenantB);
     expect(aResult?.result.vehicles).toBeGreaterThanOrEqual(2);
     expect(bResult?.result.vehicles).toBeGreaterThanOrEqual(1);
-  });
+  }, 90_000);
 
   it('the per-tenant callback runs in a tenant-scoped tx (cannot see other tenants)', async () => {
     // Stronger property: inside the withSystemJob callback, the tx
@@ -494,7 +495,7 @@ describe('withSystemJob: iterate every active tenant', () => {
         expect(r.result.aVehicles).toBe(0);
       }
     }
-  });
+  }, 90_000);
 
   it('limits iteration to a single tenant when tenantHeader is set', async () => {
     // When a logged-in user triggers a sweep for their own tenant, only

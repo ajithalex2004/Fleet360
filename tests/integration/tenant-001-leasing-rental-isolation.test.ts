@@ -268,7 +268,7 @@ describe.skipIf(!hasDb)('TENANT-001 Leasing & Rental RLS isolation', () => {
       const result = await withTenantRls(basePrisma, tenantA, async (tx) =>
         tx.lessee.updateMany({
           where: { id: lesseeB },
-          data: { notes: 'hacked' } as any,
+          data: { contactPerson: 'hacked' },
         }),
       );
       expect(result.count).toBe(0);

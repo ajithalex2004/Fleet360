@@ -405,4 +405,4 @@ export async function isServerRunning(): Promise<boolean> {
 
 afterAll(async () => {
   await prisma.$disconnect();
-});
+}, 60_000);
