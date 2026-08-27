@@ -15,6 +15,7 @@ const testFiles = [
   'tests/unit/trip-incident-schema.test.ts',
   'tests/integration/pool-context-isolation.test.ts',
   'tests/integration/tenant-isolation-rls.test.ts',
+  'tests/integration/activation-matrix.test.ts',
 ];
 
 const res = spawnSync('npx', ['vitest', 'run', '--no-file-parallelism', ...testFiles], {

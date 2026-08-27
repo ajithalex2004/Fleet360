@@ -16,7 +16,7 @@ import * as dotenv from 'dotenv';
 // for integration tests that hit the running dev server — the test must sign
 // session cookies with the SAME secret the server uses to verify them.
 dotenv.config({ path: '.env.test' });
-dotenv.config({ path: '.env', override: true });
+dotenv.config({ path: '.env' });
 
 // Web Crypto polyfill (Node < 20)
 if (typeof globalThis.crypto === 'undefined' || !globalThis.crypto.subtle) {

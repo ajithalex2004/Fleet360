@@ -89,6 +89,13 @@ beforeAll(async () => {
     throw new Error('RLS Isolation Preflight Failed: Unable to resolve current_user from pg_roles');
   }
 
+  if (role.current_user !== 'fleet360_app') {
+    throw new Error(
+      `RLS Isolation Preflight Failed: Connected role is "${role.current_user}" (expected exact role "fleet360_app"). ` +
+        `The isolation suite must run under the designated application role.`,
+    );
+  }
+
   if (role.rolbypassrls === true) {
     throw new Error(
       `RLS Isolation Preflight Failed: Connected role "${role.current_user}" has rolbypassrls = true. ` +

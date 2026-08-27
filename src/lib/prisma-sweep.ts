@@ -103,12 +103,12 @@ export async function getVerifiedSweepPrisma(): Promise<{ client: PrismaClient; 
       throw new Error('Unable to resolve current_user from pg_roles');
     }
 
-    if (role.rolbypassrls || role.rolsuper) {
+    if (role.current_user !== 'fleet360_app' || !role.rolcanlogin || role.rolbypassrls || role.rolsuper) {
       await client.$disconnect();
       console.error(
-        `[sweep] 🚨 SECURITY ALARM: RUNTIME_DIRECT_DATABASE_URL connected as role "${role.current_user}" with ` +
-          `bypassrls=${role.rolbypassrls}, super=${role.rolsuper}. Direct sweep client REJECTED because it ` +
-          `would bypass PostgreSQL RLS. Falling back to pooled DATABASE_URL at concurrency 1 to preserve tenant boundary.`,
+        `[sweep] 🚨 SECURITY ALARM: RUNTIME_DIRECT_DATABASE_URL connected as role "${role.current_user}" (canlogin=${role.rolcanlogin}, bypassrls=${role.rolbypassrls}, super=${role.rolsuper}). ` +
+          `Direct sweep client REJECTED because it must connect strictly as "fleet360_app" with bypassrls=false, super=false, canlogin=true. ` +
+          `Falling back to pooled DATABASE_URL at concurrency 1 to preserve tenant boundary.`,
       );
       return { client: prisma, concurrency: 1 };
     }

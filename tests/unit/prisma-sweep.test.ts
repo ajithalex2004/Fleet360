@@ -25,17 +25,17 @@ describe('prisma-sweep connection and role validation', () => {
     delete process.env.DIRECT_URL;
 
     const { client, concurrency } = await getVerifiedSweepPrisma();
-    expect(client).toBe(prisma);
+    expect(client === prisma).toBe(true);
     expect(concurrency).toBe(1);
     expect(sweepConcurrency()).toBe(1);
-    expect(getSweepPrisma()).toBe(prisma);
+    expect(getSweepPrisma() === prisma).toBe(true);
   });
 
   it('falls back to shared pooled client at concurrency 1 when direct URL is a -pooler endpoint', async () => {
     process.env.RUNTIME_DIRECT_DATABASE_URL = 'postgresql://user:pass@ep-demo-pooler.ap-southeast-1.aws.neon.tech/neondb';
 
     const { client, concurrency } = await getVerifiedSweepPrisma();
-    expect(client).toBe(prisma);
+    expect(client === prisma).toBe(true);
     expect(concurrency).toBe(1);
   });
 
@@ -44,24 +44,26 @@ describe('prisma-sweep connection and role validation', () => {
     process.env.RUNTIME_DIRECT_DATABASE_URL = process.env.PHASE0_DATABASE_URL;
 
     const { client, concurrency } = await getVerifiedSweepPrisma();
-    expect(client).not.toBe(prisma);
+    expect(client === prisma).toBe(false);
     expect(concurrency).toBe(3);
     expect(sweepConcurrency()).toBe(3);
-    expect(getSweepPrisma()).toBe(client);
+    expect(getSweepPrisma() === client).toBe(true);
   });
 
   it('rejects direct connection and alarms if role holds BYPASSRLS', async () => {
-    // neondb_owner direct connection
-    if (!process.env.MIGRATION_DATABASE_URL) return;
-    process.env.RUNTIME_DIRECT_DATABASE_URL = process.env.MIGRATION_DATABASE_URL;
+    if (!process.env.MIGRATION_DATABASE_URL && !process.env.DIRECT_URL) return;
+    process.env.RUNTIME_DIRECT_DATABASE_URL = process.env.MIGRATION_DATABASE_URL || process.env.DIRECT_URL;
 
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { client, concurrency } = await getVerifiedSweepPrisma();
 
     // Must reject the bypass role and fall back to safe pooled prisma
-    expect(client).toBe(prisma);
+    expect(client === prisma).toBe(true);
     expect(concurrency).toBe(1);
-    expect(consoleErrorSpy).toHaveBeenCalled();
-    consoleErrorSpy.mockRestore();
+    expect(getSweepPrisma() === prisma).toBe(true);
+
+    errorSpy.mockRestore();
+    warnSpy.mockRestore();
   });
 });

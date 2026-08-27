@@ -27,9 +27,9 @@ describe('Pooled connection context isolation', () => {
     `);
 
     const role = roles[0];
-    if (!role || role.rolbypassrls === true || role.rolsuper === true || !role.rolcanlogin) {
+    if (!role || role.current_user !== 'fleet360_app' || role.rolbypassrls === true || role.rolsuper === true || !role.rolcanlogin) {
       throw new Error(
-        `Pool Isolation Preflight Failed: Connected role "${role?.current_user}" (rolbypassrls=${role?.rolbypassrls}, rolsuper=${role?.rolsuper}). Must be a non-bypass role.`,
+        `Pool Isolation Preflight Failed: Connected role "${role?.current_user}" (rolbypassrls=${role?.rolbypassrls}, rolsuper=${role?.rolsuper}). Must be exact role "fleet360_app" with bypassrls=false, super=false.`,
       );
     }
 
