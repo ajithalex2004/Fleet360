@@ -140,6 +140,107 @@ jobs:
           SKIP_DB_TESTS: "1"
         run: go test ./phasegate/... -list '.*' | head -50
 
+  # ── The TypeScript RLS suite ────────────────────────────────────────────────
+  #
+  # tests/integration/tenant-isolation-rls.test.ts has existed for months with
+  # 22 correct assertions and was wired to NO workflow, so nothing ran it and
+  # nothing noticed when it rotted. When finally executed it failed in
+  # beforeAll on a renamed column — 22 assertions blocked by one stale field.
+  #
+  # It tests something the Go suite does not. The Go assertions carry an
+  # explicit tenant predicate, so they measure the application WHERE clause.
+  # These query BOTH tenants inside withTenantRls and assert the other's rows
+  # are absent, which only the policy can produce. Two different questions,
+  # both worth asking.
+  #
+  # EXPECT THIS JOB TO FAIL until the runtime role changes. Under neondb_owner
+  # 18 of 22 fail, because tenant A really can read and update tenant B's rows.
+  # That failure is the evidence, not a defect in the job.
+  rls-isolation-ts:
+    name: RLS isolation (TypeScript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      PHASE0_EXPECTED_ROLE: fleet360_app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      # A real step with exit 1, deliberately not an `if:`. A conditional step
+      # that does not run reports success, which is the failure mode this whole
+      # workflow exists to remove.
+      - name: Require the database secret
+        env:
+          PHASE0_DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+        run: |
+          if [ -z "$PHASE0_DATABASE_URL" ]; then
+            echo "::error title=PHASE0_DATABASE_URL is not configured::The RLS isolation suite cannot run without it. Failing rather than reporting green for a suite that never executed."
+            exit 1
+          fi
+          echo "secret present (${#PHASE0_DATABASE_URL} chars)"
+
+      # Proves the connection can actually enforce RLS BEFORE the suite runs.
+      # Sets a bogus tenant and counts rows: if any come back, the role is
+      # bypassing policies and every assertion below would be meaningless.
+      # Exit 0 = enforced, 1 = bypassed.
+      - name: Assert the role enforces RLS
+        env:
+          DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+        run: node scripts/check-rls-enforcement.mjs
+
+      # Deliberately test:isolation:integration, NOT the umbrella
+      # `npm run test:isolation`. That script chains three suites and the other
+      # two are broken for reasons unrelated to tenant isolation:
+      #
+      #   test:isolation:unit       13 of 17 fail. The mocks predate the
+      #                             set_config read-back added to withTenantRls
+      #                             and assert error messages it no longer
+      #                             emits. Verified identical before and after
+      #                             the withSystemJob change, so this is drift,
+      #                             not a regression from it.
+      #   test:isolation:tenant001  fails on a UUID type error - a `test-...`
+      #                             string bound to a uuid column.
+      #
+      # Including them would make this job red for two different reasons at
+      # once and nobody could tell which from the check name. Fix them, then
+      # add them here.
+      - name: Cross-tenant isolation suite
+        env:
+          DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+        run: npm run test:isolation:integration
+
+      - name: Record the evidence
+        if: always()
+        env:
+          SECRET_PRESENT: ${{ secrets.PHASE0_DATABASE_URL != '' }}
+        run: |
+          {
+            echo "### RLS isolation (TypeScript)"
+            echo ""
+            echo "| check | value |"
+            echo "|---|---|"
+            echo "| expected role | \`$PHASE0_EXPECTED_ROLE\` |"
+            echo "| secret configured | $SECRET_PRESENT |"
+            echo "| enforcement asserted before the suite | yes |"
+            echo ""
+            echo "Assertions query BOTH tenants inside withTenantRls; only the"
+            echo "policy can exclude the other tenant's rows."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # Companion job: verifies the dispatch migration + Phase 0 SQL
   # scripts compile cleanly. Doesn't apply them — that's a separate
   # one-time apply step done manually against staging. Catches syntax
