@@ -16,6 +16,7 @@ const testFiles = [
   'tests/integration/pool-context-isolation.test.ts',
   'tests/integration/tenant-isolation-rls.test.ts',
   'tests/integration/activation-matrix.test.ts',
+  'tests/integration/staging-lifecycle-matrix.test.ts',
 ];
 
 const res = spawnSync('npx', ['vitest', 'run', '--no-file-parallelism', ...testFiles], {
@@ -23,6 +24,7 @@ const res = spawnSync('npx', ['vitest', 'run', '--no-file-parallelism', ...testF
   env: {
     ...process.env,
     DATABASE_URL: phase0Url,
+    RUNTIME_DIRECT_DATABASE_URL: phase0Url,
     DB_CONNECT_TIMEOUT_MS: '30000',
     DB_CONNECT_RETRIES: '6',
     DB_OPERATION_RETRIES: '3',

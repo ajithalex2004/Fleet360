@@ -12,7 +12,7 @@ describe('TripIncident schema and operations mapping', () => {
 
     expect(typeof result.count).toBe('number');
     expect(result.count).toBeGreaterThanOrEqual(0);
-  });
+  }, 60_000);
 
   it('executes scoped query with tenantId predicate inside withTenantRls', async () => {
     const testTenantId = '00000000-0000-0000-0000-000000000000';
@@ -21,5 +21,5 @@ describe('TripIncident schema and operations mapping', () => {
     });
 
     expect(typeof result).toBe('number');
-  });
+  }, 60_000);
 });

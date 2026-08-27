@@ -31,12 +31,12 @@ interface RoleVerificationRow {
  * Returns the unpooled direct database URL configured specifically for
  * runtime sweeps and background jobs.
  *
- * Credential precedence:
- *   1. RUNTIME_DIRECT_DATABASE_URL (dedicated fleet360_app direct compute)
- *   2. DIRECT_URL (legacy / fallback, only if not pooled)
+ * Enforces runtime secret boundary:
+ *   - Only RUNTIME_DIRECT_DATABASE_URL is accepted for application sweeps.
+ *   - DIRECT_URL and MIGRATION_DATABASE_URL are forbidden in application runtime.
  */
 function getDirectSweepUrl(): string | null {
-  const candidate = process.env.RUNTIME_DIRECT_DATABASE_URL || process.env.DIRECT_URL || '';
+  const candidate = process.env.RUNTIME_DIRECT_DATABASE_URL || '';
   if (!candidate || /-pooler\./.test(candidate)) return null;
   return candidate;
 }
@@ -63,16 +63,16 @@ function emitFallbackWarning(reason: string) {
  * Initializes and independently verifies the direct sweep connection against pg_roles.
  *
  * Security Invariant:
- * The direct sweep connection MUST connect as a non-bypass role (fleet360_app with
- * rolbypassrls = false and rolsuper = false). If the connection resolves to neondb_owner
+ * The direct sweep connection MUST connect as exact role "fleet360_app" with
+ * rolbypassrls = false and rolsuper = false. If the connection resolves to neondb_owner
  * or any role holding BYPASSRLS, the credential is rejected and we fall back to the
  * pooled application client at concurrency 1 to ensure tenant isolation is never compromised.
  */
 export async function getVerifiedSweepPrisma(): Promise<{ client: PrismaClient; concurrency: number }> {
   const directUrl = getDirectSweepUrl();
   if (!directUrl) {
-    const why = (process.env.RUNTIME_DIRECT_DATABASE_URL || process.env.DIRECT_URL)
-      ? 'Direct sweep URL is configured as a -pooler endpoint'
+    const why = process.env.RUNTIME_DIRECT_DATABASE_URL
+      ? 'RUNTIME_DIRECT_DATABASE_URL is configured as a -pooler endpoint'
       : 'RUNTIME_DIRECT_DATABASE_URL is not set';
     emitFallbackWarning(why);
     return { client: prisma, concurrency: 1 };
@@ -149,20 +149,64 @@ export function sweepConcurrency(): number {
   return Math.max(1, Math.min(pool - 1, SWEEP_CONCURRENCY_CAP));
 }
 
+export interface RunSweepOptions extends SystemJobOptions {
+  /** Optional 32-bit numeric or string key for PostgreSQL advisory lock to prevent overlapping crons */
+  advisoryLockKey?: number | string;
+}
+
 /**
- * Run a per-tenant sweep on the verified sweep connection.
+ * Run a per-tenant sweep on the verified sweep connection with optional advisory locking.
  *
  * Binds the verified non-bypass client AND the bounded concurrency together.
  */
 export async function runSweep<T>(
   fn: (ctx: SystemJobContext) => Promise<T>,
-  opts: SystemJobOptions = {},
+  opts: RunSweepOptions = {},
 ): Promise<Array<{ tenantId: string; result: T }>> {
   const { client, concurrency } = await getVerifiedSweepPrisma();
-  return withSystemJob(client, fn, {
-    concurrency: opts.concurrency ?? concurrency,
-    ...opts,
-  });
+
+  let lockId: number | null = null;
+  if (opts.advisoryLockKey) {
+    if (typeof opts.advisoryLockKey === 'number') {
+      lockId = opts.advisoryLockKey;
+    } else {
+      // Hash string key to a signed 32-bit integer for pg advisory lock
+      let hash = 0;
+      for (let i = 0; i < opts.advisoryLockKey.length; i++) {
+        hash = (hash << 5) - hash + opts.advisoryLockKey.charCodeAt(i);
+        hash |= 0;
+      }
+      lockId = Math.abs(hash);
+    }
+
+    try {
+      const lockRes = await client.$queryRawUnsafe<Array<{ pg_try_advisory_lock: boolean }>>(
+        `SELECT pg_try_advisory_lock(${lockId})`,
+      );
+      if (!lockRes[0]?.pg_try_advisory_lock) {
+        console.warn(`[sweep] ⚠️ Cron sweep skipped: advisory lock "${opts.advisoryLockKey}" (${lockId}) held by active worker.`);
+        return [];
+      }
+    } catch (lockErr) {
+      console.warn(`[sweep] Could not acquire advisory lock (${lockErr instanceof Error ? lockErr.message : String(lockErr)}), proceeding.`);
+      lockId = null;
+    }
+  }
+
+  try {
+    return await withSystemJob(client, fn, {
+      concurrency: opts.concurrency ?? concurrency,
+      ...opts,
+    });
+  } finally {
+    if (lockId !== null) {
+      try {
+        await client.$queryRawUnsafe(`SELECT pg_advisory_unlock(${lockId})`);
+      } catch {
+        // ignore unlock error
+      }
+    }
+  }
 }
 
 /** Close the sweep client. For tests and one-shot scripts. */
