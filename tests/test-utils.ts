@@ -18,11 +18,6 @@ import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.test' });
 dotenv.config({ path: '.env', override: true });
 
-// If PHASE0_DATABASE_URL is configured, use it for isolation test runs
-if (process.env.PHASE0_DATABASE_URL) {
-  process.env.DATABASE_URL = process.env.PHASE0_DATABASE_URL;
-}
-
 // Web Crypto polyfill (Node < 20)
 if (typeof globalThis.crypto === 'undefined' || !globalThis.crypto.subtle) {
   globalThis.crypto = (crypto as any).webcrypto;
