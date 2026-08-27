@@ -27,7 +27,7 @@ interface RoleRow {
   rolsuper: boolean;
 }
 
-describe('8-Domain Activation Matrix & Performance Validation', () => {
+describe('8-Domain RLS Activation Smoke Matrix', () => {
   let testTenant: string;
   const startTime = Date.now();
 

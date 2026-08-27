@@ -25,7 +25,7 @@ dotenv.config({ path: '.env' });
 
 async function run() {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('8-DOMAIN ACTIVATION MATRIX & PERFORMANCE VALIDATION');
+  console.log('8-DOMAIN RLS ACTIVATION SMOKE MATRIX');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
   const testTenant = crypto.randomUUID();
