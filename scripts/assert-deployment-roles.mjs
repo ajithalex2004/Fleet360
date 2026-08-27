@@ -37,19 +37,32 @@ async function verifyRole(name, url, isDirectExpected) {
   });
 
   try {
-    const rows = await client.$queryRawUnsafe(`
-      SELECT
-        current_user,
-        rolcanlogin,
-        rolbypassrls,
-        rolsuper
-      FROM pg_roles
-      WHERE rolname = current_user
-    `);
+    let rows = [];
+    let lastErr = null;
+
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      try {
+        rows = await client.$queryRawUnsafe(`
+          SELECT
+            current_user,
+            rolcanlogin,
+            rolbypassrls,
+            rolsuper
+          FROM pg_roles
+          WHERE rolname = current_user
+        `);
+        if (rows.length > 0) break;
+      } catch (err) {
+        lastErr = err;
+        if (attempt < 4) {
+          await new Promise((r) => setTimeout(r, 750 * attempt));
+        }
+      }
+    }
 
     const role = rows[0];
     if (!role) {
-      console.error(`❌ ${name}: Failed to resolve current_user from pg_roles.`);
+      console.error(`❌ ${name}: Failed to resolve current_user from pg_roles (${lastErr ? lastErr.message : 'empty result'}).`);
       return false;
     }
 
