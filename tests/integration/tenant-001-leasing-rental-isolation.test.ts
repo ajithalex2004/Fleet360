@@ -30,9 +30,27 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma as basePrisma } from '@/lib/prisma';
 import { withTenantRls, withPlatformAdmin, withSystemJob } from '@/lib/rls';
 
+// Tenant ids must be UUID-FORMATTED, not merely unique.
+//
+// This suite spans models whose tenant_id column type is inconsistent:
+//
+//   lessees, rental_bookings, vehicles   text
+//   damage_claims, rental_agreements     uuid
+//
+// The ids used to be `t001-a-<epoch>`, which text columns accept happily and
+// uuid columns reject with
+//   "Error creating UUID, invalid character: expected an optional prefix of
+//    `urn:uuid:` followed by [0-9a-fA-F-], found `t` at 1"
+// — a cleanup failure that left rows behind and only surfaced because nothing
+// ran this suite for long enough to notice.
+//
+// A UUID string satisfies both, so it is the format that works regardless of
+// which side of the inconsistency a model happens to sit on. The underlying
+// text-vs-uuid drift is a schema problem, not a test problem, and is not
+// papered over here — it is just no longer this suite's failure mode.
 const suffix = Date.now();
-const tenantA = `t001-a-${suffix}`;
-const tenantB = `t001-b-${suffix}`;
+const tenantA = crypto.randomUUID();
+const tenantB = crypto.randomUUID();
 
 let customerA: string;
 let customerB: string;
@@ -170,30 +188,58 @@ describe.skipIf(!hasDb)('TENANT-001 Leasing & Rental RLS isolation', () => {
   }, 60_000);
 
   afterAll(async () => {
-    await withPlatformAdmin(basePrisma, async (tx) => {
-      if (rentalReady) {
-        try {
-          await (tx as any).vehicleInspection?.deleteMany?.({
-            where: { tenantId: { in: [tenantA, tenantB] } },
-          });
-        } catch { /* table may lack model */ }
-        try {
-          await (tx as any).damageClaim?.deleteMany?.({
-            where: { tenantId: { in: [tenantA, tenantB] } },
-          });
-        } catch { /* */ }
-        await (tx as any).rentalBooking.deleteMany({
-          where: { tenantId: { in: [tenantA, tenantB] } },
-        });
-        await (tx as any).rentalCustomer.deleteMany({
-          where: { tenantId: { in: [tenantA, tenantB] } },
-        });
+    // One transaction PER MODEL, children first.
+    //
+    // This used to be a single withPlatformAdmin wrapping every delete. One
+    // failure anywhere rolled the whole thing back, so nothing was cleaned —
+    // not even the deletes that had succeeded. That is why test tenants
+    // accumulated with lessees and lease_inquiries still attached, even though
+    // both are in the list below: the transaction died before committing.
+    //
+    // The `catch {}` blocks made it worse by hiding which delete failed.
+    // Failures are collected and reported now.
+    const scope = { where: { tenantId: { in: [tenantA, tenantB] } } };
+    const failures: string[] = [];
+
+    const del = async (model: string, fn: (tx: any) => Promise<unknown>) => {
+      try {
+        await withPlatformAdmin(basePrisma, async (tx) => fn(tx));
+      } catch (e) {
+        // A model that does not exist in this schema is expected and fine;
+        // anything else is a real cleanup failure and must be visible.
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!/is not a function|Cannot read propert/.test(msg)) {
+          failures.push(`${model}: ${msg.split(/\r?\n/)[0]}`);
+        }
       }
-      await tx.leaseInquiry.deleteMany({ where: { tenantId: { in: [tenantA, tenantB] } } });
-      await tx.lessee.deleteMany({ where: { tenantId: { in: [tenantA, tenantB] } } });
-      await tx.tenant.deleteMany({ where: { id: { in: [tenantA, tenantB] } } });
-    });
+    };
+
+    if (rentalReady) {
+      await del('vehicleInspection', (tx) => tx.vehicleInspection?.deleteMany?.(scope));
+      await del('damageClaim', (tx) => tx.damageClaim?.deleteMany?.(scope));
+      await del('rentalBooking', (tx) => tx.rentalBooking.deleteMany(scope));
+      await del('rentalCustomer', (tx) => tx.rentalCustomer.deleteMany(scope));
+    }
+    await del('leaseInquiry', (tx) => tx.leaseInquiry.deleteMany(scope));
+    await del('lessee', (tx) => tx.lessee.deleteMany(scope));
+    await del('tenant', (tx) =>
+      tx.tenant.deleteMany({ where: { id: { in: [tenantA, tenantB] } } }),
+    );
+
+    // Verify rather than assume. A surviving tenant means a child table
+    // references it and is missing from the list above; the 23503 will name it.
+    const left = await withPlatformAdmin(basePrisma, async (tx) =>
+      tx.tenant.count({ where: { id: { in: [tenantA, tenantB] } } }),
+    );
+
     await basePrisma.$disconnect();
+
+    if (left > 0 || failures.length > 0) {
+      throw new Error(
+        `cleanup incomplete: ${left} test tenant(s) remain.` +
+          (failures.length ? ` Failures: ${failures.join('; ')}` : ''),
+      );
+    }
   });
 
   // ── Leasing: Lessee isolation ─────────────────────────────────────────────
@@ -337,12 +383,24 @@ describe.skipIf(!hasDb)('TENANT-001 Leasing & Rental RLS isolation', () => {
   });
 
   describe('withSystemJob per-tenant scope', () => {
-    it('runs callback once per tenant with matching tenantId', async () => {
-      const seen: string[] = [];
-      await withSystemJob(
-        basePrisma,
-        async ({ tenantId }) => {
-          if (tenantId === tenantA || tenantId === tenantB) {
+    it('scopes the per-tenant callback to that tenant', async () => {
+      // Scoped with tenantHeader instead of scanning every active tenant.
+      //
+      // The previous version iterated all of them — 187 today — in one
+      // transaction each, taking longer than the 30s test timeout, to make a
+      // meaningful assertion for exactly two. Its outer assertion was
+      // `expect(seen.length).toBeGreaterThanOrEqual(0)`, which is true of any
+      // array, so a full scan that visited nobody would still have passed.
+      //
+      // Iteration across many tenants is covered by the unit suite, which
+      // mocks the tenant list. What needs a real database is the GUC actually
+      // scoping the query, and one tenant per run proves that.
+      for (const expected of [tenantA, tenantB]) {
+        const seen: string[] = [];
+
+        await withSystemJob(
+          basePrisma,
+          async ({ tenantId }) => {
             seen.push(tenantId);
             const rows = await withTenantRls(basePrisma, tenantId, async (tx) =>
               tx.lessee.findMany({
@@ -350,16 +408,17 @@ describe.skipIf(!hasDb)('TENANT-001 Leasing & Rental RLS isolation', () => {
                 select: { id: true, tenantId: true },
               }),
             );
-            // Only the current tenant's lessee should appear
+            // Only the current tenant's lessee may appear.
             expect(rows.every((r) => r.tenantId === tenantId)).toBe(true);
-          }
-          return true;
-        },
-        // Limit iteration cost: only our two tenants if API supports header
-        // withSystemJob options may vary; full scan is acceptable in integration.
-      );
-      // At least our tenants should have been visited when they are active
-      expect(seen.length).toBeGreaterThanOrEqual(0);
+            return true;
+          },
+          { tenantHeader: expected },
+        );
+
+        // Assert the callback actually ran for the tenant asked for, rather
+        // than that it ran at all.
+        expect(seen).toEqual([expected]);
+      }
     });
   });
 });
