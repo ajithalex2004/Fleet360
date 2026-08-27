@@ -40,6 +40,7 @@ const config: CapacitorConfig = {
   // launcher always loads fresh — even on MIUI where the system
   // WebView cache survives `pm clear` and uninstall+reinstall.
   server: {
+    androidScheme: 'https',
     hostname: 'localhost2',
   },
   plugins: {
