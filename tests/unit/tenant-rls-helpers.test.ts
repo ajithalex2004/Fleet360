@@ -54,6 +54,42 @@ interface MockTx {
   [model: string]: unknown;
 }
 
+/**
+ * Answer a set_config query the way Postgres does: return the value that was
+ * set.
+ *
+ * withTenantRls does not fire-and-forget the GUC — it reads the result back and
+ * throws if it does not match, which is what catches a connection layer that
+ * silently drops transaction-local settings. The mock returned undefined, so
+ * every call died on `_set[0]` with "Cannot read properties of undefined
+ * (reading '0')" and 13 of 17 tests failed against correct production code.
+ */
+function setConfigResult(sql: unknown): Array<{ v: string }> {
+  const m = /set_config\(\s*'app\.tenant_id'\s*,\s*'([^']*)'/.exec(String(sql ?? ''));
+  return m ? [{ v: m[1] }] : [];
+}
+
+/**
+ * The tenant ids set by withTenantRls calls, in order.
+ *
+ * The discriminator used to be "the SQL contains $1", because withTenantRls
+ * bound the value while withPlatformAdmin hardcoded '*'. withTenantRls now
+ * interpolates and uses $queryRawUnsafe so it can read the value back;
+ * withPlatformAdmin still uses $executeRawUnsafe. The METHOD is what tells them
+ * apart now, and '*' is excluded explicitly rather than incidentally.
+ */
+function perTenantSetConfigs(calls: RecordedCall[]): string[] {
+  return calls
+    .filter(
+      c =>
+        c.method === '$queryRawUnsafe' &&
+        typeof c.args[0] === 'string' &&
+        (c.args[0] as string).includes("set_config('app.tenant_id'"),
+    )
+    .map(c => setConfigResult(c.args[0])[0]?.v ?? '')
+    .filter(v => v !== '' && v !== '*');
+}
+
 function makeMockPrisma() {
   const calls: RecordedCall[] = [];
 
@@ -68,7 +104,7 @@ function makeMockPrisma() {
       }) as never,
       $queryRawUnsafe: vi.fn((...args: unknown[]) => {
         calls.push({ method: '$queryRawUnsafe', args });
-        return Promise.resolve();
+        return Promise.resolve(setConfigResult(args[0]));
       }) as never,
       $transaction: vi.fn((fn: (tx: MockTx) => Promise<unknown>) => {
         calls.push({ method: '$transaction', args: [fn] });
@@ -102,7 +138,7 @@ function makeMockPrisma() {
     }),
     $queryRawUnsafe: vi.fn((...args: unknown[]) => {
       calls.push({ method: '$queryRawUnsafe', args });
-      return Promise.resolve();
+      return Promise.resolve(setConfigResult(args[0]));
     }),
     tenant: {
       findMany: vi.fn((...args: unknown[]) => {
@@ -130,32 +166,37 @@ describe('withTenantRls', () => {
     const txCall = calls.find(c => c.method === '$transaction');
     expect(txCall).toBeDefined();
 
-    // withTenantRls uses a parameterised $1 placeholder and passes the
-    // tenantId as the second arg to $executeRawUnsafe. That way the
-    // SQL-injection guard (alphanumeric regex) actually matters.
+    // withTenantRls interpolates the tenantId rather than binding it, and uses
+    // $queryRawUnsafe so it can READ THE VALUE BACK and verify the GUC took.
+    // This assertion previously described a $1-bound $executeRawUnsafe call,
+    // which the helper has not used for some time.
+    //
+    // Interpolation is safe here only because of the two guards asserted in the
+    // tests below — the format check and the quote-escaping — so those are what
+    // make this acceptable, not the query shape.
     const setConfig = calls.find(
-      c => c.method === '$executeRawUnsafe' &&
+      c => c.method === '$queryRawUnsafe' &&
         typeof c.args[0] === 'string' &&
-        c.args[0].includes("set_config('app.tenant_id'") &&
-        c.args[0].includes('$1'),
+        c.args[0].includes("set_config('app.tenant_id'"),
     );
     expect(setConfig).toBeDefined();
-    expect(setConfig?.args[0]).toBe(`SELECT set_config('app.tenant_id', $1, true)`);
-    expect(setConfig?.args[1]).toBe('tenant-a');
+    expect(setConfig?.args[0]).toBe(
+      `SELECT set_config('app.tenant_id', 'tenant-a', true) AS v`,
+    );
   });
 
   it('rejects an empty tenantId', async () => {
     const { prisma } = makeMockPrisma();
     await expect(
       withTenantRls(prisma as never, '', async () => 'ok'),
-    ).rejects.toThrow(/non-empty/);
+    ).rejects.toThrow(/tenantId is required/);
   });
 
   it('rejects a tenantId with special characters (SQL-injection guard)', async () => {
     const { prisma } = makeMockPrisma();
     await expect(
       withTenantRls(prisma as never, "tenant-a'; DROP TABLE--", async () => 'ok'),
-    ).rejects.toThrow(/alphanumeric/);
+    ).rejects.toThrow(/invalid tenantId format/);
   });
 
   it('returns whatever the callback returns', async () => {
@@ -231,15 +272,11 @@ describe('withSystemJob', () => {
       async ({ tx, tenantId }) => {
         await tx.tenant.findMany({});  // any tx op proves we're inside the wrap
         // Find the most recent $1-parameterised set_config call. That's
-        // the per-tenant wrap; the hardcoded '*' is from withPlatformAdmin's
-        // outer wrap and won't match the $1 pattern.
-        const all = calls.filter(
-          c => c.method === '$executeRawUnsafe' && typeof c.args[0] === 'string'
-            && c.args[0].includes("set_config('app.tenant_id'") &&
-            c.args[0].includes('$1'),
-        );
+        // the per-tenant wrap; withPlatformAdmin's '*' goes through
+        // $executeRawUnsafe and is filtered out by perTenantSetConfigs.
+        const all = perTenantSetConfigs(calls);
         const last = all[all.length - 1];
-        if (last) gucValuesByTenant[tenantId] = String(last.args[1] ?? '');
+        if (last) gucValuesByTenant[tenantId] = last;
         return { ok: true };
       },
     );
@@ -333,17 +370,12 @@ describe('withWebhookTenant', () => {
     );
 
     // After the identify (which set '*'), the handle wrap should set
-    // the GUC to the resolved tenantId. Look for the $1-parameterised
-    // form — that's withTenantRls.
-    const perTenant = calls.filter(
-      c => c.method === '$executeRawUnsafe' &&
-        typeof c.args[0] === 'string' &&
-        c.args[0].includes("set_config('app.tenant_id'") &&
-        c.args[0].includes('$1'),
-    );
+    // the GUC to the resolved tenantId. perTenantSetConfigs picks out the
+    // withTenantRls calls and drops the platform-admin '*'.
+    const perTenant = perTenantSetConfigs(calls);
     expect(perTenant.length).toBeGreaterThanOrEqual(1);
     // The last per-tenant set_config should be the resolved tenant.
-    expect(perTenant[perTenant.length - 1].args[1]).toBe('tenant-a');
+    expect(perTenant[perTenant.length - 1]).toBe('tenant-a');
   });
 
   it('returns null and skips handle when identify returns null', async () => {
@@ -399,9 +431,14 @@ describe('RLS helpers do not silently fall through on GUC failure', () => {
   // and continues would be caught here.
   it('withTenantRls propagates set_config errors', async () => {
     const { prisma } = makeMockPrisma();
-    // Make $executeRawUnsafe throw on the set_config call.
+    // withTenantRls sets the GUC through $queryRawUnsafe (it reads the value
+    // back), so that is the method that has to reject. Rejecting
+    // $executeRawUnsafe instead left $queryRawUnsafe undefined and the test
+    // failed with "tx.$queryRawUnsafe is not a function" — a mock shape error
+    // masquerading as a missing propagation.
     prisma.$transaction.mockImplementationOnce(async (fn: (tx: unknown) => Promise<unknown>) => {
       const tx = {
+        $queryRawUnsafe: vi.fn().mockRejectedValue(new Error('permission denied')),
         $executeRawUnsafe: vi.fn().mockRejectedValue(new Error('permission denied')),
         $transaction: vi.fn(),
       };
