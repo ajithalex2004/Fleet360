@@ -16,7 +16,7 @@ dotenv.config({ path: '.env.test' });
 dotenv.config({ path: '.env' });
 
 const targetUrl = process.argv[2] || process.env.STAGING_APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-const secret = process.env.DEPLOYMENT_HEALTH_SECRET || process.env.SESSION_SECRET || '';
+const secret = process.env.DEPLOYMENT_HEALTH_SECRET || process.env.INTERNAL_SERVICE_KEY || process.env.SESSION_SECRET || '';
 
 async function verifyRemoteDeployment() {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -31,16 +31,16 @@ async function verifyRemoteDeployment() {
 
     const body = await res.json();
 
-    if (!res.ok || body.status !== 'pass') {
+    if (!res.ok || body.status !== 'pass' || !body.runtimeRoleValid || !body.directRoleValid) {
       console.error('❌ REMOTE DEPLOYMENT ROLE ASSERTION FAILED:');
       console.error(JSON.stringify(body, null, 2));
       process.exit(1);
     }
 
     console.log('✅ Remote Deployment Confirmed Enforcing fleet360_app:');
-    console.log(`   App Connection Role:   ${body.appConnection.role} (bypassrls=${body.appConnection.bypassRls})`);
-    console.log(`   Sweep Connection Role: ${body.sweepConnection.role} (bypassrls=${body.sweepConnection.bypassRls}, concurrency=${body.sweepConnection.concurrency})`);
-    console.log(`   Server Timestamp:      ${body.timestamp}`);
+    console.log(`   Runtime Application Role Valid: ${body.runtimeRoleValid}`);
+    console.log(`   Direct Sweep Role Valid:        ${body.directRoleValid}`);
+    console.log(`   Server Timestamp:               ${body.timestamp}`);
     console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('✅ POST-DEPLOYMENT RUNTIME ROLE VERIFICATION SUCCESSFUL');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');

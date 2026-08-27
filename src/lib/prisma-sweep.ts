@@ -88,19 +88,33 @@ export async function getVerifiedSweepPrisma(): Promise<{ client: PrismaClient; 
   });
 
   try {
-    const roles = await client.$queryRawUnsafe<RoleVerificationRow[]>(`
-      SELECT
-        current_user,
-        rolcanlogin,
-        rolbypassrls,
-        rolsuper
-      FROM pg_roles
-      WHERE rolname = current_user
-    `);
+    let roles: RoleVerificationRow[] = [];
+    let lastErr: unknown = null;
+
+    // Retry direct connection query up to 4 times to handle Neon compute wakeups
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      try {
+        roles = await client.$queryRawUnsafe<RoleVerificationRow[]>(`
+          SELECT
+            current_user,
+            rolcanlogin,
+            rolbypassrls,
+            rolsuper
+          FROM pg_roles
+          WHERE rolname = current_user
+        `);
+        if (roles.length > 0) break;
+      } catch (err) {
+        lastErr = err;
+        if (attempt < 4) {
+          await new Promise((r) => setTimeout(r, 750 * attempt));
+        }
+      }
+    }
 
     const role = roles[0];
     if (!role) {
-      throw new Error('Unable to resolve current_user from pg_roles');
+      throw lastErr || new Error('Unable to resolve current_user from pg_roles');
     }
 
     if (role.current_user !== 'fleet360_app' || !role.rolcanlogin || role.rolbypassrls || role.rolsuper) {
@@ -155,6 +169,21 @@ export interface RunSweepOptions extends SystemJobOptions {
 }
 
 /**
+ * Hash string or number to a deterministic 32-bit positive integer for PostgreSQL advisory locks.
+ */
+export function getAdvisoryLockId(key: number | string): number {
+  if (typeof key === 'number') {
+    return Math.abs(Math.floor(key));
+  }
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = (hash << 5) - hash + key.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+/**
  * Run a per-tenant sweep on the verified sweep connection with optional advisory locking.
  *
  * Binds the verified non-bypass client AND the bounded concurrency together.
@@ -166,18 +195,8 @@ export async function runSweep<T>(
   const { client, concurrency } = await getVerifiedSweepPrisma();
 
   let lockId: number | null = null;
-  if (opts.advisoryLockKey) {
-    if (typeof opts.advisoryLockKey === 'number') {
-      lockId = opts.advisoryLockKey;
-    } else {
-      // Hash string key to a signed 32-bit integer for pg advisory lock
-      let hash = 0;
-      for (let i = 0; i < opts.advisoryLockKey.length; i++) {
-        hash = (hash << 5) - hash + opts.advisoryLockKey.charCodeAt(i);
-        hash |= 0;
-      }
-      lockId = Math.abs(hash);
-    }
+  if (opts.advisoryLockKey !== undefined) {
+    lockId = getAdvisoryLockId(opts.advisoryLockKey);
 
     try {
       const lockRes = await client.$queryRawUnsafe<Array<{ pg_try_advisory_lock: boolean }>>(
