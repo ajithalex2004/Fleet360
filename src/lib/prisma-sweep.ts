@@ -6,148 +6,161 @@ import { prisma } from '@/lib/prisma';
 import { withSystemJob, type SystemJobContext, type SystemJobOptions } from '@/lib/rls';
 
 /**
- * The connection sweeps run on, and why it is not the shared one.
- *
- * A sweep opens one transaction per tenant. With 179 active tenants and a
- * callback that does nothing, that measured 125s on the pooled endpoint —
- * roughly 700ms each, almost entirely round-trips (BEGIN, set_config with its
- * read-back, COMMIT). That is the floor before any real work, and it exceeds
- * the 60s timeout common to serverless cron runners, so a sweep gets killed
- * part-way through having committed an arbitrary prefix of the tenants.
- *
- * Overlapping the per-tenant transactions fixes it — they were always
- * independent. But NOT on a pooled connection:
- *
- *     pooled,  concurrency 1    71-125s   works
- *     pooled,  concurrency 2    FAILS     P1001 "Can't reach database server"
- *     pooled,  concurrency 4    FAILS     P1001
- *     direct,  concurrency 4    35s       works, 196ms/tenant
- *
- * Two concurrent interactive transactions are enough to break Neon's pooler,
- * reproducibly, on a warm connection. So sweeps get their own client bound to
- * DIRECT_URL, where concurrency is available.
- *
- * This does not contradict scripts/prove-pooled-rls.ts. That proved
- * withTenantRls is correct over the pooler, and it is — for SEQUENTIAL
- * transactions, which is what every request path does. Sustained concurrent
- * interactive transactions are a different load.
- *
- * WHY A SEPARATE CLIENT RATHER THAN SWITCHING THE SHARED ONE: request handlers
- * should keep using the pooler. That is what it is for, and a few hundred
- * short-lived requests are exactly the shape it handles well. Only sweeps have
- * the long-transaction, high-concurrency profile that needs a direct
- * connection.
- */
-
-/**
- * Upper bound on tenants processed at once.
+ * Upper bound on tenants processed at once during direct sweeps.
  *
  * 3, not 8, to survive single-core serverless compute where Prisma's pool is
  * num_cpus * 2 + 1 = 3. Exceeding the pool does not fail loudly — requests
  * queue and then time out fetching a connection, which reads like a database
  * fault rather than a configuration one.
  *
- * MUST STAY IN STEP WITH defaultSweepConcurrency() in src/lib/rls.ts. Those two
- * were briefly out of step — rls.ts was tuned to 3 while this file still said
- * 8, and because runSweep() passes this value explicitly, the tuning had no
- * effect on any actual sweep. The rls.ts default only applies to a direct
- * withSystemJob() call, of which there are none outside tests.
+ * MUST STAY IN STEP WITH defaultSweepConcurrency() in src/lib/rls.ts.
  */
 const SWEEP_CONCURRENCY_CAP = 3;
 
 let sweepClient: PrismaClient | null = null;
+let sweepClientVerified = false;
 
-/** True when a usable DIRECT_URL is configured. */
-function hasDirectUrl(): boolean {
-  const u = process.env.DIRECT_URL ?? '';
-  return u.length > 0 && !/-pooler\./.test(u);
+interface RoleVerificationRow {
+  current_user: string;
+  rolcanlogin: boolean;
+  rolbypassrls: boolean;
+  rolsuper: boolean;
 }
 
 /**
- * The client sweeps should use.
+ * Returns the unpooled direct database URL configured specifically for
+ * runtime sweeps and background jobs.
  *
- * Falls back to the shared pooled client when DIRECT_URL is absent or is itself
- * pooled — a sweep that runs slowly is better than one that cannot run, and
- * sweepConcurrency() drops to 1 in that case so the fallback is safe rather
- * than merely functional.
- *
- * Lazily created, then reused. Sweeps are cron-invoked and infrequent, so the
- * cost of the extra pool is only paid when one actually runs.
+ * Credential precedence:
+ *   1. RUNTIME_DIRECT_DATABASE_URL (dedicated fleet360_app direct compute)
+ *   2. DIRECT_URL (legacy / fallback, only if not pooled)
  */
-let warnedNoDirect = false;
+function getDirectSweepUrl(): string | null {
+  const candidate = process.env.RUNTIME_DIRECT_DATABASE_URL || process.env.DIRECT_URL || '';
+  if (!candidate || /-pooler\./.test(candidate)) return null;
+  return candidate;
+}
 
-export function getSweepPrisma(): PrismaClient {
-  if (!hasDirectUrl()) {
-    // Say so, once. A silent fallback here costs roughly 4x on every sweep and
-    // leaves no trace — the deployment looks healthy, the cron still finishes,
-    // and nobody learns that DIRECT_URL was never set in this environment.
-    if (!warnedNoDirect) {
-      warnedNoDirect = true;
-      const why = process.env.DIRECT_URL
-        ? 'DIRECT_URL is itself a -pooler endpoint'
-        : 'DIRECT_URL is not set';
-      console.warn(
-        `[sweep] ${why}; falling back to the pooled client at concurrency 1. ` +
-          `Sweeps will take roughly 4x longer (measured: 33s vs 125s across 179 tenants). ` +
-          `Set DIRECT_URL to the non-pooled endpoint for this environment.`,
-      );
-    }
-    return prisma;
+/** True when a usable direct endpoint URL is configured. */
+function hasDirectUrl(): boolean {
+  return getDirectSweepUrl() !== null;
+}
+
+let warnedFallback = false;
+
+function emitFallbackWarning(reason: string) {
+  if (!warnedFallback) {
+    warnedFallback = true;
+    console.warn(
+      `[sweep] ${reason}; falling back to the pooled application client at concurrency 1. ` +
+        `Sweeps will take roughly 4x longer (measured: 33s vs 125s across 179 tenants). ` +
+        `Configure RUNTIME_DIRECT_DATABASE_URL with a direct non-bypass role (fleet360_app) for full performance.`,
+    );
   }
-  if (sweepClient) return sweepClient;
+}
 
-  sweepClient = new PrismaClient({
-    datasourceUrl: process.env.DIRECT_URL,
+/**
+ * Initializes and independently verifies the direct sweep connection against pg_roles.
+ *
+ * Security Invariant:
+ * The direct sweep connection MUST connect as a non-bypass role (fleet360_app with
+ * rolbypassrls = false and rolsuper = false). If the connection resolves to neondb_owner
+ * or any role holding BYPASSRLS, the credential is rejected and we fall back to the
+ * pooled application client at concurrency 1 to ensure tenant isolation is never compromised.
+ */
+export async function getVerifiedSweepPrisma(): Promise<{ client: PrismaClient; concurrency: number }> {
+  const directUrl = getDirectSweepUrl();
+  if (!directUrl) {
+    const why = (process.env.RUNTIME_DIRECT_DATABASE_URL || process.env.DIRECT_URL)
+      ? 'Direct sweep URL is configured as a -pooler endpoint'
+      : 'RUNTIME_DIRECT_DATABASE_URL is not set';
+    emitFallbackWarning(why);
+    return { client: prisma, concurrency: 1 };
+  }
+
+  if (sweepClient && sweepClientVerified) {
+    return { client: sweepClient, concurrency: sweepConcurrency() };
+  }
+
+  const client = new PrismaClient({
+    datasourceUrl: directUrl,
     log: [{ level: 'error', emit: 'stdout' }],
   });
-  return sweepClient;
+
+  try {
+    const roles = await client.$queryRawUnsafe<RoleVerificationRow[]>(`
+      SELECT
+        current_user,
+        rolcanlogin,
+        rolbypassrls,
+        rolsuper
+      FROM pg_roles
+      WHERE rolname = current_user
+    `);
+
+    const role = roles[0];
+    if (!role) {
+      throw new Error('Unable to resolve current_user from pg_roles');
+    }
+
+    if (role.rolbypassrls || role.rolsuper) {
+      await client.$disconnect();
+      console.error(
+        `[sweep] 🚨 SECURITY ALARM: RUNTIME_DIRECT_DATABASE_URL connected as role "${role.current_user}" with ` +
+          `bypassrls=${role.rolbypassrls}, super=${role.rolsuper}. Direct sweep client REJECTED because it ` +
+          `would bypass PostgreSQL RLS. Falling back to pooled DATABASE_URL at concurrency 1 to preserve tenant boundary.`,
+      );
+      return { client: prisma, concurrency: 1 };
+    }
+
+    sweepClient = client;
+    sweepClientVerified = true;
+    return { client: sweepClient, concurrency: sweepConcurrency() };
+  } catch (err) {
+    try {
+      await client.$disconnect();
+    } catch {
+      // ignore
+    }
+    console.warn(
+      `[sweep] Direct sweep role verification failed (${err instanceof Error ? err.message : String(err)}); falling back to pooled client at concurrency 1.`,
+    );
+    return { client: prisma, concurrency: 1 };
+  }
+}
+
+/**
+ * Returns the client sweeps should use.
+ * Synchronous getter for backwards compatibility.
+ */
+export function getSweepPrisma(): PrismaClient {
+  return (sweepClient && sweepClientVerified) ? sweepClient : prisma;
 }
 
 /**
  * How many tenants a sweep may process at once.
- *
- * Deliberately computed HERE rather than left to withSystemJob's own default.
- * That default inspects process.env.DATABASE_URL, which stays pooled even when
- * the sweep is running on a direct client — it would return 1 and the speedup
- * would silently not happen. The concurrency has to be decided by whoever knows
- * which connection is actually in use.
- *
- * The ceiling is the PRISMA CLIENT POOL, not the server. Neon reports
- * max_connections = 901; Prisma opens num_cpus * 2 + 1 unless connection_limit
- * says otherwise — 9 on a 4-core box, 3 on a single-core serverless instance.
- * Exceeding it does not fail loudly; requests queue and then time out fetching
- * a connection, which reads like a database fault rather than a configuration
- * one. One connection is left spare and the whole thing is capped.
  */
 export function sweepConcurrency(): number {
-  if (!hasDirectUrl()) return 1;
+  if (!hasDirectUrl() || !sweepClientVerified) return 1;
 
-  const m = /[?&]connection_limit=(\d+)/.exec(process.env.DIRECT_URL ?? '');
-  // os.cpus() is not imported here — this module is also loaded in edge-ish
-  // contexts during build. 9 is Prisma's default on a 4-core box; the cap below
-  // is what actually binds, so the guess only matters if connection_limit is
-  // absent AND the cap is raised.
+  const directUrl = getDirectSweepUrl();
+  const m = /[?&]connection_limit=(\d+)/.exec(directUrl ?? '');
   const pool = m ? Number(m[1]) : 9;
   return Math.max(1, Math.min(pool - 1, SWEEP_CONCURRENCY_CAP));
 }
 
 /**
- * Run a per-tenant sweep on the sweep connection.
+ * Run a per-tenant sweep on the verified sweep connection.
  *
- * Prefer this over calling withSystemJob(prisma, ...) directly from a cron
- * route: it binds the right client AND the right concurrency together, which
- * is the pairing that is easy to get half-right.
- *
- * This is not a sixth tenancy pattern — the isolation semantics are exactly
- * withSystemJob's, one tenant-scoped transaction per tenant. Only the
- * connection and the batch size differ.
+ * Binds the verified non-bypass client AND the bounded concurrency together.
  */
 export async function runSweep<T>(
   fn: (ctx: SystemJobContext) => Promise<T>,
   opts: SystemJobOptions = {},
 ): Promise<Array<{ tenantId: string; result: T }>> {
-  return withSystemJob(getSweepPrisma(), fn, {
-    concurrency: sweepConcurrency(),
+  const { client, concurrency } = await getVerifiedSweepPrisma();
+  return withSystemJob(client, fn, {
+    concurrency: opts.concurrency ?? concurrency,
     ...opts,
   });
 }
@@ -157,5 +170,6 @@ export async function disconnectSweepPrisma(): Promise<void> {
   if (sweepClient) {
     await sweepClient.$disconnect();
     sweepClient = null;
+    sweepClientVerified = false;
   }
 }

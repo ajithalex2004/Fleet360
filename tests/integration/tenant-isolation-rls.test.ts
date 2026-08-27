@@ -32,9 +32,22 @@
  * tests glob in vitest.config.mjs.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { prisma as basePrisma } from '@/lib/prisma';
 import { withTenantRls, withPlatformAdmin, withSystemJob, withWebhookTenant } from '@/lib/rls';
+
+interface RoleVerificationRow {
+  current_user: string;
+  rolcanlogin: boolean;
+  rolbypassrls: boolean;
+  rolsuper: boolean;
+}
+
+let isolationAssertionsExecuted = 0;
+
+beforeEach(() => {
+  isolationAssertionsExecuted++;
+});
 
 // ── Test fixtures ───────────────────────────────────────────────────────────
 
@@ -60,6 +73,40 @@ let driverA1: string;
 let driverB1: string;
 
 beforeAll(async () => {
+  // Preflight: independently verify the active PostgreSQL connection role.
+  const roles = await basePrisma.$queryRawUnsafe<RoleVerificationRow[]>(`
+    SELECT
+      current_user,
+      rolcanlogin,
+      rolbypassrls,
+      rolsuper
+    FROM pg_roles
+    WHERE rolname = current_user
+  `);
+
+  const role = roles[0];
+  if (!role) {
+    throw new Error('RLS Isolation Preflight Failed: Unable to resolve current_user from pg_roles');
+  }
+
+  if (role.rolbypassrls === true) {
+    throw new Error(
+      `RLS Isolation Preflight Failed: Connected role "${role.current_user}" has rolbypassrls = true. ` +
+        `The cross-tenant isolation suite MUST run under a non-bypass role (fleet360_app) to genuinely prove RLS enforcement.`,
+    );
+  }
+
+  if (role.rolsuper === true) {
+    throw new Error(
+      `RLS Isolation Preflight Failed: Connected role "${role.current_user}" has rolsuper = true. ` +
+        `Superuser roles bypass RLS policies.`,
+    );
+  }
+
+  if (!role.rolcanlogin) {
+    throw new Error(`RLS Isolation Preflight Failed: Connected role "${role.current_user}" cannot log in.`);
+  }
+
   // Setup runs as super-admin so it can write across both tenants.
   // Without withPlatformAdmin, the test would fail at the first insert
   // because the policy filters by app.tenant_id (which is unset on the
@@ -160,6 +207,7 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
+  expect(isolationAssertionsExecuted).toBeGreaterThanOrEqual(22);
   // Cleanup also runs as super-admin so it can delete across tenants.
   //
   // CHILDREN BEFORE PARENTS, and every model this file creates must appear

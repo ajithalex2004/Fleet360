@@ -13,6 +13,26 @@ describe('Pooled connection context isolation', () => {
   let tenantB: string;
 
   beforeAll(async () => {
+    // Preflight: independently verify the active PostgreSQL connection role.
+    const roles = await basePrisma.$queryRawUnsafe<
+      Array<{ current_user: string; rolcanlogin: boolean; rolbypassrls: boolean; rolsuper: boolean }>
+    >(`
+      SELECT
+        current_user,
+        rolcanlogin,
+        rolbypassrls,
+        rolsuper
+      FROM pg_roles
+      WHERE rolname = current_user
+    `);
+
+    const role = roles[0];
+    if (!role || role.rolbypassrls === true || role.rolsuper === true || !role.rolcanlogin) {
+      throw new Error(
+        `Pool Isolation Preflight Failed: Connected role "${role?.current_user}" (rolbypassrls=${role?.rolbypassrls}, rolsuper=${role?.rolsuper}). Must be a non-bypass role.`,
+      );
+    }
+
     tenantA = crypto.randomUUID();
     tenantB = crypto.randomUUID();
 

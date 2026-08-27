@@ -10,6 +10,7 @@ if (!phase0Url) {
 console.log('🚀 Running Complete Phase 1 Behavioral Isolation Suite as fleet360_app...\n');
 
 const testFiles = [
+  'tests/unit/prisma-sweep.test.ts',
   'tests/unit/tenant-bootstrap-handler.test.ts',
   'tests/unit/trip-incident-schema.test.ts',
   'tests/integration/pool-context-isolation.test.ts',
