@@ -12,23 +12,25 @@ name: Migration Safety
 # See scripts/check-destructive-migrations.js for the allowlist mechanism.
 
 on:
+  # NO `paths:` filter on pull_request, deliberately - see tenant-rls-check.yml
+  # for the full reasoning. Required + path-filtered = merges blocked forever on
+  # any PR that does not touch the filtered paths.
+  #
+  # The push filter below is kept: on main the job only needs to re-run when the
+  # migrations or the checker itself change, and nothing is waiting on its
+  # status there.
   pull_request:
-    paths:
-      - 'prisma/**'
-      - 'scripts/check-destructive-migrations.js'
-      - '.github/workflows/migration-safety.yml'
   push:
     branches:
       - main
       - develop
-    # These three must match the pull_request list above. They did not: the push
-    # filter covered only prisma/**, so an edit to the checker — or to its
-    # ALLOWLIST, which is the change that most needs re-verifying — did not
-    # re-run the check on main. The job kept displaying its last red result
-    # while the fix for it sat merged and unverified.
+    # This list once covered only prisma/**, so an edit to the checker — or to
+    # its ALLOWLIST, the change that most needs re-verifying — did not re-run
+    # the check on main. The job kept displaying its last red result while the
+    # fix for it sat merged and unverified.
     #
     # Weakening the allowlist is exactly the edit that must not slip through
-    # unchecked.
+    # unchecked, so the checker and this workflow are both in the list.
     paths:
       - 'prisma/**'
       - 'scripts/check-destructive-migrations.js'
