@@ -21,6 +21,8 @@
  * which applies the policy to every tenant-scoped table.
  */
 
+import { cpus } from 'node:os';
+
 import type { PrismaClient } from '@prisma/client';
 import { runWithRlsScope } from '@/lib/rls-scope';
 
@@ -143,6 +145,55 @@ export interface SystemJobOptions {
   tenantHeader?: string | null;
   /** Per-tenant transaction timeout in ms. Default 30s. */
   timeoutMs?: number;
+  /**
+   * How many tenants to process at once. Defaults to one less than the Prisma
+   * connection pool, capped at 10. Set 1 to force the old serial behaviour.
+   */
+  concurrency?: number;
+}
+
+/**
+ * Tenants to process concurrently by default.
+ *
+ * The limit that matters is the PRISMA CLIENT POOL, not the server. Neon
+ * reports max_connections = 901; Prisma opens `num_cpus * 2 + 1` unless
+ * connection_limit says otherwise, which is 9 on a 4-core box and 3 on a
+ * single-core serverless instance. Exceeding it does not fail loudly — requests
+ * queue and then time out fetching a connection, which reads like a database
+ * problem rather than a configuration one.
+ *
+ * So the pool size is derived the same way Prisma derives it, one connection is
+ * left for whatever else the process is doing, and the whole thing is capped so
+ * a large box does not hammer the pooler.
+ */
+function defaultSweepConcurrency(): number {
+  const url = process.env.DATABASE_URL ?? '';
+
+  // A POOLED endpoint cannot do this. Measured against
+  // ep-...-pooler.ap-southeast-1.aws.neon.tech, 179 tenants, no-op callback:
+  //
+  //   pooled,  concurrency 1   71-125s   works
+  //   pooled,  concurrency 2   FAILS     P1001 "Can't reach database server"
+  //   pooled,  concurrency 4   FAILS     P1001
+  //   direct,  concurrency 4   35s       works, 196ms/tenant
+  //
+  // Reproducible on a warm connection, so it is the concurrency and not a cold
+  // start. Two concurrent interactive transactions are enough to break it.
+  //
+  // This does NOT contradict scripts/prove-pooled-rls.ts, which showed
+  // withTenantRls is correct over the pooler. That measured SEQUENTIAL
+  // transactions, including eight overlapping ones that each completed. Long-
+  // running concurrent interactive transactions are a different load, and the
+  // pooler does not survive it.
+  //
+  // So: serial on a pooled URL, concurrent on a direct one. A sweep that wants
+  // the speedup points DATABASE_URL at DIRECT_URL for its own process rather
+  // than having this guess.
+  if (/-pooler\./.test(url)) return 1;
+
+  const m = /[?&]connection_limit=(\d+)/.exec(url);
+  const pool = m ? Number(m[1]) : cpus().length * 2 + 1;
+  return Math.max(1, Math.min(pool - 1, 10));
 }
 
 export async function withSystemJob<T>(
@@ -192,18 +243,45 @@ export async function withSystemJob<T>(
         { timeoutMs: 15_000 },
       );
 
-  // One transaction per tenant, none of them nested inside another. The job as
-  // a whole is now bounded by the number of tenants rather than by a single
-  // 60s ceiling.
-  const results: Array<{ tenantId: string; result: T }> = [];
-  for (const t of tenants) {
-    const result = await withTenantRls(
-      prisma,
-      t.id,
-      async (tenantTx) => fn({ tx: tenantTx, tenantId: t.id }),
-      { timeoutMs: opts.timeoutMs ?? 30_000 },
+  // One transaction per tenant, none nested, processed in bounded batches.
+  //
+  // Serially this took 125s across 179 tenants with a callback that did NOTHING
+  // — 700ms each, almost all of it round-trips: BEGIN, set_config with its
+  // read-back, COMMIT. That is the floor before a sweep does any real work, and
+  // it exceeds the 60s timeout common to serverless cron runners, so the sweeps
+  // would be killed mid-iteration having committed an arbitrary prefix of the
+  // tenants.
+  //
+  // The per-tenant transactions are independent — that was already true and is
+  // why this is safe to overlap. Batching preserves the result order.
+  //
+  // ERROR SEMANTICS, which do shift slightly: a throw still fails the whole job
+  // fast, but the other members of the in-flight batch have already started and
+  // will run to completion. So up to `concurrency - 1` more tenants may commit
+  // after the failing one than would have serially. For a sweep, where each
+  // tenant was always independently committed, that is a difference of degree
+  // rather than of kind — but a caller needing exact resumability must record
+  // its own progress, as the docblock above says.
+  const concurrency = Math.max(1, opts.concurrency ?? defaultSweepConcurrency());
+  const results: Array<{ tenantId: string; result: T }> = new Array(tenants.length);
+
+  for (let i = 0; i < tenants.length; i += concurrency) {
+    const batch = tenants.slice(i, i + concurrency);
+    const settled = await Promise.all(
+      batch.map(async (t, j) => ({
+        idx: i + j,
+        entry: {
+          tenantId: t.id,
+          result: await withTenantRls(
+            prisma,
+            t.id,
+            async (tenantTx) => fn({ tx: tenantTx, tenantId: t.id }),
+            { timeoutMs: opts.timeoutMs ?? 30_000 },
+          ),
+        },
+      })),
     );
-    results.push({ tenantId: t.id, result });
+    for (const s of settled) results[s.idx] = s.entry;
   }
   return results;
 }
