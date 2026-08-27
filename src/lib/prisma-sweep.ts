@@ -39,6 +39,22 @@ import { withSystemJob, type SystemJobContext, type SystemJobOptions } from '@/l
  * connection.
  */
 
+/**
+ * Upper bound on tenants processed at once.
+ *
+ * 3, not 8, to survive single-core serverless compute where Prisma's pool is
+ * num_cpus * 2 + 1 = 3. Exceeding the pool does not fail loudly — requests
+ * queue and then time out fetching a connection, which reads like a database
+ * fault rather than a configuration one.
+ *
+ * MUST STAY IN STEP WITH defaultSweepConcurrency() in src/lib/rls.ts. Those two
+ * were briefly out of step — rls.ts was tuned to 3 while this file still said
+ * 8, and because runSweep() passes this value explicitly, the tuning had no
+ * effect on any actual sweep. The rls.ts default only applies to a direct
+ * withSystemJob() call, of which there are none outside tests.
+ */
+const SWEEP_CONCURRENCY_CAP = 3;
+
 let sweepClient: PrismaClient | null = null;
 
 /** True when a usable DIRECT_URL is configured. */
@@ -108,10 +124,11 @@ export function sweepConcurrency(): number {
 
   const m = /[?&]connection_limit=(\d+)/.exec(process.env.DIRECT_URL ?? '');
   // os.cpus() is not imported here — this module is also loaded in edge-ish
-  // contexts during build. 4 is the conservative floor that works on a
-  // single-core instance (pool 3) without needing to know the host.
+  // contexts during build. 9 is Prisma's default on a 4-core box; the cap below
+  // is what actually binds, so the guess only matters if connection_limit is
+  // absent AND the cap is raised.
   const pool = m ? Number(m[1]) : 9;
-  return Math.max(1, Math.min(pool - 1, 8));
+  return Math.max(1, Math.min(pool - 1, SWEEP_CONCURRENCY_CAP));
 }
 
 /**

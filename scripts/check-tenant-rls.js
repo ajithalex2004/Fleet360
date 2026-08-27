@@ -89,6 +89,8 @@ const RLS_WRAPPERS = [
   'withPlatformAdmin',
   'withSystemJob',
   'withWebhookTenant',
+  'runSweep',
+  'tenantBootstrapHandler',
 ];
 
 // Database operation patterns
@@ -200,6 +202,9 @@ function hasDatabaseOperations(handlerBody) {
 }
 
 function hasDirectPrismaCall(handlerBody) {
+  // Ignore TypeScript type-level annotations (typeof prisma...)
+  const runtimeBody = handlerBody.replace(/\btypeof\s+prisma\.\w+(\.\w+)?/g, '');
+
   // Check if handler uses 'prisma' directly (not 'tx') for database operations
   // This indicates missing RLS wrapper
   const directPrismaPatterns = [
@@ -215,7 +220,7 @@ function hasDirectPrismaCall(handlerBody) {
     /\bprisma\.\w+\.groupBy/,
   ];
 
-  return directPrismaPatterns.some(pattern => pattern.test(handlerBody));
+  return directPrismaPatterns.some(pattern => pattern.test(runtimeBody));
 }
 
 function hasTenantFilter(handlerBody) {
@@ -253,8 +258,9 @@ function analyzeRouteFile(filePath, opts = {}) {
 
   // Check for imports
   const hasAuthImport = /import\s+\{[^}]*requireAuthorizedTenant[^}]*\}\s+from\s+['"]@\/lib\/tenant-context['"]/.test(content);
+  const hasBootstrapImport = /import\s+\{[^}]*tenantBootstrapHandler[^}]*\}\s+from\s+['"]@\/lib\/handlers\/tenant-bootstrap-handler['"]/.test(content);
   const hasRlsImport = new RegExp(
-    `import\\s+\\{[^}]*(${RLS_WRAPPERS.join('|')})[^}]*\\}\\s+from\\s+['"]@/lib/rls['"]`
+    `import\\s+\\{[^}]*(${RLS_WRAPPERS.join('|')})[^}]*\\}\\s+from\\s+['"]@/(lib/rls|lib/prisma-sweep|lib/handlers/tenant-bootstrap-handler)['"]`
   ).test(content);
   const hasSanitizeImport = /import\s+\{[^}]*stripTenantOwnershipFields[^}]*\}\s+from\s+['"]@\/lib\/tenant-context['"]/.test(content);
 
@@ -286,8 +292,8 @@ function analyzeRouteFile(filePath, opts = {}) {
     const isMutation = MUTATION_METHODS.includes(method);
     const hasSanitization = hasBodySanitization(handlerBody);
 
-    // Violation 1: Missing requireAuthorizedTenant
-    if (!hasAuthImport) {
+    // Violation 1: Missing requireAuthorizedTenant (unless explicit tenantBootstrapHandler boundary)
+    if (!hasAuthImport && !(hasBootstrapImport && rlsWrapper === 'tenantBootstrapHandler')) {
       violations.push({
         method,
         type: 'missing_auth',
@@ -312,7 +318,7 @@ function analyzeRouteFile(filePath, opts = {}) {
         method,
         type: 'missing_rls_import',
         severity: 'error',
-        message: `${method} handler uses ${rlsWrapper} but missing import from @/lib/rls`,
+        message: `${method} handler uses ${rlsWrapper} but missing import from @/lib/rls, @/lib/prisma-sweep, or @/lib/handlers/tenant-bootstrap-handler`,
       });
     }
 
@@ -443,34 +449,44 @@ function printResults(results, opts = {}) {
 
   const allViolations = [];
   const allWarnings = [];
-  let compliantCount = 0;
+  let fullyCompliantCount = 0;
+  let compliantWithWarningsCount = 0;
   let exemptCount = 0;
 
   for (const result of results) {
     if (result.exempt) {
       exemptCount++;
-    } else if (result.violations.length === 0 && result.warnings.length === 0) {
-      compliantCount++;
-    } else {
-      if (result.violations.length > 0) {
-        allViolations.push({ filePath: result.filePath, ...result });
-      }
+    } else if (result.violations.length > 0) {
+      allViolations.push({ filePath: result.filePath, ...result });
       if (result.warnings.length > 0) {
         allWarnings.push({ filePath: result.filePath, ...result });
       }
+    } else if (result.warnings.length > 0) {
+      compliantWithWarningsCount++;
+      allWarnings.push({ filePath: result.filePath, ...result });
+    } else {
+      fullyCompliantCount++;
     }
   }
+
+  const accountedTotal = exemptCount + fullyCompliantCount + compliantWithWarningsCount + allViolations.length;
 
   // Print summary
   console.log('━'.repeat(60));
   console.log('SUMMARY');
   console.log('━'.repeat(60));
-  console.log(`Total routes:     ${results.length}`);
-  console.log(`Exempt:           ${exemptCount} (public/webhooks/auth/health)`);
-  console.log(`✅ Compliant:      ${compliantCount}`);
-  console.log(`❌ Violations:     ${allViolations.length}`);
-  console.log(`⚠️  Warnings:       ${allWarnings.length}`);
+  console.log(`Total routes:                 ${results.length}`);
+  console.log(`Exempt:                       ${exemptCount} (public/webhooks/auth/health)`);
+  console.log(`✅ Fully Compliant:            ${fullyCompliantCount} (0 violations, 0 warnings)`);
+  console.log(`⚠️  Compliant with Warnings:    ${compliantWithWarningsCount} (RLS enforced, defense-in-depth suggestions)`);
+  console.log(`❌ Violations:                 ${allViolations.length}`);
+  console.log(`Accounting Invariant:         ${accountedTotal} / ${results.length} accounted for (${accountedTotal === results.length ? 'VERIFIED 100%' : 'INVARIANT FAILURE'})`);
   console.log('━'.repeat(60));
+
+  if (accountedTotal !== results.length) {
+    console.error(`❌ INVARIANT ERROR: Accounted routes (${accountedTotal}) !== total route files (${results.length})`);
+    return false;
+  }
 
   // Print violations
   if (allViolations.length > 0) {

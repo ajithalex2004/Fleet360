@@ -216,9 +216,9 @@ describe('withPlatformAdmin', () => {
     // withPlatformAdmin hardcodes '*' in the SQL string (no parameter) so
     // there's no risk of the wildcard being overridden by a tenant arg.
     const setConfig = calls.find(
-      c => c.method === '$executeRawUnsafe' &&
+      c => c.method === '$queryRawUnsafe' &&
         typeof c.args[0] === 'string' &&
-        c.args[0] === `SELECT set_config('app.tenant_id', '*', true)`,
+        c.args[0] === `SELECT set_config('app.tenant_id', '*', true) AS v`,
     );
     expect(setConfig).toBeDefined();
     // No second arg — the wildcard is in the SQL.
@@ -271,14 +271,18 @@ describe('withSystemJob', () => {
       prisma as never,
       async ({ tx, tenantId }) => {
         await tx.tenant.findMany({});  // any tx op proves we're inside the wrap
-        // Find the most recent $1-parameterised set_config call. That's
-        // the per-tenant wrap; withPlatformAdmin's '*' goes through
-        // $executeRawUnsafe and is filtered out by perTenantSetConfigs.
+        // The most recent per-tenant set_config. withPlatformAdmin's '*' now
+        // also goes through $queryRawUnsafe, so perTenantSetConfigs excludes it
+        // by VALUE rather than by method.
         const all = perTenantSetConfigs(calls);
         const last = all[all.length - 1];
         if (last) gucValuesByTenant[tenantId] = last;
         return { ok: true };
       },
+      // Serial, explicitly. "the most recent set_config" only identifies THIS
+      // tenant's while one runs at a time; batched, the last entry may belong
+      // to a sibling still in flight.
+      { concurrency: 1 },
     );
 
     // Each per-tenant wrap should set the GUC to the actual tenant ID,
@@ -327,6 +331,11 @@ describe('withSystemJob', () => {
           if (tenantId === 'tenant-a') throw new Error('boom');
           return tenantId;
         },
+        // Serial, explicitly. This asserts a throw stops the NEXT tenant from
+        // starting, which is only true at concurrency 1 — withSystemJob batches
+        // by default, and the rest of an in-flight batch has already begun and
+        // will run to completion.
+        { concurrency: 1 },
       ),
     ).rejects.toThrow('boom');
     // Should have stopped at the first tenant (no continuation after throw).
@@ -351,9 +360,9 @@ describe('withWebhookTenant', () => {
     // withPlatformAdmin's set_config is the hardcoded '*' SQL. It should
     // be present and the first set_config call.
     const hardcodedStar = calls.find(
-      c => c.method === '$executeRawUnsafe' &&
+      c => c.method === '$queryRawUnsafe' &&
         typeof c.args[0] === 'string' &&
-        c.args[0] === `SELECT set_config('app.tenant_id', '*', true)`,
+        c.args[0] === `SELECT set_config('app.tenant_id', '*', true) AS v`,
     );
     expect(hardcodedStar).toBeDefined();
   });
@@ -396,12 +405,12 @@ describe('withWebhookTenant', () => {
     // Only the platform-admin wrap's hardcoded '*' set_config should
     // be present; no $1-form (no per-tenant wrap ran).
     const setConfigs = calls.filter(
-      c => c.method === '$executeRawUnsafe' &&
+      c => c.method === '$queryRawUnsafe' &&
         typeof c.args[0] === 'string' &&
         c.args[0].includes("set_config('app.tenant_id'"),
     );
     expect(setConfigs).toHaveLength(1);
-    expect(setConfigs[0].args[0]).toBe(`SELECT set_config('app.tenant_id', '*', true)`);
+    expect(setConfigs[0].args[0]).toBe(`SELECT set_config('app.tenant_id', '*', true) AS v`);
   });
 
   it('passes the resolved tenantId to the handle callback', async () => {
@@ -454,6 +463,10 @@ describe('RLS helpers do not silently fall through on GUC failure', () => {
     const { prisma } = makeMockPrisma();
     prisma.$transaction.mockImplementationOnce(async (fn: (tx: unknown) => Promise<unknown>) => {
       const tx = {
+        // withPlatformAdmin now reads set_config back too, so it goes through
+        // $queryRawUnsafe. Both are stubbed so the test asserts propagation
+        // rather than which method happens to be called.
+        $queryRawUnsafe: vi.fn().mockRejectedValue(new Error('permission denied')),
         $executeRawUnsafe: vi.fn().mockRejectedValue(new Error('permission denied')),
         $transaction: vi.fn(),
       };

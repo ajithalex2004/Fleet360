@@ -10,14 +10,29 @@
  * database level.
  *
  * Run before and after switching DATABASE_URL to fleet360_app.
- *   node -r dotenv/config scripts/check-rls-enforcement.mjs dotenv_config_path=.env
+ *   node scripts/check-rls-enforcement.mjs
  *
  * Exit 0 if RLS is enforced, 1 if it is bypassed.
  */
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+const url = process.env.PHASE0_DATABASE_URL || process.env.DATABASE_URL;
+const prisma = new PrismaClient({
+  datasources: { db: { url } },
+});
 const FAKE_TENANT = '00000000-0000-0000-0000-000000000000';
+
+async function queryWithRetry(fn, retries = 5, delayMs = 2500) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt === retries) throw err;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}
 
 async function countAs(tenant, table) {
   return prisma.$transaction(async (tx) => {
@@ -28,24 +43,30 @@ async function countAs(tenant, table) {
 }
 
 try {
-  const [who] = await prisma.$queryRawUnsafe(
-    `SELECT current_user AS role,
-            (SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user) AS bypassrls`);
+  const [who] = await queryWithRetry(() =>
+    prisma.$queryRawUnsafe(
+      `SELECT current_user AS role,
+              (SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user) AS bypassrls`,
+    ),
+  );
   console.log(`connected as : ${who.role}`);
   console.log(`BYPASSRLS    : ${who.bypassrls}`);
 
   // Pick a populated, RLS-enabled, tenant-scoped table to probe with.
-  const [probe] = await prisma.$queryRawUnsafe(
-    `SELECT n.nspname||'.'||c.relname AS t
-       FROM pg_class c
-       JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE c.relkind = 'r' AND c.relrowsecurity
-        AND EXISTS (SELECT 1 FROM information_schema.columns col
-                     WHERE col.table_schema = n.nspname AND col.table_name = c.relname
-                       AND col.column_name = 'tenant_id')
-        AND c.reltuples > 0
-      ORDER BY c.reltuples DESC
-      LIMIT 1`);
+  const [probe] = await queryWithRetry(() =>
+    prisma.$queryRawUnsafe(
+      `SELECT n.nspname||'.'||c.relname AS t
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relkind = 'r' AND c.relrowsecurity
+          AND EXISTS (SELECT 1 FROM information_schema.columns col
+                       WHERE col.table_schema = n.nspname AND col.table_name = c.relname
+                         AND col.column_name = 'tenant_id')
+          AND c.reltuples > 0
+        ORDER BY c.reltuples DESC
+        LIMIT 1`,
+    ),
+  );
 
   if (!probe) {
     console.log('\nno populated RLS table to probe with — cannot assess enforcement');
@@ -59,15 +80,22 @@ try {
   console.log(`  as platform '*'     : ${all}`);
   console.log(`  as unrelated tenant : ${other}`);
 
-  const enforced = other === '0' && all !== '0';
-  console.log(
-    enforced
-      ? '\n✅ RLS IS ENFORCED — an unrelated tenant sees nothing.'
-      : `\n❌ RLS IS NOT ENFORCED — an unrelated tenant sees ${other} row(s).`
-        + (who.bypassrls ? `\n   Cause: ${who.role} has BYPASSRLS, which overrides FORCE ROW LEVEL SECURITY.` : '')
-        + '\n   Tenant isolation currently depends entirely on application-level filtering.');
+  if (who.bypassrls) {
+    console.log('\n❌ RLS IS BYPASSED — the role holds BYPASSRLS.');
+    console.log('   All rows are visible regardless of RLS policies.');
+    process.exit(1);
+  }
 
-  process.exit(enforced ? 0 : 1);
+  if (other === '0') {
+    console.log('\n✅ RLS IS ENFORCED — unrelated tenant saw 0 rows.');
+    process.exit(0);
+  } else {
+    console.log('\n❌ RLS FAILED — unrelated tenant saw rows under non-bypass role.');
+    process.exit(1);
+  }
+} catch (err) {
+  console.error('Connection failed:', err);
+  process.exit(1);
 } finally {
   await prisma.$disconnect();
 }

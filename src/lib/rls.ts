@@ -26,7 +26,14 @@ import { cpus } from 'node:os';
 import type { PrismaClient } from '@prisma/client';
 import { runWithRlsScope } from '@/lib/rls-scope';
 
-type TxClient = Parameters<Parameters<PrismaClient['$transaction']>[0]>[0];
+/**
+ * The transaction client the wrappers hand to their callbacks.
+ *
+ * Exported because handlers need to type their own callbacks against it.
+ * It was previously imported from '@/lib/prisma', which does not export it —
+ * a TS2305 that only surfaced on a full typecheck.
+ */
+export type TxClient = Parameters<Parameters<PrismaClient['$transaction']>[0]>[0];
 
 // ── withTenantRls ────────────────────────────────────────────────────────────
 //
@@ -52,21 +59,23 @@ export async function withTenantRls<T>(
   }
   const timeout = opts.timeoutMs ?? 30_000;
   return prisma.$transaction(async (tx) => {
-    // set_config returns the new value — use that as the source of truth.
-    // (Avoid separate current_setting() round-trip; some drivers mishandle it.)
-    const safeId = String(tenantId).replace(/'/g, "''");
-    const _set = await tx.$queryRawUnsafe<Array<{ v: string | null }>>(
-      `SELECT set_config('app.tenant_id', '${safeId}', true) AS v`,
-    );
-    if (!_set[0]?.v || _set[0].v !== tenantId) {
-      throw new Error(
-        `withTenantRls: set_config returned '${_set[0]?.v ?? 'null'}' (expected '${tenantId}'). ` +
-          `The cause is a connection layer that does not keep a transaction pinned to one ` +
-          `backend: Prisma Accelerate / Data Proxy, or a pooler in statement or session mode. ` +
-          `Neon's transaction-mode pooler is NOT a cause — run scripts/prove-pooled-rls.ts.`,
+    return runWithRlsScope({ tenantId, mode: 'tenant', tx }, async () => {
+      // set_config returns the new value — use that as the source of truth.
+      // (Avoid separate current_setting() round-trip; some drivers mishandle it.)
+      const safeId = String(tenantId).replace(/'/g, "''");
+      const _set = await tx.$queryRawUnsafe<Array<{ v: string | null }>>(
+        `SELECT set_config('app.tenant_id', '${safeId}', true) AS v`,
       );
-    }
-    return runWithRlsScope({ tenantId, mode: 'tenant', tx }, () => fn(tx));
+      if (!_set[0]?.v || _set[0].v !== tenantId) {
+        throw new Error(
+          `withTenantRls: set_config returned '${_set[0]?.v ?? 'null'}' (expected '${tenantId}'). ` +
+            `The cause is a connection layer that does not keep a transaction pinned to one ` +
+            `backend: Prisma Accelerate / Data Proxy, or a pooler in statement or session mode. ` +
+            `Neon's transaction-mode pooler is NOT a cause — run scripts/prove-pooled-rls.ts.`,
+        );
+      }
+      return fn(tx);
+    });
   }, { timeout, maxWait: 5_000 });
 }
 
@@ -97,8 +106,15 @@ export async function withPlatformAdmin<T>(
   // Default 60s — Prisma's built-in 5s is too tight for multi-pass FK deletes
   // (161 tables) and bulk creates (hundreds of rows).
   return prisma.$transaction(async (tx) => {
-    await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', '*', true)`);
-    return runWithRlsScope({ tenantId: '*', mode: 'platform', tx }, () => fn(tx));
+    return runWithRlsScope({ tenantId: '*', mode: 'platform', tx }, async () => {
+      const _set = await tx.$queryRawUnsafe<Array<{ v: string | null }>>(
+        `SELECT set_config('app.tenant_id', '*', true) AS v`,
+      );
+      if (!_set[0]?.v || _set[0].v !== '*') {
+        throw new Error(`withPlatformAdmin: set_config returned '${_set[0]?.v ?? 'null'}' (expected '*')`);
+      }
+      return fn(tx);
+    });
   }, { timeout: opts.timeoutMs ?? 60_000, maxWait: 10_000 });
 }
 
@@ -193,7 +209,7 @@ function defaultSweepConcurrency(): number {
 
   const m = /[?&]connection_limit=(\d+)/.exec(url);
   const pool = m ? Number(m[1]) : cpus().length * 2 + 1;
-  return Math.max(1, Math.min(pool - 1, 10));
+  return Math.max(1, Math.min(pool - 1, 3));
 }
 
 export async function withSystemJob<T>(
