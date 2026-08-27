@@ -1,11 +1,17 @@
 name: Tenant RLS Compliance Check
 
 on:
+  # NO `paths:` filter on pull_request, deliberately.
+  #
+  # This check is intended to be a REQUIRED status check on main. A required
+  # check that a path filter skips never reports on the PR, and GitHub leaves
+  # the merge blocked at "Expected - waiting for status to be reported"
+  # indefinitely. Filtering it would deadlock every PR that happens not to
+  # touch src/app/api.
+  #
+  # The check is a Node script over route files and costs seconds, so running
+  # it on every PR is cheaper than the class of bug that filtering invites.
   pull_request:
-    paths:
-      - 'src/app/api/**/*.ts'
-      - 'src/lib/tenant-context.ts'
-      - 'src/lib/rls.ts'
   push:
     branches:
       - main
