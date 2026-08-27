@@ -14,8 +14,9 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { withSystemJob } from '@/lib/rls';
+
 import { captureException, captureMessage } from '@/lib/sentry';
+import { runSweep } from '@/lib/prisma-sweep';
 
 export type ExpiryBucket = 'EXPIRED' | 'EXPIRING_1D' | 'EXPIRING_14D' | 'EXPIRING_30D';
 
@@ -79,8 +80,7 @@ export async function runExpirySweep(
   let statusUpdates = 0;
   let scanned = 0;
 
-  const perTenantResults = await withSystemJob(
-    prisma,
+  const perTenantResults = await runSweep(
     async ({ tx, tenantId }) => {
       // Only documents with an expiry that haven't been deleted (no
       // soft-delete column on LeaseDocument) and aren't already EXPIRED.

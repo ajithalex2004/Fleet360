@@ -28,7 +28,8 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { withSystemJob, withTenantRls, type SystemJobContext } from '@/lib/rls';
+import { withTenantRls, type SystemJobContext } from '@/lib/rls';
+import { runSweep } from '@/lib/prisma-sweep';
 import { sendPush } from '@/lib/push/server';
 
 const DEFAULT_LEAD_MINS = Number(process.env.REMINDER_LEAD_MINS ?? 10);
@@ -47,8 +48,7 @@ export async function runTripReminders(tenantHeader?: string | null): Promise<Ru
   const windowStart = new Date(Date.now() + (lead - 2) * 60_000);
   const windowEnd   = new Date(Date.now() + (lead + 2) * 60_000);
 
-  const results = await withSystemJob<Omit<RunResult, 'tenantsScanned'>>(
-    prisma,
+  const results = await runSweep<Omit<RunResult, 'tenantsScanned'>>(
     async ({ tx, tenantId }) => {
       return runForTenant(tx, tenantId, windowStart, windowEnd, lead);
     },

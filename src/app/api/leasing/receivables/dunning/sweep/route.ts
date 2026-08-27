@@ -32,7 +32,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withSystemJob } from '@/lib/rls';
+
 import {
   classifyMany,
   activityTypeFor,
@@ -44,6 +44,7 @@ import { logAudit } from '@/lib/audit';
 import { captureException, captureMessage } from '@/lib/sentry';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { runSweep } from '@/lib/prisma-sweep';
 export const runtime = 'nodejs';
 
 type InvoiceWithLessee = Awaited<ReturnType<typeof prisma.leaseInvoice.findMany>>[number] & {
@@ -81,8 +82,7 @@ export async function POST(req: NextRequest) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const perTenant = await withSystemJob<PerTenantResult>(
-      prisma,
+    const perTenant = await runSweep<PerTenantResult>(
       async ({ tx, tenantId }) => {
         const invoices = (await tx.leaseInvoice.findMany({
           where: {

@@ -4,11 +4,12 @@
  */
 import type { JobContext, JobResult } from '@/lib/jobs/registry';
 import { prisma } from '@/lib/prisma';
-import { withSystemJob } from '@/lib/rls';
+
 import { classifyMany, activityTypeFor, type InvoiceForDunning } from '@/lib/finance/dunning-engine';
 import { renderDunningEmail, type DunningStage } from '@/lib/finance/dunning-templates';
 import { sendEmail } from '@/services/email/emailService';
 import { captureException, captureMessage } from '@/lib/sentry';
+import { runSweep } from '@/lib/prisma-sweep';
 
 export async function runDunningSweep(ctx: JobContext): Promise<JobResult> {
   const dryRun      = ctx.searchParams.get('dryRun') === '1';
@@ -22,13 +23,13 @@ export async function runDunningSweep(ctx: JobContext): Promise<JobResult> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const perTenant = await withSystemJob<{
+  const perTenant = await runSweep<{
     scanned: number;
     sent: { reminder_30: number; notice_60: number; final_90: number };
     markedOverdue: number;
     skipped: number;
     errors: { invoiceId: string; message: string }[];
-  }>(prisma, async ({ tx, tenantId }) => {
+  }>(async ({ tx, tenantId }) => {
     const invoices = (await tx.leaseInvoice.findMany({
       where: { tenantId, ...(lesseeFilter ? { lesseeId: lesseeFilter } : {}), status: { notIn: ['PAID', 'CANCELLED'] } },
       include: { lessee: { select: { name: true, email: true, type: true } } },

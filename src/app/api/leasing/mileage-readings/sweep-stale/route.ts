@@ -14,11 +14,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withSystemJob } from '@/lib/rls';
+
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { runSweep } from '@/lib/prisma-sweep';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
@@ -63,8 +64,7 @@ export async function POST(req: NextRequest) {
       errors: number;
     }
 
-    const perTenant = await withSystemJob<PerTenantResult>(
-      prisma,
+    const perTenant = await runSweep<PerTenantResult>(
       async ({ tx, tenantId }) => {
         const contracts = await tx.leaseContract2.findMany({
           where: { tenantId, deletedAt: null, status: 'ACTIVE' },
