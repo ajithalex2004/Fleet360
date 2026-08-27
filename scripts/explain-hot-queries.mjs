@@ -182,14 +182,16 @@ async function explainHotQueries() {
 
         const planRoot = result[0]['QUERY PLAN'][0];
         const plan = planRoot['Plan'];
+        const childPlan = plan['Plans']?.[0] || plan;
         const executionMs = Number(planRoot['Execution Time']);
         const planningMs = Number(planRoot['Planning Time']);
-        const planType = plan['Node Type'];
-        const indexUsed = plan['Index Name'] || 'None (Sequential Scan)';
-        const sharedHits = plan['Shared Hit Blocks'] || 0;
-        const sharedReads = plan['Shared Read Blocks'] || 0;
-        const rowsActual = plan['Actual Rows'] ?? 0;
-        const rowsFiltered = plan['Rows Removed by Filter'] || 0;
+        const topNode = plan['Node Type'];
+        const childScanType = childPlan['Node Type'];
+        const indexUsed = childPlan['Index Name'] || plan['Index Name'] || 'None (Sequential Scan)';
+        const sharedHits = (plan['Shared Hit Blocks'] || 0) + (childPlan !== plan ? (childPlan['Shared Hit Blocks'] || 0) : 0);
+        const sharedReads = (plan['Shared Read Blocks'] || 0) + (childPlan !== plan ? (childPlan['Shared Read Blocks'] || 0) : 0);
+        const rowsActual = plan['Actual Rows'] ?? childPlan['Actual Rows'] ?? 0;
+        const rowsFiltered = childPlan['Rows Removed by Filter'] || plan['Rows Removed by Filter'] || 0;
 
         const metrics = {
           id: q.id,
@@ -197,7 +199,9 @@ async function explainHotQueries() {
           domain: q.domain,
           planning_ms: planningMs,
           execution_ms: executionMs,
-          plan_type: planType,
+          top_node: topNode,
+          child_scan_type: childScanType,
+          plan_type: topNode === childScanType ? topNode : `${topNode} -> ${childScanType}`,
           index_used: indexUsed,
           rows_actual: rowsActual,
           rows_filtered: rowsFiltered,
@@ -210,7 +214,8 @@ async function explainHotQueries() {
         console.log(`📌 [${q.domain}] ${q.name}`);
         console.log(`   Planning Time:     ${planningMs.toFixed(3)} ms`);
         console.log(`   Execution Time:    ${executionMs.toFixed(3)} ms`);
-        console.log(`   Plan Type:         ${planType}`);
+        console.log(`   Plan Hierarchy:    ${metrics.plan_type}`);
+        console.log(`   Scan Method:       ${childScanType}`);
         console.log(`   Index Used:        ${indexUsed}`);
         console.log(`   Buffer Hits/Reads: ${sharedHits} hits / ${sharedReads} reads`);
         console.log(`   Rows Filtered:     ${rowsFiltered} removed\n`);
