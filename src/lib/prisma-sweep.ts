@@ -58,8 +58,26 @@ function hasDirectUrl(): boolean {
  * Lazily created, then reused. Sweeps are cron-invoked and infrequent, so the
  * cost of the extra pool is only paid when one actually runs.
  */
+let warnedNoDirect = false;
+
 export function getSweepPrisma(): PrismaClient {
-  if (!hasDirectUrl()) return prisma;
+  if (!hasDirectUrl()) {
+    // Say so, once. A silent fallback here costs roughly 4x on every sweep and
+    // leaves no trace — the deployment looks healthy, the cron still finishes,
+    // and nobody learns that DIRECT_URL was never set in this environment.
+    if (!warnedNoDirect) {
+      warnedNoDirect = true;
+      const why = process.env.DIRECT_URL
+        ? 'DIRECT_URL is itself a -pooler endpoint'
+        : 'DIRECT_URL is not set';
+      console.warn(
+        `[sweep] ${why}; falling back to the pooled client at concurrency 1. ` +
+          `Sweeps will take roughly 4x longer (measured: 33s vs 125s across 179 tenants). ` +
+          `Set DIRECT_URL to the non-pooled endpoint for this environment.`,
+      );
+    }
+    return prisma;
+  }
   if (sweepClient) return sweepClient;
 
   sweepClient = new PrismaClient({
