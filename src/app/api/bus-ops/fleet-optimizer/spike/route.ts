@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
   }];
 
   const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID!;
-  const req = buildOptimizeToursRequest({
+  const optimizeReq = buildOptimizeToursRequest({
     projectId,
     shipments,
     vehicles,
@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
   });
   const solveStart = Date.now();
   try {
-    const raw = await optimizeTours(req);
+    const raw = await optimizeTours(optimizeReq);
     const solveSec = (Date.now() - solveStart) / 1000;
 
     // Criterion 2: got a route
