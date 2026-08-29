@@ -1,0 +1,50 @@
+# Dependencies / build outputs
+node_modules
+.next
+out
+dist
+build
+coverage
+.turbo
+.cache
+
+# Mobile native projects/artifacts
+android
+ios
+*.apk
+*.aab
+*.ipa
+
+# Local JDK / archives / binaries
+jdk-*
+*.zip
+*.exe
+classes.dex
+
+# Test and generated reports
+playwright-report
+test-results
+.audit-reports
+scratch
+logs
+*.log
+*.out
+*.err
+
+# Local tooling/worktrees
+.claude
+.harness
+
+# TypeScript/build caches
+*.tsbuildinfo
+
+# Local environment files / secrets
+.env
+.env.local
+.env.test
+.env.bak
+
+# Misc local generated files
+adb
+node
+npx
