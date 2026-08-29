@@ -7,7 +7,7 @@
         "predev": "node scripts/clean-next-cache.mjs",
         "dev:turbo": "next dev --turbopack",
         "clean:dev": "node scripts/clean-dev.mjs",
-        "prebuild": "node scripts/check-no-pages-dir.mjs",
+        "prebuild": "node scripts/check-no-pages-dir.mjs && prisma generate",
         "build:driver": "cd mobile-app && node ../scripts/check-no-pages-dir.mjs --root=. && next build",
         "db:probe": "node scripts/db-probe.mjs",
         "check:migrations": "node scripts/check-destructive-migrations.js",
