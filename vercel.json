@@ -7,7 +7,8 @@
       "framework": "nextjs"
     },
     "backend": {
-      "root": "backend"
+      "root": "backend",
+      "entrypoint": "main.go"
     }
   },
 
