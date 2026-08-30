@@ -53,6 +53,10 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
 
+  // Build performance & memory optimizations for large page sets
+  staticPageGenerationTimeout: 180,
+  productionBrowserSourceMaps: false,
+
   // Compress responses
   compress: true,
 
@@ -69,14 +73,11 @@ const nextConfig: NextConfig = {
   // into API routes. This config is the safety net until that refactor
   // lands.
   webpack: (config, { isServer, dev }) => {
-    // webpack cache is enabled in dev so hot reloads reuse the previous
-    // bundle. The historical corruption problem (Windows, missing
-    // manifest/chunk, _not-found runtime 500s) is now handled by the
-    // `predev` script (scripts/clean-next-cache.mjs) which only removes
-    // .next/cache on each dev start — the pack cache rebuilds in 1-3s
-    // instead of 5-15s, and the .next/build manifests survive.
     void isServer;
-    void dev;
+    
+    if (!dev) {
+      config.cache = false;
+    }
 
     if (!isServer) {
       config.resolve.fallback = {

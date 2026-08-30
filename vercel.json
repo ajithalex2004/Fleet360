@@ -1,22 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-
-
-
   "crons": [
-    { "path": "/api/jobs/run?job=auto-close-trips", "schedule": "0/15 * * * *" },
-    { "path": "/api/jobs/run?job=dunning-sweep", "schedule": "0 2 * * *" },
-    { "path": "/api/jobs/run?job=fuel-sweep-bill", "schedule": "0 3 1 * *" },
-    { "path": "/api/jobs/run?job=traffic-fines-sweep-bill", "schedule": "0 3 2 * *" },
-    { "path": "/api/jobs/run?job=document-expiry-sweep", "schedule": "0 6 * * *" },
-    { "path": "/api/jobs/run?job=insurance-expiry-sweep", "schedule": "0 6 * * *" },
-    { "path": "/api/jobs/run?job=mileage-sweep-stale", "schedule": "0 4 * * 1" },
-    { "path": "/api/jobs/run?job=inquiries-sweep-followups", "schedule": "0 9 * * *" },
-    { "path": "/api/jobs/run?job=bookings-sweep-penalties", "schedule": "0 1 * * *" },
-    { "path": "/api/jobs/run?job=attendance-sweep-no-show", "schedule": "0 23 * * *" },
-    { "path": "/api/jobs/run?job=push-scheduler", "schedule": "0/5 * * * *" },
-    { "path": "/api/jobs/run?job=outbox-publisher", "schedule": "0/2 * * * *" },
-    { "path": "/api/jobs/run?job=bus-ops-generate-schedule-templates", "schedule": "0 1 * * *" },
-    { "path": "/api/jobs/run?job=alert-trip-overdue", "schedule": "0/5 * * * *" }
+    { "path": "/api/jobs/run?job=dunning-sweep", "schedule": "0 2 * * *" }
   ]
 }
+
