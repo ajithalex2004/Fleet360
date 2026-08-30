@@ -110,6 +110,10 @@ const nextConfig: NextConfig = {
       { source: "/leasing/traffic-fines", destination: "/fleet/fines", permanent: false },
       { source: "/leasing/insurance", destination: "/fleet/insurance", permanent: false },
       { source: "/leasing/branches", destination: "/admin/branches", permanent: false },
+      { source: "/carrier-portal/logistics/app", destination: "/carrier-portal/loads", permanent: false },
+      { source: "/carrier-portal/logistics/app/loads/:id", destination: "/carrier-portal/loads/:id", permanent: false },
+      { source: "/carrier-portal/logistics/invite/:token", destination: "/carrier-portal/invite/:token", permanent: false },
+      { source: "/carrier-portal/logistics/offer/:token", destination: "/carrier-portal/offer/:token", permanent: false },
     ];
   },
 

@@ -133,7 +133,7 @@ export default function CarrierAppPage() {
           </div>
           <div className="grid gap-3">
             {assignedLoads.map(loadRow => (
-              <Link key={loadRow.id} href={`/carrier-portal/logistics/app/loads/${loadRow.id}`} className="block rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4 transition hover:bg-emerald-500/10">
+              <Link key={loadRow.id} href={`/carrier-portal/loads/${loadRow.id}`} className="block rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4 transition hover:bg-emerald-500/10">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="font-mono text-xs text-emerald-300">{loadRow.shipmentNo ?? loadRow.id.slice(0, 8)}</p>

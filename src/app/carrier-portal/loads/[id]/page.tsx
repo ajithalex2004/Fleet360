@@ -303,7 +303,7 @@ export default function CarrierLoadDetailPage() {
       <div className="mx-auto max-w-6xl space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <Link href="/carrier-portal/logistics/app" className="mb-2 inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white"><ArrowLeft className="h-3.5 w-3.5" /> Back to carrier loads</Link>
+            <Link href="/carrier-portal/loads" className="mb-2 inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white"><ArrowLeft className="h-3.5 w-3.5" /> Back to carrier loads</Link>
             <p className="font-mono text-xs text-emerald-300">{shipment?.shipmentNo ?? id?.slice(0, 8) ?? '—'}</p>
             <h1 className="mt-1 text-2xl font-bold">{shipment?.originName ?? shipment?.originAddress ?? '-'} to {shipment?.destinationName ?? shipment?.destinationAddress ?? '-'}</h1>
             <p className="mt-1 text-sm text-slate-400">{shipment?.cargoOwnerName ?? 'Customer'} · pickup {dt(shipment?.pickupWindowFrom)} · delivery {dt(shipment?.deliveryWindowTo)}</p>
