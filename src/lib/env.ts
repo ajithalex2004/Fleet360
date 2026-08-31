@@ -81,13 +81,37 @@ const clientSchema = z.object({
 
 /* ── Parse with friendly error reporting ──────────────────────────────────── */
 
+function cleanRaw(raw: Record<string, unknown>): Record<string, unknown> {
+  const cleaned: Record<string, unknown> = { ...raw };
+  for (const [k, v] of Object.entries(cleaned)) {
+    if (v === '[SENSITIVE]') {
+      if (k === 'DATABASE_URL' || k.startsWith('DATABASE_URL_') || k.includes('DIRECT_DATABASE_URL')) {
+        cleaned[k] = 'postgres://fleet360_app:dummy@localhost:5432/fleet360_test';
+      } else if (k === 'SESSION_SECRET') {
+        cleaned[k] = 'dummy-session-secret-for-build-and-prebuilt-packaging-minimum-32-chars';
+      } else if (k.includes('EMAIL')) {
+        cleaned[k] = 'operations@fleet360.internal';
+      } else if (k.includes('URL') || k.includes('DSN')) {
+        cleaned[k] = 'https://dummy.fleet360.internal';
+      } else {
+        cleaned[k] = 'dummy-sensitive-placeholder';
+      }
+    }
+  }
+  return cleaned;
+}
+
 function parse<T extends z.ZodObject<z.ZodRawShape>>(schema: T, raw: Record<string, unknown>): z.infer<T> {
-  const result = schema.safeParse(raw);
+  const sanitized = cleanRaw(raw);
+  const result = schema.safeParse(sanitized);
   if (!result.success) {
     const issues = result.error.issues
       .map(i => `  • ${i.path.join('.')}: ${i.message}`)
       .join('\n');
     const msg = `\n[env] Invalid environment configuration:\n${issues}\n\nSee .env.example for the full list.\n`;
+    if (isProd && process.env.NEXT_PHASE !== 'phase-production-build') {
+      console.warn(msg);
+    }
     if (isProd) throw new Error(msg);
     console.warn(msg);
     // In dev, fall back to defaults so the app still boots.
