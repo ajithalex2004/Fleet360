@@ -114,6 +114,7 @@ const nextConfig: NextConfig = {
       { source: "/carrier-portal/logistics/app/loads/:id", destination: "/carrier-portal/loads/:id", permanent: false },
       { source: "/carrier-portal/logistics/invite/:token", destination: "/carrier-portal/invite/:token", permanent: false },
       { source: "/carrier-portal/logistics/offer/:token", destination: "/carrier-portal/offer/:token", permanent: false },
+      { source: "/driver/feedback", destination: "/driver-feedback", permanent: false },
     ];
   },
 
