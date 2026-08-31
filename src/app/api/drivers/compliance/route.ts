@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Driver Management Hub — /api/drivers/compliance
  *

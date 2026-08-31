@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/assets/spm/assignees
  * Returns active platform users for the SPM user-picker.

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Tax Engine API — /api/finance/tax
  * Manages UAE VAT categories, FTA audit trail, Input/Output tax tracking

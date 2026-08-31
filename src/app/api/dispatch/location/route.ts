@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/dispatch/location — vehicle GPS heartbeat
  * Called by driver app every 10–30 seconds.

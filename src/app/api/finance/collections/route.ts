@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Collections & Dunning API — /api/finance/collections
  * AR Aging buckets, collection cases, dunning workflow

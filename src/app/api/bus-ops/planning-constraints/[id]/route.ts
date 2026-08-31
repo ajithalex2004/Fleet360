@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/bus-ops/planning-constraints/[id] — single-rule CRUD.
  *

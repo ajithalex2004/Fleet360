@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/auth/session  — Exchange userId + tenantId for an xl-session cookie
  * DELETE /api/auth/session — Clear the xl-session cookie (sign out)

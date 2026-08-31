@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/rental/ancillaries — list all (optionally ?category=)
  * POST /api/rental/ancillaries — upsert by code

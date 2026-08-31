@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { getWorkflowWithSteps, updateWorkflow, deleteWorkflow } from '@/lib/workflow-db';

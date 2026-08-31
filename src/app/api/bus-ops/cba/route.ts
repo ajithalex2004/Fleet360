@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/bus-ops/cba — CRUD for CBA / union rule sets.
  *

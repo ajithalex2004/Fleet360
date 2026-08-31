@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/credit-assessments — list + create LeaseCreditAssessment.
  *

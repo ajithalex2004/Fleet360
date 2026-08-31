@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * PDC Register — individual cheque operations
  * Status transitions: HELD → DEPOSITED → CLEARED | BOUNCED

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Automated Payment Reminder Schedules — /api/finance/reminder-schedules
  * Defines when reminders fire (X days before due, Y days after due).

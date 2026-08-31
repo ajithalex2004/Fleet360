@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/fleet/init
  * Force-runs the fleet schema bootstrap.

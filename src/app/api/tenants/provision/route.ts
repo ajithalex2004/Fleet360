@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/tenants/provision
  * Public endpoint — no auth required.

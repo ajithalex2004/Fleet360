@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST   /api/push/subscribe — register a device for push notifications
  * DELETE /api/push/subscribe — unregister a device (or all of mine)

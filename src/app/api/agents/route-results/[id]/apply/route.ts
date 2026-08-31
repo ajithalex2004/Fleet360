@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/agents/route-results/[id]/apply
  * Applies an operator-approved optimised sequence back to the live route.

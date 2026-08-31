@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/admin/tenants/[id]/api-keys/[keyId]/revoke
  * Revokes an API key. Idempotent.

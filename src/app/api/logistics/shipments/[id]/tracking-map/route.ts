@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/logistics/shipments/[id]/tracking-map
  *

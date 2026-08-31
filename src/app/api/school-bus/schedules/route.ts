@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/school-bus/schedules?tenantId=X&routeId=X&weekType=MON_THU|FRI&status=ACTIVE
  *   Returns schedule records for routes.

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/rental/invoices/:id/send
  * Marks an invoice as SENT (transitions from DRAFT → SENT).

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Debit Notes API — /api/finance/debit-notes
  *

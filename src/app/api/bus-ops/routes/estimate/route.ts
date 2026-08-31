@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/bus-ops/routes/estimate?origin=<addr>&destination=<addr>&waypoints=<a>|<b>|<c>
  *

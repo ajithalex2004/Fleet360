@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/leasing/inquiries/[id]/activities — full activity log for an inquiry
  * POST /api/leasing/inquiries/[id]/activities — append a new activity entry

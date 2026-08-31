@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET    /api/school-bus/allocations/[id]
  * PATCH  /api/school-bus/allocations/[id]  — update, suspend, or withdraw

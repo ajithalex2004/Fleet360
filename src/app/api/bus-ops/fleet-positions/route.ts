@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/bus-ops/fleet-positions — powers the /bus-ops/live-map page.
  *

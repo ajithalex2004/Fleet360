@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * User hard-delete — permanently destroy a user and all of their data.
  *

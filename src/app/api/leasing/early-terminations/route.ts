@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/early-terminations — list + create LeaseEarlyTermination.
  *

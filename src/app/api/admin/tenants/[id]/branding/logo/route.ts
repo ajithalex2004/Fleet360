@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/admin/tenants/[id]/branding/logo
  * multipart/form-data with `file` field — uploads a tenant logo and

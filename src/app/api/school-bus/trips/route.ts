@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/school-bus/trips?tenantId=X&date=YYYY-MM-DD&status=X&routeId=X
  *   Returns trip records (today's by default).

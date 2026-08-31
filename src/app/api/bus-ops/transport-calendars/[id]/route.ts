@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/bus-ops/transport-calendars/[id] — single-calendar ops.
  * GET returns the calendar with entries; PATCH updates header

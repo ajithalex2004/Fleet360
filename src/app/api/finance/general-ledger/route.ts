@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * General Ledger API — /api/finance/general-ledger
  * Account statement, Trial Balance, account balances from posted journal lines

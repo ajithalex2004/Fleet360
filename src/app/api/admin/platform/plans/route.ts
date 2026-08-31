@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Platform plans — admin CRUD.
  *

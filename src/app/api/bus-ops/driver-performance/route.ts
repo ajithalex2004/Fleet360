@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/bus-ops/driver-performance?month=YYYY-MM
  *

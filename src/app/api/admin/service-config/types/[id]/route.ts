@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * PATCH  /api/admin/service-config/types/[id]   — edit a service type
  * DELETE /api/admin/service-config/types/[id]   — soft delete (system rows

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Bank Accounts API — /api/finance/bank-accounts
  * Manages bank accounts registered for reconciliation

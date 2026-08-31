@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * AR Aging Report API — /api/finance/ar-aging
  * Standard buckets: Current / 1-30 / 31-60 / 61-90 / 91-120 / 120+

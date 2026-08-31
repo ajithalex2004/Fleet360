@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Balance Sheet API — /api/finance/balance-sheet
  * Full Balance Sheet: Assets = Liabilities + Equity

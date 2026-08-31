@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * PATCH  /api/school-bus/attendants/[id]  — update attendant
  * DELETE /api/school-bus/attendants/[id]  — soft delete

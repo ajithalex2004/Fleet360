@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/handover — vehicle handover & return checklists (raw-SQL backend).
  *

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/inquiries — list and create LeaseInquiry rows.
  *

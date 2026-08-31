@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Journal Entry individual operations — status transitions + reversal
  *

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * src/app/api/dispatcher/reports/[id]/acknowledge/route.ts
  *

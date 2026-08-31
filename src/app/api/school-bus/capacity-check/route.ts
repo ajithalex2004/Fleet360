@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/school-bus/capacity-check?tenantId=X
  *

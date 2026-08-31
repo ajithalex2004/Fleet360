@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET    /api/bus-ops/staff/[id]/ble-tag — read tag for staff member
  * PUT    /api/bus-ops/staff/[id]/ble-tag — register / update

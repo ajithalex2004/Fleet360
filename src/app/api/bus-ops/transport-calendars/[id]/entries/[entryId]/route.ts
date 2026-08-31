@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * DELETE /api/bus-ops/transport-calendars/[id]/entries/[entryId]
  *

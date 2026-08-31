@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Enhanced Credit Notes API — /api/finance/credit-notes
  * Full lifecycle: DRAFT → ISSUED → APPLIED | REFUNDED | VOIDED

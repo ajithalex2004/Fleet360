@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/rental/rates/calculate
  * The rate engine endpoint. Takes a booking request and returns

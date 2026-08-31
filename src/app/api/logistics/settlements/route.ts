@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { getShipmentFinanceSummary, postFreightSettlementToFinance } from '@/lib/logistics/domain';

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET    /api/school-bus/stops/[id]   — single stop detail
  * PATCH  /api/school-bus/stops/[id]   — update stop

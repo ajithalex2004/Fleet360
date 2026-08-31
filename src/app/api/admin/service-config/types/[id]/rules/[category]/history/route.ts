@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/admin/service-config/types/[id]/rules/[category]/history
  *   Returns every saved version for the (type, category) pair, newest

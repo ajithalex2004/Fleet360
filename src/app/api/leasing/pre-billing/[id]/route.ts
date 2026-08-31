@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/pre-billing/[id] — PATCH a pre-billing statement.
  *

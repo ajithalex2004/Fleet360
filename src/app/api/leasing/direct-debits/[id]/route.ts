@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/direct-debits/[id] — single direct-debit PATCH + DELETE.
  *

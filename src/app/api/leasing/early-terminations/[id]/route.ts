@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/early-terminations/[id] — single termination detail + PATCH.
  *

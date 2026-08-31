@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/receivables/dunning — list + create dunning activity rows.
  *

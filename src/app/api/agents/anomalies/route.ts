@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/agents/anomalies  — list anomaly flags with filters
  * PATCH /api/agents/anomalies — update flag status (review/dismiss/confirm)

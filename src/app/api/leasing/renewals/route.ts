@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/renewals — list + create LeaseRenewal rows.
  *

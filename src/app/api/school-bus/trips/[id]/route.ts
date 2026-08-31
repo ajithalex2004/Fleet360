@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET    /api/school-bus/trips/[id]  — fetch single trip with events
  * PATCH  /api/school-bus/trips/[id]  — update trip (status, counters, etc.)

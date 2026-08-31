@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/leasing/quotations/[id]/pdf?lang=en|ar
  *

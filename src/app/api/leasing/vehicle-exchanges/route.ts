@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/vehicle-exchanges — list + create LeaseVehicleExchange rows.
  *

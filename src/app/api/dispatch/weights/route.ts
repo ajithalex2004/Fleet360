@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/dispatch/weights           — list all weight configs
  * PUT  /api/dispatch/weights           — upsert a config (admin only)

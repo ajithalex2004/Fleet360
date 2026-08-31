@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/dispatch/respond?token=XXX&action=accept|reject
  * POST /api/dispatch/respond   body: { token, action, reason? }

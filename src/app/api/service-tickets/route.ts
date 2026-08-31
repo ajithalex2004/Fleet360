@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/service-tickets                — list tickets for the current tenant
  *   Query params: type, status, search, from, to, limit, offset

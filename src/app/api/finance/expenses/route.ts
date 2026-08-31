@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Expense Management API — /api/finance/expenses
  * Handles operational expenses with approval workflow: DRAFT→SUBMITTED→APPROVED/REJECTED→PAID

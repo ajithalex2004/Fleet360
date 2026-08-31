@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/bus-ops/planning-constraints — CRUD for PCE rules.
  *

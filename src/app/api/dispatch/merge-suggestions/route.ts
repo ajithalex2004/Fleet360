@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/dispatch/merge-suggestions?tenantId=X[&status=PENDING]
  *

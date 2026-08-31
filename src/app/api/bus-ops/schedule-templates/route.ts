@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/bus-ops/schedule-templates — recurring schedule template CRUD.
  *

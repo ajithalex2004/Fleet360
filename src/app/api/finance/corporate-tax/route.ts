@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * UAE Corporate Tax API — /api/finance/corporate-tax
  * UAE CT: 9% on taxable income above AED 375,000 threshold (Small Business Relief up to AED 3M revenue)

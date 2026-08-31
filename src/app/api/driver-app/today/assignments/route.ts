@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * src/app/api/driver-app/today/assignments/route.ts
  *

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/bus-ops/plan            — list plans for the current tenant
  * GET /api/bus-ops/plan/[id]       — get one plan (in [id]/route.ts)

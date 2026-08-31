@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/bus-ops/routes/[id]/stops — RouteStop CRUD for one route.
  *

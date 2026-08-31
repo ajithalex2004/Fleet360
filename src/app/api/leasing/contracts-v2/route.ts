@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Lease contracts v2 list/create — TENANT-001 hardened.
  *

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/powerbi/* — Power BI connector endpoints.
  *

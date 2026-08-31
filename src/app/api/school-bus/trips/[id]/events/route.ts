@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/school-bus/trips/[id]/events
  *   Appends a telemetry event to a trip's log.

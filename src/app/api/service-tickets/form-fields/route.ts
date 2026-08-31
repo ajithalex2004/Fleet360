@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/service-tickets/form-fields
  *   Tenant-scoped — returns everything the user-facing /service-tickets

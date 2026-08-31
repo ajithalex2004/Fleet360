@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/school-bus/trips/[id]/pretrip-check
  *      Returns the latest pre-trip check for this trip + checklist definition.

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/maintenance/[id]/sla
  * Returns a computed SLASnapshot for one MaintenanceRequest.

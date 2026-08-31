@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/auth/mfa/status
  * Returns whether MFA is currently enabled for the logged-in user.

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls, runSequential } from '@/lib/rls';
 import { prisma }          from '@/lib/prisma';

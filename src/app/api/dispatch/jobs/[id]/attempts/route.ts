@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/dispatch/jobs/[id]/attempts
  * Returns all dispatch attempts for a specific job, ordered chronologically.

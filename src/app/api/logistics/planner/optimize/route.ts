@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Planner /optimize endpoint — STUB for type-check pass.
  *

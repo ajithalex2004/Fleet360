@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/bus-ops/schedules/[id]/pretrip-check
  *      Returns the most recent pre-trip check for this trip, or null.

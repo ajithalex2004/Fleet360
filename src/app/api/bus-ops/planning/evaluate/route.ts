@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/bus-ops/planning/evaluate — Planning Constraint Engine entry point.
  *

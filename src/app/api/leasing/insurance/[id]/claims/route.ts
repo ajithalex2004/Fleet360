@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/insurance/[id]/claims — list and create claims for a policy.
  *

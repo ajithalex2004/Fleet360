@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * PATCH  /api/admin/service-config/scopes/[id]   — edit name / description /
  *        level / parent / sort order. Cannot re-parent the tenant root.

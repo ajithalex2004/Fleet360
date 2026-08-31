@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Fixed Assets API — /api/finance/fixed-assets
  * Fleet Register with straight-line and reducing-balance depreciation

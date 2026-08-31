@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET    /api/service-tickets/[id]    — fetch a single ticket
  * PATCH  /api/service-tickets/[id]    — update fields (status, assignedTo,

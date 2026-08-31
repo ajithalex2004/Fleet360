@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET   /api/admin/tenant-settings/tracking-visibility
  * PUT   /api/admin/tenant-settings/tracking-visibility

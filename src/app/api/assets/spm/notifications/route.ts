@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/assets/spm/notifications?user_id=xxx  — fetch notifications for a user
  * PATCH /api/assets/spm/notifications              — mark notifications as read

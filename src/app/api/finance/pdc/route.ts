@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * PDC Register API — /api/finance/pdc
  * Manages Post-Dated Cheques: INCOMING (from clients) and OUTGOING (to suppliers)

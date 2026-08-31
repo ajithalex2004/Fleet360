@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/school-bus/stops          — list stops (filterable by emirate/city/area/active)
  * POST /api/school-bus/stops          — create stop (auto-generates stop_code)

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * RAC Renewals API — /api/rental/renewals
  * Manages rental agreement renewal requests with approval workflow

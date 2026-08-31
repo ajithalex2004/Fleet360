@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/leasing/contracts/[id]/drivers — full allocation history for a contract
  * POST /api/leasing/contracts/[id]/drivers — allocate a driver

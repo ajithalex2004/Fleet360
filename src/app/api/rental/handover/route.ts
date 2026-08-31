@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * RAC Handover/Return Checklists API — /api/rental/handover
  * Manages vehicle pickup and return inspection records

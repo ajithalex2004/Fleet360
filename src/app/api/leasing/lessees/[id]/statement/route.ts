@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/leasing/lessees/[id]/statement?lang=en|ar&from=YYYY-MM-DD&to=YYYY-MM-DD
  *

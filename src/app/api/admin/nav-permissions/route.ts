@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/admin/nav-permissions          — returns enabled nav keys for current tenant
  * GET  /api/admin/nav-permissions?tenantId — super admin fetches for a specific tenant

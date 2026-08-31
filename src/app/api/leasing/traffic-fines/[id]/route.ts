@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/traffic-fines/[id] — single fine detail / PATCH / DELETE.
  *

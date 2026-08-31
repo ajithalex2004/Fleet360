@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/transfers — inter-branch vehicle transfers (raw-SQL backend).
  *

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Rental Quotations API — /api/rental/quotations
  * Formal quote generation from inquiry to rental agreement

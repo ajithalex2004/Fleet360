@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/dispatch/jobs — list dispatch jobs
  * POST /api/dispatch/jobs — manual admin override

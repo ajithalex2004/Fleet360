@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/school-bus/driver-scores?tenantId=X&period=YYYY-MM
  *   Returns the RAG (Red/Amber/Green) safety scores for all school bus drivers

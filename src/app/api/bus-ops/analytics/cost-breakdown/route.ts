@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/bus-ops/analytics/cost-breakdown?groupBy=trip|route&days=30
  *

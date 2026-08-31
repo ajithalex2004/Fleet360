@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET    /api/bus-ops/staff/[id]/rfid-tag — read RFID tag
  * PUT    /api/bus-ops/staff/[id]/rfid-tag — register / update tag

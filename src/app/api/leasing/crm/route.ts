@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/leasing/crm — CRM dashboard view (inquiries + pipeline stats).
  *

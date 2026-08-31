@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/auth/me
  * Returns the current session's identity + nav permissions in one call.

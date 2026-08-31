@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/alerts/[id] — PATCH + DELETE single alert.
  *

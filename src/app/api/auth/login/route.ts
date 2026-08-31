@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/auth/login
  * Authenticates a user with email + password, signs an xl-session cookie.

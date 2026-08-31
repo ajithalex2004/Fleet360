@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/agents/thresholds          — returns all agent threshold configs
  * PATCH /api/agents/thresholds         — updates one agent's thresholds

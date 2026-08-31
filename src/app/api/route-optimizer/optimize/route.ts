@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/route-optimizer/optimize
  * Body: { waypoints: Waypoint[], vehicleType?: 'van'|'truck'|'bus' }

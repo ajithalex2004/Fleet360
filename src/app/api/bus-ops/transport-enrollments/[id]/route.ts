@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/bus-ops/transport-enrollments/[id] — single-row GET / PATCH / DELETE.
  * DELETE is soft (sets deletedAt).

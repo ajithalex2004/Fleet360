@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Revenue Analysis API — /api/finance/revenue-analysis
  * Vehicle-level and Customer-level profitability from finance_invoices

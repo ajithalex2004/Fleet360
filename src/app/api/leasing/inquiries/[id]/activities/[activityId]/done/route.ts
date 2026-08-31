@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/leasing/inquiries/[id]/activities/[activityId]/done
  *

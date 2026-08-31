@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Budget Approvals API — /api/finance/budget-approvals
  * Department-level budget submissions with multi-step approval workflow

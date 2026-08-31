@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/admin/service-config/types
  *   Body: { categoryId, key, name, description?, icon?, tone?,

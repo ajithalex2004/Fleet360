@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/branches — list/create/update/soft-delete lease branches.
  *

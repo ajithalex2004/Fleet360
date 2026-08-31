@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/school-bus/fleet-positions?tenantId=X
  *   Returns the latest GPS position for every active school bus vehicle,

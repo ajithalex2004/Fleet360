@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/maintenance/sla-rules
  * Returns the active SLA rule set for all tiers.

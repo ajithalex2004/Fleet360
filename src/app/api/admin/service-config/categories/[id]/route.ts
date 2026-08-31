@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * PATCH  /api/admin/service-config/categories/[id]   — edit a category
  * DELETE /api/admin/service-config/categories/[id]   — soft delete (blocks

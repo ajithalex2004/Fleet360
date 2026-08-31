@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/school-bus/attendants   — list bus attendants (nannies)
  * POST /api/school-bus/attendants   — register new attendant

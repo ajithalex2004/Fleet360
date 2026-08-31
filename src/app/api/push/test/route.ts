@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/push/test — send a test push to the calling staff member's
  * active subscriptions. Used by the PWA to confirm the round-trip works

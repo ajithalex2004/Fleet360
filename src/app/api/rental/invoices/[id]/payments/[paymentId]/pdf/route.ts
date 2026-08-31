@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/rental/invoices/[id]/payments/[paymentId]/pdf?lang=en|ar
  *

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Finance Audit Log API — /api/finance/audit-log
  * Comprehensive immutable audit trail for all finance module actions

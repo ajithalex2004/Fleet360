@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/bus-ops/schedules/[id]/expand-roster
  *

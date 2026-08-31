@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Chart of Accounts — /api/finance/coa
  * Transport-specific double-entry COA with 5 root types

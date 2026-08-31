@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/bus-ops/transport-calendars — MVP CRUD for tenant exception-day
  * calendars. GET lists active calendars (with entries); POST creates a

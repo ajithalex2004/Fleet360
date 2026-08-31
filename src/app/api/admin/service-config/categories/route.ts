@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/admin/service-config/categories
  *   Returns the tenant's categories with their child types and module mapping

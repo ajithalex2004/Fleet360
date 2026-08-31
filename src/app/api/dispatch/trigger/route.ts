@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/dispatch/trigger
  * Creates a dispatch job and runs the dispatch engine.

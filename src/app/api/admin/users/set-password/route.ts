@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/admin/users/set-password
  * Admin-only: set or reset a user's password.

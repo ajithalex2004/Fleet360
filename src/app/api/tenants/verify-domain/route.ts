@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/tenants/verify-domain  — Email link token verification
  * GET  /api/tenants/verify-domain?tenantId=X — DNS TXT record verification

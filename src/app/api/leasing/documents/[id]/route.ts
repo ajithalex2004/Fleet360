@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/documents/[id] — PATCH + DELETE single document.
  *

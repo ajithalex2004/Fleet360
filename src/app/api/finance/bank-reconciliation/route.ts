@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Bank Reconciliation API — /api/finance/bank-reconciliation
  * CSV statement import, match/unmatch workflow

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/places/[id] — single-place read / update / soft-delete.
  *

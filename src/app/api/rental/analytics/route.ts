@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * RAC Analytics API — /api/rental/analytics
  * Branch P&L, revenue tracking, and operational KPIs

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/inquiries/[id] — single inquiry detail / PATCH / DELETE.
  *

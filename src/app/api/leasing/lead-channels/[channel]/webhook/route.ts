@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/leasing/lead-channels/[channel]/webhook
  *

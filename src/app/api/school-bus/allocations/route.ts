@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/school-bus/allocations?tenantId=X&routeId=X&studentId=X&status=ACTIVE
  *   Returns seat allocations (student-to-route assignments) with current capacity checks.

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Profit Centres API — /api/finance/profit-centres
  *

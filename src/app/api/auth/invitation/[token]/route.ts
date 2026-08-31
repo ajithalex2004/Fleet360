@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/auth/invitation/[token]
  * Public — returns invitation context (tenant name, email, role, expiry,

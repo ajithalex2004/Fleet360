@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Payment Allocations API — /api/finance/payment-allocations
  *

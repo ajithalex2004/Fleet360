@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/admin/service-config/types/[id]/module-mapping
  *   Returns the mapping row for a service type. Lazily creates a default one

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/leasing/pre-billing/[id]/pdf?lang=en|ar&download=0|1
  *

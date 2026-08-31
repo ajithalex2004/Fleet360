@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/bus-ops/passenger/today?employeeId=X
  *

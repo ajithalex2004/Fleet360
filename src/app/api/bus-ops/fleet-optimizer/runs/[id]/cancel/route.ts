@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/bus-ops/fleet-optimizer/runs/:id/cancel
  *

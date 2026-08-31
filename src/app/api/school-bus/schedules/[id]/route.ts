@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * PATCH  /api/school-bus/schedules/[id]  — update schedule fields
  * DELETE /api/school-bus/schedules/[id]  — soft delete (set status=DELETED)

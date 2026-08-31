@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Finance Reporting Layer — /api/finance/summary
  *

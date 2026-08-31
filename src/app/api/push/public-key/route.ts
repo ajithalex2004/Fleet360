@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/push/public-key
  * Returns the VAPID public key so the PWA can subscribe(). Safe to expose

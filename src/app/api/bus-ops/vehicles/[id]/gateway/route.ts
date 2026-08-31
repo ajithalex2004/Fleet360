@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET    /api/bus-ops/vehicles/[id]/gateway — read gateway for vehicle
  * PUT    /api/bus-ops/vehicles/[id]/gateway — register / update

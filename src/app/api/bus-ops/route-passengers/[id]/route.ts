@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/bus-ops/route-passengers/[id] — single-roster-row ops.
  *

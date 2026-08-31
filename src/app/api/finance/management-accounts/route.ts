@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Management Accounts API — /api/finance/management-accounts
  *

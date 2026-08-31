@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET    /api/bus-ops/vehicles/[id]/beacon  — read beacon for vehicle
  * PUT    /api/bus-ops/vehicles/[id]/beacon  — register / update beacon

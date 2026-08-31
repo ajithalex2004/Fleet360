@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Tenant hard-delete — permanently destroy a tenant and all of its data.
  *

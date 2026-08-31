@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/admin/service-config/scopes
  *   Returns every scope for the current tenant (root + descendants),

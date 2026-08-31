@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/admin/service-config/types/[id]/rules/[category]?scopeId=...
  *   Returns the resolved rules at the requested scope, walking the

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/rental/analytics/dashboard?from=YYYY-MM-DD&to=YYYY-MM-DD
  *

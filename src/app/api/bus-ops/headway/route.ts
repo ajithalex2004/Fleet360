@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/bus-ops/headway — CRUD for headway rules + expand endpoint.
  *

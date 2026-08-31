@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Rental Inquiries API — /api/rental/inquiries
  * Tracks rental leads before booking is confirmed

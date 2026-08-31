@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/rental/invoices/:id/void
  * Void an invoice (cannot be undone). Reason is required.

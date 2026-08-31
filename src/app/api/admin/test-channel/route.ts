@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/admin/test-channel
  * Sends a real test email or SMS using the settings provided in the request body.

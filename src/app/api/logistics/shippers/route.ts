@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/logistics/shippers  (model A: shipper = customers)
  *

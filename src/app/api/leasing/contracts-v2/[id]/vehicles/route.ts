@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/contracts-v2/[id]/vehicles — list and add contract vehicles.
  *

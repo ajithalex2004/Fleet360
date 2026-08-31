@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * School Bus Route Assignment Engine
  *

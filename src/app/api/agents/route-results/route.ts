@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/agents/route-results
  * Returns all route optimisation results with optional filters.

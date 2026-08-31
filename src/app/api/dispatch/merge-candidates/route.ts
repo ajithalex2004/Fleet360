@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/dispatch/merge-candidates?jobId=X&tenantId=Y
  *      Returns ranked merge candidates for a specific dispatch job.

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Credit Note individual operations — status lifecycle
  * DRAFT → ISSUED → APPLIED | REFUNDED | VOIDED

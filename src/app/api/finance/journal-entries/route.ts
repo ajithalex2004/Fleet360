@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Journal Entries API — /api/finance/journal-entries
  *

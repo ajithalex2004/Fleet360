@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Mileage readings — capture readings and auto-generate overage charges + invoices.
  *

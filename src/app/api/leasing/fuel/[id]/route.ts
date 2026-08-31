@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/fuel/[id] — single fuel log PATCH + DELETE.
  *

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/amendments — leasing amendment processing (raw-SQL backend).
  *

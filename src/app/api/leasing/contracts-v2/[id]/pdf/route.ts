@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/leasing/contracts-v2/[id]/pdf?lang=en|ar
  *

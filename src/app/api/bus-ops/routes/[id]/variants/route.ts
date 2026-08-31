@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/bus-ops/routes/[id]/variants — variant CRUD for a route.
  *

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Period Locks API — /api/finance/period-locks
  * Financial year & accounting period management with hard/soft locks

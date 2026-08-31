@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * AP Payable detail — /api/finance/payables/[id]
  *

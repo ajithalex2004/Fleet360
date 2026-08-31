@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { createElement } from 'react';
 import { withTenantRls } from '@/lib/rls';
 import { NextRequest, NextResponse } from 'next/server';

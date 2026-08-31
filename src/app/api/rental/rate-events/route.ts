@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/rental/rate-events  — list active events (optional ?from=YYYY-MM-DD&to=YYYY-MM-DD)
  * POST /api/rental/rate-events  — create or upsert by eventCode

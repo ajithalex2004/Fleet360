@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Expense individual operations — approval workflow
  * DRAFT → SUBMITTED → APPROVED / REJECTED → PAID

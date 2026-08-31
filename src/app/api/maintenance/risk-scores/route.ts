@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/maintenance/risk-scores
  * Returns a computed MaintenanceRiskScore for every active vehicle.

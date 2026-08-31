@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/bus-ops/geofences/[id] — single-geofence GET / PATCH / DELETE.
  *

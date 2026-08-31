@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * School Bus Fees API has moved to Finance Module.
  *

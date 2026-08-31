@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * DELETE /api/bus-ops/route-consolidations/[id]
  *

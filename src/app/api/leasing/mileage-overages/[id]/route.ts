@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * /api/leasing/mileage-overages/[id] — single overage PATCH.
  *

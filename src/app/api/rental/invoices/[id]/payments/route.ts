@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/rental/invoices/:id/payments
  * Record a payment receipt against an invoice.

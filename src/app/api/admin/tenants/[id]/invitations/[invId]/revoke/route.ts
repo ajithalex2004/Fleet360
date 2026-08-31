@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/admin/tenants/[id]/invitations/[invId]/revoke
  * Revokes a pending invitation. Idempotent.

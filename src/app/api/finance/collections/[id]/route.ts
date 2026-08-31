@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Collection Case — individual operations & dunning stage transitions
  */
