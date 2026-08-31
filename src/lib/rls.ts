@@ -209,7 +209,9 @@ function defaultSweepConcurrency(): number {
 
   const m = /[?&]connection_limit=(\d+)/.exec(url);
   const pool = m ? Number(m[1]) : cpus().length * 2 + 1;
-  return Math.max(1, Math.min(pool - 1, 3));
+  // Kept in step with SWEEP_CONCURRENCY_CAP in src/lib/prisma-sweep.ts, which
+  // is the value real sweeps actually use. See there for the measurement.
+  return Math.max(1, Math.min(pool - 1, 2));
 }
 
 export async function withSystemJob<T>(

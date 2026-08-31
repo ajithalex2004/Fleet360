@@ -8,14 +8,29 @@ import { withSystemJob, type SystemJobContext, type SystemJobOptions } from '@/l
 /**
  * Upper bound on tenants processed at once during direct sweeps.
  *
- * 3, not 8, to survive single-core serverless compute where Prisma's pool is
- * num_cpus * 2 + 1 = 3. Exceeding the pool does not fail loudly — requests
- * queue and then time out fetching a connection, which reads like a database
- * fault rather than a configuration one.
+ * 2, measured rather than reasoned. Against RUNTIME_DIRECT_DATABASE_URL as
+ * fleet360_app on the Neon direct endpoint:
  *
- * MUST STAY IN STEP WITH defaultSweepConcurrency() in src/lib/rls.ts.
+ *     1 concurrent transaction    OK
+ *     2 concurrent transactions   OK
+ *     3 concurrent transactions   FAIL - "Unable to start a transaction"
+ *
+ * That error is Prisma's maxWait expiring while acquiring a pool connection,
+ * not a network fault: fleet360_app has rolconnlimit = -1 and only one active
+ * connection at the time. So the ceiling is client-side, and the previous
+ * value of 3 sat exactly on it.
+ *
+ * The URL sets no connection_limit, so Prisma sizes the pool from the host's
+ * core count. Setting ?connection_limit=10 on RUNTIME_DIRECT_DATABASE_URL would
+ * make the pool explicit and allow a higher cap; until then 2 is what the
+ * connection actually supports, and it is the same on a single-core serverless
+ * instance where the pool is 3.
+ *
+ * MUST STAY IN STEP WITH defaultSweepConcurrency() in src/lib/rls.ts. Those two
+ * were briefly out of step at 3 and 8, and because runSweep() passes this value
+ * explicitly, the rls.ts figure had no effect on any real sweep.
  */
-const SWEEP_CONCURRENCY_CAP = 3;
+const SWEEP_CONCURRENCY_CAP = 2;
 
 let sweepClient: PrismaClient | null = null;
 let sweepClientVerified = false;
@@ -213,9 +228,17 @@ export async function runSweep<T>(
   }
 
   try {
+    // Spread FIRST, then apply the resolved concurrency. The reverse order —
+    // which this was — lets `...opts` overwrite the computed value with
+    // `undefined` whenever a caller passes the key explicitly but unset, e.g.
+    // `runSweep(fn, { tenantHeader, concurrency: someMaybeUndefined })`.
+    // withSystemJob then falls back to its own default, discarding the
+    // concurrency getVerifiedSweepPrisma just decided. The dangerous case is
+    // the fallback path: verification failed, concurrency is 1 because we are
+    // on the POOLED client, and the spread throws that 1 away.
     return await withSystemJob(client, fn, {
-      concurrency: opts.concurrency ?? concurrency,
       ...opts,
+      concurrency: opts.concurrency ?? concurrency,
     });
   } finally {
     if (lockId !== null) {
