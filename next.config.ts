@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 // Routes handled by the Go backend on :8080
 // Everything else is handled by Next.js API routes directly
@@ -16,8 +17,8 @@ const GO_BACKEND_ROUTES = [
 ].join("|");
 
 const nextConfig: NextConfig = {
-  // Note: 'instrumentationHook' was removed in Next.js 15+ — the
-  // src/instrumentation.ts file is now picked up automatically.
+  // Fix workspace root tracing
+  outputFileTracingRoot: path.join(__dirname),
 
   // Tree-shake heavy UI libraries so only used components are bundled
   experimental: {
