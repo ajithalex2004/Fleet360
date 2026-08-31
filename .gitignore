@@ -121,3 +121,6 @@ next-env.d.ts
 classes.dex
 /scratch/
 
+
+# Local scratch scripts
+test_claude.py
