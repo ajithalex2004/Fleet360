@@ -122,8 +122,10 @@ async function ensureLoaded(): Promise<Map<string, PlanCatalogEntry>> {
   return _cache!;
 }
 
-// Eager load at module import — best effort, non-blocking.
-void ensureLoaded().catch(() => { /* logged inside */ });
+// Eager load at module import only in runtime server environment, not during next build
+if (process.env.NEXT_PHASE !== 'phase-production-build' && typeof window === 'undefined') {
+  void ensureLoaded().catch(() => { /* logged inside */ });
+}
 
 // ── Fallback (used only when DB read fails AND no cached data exists) ──────
 // Mirrors the seeded data. If the DB is up, these never get used.

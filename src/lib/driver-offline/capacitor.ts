@@ -41,7 +41,7 @@ async function isCapacitor(): Promise<boolean> {
 
 async function tryImport(speccer: string): Promise<any> {
   try {
-    return await import(/* @vite-ignore */ speccer);
+    return await import(/* webpackIgnore: true */ /* @vite-ignore */ speccer);
   } catch {
     return null;
   }

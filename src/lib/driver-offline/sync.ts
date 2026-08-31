@@ -68,7 +68,7 @@ async function getNetworkStatus(): Promise<boolean> {
   try {
     if (!netPlugin) {
       const mod = '@capacitor/network';
-      netPlugin = await import(/* @vite-ignore */ mod);
+      netPlugin = await import(/* webpackIgnore: true */ /* @vite-ignore */ mod);
     }
     const status = await netPlugin.Network.getStatus();
     return Boolean(status.connected);
