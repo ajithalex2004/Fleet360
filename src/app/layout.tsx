@@ -5,8 +5,6 @@ import ClientProviders from "@/components/ClientProviders";
 import GlobalDeferredWidgets from "@/components/GlobalDeferredWidgets";
 import { ThemeProvider } from "@/components/ThemeProvider";
 
-export const dynamic = 'force-dynamic';
-
 export const metadata: Metadata = {
   title: "Fleet360",
   description: "Unified Transport Management Platform",
