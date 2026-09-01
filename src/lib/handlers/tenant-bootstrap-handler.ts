@@ -7,7 +7,8 @@
  *
  * Threat Mitigations:
  * 1. Capability Allowlist (BOOTSTRAP_ALLOWED_OPERATIONS): Rejects any unlisted operation.
- * 2. Dedicated Bootstrap DB Context: Sets `app.tenant_id = 'bootstrap'` rather than wildcard `*`.
+ * 2. Dedicated Bootstrap DB Context: Sets `app.tenant_id` to BOOTSTRAP_SENTINEL_TENANT_ID
+ *    rather than wildcard `*`.
  * 3. Restricted Delegate Proxy: Throws immediately if code attempts to touch business models
  *    (vehicles, invoices, trips, bookings, etc.). Only Tenant, User, UserTenant, and TenantModule
  *    are permitted.
@@ -21,6 +22,26 @@ import type { TxClient } from '@/lib/rls';
 import { SecurityContext } from '@/lib/security-context';
 import { runWithRlsScope } from '@/lib/rls-scope';
 import crypto from 'crypto';
+
+/**
+ * Dedicated app.tenant_id value for pre-tenant bootstrap transactions - not
+ * the wildcard '*', so a fresh signup can't read any existing tenant's data.
+ *
+ * Must be the nil UUID, not an arbitrary string like the literal 'bootstrap'
+ * this used to be. tenant_id::uuid columns on roles/tenant_modules/
+ * user_tenants compare via `tenant_id = current_setting('app.tenant_id')`
+ * with no ::text cast on the column side, so Postgres implicitly casts the
+ * setting to uuid to resolve the `=` operator - even to evaluate the OTHER
+ * (short-circuiting, in a procedural sense) branches of the surrounding OR,
+ * since SQL types are resolved at parse time, not short-circuited at
+ * runtime. A non-UUID sentinel throws `invalid input syntax for type uuid`
+ * the moment any bootstrap write touches one of those three tables, aborting
+ * the whole transaction. The nil UUID is syntactically valid so the cast
+ * succeeds, and real tenant ids are crypto.randomUUID() v4 UUIDs, which
+ * structurally can never collide with it - same "matches no real tenant"
+ * guarantee as the string sentinel, without the cast failure.
+ */
+const BOOTSTRAP_SENTINEL_TENANT_ID = '00000000-0000-0000-0000-000000000000';
 
 export type BootstrapOperation =
   | 'create_pending_tenant'
@@ -101,7 +122,7 @@ function checkBootstrapRateLimit(ip: string): boolean {
 
 /**
  * Dedicated transactional helper for bootstrap operations.
- * Sets `app.tenant_id = 'bootstrap'` instead of wildcard `*`.
+ * Sets `app.tenant_id` to BOOTSTRAP_SENTINEL_TENANT_ID instead of wildcard `*`.
  */
 export async function withBootstrap<T>(
   fn: (tx: TxClient, rescopeToTenant: (tenantId: string) => Promise<void>) => Promise<T>,
@@ -127,9 +148,12 @@ export async function withBootstrap<T>(
       // current_setting() as empty - not even the sentinel this function
       // sets two lines below - proving the raw calls were never landing on
       // this transaction's connection at all, from the very first one.
-      return runWithRlsScope({ tenantId: 'bootstrap', mode: 'tenant', tx: rawTx }, async () => {
+      return runWithRlsScope({ tenantId: BOOTSTRAP_SENTINEL_TENANT_ID, mode: 'tenant', tx: rawTx }, async () => {
         // Establish dedicated bootstrap tenant context
-        await rawTx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', 'bootstrap', true)`);
+        await rawTx.$executeRawUnsafe(
+          `SELECT set_config('app.tenant_id', $1, true)`,
+          BOOTSTRAP_SENTINEL_TENANT_ID,
+        );
         const restrictedTx = createRestrictedBootstrapClient(rawTx);
 
         const rescopeToTenant = async (tenantId: string) => {
@@ -164,8 +188,9 @@ export interface BootstrapContext {
   clientIp: string;
   /**
    * Re-scopes app.tenant_id for the remainder of this transaction once a real
-   * tenant has been created (withBootstrap otherwise pins it to the sentinel
-   * 'bootstrap' for the whole transaction). Must be used for this - never
+   * tenant has been created (withBootstrap otherwise pins it to
+   * BOOTSTRAP_SENTINEL_TENANT_ID for the whole transaction). Must be used for
+   * this - never
    * call raw SQL methods directly on `tx` to change RLS scope; see the
    * comment on rescopeToTenant's definition in withBootstrap for why.
    */

@@ -395,7 +395,12 @@ export async function POST(request: NextRequest) {
                 name:        'Tenant Admin',
                 code:        'TENANT_ADMIN',
                 tenantId:    tenant.id,
-                isSystem:    true,
+                // NOT a global template role - chk_roles_system_template requires
+                // (tenant_id IS NULL) = is_system, so isSystem: true here (paired
+                // with a real tenantId) violates the constraint on every signup.
+                // This is a per-tenant admin role, which is exactly what isSystem
+                // false + a real tenantId means.
+                isSystem:    false,
                 description: 'Full administrative access within this organisation',
               },
             });
