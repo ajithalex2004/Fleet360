@@ -1,30 +1,84 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  FileCheck2,
+  AlertTriangle,
+  ShieldAlert,
+  ShieldCheck,
+  RefreshCw,
+  Plus,
+  Search,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  FileText,
+  X,
+} from 'lucide-react';
 
-interface Document {
+interface VehicleDocumentItem {
   id: string;
-  vehicle: string;
-  licensePlate: string;
+  vehicleId: string;
+  vehicleCode?: string;
+  licensePlate?: string;
+  makeModel?: string;
   docType: string;
-  docNumber: string;
-  issuedBy: string;
-  issueDate: string;
-  expiryDate: string;
-  daysUntilExpiry: number;
+  docNumber?: string | null;
+  issuedBy?: string | null;
+  issueDate?: string | null;
+  expiryDate?: string | null;
+  daysRemaining?: number;
   status: string;
+  notes?: string | null;
 }
 
-export default function FleetDocuments() {
-  const [documents, setDocuments] = useState<Document[]>([]);
+interface GroundedVehicleItem {
+  vehicleId: string;
+  vehicleCode: string;
+  licensePlate: string;
+  makeModel: string;
+  actionTaken: string;
+  actionReason?: string;
+  complianceHealth: string;
+  documents: Array<{
+    id: string;
+    docType: string;
+    status: string;
+    daysRemaining: number;
+    groundingRequired: boolean;
+    reason?: string;
+  }>;
+}
+
+interface SweepSummary {
+  sweepTimestamp: string;
+  totalVehiclesEvaluated: number;
+  totalDocumentsEvaluated: number;
+  compliantVehiclesCount: number;
+  warningVehiclesCount: number;
+  criticalVehiclesCount: number;
+  groundedVehiclesCount: number;
+  newlyGroundedCount: number;
+  newlyRestoredCount: number;
+  vehicleRecords: GroundedVehicleItem[];
+}
+
+export default function FleetDocumentsPage() {
+  const [documents, setDocuments] = useState<VehicleDocumentItem[]>([]);
+  const [sweepSummary, setSweepSummary] = useState<SweepSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sweeping, setSweeping] = useState(false);
   const [error, setError] = useState('');
-  const [filterDocType, setFilterDocType] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
+  const [sweepMessage, setSweepMessage] = useState('');
+
+  const [activeTab, setActiveTab] = useState<'ALL' | 'GROUNDED' | 'EXPIRING' | 'VALID'>('ALL');
+  const [filterDocType, setFilterDocType] = useState('ALL');
+  const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
+
   const [formData, setFormData] = useState({
     vehicleId: '',
-    docType: '',
+    docType: 'MULKIYA',
     docNumber: '',
     issueDate: '',
     expiryDate: '',
@@ -32,33 +86,54 @@ export default function FleetDocuments() {
     notes: '',
   });
 
-  const docTypes = ['Registration', 'Insurance', 'Mulkiya', 'Testing', 'Permit', 'Other'];
-  const statuses = ['Valid', 'Expired', 'Expiring Soon', 'Pending'];
-
-  useEffect(() => {
-    fetchDocuments();
-  }, []);
-
-  const fetchDocuments = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
-      const res = await fetch('/api/fleet/documents');
-      if (!res.ok) throw new Error('Failed to fetch documents');
-      const data = await res.json();
-      setDocuments(data);
+      const [docsRes, sweepRes] = await Promise.all([
+        fetch('/api/fleet/documents?limit=100'),
+        fetch('/api/fleet/documents/sweep'),
+      ]);
+
+      if (docsRes.ok) {
+        const json = await docsRes.json();
+        setDocuments(json.data || json || []);
+      }
+      if (sweepRes.ok) {
+        const summary = await sweepRes.json();
+        setSweepSummary(summary);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load documents');
+      setError(err instanceof Error ? err.message : 'Failed to load fleet document intelligence');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const filteredDocuments = documents.filter((doc) => {
-    const matchesDocType = !filterDocType || doc.docType === filterDocType;
-    const matchesStatus = !filterStatus || doc.status === filterStatus;
-    return matchesDocType && matchesStatus;
-  });
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleRunSweep = async () => {
+    try {
+      setSweeping(true);
+      setSweepMessage('');
+      const res = await fetch('/api/fleet/documents/sweep', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mulkiyaGracePeriodDays: 30 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to run sweep');
+      setSweepMessage(data.message);
+      setSweepSummary(data.summary);
+      fetchData();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Sweep failed');
+    } finally {
+      setSweeping(false);
+    }
+  };
 
   const handleAddDocument = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,262 +143,435 @@ export default function FleetDocuments() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
-      if (!res.ok) throw new Error('Failed to add document');
+      if (!res.ok) throw new Error('Failed to register document');
       setShowModal(false);
       setFormData({
         vehicleId: '',
-        docType: '',
+        docType: 'MULKIYA',
         docNumber: '',
         issueDate: '',
         expiryDate: '',
         issuedBy: '',
         notes: '',
       });
-      fetchDocuments();
+      fetchData();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to add document');
     }
   };
 
-  const getStatusColor = (days: number) => {
-    if (days < 7) return 'bg-red-500/20 text-red-400 border border-red-500/30';
-    if (days < 30) return 'bg-amber-500/20 text-amber-400 border border-amber-500/30';
-    return 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
-  };
+  const groundedVehicles = sweepSummary?.vehicleRecords.filter(
+    (v) => v.complianceHealth === 'NON_COMPLIANT' || v.actionTaken === 'GROUNDED'
+  ) || [];
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full min-h-[200px]">
-        <div className="animate-spin">
-          <div className="w-12 h-12 border-4 border-slate-700 border-t-orange-500 rounded-full"></div>
-        </div>
-      </div>
-    );
-  }
+  const filteredDocs = documents.filter((doc) => {
+    if (filterDocType !== 'ALL' && doc.docType !== filterDocType) return false;
 
-  if (error) {
-    return (
-      <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-6 text-red-400">
-        <p className="font-medium">Error loading documents</p>
-        <p className="text-sm mt-1">{error}</p>
-      </div>
-    );
-  }
+    const days = doc.expiryDate
+      ? Math.floor((new Date(doc.expiryDate).getTime() - Date.now()) / (1000 * 86400))
+      : -999;
+
+    if (activeTab === 'EXPIRING' && days > 30) return false;
+    if (activeTab === 'VALID' && days <= 30) return false;
+
+    if (search) {
+      const q = search.toLowerCase();
+      return (
+        (doc.docNumber && doc.docNumber.toLowerCase().includes(q)) ||
+        (doc.docType && doc.docType.toLowerCase().includes(q)) ||
+        (doc.vehicleCode && doc.vehicleCode.toLowerCase().includes(q)) ||
+        (doc.licensePlate && doc.licensePlate.toLowerCase().includes(q))
+      );
+    }
+    return true;
+  });
 
   return (
-    <div className="space-y-8">
+    <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">Vehicle Documents</h1>
-          <p className="text-slate-400 mt-1">Manage vehicle registration, insurance, and compliance documents</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
+              <FileCheck2 className="w-6 h-6 text-cyan-400" />
+              Document Expiry & Vehicle Auto-Grounding
+            </h1>
+            <span className="px-2 py-0.5 text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-full">
+              P0 Compliance
+            </span>
+          </div>
+          <p className="text-sm text-slate-400 mt-1">
+            Automated UAE regulatory sweep: Mulkiya 30d grace evaluation, 0-day insurance enforcement, and automatic asset grounding.
+          </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 px-6 py-3 text-sm font-medium text-white hover:shadow-lg hover:shadow-orange-500/20 transition-all"
-        >
-          + Add Document
-        </button>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRunSweep}
+            disabled={sweeping}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold shadow transition disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${sweeping ? 'animate-spin' : ''}`} />
+            {sweeping ? 'Running Sweep...' : 'Run Expiry Sweep'}
+          </button>
+
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
+          >
+            <Plus className="w-4 h-4" />
+            Upload Document
+          </button>
+        </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-4">
-        <select
-          value={filterDocType}
-          onChange={(e) => setFilterDocType(e.target.value)}
-          className="bg-slate-800/50 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-        >
-          <option value="">All Document Types</option>
-          {docTypes.map((type) => (
-            <option key={type} value={type}>
-              {type}
-            </option>
-          ))}
-        </select>
+      {sweepMessage && (
+        <div className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          {sweepMessage}
+        </div>
+      )}
 
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="bg-slate-800/50 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-        >
-          <option value="">All Statuses</option>
-          {statuses.map((status) => (
-            <option key={status} value={status}>
-              {status}
-            </option>
-          ))}
-        </select>
-      </div>
+      {error && (
+        <div className="p-4 rounded-2xl bg-rose-950/40 border border-rose-500/30 text-rose-300 text-xs">
+          {error}
+        </div>
+      )}
 
-      {/* Documents Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 overflow-hidden">
-        {filteredDocuments.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="text-4xl mb-3">📄</div>
-            <p className="text-slate-400">No documents found</p>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-emerald-500/30 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-emerald-400 font-medium">Fully Compliant</span>
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-800/50">
-                <tr className="border-b border-white/5">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Vehicle</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">License Plate</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Doc Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Doc Number</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Issued By</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Issue Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Expiry Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Days Until Expiry</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Actions</th>
+          <p className="text-2xl font-bold text-white">
+            {sweepSummary?.compliantVehiclesCount || 0}
+          </p>
+          <p className="text-[11px] text-slate-500">All mandatory documents valid</p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-amber-500/30 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-amber-400 font-medium">Expiring in 30 Days</span>
+            <Clock className="w-4 h-4 text-amber-400" />
+          </div>
+          <p className="text-2xl font-bold text-amber-300">
+            {sweepSummary?.warningVehiclesCount || 0}
+          </p>
+          <p className="text-[11px] text-slate-500">Upcoming renewals needed</p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-orange-500/30 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-orange-400 font-medium">Critical (&le; 7 Days)</span>
+            <AlertTriangle className="w-4 h-4 text-orange-400" />
+          </div>
+          <p className="text-2xl font-bold text-orange-300">
+            {sweepSummary?.criticalVehiclesCount || 0}
+          </p>
+          <p className="text-[11px] text-slate-500">Immediate action required</p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-rose-500/40 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-rose-400 font-medium">Grounded / Expired</span>
+            <ShieldAlert className="w-4 h-4 text-rose-400" />
+          </div>
+          <p className="text-2xl font-bold text-rose-300">
+            {sweepSummary?.groundedVehiclesCount || groundedVehicles.length}
+          </p>
+          <p className="text-[11px] text-rose-400/80">Blocked from trip dispatch</p>
+        </div>
+      </div>
+
+      {/* Grounded Quarantine Banner */}
+      {groundedVehicles.length > 0 && (
+        <div className="p-4 rounded-2xl bg-rose-950/40 border border-rose-500/40 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-rose-300 flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-rose-400" />
+              Grounded Vehicles Quarantine ({groundedVehicles.length} vehicles)
+            </h3>
+            <span className="text-xs text-rose-400 font-mono">STATUS: GROUNDED</span>
+          </div>
+          <p className="text-xs text-rose-200/80">
+            The following vehicles have been automatically grounded due to expired insurance or Mulkiya past grace period. They cannot be assigned to any driver, route, or ad-hoc booking.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 pt-1">
+            {groundedVehicles.map((v) => (
+              <div
+                key={v.vehicleId}
+                className="p-3 rounded-xl bg-rose-900/40 border border-rose-500/30 text-xs space-y-1"
+              >
+                <div className="flex items-center justify-between font-bold text-white">
+                  <span>{v.vehicleCode}</span>
+                  <span className="font-mono text-rose-300">{v.licensePlate}</span>
+                </div>
+                <p className="text-[11px] text-rose-200/70">{v.actionReason || 'Non-compliant documents'}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Filters & Tabs */}
+      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto">
+          {(['ALL', 'EXPIRING', 'VALID'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                activeTab === tab
+                  ? 'bg-slate-700 text-white border border-slate-500'
+                  : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-transparent'
+              }`}
+            >
+              {tab === 'ALL' && 'All Documents'}
+              {tab === 'EXPIRING' && 'Expiring Soon (&le; 30d)'}
+              {tab === 'VALID' && 'Valid Documents'}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <select
+            value={filterDocType}
+            onChange={(e) => setFilterDocType(e.target.value)}
+            className="px-3 py-1.5 rounded-xl bg-slate-900 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+          >
+            <option value="ALL">All Document Types</option>
+            <option value="MULKIYA">Mulkiya (Registration)</option>
+            <option value="INSURANCE">Insurance</option>
+            <option value="TESTING">Testing / Inspection</option>
+            <option value="PERMIT">Permit</option>
+            <option value="CIVIL_DEFENSE">Civil Defense</option>
+          </select>
+
+          <div className="relative w-full sm:w-64">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search plate, doc #..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-900 border border-white/10 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Document Grid */}
+      <div className="rounded-2xl border border-white/10 overflow-hidden bg-slate-900/60 shadow-xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs text-slate-300">
+            <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-white/10">
+              <tr>
+                <th className="p-3.5">Vehicle</th>
+                <th className="p-3.5">Document Type</th>
+                <th className="p-3.5">Document No.</th>
+                <th className="p-3.5">Issued By</th>
+                <th className="p-3.5">Expiry Date</th>
+                <th className="p-3.5">Status & Countdown</th>
+                <th className="p-3.5 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {!filteredDocs.length ? (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-slate-500">
+                    No documents matching the criteria.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {filteredDocuments.map((doc) => (
-                  <tr key={doc.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td className="px-6 py-4 text-sm text-white font-medium">{doc.vehicle}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{doc.licensePlate}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{doc.docType}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{doc.docNumber}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{doc.issuedBy}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">
-                      {new Date(doc.issueDate).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-200">
-                      {new Date(doc.expiryDate).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(doc.daysUntilExpiry)}`}>
-                        {doc.daysUntilExpiry} days
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          doc.status === 'Valid'
-                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                            : doc.status === 'Expired'
-                            ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                            : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                        }`}
-                      >
-                        {doc.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <button className="text-blue-400 hover:text-blue-300 transition-colors">View</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              ) : (
+                filteredDocs.map((doc) => {
+                  const days = doc.expiryDate
+                    ? Math.floor((new Date(doc.expiryDate).getTime() - Date.now()) / (1000 * 86400))
+                    : -999;
+
+                  return (
+                    <tr key={doc.id} className="hover:bg-white/[0.02] transition">
+                      <td className="p-3.5">
+                        <div className="font-bold text-white">{doc.vehicleCode || doc.vehicleId.slice(0, 8)}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">{doc.licensePlate || '—'}</div>
+                      </td>
+
+                      <td className="p-3.5">
+                        <span className="font-semibold text-slate-200">{doc.docType}</span>
+                      </td>
+
+                      <td className="p-3.5 font-mono text-cyan-300">
+                        {doc.docNumber || '—'}
+                      </td>
+
+                      <td className="p-3.5 text-slate-400">
+                        {doc.issuedBy || '—'}
+                      </td>
+
+                      <td className="p-3.5 font-mono">
+                        {doc.expiryDate ? new Date(doc.expiryDate).toLocaleDateString('en-AE') : '—'}
+                      </td>
+
+                      <td className="p-3.5">
+                        {days < 0 ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                            <XCircle className="w-3 h-3" />
+                            Expired {Math.abs(days)}d ago
+                          </span>
+                        ) : days <= 7 ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/20 text-orange-300 border border-orange-500/40">
+                            <AlertTriangle className="w-3 h-3" />
+                            Expires in {days}d (Critical)
+                          </span>
+                        ) : days <= 30 ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            <Clock className="w-3 h-3" />
+                            Expires in {days}d
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                            <CheckCircle2 className="w-3 h-3" />
+                            Valid ({days}d)
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="p-3.5 text-right">
+                        <button
+                          onClick={() => {
+                            setFormData({
+                              vehicleId: doc.vehicleId,
+                              docType: doc.docType,
+                              docNumber: doc.docNumber || '',
+                              issueDate: '',
+                              expiryDate: '',
+                              issuedBy: doc.issuedBy || '',
+                              notes: '',
+                            });
+                            setShowModal(true);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-semibold border border-slate-700 transition"
+                        >
+                          Renew
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Modal */}
+      {/* Upload/Renew Document Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-800 border border-white/10 rounded-2xl p-8 max-w-md w-full">
-            <h2 className="text-2xl font-bold text-white mb-6">Add New Document</h2>
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <FileText className="w-5 h-5 text-cyan-400" />
+                Register / Renew Fleet Document
+              </h3>
+              <button
+                onClick={() => setShowModal(false)}
+                className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-            <form onSubmit={handleAddDocument} className="space-y-4">
+            <form onSubmit={handleAddDocument} className="space-y-3 text-xs">
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Vehicle ID</label>
+                <label className="block text-slate-400 mb-1">Vehicle ID / UUID</label>
                 <input
                   type="text"
+                  required
+                  placeholder="Vehicle UUID..."
                   value={formData.vehicleId}
                   onChange={(e) => setFormData({ ...formData, vehicleId: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  required
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-cyan-500"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Document Type</label>
-                <select
-                  value={formData.docType}
-                  onChange={(e) => setFormData({ ...formData, docType: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  required
-                >
-                  <option value="">Select Type</option>
-                  {docTypes.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">Document Type</label>
+                  <select
+                    value={formData.docType}
+                    onChange={(e) => setFormData({ ...formData, docType: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-cyan-500"
+                  >
+                    <option value="MULKIYA">Mulkiya (Registration)</option>
+                    <option value="INSURANCE">Insurance Policy</option>
+                    <option value="TESTING">Testing / Inspection</option>
+                    <option value="PERMIT">Commercial Permit</option>
+                    <option value="CIVIL_DEFENSE">Civil Defense</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">Document Number</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. POL-984214"
+                    value={formData.docNumber}
+                    onChange={(e) => setFormData({ ...formData, docNumber: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">Issue Date</label>
+                  <input
+                    type="date"
+                    value={formData.issueDate}
+                    onChange={(e) => setFormData({ ...formData, issueDate: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">Expiry Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={formData.expiryDate}
+                    onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Document Number</label>
+                <label className="block text-slate-400 mb-1">Issued By Authority</label>
                 <input
                   type="text"
-                  value={formData.docNumber}
-                  onChange={(e) => setFormData({ ...formData, docNumber: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Issue Date</label>
-                <input
-                  type="date"
-                  value={formData.issueDate}
-                  onChange={(e) => setFormData({ ...formData, issueDate: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Expiry Date</label>
-                <input
-                  type="date"
-                  value={formData.expiryDate}
-                  onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Issued By</label>
-                <input
-                  type="text"
+                  placeholder="e.g. Dubai RTA, Abu Dhabi Police, Sukoon Insurance"
                   value={formData.issuedBy}
                   onChange={(e) => setFormData({ ...formData, issuedBy: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  required
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-cyan-500"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Notes</label>
-                <textarea
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
-                  rows={3}
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="submit"
-                  className="flex-1 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 px-4 py-2 text-sm font-medium text-white hover:shadow-lg hover:shadow-orange-500/20 transition-all"
-                >
-                  Add Document
-                </button>
+              <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 rounded-xl bg-slate-700 px-4 py-2 text-sm font-medium text-slate-400 hover:bg-slate-600 transition-all"
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold hover:bg-slate-700 transition"
                 >
                   Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 transition"
+                >
+                  Save & Validate Compliance
                 </button>
               </div>
             </form>

@@ -1,72 +1,127 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  AlertTriangle,
+  Zap,
+  CheckCircle2,
+  User,
+  Building,
+  RefreshCw,
+  Plus,
+  Search,
+  HelpCircle,
+  X,
+} from 'lucide-react';
 
-interface TrafficFine {
+interface TrafficFineItem {
   id: string;
-  vehicle: string;
-  driver: string;
+  vehicleId: string | null;
+  vehicleCode?: string | null;
+  licensePlate?: string | null;
+  driverId: string | null;
+  driverName?: string | null;
   fineDate: string;
-  amount: number;
-  authority: string;
-  fineRef: string;
-  offenceType: string;
-  assignedTo: string;
-  status: string;
+  fineAmount: number;
+  authority: string | null;
+  fineRef: string | null;
+  offenceType: string | null;
+  assignedTo: string | null;
+  status: string | null;
   paidDate: string | null;
+  notes?: string | null;
 }
 
 interface FineSummary {
-  totalOutstanding: number;
+  outstanding: number;
   totalPaid: number;
-  totalDisputed: number;
-  totalWaived: number;
+  disputedCount: number;
+  waivedCount: number;
+  totalFines: number;
 }
 
-export default function TrafficFines() {
-  const [fines, setFines] = useState<TrafficFine[]>([]);
+interface AutoMatchSummary {
+  processedCount: number;
+  matchedToDriverCount: number;
+  assignedToCompanyCount: number;
+  unmatchedCount: number;
+  totalDriverRecoverableAed: number;
+  totalCompanyLiabilityAed: number;
+}
+
+export default function TrafficFinesPage() {
+  const [fines, setFines] = useState<TrafficFineItem[]>([]);
   const [summary, setSummary] = useState<FineSummary | null>(null);
+  const [matchSummary, setMatchSummary] = useState<AutoMatchSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [matching, setMatching] = useState(false);
   const [error, setError] = useState('');
+  const [matchMessage, setMatchMessage] = useState('');
+
+  const [activeTab, setActiveTab] = useState<'ALL' | 'DRIVER' | 'COMPANY' | 'UNMATCHED'>('ALL');
+  const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
+
   const [formData, setFormData] = useState({
-    vehicle: '',
-    driver: '',
-    fineDate: '',
-    amount: '',
-    authority: '',
+    vehicleId: '',
+    driverId: '',
+    fineDate: new Date().toISOString().slice(0, 16),
+    fineAmount: '',
+    authority: 'RTA',
     fineRef: '',
-    offenceType: '',
-    assignedTo: '',
+    offenceType: 'SPEEDING',
+    assignedTo: 'DRIVER',
   });
 
-  const authorities = ['RTA', 'Police', 'Municipality'];
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
-
-      const [finesRes, summaryRes] = await Promise.all([
-        fetch('/api/fleet/traffic-fines'),
+      const [finesRes, summaryRes, matchRes] = await Promise.all([
+        fetch('/api/fleet/traffic-fines?limit=100'),
         fetch('/api/fleet/traffic-fines/summary'),
+        fetch('/api/fleet/traffic-fines/auto-match'),
       ]);
 
-      if (!finesRes.ok || !summaryRes.ok) throw new Error('Failed to fetch data');
-
-      const finesData = await finesRes.json();
-      const summaryData = await summaryRes.json();
-
-      setFines(finesData);
-      setSummary(summaryData);
+      if (finesRes.ok) {
+        const json = await finesRes.json();
+        setFines(json.data || json || []);
+      }
+      if (summaryRes.ok) {
+        setSummary(await summaryRes.json());
+      }
+      if (matchRes.ok) {
+        setMatchSummary(await matchRes.json());
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load fines');
+      setError(err instanceof Error ? err.message : 'Failed to load traffic fines');
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleRunAutoMatch = async () => {
+    try {
+      setMatching(true);
+      setMatchMessage('');
+      const res = await fetch('/api/fleet/traffic-fines/auto-match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confidenceThreshold: 75 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to auto-match');
+      setMatchMessage(data.message);
+      setMatchSummary(data.summary);
+      fetchData();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Auto-match failed');
+    } finally {
+      setMatching(false);
     }
   };
 
@@ -76,272 +131,409 @@ export default function TrafficFines() {
       const res = await fetch('/api/fleet/traffic-fines', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          fineAmount: parseFloat(formData.fineAmount),
+          driverId: formData.driverId || undefined,
+        }),
       });
-      if (!res.ok) throw new Error('Failed to add fine');
+      if (!res.ok) throw new Error('Failed to record traffic fine');
       setShowModal(false);
       setFormData({
-        vehicle: '',
-        driver: '',
-        fineDate: '',
-        amount: '',
-        authority: '',
+        vehicleId: '',
+        driverId: '',
+        fineDate: new Date().toISOString().slice(0, 16),
+        fineAmount: '',
+        authority: 'RTA',
         fineRef: '',
-        offenceType: '',
-        assignedTo: '',
+        offenceType: 'SPEEDING',
+        assignedTo: 'DRIVER',
       });
       fetchData();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to add fine');
+      alert(err instanceof Error ? err.message : 'Failed to save fine');
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Paid':
-        return 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
-      case 'Unpaid':
-        return 'bg-red-500/20 text-red-400 border border-red-500/30';
-      case 'Disputed':
-        return 'bg-amber-500/20 text-amber-400 border border-amber-500/30';
-      case 'Waived':
-        return 'bg-slate-500/20 text-slate-400 border border-slate-500/30';
-      default:
-        return 'bg-slate-500/20 text-slate-400 border border-slate-500/30';
-    }
-  };
+  const filteredFines = useMemo(() => {
+    return fines.filter((f) => {
+      if (activeTab === 'DRIVER' && f.assignedTo !== 'DRIVER') return false;
+      if (activeTab === 'COMPANY' && f.assignedTo !== 'COMPANY') return false;
+      if (activeTab === 'UNMATCHED' && f.driverId) return false;
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full min-h-[200px]">
-        <div className="animate-spin">
-          <div className="w-12 h-12 border-4 border-slate-700 border-t-orange-500 rounded-full"></div>
-        </div>
-      </div>
-    );
-  }
+      if (search) {
+        const q = search.toLowerCase();
+        return (
+          (f.fineRef && f.fineRef.toLowerCase().includes(q)) ||
+          (f.offenceType && f.offenceType.toLowerCase().includes(q)) ||
+          (f.authority && f.authority.toLowerCase().includes(q)) ||
+          (f.vehicleCode && f.vehicleCode.toLowerCase().includes(q)) ||
+          (f.licensePlate && f.licensePlate.toLowerCase().includes(q)) ||
+          (f.driverName && f.driverName.toLowerCase().includes(q))
+        );
+      }
+      return true;
+    });
+  }, [fines, activeTab, search]);
 
-  if (error) {
-    return (
-      <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-6 text-red-400">
-        <p className="font-medium">Error loading fines</p>
-        <p className="text-sm mt-1">{error}</p>
-      </div>
-    );
-  }
+  const driverLiabilityAed = fines
+    .filter((f) => f.assignedTo === 'DRIVER' && f.status === 'UNPAID')
+    .reduce((s, f) => s + f.fineAmount, 0);
+
+  const companyLiabilityAed = fines
+    .filter((f) => f.assignedTo === 'COMPANY' && f.status === 'UNPAID')
+    .reduce((s, f) => s + f.fineAmount, 0);
 
   return (
-    <div className="space-y-8">
+    <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">Traffic Fines</h1>
-          <p className="text-slate-400 mt-1">Manage traffic fines and violations</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
+              <Zap className="w-6 h-6 text-amber-400" />
+              Traffic Fine & Toll Auto-Matcher
+            </h1>
+            <span className="px-2 py-0.5 text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full">
+              P0 Recovery
+            </span>
+          </div>
+          <p className="text-sm text-slate-400 mt-1">
+            Correlates RTA, Police, and Salik/Darb violation timestamps with active DriverShifts for automated payroll recovery.
+          </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 px-6 py-3 text-sm font-medium text-white hover:shadow-lg hover:shadow-orange-500/20 transition-all"
-        >
-          + New Fine Entry
-        </button>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRunAutoMatch}
+            disabled={matching}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow transition disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${matching ? 'animate-spin' : ''}`} />
+            {matching ? 'Auto-Matching...' : 'Auto-Match to Shifts'}
+          </button>
+
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
+          >
+            <Plus className="w-4 h-4" />
+            Record Fine / Toll
+          </button>
+        </div>
       </div>
 
-      {/* Summary Cards */}
-      {summary && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-            <p className="text-slate-400 text-sm font-medium mb-2">Outstanding Fines</p>
-            <p className="text-3xl font-bold text-red-400">AED {summary.totalOutstanding.toFixed(2)}</p>
-            <p className="text-xs text-slate-500 mt-2">Unpaid</p>
-          </div>
-
-          <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-            <p className="text-slate-400 text-sm font-medium mb-2">Total Paid</p>
-            <p className="text-3xl font-bold text-emerald-400">AED {summary.totalPaid.toFixed(2)}</p>
-            <p className="text-xs text-slate-500 mt-2">Settled</p>
-          </div>
-
-          <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-            <p className="text-slate-400 text-sm font-medium mb-2">Disputed</p>
-            <p className="text-3xl font-bold text-amber-400">AED {summary.totalDisputed.toFixed(2)}</p>
-            <p className="text-xs text-slate-500 mt-2">In Review</p>
-          </div>
-
-          <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-            <p className="text-slate-400 text-sm font-medium mb-2">Waived</p>
-            <p className="text-3xl font-bold text-slate-400">AED {summary.totalWaived.toFixed(2)}</p>
-            <p className="text-xs text-slate-500 mt-2">Cancelled</p>
-          </div>
+      {matchMessage && (
+        <div className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          {matchMessage}
         </div>
       )}
 
-      {/* Fines Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 overflow-hidden">
-        {fines.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="text-4xl mb-3">🚨</div>
-            <p className="text-slate-400">No traffic fines recorded</p>
+      {error && (
+        <div className="p-4 rounded-2xl bg-rose-950/40 border border-rose-500/30 text-rose-300 text-xs">
+          {error}
+        </div>
+      )}
+
+      {/* KPI Strip */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/10 space-y-1">
+          <span className="text-xs text-slate-400 font-medium">Total Outstanding</span>
+          <p className="text-2xl font-bold text-white">
+            AED {(summary?.outstanding || 0).toLocaleString()}
+          </p>
+          <p className="text-[11px] text-slate-500">Unpaid violations in system</p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-cyan-500/30 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-cyan-400 font-medium">Driver Recoverable</span>
+            <User className="w-4 h-4 text-cyan-400" />
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-800/50">
-                <tr className="border-b border-white/5">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Vehicle</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Driver</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Fine Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Amount</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Authority</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Fine Ref</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Offence Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Assigned To</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Paid Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {fines.map((fine) => (
-                  <tr key={fine.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td className="px-6 py-4 text-sm text-white font-medium">{fine.vehicle}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{fine.driver}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{new Date(fine.fineDate).toLocaleDateString()}</td>
-                    <td className="px-6 py-4 text-sm font-medium text-white">AED {fine.amount.toFixed(2)}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{fine.authority}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200 font-mono">{fine.fineRef}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{fine.offenceType}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{fine.assignedTo}</td>
-                    <td className="px-6 py-4 text-sm">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(fine.status)}`}>
-                        {fine.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-200">
-                      {fine.paidDate ? new Date(fine.paidDate).toLocaleDateString() : '-'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <p className="text-2xl font-bold text-cyan-300">
+            AED {driverLiabilityAed.toLocaleString()}
+          </p>
+          <p className="text-[11px] text-cyan-500/80">Matched & pending payroll deduction</p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-amber-500/30 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-amber-400 font-medium">Company Liability</span>
+            <Building className="w-4 h-4 text-amber-400" />
           </div>
-        )}
+          <p className="text-2xl font-bold text-amber-300">
+            AED {companyLiabilityAed.toLocaleString()}
+          </p>
+          <p className="text-[11px] text-slate-500">Vehicle defects / company permits</p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-emerald-500/30 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-emerald-400 font-medium">Auto-Matched Rate</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          </div>
+          <p className="text-2xl font-bold text-emerald-300">
+            {fines.length
+              ? Math.round(
+                  ((fines.filter((f) => f.driverId).length) / fines.length) * 100
+                )
+              : 100}
+            %
+          </p>
+          <p className="text-[11px] text-slate-500">Shifts temporally correlated</p>
+        </div>
       </div>
 
-      {/* Modal */}
+      {/* Tabs & Search */}
+      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto">
+          {(['ALL', 'DRIVER', 'COMPANY', 'UNMATCHED'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                activeTab === tab
+                  ? 'bg-slate-700 text-white border border-slate-500'
+                  : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-transparent'
+              }`}
+            >
+              {tab === 'ALL' && 'All Violations'}
+              {tab === 'DRIVER' && 'Driver Liability'}
+              {tab === 'COMPANY' && 'Company Liability'}
+              {tab === 'UNMATCHED' && 'Unmatched Queue'}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative w-full sm:w-72">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search ref, plate, offence, driver..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-900 border border-white/10 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500"
+          />
+        </div>
+      </div>
+
+      {/* Fines Table */}
+      <div className="rounded-2xl border border-white/10 overflow-hidden bg-slate-900/60 shadow-xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs text-slate-300">
+            <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-white/10">
+              <tr>
+                <th className="p-3.5">Violation Ref / Date</th>
+                <th className="p-3.5">Vehicle</th>
+                <th className="p-3.5">Offence & Authority</th>
+                <th className="p-3.5">Amount (AED)</th>
+                <th className="p-3.5">Assigned Liability</th>
+                <th className="p-3.5">Matched Driver</th>
+                <th className="p-3.5">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {!filteredFines.length ? (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-slate-500">
+                    No traffic violations matching criteria.
+                  </td>
+                </tr>
+              ) : (
+                filteredFines.map((f) => (
+                  <tr key={f.id} className="hover:bg-white/[0.02] transition">
+                    <td className="p-3.5">
+                      <div className="font-bold text-white font-mono">{f.fineRef || f.id.slice(0, 8)}</div>
+                      <div className="text-[11px] text-slate-400">
+                        {new Date(f.fineDate).toLocaleString('en-AE', {
+                          dateStyle: 'medium',
+                          timeStyle: 'short',
+                        })}
+                      </div>
+                    </td>
+
+                    <td className="p-3.5">
+                      <div className="font-bold text-white">{f.vehicleCode || 'VEH'}</div>
+                      <div className="text-[10px] text-slate-400 font-mono">{f.licensePlate || f.vehicleId?.slice(0, 8)}</div>
+                    </td>
+
+                    <td className="p-3.5">
+                      <div className="font-semibold text-slate-200">{f.offenceType || 'Driving Violation'}</div>
+                      <div className="text-[10px] text-slate-400">{f.authority || 'RTA Dubai'}</div>
+                    </td>
+
+                    <td className="p-3.5 font-mono font-bold text-amber-300">
+                      AED {f.fineAmount.toLocaleString()}
+                    </td>
+
+                    <td className="p-3.5">
+                      {f.assignedTo === 'DRIVER' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                          <User className="w-3 h-3" />
+                          DRIVER PAYROLL
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-700 text-slate-300">
+                          <Building className="w-3 h-3" />
+                          COMPANY
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="p-3.5">
+                      {f.driverId ? (
+                        <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                          <span>{f.driverName || `Driver #${f.driverId.slice(0, 6)}`}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 text-slate-500">
+                          <HelpCircle className="w-3.5 h-3.5" />
+                          <span>Unmatched</span>
+                        </div>
+                      )}
+                    </td>
+
+                    <td className="p-3.5">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          f.status === 'PAID'
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            : f.status === 'DISPUTED'
+                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                            : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        }`}
+                      >
+                        {f.status || 'UNPAID'}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Record Fine Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-800 border border-white/10 rounded-2xl p-8 max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold text-white mb-6">New Traffic Fine</h2>
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+                Record Traffic Violation / Toll
+              </h3>
+              <button
+                onClick={() => setShowModal(false)}
+                className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-            <form onSubmit={handleAddFine} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Vehicle</label>
-                <input
-                  type="text"
-                  value={formData.vehicle}
-                  onChange={(e) => setFormData({ ...formData, vehicle: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  required
-                />
+            <form onSubmit={handleAddFine} className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">Vehicle ID / UUID</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Vehicle UUID..."
+                    value={formData.vehicleId}
+                    onChange={(e) => setFormData({ ...formData, vehicleId: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">Fine Reference No.</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. DXB-FN-98214"
+                    value={formData.fineRef}
+                    onChange={(e) => setFormData({ ...formData, fineRef: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Driver</label>
-                <input
-                  type="text"
-                  value={formData.driver}
-                  onChange={(e) => setFormData({ ...formData, driver: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  required
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">Violation Timestamp</label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={formData.fineDate}
+                    onChange={(e) => setFormData({ ...formData, fineDate: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">Fine Amount (AED)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    placeholder="e.g. 600"
+                    value={formData.fineAmount}
+                    onChange={(e) => setFormData({ ...formData, fineAmount: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Fine Date</label>
-                <input
-                  type="date"
-                  value={formData.fineDate}
-                  onChange={(e) => setFormData({ ...formData, fineDate: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  required
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">Offence Type</label>
+                  <select
+                    value={formData.offenceType}
+                    onChange={(e) => setFormData({ ...formData, offenceType: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="SPEEDING">Speeding (Radar)</option>
+                    <option value="RED_LIGHT">Red Light Violation</option>
+                    <option value="LANE_DISCIPLINE">Lane Discipline Misuse</option>
+                    <option value="ILLEGAL_PARKING">Illegal Parking</option>
+                    <option value="SALIK_TOLL">Salik Toll Crossing</option>
+                    <option value="DARB_TOLL">Darb Toll Crossing</option>
+                    <option value="EXPIRED_REGISTRATION">Expired Mulkiya / Testing (Company)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">Authority</label>
+                  <select
+                    value={formData.authority}
+                    onChange={(e) => setFormData({ ...formData, authority: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="RTA">Dubai RTA</option>
+                    <option value="DUBAI_POLICE">Dubai Police</option>
+                    <option value="ABU_DHABI_POLICE">Abu Dhabi Police / ITC</option>
+                    <option value="SALIK">Salik Toll System</option>
+                    <option value="DARB">Darb Abu Dhabi</option>
+                    <option value="MUNICIPALITY">Municipality</option>
+                  </select>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Amount (AED)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Authority</label>
-                <select
-                  value={formData.authority}
-                  onChange={(e) => setFormData({ ...formData, authority: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  required
-                >
-                  <option value="">Select Authority</option>
-                  {authorities.map((auth) => (
-                    <option key={auth} value={auth}>
-                      {auth}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Fine Reference</label>
-                <input
-                  type="text"
-                  value={formData.fineRef}
-                  onChange={(e) => setFormData({ ...formData, fineRef: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Offence Type</label>
-                <input
-                  type="text"
-                  value={formData.offenceType}
-                  onChange={(e) => setFormData({ ...formData, offenceType: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Assigned To</label>
-                <input
-                  type="text"
-                  value={formData.assignedTo}
-                  onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  placeholder="Company or Driver name"
-                  required
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="submit"
-                  className="flex-1 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 px-4 py-2 text-sm font-medium text-white hover:shadow-lg hover:shadow-orange-500/20 transition-all"
-                >
-                  Add Fine
-                </button>
+              <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 rounded-xl bg-slate-700 px-4 py-2 text-sm font-medium text-slate-400 hover:bg-slate-600 transition-all"
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold hover:bg-slate-700 transition"
                 >
                   Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold hover:bg-amber-400 transition"
+                >
+                  Save Fine
                 </button>
               </div>
             </form>
