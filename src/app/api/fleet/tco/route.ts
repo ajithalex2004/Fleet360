@@ -3,120 +3,62 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-type Row = Record<string, unknown>;
-
-const query = <T = Row>(sql: string, ...v: unknown[]) =>
-  prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
-
-function ser<T>(v: T): T {
-  return JSON.parse(JSON.stringify(v, (_, val) =>
-    typeof val === 'bigint' ? Number(val) : val instanceof Date ? val.toISOString() : val
-  ));
-}
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { calculateFleetTcoSummary } from '@/lib/fleet/tco-engine';
 
 /**
  * GET /api/fleet/tco
- * Total Cost of Ownership breakdown per vehicle.
- * Aggregates: fuel costs, traffic fines, work-order labour/parts (if available).
+ *
+ * Enterprise Total Cost of Ownership (TCO) breakdown per vehicle & fleet summary.
+ * Aggregates 7 cost pillars: Depreciation, Fuel, Maintenance, Tires, Insurance, Fines, and Labor.
  *
  * Query params:
- *   vehicleId  — filter to a single vehicle UUID
- *   months     — rolling window in months (default 12)
+ *   vehicleId    — filter to a single vehicle UUID
+ *   vehicleGroup — filter by vehicle group (BUS, VAN, SEDAN, TRUCK)
+ *   months       — rolling window in months (default 12)
  */
 export async function GET(req: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  try {
-    const sp = req.nextUrl.searchParams;
-    const vehicleId = sp.get('vehicleId');
-    const months = Math.max(1, Math.min(60, parseInt(sp.get('months') ?? '12', 10)));
+  const sp = req.nextUrl.searchParams;
+  const vehicleId = sp.get('vehicleId') || undefined;
+  const vehicleGroup = sp.get('vehicleGroup') || undefined;
+  const months = Math.max(1, Math.min(60, parseInt(sp.get('months') ?? '12', 10)));
 
-    const vehicleFilter = vehicleId ? `AND v.id = '${vehicleId.replace(/'/g, "''")}'` : '';
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+      const summary = await calculateFleetTcoSummary(tx, tenantId, {
+        months,
+        vehicleId,
+        vehicleGroup,
+      });
 
-    // Per-vehicle fuel cost summary
-    const fuelRows = await query<Row>(`
-      SELECT
-        v.id           AS vehicle_id,
-        v.license_plate,
-        COALESCE(v.make || ' ' || v.model, v.license_plate) AS vehicle_name,
-        COALESCE(SUM(fl.total_cost), 0)   AS fuel_cost,
-        COALESCE(SUM(fl.liters), 0)       AS total_liters,
-        COUNT(fl.id)                      AS fuel_transactions
-      FROM vehicles v
-      LEFT JOIN fuel_logs fl
-        ON fl.vehicle_id = v.id
-        AND fl.fuel_date >= NOW() - ($1 || ' months')::interval
-      WHERE v.deleted_at IS NULL
-        ${vehicleFilter}
-      GROUP BY v.id, v.license_plate, v.make, v.model
-      ORDER BY fuel_cost DESC
-      LIMIT 50
-    `, String(months));
-
-    // Per-vehicle traffic-fine cost summary
-    const fineRows = await query<Row>(`
-      SELECT
-        vehicle_id,
-        COALESCE(SUM(fine_amount), 0) AS fines_cost,
-        COUNT(*)                      AS fine_count
-      FROM traffic_fines
-      WHERE fine_date >= NOW() - ($1 || ' months')::interval
-        ${vehicleId ? `AND vehicle_id = '${vehicleId.replace(/'/g, "''")}'` : ''}
-      GROUP BY vehicle_id
-    `, String(months));
-
-    // Build fines lookup map
-    const finesMap: Record<string, { fines_cost: number; fine_count: number }> = {};
-    for (const r of fineRows) {
-      finesMap[r.vehicle_id as string] = {
-        fines_cost: Number(r.fines_cost ?? 0),
-        fine_count: Number(r.fine_count ?? 0),
-      };
+      return NextResponse.json({
+        months,
+        totals: {
+          totalTco: summary.fleetTotals.totalTco,
+          depreciationCost: summary.fleetTotals.depreciationCost,
+          fuelCost: summary.fleetTotals.fuelCost,
+          maintenanceCost: summary.fleetTotals.maintenanceCost,
+          tiresCost: summary.fleetTotals.tiresCost,
+          insuranceCost: summary.fleetTotals.insuranceCost,
+          finesCost: summary.fleetTotals.finesCost,
+          laborCost: summary.fleetTotals.laborCost,
+          totalDistanceKm: summary.fleetTotals.totalDistanceKm,
+          totalFuelLiters: summary.fleetTotals.totalFuelLiters,
+          averageCpk: summary.fleetTotals.averageCpk,
+        },
+        costPillarsPct: summary.costPillarsPct,
+        replacementRecommendations: summary.replacementRecommendations,
+        vehicles: summary.vehicles,
+      });
+    } catch (err) {
+      console.error('[fleet-tco] Calculation failed:', err);
+      return NextResponse.json({ error: 'Failed to calculate Fleet TCO' }, { status: 500 });
     }
-
-    // Merge and compute TCO
-    const rows = fuelRows.map((r) => {
-      const vid = r.vehicle_id as string;
-      const fuelCost = Number(r.fuel_cost ?? 0);
-      const finesCost = finesMap[vid]?.fines_cost ?? 0;
-      const fineCount = finesMap[vid]?.fine_count ?? 0;
-      const totalTco = fuelCost + finesCost;
-
-      return {
-        vehicleId: vid,
-        licensePlate: r.license_plate,
-        vehicleName: r.vehicle_name,
-        fuelCost,
-        totalLiters: Number(r.total_liters ?? 0),
-        fuelTransactions: Number(r.fuel_transactions ?? 0),
-        finesCost,
-        fineCount,
-        totalTco,
-      };
-    });
-
-    // Fleet-wide totals
-    const totals = rows.reduce(
-      (acc, r) => {
-        acc.fuelCost += r.fuelCost;
-        acc.finesCost += r.finesCost;
-        acc.totalTco += r.totalTco;
-        acc.fuelTransactions += r.fuelTransactions;
-        acc.fineCount += r.fineCount;
-        return acc;
-      },
-      { fuelCost: 0, finesCost: 0, totalTco: 0, fuelTransactions: 0, fineCount: 0 }
-    );
-
-    return NextResponse.json(ser({ months, totals, vehicles: rows }));
-  } catch (e) {
-    console.error('Error fetching fleet TCO:', e);
-    return NextResponse.json({ error: 'Failed to fetch TCO data' }, { status: 500 });
-  }
+  });
 }

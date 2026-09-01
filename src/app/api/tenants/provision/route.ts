@@ -300,7 +300,6 @@ export async function POST(request: NextRequest) {
         // callback's `tx` parameter so the body is unchanged; atomicity already
         // comes from the outer transaction.
         const { tenant, user } = await (async (tx, rescopeToTenant) => {
-
           // 1. Create Tenant
           const tenant = await tx.tenant.create({
             data: {
@@ -320,15 +319,13 @@ export async function POST(request: NextRequest) {
           });
 
           // 1a. Re-scope the bootstrap transaction to the tenant just created.
-          // withBootstrap() pins app.tenant_id to the sentinel 'bootstrap' for
-          // the whole transaction so a fresh signup can't read any existing
-          // tenant's data - but that sentinel can never equal a real tenant_id,
-          // so RLS WITH CHECK silently rejected every write below this point
-          // (tenantModule, role, userTenant all carry tenant_id = tenant.id).
-          // Must go through rescopeToTenant(), not a raw call on `tx` - see
-          // its definition in tenant-bootstrap-handler.ts for why calling
-          // $executeRawUnsafe directly on the restricted proxy silently runs
-          // outside the actual transaction instead of erroring.
+          // withBootstrap() pins app.tenant_id to BOOTSTRAP_SENTINEL_TENANT_ID
+          // (the nil UUID) for the whole transaction so a fresh signup can't
+          // read any existing tenant's data. Must go through rescopeToTenant(),
+          // not a raw call on `tx` - see its definition in
+          // tenant-bootstrap-handler.ts for why calling $executeRawUnsafe
+          // directly on the restricted proxy silently runs outside the actual
+          // transaction instead of erroring.
           await rescopeToTenant(tenant.id);
 
           // 1b. Set TRN via raw SQL (handles case where Prisma client is stale)
