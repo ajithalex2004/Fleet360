@@ -259,6 +259,7 @@ export const MODULES: ModuleDef[] = [
     id: 'fleet', label: 'Fleet', href: '/fleet', icon: CarFront,
     subPages: [
       { label: 'Dashboard',             href: '/fleet',                icon: LayoutDashboard },
+      { label: 'Live Telematics & IoT', href: '/fleet/telematics',     icon: Radio },
       { label: 'Vehicle master',        href: '/fleet/vehicles',       icon: Car },
       { label: 'Vehicle types',         href: '/fleet/vehicle-types',  icon: Tag },
       { label: 'Lifecycle events',      href: '/fleet/lifecycle',      icon: RefreshCw },
