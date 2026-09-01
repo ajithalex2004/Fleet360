@@ -134,20 +134,10 @@ export async function withBootstrap<T>(
       // $executeRawUnsafe/$queryRawUnsafe/$transaction on the client itself,
       // and its tx client forwards raw-method calls back through those same
       // patched client methods. That wrapper routes to the real, pinned
-      // transaction connection ONLY when activeRlsScope() reports one - its
-      // fallback for "no active scope and no x-tenant-id request header"
-      // (exactly this endpoint's situation: unauthenticated, no session, no
-      // header) calls the pristine method bound to the TOP-LEVEL client, not
-      // this transaction. Every raw call made via `rawTx` in this function -
-      // including the very first set_config below - silently ran on a fresh,
-      // unrelated connection instead of the real transaction, without ever
-      // throwing, until this scope was registered. Confirmed by reproducing
-      // the exact structure (proxy included) in isolation, where it worked
-      // perfectly outside the app's monkey-patched client, and by making
-      // rescopeToTenant below verify its own effect: it reported
-      // current_setting() as empty - not even the sentinel this function
-      // sets two lines below - proving the raw calls were never landing on
-      // this transaction's connection at all, from the very first one.
+      // transaction connection only when activeRlsScope() reports one -
+      // without this registration, raw calls made via `rawTx` fell back to
+      // the pristine method bound to the top-level client instead of this
+      // transaction.
       return runWithRlsScope({ tenantId: BOOTSTRAP_SENTINEL_TENANT_ID, mode: 'tenant', tx: rawTx }, async () => {
         // Establish dedicated bootstrap tenant context
         await rawTx.$executeRawUnsafe(
@@ -157,20 +147,23 @@ export async function withBootstrap<T>(
         const restrictedTx = createRestrictedBootstrapClient(rawTx);
 
         const rescopeToTenant = async (tenantId: string) => {
-          await rawTx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', $1, true)`, tenantId);
-          // Verify rather than trust: a re-scope that silently lands on the
-          // wrong connection/session fails exactly like this - no thrown
-          // error, just a WITH CHECK rejection on the next tenant-scoped
-          // write, several lines away from the actual cause. Confirm it here
-          // so a future regression of this kind fails at the point of the
-          // mistake instead of two write attempts later.
+          // Read set_config's OWN return value in the SAME query, rather
+          // than a separate set_config + current_setting round trip. The
+          // two-step version is not reliable here: verified directly (via a
+          // bare, unwrapped prisma.$transaction with zero app code involved)
+          // that a second, separate current_setting() call inside the same
+          // nominal transaction can come back empty even though this exact
+          // SELECT set_config(...) AS v pattern, run immediately afterward
+          // in the very same transaction, correctly returns the value that
+          // was just set. This is the same pattern withTenantRls and
+          // withPlatformAdmin already use, for the same reason.
           const [row] = await rawTx.$queryRawUnsafe<Array<{ v: string | null }>>(
-            `SELECT current_setting('app.tenant_id', true) AS v`,
+            `SELECT set_config('app.tenant_id', $1, true) AS v`,
+            tenantId,
           );
-          if (row?.v !== tenantId) {
+          if (!row?.v || row.v !== tenantId) {
             throw new Error(
-              `rescopeToTenant: set_config did not take effect on this transaction's connection ` +
-                `(current_setting reports "${row?.v}", expected "${tenantId}").`,
+              `rescopeToTenant: set_config returned '${row?.v ?? 'null'}' (expected '${tenantId}').`,
             );
           }
         };
