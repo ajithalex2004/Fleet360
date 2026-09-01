@@ -24,6 +24,7 @@ import {
   Paperclip, Send, Info, Pin, FileMinus, Target, BookText, TrendingUp, Clock,
   CalendarCheck2,
   Gauge,
+  Cpu,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -260,6 +261,7 @@ export const MODULES: ModuleDef[] = [
     subPages: [
       { label: 'Dashboard',             href: '/fleet',                icon: LayoutDashboard },
       { label: 'Live Telematics & IoT', href: '/fleet/telematics',     icon: Radio },
+      { label: 'CAN-bus diagnostics',   href: '/fleet/diagnostics',    icon: Cpu },
       { label: 'Vehicle master',        href: '/fleet/vehicles',       icon: Car },
       { label: 'Vehicle types',         href: '/fleet/vehicle-types',  icon: Tag },
       { label: 'Lifecycle events',      href: '/fleet/lifecycle',      icon: RefreshCw },
