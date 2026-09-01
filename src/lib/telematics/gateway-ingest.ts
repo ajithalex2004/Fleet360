@@ -405,7 +405,7 @@ export async function processTelemetryBatch(
           where: {
             tenantId,
             vehicleId: vehicle.id,
-            status: { in: ['SCHEDULED', 'DEPARTED', 'IN_TRANSIT'] },
+            status: { in: ['SCHEDULED', 'STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT'] },
           },
           select: {
             id: true,

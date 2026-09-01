@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   try {
     const summary = await evaluateTenantSla(tenantId, {
       raiseAlerts: true,
-      statusFilter: ['IN_TRANSIT', 'DEPARTED', 'SCHEDULED'],
+      statusFilter: ['EN_ROUTE', 'STARTED', 'IN_TRANSIT', 'DEPARTED', 'SCHEDULED'],
     });
 
     void logAudit({

@@ -17,9 +17,7 @@ import Link from 'next/link';
 import { ArrowLeft, Users, RefreshCw } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
 import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
-
 type PassengerStatus = 'CONFIRMED' | 'BOARDED' | 'ALIGHTED' | 'ABSENT' | 'NO_SHOW' | 'CANCELLED' | 'WAITLISTED';
-type TripStatus = 'SCHEDULED' | 'DEPARTED' | 'IN_TRANSIT' | 'COMPLETED' | 'CANCELLED';
 
 interface Passenger {
   id: string;
@@ -47,7 +45,7 @@ interface Trip {
 // Palettes come from src/lib/bus-ops/status-meta.ts so every bus-ops UI
 // renders the same status with the same colour.
 import { TRIP_STATUS_META, PASSENGER_STATUS_META, pillClass } from '@/lib/bus-ops/status-meta';
-import { allowedPassengerTransitions } from '@/lib/bus-ops/state-machines';
+import { allowedPassengerTransitions, type TripScheduleStatus as TripStatus } from '@/lib/bus-ops/state-machines';
 const PAX_PILL  = Object.fromEntries(Object.entries(PASSENGER_STATUS_META).map(([k, v]) => [k, pillClass(v)])) as Record<PassengerStatus, string>;
 const TRIP_PILL = Object.fromEntries(Object.entries(TRIP_STATUS_META).map(([k, v]) => [k, pillClass(v)])) as Record<TripStatus, string>;
 

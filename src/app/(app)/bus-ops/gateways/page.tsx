@@ -236,7 +236,7 @@ export default function GatewaysAdminPage() {
           <li>Body shape A (preferred): <code className="text-slate-300">{'{ gatewayId, events:[{kind:BOARD|ALIGHT, tagId, occurredAt, rssiDbm?}] }'}</code></li>
           <li>Body shape B (fallback): <code className="text-slate-300">{'{ gatewayId, scanWindow:{startedAt, endedAt, observations:[...]} }'}</code> — server runs hysteresis</li>
           <li>Idempotent on (scheduleId, passengerId, occurredAt ±5s, direction)</li>
-          <li>Active trip auto-resolved as the SCHEDULED|DEPARTED|IN_TRANSIT trip on the gateway's vehicle within ±2h</li>
+          <li>Active trip auto-resolved as the SCHEDULED|STARTED|EN_ROUTE trip on the gateway's vehicle within ±2h</li>
         </ul>
       </div>
     </div>

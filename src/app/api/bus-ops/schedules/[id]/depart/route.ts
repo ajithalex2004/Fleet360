@@ -5,7 +5,7 @@ import { withTenantRls, runSequential } from '@/lib/rls';
 import { prisma }         from '@/lib/prisma';
 import { getEventBus }    from '@/events/event-bus';
 import { TRIP_DEPARTED }  from '@/events/registry';
-import { assertTripTransition, TripTransitionError, type TripScheduleStatus } from '@/lib/bus-ops/state-machines';
+import { assertTripTransition, normalizeTripStatus, TripTransitionError } from '@/lib/bus-ops/state-machines';
 import { raiseAlert }     from '@/lib/alerts/raise';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         const schedule = await tx.tripSchedule.findFirst({ where: { id: params.id, tenantId } });
         if (!schedule) return NextResponse.json({ error: 'Not found' }, { status: 404 });
         try {
-          assertTripTransition((schedule.status ?? 'SCHEDULED') as TripScheduleStatus, 'STARTED');
+          assertTripTransition(normalizeTripStatus(schedule.status), 'STARTED');
         } catch (e) {
           if (e instanceof TripTransitionError) return NextResponse.json({ error: e.message }, { status: 409 });
           throw e;

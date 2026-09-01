@@ -99,7 +99,7 @@ export interface PricingRule {
 }
 
 // ─── BUS OPERATIONS ──────────────────────────────────────────
-export type TripStatus = 'SCHEDULED' | 'DEPARTED' | 'IN_TRANSIT' | 'COMPLETED' | 'CANCELLED';
+export type TripStatus = 'SCHEDULED' | 'STARTED' | 'EN_ROUTE' | 'COMPLETED' | 'CANCELLED';
 export type PassengerStatus = 'CONFIRMED' | 'BOARDED' | 'ABSENT';
 
 export interface BusRoute {

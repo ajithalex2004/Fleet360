@@ -31,7 +31,7 @@ export default function BusOpsDashboard() {
     const now = new Date();
     return d.toDateString() === now.toDateString();
   });
-  const activeTrips   = schedules.filter((s: any) => ['DEPARTED','IN_TRANSIT'].includes(s.status ?? ''));
+  const activeTrips   = schedules.filter((s: any) => ['STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT'].includes(s.status ?? ''));
   const openIncidents = incidents.filter((i: any) => i.status === 'OPEN');
   const pendingReqs   = requests.filter((r: any) => r.status === 'PENDING');
 

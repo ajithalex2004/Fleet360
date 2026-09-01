@@ -82,6 +82,8 @@ export type MergeError = {
 };
 
 const TERMINAL_SOURCE_STATUSES = new Set([
+  'STARTED',
+  'EN_ROUTE',
   'DEPARTED',
   'IN_TRANSIT',
   'COMPLETED',

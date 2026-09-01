@@ -19,8 +19,15 @@ interface Route { id: string; name: string; isActive?: boolean; estimatedDuratio
 interface Vehicle { id: string; licensePlate?: string | null; make?: string | null; model?: string | null; vehicleUsage?: string | null }
 interface Driver { id: string; name: string; licenseType?: string | null }
 
+// Canonical vocabulary is SCHEDULED/STARTED/EN_ROUTE/COMPLETED/CANCELLED
+// (src/lib/bus-ops/state-machines.ts). DEPARTED/IN_TRANSIT are the legacy
+// strings STARTED/EN_ROUTE were renamed from - kept here so a row that
+// hasn't been touched since the rename still gets a colour instead of
+// falling through to no styling.
 const STATUS_COLORS: Record<string,string> = {
   SCHEDULED:  'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  STARTED:    'bg-amber-500/20 text-amber-400 border-amber-500/30',
+  EN_ROUTE:   'bg-orange-500/20 text-orange-400 border-orange-500/30',
   DEPARTED:   'bg-amber-500/20 text-amber-400 border-amber-500/30',
   IN_TRANSIT: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
   COMPLETED:  'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
@@ -160,7 +167,7 @@ export default function SchedulesPage() {
 
   const counts = {
     SCHEDULED: schedules.filter(s=>s.status==='SCHEDULED').length,
-    DEPARTED:  schedules.filter(s=>s.status==='DEPARTED').length,
+    STARTED:   schedules.filter(s=>['STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT'].includes(s.status ?? '')).length,
     COMPLETED: schedules.filter(s=>s.status==='COMPLETED').length,
   };
 
@@ -313,7 +320,7 @@ export default function SchedulesPage() {
     <div className="space-y-8">
       <PageHeader
         title="Trip Schedules"
-        subtitle={`${schedules.length} trips · ${counts.SCHEDULED} scheduled · ${counts.DEPARTED} departed · ${counts.COMPLETED} completed`}
+        subtitle={`${schedules.length} trips · ${counts.SCHEDULED} scheduled · ${counts.STARTED} in progress · ${counts.COMPLETED} completed`}
         icon={Calendar}
         accent="violet"
         actions={
@@ -343,7 +350,7 @@ export default function SchedulesPage() {
         <select value={statusFilter} onChange={e=>setStatus(e.target.value)}
           className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
           <option value="All">All Status</option>
-          {['SCHEDULED','DEPARTED','IN_TRANSIT','COMPLETED','CANCELLED'].map(s=><option key={s} value={s}>{s}</option>)}
+          {['SCHEDULED','STARTED','EN_ROUTE','COMPLETED','CANCELLED'].map(s=><option key={s} value={s}>{s}</option>)}
         </select>
         <input type="date" value={dateFilter} onChange={e=>setDate(e.target.value)}
           className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />

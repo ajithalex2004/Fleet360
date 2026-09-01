@@ -5,7 +5,7 @@ import { withTenantRls, runSequential } from '@/lib/rls';
 import { prisma }          from '@/lib/prisma';
 import { getEventBus }     from '@/events/event-bus';
 import { TRIP_COMPLETED }  from '@/events/registry';
-import { assertTripTransition, TripTransitionError, type TripScheduleStatus } from '@/lib/bus-ops/state-machines';
+import { assertTripTransition, normalizeTripStatus, TripTransitionError } from '@/lib/bus-ops/state-machines';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           // State machine: only STARTED / EN_ROUTE can COMPLETE. Previously
           // allowed SCHEDULED too — that skipped no-show marking and audit
           // trail; blocked now (audit risk closed).
-          assertTripTransition((schedule.status ?? 'SCHEDULED') as TripScheduleStatus, 'COMPLETED');
+          assertTripTransition(normalizeTripStatus(schedule.status), 'COMPLETED');
         } catch (e) {
           if (e instanceof TripTransitionError) return NextResponse.json({ error: e.message }, { status: 409 });
           throw e;

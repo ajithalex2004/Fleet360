@@ -250,7 +250,7 @@ export async function evaluateTenantSla(tenantId: string, options: {
   statusFilter?: string[];
 } = {}): Promise<SlaMonitorSummary> {
   const shouldRaiseAlerts = options.raiseAlerts ?? true;
-  const targetStatuses = options.statusFilter || ['IN_TRANSIT', 'DEPARTED', 'SCHEDULED'];
+  const targetStatuses = options.statusFilter || ['EN_ROUTE', 'STARTED', 'IN_TRANSIT', 'DEPARTED', 'SCHEDULED'];
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     // 1. Fetch active trips (today / running)

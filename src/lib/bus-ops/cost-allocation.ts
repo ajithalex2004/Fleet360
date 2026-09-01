@@ -230,7 +230,7 @@ export async function getTenantCostAllocation(
       where: {
         tenantId,
         departureTime: { gte: startDate, lte: endDate },
-        status: { in: ['COMPLETED', 'DEPARTED', 'IN_TRANSIT'] },
+        status: { in: ['COMPLETED', 'STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT'] },
       },
       include: {
         route: { select: { totalDistanceKm: true } },

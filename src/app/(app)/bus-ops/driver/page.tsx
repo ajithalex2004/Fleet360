@@ -185,7 +185,7 @@ export default function DriverTodayPage() {
                       </button>
                     </>
                   )}
-                  {(status === 'DEPARTED' || status === 'IN_TRANSIT') && (
+                  {(status === 'STARTED' || status === 'EN_ROUTE' || status === 'DEPARTED' || status === 'IN_TRANSIT') && (
                     <button
                       onClick={() => action(t.id, 'complete')}
                       disabled={isBusy}

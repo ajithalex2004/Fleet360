@@ -222,7 +222,7 @@ export async function getTenantAdhocRequests(
       where: {
         tenantId,
         departureTime: { gte: startOfToday },
-        status: { in: ['SCHEDULED', 'DEPARTED'] },
+        status: { in: ['SCHEDULED', 'STARTED', 'DEPARTED'] },
       },
       include: {
         route: true,

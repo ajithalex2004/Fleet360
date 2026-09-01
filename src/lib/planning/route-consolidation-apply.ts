@@ -499,7 +499,7 @@ export async function revertConsolidation(
           where: {
             routeId: consolidation.mergedRouteId,
             tenantId: input.tenantId,
-            status: { in: ['DEPARTED', 'IN_TRANSIT', 'COMPLETED'] },
+            status: { in: ['STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT', 'COMPLETED'] },
           },
         });
         if (executedCount > 0) {

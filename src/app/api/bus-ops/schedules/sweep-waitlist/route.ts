@@ -175,7 +175,7 @@ export async function POST(req: NextRequest) {
           where: {
             deletedAt: null,
             departureTime: { gte: target, lt: targetEnd },
-            status: { in: ['SCHEDULED', 'DEPARTED', 'IN_TRANSIT'] },
+            status: { in: ['SCHEDULED', 'STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT'] },
             passengers: { some: { status: 'WAITLISTED' } },
             ...(tenantScope ? { tenantId: tenantScope } : {}),
           },

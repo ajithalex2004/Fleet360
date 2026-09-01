@@ -43,10 +43,11 @@ interface EtaInfo {
 }
 
 const ETA_POLL_MS = 15_000;
-// Trip statuses during which the ETA is meaningful. Before DEPARTED the bus
+// Trip statuses during which the ETA is meaningful. Before STARTED the bus
 // is at the depot; after COMPLETED it's parked. Polling outside this set
-// wastes bandwidth and returns 'planned' / low-confidence.
-const ETA_TRACKED_STATUSES = new Set(['DEPARTED', 'IN_TRANSIT']);
+// wastes bandwidth and returns 'planned' / low-confidence. Includes the
+// legacy DEPARTED/IN_TRANSIT strings STARTED/EN_ROUTE were renamed from.
+const ETA_TRACKED_STATUSES = new Set(['STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT']);
 
 const STATUS_PILL: Record<string, string> = {
   CONFIRMED: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
@@ -208,7 +209,7 @@ function PassengerHomeInner() {
             const status = t.status;
             const trip = t.trip;
             const tStatus = (trip.status ?? 'SCHEDULED').toUpperCase();
-            const canBoard = ['CONFIRMED'].includes(status) && ['SCHEDULED', 'DEPARTED', 'IN_TRANSIT'].includes(tStatus);
+            const canBoard = ['CONFIRMED'].includes(status) && ['SCHEDULED', 'STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT'].includes(tStatus);
             const eta = etas[trip.id];
             return (
               <div key={t.passengerId} className="rounded-2xl bg-slate-800/60 border border-white/10 p-4 space-y-3">

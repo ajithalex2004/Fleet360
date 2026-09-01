@@ -171,8 +171,14 @@ const VEHICLE_UNAVAILABLE_STATUSES = new Set([
   'ALLOCATED',
 ]);
 
-/** TripSchedule statuses that count as "still holds the resource". */
-const ACTIVE_SCHEDULE_STATUSES = ['SCHEDULED', 'DEPARTED', 'IN_TRANSIT'] as const;
+/**
+ * TripSchedule statuses that count as "still holds the resource".
+ * Includes both the canonical vocabulary (STARTED/EN_ROUTE) and the legacy
+ * strings (DEPARTED/IN_TRANSIT) it was renamed from - old rows may still
+ * carry the legacy values, and dropping them here would let a vehicle or
+ * driver already on an active trip be double-booked onto a second one.
+ */
+const ACTIVE_SCHEDULE_STATUSES = ['SCHEDULED', 'STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT'] as const;
 
 /** V6 GPS_STALE only fires when departure is within this many minutes of now.
  *  Long-lead scheduling ("next week's trip") shouldn't warn on today's

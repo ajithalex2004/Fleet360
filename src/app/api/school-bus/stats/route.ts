@@ -46,7 +46,7 @@ const getSchoolBusStats = cacheRead(
       ).catch(zero),
 
       prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
-        `SELECT COUNT(*) as count FROM trip_schedules WHERE status IN ('DEPARTED','IN_TRANSIT') AND DATE(departure_time) = CURRENT_DATE`,
+        `SELECT COUNT(*) as count FROM trip_schedules WHERE status IN ('STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT') AND DATE(departure_time) = CURRENT_DATE`,
       ).catch(zero),
 
       prisma.$queryRawUnsafe<Array<{ count: bigint }>>(

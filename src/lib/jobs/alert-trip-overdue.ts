@@ -47,7 +47,7 @@ export async function runAlertTripOverdue(_ctx: JobContext): Promise<JobResult> 
            departure_time, arrival_time, status, route_variant_version_id
       FROM trip_schedules
      WHERE deleted_at IS NULL
-       AND status IN ('SCHEDULED', 'DEPARTED', 'IN_TRANSIT')
+       AND status IN ('SCHEDULED', 'STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT')
        AND arrival_time IS NOT NULL
        AND arrival_time < ${cutoff}
        AND departure_time > ${windowStart}

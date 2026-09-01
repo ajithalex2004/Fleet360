@@ -57,9 +57,10 @@ interface EstimateResp {
 const GPS_MIN_INTERVAL_MS = 10_000;
 
 // Trip statuses during which GPS tracking is active. Before SCHEDULED becomes
-// DEPARTED the driver is still at the depot; after COMPLETED there's nothing
-// to track.
-const TRACKED_STATUSES = new Set(['DEPARTED', 'IN_TRANSIT']);
+// STARTED the driver is still at the depot; after COMPLETED there's nothing
+// to track. Includes the legacy DEPARTED/IN_TRANSIT strings too - a trip row
+// still carrying the pre-rename status must keep tracking, not silently stop.
+const TRACKED_STATUSES = new Set(['STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT']);
 
 const STATUS_OPTIONS = ['CONFIRMED', 'BOARDED', 'ABSENT', 'NO_SHOW'] as const;
 const STATUS_BG: Record<string, string> = {

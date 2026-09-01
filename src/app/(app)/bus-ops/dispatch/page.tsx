@@ -300,7 +300,7 @@ export default function BusOpsDispatchPage() {
           body: JSON.stringify({ reason: 'Cancelled via Trip Monitor' }),
         });
       } else {
-        // IN_TRANSIT — no dedicated endpoint yet; generic PATCH.
+        // EN_ROUTE — no dedicated endpoint yet; generic PATCH.
         await fetch(`/api/bus-ops/schedules/${id}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status }),

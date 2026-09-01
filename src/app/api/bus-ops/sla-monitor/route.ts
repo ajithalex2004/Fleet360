@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
 
   const statusParam = sp.get('status');
-  const statusFilter = statusParam ? statusParam.split(',').map(s => s.trim()) : ['IN_TRANSIT', 'DEPARTED', 'SCHEDULED'];
+  const statusFilter = statusParam ? statusParam.split(',').map(s => s.trim()) : ['EN_ROUTE', 'STARTED', 'IN_TRANSIT', 'DEPARTED', 'SCHEDULED'];
   const raiseAlerts = sp.get('raiseAlerts') === 'true';
 
   try {

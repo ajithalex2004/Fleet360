@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
             tenantId,
             vehicleId: gateway.vehicleId,
             deletedAt: null,
-            status: { in: ['SCHEDULED', 'DEPARTED', 'IN_TRANSIT'] },
+            status: { in: ['SCHEDULED', 'STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT'] },
             // Trip is "active" if it's within ±2h of departure, or currently in
             // transit. Simple heuristic — adjust if shifts are longer than 4h.
             departureTime: { lte: new Date(now.getTime() + 2 * 60 * 60 * 1000) },

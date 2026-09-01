@@ -25,7 +25,14 @@ const getSchedules = cacheRead(
     dateStr: string | null,
   ) => {
     const where: any = { deletedAt: null, tenantId };
-    if (status)   where.status   = status;
+    // Canonical status filters must also match the legacy strings
+    // STARTED/EN_ROUTE were renamed from, so a query for the current
+    // vocabulary doesn't silently miss rows still on the old one.
+    const LEGACY_STATUS_ALIASES: Record<string, string[]> = {
+      STARTED:  ['STARTED', 'DEPARTED'],
+      EN_ROUTE: ['EN_ROUTE', 'IN_TRANSIT'],
+    };
+    if (status) where.status = LEGACY_STATUS_ALIASES[status] ? { in: LEGACY_STATUS_ALIASES[status] } : status;
     if (routeId)  where.routeId  = routeId;
     if (dateStr) {
       const start = new Date(dateStr); start.setHours(0,0,0,0);

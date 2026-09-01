@@ -19,11 +19,12 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-      // 1. Fetch active trips (SCHEDULED, DEPARTED, IN_TRANSIT)
+      // 1. Fetch active trips (SCHEDULED, STARTED, EN_ROUTE, and the legacy
+      // DEPARTED/IN_TRANSIT strings those were renamed from)
       const activeTrips = await tx.tripSchedule.findMany({
         where: {
           tenantId,
-          status: { in: ['SCHEDULED', 'DEPARTED', 'IN_TRANSIT'] },
+          status: { in: ['SCHEDULED', 'STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT'] },
         },
         include: {
           route: {
