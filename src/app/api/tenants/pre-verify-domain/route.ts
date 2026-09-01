@@ -25,11 +25,9 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function genId(): string    { return crypto.randomUUID(); }
@@ -67,176 +65,167 @@ async function ensureTable(): Promise<void> {
 // ── POST — all actions ────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  await ensureTable();
 
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
-  }
-  const { tenantId } = authz;
+  const url    = request.nextUrl;
+  const action = url.searchParams.get('action');
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureTable();
+  // ── send-otp ────────────────────────────────────────────────────────────────
+  if (action === 'send-otp') {
+    try {
+      const { id, email } = await request.json() as { id?: string; email?: string };
 
-      const url    = request.nextUrl;
-      const action = url.searchParams.get('action');
-
-      // ── send-otp ────────────────────────────────────────────────────────────────
-      if (action === 'send-otp') {
-        try {
-          const { id, email } = await request.json() as { id?: string; email?: string };
-
-          if (!id || !email) {
-            return NextResponse.json({ error: 'id and email are required' }, { status: 400 });
-          }
-
-          type Row = { id: string; domain: string; verified: boolean; expires_at: string };
-          const rows = await tx.$queryRawUnsafe<Row[]>(
-            `SELECT id, domain, verified, expires_at FROM domain_pre_verifications WHERE id = $1`, id,
-          );
-
-          if (!rows.length) {
-            return NextResponse.json({ error: 'Verification session not found. Please refresh and try again.' }, { status: 404 });
-          }
-
-          const rec = rows[0];
-
-          if (rec.verified) {
-            return NextResponse.json({ ok: true, alreadyVerified: true });
-          }
-
-          if (new Date(rec.expires_at) < new Date()) {
-            return NextResponse.json({ error: 'Verification session expired. Please start again.' }, { status: 410 });
-          }
-
-          // Email domain must match the registered domain
-          const emailDomain = email.split('@')[1]?.toLowerCase() ?? '';
-          const domainClean = rec.domain.replace(/^www\./, '').toLowerCase();
-          if (emailDomain !== domainClean) {
-            return NextResponse.json(
-              { error: `Email must be at your company domain (@${domainClean})` },
-              { status: 400 },
-            );
-          }
-
-          const otp      = genOtp();
-          const otpExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 min
-
-          await tx.$executeRawUnsafe(
-            `UPDATE domain_pre_verifications SET otp = $1, otp_email = $2, otp_expires_at = $3::timestamptz WHERE id = $4`,
-            otp, email, otpExpiry.toISOString(), id,
-          );
-
-          // Send OTP via platform SMTP (fire and forget on error — code is stored in DB)
-          await sendOtpEmail(email, otp, rec.domain).catch(err => {
-            console.error('[pre-verify-domain] sendOtpEmail failed:', err);
-          });
-
-          return NextResponse.json({ ok: true, sentTo: email });
-          } catch (err) {
-          console.error('[pre-verify-domain] send-otp error:', err);
-          const msg = err instanceof Error ? err.message : String(err);
-          return NextResponse.json({ error: msg }, { status: 500 });
-        }
+      if (!id || !email) {
+        return NextResponse.json({ error: 'id and email are required' }, { status: 400 });
       }
 
-      // ── verify-otp ──────────────────────────────────────────────────────────────
-      if (action === 'verify-otp') {
-        try {
-          const { id, otp } = await request.json() as { id?: string; otp?: string };
+      type Row = { id: string; domain: string; verified: boolean; expires_at: string };
+      const rows = await prisma.$queryRawUnsafe<Row[]>(
+        `SELECT id, domain, verified, expires_at FROM domain_pre_verifications WHERE id = $1`, id,
+      );
 
-          if (!id || !otp) {
-            return NextResponse.json({ error: 'id and otp are required' }, { status: 400 });
-          }
-
-          type OtpRow = { id: string; otp: string | null; otp_expires_at: string | null; verified: boolean };
-          const rows = await tx.$queryRawUnsafe<OtpRow[]>(
-            `SELECT id, otp, otp_expires_at, verified FROM domain_pre_verifications WHERE id = $1`, id,
-          );
-
-          if (!rows.length) {
-            return NextResponse.json({ error: 'Verification session not found.' }, { status: 404 });
-          }
-
-          const rec = rows[0];
-
-          if (rec.verified) {
-            return NextResponse.json({ ok: true, verified: true });
-          }
-
-          if (!rec.otp) {
-            return NextResponse.json({ error: 'No code has been sent yet. Request a code first.' }, { status: 400 });
-          }
-
-          if (rec.otp_expires_at && new Date(rec.otp_expires_at) < new Date()) {
-            return NextResponse.json({ error: 'Code has expired. Request a new one.' }, { status: 410 });
-          }
-
-          if (rec.otp !== otp.trim()) {
-            return NextResponse.json({ error: 'Incorrect code. Please try again.' }, { status: 401 });
-          }
-
-          await tx.$executeRawUnsafe(
-            `UPDATE domain_pre_verifications SET verified = true, verified_method = 'EMAIL_OTP' WHERE id = $1`, id,
-          );
-
-          return NextResponse.json({ ok: true, verified: true });
-          } catch (err) {
-          console.error('[pre-verify-domain] verify-otp error:', err);
-          const msg = err instanceof Error ? err.message : String(err);
-          return NextResponse.json({ error: msg }, { status: 500 });
-        }
+      if (!rows.length) {
+        return NextResponse.json({ error: 'Verification session not found. Please refresh and try again.' }, { status: 404 });
       }
 
-      // ── default POST — initiate domain session ───────────────────────────────────
-      try {
-        const body = await request.json() as { domain?: string };
-        const { domain } = body;
+      const rec = rows[0];
 
-        if (!domain) {
-          return NextResponse.json({ error: 'domain is required' }, { status: 400 });
-        }
+      if (rec.verified) {
+        return NextResponse.json({ ok: true, alreadyVerified: true });
+      }
 
-        const domainClean  = domain.replace(/^www\./, '').toLowerCase().trim();
-        const domainPattern = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]?\.[a-zA-Z]{2,}$/;
-        if (!domainPattern.test(domainClean)) {
-          return NextResponse.json({ error: 'Invalid domain format (e.g. acmetransport.com)' }, { status: 400 });
-        }
+      if (new Date(rec.expires_at) < new Date()) {
+        return NextResponse.json({ error: 'Verification session expired. Please start again.' }, { status: 410 });
+      }
 
-        // Clean up expired records for this domain
-        await tx.$executeRawUnsafe(
-          `DELETE FROM domain_pre_verifications WHERE domain = $1 AND expires_at < NOW()`,
-          domainClean,
-        ).catch(() => {}); // ignore if table empty / doesn't exist yet
-
-        // Reuse an existing unexpired & already-verified session
-        type ExistingRow = { id: string; verified: boolean };
-        const existing = await tx.$queryRawUnsafe<ExistingRow[]>(
-          `SELECT id, verified FROM domain_pre_verifications
-           WHERE domain = $1 AND expires_at > NOW()
-           ORDER BY created_at DESC LIMIT 1`,
-          domainClean,
-        ).catch(() => [] as ExistingRow[]);
-
-        if (existing.length && existing[0].verified) {
-          return NextResponse.json({ id: existing[0].id, domain: domainClean, verified: true });
-        }
-
-        // Create a new session — generate id and token in JavaScript
-        const id    = genId();
-        const token = genToken();
-
-        await tx.$executeRawUnsafe(
-          `INSERT INTO domain_pre_verifications (id, domain, token) VALUES ($1, $2, $3)`,
-          id, domainClean, token,
+      // Email domain must match the registered domain
+      const emailDomain = email.split('@')[1]?.toLowerCase() ?? '';
+      const domainClean = rec.domain.replace(/^www\./, '').toLowerCase();
+      if (emailDomain !== domainClean) {
+        return NextResponse.json(
+          { error: `Email must be at your company domain (@${domainClean})` },
+          { status: 400 },
         );
-
-        return NextResponse.json({ id, domain: domainClean, verified: false });
-        } catch (err) {
-        console.error('[pre-verify-domain] initiate error:', err);
-        const msg = err instanceof Error ? err.message : String(err);
-        return NextResponse.json({ error: msg }, { status: 500 });
       }
-  });
+
+      const otp      = genOtp();
+      const otpExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 min
+
+      await prisma.$executeRawUnsafe(
+        `UPDATE domain_pre_verifications SET otp = $1, otp_email = $2, otp_expires_at = $3::timestamptz WHERE id = $4`,
+        otp, email, otpExpiry.toISOString(), id,
+      );
+
+      // Send OTP via platform SMTP (fire and forget on error — code is stored in DB)
+      await sendOtpEmail(email, otp, rec.domain).catch(err => {
+        console.error('[pre-verify-domain] sendOtpEmail failed:', err);
+      });
+
+      return NextResponse.json({ ok: true, sentTo: email });
+    } catch (err) {
+      console.error('[pre-verify-domain] send-otp error:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
+  }
+
+  // ── verify-otp ──────────────────────────────────────────────────────────────
+  if (action === 'verify-otp') {
+    try {
+      const { id, otp } = await request.json() as { id?: string; otp?: string };
+
+      if (!id || !otp) {
+        return NextResponse.json({ error: 'id and otp are required' }, { status: 400 });
+      }
+
+      type OtpRow = { id: string; otp: string | null; otp_expires_at: string | null; verified: boolean };
+      const rows = await prisma.$queryRawUnsafe<OtpRow[]>(
+        `SELECT id, otp, otp_expires_at, verified FROM domain_pre_verifications WHERE id = $1`, id,
+      );
+
+      if (!rows.length) {
+        return NextResponse.json({ error: 'Verification session not found.' }, { status: 404 });
+      }
+
+      const rec = rows[0];
+
+      if (rec.verified) {
+        return NextResponse.json({ ok: true, verified: true });
+      }
+
+      if (!rec.otp) {
+        return NextResponse.json({ error: 'No code has been sent yet. Request a code first.' }, { status: 400 });
+      }
+
+      if (rec.otp_expires_at && new Date(rec.otp_expires_at) < new Date()) {
+        return NextResponse.json({ error: 'Code has expired. Request a new one.' }, { status: 410 });
+      }
+
+      if (rec.otp !== otp.trim()) {
+        return NextResponse.json({ error: 'Incorrect code. Please try again.' }, { status: 401 });
+      }
+
+      await prisma.$executeRawUnsafe(
+        `UPDATE domain_pre_verifications SET verified = true, verified_method = 'EMAIL_OTP' WHERE id = $1`, id,
+      );
+
+      return NextResponse.json({ ok: true, verified: true });
+    } catch (err) {
+      console.error('[pre-verify-domain] verify-otp error:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
+  }
+
+  // ── default POST — initiate domain session ───────────────────────────────────
+  try {
+    const body = await request.json() as { domain?: string };
+    const { domain } = body;
+
+    if (!domain) {
+      return NextResponse.json({ error: 'domain is required' }, { status: 400 });
+    }
+
+    const domainClean  = domain.replace(/^www\./, '').toLowerCase().trim();
+    const domainPattern = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]?\.[a-zA-Z]{2,}$/;
+    if (!domainPattern.test(domainClean)) {
+      return NextResponse.json({ error: 'Invalid domain format (e.g. acmetransport.com)' }, { status: 400 });
+    }
+
+    // Clean up expired records for this domain
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM domain_pre_verifications WHERE domain = $1 AND expires_at < NOW()`,
+      domainClean,
+    ).catch(() => {}); // ignore if table empty / doesn't exist yet
+
+    // Reuse an existing unexpired & already-verified session
+    type ExistingRow = { id: string; verified: boolean };
+    const existing = await prisma.$queryRawUnsafe<ExistingRow[]>(
+      `SELECT id, verified FROM domain_pre_verifications
+       WHERE domain = $1 AND expires_at > NOW()
+       ORDER BY created_at DESC LIMIT 1`,
+      domainClean,
+    ).catch(() => [] as ExistingRow[]);
+
+    if (existing.length && existing[0].verified) {
+      return NextResponse.json({ id: existing[0].id, domain: domainClean, verified: true });
+    }
+
+    // Create a new session — generate id and token in JavaScript
+    const id    = genId();
+    const token = genToken();
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO domain_pre_verifications (id, domain, token) VALUES ($1, $2, $3)`,
+      id, domainClean, token,
+    );
+
+    return NextResponse.json({ id, domain: domainClean, verified: false });
+  } catch (err) {
+    console.error('[pre-verify-domain] initiate error:', err);
+    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
 
 
