@@ -125,6 +125,20 @@ export async function withBootstrap<T>(
       // inlined as a raw call on `tx` at the route-handler call site.
       const rescopeToTenant = async (tenantId: string) => {
         await rawTx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', $1, true)`, tenantId);
+        // Verify rather than trust: a re-scope that silently lands on the
+        // wrong connection/session fails exactly like this - no thrown error,
+        // just a WITH CHECK rejection on the next tenant-scoped write, several
+        // lines away from the actual cause. Confirm it here so a future
+        // regression of this kind fails at the point of the mistake.
+        const [row] = await rawTx.$queryRawUnsafe<Array<{ v: string | null }>>(
+          `SELECT current_setting('app.tenant_id', true) AS v`,
+        );
+        if (row?.v !== tenantId) {
+          throw new Error(
+            `rescopeToTenant: set_config did not take effect on this transaction's connection ` +
+              `(current_setting reports "${row?.v}", expected "${tenantId}").`,
+          );
+        }
       };
 
       return fn(restrictedTx, rescopeToTenant);
