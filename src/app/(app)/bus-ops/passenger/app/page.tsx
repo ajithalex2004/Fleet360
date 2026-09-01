@@ -21,7 +21,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Bus, Bell, MapPin, CheckCircle2, AlertTriangle, Clock,
   User, ListChecks, Wifi, WifiOff, X, RefreshCw, ChevronRight,
-  Play, SkipForward, Hourglass, Navigation,
+  Play, SkipForward, Hourglass, Navigation, Zap, QrCode, Send, Ticket, Car,
 } from 'lucide-react';
 import { useFetchedData, fetchOnce } from '@/hooks/useFetchedData';
 
@@ -301,26 +301,155 @@ function TodayTab({ today, onAction, actionInFlight }: {
   onAction: (id: string, action: 'late' | 'skip' | 'board', trip: PassengerTrip['trip']) => void;
   actionInFlight: string | null;
 }) {
+  const [showAdhocModal, setShowAdhocModal] = useState(false);
+  const [pickupLoc, setPickupLoc] = useState('');
+  const [dropLoc, setDropLoc] = useState('');
+  const [tripDateTime, setTripDateTime] = useState('');
+  const [reason, setReason] = useState('Production Overtime');
+  const [notes, setNotes] = useState('');
+  const [submittingAdhoc, setSubmittingAdhoc] = useState(false);
+
+  const [adhocRequests, setAdhocRequests] = useState<any[]>([]);
+
+  const loadAdhoc = useCallback(() => {
+    if (!today?.staff?.id) return;
+    fetch(`/api/bus-ops/adhoc-requests?staffMemberId=${today.staff.id}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setAdhocRequests(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, [today?.staff?.id]);
+
+  useEffect(() => {
+    loadAdhoc();
+  }, [loadAdhoc]);
+
+  const handleCreateAdhoc = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!today?.staff?.id || !tripDateTime || !pickupLoc || !dropLoc) return;
+
+    setSubmittingAdhoc(true);
+    try {
+      const res = await fetch('/api/bus-ops/adhoc-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          staffMemberId: today.staff.id,
+          tripDate: new Date(tripDateTime).toISOString(),
+          pickupLocation: pickupLoc,
+          dropLocation: dropLoc,
+          reason,
+          notes,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to submit request');
+      }
+
+      setShowAdhocModal(false);
+      setPickupLoc('');
+      setDropLoc('');
+      setTripDateTime('');
+      setNotes('');
+      loadAdhoc();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to request adhoc transport');
+    } finally {
+      setSubmittingAdhoc(false);
+    }
+  };
+
   if (!today) return <Splash label="Loading today's trips…" />;
   const now = new Date();
   const upcoming = today.trips.filter((t) => new Date(t.trip.departureTime).getTime() > now.getTime() - 30 * 60_000);
   const past    = today.trips.filter((t) => new Date(t.trip.departureTime).getTime() <= now.getTime() - 30 * 60_000);
 
+  const pendingAdhoc = adhocRequests.filter((r) => r.status === 'PENDING');
+  const activeAdhoc = adhocRequests.filter((r) => r.status === 'FULFILLED');
+
   return (
     <div className="space-y-4">
+      {/* Today Banner */}
       <div className="rounded-2xl bg-gradient-to-br from-cyan-600 to-blue-700 p-5 text-white shadow-lg shadow-cyan-500/30">
-        <p className="text-xs uppercase tracking-wider opacity-80">Today</p>
-        <h2 className="text-2xl font-bold mt-1">
-          {upcoming.length > 0 ? `${upcoming.length} upcoming trip${upcoming.length === 1 ? '' : 's'}` : 'No more trips today'}
-        </h2>
-        {today.staff.defaultStopName && (
-          <p className="text-sm opacity-90 mt-1 flex items-center gap-1.5">
-            <MapPin className="w-3.5 h-3.5" /> Default stop: {today.staff.defaultStopName}
-          </p>
-        )}
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-wider opacity-80">Today</p>
+            <h2 className="text-2xl font-bold mt-1">
+              {upcoming.length > 0 ? `${upcoming.length} upcoming trip${upcoming.length === 1 ? '' : 's'}` : 'No scheduled trips'}
+            </h2>
+            {today.staff.defaultStopName && (
+              <p className="text-sm opacity-90 mt-1 flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5" /> Default stop: {today.staff.defaultStopName}
+              </p>
+            )}
+          </div>
+
+          <button
+            onClick={() => setShowAdhocModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs shadow hover:bg-amber-300 transition"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            Ad-Hoc / Overtime
+          </button>
+        </div>
       </div>
 
-      {upcoming.length === 0 ? (
+      {/* Active Ad-Hoc / Overtime Bookings & Boarding Passes */}
+      {activeAdhoc.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+            <Zap className="w-3.5 h-3.5" /> Confirmed Ad-Hoc Boarding Passes
+          </p>
+          {activeAdhoc.map((req) => (
+            <div
+              key={req.id}
+              className="rounded-2xl bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-900 border border-amber-500/40 p-4 space-y-3"
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="font-mono text-[10px] font-bold text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/30">
+                    {req.requestNo}
+                  </span>
+                  <h3 className="text-sm font-bold text-white mt-1">
+                    {req.pickupLocation} → {req.dropLocation}
+                  </h3>
+                  <p className="text-xs text-amber-200 flex items-center gap-1 mt-0.5">
+                    <Clock className="w-3 h-3 text-amber-400" />
+                    Pickup at {new Date(req.tripDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+                <div className="p-2 rounded-xl bg-white text-slate-950 flex flex-col items-center justify-center">
+                  <QrCode className="w-8 h-8" />
+                  <span className="text-[8px] font-mono font-bold mt-0.5">SCAN TO BOARD</span>
+                </div>
+              </div>
+
+              {req.notes && (
+                <div className="text-[11px] text-slate-300 bg-slate-950/80 p-2 rounded-lg border border-white/5 font-mono">
+                  {req.notes.split('\n')[0]}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Pending Ad-Hoc Requests Notice */}
+      {pendingAdhoc.length > 0 && (
+        <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-amber-400 animate-spin" />
+            <span className="text-amber-200">
+              {pendingAdhoc.length} Ad-Hoc Request pending dispatcher match...
+            </span>
+          </div>
+          <span className="text-[10px] font-mono text-amber-400">{pendingAdhoc[0].requestNo}</span>
+        </div>
+      )}
+
+      {/* Scheduled Upcoming Trips */}
+      {upcoming.length === 0 && activeAdhoc.length === 0 ? (
         <div className="rounded-2xl bg-slate-900/60 border border-white/10 p-6 text-center">
           <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
           <p className="text-sm text-slate-200">All trips done for today.</p>
@@ -336,6 +465,98 @@ function TodayTab({ today, onAction, actionInFlight }: {
             {past.map((t) => <TripCard key={t.passengerId} trip={t} onAction={onAction} actionInFlight={actionInFlight} muted />)}
           </div>
         </details>
+      )}
+
+      {/* Ad-Hoc Request Modal */}
+      {showAdhocModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 space-y-3.5 shadow-2xl text-xs">
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">
+                  ⚡ On-Demand
+                </span>
+                <h3 className="text-base font-bold text-white mt-0.5">Request Overtime Shuttle</h3>
+              </div>
+              <button
+                onClick={() => setShowAdhocModal(false)}
+                className="text-slate-500 hover:text-slate-300 text-lg leading-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateAdhoc} className="space-y-3">
+              <div>
+                <label className="block text-slate-300 font-medium mb-1">Required Pickup Time *</label>
+                <input
+                  type="datetime-local"
+                  value={tripDateTime}
+                  onChange={(e) => setTripDateTime(e.target.value)}
+                  required
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-100 focus:outline-none focus:border-amber-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-medium mb-1">Pickup Location *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Plant Gate 4"
+                  value={pickupLoc}
+                  onChange={(e) => setPickupLoc(e.target.value)}
+                  required
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-100 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-medium mb-1">Drop-off Location *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. DIP Accommodation"
+                  value={dropLoc}
+                  onChange={(e) => setDropLoc(e.target.value)}
+                  required
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-100 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-medium mb-1">Reason *</label>
+                <select
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-100 focus:outline-none focus:border-amber-500"
+                >
+                  <option value="Production Overtime">Production Overtime</option>
+                  <option value="Emergency Maintenance">Emergency Maintenance</option>
+                  <option value="Flight / Shift Extension">Flight / Shift Extension</option>
+                  <option value="Hospital Urgent Coverage">Hospital Urgent Coverage</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAdhocModal(false)}
+                  disabled={submittingAdhoc}
+                  className="px-3 py-1.5 text-slate-400 hover:text-slate-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingAdhoc}
+                  className="flex items-center gap-1.5 px-4 py-2 font-bold text-white bg-amber-600 hover:bg-amber-500 rounded-xl shadow transition disabled:opacity-50"
+                >
+                  <Send className="w-3 h-3" />
+                  {submittingAdhoc ? 'Submitting...' : 'Request Transport'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
