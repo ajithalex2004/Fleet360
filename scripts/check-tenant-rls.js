@@ -81,6 +81,21 @@ const RULE_EXEMPTIONS = [
       'x-webhook-secret / x-telematics-secret and specify tenantId via headers or query parameters, ' +
       'with all database writes strictly executed under withTenantRls.',
   },
+  {
+    file: 'src/app/api/tenants/pre-verify-domain/route.ts',
+    method: 'POST',
+    type: 'missing_auth',
+    reason:
+      'Pre-registration domain verification endpoint. Called before a tenant exists to verify email OTP, ' +
+      'storing ephemeral records with no tenant association.',
+  },
+  {
+    file: 'src/app/api/tenants/pre-verify-domain/route.ts',
+    method: 'POST',
+    type: 'missing_rls_wrapper',
+    reason:
+      'Pre-registration domain verification endpoint operates on ephemeral unauthenticated domain_pre_verifications table.',
+  },
 ];
 
 function ruleExemptionFor(relativePath, violation) {
