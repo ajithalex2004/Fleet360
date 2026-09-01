@@ -44,11 +44,13 @@ export async function GET(req: NextRequest) {
         },
         select: {
           id: true,
-          fullName: true,
-          phone: true,
+          name: true,
+          firstName: true,
+          lastName: true,
+          contactNumber: true,
           status: true,
         },
-        orderBy: { fullName: 'asc' },
+        orderBy: { name: 'asc' },
       });
 
       // Fetch trip history across past 7 days for these drivers
@@ -67,7 +69,7 @@ export async function GET(req: NextRequest) {
           departureTime: true,
           arrivalTime: true,
           status: true,
-          Route: { select: { name: true } },
+          route: { select: { name: true } },
         },
         orderBy: { departureTime: 'desc' },
       });
@@ -86,7 +88,7 @@ export async function GET(req: NextRequest) {
         const recentTrips = rawTrips.map((t) => ({
           id: t.id,
           tripNumber: t.tripNumber ?? t.id.slice(0, 8),
-          routeName: t.Route?.name,
+          routeName: t.route?.name,
           departureTime: t.departureTime,
           arrivalTime: t.arrivalTime,
           status: t.status ?? 'COMPLETED',
@@ -95,7 +97,7 @@ export async function GET(req: NextRequest) {
 
         return evaluateDriverFatigue({
           driverId: drv.id,
-          driverName: drv.fullName,
+          driverName: drv.name ?? ([drv.firstName, drv.lastName].filter(Boolean).join(' ') || undefined),
           targetDepartureTime: targetTime,
           targetDurationMinutes: 60,
           recentTrips,
@@ -148,7 +150,7 @@ export async function POST(req: NextRequest) {
 
       const driver = await tx.driver.findFirst({
         where: { id: driverId, tenantId, deletedAt: null },
-        select: { id: true, fullName: true },
+        select: { id: true, name: true, firstName: true, lastName: true },
       });
 
       if (!driver) {
@@ -171,7 +173,7 @@ export async function POST(req: NextRequest) {
           departureTime: true,
           arrivalTime: true,
           status: true,
-          Route: { select: { name: true } },
+          route: { select: { name: true } },
         },
         orderBy: { departureTime: 'desc' },
       });
@@ -179,7 +181,7 @@ export async function POST(req: NextRequest) {
       const recentTrips = trips.map((t) => ({
         id: t.id,
         tripNumber: t.tripNumber ?? t.id.slice(0, 8),
-        routeName: t.Route?.name,
+        routeName: t.route?.name,
         departureTime: t.departureTime,
         arrivalTime: t.arrivalTime,
         status: t.status ?? 'COMPLETED',
@@ -188,7 +190,7 @@ export async function POST(req: NextRequest) {
 
       const evaluation = evaluateDriverFatigue({
         driverId: driver.id,
-        driverName: driver.fullName,
+        driverName: driver.name ?? ([driver.firstName, driver.lastName].filter(Boolean).join(' ') || undefined),
         targetDepartureTime: targetTime,
         targetDurationMinutes,
         recentTrips,

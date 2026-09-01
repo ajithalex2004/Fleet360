@@ -35,7 +35,9 @@ export async function GET(req: NextRequest) {
       const startOfMonth = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0));
       const endOfMonth = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
 
-      // Fetch completed trips in the target period
+      // Fetch completed trips in the target period. TripSchedule has no
+      // `vehicle` relation object (only the scalar vehicleId), so vehicles
+      // are looked up separately below.
       const trips = await tx.tripSchedule.findMany({
         where: {
           tenantId,
@@ -46,30 +48,34 @@ export async function GET(req: NextRequest) {
           },
         },
         include: {
-          Route: { select: { distanceKm: true, name: true } },
-          Vehicle: { select: { type: true, fuelType: true } },
-          passengers: {
-            include: {
-              staffMember: { select: { department: true, name: true } },
-            },
-          },
+          route: { select: { totalDistanceKm: true, name: true } },
+          passengers: true,
         },
         orderBy: { departureTime: 'desc' },
       });
 
-      const esgTrips: EsgTripInput[] = trips.map((t) => ({
-        id: t.id,
-        tripNumber: t.tripNumber ?? t.id.slice(0, 8),
-        distanceKm: Number(t.Route?.distanceKm ?? 35),
-        vehicleType: t.Vehicle?.type || 'DIESEL_COASTER_30',
-        fuelType: t.Vehicle?.fuelType || 'DIESEL',
-        departureTime: t.departureTime,
-        passengers: t.passengers.map((p) => ({
-          staffMemberId: p.staffMemberId || p.id,
-          department: p.staffMember?.department || 'Operations',
-          status: p.status || 'BOARDED',
-        })),
-      }));
+      const vehicleIds = [...new Set(trips.map((t) => t.vehicleId).filter((id): id is string => !!id))];
+      const vehicles = vehicleIds.length
+        ? await tx.vehicle.findMany({ where: { id: { in: vehicleIds } }, select: { id: true, type: true, fuelType: true } })
+        : [];
+      const vehicleById = new Map(vehicles.map((v) => [v.id, v]));
+
+      const esgTrips: EsgTripInput[] = trips.map((t) => {
+        const vehicle = t.vehicleId ? vehicleById.get(t.vehicleId) : undefined;
+        return {
+          id: t.id,
+          tripNumber: t.tripNumber ?? t.id.slice(0, 8),
+          distanceKm: Number(t.route?.totalDistanceKm ?? 35),
+          vehicleType: vehicle?.type || 'DIESEL_COASTER_30',
+          fuelType: vehicle?.fuelType || 'DIESEL',
+          departureTime: t.departureTime,
+          passengers: t.passengers.map((p) => ({
+            staffMemberId: p.staffMemberId || p.id,
+            department: p.department || 'Operations',
+            status: p.status || 'BOARDED',
+          })),
+        };
+      });
 
       const report = generateDepartmentalCarbonMatrix(esgTrips, period);
 
