@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   BusFront, Map as MapIcon, Calendar, Clock as ClockIcon, Users, AlertTriangle, FileText, ArrowRight, Sparkles,
-  Timer, Scale, BarChart3, Layers, Smartphone, Shield, GitMerge, Repeat,
+  Timer, Scale, BarChart3, Layers, Smartphone, Shield, GitMerge, Repeat, Calculator, Zap,
 } from 'lucide-react';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/bus-ops/theme';
 import { useFetchedData } from '@/hooks/useFetchedData';
@@ -191,6 +191,7 @@ export default function BusOpsDashboard() {
                 { label: 'Operational Rules Engine', href: '/bus-ops/planning-engine?tab=cba', icon: Scale, accent: 'amber' as const,  badge: 'P1' },
               ] : []),
               { label: 'Shift SLA Monitor', href: '/bus-ops/sla-monitor',  icon: Shield,        accent: 'rose' as const,   badge: 'P0' },
+              { label: 'Ad-Hoc / Overtime Dispatch', href: '/bus-ops/adhoc-dispatch', icon: Zap, accent: 'amber' as const, badge: 'P0' },
               { label: 'Cost Allocation & Recharge', href: '/bus-ops/cost-allocation', icon: Calculator, accent: 'emerald' as const, badge: 'P0' },
               { label: 'Power BI Connector',href: '/bus-ops/powerbi',      icon: BarChart3,     accent: 'emerald' as const,badge: 'P1' },
               { label: 'Multilayer GIS',    href: '/bus-ops/gis',          icon: Layers,        accent: 'rose' as const,   badge: 'P1' },
