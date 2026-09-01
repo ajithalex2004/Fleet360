@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
 const _g = globalThis as { _assetsSchemaInit?: Promise<void> };
@@ -12,7 +13,32 @@ export function ensureAssetsSchema(): Promise<void> {
   return _g._assetsSchemaInit;
 }
 
+// The production runtime role (fleet360_app) has no CREATE privilege on the
+// public schema, so this DDL always fails with 42501 there. The tables it
+// creates already exist in every live environment - this block only matters
+// for fresh/local databases connecting as an owner-equivalent role. Treat
+// insufficient_privilege as "schema already provisioned, nothing to do"
+// instead of crashing every request that calls ensureAssetsSchema().
+function isInsufficientPrivilege(e: unknown): boolean {
+  return (
+    e instanceof Prisma.PrismaClientKnownRequestError &&
+    (e.meta as { code?: string } | undefined)?.code === '42501'
+  );
+}
+
 async function _doInit(): Promise<void> {
+  try {
+    await _runDdl();
+  } catch (e) {
+    if (isInsufficientPrivilege(e)) {
+      console.warn('[ensureAssetsSchema] DDL skipped: runtime role lacks CREATE privilege on public schema (assuming tables already exist)');
+      return;
+    }
+    throw e;
+  }
+}
+
+async function _runDdl(): Promise<void> {
   await prisma.$executeRawUnsafe(`
     DO $DDL$
     BEGIN

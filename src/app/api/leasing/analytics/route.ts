@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, runSequential } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
@@ -51,7 +51,7 @@ const getLeasingAnalytics = cacheRead(
       }
     };
 
-    const [contracts, contractVehicles, payments, overages, fines, fuel, insurance, renewals, lessees] = await withTenantRls(prisma, tenantId, (tx) => Promise.all([
+    const [contracts, contractVehicles, payments, overages, fines, fuel, insurance, renewals, lessees] = await withTenantRls(prisma, tenantId, (tx) => runSequential([
       safe('contracts', tx.leaseContract2.findMany({
         where: { tenantId, deletedAt: null },
         select: { id: true, contractNumber: true, status: true, monthlyRate: true, totalContractValue: true, startDate: true, endDate: true, lesseeId: true },

@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, runSequential } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl } from '@/lib/server-cache';
 
@@ -50,7 +50,11 @@ function iso(value: Date | string | null | undefined) {
 // silently zeroed out every one of these queries for every tenant, and each
 // .catch(zero) masked it as an empty/zero result rather than a visible
 // error. withTenantRls sets app.tenant_id explicitly and gives every query
-// below the same pinned, scoped connection.
+// below the same pinned, scoped connection. All queries share ONE
+// connection (the tx), so they must run sequentially, not via Promise.all -
+// concurrent queries on a single Prisma transaction client are unsupported
+// and can interleave in ways that break RLS scoping. See runSequential in
+// src/lib/rls.ts.
 const getLogisticsStats = cacheRead(
   async (tenantId: string) => withTenantRls(prisma, tenantId, async (tx) => {
     const [
@@ -61,7 +65,7 @@ const getLogisticsStats = cacheRead(
       completedToday,
       pendingBookings,
       driversResult,
-    ] = await Promise.all([
+    ] = await runSequential([
       tx.$queryRawUnsafe<CountRow[]>(
         `SELECT COUNT(*) AS count
            FROM vehicles

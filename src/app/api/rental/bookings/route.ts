@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, runSequential } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { paginate, paginatedResponse } from '@/lib/pagination';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
@@ -14,7 +14,11 @@ const CACHE_TAG = 'rental:bookings';
 // header-based auto-scoping middleware never engages and RLS (force-applied
 // to the runtime role regardless of the WHERE clause) filters out every row
 // for every tenant. withTenantRls sets app.tenant_id explicitly from the
-// argument instead of relying on headers.
+// argument instead of relying on headers. findMany + count share ONE
+// connection (the tx), so they must run sequentially, not via Promise.all -
+// concurrent queries on a single Prisma transaction client are unsupported
+// and can interleave in ways that break RLS scoping. See runSequential in
+// src/lib/rls.ts.
 const getBookings = cacheRead(
   async (
     tenantId: string,
@@ -28,7 +32,7 @@ const getBookings = cacheRead(
       ...(status ? { status } : {}),
       ...(customerId ? { customerId } : {}),
     };
-    const [data, total] = await withTenantRls(prisma, tenantId, (tx) => Promise.all([
+    const [data, total] = await withTenantRls(prisma, tenantId, (tx) => runSequential([
       tx.rentalBooking.findMany({
         where,
         orderBy: { createdAt: 'desc' },

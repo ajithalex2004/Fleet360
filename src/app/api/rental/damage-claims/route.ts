@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, runSequential } from '@/lib/rls';
 import { paginate, paginatedResponse } from '@/lib/pagination';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
 
@@ -22,8 +22,14 @@ const getClaims = cacheRead(
     bookingId: string | null,
     take: number, skip: number, page: number, limit: number,
   ) => {
-    const where = { tenantId, deletedAt: null, ...(status ? { status } : {}), ...(bookingId ? { bookingId } : {}) };
-    const [data, total] = await withTenantRls(prisma, tenantId, (tx) => Promise.all([
+    // DamageClaim has no deletedAt column (no soft-delete on this model) -
+    // a stale filter here always threw "Unknown argument `deletedAt`".
+    const where = { tenantId, ...(status ? { status } : {}), ...(bookingId ? { bookingId } : {}) };
+    // findMany + count share ONE connection (the tx), so they must run
+    // sequentially, not via Promise.all - concurrent queries on a single
+    // Prisma transaction client are unsupported and can interleave in ways
+    // that break RLS scoping. See runSequential in src/lib/rls.ts.
+    const [data, total] = await withTenantRls(prisma, tenantId, (tx) => runSequential([
       tx.damageClaim.findMany({
         where,
         orderBy: { createdAt: 'desc' },

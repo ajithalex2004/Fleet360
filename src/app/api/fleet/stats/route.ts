@@ -26,75 +26,79 @@ const zero = () => Promise.resolve([{ count: BigInt(0) }]);
 // every query returned zero rows for every tenant, and each .catch(zero)
 // masked it as an empty/zero result rather than a visible error.
 // withTenantRls sets app.tenant_id explicitly and gives every query below
-// the same pinned, scoped connection.
+// the same pinned, scoped connection. Queries run as individually-awaited
+// statements, NOT built into an array first (even via Promise.all or the
+// runSequential helper) - chaining .catch() onto a Prisma query eagerly
+// dispatches it (that's what .then/.catch DOES for a lazy Prisma promise),
+// so building an array of already-.catch()-chained queries fires them all
+// concurrently over the one shared tx connection regardless of how the
+// array is later consumed. That previously caused a cross-tenant leak here
+// (fleet/stats returned the platform-wide vehicle count instead of the
+// caller's tenant's). Each `await ... .catch(...)` below fully resolves
+// before the next statement's query is even constructed.
 const getFleetStats = cacheRead(
   async (tenantId: string) => {
     await ensureFleetSchema();
-    const [
-      totalResult,
-      availableResult,
-      maintenanceResult,
-      allocatedResult,
-      expiringDocsResult,
-      workOrdersResult,
-      expiringInsuranceResult,
-      byLifecycleResult,
-      byUsageResult,
-    ] = await withTenantRls(prisma, tenantId, (tx) => Promise.all([
-
-      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
+    const { totalResult, availableResult, maintenanceResult, allocatedResult,
+      expiringDocsResult, workOrdersResult, expiringInsuranceResult,
+      byLifecycleResult, byUsageResult } = await withTenantRls(prisma, tenantId, async (tx) => {
+      const totalResult = await tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count FROM vehicles WHERE deleted_at IS NULL`,
-      ).catch(zero),
+      ).catch(zero);
 
-      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
+      const availableResult = await tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count FROM vehicles WHERE deleted_at IS NULL AND status = 'AVAILABLE'`,
-      ).catch(zero),
+      ).catch(zero);
 
-      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
+      const maintenanceResult = await tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count FROM vehicles WHERE deleted_at IS NULL AND status = 'MAINTENANCE'`,
-      ).catch(zero),
+      ).catch(zero);
 
       // lifecycle_stage added by hub migration — catch if column not yet present
-      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
+      const allocatedResult = await tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count FROM vehicles WHERE deleted_at IS NULL AND lifecycle_stage = 'ALLOCATED'`,
-      ).catch(zero),
+      ).catch(zero);
 
       // vehicle_documents may not have deleted_at — use plain count
-      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
+      const expiringDocsResult = await tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count
          FROM vehicle_documents
          WHERE expiry_date BETWEEN NOW() AND NOW() + INTERVAL '30 days'`,
-      ).catch(zero),
+      ).catch(zero);
 
       // correct table name is work_orders (not fleet_work_orders)
-      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
+      const workOrdersResult = await tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count
          FROM work_orders
          WHERE status NOT IN ('COMPLETED', 'CLOSED', 'CANCELLED')`,
-      ).catch(zero),
+      ).catch(zero);
 
       // correct table name is vehicle_insurance (not fleet_vehicle_insurance)
-      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
+      const expiringInsuranceResult = await tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count
          FROM vehicle_insurance
          WHERE status = 'ACTIVE'
            AND end_date BETWEEN NOW() AND NOW() + INTERVAL '30 days'`,
-      ).catch(zero),
+      ).catch(zero);
 
-      tx.$queryRawUnsafe<Array<{ lifecycle_stage: string; count: bigint }>>(
+      const byLifecycleResult = await tx.$queryRawUnsafe<Array<{ lifecycle_stage: string; count: bigint }>>(
         `SELECT COALESCE(lifecycle_stage, 'UNKNOWN') as lifecycle_stage, COUNT(*) as count
          FROM vehicles
          WHERE deleted_at IS NULL
          GROUP BY lifecycle_stage`,
-      ).catch(() => [] as Array<{ lifecycle_stage: string; count: bigint }>),
+      ).catch(() => [] as Array<{ lifecycle_stage: string; count: bigint }>);
 
-      tx.$queryRawUnsafe<Array<{ vehicle_usage: string; count: bigint }>>(
+      const byUsageResult = await tx.$queryRawUnsafe<Array<{ vehicle_usage: string; count: bigint }>>(
         `SELECT COALESCE(vehicle_usage, 'UNKNOWN') as vehicle_usage, COUNT(*) as count
          FROM vehicles
          WHERE deleted_at IS NULL
          GROUP BY vehicle_usage`,
-      ).catch(() => [] as Array<{ vehicle_usage: string; count: bigint }>),
-    ]));
+      ).catch(() => [] as Array<{ vehicle_usage: string; count: bigint }>);
+
+      return { totalResult, availableResult, maintenanceResult, allocatedResult,
+        expiringDocsResult, workOrdersResult, expiringInsuranceResult,
+        byLifecycleResult, byUsageResult };
+    });
 
     return {
       totalVehicles:     Number(totalResult[0]?.count     ?? 0),

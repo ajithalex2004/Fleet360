@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, runSequential } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl } from '@/lib/server-cache';
 
@@ -48,7 +48,11 @@ const zeroMonth = () => Promise.resolve([] as MonthRow[]);
 // / zeroMonth) masked it as an empty/zero result rather than a visible
 // error — the whole finance dashboard silently rendered as all-zero.
 // withTenantRls sets app.tenant_id explicitly and gives every query below
-// the same pinned, scoped connection.
+// the same pinned, scoped connection. All queries share ONE connection (the
+// tx), so they must run sequentially, not via Promise.all - concurrent
+// queries on a single Prisma transaction client are unsupported and can
+// interleave in ways that break RLS scoping. See runSequential in
+// src/lib/rls.ts.
 const getFinanceSummary = cacheRead(
   async (tenantId: string, fromIso: string | null, toIso: string | null) => {
     const from = fromIso ? new Date(fromIso) : null;
@@ -67,7 +71,7 @@ const getFinanceSummary = cacheRead(
       maintenanceByMonth,
       rentalByMonth,
       financeInvByMonth,
-    ] = await withTenantRls(prisma, tenantId, (tx) => Promise.all([
+    ] = await withTenantRls(prisma, tenantId, (tx) => runSequential([
       tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
            FROM quotations

@@ -27,48 +27,30 @@ const query = <T = Row>(tx: QueryClient, sql: string, ...v: unknown[]) =>
 // query's own .catch(() => []) swallowed the resulting error, so the whole
 // dashboard silently rendered as all-zero rather than visibly failing.
 // withTenantRls sets app.tenant_id explicitly and gives every query below
-// the same pinned, scoped connection.
+// the same pinned, scoped connection. Queries run as individually-awaited
+// statements rather than Promise.all/runSequential - all 18 share ONE
+// connection (the tx), and concurrent queries on a single Prisma
+// transaction client are unsupported.
 const getAssetsStats = cacheRead(
   async (tenantId: string) => withTenantRls(prisma, tenantId, async (tx) => {
-    const [
-      totalAssetsRes,
-      totalValueRes,
-      lowStockRes,
-      outOfStockRes,
-      hvaCountRes,
-      hvaInsuranceRes,
-      hvaCalibrationRes,
-      medicalExpiringRes,
-      medicalExpiredRes,
-      bleTagsTotalRes,
-      bleTagsOfflineRes,
-      bleTagsLowBatteryRes,
-      gatewaysOnlineRes,
-      gatewaysOfflineRes,
-      pendingDispatchesRes,
-      pendingReturnsRes,
-      todayTransactionsRes,
-      domainBreakdownRes,
-    ] = await Promise.all([
-      query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM asset_registry WHERE tenant_id = $1 AND is_active = TRUE`, tenantId),
-      query<{ total: unknown }>(tx, `SELECT COALESCE(SUM(unit_cost_aed * current_stock), 0) as total FROM asset_registry WHERE tenant_id = $1 AND is_active = TRUE`, tenantId),
-      query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM asset_registry WHERE tenant_id = $1 AND is_active = TRUE AND status = 'LOW_STOCK'`, tenantId),
-      query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM asset_registry WHERE tenant_id = $1 AND is_active = TRUE AND status = 'OUT_OF_STOCK'`, tenantId),
-      query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM hva_assets WHERE tenant_id = $1 AND status != 'CONDEMNED'`, tenantId),
-      query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM hva_assets WHERE tenant_id = $1 AND insurance_expiry BETWEEN NOW() AND NOW() + INTERVAL '30 days'`, tenantId),
-      query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM hva_assets WHERE tenant_id = $1 AND calibration_due_date BETWEEN NOW() AND NOW() + INTERVAL '30 days'`, tenantId),
-      query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM medical_assets WHERE tenant_id = $1 AND expiry_date BETWEEN NOW() AND NOW() + INTERVAL '30 days'`, tenantId),
-      query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM medical_assets WHERE tenant_id = $1 AND expiry_date < NOW()`, tenantId),
-      query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM ble_tags WHERE tenant_id = $1`, tenantId),
-      query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM ble_tags WHERE tenant_id = $1 AND status = 'OFFLINE'`, tenantId),
-      query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM ble_tags WHERE tenant_id = $1 AND battery_pct < 20`, tenantId),
-      query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM ble_gateways WHERE tenant_id = $1 AND status = 'ONLINE'`, tenantId),
-      query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM ble_gateways WHERE tenant_id = $1 AND status = 'OFFLINE'`, tenantId),
-      query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM field_dispatch WHERE tenant_id = $1 AND status IN ('PENDING','DISPATCHED')`, tenantId),
-      query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM return_requests WHERE tenant_id = $1 AND status = 'PENDING'`, tenantId),
-      query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM stock_transactions WHERE tenant_id = $1 AND performed_at >= CURRENT_DATE`, tenantId),
-      query<{ domain: string; count: bigint; total_value: unknown }>(tx, `SELECT domain, COUNT(*) as count, COALESCE(SUM(unit_cost_aed * current_stock), 0) as total_value FROM asset_registry WHERE tenant_id = $1 AND is_active = TRUE GROUP BY domain ORDER BY count DESC`, tenantId),
-    ]);
+    const totalAssetsRes = await query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM asset_registry WHERE tenant_id = $1 AND is_active = TRUE`, tenantId);
+    const totalValueRes = await query<{ total: unknown }>(tx, `SELECT COALESCE(SUM(unit_cost_aed * current_stock), 0) as total FROM asset_registry WHERE tenant_id = $1 AND is_active = TRUE`, tenantId);
+    const lowStockRes = await query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM asset_registry WHERE tenant_id = $1 AND is_active = TRUE AND status = 'LOW_STOCK'`, tenantId);
+    const outOfStockRes = await query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM asset_registry WHERE tenant_id = $1 AND is_active = TRUE AND status = 'OUT_OF_STOCK'`, tenantId);
+    const hvaCountRes = await query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM hva_assets WHERE tenant_id = $1 AND status != 'CONDEMNED'`, tenantId);
+    const hvaInsuranceRes = await query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM hva_assets WHERE tenant_id = $1 AND insurance_expiry BETWEEN NOW() AND NOW() + INTERVAL '30 days'`, tenantId);
+    const hvaCalibrationRes = await query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM hva_assets WHERE tenant_id = $1 AND calibration_due_date BETWEEN NOW() AND NOW() + INTERVAL '30 days'`, tenantId);
+    const medicalExpiringRes = await query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM medical_assets WHERE tenant_id = $1 AND expiry_date BETWEEN NOW() AND NOW() + INTERVAL '30 days'`, tenantId);
+    const medicalExpiredRes = await query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM medical_assets WHERE tenant_id = $1 AND expiry_date < NOW()`, tenantId);
+    const bleTagsTotalRes = await query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM ble_tags WHERE tenant_id = $1`, tenantId);
+    const bleTagsOfflineRes = await query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM ble_tags WHERE tenant_id = $1 AND status = 'OFFLINE'`, tenantId);
+    const bleTagsLowBatteryRes = await query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM ble_tags WHERE tenant_id = $1 AND battery_pct < 20`, tenantId);
+    const gatewaysOnlineRes = await query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM ble_gateways WHERE tenant_id = $1 AND status = 'ONLINE'`, tenantId);
+    const gatewaysOfflineRes = await query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM ble_gateways WHERE tenant_id = $1 AND status = 'OFFLINE'`, tenantId);
+    const pendingDispatchesRes = await query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM field_dispatch WHERE tenant_id = $1 AND status IN ('PENDING','DISPATCHED')`, tenantId);
+    const pendingReturnsRes = await query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM return_requests WHERE tenant_id = $1 AND status = 'PENDING'`, tenantId);
+    const todayTransactionsRes = await query<{ count: bigint }>(tx, `SELECT COUNT(*) as count FROM stock_transactions WHERE tenant_id = $1 AND performed_at >= CURRENT_DATE`, tenantId);
+    const domainBreakdownRes = await query<{ domain: string; count: bigint; total_value: unknown }>(tx, `SELECT domain, COUNT(*) as count, COALESCE(SUM(unit_cost_aed * current_stock), 0) as total_value FROM asset_registry WHERE tenant_id = $1 AND is_active = TRUE GROUP BY domain ORDER BY count DESC`, tenantId);
 
     return {
       totalAssets: Number(totalAssetsRes[0]?.count ?? 0),
