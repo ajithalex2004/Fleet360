@@ -208,7 +208,7 @@ async function detectDomainVerifColumnsExist(): Promise<boolean> {
 // ── POST handler ──────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
-  return tenantBootstrapHandler(request, 'create_pending_tenant', async ({ tx }) => {
+  return tenantBootstrapHandler(request, 'create_pending_tenant', async ({ tx, rescopeToTenant }) => {
     try {
         const body   = await request.json();
         const parsed = ProvisionSchema.safeParse(body);
@@ -299,7 +299,7 @@ export async function POST(request: NextRequest) {
         // so this threw "tx.$transaction is not a function". The IIFE keeps the
         // callback's `tx` parameter so the body is unchanged; atomicity already
         // comes from the outer transaction.
-        const { tenant, user } = await (async (tx) => {
+        const { tenant, user } = await (async (tx, rescopeToTenant) => {
 
           // 1. Create Tenant
           const tenant = await tx.tenant.create({
@@ -325,14 +325,11 @@ export async function POST(request: NextRequest) {
           // tenant's data - but that sentinel can never equal a real tenant_id,
           // so RLS WITH CHECK silently rejected every write below this point
           // (tenantModule, role, userTenant all carry tenant_id = tenant.id).
-          // set_config(..., true) is transaction-local and can be called more
-          // than once, so re-scoping here to the real id keeps the "can't see
-          // other tenants" guarantee for everything before this line while
-          // unblocking writes to the tenant that now legitimately exists.
-          await tx.$executeRawUnsafe(
-            `SELECT set_config('app.tenant_id', $1, true)`,
-            tenant.id,
-          );
+          // Must go through rescopeToTenant(), not a raw call on `tx` - see
+          // its definition in tenant-bootstrap-handler.ts for why calling
+          // $executeRawUnsafe directly on the restricted proxy silently runs
+          // outside the actual transaction instead of erroring.
+          await rescopeToTenant(tenant.id);
 
           // 1b. Set TRN via raw SQL (handles case where Prisma client is stale)
           if (data.trn) {
@@ -436,7 +433,7 @@ export async function POST(request: NextRequest) {
           }
 
           return { tenant, user };
-        })(tx);
+        })(tx, rescopeToTenant);
 
         // Send verification email only if domain not already pre-verified (fire-and-forget)
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${request.headers.get('host')}`;
