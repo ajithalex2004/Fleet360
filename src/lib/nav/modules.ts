@@ -179,6 +179,7 @@ export const MODULES: ModuleDef[] = [
 
       // Operations — day-of-service execution.
       { label: 'Trip Monitor',        href: '/bus-ops/dispatch',            icon: Radio,           group: 'Operations' },
+      { label: 'SLA Monitor & Alerts', href: '/bus-ops/sla-monitor',        icon: Clock,           group: 'Operations' },
       { label: 'Optimisation Status', href: '/bus-ops/optimisation',        icon: Sparkles,        group: 'Operations' },
       { label: 'Demand forecast',     href: '/bus-ops/demand-forecast',     icon: TrendingUp,      group: 'Operations' },
 
@@ -193,11 +194,13 @@ export const MODULES: ModuleDef[] = [
       { label: 'Drivers Performance', href: '/bus-ops/drivers',             icon: UserCog,         group: 'Workforce' },
 
       // Requests — inbound demand / exceptions.
+      { label: 'Ad-hoc & Overtime',   href: '/bus-ops/adhoc-dispatch',      icon: ClipboardList,   group: 'Requests' },
       { label: 'Transport requests',  href: '/bus-ops/transport-requests',  icon: ClipboardList,   group: 'Requests' },
       { label: 'Incidents',           href: '/bus-ops/incidents',           icon: AlertTriangle,   group: 'Requests' },
 
       // Analytics — after-the-fact reporting.
       { label: 'Analytics',           href: '/bus-ops/analytics',           icon: BarChart3,       group: 'Analytics' },
+      { label: 'Cost Allocation',     href: '/bus-ops/cost-allocation',     icon: Calculator,      group: 'Analytics' },
     ],
   },
   {
