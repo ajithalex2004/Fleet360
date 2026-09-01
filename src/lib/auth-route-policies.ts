@@ -39,6 +39,9 @@ export const PUBLIC_EXACT: readonly string[] = [
   '/api/platform/plans',
   '/api/admin/session',
   '/api/health',
+  // Own secret-header auth (x-deployment-health-secret), not session-based -
+  // must bypass the session check here or that auth can never be reached.
+  '/api/health/db-role',
   '/api/version',
   // /api/auth/me is NOT public — it must receive the injected headers
 ];
