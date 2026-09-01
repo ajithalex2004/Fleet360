@@ -12,6 +12,7 @@
  */
 
 import Stripe from 'stripe';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withWebhookTenant } from '@/lib/rls';
 
@@ -57,16 +58,36 @@ export function priceIdToPlan(priceId: string): PlanCode | null {
 
 let _ensured = false;
 
+// The production runtime role (fleet360_app) has no ALTER privilege on the
+// public schema, so this DDL always fails with 42501 there. The columns it
+// adds already exist in every live environment - this block only matters
+// for fresh/local databases connecting as an owner-equivalent role. Treat
+// insufficient_privilege as "already provisioned" instead of crashing
+// every request that calls getTenantBilling() (GET /api/admin/billing had
+// no try/catch anywhere in its chain, so this previously 500'd on every
+// authenticated page load platform-wide).
+function isInsufficientPrivilege(e: unknown): boolean {
+  return (
+    e instanceof Prisma.PrismaClientKnownRequestError &&
+    (e.meta as { code?: string } | undefined)?.code === '42501'
+  );
+}
+
 export async function ensureBillingColumns(): Promise<void> {
   if (_ensured) return;
-  await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS stripe_customer_id      TEXT`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS stripe_subscription_id  TEXT`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS subscription_status     TEXT`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS current_period_end      TIMESTAMPTZ`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trial_ends_at           TIMESTAMPTZ`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS billing_email           TEXT`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_tenants_stripe_customer ON tenants (stripe_customer_id) WHERE stripe_customer_id IS NOT NULL`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_tenants_stripe_sub      ON tenants (stripe_subscription_id) WHERE stripe_subscription_id IS NOT NULL`);
+  try {
+    await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS stripe_customer_id      TEXT`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS stripe_subscription_id  TEXT`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS subscription_status     TEXT`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS current_period_end      TIMESTAMPTZ`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trial_ends_at           TIMESTAMPTZ`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS billing_email           TEXT`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_tenants_stripe_customer ON tenants (stripe_customer_id) WHERE stripe_customer_id IS NOT NULL`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_tenants_stripe_sub      ON tenants (stripe_subscription_id) WHERE stripe_subscription_id IS NOT NULL`);
+  } catch (e) {
+    if (!isInsufficientPrivilege(e)) throw e;
+    console.warn('[ensureBillingColumns] DDL skipped: runtime role lacks ALTER privilege on public schema (assuming columns already exist)');
+  }
   _ensured = true;
 }
 
