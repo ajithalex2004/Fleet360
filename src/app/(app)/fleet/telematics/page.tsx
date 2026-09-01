@@ -398,6 +398,18 @@ export default function TelematicsPage() {
         </button>
 
         <button
+          onClick={() => setActiveTab('safety')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition shrink-0 ${
+            activeTab === 'safety'
+              ? 'bg-rose-500 text-slate-950 shadow'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+          }`}
+        >
+          <Shield className="w-4 h-4" />
+          Safety & Diagnostics (Phase 3)
+        </button>
+
+        <button
           onClick={() => setActiveTab('simulator')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition shrink-0 ${
             activeTab === 'simulator'
@@ -836,7 +848,216 @@ export default function TelematicsPage() {
         </div>
       )}
 
-      {/* TAB 3: Webhook Simulator & Tester */}
+      {/* TAB 3: Safety & Diagnostics (Phase 3) */}
+      {activeTab === 'safety' && (
+        <div className="space-y-6">
+          {/* Header Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/10 space-y-1">
+              <p className="text-xs text-slate-400 font-medium">Fleet Driver Safety Index</p>
+              <div className="flex items-center gap-2">
+                <p className="text-2xl font-bold text-emerald-400">
+                  {analyticsData?.averageSafetyScore ?? 100} / 100
+                </p>
+                <Award className="w-5 h-5 text-amber-400" />
+              </div>
+              <p className="text-[11px] text-slate-500">Based on harsh events & speeding</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-rose-950/30 border border-rose-500/30 space-y-1">
+              <p className="text-xs text-rose-400 font-medium">Fuel Siphoning Alerts</p>
+              <div className="flex items-center gap-2">
+                <p className="text-2xl font-bold text-rose-300">
+                  {analyticsData?.fuelAlerts?.length ?? 0}
+                </p>
+                <Flame className="w-5 h-5 text-rose-400" />
+              </div>
+              <p className="text-[11px] text-rose-500/80">Rapid tank level drops while off</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-500/30 space-y-1">
+              <p className="text-xs text-amber-400 font-medium">CAN-bus Engine Faults</p>
+              <div className="flex items-center gap-2">
+                <p className="text-2xl font-bold text-amber-300">
+                  {analyticsData?.dtcServiceRequests?.length ?? 0}
+                </p>
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              </div>
+              <p className="text-[11px] text-amber-500/80">Auto-ticketed service requests</p>
+            </div>
+          </div>
+
+          {/* Section 1: Driver Safety & Eco-Driving Leaderboard */}
+          <div className="space-y-3">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <Award className="w-5 h-5 text-amber-400" />
+              Driver Safety & Eco-Driving Leaderboard
+            </h3>
+
+            <div className="rounded-2xl border border-white/10 overflow-hidden bg-slate-900/60 shadow-xl">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-white/10">
+                  <tr>
+                    <th className="p-3.5">Rank & Driver</th>
+                    <th className="p-3.5">Safety Score (0–100)</th>
+                    <th className="p-3.5">Harsh Brakes</th>
+                    <th className="p-3.5">Harsh Accels</th>
+                    <th className="p-3.5">Speeding</th>
+                    <th className="p-3.5">Safety Assessment</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {analyticsLoading ? (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-slate-500">
+                        Loading driver safety leaderboard...
+                      </td>
+                    </tr>
+                  ) : !analyticsData?.driverLeaderboard?.length ? (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-slate-500">
+                        No driver telemetry safety scores available yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    analyticsData.driverLeaderboard.map((d: any, index: number) => {
+                      const isGreen = d.ragStatus === 'GREEN';
+                      const isAmber = d.ragStatus === 'AMBER';
+
+                      return (
+                        <tr key={d.driverId} className="hover:bg-white/[0.02] transition">
+                          <td className="p-3.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs font-bold text-slate-400 w-5">
+                                #{index + 1}
+                              </span>
+                              <div>
+                                <div className="font-bold text-white">{d.driverName}</div>
+                                <div className="text-[10px] text-slate-500">{d.phone || 'No phone'}</div>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="p-3.5 font-mono">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`text-sm font-bold ${
+                                  isGreen
+                                    ? 'text-emerald-400'
+                                    : isAmber
+                                    ? 'text-amber-400'
+                                    : 'text-rose-400'
+                                }`}
+                              >
+                                {d.score}
+                              </span>
+                              <div className="w-20 bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                                <div
+                                  className={`h-full ${
+                                    isGreen ? 'bg-emerald-400' : isAmber ? 'bg-amber-400' : 'bg-rose-400'
+                                  }`}
+                                  style={{ width: `${d.score}%` }}
+                                />
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="p-3.5 font-mono text-slate-300">{d.harshBrakes}</td>
+                          <td className="p-3.5 font-mono text-slate-300">{d.harshAccels}</td>
+                          <td className="p-3.5 font-mono text-slate-300">{d.overspeedEvents}</td>
+
+                          <td className="p-3.5">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                                isGreen
+                                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                  : isAmber
+                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                  : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                              }`}
+                            >
+                              {d.ragStatus} · {d.summary}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Section 2: Two Columns: Fuel Theft Log & CAN-bus DTC Auto-Tickets */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
+            {/* Left: Fuel Siphoning & Theft Log */}
+            <div className="space-y-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Flame className="w-5 h-5 text-rose-400" />
+                Fuel Theft & Siphoning Audit Log
+              </h3>
+
+              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 space-y-3">
+                {!analyticsData?.fuelAlerts?.length ? (
+                  <div className="p-6 text-center text-slate-500 text-xs">
+                    No fuel theft or siphoning anomalies detected.
+                  </div>
+                ) : (
+                  analyticsData.fuelAlerts.map((a: any) => (
+                    <div
+                      key={a.id}
+                      className="p-3 rounded-xl bg-rose-950/40 border border-rose-500/30 space-y-1"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-rose-300">{a.title}</span>
+                        <span className="text-[10px] text-slate-400">
+                          {new Date(a.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-300">{a.description}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Right: CAN-bus DTC Diagnostics */}
+            <div className="space-y-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Wrench className="w-5 h-5 text-amber-400" />
+                CAN-bus Engine Fault Diagnostics
+              </h3>
+
+              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 space-y-3">
+                {!analyticsData?.dtcServiceRequests?.length ? (
+                  <div className="p-6 text-center text-slate-500 text-xs">
+                    No active DTC engine fault tickets. Vehicle powertrains healthy.
+                  </div>
+                ) : (
+                  analyticsData.dtcServiceRequests.map((sr: any) => (
+                    <div
+                      key={sr.id}
+                      className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 space-y-1"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-amber-300">
+                          {sr.vehicle?.vehicleCode || sr.vehicle?.licensePlate || 'Vehicle'} · {sr.priority}
+                        </span>
+                        <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300">
+                          {sr.status}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-300">{sr.description}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: Webhook Simulator & Tester */}
       {activeTab === 'simulator' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-5 space-y-4">
