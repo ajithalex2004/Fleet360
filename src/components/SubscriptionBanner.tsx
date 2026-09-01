@@ -39,7 +39,7 @@ export default function SubscriptionBanner() {
 
     const load = async () => {
       try {
-        const r = await fetch('/api/admin/billing', { cache: 'force-cache' });
+        const r = await fetch('/api/admin/billing', { cache: 'no-store' });
         if (!r.ok) return;
         const d = (await r.json()) as BillingResp;
         if (d?.billing) {
