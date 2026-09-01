@@ -127,7 +127,10 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   },
 ];
 
-// Simple in-memory history (per-session via threadId)
+// Simple in-memory history (per-session via threadId, scoped by tenant).
+// threadId alone is client-supplied and not guaranteed unique across tenants -
+// keying by tenantId:threadId keeps one tenant's conversation (which includes
+// real business data from tool calls) from being read or appended to by another.
 const threads = new Map<string, OpenAI.Chat.ChatCompletionMessageParam[]>();
 
 function enc(obj: unknown) {
@@ -149,10 +152,11 @@ export async function POST(req: NextRequest) {
     apiKey: process.env.THESYS_API_KEY ?? '',
   });
 
-  if (!threads.has(threadId)) {
-    threads.set(threadId, [{ role: 'system', content: SYSTEM_PROMPT }]);
+  const threadKey = `${tenantId}:${threadId}`;
+  if (!threads.has(threadKey)) {
+    threads.set(threadKey, [{ role: 'system', content: SYSTEM_PROMPT }]);
   }
-  const history = threads.get(threadId)!;
+  const history = threads.get(threadKey)!;
   history.push({ role: 'user', content: message });
 
   const stream = new ReadableStream({
