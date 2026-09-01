@@ -231,7 +231,12 @@ export async function POST(request: NextRequest) {
   ]);
   console.log(`[provision] userTable=${userTable} domainVerifCols=${domainVerifColumnsExist}`);
 
-  return tenantBootstrapHandler(request, 'create_pending_tenant', async ({ tx, rescopeToTenant }) => {
+  // Assigned inside the transaction callback below, invoked only after
+  // tenantBootstrapHandler has fully returned - see the comment at the
+  // assignment site for why these can't fire from inside the transaction.
+  const deferred: { run: (() => void) | null } = { run: null };
+
+  const bootstrapResponse = await tenantBootstrapHandler(request, 'create_pending_tenant', async ({ tx, rescopeToTenant }) => {
     try {
         const body   = await request.json();
         const parsed = ProvisionSchema.safeParse(body);
@@ -452,20 +457,33 @@ export async function POST(request: NextRequest) {
           return { tenant, user };
         })(tx, rescopeToTenant);
 
-        // Send verification email only if domain not already pre-verified (fire-and-forget)
+        // Defer the verification email + trial bootstrap until AFTER this
+        // transaction has actually committed (invoked once tenantBootstrapHandler
+        // returns, below). Both are fire-and-forget, but firing them from inside
+        // this callback would inherit the active RLS scope via AsyncLocalStorage
+        // and route their prisma.$executeRawUnsafe calls onto THIS transaction's
+        // pinned connection. startTrialForTenant → ensureBillingColumns() runs
+        // unguarded ALTER TABLEs with no per-statement try/catch; fleet360_app
+        // has no DDL grant, so the first ALTER throws and aborts the transaction
+        // — right as (or just before) the real COMMIT, which Postgres then
+        // treats as a no-op rollback on an aborted transaction. The route still
+        // returned 201/ok:true with a real-looking tenantId, but nothing was
+        // ever persisted. Confirmed live via pg_stat_activity: the ALTER TABLE
+        // ran on this transaction's own pid immediately after the last real
+        // statement, then "COMMIT" landed on an already-aborted transaction.
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${request.headers.get('host')}`;
-        if (!domainPreVerified) {
-          sendVerificationEmail({
-            to: user.email ?? data.contactEmail,
-            tenantName: tenant.name,
-            token: verificationToken,
-            baseUrl,
-            tenantId: tenant.id,
-          }).catch(() => {});
-        }
-
-        // Start a 14-day trial subscription (best-effort — won't block signup).
-        void import('@/lib/billing').then(m => m.startTrialForTenant(tenant.id)).catch(() => {});
+        deferred.run = () => {
+          if (!domainPreVerified) {
+            sendVerificationEmail({
+              to: user.email ?? data.contactEmail,
+              tenantName: tenant.name,
+              token: verificationToken,
+              baseUrl,
+              tenantId: tenant.id,
+            }).catch(() => {});
+          }
+          void import('@/lib/billing').then(m => m.startTrialForTenant(tenant.id)).catch(() => {});
+        };
 
         // Set session cookie — newly provisioned users always start as TENANT_ADMIN
         const effectivePlan = tenant.plan ?? 'TRIAL';
@@ -523,5 +541,8 @@ export async function POST(request: NextRequest) {
         );
       }
   });
+
+  deferred.run?.();
+  return bootstrapResponse;
 }
 
