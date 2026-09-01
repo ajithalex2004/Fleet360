@@ -21,6 +21,8 @@ interface Trip {
 
 const STATUS_PILL: Record<string, string> = {
   SCHEDULED:  'bg-blue-500/20 text-blue-300 border-blue-500/40',
+  STARTED:    'bg-amber-500/20 text-amber-300 border-amber-500/40',
+  EN_ROUTE:   'bg-amber-500/20 text-amber-300 border-amber-500/40',
   DEPARTED:   'bg-amber-500/20 text-amber-300 border-amber-500/40',
   IN_TRANSIT: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
   COMPLETED:  'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
