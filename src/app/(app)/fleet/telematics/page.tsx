@@ -33,6 +33,12 @@ import {
   AlertTriangle,
   Send,
   Terminal,
+  Navigation,
+  MapPin,
+  CheckCircle2,
+  Wrench,
+  ArrowRight,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface DeviceItem {
@@ -68,8 +74,11 @@ export default function TelematicsPage() {
   const [editSim, setEditSim] = useState('');
   const [pairingSaving, setPairingSaving] = useState(false);
 
-  // Webhook Simulator state
-  const [activeTab, setActiveTab] = useState<'devices' | 'simulator' | 'guide'>('devices');
+  // Active Tab state
+  const [activeTab, setActiveTab] = useState<'devices' | 'automation' | 'simulator' | 'guide'>('devices');
+  const [automationData, setAutomationData] = useState<any>(null);
+  const [automationLoading, setAutomationLoading] = useState(false);
+
   const [simVendor, setSimVendor] = useState<'flespi' | 'teltonika' | 'traccar' | 'generic'>('flespi');
   const [simPayload, setSimPayload] = useState('');
   const [simSubmitting, setSimSubmitting] = useState(false);
@@ -91,9 +100,27 @@ export default function TelematicsPage() {
     }
   }, []);
 
+  const fetchAutomation = useCallback(async () => {
+    setAutomationLoading(true);
+    try {
+      const res = await fetch('/api/telematics/automation');
+      if (res.ok) {
+        const data = await res.json();
+        setAutomationData(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch automation data', err);
+    } finally {
+      setAutomationLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchDevices();
-  }, [fetchDevices]);
+    if (activeTab === 'automation') {
+      fetchAutomation();
+    }
+  }, [fetchDevices, fetchAutomation, activeTab]);
 
   // Load sample payloads for simulator
   useEffect(() => {
@@ -345,10 +372,10 @@ export default function TelematicsPage() {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto">
         <button
           onClick={() => setActiveTab('devices')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition shrink-0 ${
             activeTab === 'devices'
               ? 'bg-cyan-500 text-slate-950 shadow'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -359,8 +386,20 @@ export default function TelematicsPage() {
         </button>
 
         <button
+          onClick={() => setActiveTab('automation')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition shrink-0 ${
+            activeTab === 'automation'
+              ? 'bg-emerald-500 text-slate-950 shadow'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+          }`}
+        >
+          <Navigation className="w-4 h-4" />
+          Automation & Geofences (Phase 2)
+        </button>
+
+        <button
           onClick={() => setActiveTab('simulator')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition shrink-0 ${
             activeTab === 'simulator'
               ? 'bg-amber-500 text-slate-950 shadow'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -372,7 +411,7 @@ export default function TelematicsPage() {
 
         <button
           onClick={() => setActiveTab('guide')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition shrink-0 ${
             activeTab === 'guide'
               ? 'bg-violet-500 text-slate-950 shadow'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -574,7 +613,230 @@ export default function TelematicsPage() {
         </div>
       )}
 
-      {/* TAB 2: Webhook Simulator & Tester */}
+      {/* TAB 2: Automation & Geofences (Phase 2) */}
+      {activeTab === 'automation' && (
+        <div className="space-y-6">
+          {/* Header Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/10 space-y-1">
+              <p className="text-xs text-slate-400 font-medium">Active Trips Under Geofence Tracking</p>
+              <p className="text-2xl font-bold text-cyan-400">
+                {automationData?.activeTripsCount ?? 0}
+              </p>
+              <p className="text-[11px] text-slate-500">Live approach & arrival detection</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-500/30 space-y-1">
+              <p className="text-xs text-amber-400 font-medium">PM Service Due Soon (&le; 500 km)</p>
+              <p className="text-2xl font-bold text-amber-300">
+                {automationData?.pmDueSoonCount ?? 0}
+              </p>
+              <p className="text-[11px] text-amber-500/80">Proactive workshop alerts sent</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-rose-950/30 border border-rose-500/30 space-y-1">
+              <p className="text-xs text-rose-400 font-medium">PM Service Overdue</p>
+              <p className="text-2xl font-bold text-rose-300">
+                {automationData?.pmOverdueCount ?? 0}
+              </p>
+              <p className="text-[11px] text-rose-500/80">Requires immediate PM booking</p>
+            </div>
+          </div>
+
+          {/* Section 1: Live Trip Stop Progress */}
+          <div className="space-y-3">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <Navigation className="w-5 h-5 text-emerald-400" />
+              Live Route Stop Visits & Telematics ETA
+            </h3>
+
+            {automationLoading ? (
+              <div className="p-8 text-center text-slate-500 text-sm">Loading live trip progress...</div>
+            ) : !automationData?.activeTripProgress?.length ? (
+              <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-8 text-center text-slate-500 text-xs">
+                No active trips currently in transit. Trips will show real-time geofence stop approach/entry once dispatched.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {automationData.activeTripProgress.map((trip: any) => (
+                  <div
+                    key={trip.tripId}
+                    className="rounded-2xl border border-white/10 bg-slate-900/70 p-5 space-y-4 shadow-lg"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/5 pb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-cyan-400 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-500/30 text-xs">
+                            {trip.tripNumber || 'TRIP'}
+                          </span>
+                          <span className="font-bold text-white text-sm">{trip.routeName}</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300">
+                            {trip.status}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1">
+                          Vehicle: <span className="text-slate-200 font-medium">{trip.vehicle?.vehicleCode || trip.vehicle?.licensePlate || '—'}</span>
+                          {trip.driver && ` · Driver: ${trip.driver.firstName} ${trip.driver.lastName}`}
+                        </p>
+                      </div>
+
+                      {trip.estimatedArrival && (
+                        <div className="text-right">
+                          <div className="text-[10px] uppercase tracking-wider text-slate-500">
+                            Telemetry Destination ETA
+                          </div>
+                          <div className="text-sm font-bold font-mono text-emerald-400 flex items-center justify-end gap-1">
+                            <Clock className="w-3.5 h-3.5" />
+                            {new Date(trip.estimatedArrival).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Horizontal Stop Chain */}
+                    <div className="overflow-x-auto pb-2">
+                      <div className="flex items-center gap-2 min-w-max">
+                        {trip.stops.map((stop: any, idx: number) => {
+                          const isDeparted = stop.state === 'DEPARTED';
+                          const isAtStop = stop.state === 'AT_STOP';
+                          const isApproaching = stop.state === 'APPROACHING';
+
+                          return (
+                            <React.Fragment key={stop.stopId}>
+                              <div
+                                className={`p-2.5 rounded-xl border flex items-center gap-2 text-xs transition ${
+                                  isDeparted
+                                    ? 'bg-slate-950/80 border-slate-800 text-slate-400'
+                                    : isAtStop
+                                    ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-200 shadow-md shadow-emerald-500/20'
+                                    : isApproaching
+                                    ? 'bg-cyan-950/60 border-cyan-500/50 text-cyan-200 animate-pulse'
+                                    : 'bg-slate-950 border-slate-900 text-slate-500'
+                                }`}
+                              >
+                                <span className="font-mono text-[10px] font-bold">#{stop.sequence}</span>
+                                <span className="font-semibold">{stop.stopName}</span>
+
+                                {isDeparted && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                                {isAtStop && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-400 text-slate-950">
+                                    AT STOP
+                                  </span>
+                                )}
+                                {isApproaching && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-400 text-slate-950">
+                                    APPROACHING
+                                  </span>
+                                )}
+                              </div>
+
+                              {idx < trip.stops.length - 1 && (
+                                <ArrowRight className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Section 2: Telematics PM Odometer Threshold Table */}
+          <div className="space-y-3 pt-2">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <Wrench className="w-5 h-5 text-amber-400" />
+              Preventive Maintenance (PM) 10,000 km Countdown
+            </h3>
+
+            <div className="rounded-2xl border border-white/10 overflow-hidden bg-slate-900/60 shadow-xl">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-white/10">
+                  <tr>
+                    <th className="p-3.5">Vehicle</th>
+                    <th className="p-3.5">Current Odometer</th>
+                    <th className="p-3.5">Next Service Target</th>
+                    <th className="p-3.5">Remaining Km</th>
+                    <th className="p-3.5">PM Health Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {!automationData?.pmStatusList?.length ? (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-slate-500">
+                        No vehicle odometer telemetry records found yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    automationData.pmStatusList.map((item: any) => {
+                      const isOverdue = item.status === 'OVERDUE';
+                      const isDueSoon = item.status === 'DUE_SOON';
+
+                      return (
+                        <tr key={item.vehicleId} className="hover:bg-white/[0.02] transition">
+                          <td className="p-3.5 font-medium">
+                            <div className="font-bold text-white">
+                              {item.vehicleCode || item.licensePlate}
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-mono">
+                              {item.deviceId ? `IMEI: ${item.deviceId}` : item.licensePlate}
+                            </div>
+                          </td>
+
+                          <td className="p-3.5 font-mono text-slate-200">
+                            {item.currentOdometerKm.toLocaleString()} km
+                          </td>
+
+                          <td className="p-3.5 font-mono text-cyan-300 font-semibold">
+                            {item.nextDueKm.toLocaleString()} km
+                          </td>
+
+                          <td className="p-3.5 font-mono">
+                            {isOverdue ? (
+                              <span className="text-rose-400 font-bold">
+                                {Math.abs(item.kmRemaining).toLocaleString()} km OVERDUE
+                              </span>
+                            ) : (
+                              <span className={isDueSoon ? 'text-amber-300 font-bold' : 'text-slate-300'}>
+                                {item.kmRemaining.toLocaleString()} km
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="p-3.5">
+                            {isOverdue && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                                <AlertTriangle className="w-3 h-3" />
+                                OVERDUE FOR PM
+                              </span>
+                            )}
+                            {isDueSoon && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                                <Clock className="w-3 h-3" />
+                                SERVICE DUE SOON
+                              </span>
+                            )}
+                            {item.status === 'OK' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                <ShieldCheck className="w-3 h-3" />
+                                ON SCHEDULE
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: Webhook Simulator & Tester */}
       {activeTab === 'simulator' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-5 space-y-4">
