@@ -9,6 +9,12 @@ import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-ca
 
 const CACHE_TAG = 'rental:damage-claims';
 
+// Runs inside unstable_cache (via cacheRead), which strips Next.js request
+// context - next/headers() is unavailable there, so the plain prisma client's
+// header-based auto-scoping middleware never engages and RLS (force-applied
+// to the runtime role regardless of the WHERE clause) filters out every row
+// for every tenant. withTenantRls sets app.tenant_id explicitly from the
+// argument instead of relying on headers.
 const getClaims = cacheRead(
   async (
     tenantId: string,
@@ -17,15 +23,15 @@ const getClaims = cacheRead(
     take: number, skip: number, page: number, limit: number,
   ) => {
     const where = { tenantId, deletedAt: null, ...(status ? { status } : {}), ...(bookingId ? { bookingId } : {}) };
-    const [data, total] = await Promise.all([
-      prisma.damageClaim.findMany({
+    const [data, total] = await withTenantRls(prisma, tenantId, (tx) => Promise.all([
+      tx.damageClaim.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         take,
         skip,
       }),
-      prisma.damageClaim.count({ where }),
-    ]);
+      tx.damageClaim.count({ where }),
+    ]));
     return paginatedResponse(data, total, page, limit);
   },
   [CACHE_TAG],

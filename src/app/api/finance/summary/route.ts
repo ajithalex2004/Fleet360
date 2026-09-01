@@ -39,6 +39,16 @@ type MonthRow = { month: string; total: unknown; count: unknown };
 const zeroAgg  = () => Promise.resolve([{ total: 0, count: 0 }] as AggRow[]);
 const zeroMonth = () => Promise.resolve([] as MonthRow[]);
 
+// Runs inside unstable_cache (via cacheRead), which strips Next.js request
+// context - next/headers() is unavailable there, so the plain prisma client's
+// header-based auto-scoping middleware never engages. None of the queries
+// below have their own tenant_id filter — they rely entirely on RLS, which
+// is force-applied to the runtime role regardless. With no scope ever set,
+// every query returned zero rows for every tenant, and each .catch(zeroAgg
+// / zeroMonth) masked it as an empty/zero result rather than a visible
+// error — the whole finance dashboard silently rendered as all-zero.
+// withTenantRls sets app.tenant_id explicitly and gives every query below
+// the same pinned, scoped connection.
 const getFinanceSummary = cacheRead(
   async (tenantId: string, fromIso: string | null, toIso: string | null) => {
     const from = fromIso ? new Date(fromIso) : null;
@@ -57,8 +67,8 @@ const getFinanceSummary = cacheRead(
       maintenanceByMonth,
       rentalByMonth,
       financeInvByMonth,
-    ] = await Promise.all([
-      prisma.$queryRawUnsafe<AggRow[]>(
+    ] = await withTenantRls(prisma, tenantId, (tx) => Promise.all([
+      tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
            FROM quotations
           WHERE status = 'APPROVED' AND deleted_at IS NULL
@@ -66,25 +76,25 @@ const getFinanceSummary = cacheRead(
         fromTs, toTs,
       ).catch(zeroAgg),
 
-      prisma.$queryRawUnsafe<AggRow[]>(
+      tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
            FROM rental_invoices WHERE deleted_at IS NULL AND created_at BETWEEN $1 AND $2`,
         fromTs, toTs,
       ).catch(zeroAgg),
 
-      prisma.$queryRawUnsafe<AggRow[]>(
+      tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
            FROM lease_invoices WHERE deleted_at IS NULL AND created_at BETWEEN $1 AND $2`,
         fromTs, toTs,
       ).catch(zeroAgg),
 
-      prisma.$queryRawUnsafe<AggRow[]>(
+      tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(amount),0) as total, COUNT(*) as count
            FROM invoices WHERE deleted_at IS NULL AND created_at BETWEEN $1 AND $2`,
         fromTs, toTs,
       ).catch(zeroAgg),
 
-      prisma.$queryRawUnsafe<AggRow[]>(
+      tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
            FROM finance_invoices
           WHERE deleted_at IS NULL
@@ -93,7 +103,7 @@ const getFinanceSummary = cacheRead(
         fromTs, toTs,
       ).catch(zeroAgg),
 
-      prisma.$queryRawUnsafe<AggRow[]>(
+      tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(amount),0) as total, COUNT(*) as count
            FROM payment_transactions
           WHERE deleted_at IS NULL AND status = 'COMPLETED'
@@ -101,14 +111,14 @@ const getFinanceSummary = cacheRead(
         fromTs, toTs,
       ).catch(zeroAgg),
 
-      prisma.$queryRawUnsafe<AggRow[]>(
+      tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(amount),0) as total, COUNT(*) as count
            FROM finance_payments
           WHERE payment_date BETWEEN $1::date AND $2::date`,
         fromTs, toTs,
       ).catch(zeroAgg),
 
-      prisma.$queryRawUnsafe<MonthRow[]>(
+      tx.$queryRawUnsafe<MonthRow[]>(
         `SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') as month,
                 COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
            FROM quotations
@@ -118,7 +128,7 @@ const getFinanceSummary = cacheRead(
         fromTs, toTs,
       ).catch(zeroMonth),
 
-      prisma.$queryRawUnsafe<MonthRow[]>(
+      tx.$queryRawUnsafe<MonthRow[]>(
         `SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') as month,
                 COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
            FROM rental_invoices WHERE deleted_at IS NULL
@@ -127,7 +137,7 @@ const getFinanceSummary = cacheRead(
         fromTs, toTs,
       ).catch(zeroMonth),
 
-      prisma.$queryRawUnsafe<MonthRow[]>(
+      tx.$queryRawUnsafe<MonthRow[]>(
         `SELECT TO_CHAR(DATE_TRUNC('month', issue_date), 'YYYY-MM') as month,
                 COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
            FROM finance_invoices
@@ -136,7 +146,7 @@ const getFinanceSummary = cacheRead(
           GROUP BY DATE_TRUNC('month', issue_date) ORDER BY month`,
         fromTs, toTs,
       ).catch(zeroMonth),
-    ]);
+    ]));
 
     const mc  = { total: toNum(maintenanceCosts[0]?.total),      count: toNum(maintenanceCosts[0]?.count) };
     const rr  = { total: toNum(rentalRevenue[0]?.total),         count: toNum(rentalRevenue[0]?.count) };

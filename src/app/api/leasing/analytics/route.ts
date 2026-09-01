@@ -28,6 +28,15 @@ const CACHE_TAG = 'leasing:analytics';
 
 // Heavy work extracted into a cacheable, self-contained function. No
 // closures over request state — only the tenantId parameter.
+//
+// Runs inside unstable_cache (via cacheRead), which strips Next.js request
+// context - next/headers() is unavailable there, so the plain prisma client's
+// header-based auto-scoping middleware never engages. Every query below
+// already has its own explicit tenantId filter, but RLS is force-applied to
+// the runtime role regardless of that filter - with no scope ever set, it
+// silently zeroed out every one of these 9 queries for every tenant.
+// withTenantRls sets app.tenant_id explicitly and gives every query below
+// the same pinned, scoped connection.
 const getLeasingAnalytics = cacheRead(
   async (tenantId: string) => {
     const now = new Date();
@@ -42,44 +51,44 @@ const getLeasingAnalytics = cacheRead(
       }
     };
 
-    const [contracts, contractVehicles, payments, overages, fines, fuel, insurance, renewals, lessees] = await Promise.all([
-      safe('contracts', prisma.leaseContract2.findMany({
+    const [contracts, contractVehicles, payments, overages, fines, fuel, insurance, renewals, lessees] = await withTenantRls(prisma, tenantId, (tx) => Promise.all([
+      safe('contracts', tx.leaseContract2.findMany({
         where: { tenantId, deletedAt: null },
         select: { id: true, contractNumber: true, status: true, monthlyRate: true, totalContractValue: true, startDate: true, endDate: true, lesseeId: true },
       })),
-      safe('contract vehicles', prisma.leaseContractVehicle.findMany({
+      safe('contract vehicles', tx.leaseContractVehicle.findMany({
         where: { contract: { tenantId } },
         select: { id: true, contractId: true, status: true },
       })),
-      safe('legacy leasing payments', prisma.leasePayment2.findMany({
+      safe('legacy leasing payments', tx.leasePayment2.findMany({
         where: { tenantId },
         select: { id: true, contractId: true, amount: true, totalAmount: true, status: true, dueDate: true, paidDate: true, periodMonth: true, periodYear: true },
       })),
-      safe('mileage overages', prisma.leaseMileageOverage.findMany({
+      safe('mileage overages', tx.leaseMileageOverage.findMany({
         where: { tenantId },
         select: { id: true, contractId: true, overageAmount: true, status: true, createdAt: true },
       })),
-      safe('traffic fines', prisma.leaseTrafficFine.findMany({
+      safe('traffic fines', tx.leaseTrafficFine.findMany({
         where: { tenantId },
         select: { id: true, contractId: true, finalAmount: true, fineAmount: true, billingStatus: true, violationDate: true },
       })),
-      safe('fuel logs', prisma.leaseFuelLog.findMany({
+      safe('fuel logs', tx.leaseFuelLog.findMany({
         where: { tenantId },
         select: { id: true, contractId: true, totalCost: true, billingStatus: true, fuelDate: true },
       })),
-      safe('insurance policies', prisma.leaseInsurancePolicy.findMany({
+      safe('insurance policies', tx.leaseInsurancePolicy.findMany({
         where: { tenantId, deletedAt: null },
         select: { id: true, status: true, expiryDate: true, premium: true },
       })),
-      safe('renewals', prisma.leaseRenewal.findMany({
+      safe('renewals', tx.leaseRenewal.findMany({
         where: { tenantId },
         select: { id: true, status: true, createdAt: true },
       })),
-      safe('lessees', prisma.lessee.findMany({
+      safe('lessees', tx.lessee.findMany({
         where: { tenantId, deletedAt: null },
         select: { id: true, type: true },
       })),
-    ]);
+    ]));
 
     // Portfolio KPIs
     const activeContracts  = contracts.filter(c => c.status === 'ACTIVE');

@@ -41,8 +41,18 @@ function iso(value: Date | string | null | undefined) {
 // refresh now hits the Data Cache instead of Neon. Per-tenant key keeps
 // responses isolated (no `public` because the URL doesn't carry the
 // tenantId — see server-cache.ts for the security rationale).
+//
+// Runs inside unstable_cache (via cacheRead), which strips Next.js request
+// context - next/headers() is unavailable there, so the plain prisma client's
+// header-based auto-scoping middleware never engages. Every query below
+// already has its own explicit tenant_id filter, but RLS is force-applied to
+// the runtime role regardless of that filter - with no scope ever set, it
+// silently zeroed out every one of these queries for every tenant, and each
+// .catch(zero) masked it as an empty/zero result rather than a visible
+// error. withTenantRls sets app.tenant_id explicitly and gives every query
+// below the same pinned, scoped connection.
 const getLogisticsStats = cacheRead(
-  async (tenantId: string) => {
+  async (tenantId: string) => withTenantRls(prisma, tenantId, async (tx) => {
     const [
       totalVehicles,
       availableVehicles,
@@ -52,28 +62,28 @@ const getLogisticsStats = cacheRead(
       pendingBookings,
       driversResult,
     ] = await Promise.all([
-      prisma.$queryRawUnsafe<CountRow[]>(
+      tx.$queryRawUnsafe<CountRow[]>(
         `SELECT COUNT(*) AS count
            FROM vehicles
           WHERE tenant_id = $1 AND deleted_at IS NULL AND vehicle_usage = 'LOGISTICS'`,
         tenantId,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<CountRow[]>(
+      tx.$queryRawUnsafe<CountRow[]>(
         `SELECT COUNT(*) AS count
            FROM vehicles
           WHERE tenant_id = $1 AND deleted_at IS NULL AND vehicle_usage = 'LOGISTICS' AND status = 'AVAILABLE'`,
         tenantId,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<CountRow[]>(
+      tx.$queryRawUnsafe<CountRow[]>(
         `SELECT COUNT(*) AS count
            FROM vehicles
           WHERE tenant_id = $1 AND deleted_at IS NULL AND vehicle_usage = 'LOGISTICS' AND status = 'MAINTENANCE'`,
         tenantId,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<CountRow[]>(
+      tx.$queryRawUnsafe<CountRow[]>(
         `SELECT COUNT(*) AS count
           FROM logistics_shipment_orders
           WHERE tenant_id = $1 AND deleted_at IS NULL AND status = ANY($2::text[])`,
@@ -81,7 +91,7 @@ const getLogisticsStats = cacheRead(
         activeShipmentStatuses,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<CountRow[]>(
+      tx.$queryRawUnsafe<CountRow[]>(
         `SELECT COUNT(*) AS count
            FROM logistics_shipment_orders
           WHERE tenant_id = $1
@@ -92,14 +102,14 @@ const getLogisticsStats = cacheRead(
         completedShipmentStatuses,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<CountRow[]>(
+      tx.$queryRawUnsafe<CountRow[]>(
         `SELECT COUNT(*) AS count
            FROM logistics_shipment_orders
           WHERE tenant_id = $1 AND deleted_at IS NULL AND status = 'PENDING'`,
         tenantId,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<CountRow[]>(
+      tx.$queryRawUnsafe<CountRow[]>(
         `SELECT COUNT(*) AS count
           FROM drivers
           WHERE tenant_id = $1 AND deleted_at IS NULL`,
@@ -107,7 +117,7 @@ const getLogisticsStats = cacheRead(
       ).catch(zero),
     ]);
 
-    const recentTrips = await prisma.$queryRawUnsafe<RecentShipmentRow[]>(
+    const recentTrips = await tx.$queryRawUnsafe<RecentShipmentRow[]>(
       `SELECT id,
               shipment_no AS booking_ref,
               status,
@@ -139,7 +149,7 @@ const getLogisticsStats = cacheRead(
         created_at: iso(trip.created_at),
       })),
     };
-  },
+  }),
   [CACHE_TAG],
   30,
 );

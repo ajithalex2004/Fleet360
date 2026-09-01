@@ -14,8 +14,18 @@ const zero = () => Promise.resolve([{ count: BigInt(0) }]);
 // 8 raw SQL queries on every page load. The page also auto-refreshes
 // every 30s — the server cache means the auto-refresh hits the Data
 // Cache instead of Neon. Per-tenant key keeps responses isolated.
+//
+// Runs inside unstable_cache (via cacheRead), which strips Next.js request
+// context - next/headers() is unavailable there, so the plain prisma client's
+// header-based auto-scoping middleware never engages. None of the queries
+// below have their own tenant_id filter — they rely entirely on RLS, which
+// is force-applied to the runtime role regardless. With no scope ever set,
+// every query returned zero rows for every tenant, and each .catch(zero)
+// masked it as an empty/zero result rather than a visible error.
+// withTenantRls sets app.tenant_id explicitly and gives every query below
+// the same pinned, scoped connection.
 const getSchoolBusStats = cacheRead(
-  async (_tenantId: string) => {
+  async (tenantId: string) => withTenantRls(prisma, tenantId, async (tx) => {
     const [
       totalVehicles,
       availableVehicles,
@@ -25,36 +35,36 @@ const getSchoolBusStats = cacheRead(
       inTransit,
       driversResult,
     ] = await Promise.all([
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count FROM vehicles WHERE deleted_at IS NULL AND vehicle_usage = 'SCHOOL_BUS'`,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count FROM vehicles WHERE deleted_at IS NULL AND vehicle_usage = 'SCHOOL_BUS' AND status = 'AVAILABLE'`,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count FROM vehicles WHERE deleted_at IS NULL AND vehicle_usage = 'SCHOOL_BUS' AND status = 'MAINTENANCE'`,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count FROM bus_routes WHERE route_type = 'SCHOOL' AND is_active = true`,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count FROM trip_schedules WHERE DATE(departure_time) = CURRENT_DATE`,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count FROM trip_schedules WHERE status IN ('STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT') AND DATE(departure_time) = CURRENT_DATE`,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count FROM drivers WHERE deleted_at IS NULL AND assignment_type = 'SCHOOL_BUS'`,
       ).catch(zero),
     ]);
 
-    const todayTrips = await prisma.$queryRawUnsafe<Array<{
+    const todayTrips = await tx.$queryRawUnsafe<Array<{
       id: string; trip_no: string | null; status: string; departure_time: string | null;
       arrival_time: string | null; route_name: string | null; vehicle_plate: string | null;
     }>>(
@@ -82,7 +92,7 @@ const getSchoolBusStats = cacheRead(
       drivers:          Number(driversResult[0]?.count    ?? 0),
       todayTrips,
     };
-  },
+  }),
   [CACHE_TAG],
   30,
 );

@@ -17,6 +17,16 @@ const zero = () => Promise.resolve([{ count: BigInt(0) }]);
 // stale-while-revalidate gives a near-instant response on repeated page
 // loads while still surfacing fresh data within a minute. The per-tenant
 // cache key keeps responses isolated.
+//
+// Runs inside unstable_cache (via cacheRead), which strips Next.js request
+// context - next/headers() is unavailable there, so the plain prisma client's
+// header-based auto-scoping middleware never engages. None of the queries
+// below have their own tenant_id filter — they rely entirely on RLS, which
+// is force-applied to the runtime role regardless. With no scope ever set,
+// every query returned zero rows for every tenant, and each .catch(zero)
+// masked it as an empty/zero result rather than a visible error.
+// withTenantRls sets app.tenant_id explicitly and gives every query below
+// the same pinned, scoped connection.
 const getFleetStats = cacheRead(
   async (tenantId: string) => {
     await ensureFleetSchema();
@@ -30,61 +40,61 @@ const getFleetStats = cacheRead(
       expiringInsuranceResult,
       byLifecycleResult,
       byUsageResult,
-    ] = await Promise.all([
+    ] = await withTenantRls(prisma, tenantId, (tx) => Promise.all([
 
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count FROM vehicles WHERE deleted_at IS NULL`,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count FROM vehicles WHERE deleted_at IS NULL AND status = 'AVAILABLE'`,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count FROM vehicles WHERE deleted_at IS NULL AND status = 'MAINTENANCE'`,
       ).catch(zero),
 
       // lifecycle_stage added by hub migration — catch if column not yet present
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count FROM vehicles WHERE deleted_at IS NULL AND lifecycle_stage = 'ALLOCATED'`,
       ).catch(zero),
 
       // vehicle_documents may not have deleted_at — use plain count
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count
          FROM vehicle_documents
          WHERE expiry_date BETWEEN NOW() AND NOW() + INTERVAL '30 days'`,
       ).catch(zero),
 
       // correct table name is work_orders (not fleet_work_orders)
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count
          FROM work_orders
          WHERE status NOT IN ('COMPLETED', 'CLOSED', 'CANCELLED')`,
       ).catch(zero),
 
       // correct table name is vehicle_insurance (not fleet_vehicle_insurance)
-      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      tx.$queryRawUnsafe<Array<{ count: bigint }>>(
         `SELECT COUNT(*) as count
          FROM vehicle_insurance
          WHERE status = 'ACTIVE'
            AND end_date BETWEEN NOW() AND NOW() + INTERVAL '30 days'`,
       ).catch(zero),
 
-      prisma.$queryRawUnsafe<Array<{ lifecycle_stage: string; count: bigint }>>(
+      tx.$queryRawUnsafe<Array<{ lifecycle_stage: string; count: bigint }>>(
         `SELECT COALESCE(lifecycle_stage, 'UNKNOWN') as lifecycle_stage, COUNT(*) as count
          FROM vehicles
          WHERE deleted_at IS NULL
          GROUP BY lifecycle_stage`,
       ).catch(() => [] as Array<{ lifecycle_stage: string; count: bigint }>),
 
-      prisma.$queryRawUnsafe<Array<{ vehicle_usage: string; count: bigint }>>(
+      tx.$queryRawUnsafe<Array<{ vehicle_usage: string; count: bigint }>>(
         `SELECT COALESCE(vehicle_usage, 'UNKNOWN') as vehicle_usage, COUNT(*) as count
          FROM vehicles
          WHERE deleted_at IS NULL
          GROUP BY vehicle_usage`,
       ).catch(() => [] as Array<{ vehicle_usage: string; count: bigint }>),
-    ]);
+    ]));
 
     return {
       totalVehicles:     Number(totalResult[0]?.count     ?? 0),

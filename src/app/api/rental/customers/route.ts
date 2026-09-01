@@ -8,12 +8,18 @@ import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-ca
 
 const CACHE_TAG = 'rental:customers';
 
+// Runs inside unstable_cache (via cacheRead), which strips Next.js request
+// context - next/headers() is unavailable there, so the plain prisma client's
+// header-based auto-scoping middleware never engages and RLS (force-applied
+// to the runtime role regardless of the WHERE clause) filters out every row
+// for every tenant. withTenantRls sets app.tenant_id explicitly from the
+// argument instead of relying on headers.
 const getCustomers = cacheRead(
   async (tenantId: string) => {
-    return prisma.rentalCustomer.findMany({
+    return withTenantRls(prisma, tenantId, (tx) => tx.rentalCustomer.findMany({
       where: { tenantId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
-    });
+    }));
   },
   [CACHE_TAG],
   30,
