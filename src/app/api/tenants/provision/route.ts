@@ -208,6 +208,29 @@ async function detectDomainVerifColumnsExist(): Promise<boolean> {
 // ── POST handler ──────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  // Genuinely BEFORE any transaction/RLS scope exists - not just before the
+  // rest of this handler's own code, but before tenantBootstrapHandler opens
+  // its transaction at all. These used to run from inside that callback,
+  // which is already inside withBootstrap's runWithRlsScope: the prisma
+  // client's raw-method routing sees an active scope and redirects these
+  // "plain client" calls onto the SAME transaction connection instead of an
+  // independent one. ensureTrnColumn's ALTER TABLE then fails (fleet360_app
+  // has no DDL privileges), silently caught by its own try/catch - but the
+  // failure had already aborted the Postgres transaction at the database
+  // level. Every statement after it on that connection, including
+  // tenant.create() further down, failed with 25P02 "current transaction is
+  // aborted" regardless of what it was actually trying to do. Confirmed via
+  // pg_stat_activity mid-request: the transaction showed
+  // "idle in transaction (aborted)" while running detectUserTableName()'s
+  // query, one step after ensureTrnColumn's ALTER TABLE - before
+  // tenant.create() ever ran.
+  await Promise.all([ensurePasswordHashColumn(), ensureTrnColumn(), ensureDomainVerificationColumns()]);
+  const [userTable, domainVerifColumnsExist] = await Promise.all([
+    detectUserTableName(),
+    detectDomainVerifColumnsExist(),
+  ]);
+  console.log(`[provision] userTable=${userTable} domainVerifCols=${domainVerifColumnsExist}`);
+
   return tenantBootstrapHandler(request, 'create_pending_tenant', async ({ tx, rescopeToTenant }) => {
     try {
         const body   = await request.json();
@@ -281,17 +304,9 @@ export async function POST(request: NextRequest) {
         const verificationToken = crypto.randomBytes(32).toString('hex');
         const allModules        = Array.from(new Set(['admin', 'platform', ...data.selectedModules]));
 
-        // Ensure required columns exist BEFORE the transaction (DDL cannot run inside tx)
-        await Promise.all([ensurePasswordHashColumn(), ensureTrnColumn(), ensureDomainVerificationColumns()]);
-
-        // Detect table/column names OUTSIDE the transaction — avoids try/catch inside
-        // a PG transaction (any thrown error inside a tx aborts it with code 25P02).
-        const [userTable, domainVerifColumnsExist] = await Promise.all([
-          detectUserTableName(),
-          detectDomainVerifColumnsExist(),
-        ]);
-
-        console.log(`[provision] userTable=${userTable} domainVerifCols=${domainVerifColumnsExist}`);
+        // userTable / domainVerifColumnsExist come from the closure - computed
+        // above, genuinely before this transaction started. See the comment
+        // there for why they can't be computed here instead.
 
         // ── DB transaction ────────────────────────────────────────────────────────
         // No inner transaction: withTenantRls / withPlatformAdmin has already
