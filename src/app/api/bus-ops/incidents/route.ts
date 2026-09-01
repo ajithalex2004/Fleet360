@@ -9,16 +9,23 @@ import { raiseAlert } from '@/lib/alerts/raise';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'bus-ops:incidents';
 
+// Runs inside unstable_cache (via cacheRead), which strips Next.js request
+// context - next/headers() is unavailable there, so the plain prisma client's
+// header-based auto-scoping middleware never engages and RLS (force-applied
+// to fleet360_app regardless of the WHERE clause) filters out every row for
+// every tenant. withTenantRls sets app.tenant_id explicitly from the
+// argument instead of relying on headers, matching the pattern already used
+// correctly in src/app/api/bus-ops/plan/route.ts.
 const getIncidents = cacheRead(
   async (tenantId: string, status: string | null, severity: string | null) => {
-    return prisma.tripIncident.findMany({
+    return withTenantRls(prisma, tenantId, (tx) => tx.tripIncident.findMany({
       where: {
         tenantId,
         ...(status   ? { status }   : {}),
         ...(severity ? { severity } : {}),
       },
       orderBy: { incidentDate: 'desc' },
-    });
+    }));
   },
   [CACHE_TAG],
   30,

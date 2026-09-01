@@ -17,6 +17,13 @@ import {
 
 const CACHE_TAG = 'bus-ops:schedules';
 
+// Runs inside unstable_cache (via cacheRead), which strips Next.js request
+// context - next/headers() is unavailable there, so the plain prisma client's
+// header-based auto-scoping middleware never engages and RLS (force-applied
+// to fleet360_app regardless of the WHERE clause) filters out every row for
+// every tenant. withTenantRls sets app.tenant_id explicitly from the
+// argument instead of relying on headers, matching the pattern already used
+// correctly in src/app/api/bus-ops/plan/route.ts.
 const getSchedules = cacheRead(
   async (
     tenantId: string,
@@ -39,7 +46,7 @@ const getSchedules = cacheRead(
       const end   = new Date(dateStr); end.setHours(23,59,59,999);
       where.departureTime = { gte: start, lte: end };
     }
-    return prisma.tripSchedule.findMany({
+    return withTenantRls(prisma, tenantId, (tx) => tx.tripSchedule.findMany({
       where,
       include: {
         route: true,
@@ -47,7 +54,7 @@ const getSchedules = cacheRead(
         tripLogs: { orderBy: { createdAt: 'desc' }, take: 1 },
       },
       orderBy: { departureTime: 'asc' },
-    });
+    }));
   },
   [CACHE_TAG],
   30,
