@@ -123,14 +123,25 @@ export default function DriverTodayPage() {
           {trips.map(t => {
             const status = (t.status ?? 'SCHEDULED').toUpperCase();
             const isBusy = busy?.startsWith(t.id);
+            const isAdhoc = t.shiftType === 'ADHOC_OVERTIME';
             return (
-              <div key={t.id} className="rounded-2xl bg-slate-800/60 border border-white/10 p-4 space-y-3">
+              <div key={t.id} className={`rounded-2xl border p-4 space-y-3 ${
+                isAdhoc
+                  ? 'bg-gradient-to-br from-amber-950/30 to-slate-800/80 border-amber-500/40 shadow-lg shadow-amber-500/10'
+                  : 'bg-slate-800/60 border-white/10'
+              }`}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-violet-300">{t.tripNumber ?? t.id.slice(0, 8)}</span>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] border ${STATUS_PILL[status]}`}>{status}</span>
-                      {t.shiftType && <span className="text-[10px] text-slate-400 uppercase tracking-wide">{t.shiftType}</span>}
+                      {isAdhoc ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                          ⚡ AD-HOC OVERTIME
+                        </span>
+                      ) : (
+                        t.shiftType && <span className="text-[10px] text-slate-400 uppercase tracking-wide">{t.shiftType}</span>
+                      )}
                     </div>
                     <div className="text-base font-semibold mt-1 truncate">
                       {t.route?.name ?? 'Route'}

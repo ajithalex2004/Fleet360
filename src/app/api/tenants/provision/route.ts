@@ -319,7 +319,22 @@ export async function POST(request: NextRequest) {
             },
           });
 
-          // 1a. Set TRN via raw SQL (handles case where Prisma client is stale)
+          // 1a. Re-scope the bootstrap transaction to the tenant just created.
+          // withBootstrap() pins app.tenant_id to the sentinel 'bootstrap' for
+          // the whole transaction so a fresh signup can't read any existing
+          // tenant's data - but that sentinel can never equal a real tenant_id,
+          // so RLS WITH CHECK silently rejected every write below this point
+          // (tenantModule, role, userTenant all carry tenant_id = tenant.id).
+          // set_config(..., true) is transaction-local and can be called more
+          // than once, so re-scoping here to the real id keeps the "can't see
+          // other tenants" guarantee for everything before this line while
+          // unblocking writes to the tenant that now legitimately exists.
+          await tx.$executeRawUnsafe(
+            `SELECT set_config('app.tenant_id', $1, true)`,
+            tenant.id,
+          );
+
+          // 1b. Set TRN via raw SQL (handles case where Prisma client is stale)
           if (data.trn) {
             await tx.$executeRawUnsafe(
               `UPDATE tenants SET trn = $1 WHERE id = $2`,
