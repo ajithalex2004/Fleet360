@@ -103,7 +103,7 @@ function checkBootstrapRateLimit(ip: string): boolean {
  * Sets `app.tenant_id = 'bootstrap'` instead of wildcard `*`.
  */
 export async function withBootstrap<T>(
-  fn: (tx: TxClient) => Promise<T>,
+  fn: (tx: TxClient, rescopeToTenant: (tenantId: string) => Promise<void>) => Promise<T>,
   opts: { timeoutMs?: number } = {},
 ): Promise<T> {
   return prisma.$transaction(
@@ -111,7 +111,23 @@ export async function withBootstrap<T>(
       // Establish dedicated bootstrap tenant context
       await rawTx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', 'bootstrap', true)`);
       const restrictedTx = createRestrictedBootstrapClient(rawTx);
-      return fn(restrictedTx);
+
+      // Closes over rawTx directly - the real, un-proxied transaction client.
+      // Calling a raw-SQL method (e.g. $executeRawUnsafe) directly on the
+      // restricted proxy invokes it with `this` bound to the proxy, not the
+      // real Prisma client, unlike a nested delegate call (tx.tenant.create()
+      // first reads the real, unwrapped `tenant` delegate off the proxy, then
+      // calls .create() on THAT object, so `this` is correct there). That
+      // mismatch let a re-scope call through the proxy execute against a
+      // different connection than the one the rest of the transaction runs
+      // on - it appeared to succeed but silently had no effect, which is why
+      // this exists as its own function closing over rawTx instead of being
+      // inlined as a raw call on `tx` at the route-handler call site.
+      const rescopeToTenant = async (tenantId: string) => {
+        await rawTx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', $1, true)`, tenantId);
+      };
+
+      return fn(restrictedTx, rescopeToTenant);
     },
     { timeout: opts.timeoutMs ?? 30_000, maxWait: 10_000 },
   );
@@ -121,6 +137,14 @@ export interface BootstrapContext {
   securityContext: SecurityContext;
   tx: TxClient;
   clientIp: string;
+  /**
+   * Re-scopes app.tenant_id for the remainder of this transaction once a real
+   * tenant has been created (withBootstrap otherwise pins it to the sentinel
+   * 'bootstrap' for the whole transaction). Must be used for this - never
+   * call raw SQL methods directly on `tx` to change RLS scope; see the
+   * comment on rescopeToTenant's definition in withBootstrap for why.
+   */
+  rescopeToTenant: (tenantId: string) => Promise<void>;
 }
 
 export type BootstrapHandlerFn<T> = (ctx: BootstrapContext) => Promise<T>;
@@ -171,11 +195,12 @@ export async function tenantBootstrapHandler<T>(
 
   try {
     // 4. Execute within dedicated withBootstrap boundary
-    const result = await withBootstrap(async (tx) => {
+    const result = await withBootstrap(async (tx, rescopeToTenant) => {
       return fn({
         securityContext,
         tx,
         clientIp,
+        rescopeToTenant,
       });
     });
 
