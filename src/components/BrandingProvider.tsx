@@ -24,7 +24,7 @@ export default function BrandingProvider() {
 
     const load = async () => {
       try {
-        const r = await fetch('/api/auth/me', { cache: 'force-cache' });
+        const r = await fetch('/api/auth/me', { cache: 'no-store' });
         if (!r.ok) return;
         const data = await r.json();
         if (cancelled) return;

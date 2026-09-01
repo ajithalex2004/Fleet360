@@ -8,18 +8,39 @@
  * The colour fields drive runtime CSS variables — see BrandingProvider.
  */
 
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
 let _ensured = false;
 
+// The production runtime role (fleet360_app) has no ALTER privilege on the
+// public schema, so this DDL always fails with 42501 there. The columns it
+// adds already exist in every live environment - this block only matters
+// for fresh/local databases connecting as an owner-equivalent role. Every
+// caller of getBranding() already wraps it in .catch(() => null), so a
+// failure here never crashed a response - but without catching it, _ensured
+// was never set, so this failing DDL re-ran (and re-failed) on every single
+// call, forever. Treat insufficient_privilege as "already provisioned".
+function isInsufficientPrivilege(e: unknown): boolean {
+  return (
+    e instanceof Prisma.PrismaClientKnownRequestError &&
+    (e.meta as { code?: string } | undefined)?.code === '42501'
+  );
+}
+
 export async function ensureBrandingColumns(): Promise<void> {
   if (_ensured) return;
-  await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS brand_product_name   TEXT`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS brand_tagline        TEXT`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS brand_logo_url       TEXT`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS brand_favicon_url    TEXT`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS brand_primary_color  TEXT`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS brand_accent_color   TEXT`);
+  try {
+    await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS brand_product_name   TEXT`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS brand_tagline        TEXT`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS brand_logo_url       TEXT`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS brand_favicon_url    TEXT`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS brand_primary_color  TEXT`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS brand_accent_color   TEXT`);
+  } catch (e) {
+    if (!isInsufficientPrivilege(e)) throw e;
+    console.warn('[ensureBrandingColumns] DDL skipped: runtime role lacks ALTER privilege on public schema (assuming columns already exist)');
+  }
   _ensured = true;
 }
 
