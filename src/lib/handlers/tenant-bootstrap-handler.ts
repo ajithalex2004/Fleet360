@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import type { TxClient } from '@/lib/rls';
 import { SecurityContext } from '@/lib/security-context';
+import { runWithRlsScope } from '@/lib/rls-scope';
 import crypto from 'crypto';
 
 export type BootstrapOperation =
@@ -108,40 +109,50 @@ export async function withBootstrap<T>(
 ): Promise<T> {
   return prisma.$transaction(
     async (rawTx) => {
-      // Establish dedicated bootstrap tenant context
-      await rawTx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', 'bootstrap', true)`);
-      const restrictedTx = createRestrictedBootstrapClient(rawTx);
+      // The prisma singleton (src/lib/prisma.ts) monkey-patches
+      // $executeRawUnsafe/$queryRawUnsafe/$transaction on the client itself,
+      // and its tx client forwards raw-method calls back through those same
+      // patched client methods. That wrapper routes to the real, pinned
+      // transaction connection ONLY when activeRlsScope() reports one - its
+      // fallback for "no active scope and no x-tenant-id request header"
+      // (exactly this endpoint's situation: unauthenticated, no session, no
+      // header) calls the pristine method bound to the TOP-LEVEL client, not
+      // this transaction. Every raw call made via `rawTx` in this function -
+      // including the very first set_config below - silently ran on a fresh,
+      // unrelated connection instead of the real transaction, without ever
+      // throwing, until this scope was registered. Confirmed by reproducing
+      // the exact structure (proxy included) in isolation, where it worked
+      // perfectly outside the app's monkey-patched client, and by making
+      // rescopeToTenant below verify its own effect: it reported
+      // current_setting() as empty - not even the sentinel this function
+      // sets two lines below - proving the raw calls were never landing on
+      // this transaction's connection at all, from the very first one.
+      return runWithRlsScope({ tenantId: 'bootstrap', mode: 'tenant', tx: rawTx }, async () => {
+        // Establish dedicated bootstrap tenant context
+        await rawTx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', 'bootstrap', true)`);
+        const restrictedTx = createRestrictedBootstrapClient(rawTx);
 
-      // Closes over rawTx directly - the real, un-proxied transaction client.
-      // Calling a raw-SQL method (e.g. $executeRawUnsafe) directly on the
-      // restricted proxy invokes it with `this` bound to the proxy, not the
-      // real Prisma client, unlike a nested delegate call (tx.tenant.create()
-      // first reads the real, unwrapped `tenant` delegate off the proxy, then
-      // calls .create() on THAT object, so `this` is correct there). That
-      // mismatch let a re-scope call through the proxy execute against a
-      // different connection than the one the rest of the transaction runs
-      // on - it appeared to succeed but silently had no effect, which is why
-      // this exists as its own function closing over rawTx instead of being
-      // inlined as a raw call on `tx` at the route-handler call site.
-      const rescopeToTenant = async (tenantId: string) => {
-        await rawTx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', $1, true)`, tenantId);
-        // Verify rather than trust: a re-scope that silently lands on the
-        // wrong connection/session fails exactly like this - no thrown error,
-        // just a WITH CHECK rejection on the next tenant-scoped write, several
-        // lines away from the actual cause. Confirm it here so a future
-        // regression of this kind fails at the point of the mistake.
-        const [row] = await rawTx.$queryRawUnsafe<Array<{ v: string | null }>>(
-          `SELECT current_setting('app.tenant_id', true) AS v`,
-        );
-        if (row?.v !== tenantId) {
-          throw new Error(
-            `rescopeToTenant: set_config did not take effect on this transaction's connection ` +
-              `(current_setting reports "${row?.v}", expected "${tenantId}").`,
+        const rescopeToTenant = async (tenantId: string) => {
+          await rawTx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', $1, true)`, tenantId);
+          // Verify rather than trust: a re-scope that silently lands on the
+          // wrong connection/session fails exactly like this - no thrown
+          // error, just a WITH CHECK rejection on the next tenant-scoped
+          // write, several lines away from the actual cause. Confirm it here
+          // so a future regression of this kind fails at the point of the
+          // mistake instead of two write attempts later.
+          const [row] = await rawTx.$queryRawUnsafe<Array<{ v: string | null }>>(
+            `SELECT current_setting('app.tenant_id', true) AS v`,
           );
-        }
-      };
+          if (row?.v !== tenantId) {
+            throw new Error(
+              `rescopeToTenant: set_config did not take effect on this transaction's connection ` +
+                `(current_setting reports "${row?.v}", expected "${tenantId}").`,
+            );
+          }
+        };
 
-      return fn(restrictedTx, rescopeToTenant);
+        return fn(restrictedTx, rescopeToTenant);
+      });
     },
     { timeout: opts.timeoutMs ?? 30_000, maxWait: 10_000 },
   );
