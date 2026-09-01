@@ -192,6 +192,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'Passengers',          href: '/bus-ops/passengers',          icon: Users,           group: 'Workforce' },
       { label: 'Employees',           href: '/bus-ops/staff',               icon: Users,           group: 'Workforce' },
       { label: 'Drivers Performance', href: '/bus-ops/drivers',             icon: UserCog,         group: 'Workforce' },
+      { label: 'Driver Fatigue & Rest', href: '/bus-ops/drivers/fatigue',   icon: Shield,          group: 'Workforce' },
 
       // Requests — inbound demand / exceptions.
       { label: 'Ad-hoc & Overtime',   href: '/bus-ops/adhoc-dispatch',      icon: ClipboardList,   group: 'Requests' },
@@ -201,6 +202,7 @@ export const MODULES: ModuleDef[] = [
       // Analytics — after-the-fact reporting.
       { label: 'Analytics',           href: '/bus-ops/analytics',           icon: BarChart3,       group: 'Analytics' },
       { label: 'Cost Allocation',     href: '/bus-ops/cost-allocation',     icon: Calculator,      group: 'Analytics' },
+      { label: 'ESG Carbon Footprint', href: '/bus-ops/esg',                icon: Leaf,            group: 'Analytics' },
     ],
   },
   {
