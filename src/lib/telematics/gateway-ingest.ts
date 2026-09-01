@@ -12,6 +12,9 @@
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { raiseAlert } from '@/lib/alerts/raise';
+import { evaluateAndRecordStopVisits } from '@/lib/telematics/geofence-evaluator';
+import { checkAndTriggerPmOdometerAlerts } from '@/lib/telematics/pm-odometer-sync';
+import { evaluateTelemetryTripTransitions } from '@/lib/bus-ops/telemetry-trip-transitions';
 
 export interface NormalizedTelemetryPing {
   imei: string;
@@ -396,7 +399,61 @@ export async function processTelemetryBatch(
         result.processed++;
         result.matchedVehicles++;
 
-        // 4. Check & Trigger Event Alerts
+        // 4. Geofencing & Operational Automation (Phase 2)
+        // A. Active Trip Stop Visits & Live Destination ETA
+        const activeTrip = await tx.tripSchedule.findFirst({
+          where: {
+            tenantId,
+            vehicleId: vehicle.id,
+            status: { in: ['SCHEDULED', 'DEPARTED', 'IN_TRANSIT'] },
+          },
+          select: {
+            id: true,
+            routeId: true,
+            status: true,
+          },
+        });
+
+        if (activeTrip && activeTrip.routeId) {
+          await evaluateAndRecordStopVisits(
+            tx,
+            tenantId,
+            {
+              latitude: ping.latitude,
+              longitude: ping.longitude,
+              speedKmh: ping.speedKmh,
+              occurredAt: ping.occurredAt,
+            },
+            activeTrip.id,
+            activeTrip.routeId,
+          ).catch((err) => console.warn('[telematics-ingest] Stop visit eval failed:', err));
+
+          // Evaluate auto-depart and auto-complete transitions
+          void evaluateTelemetryTripTransitions(tx as any, {
+            tenantId,
+            vehicleId: vehicle.id,
+            scheduleId: activeTrip.id,
+            latitude: ping.latitude,
+            longitude: ping.longitude,
+            speedKmh: ping.speedKmh,
+            headingDeg: ping.headingDeg,
+            accuracyM: ping.accuracyM,
+            occurredAt: ping.occurredAt,
+            source: 'GATEWAY',
+          } as any).catch((err) => console.warn('[telematics-ingest] Trip transition eval failed:', err));
+        }
+
+        // B. Preventive Maintenance (PM) Odometer Threshold Alerts
+        if (ping.odometerKm !== undefined && ping.odometerKm > 0) {
+          void checkAndTriggerPmOdometerAlerts(
+            tx,
+            tenantId,
+            vehicle,
+            ping.odometerKm,
+          ).catch((err) => console.warn('[telematics-ingest] PM alert check failed:', err));
+        }
+
+        // 5. Check & Trigger Event Alerts
         // A. SOS / Panic Button Alert
         if (ping.sosPanic) {
           result.alertsTriggered++;
