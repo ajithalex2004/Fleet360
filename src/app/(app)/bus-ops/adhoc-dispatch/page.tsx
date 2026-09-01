@@ -212,7 +212,7 @@ export default function AdhocDispatchPage() {
           </div>
           <h1 className="text-2xl font-bold text-white mt-1">Overtime & Ad-Hoc Transport Dispatch</h1>
           <p className="text-sm text-slate-400">
-            Automated capacity matching for unscheduled shifts: Route Fit $\rightarrow$ Standby Shuttle $\rightarrow$ Taxi Voucher.
+            Automated capacity matching for unscheduled shifts: Route Fit → Standby Shuttle → Taxi Voucher.
           </p>
         </div>
 
