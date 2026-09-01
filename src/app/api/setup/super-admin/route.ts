@@ -101,14 +101,21 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 2. Ensure SUPER_ADMIN role exists on the platform tenant.
+    // 2. Ensure the global SUPER_ADMIN role exists — tenantId MUST be null.
+    //    roles has a DB check constraint chk_roles_system_template requiring
+    //    (tenant_id IS NULL) = is_system, and src/app/api/admin/session/route.ts
+    //    grants the platform-wide '*:*:*' permission set only when
+    //    role.code === 'SUPER_ADMIN' && role.tenantId === null - scoping this
+    //    role to the platform tenant's own id violates the constraint (this is
+    //    what broke account creation) and, had it been allowed, would have
+    //    silently produced an account with no actual super-admin permissions.
     //    roles is RLS-protected and this is the install-time bootstrap — there
     //    is no session or tenant context yet — so it runs under platform scope.
     //    Unscoped, the find returns nothing and the create is refused by
     //    WITH CHECK once the app connects as a non-bypassing role.
     const role = await withPlatformAdmin(prisma, async (tx) => {
       const found = await tx.role.findFirst({
-        where: { code: 'SUPER_ADMIN', tenantId: tenant.id },
+        where: { code: 'SUPER_ADMIN', tenantId: null },
       });
       if (found) return found;
       return tx.role.create({
@@ -116,7 +123,7 @@ export async function POST(request: NextRequest) {
           id:          crypto.randomUUID(),
           name:        'Super Admin',
           code:        'SUPER_ADMIN',
-          tenantId:    tenant.id,
+          tenantId:    null,
           isSystem:    true,
           description: 'Full platform-wide administrative access',
         },
