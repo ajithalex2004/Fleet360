@@ -191,6 +191,7 @@ export default function BusOpsDashboard() {
                 { label: 'Operational Rules Engine', href: '/bus-ops/planning-engine?tab=cba', icon: Scale, accent: 'amber' as const,  badge: 'P1' },
               ] : []),
               { label: 'Shift SLA Monitor', href: '/bus-ops/sla-monitor',  icon: Shield,        accent: 'rose' as const,   badge: 'P0' },
+              { label: 'Cost Allocation & Recharge', href: '/bus-ops/cost-allocation', icon: Calculator, accent: 'emerald' as const, badge: 'P0' },
               { label: 'Power BI Connector',href: '/bus-ops/powerbi',      icon: BarChart3,     accent: 'emerald' as const,badge: 'P1' },
               { label: 'Multilayer GIS',    href: '/bus-ops/gis',          icon: Layers,        accent: 'rose' as const,   badge: 'P1' },
               { label: 'Rider App (PWA)',   href: '/bus-ops/passenger/app',icon: Smartphone,    accent: 'cyan' as const,   badge: 'P1' },
