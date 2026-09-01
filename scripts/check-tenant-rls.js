@@ -72,6 +72,15 @@ const RULE_EXEMPTIONS = [
       'production when the secret is unset. The handler performs no database access of ' +
       'its own — runTripReminders() does all of it under withSystemJob + withTenantRls.',
   },
+  {
+    file: 'src/app/api/telematics/webhook/route.ts',
+    method: 'POST',
+    type: 'missing_auth',
+    reason:
+      'Telematics IoT gateway webhook endpoint. External telematics gateways authenticate via ' +
+      'x-webhook-secret / x-telematics-secret and specify tenantId via headers or query parameters, ' +
+      'with all database writes strictly executed under withTenantRls.',
+  },
 ];
 
 function ruleExemptionFor(relativePath, violation) {

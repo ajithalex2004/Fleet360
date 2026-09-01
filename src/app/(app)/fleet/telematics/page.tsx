@@ -1,0 +1,796 @@
+'use client';
+
+/**
+ * src/app/(app)/fleet/telematics/page.tsx
+ *
+ * Live Telematics & IoT Gateway Ingestion Console (Pattern A).
+ *
+ * Features:
+ *   - Live Device Registry & Vehicle Pairing (IMEI, Model, SIM, Status)
+ *   - Real-time Telemetry Grid (Speed, Odometer, Fuel %, Heading, Last Ping)
+ *   - Webhook Ingestion Simulator & Tester (Flespi / Teltonika / Traccar / Generic)
+ *   - Gateway Configuration Guide & cURL generator
+ */
+
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Radio,
+  Wifi,
+  WifiOff,
+  Activity,
+  Gauge,
+  Fuel,
+  Cpu,
+  RefreshCw,
+  Search,
+  Plus,
+  Play,
+  Copy,
+  Check,
+  Zap,
+  Clock,
+  Compass,
+  AlertTriangle,
+  Send,
+  Terminal,
+} from 'lucide-react';
+
+interface DeviceItem {
+  vehicleId: string;
+  vehicleCode: string | null;
+  licensePlate: string | null;
+  make: string | null;
+  model: string | null;
+  type: string | null;
+  deviceId: string | null;
+  simCardNo: string | null;
+  odometerKm: number;
+  fuelLevelPercent: number | null;
+  connectionStatus: 'ONLINE' | 'IDLE' | 'OFFLINE' | 'UNPAIRED';
+  lastPing: {
+    latitude: number;
+    longitude: number;
+    speedKmh: number;
+    headingDeg: number;
+    occurredAt: string;
+  } | null;
+}
+
+export default function TelematicsPage() {
+  const [loading, setLoading] = useState(true);
+  const [devices, setDevices] = useState<DeviceItem[]>([]);
+  const [filter, setFilter] = useState<'ALL' | 'ONLINE' | 'IDLE' | 'OFFLINE' | 'UNPAIRED'>('ALL');
+  const [search, setSearch] = useState('');
+
+  // Device pairing modal
+  const [pairModal, setPairModal] = useState<DeviceItem | null>(null);
+  const [editImei, setEditImei] = useState('');
+  const [editSim, setEditSim] = useState('');
+  const [pairingSaving, setPairingSaving] = useState(false);
+
+  // Webhook Simulator state
+  const [activeTab, setActiveTab] = useState<'devices' | 'simulator' | 'guide'>('devices');
+  const [simVendor, setSimVendor] = useState<'flespi' | 'teltonika' | 'traccar' | 'generic'>('flespi');
+  const [simPayload, setSimPayload] = useState('');
+  const [simSubmitting, setSimSubmitting] = useState(false);
+  const [simResponse, setSimResponse] = useState<any>(null);
+  const [copied, setCopied] = useState(false);
+
+  const fetchDevices = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/telematics/devices');
+      if (res.ok) {
+        const data = await res.json();
+        setDevices(data.devices || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch devices', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDevices();
+  }, [fetchDevices]);
+
+  // Load sample payloads for simulator
+  useEffect(() => {
+    const defaultImei = devices.find((d) => d.deviceId)?.deviceId || '864201047281920';
+
+    if (simVendor === 'flespi') {
+      setSimPayload(
+        JSON.stringify(
+          [
+            {
+              ident: defaultImei,
+              timestamp: Math.floor(Date.now() / 1000),
+              'position.latitude': 25.0418,
+              'position.longitude': 55.1402,
+              'position.speed': 64.5,
+              'position.direction': 142,
+              'position.altitude': 15,
+              'position.satellites': 14,
+              'engine.ignition.status': true,
+              'can.vehicle.mileage': 148200,
+              'can.fuel.level': 78,
+              'battery.voltage': 24.2,
+            },
+          ],
+          null,
+          2,
+        ),
+      );
+    } else if (simVendor === 'teltonika') {
+      setSimPayload(
+        JSON.stringify(
+          {
+            imei: defaultImei,
+            timestamp: new Date().toISOString(),
+            lat: 25.1025,
+            lng: 55.1984,
+            speed: 82,
+            angle: 270,
+            altitude: 20,
+            io: {
+              ignition: 1,
+              odometer: 89450,
+              fuel: 65,
+              battery_voltage: 12.8,
+              sos: 0,
+            },
+          },
+          null,
+          2,
+        ),
+      );
+    } else if (simVendor === 'traccar') {
+      setSimPayload(
+        JSON.stringify(
+          {
+            deviceId: defaultImei,
+            fixTime: new Date().toISOString(),
+            latitude: 24.9812,
+            longitude: 55.0841,
+            speed: 52.3,
+            course: 90,
+            attributes: {
+              ignition: true,
+              odometer: 112400,
+              fuelLevel: 84,
+            },
+          },
+          null,
+          2,
+        ),
+      );
+    } else {
+      setSimPayload(
+        JSON.stringify(
+          {
+            imei: defaultImei,
+            occurredAt: new Date().toISOString(),
+            latitude: 25.0657,
+            longitude: 55.1712,
+            speedKmh: 75.0,
+            headingDeg: 180,
+            odometerKm: 95400,
+            fuelLevelPercent: 72,
+            ignition: true,
+          },
+          null,
+          2,
+        ),
+      );
+    }
+  }, [simVendor, devices]);
+
+  const handleSavePairing = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pairModal) return;
+
+    setPairingSaving(true);
+    try {
+      const res = await fetch('/api/telematics/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehicleId: pairModal.vehicleId,
+          deviceId: editImei.trim() || null,
+          simCardNo: editSim.trim() || null,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to update pairing');
+      }
+
+      setPairModal(null);
+      fetchDevices();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error updating device');
+    } finally {
+      setPairingSaving(false);
+    }
+  };
+
+  const handleSimulateWebhook = async () => {
+    setSimSubmitting(true);
+    setSimResponse(null);
+    try {
+      let parsedBody: any;
+      try {
+        parsedBody = JSON.parse(simPayload);
+      } catch (err) {
+        alert('Invalid JSON in payload editor');
+        setSimSubmitting(false);
+        return;
+      }
+
+      const res = await fetch('/api/telematics/webhook?secret=fleet360-telematics-live', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-webhook-secret': 'fleet360-telematics-live',
+        },
+        body: JSON.stringify(parsedBody),
+      });
+
+      const data = await res.json();
+      setSimResponse({ status: res.status, data });
+      if (res.ok) {
+        fetchDevices();
+      }
+    } catch (err) {
+      setSimResponse({
+        status: 500,
+        data: { error: err instanceof Error ? err.message : 'Simulation failed' },
+      });
+    } finally {
+      setSimSubmitting(false);
+    }
+  };
+
+  const handleCopyUrl = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const filtered = devices.filter((d) => {
+    if (filter !== 'ALL' && d.connectionStatus !== filter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const code = (d.vehicleCode || '').toLowerCase();
+      const plate = (d.licensePlate || '').toLowerCase();
+      const imei = (d.deviceId || '').toLowerCase();
+      const make = (d.make || '').toLowerCase();
+      return code.includes(q) || plate.includes(q) || imei.includes(q) || make.includes(q);
+    }
+    return true;
+  });
+
+  const onlineCount = devices.filter((d) => d.connectionStatus === 'ONLINE').length;
+  const idleCount = devices.filter((d) => d.connectionStatus === 'IDLE').length;
+  const offlineCount = devices.filter((d) => d.connectionStatus === 'OFFLINE').length;
+  const unpairedCount = devices.filter((d) => d.connectionStatus === 'UNPAIRED').length;
+
+  return (
+    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
+              <Radio className="w-6 h-6 text-cyan-400" />
+              Live Telematics & IoT Gateways
+            </h1>
+            <span className="px-2 py-0.5 text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-full">
+              Pattern A: HTTPS Webhook
+            </span>
+          </div>
+          <p className="text-sm text-slate-400 mt-1">
+            Real-time GPS tracking, CAN-bus telemetry, and multi-vendor gateway ingestion (Flespi, Teltonika, Geotab, Traccar).
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={fetchDevices}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium border border-slate-700 transition"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/10 space-y-1">
+          <p className="text-xs text-slate-400 font-medium">Total Vehicles</p>
+          <p className="text-2xl font-bold text-white">{devices.length}</p>
+          <p className="text-[11px] text-slate-500">Fleet asset registry</p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-500/30 space-y-1">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-emerald-400 font-medium">Online & Moving</p>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+          </div>
+          <p className="text-2xl font-bold text-emerald-300">{onlineCount}</p>
+          <p className="text-[11px] text-emerald-500/80">Active GPS stream</p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-500/30 space-y-1">
+          <p className="text-xs text-amber-400 font-medium">Stationary / Idle</p>
+          <p className="text-2xl font-bold text-amber-300">{idleCount}</p>
+          <p className="text-[11px] text-amber-500/80">Ignition ON / Speed 0</p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-rose-500/20 space-y-1">
+          <p className="text-xs text-rose-400 font-medium">Offline (&gt; 2 hrs)</p>
+          <p className="text-2xl font-bold text-rose-300">{offlineCount}</p>
+          <p className="text-[11px] text-rose-500/80">No recent ping</p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/10 space-y-1">
+          <p className="text-xs text-slate-400 font-medium">Unpaired Hardware</p>
+          <p className="text-2xl font-bold text-slate-300">{unpairedCount}</p>
+          <p className="text-[11px] text-slate-500">No IMEI bound</p>
+        </div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+        <button
+          onClick={() => setActiveTab('devices')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
+            activeTab === 'devices'
+              ? 'bg-cyan-500 text-slate-950 shadow'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+          }`}
+        >
+          <Cpu className="w-4 h-4" />
+          Live Device Fleet ({devices.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('simulator')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
+            activeTab === 'simulator'
+              ? 'bg-amber-500 text-slate-950 shadow'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+          }`}
+        >
+          <Terminal className="w-4 h-4" />
+          Webhook Simulator & Tester
+        </button>
+
+        <button
+          onClick={() => setActiveTab('guide')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
+            activeTab === 'guide'
+              ? 'bg-violet-500 text-slate-950 shadow'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+          }`}
+        >
+          <Zap className="w-4 h-4" />
+          Gateway Setup Guide
+        </button>
+      </div>
+
+      {/* TAB 1: Live Devices Grid */}
+      {activeTab === 'devices' && (
+        <div className="space-y-4">
+          {/* Filter and Search Bar */}
+          <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+            <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto">
+              {(['ALL', 'ONLINE', 'IDLE', 'OFFLINE', 'UNPAIRED'] as const).map((status) => (
+                <button
+                  key={status}
+                  onClick={() => setFilter(status)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition ${
+                    filter === status
+                      ? 'bg-slate-700 text-white border border-slate-500'
+                      : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-transparent'
+                  }`}
+                >
+                  {status}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search code, plate, IMEI..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+          </div>
+
+          {/* Grid Table */}
+          <div className="rounded-2xl border border-white/10 overflow-hidden bg-slate-900/60 shadow-xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-white/10">
+                  <tr>
+                    <th className="p-3.5">Vehicle</th>
+                    <th className="p-3.5">Hardware IMEI / Device</th>
+                    <th className="p-3.5">Status</th>
+                    <th className="p-3.5">Speed</th>
+                    <th className="p-3.5">Odometer</th>
+                    <th className="p-3.5">Fuel %</th>
+                    <th className="p-3.5">Last Communication</th>
+                    <th className="p-3.5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-8 text-center text-slate-500">
+                        No devices found matching filter criteria.
+                      </td>
+                    </tr>
+                  ) : (
+                    filtered.map((d) => {
+                      const isOnline = d.connectionStatus === 'ONLINE';
+                      const isIdle = d.connectionStatus === 'IDLE';
+                      const isOffline = d.connectionStatus === 'OFFLINE';
+
+                      return (
+                        <tr key={d.vehicleId} className="hover:bg-white/[0.02] transition">
+                          <td className="p-3.5 font-medium">
+                            <div className="font-bold text-white text-sm">
+                              {d.vehicleCode || d.licensePlate || 'Unnamed Asset'}
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              {d.licensePlate ? `Plate: ${d.licensePlate}` : ''}{' '}
+                              {d.make ? `· ${d.make} ${d.model || ''}` : ''}
+                            </div>
+                          </td>
+
+                          <td className="p-3.5 font-mono">
+                            {d.deviceId ? (
+                              <div>
+                                <span className="font-bold text-cyan-300 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/30">
+                                  {d.deviceId}
+                                </span>
+                                {d.simCardNo && (
+                                  <div className="text-[10px] text-slate-500 mt-0.5">
+                                    SIM: {d.simCardNo}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-600 italic">Unpaired</span>
+                            )}
+                          </td>
+
+                          <td className="p-3.5">
+                            {isOnline && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                ONLINE
+                              </span>
+                            )}
+                            {isIdle && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                IDLE
+                              </span>
+                            )}
+                            {isOffline && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                                <WifiOff className="w-3 h-3" />
+                                OFFLINE
+                              </span>
+                            )}
+                            {d.connectionStatus === 'UNPAIRED' && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400">
+                                NO DEVICE
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="p-3.5 font-mono">
+                            {d.lastPing ? (
+                              <span className={`font-bold ${d.lastPing.speedKmh > 100 ? 'text-amber-400' : 'text-slate-200'}`}>
+                                {d.lastPing.speedKmh.toFixed(0)} km/h
+                              </span>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+
+                          <td className="p-3.5 font-mono text-slate-200">
+                            {d.odometerKm > 0 ? `${d.odometerKm.toLocaleString()} km` : '—'}
+                          </td>
+
+                          <td className="p-3.5">
+                            {d.fuelLevelPercent !== null ? (
+                              <div className="flex items-center gap-2">
+                                <div className="w-16 h-2 bg-slate-800 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full ${
+                                      d.fuelLevelPercent < 20
+                                        ? 'bg-rose-500'
+                                        : d.fuelLevelPercent < 50
+                                        ? 'bg-amber-500'
+                                        : 'bg-emerald-500'
+                                    }`}
+                                    style={{ width: `${d.fuelLevelPercent}%` }}
+                                  />
+                                </div>
+                                <span className="font-mono text-[11px] text-slate-300">
+                                  {d.fuelLevelPercent.toFixed(0)}%
+                                </span>
+                              </div>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+
+                          <td className="p-3.5 text-slate-400">
+                            {d.lastPing ? (
+                              <div>
+                                <div>{new Date(d.lastPing.occurredAt).toLocaleTimeString()}</div>
+                                <div className="text-[10px] text-slate-500">
+                                  {new Date(d.lastPing.occurredAt).toLocaleDateString()}
+                                </div>
+                              </div>
+                            ) : (
+                              'Never'
+                            )}
+                          </td>
+
+                          <td className="p-3.5 text-right">
+                            <button
+                              onClick={() => {
+                                setPairModal(d);
+                                setEditImei(d.deviceId || '');
+                                setEditSim(d.simCardNo || '');
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
+                            >
+                              {d.deviceId ? 'Edit Pairing' : 'Pair Device'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: Webhook Simulator & Tester */}
+      {activeTab === 'simulator' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Terminal className="w-5 h-5 text-amber-400" />
+                  Inbound Webhook Payload Simulator
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Test and validate raw JSON packets from any telematics vendor.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                {(['flespi', 'teltonika', 'traccar', 'generic'] as const).map((vendor) => (
+                  <button
+                    key={vendor}
+                    onClick={() => setSimVendor(vendor)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase transition ${
+                      simVendor === vendor
+                        ? 'bg-amber-500 text-slate-950'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {vendor}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Raw JSON Webhook Body:
+              </label>
+              <textarea
+                value={simPayload}
+                onChange={(e) => setSimPayload(e.target.value)}
+                rows={12}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-xs text-amber-200 focus:outline-none focus:border-amber-500 shadow-inner"
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-[11px] text-slate-500 font-mono">
+                Target: POST /api/telematics/webhook
+              </span>
+              <button
+                onClick={handleSimulateWebhook}
+                disabled={simSubmitting}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow transition disabled:opacity-50"
+              >
+                <Play className="w-4 h-4 fill-current" />
+                {simSubmitting ? 'Simulating...' : 'Simulate Ingestion'}
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-5 space-y-4">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <Activity className="w-5 h-5 text-cyan-400" />
+              Ingestion Execution & Parser Result
+            </h3>
+
+            {simResponse ? (
+              <div className="space-y-3">
+                <div
+                  className={`p-3 rounded-xl border flex items-center justify-between text-xs font-mono font-bold ${
+                    simResponse.status === 200
+                      ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+                      : 'bg-rose-950/40 border-rose-500/40 text-rose-300'
+                  }`}
+                >
+                  <span>HTTP Status: {simResponse.status}</span>
+                  <span>{simResponse.data.success ? '✓ NORMALIZED & SAVED' : '✗ FAILED'}</span>
+                </div>
+
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-slate-300 max-h-96 overflow-y-auto">
+                  <pre>{JSON.stringify(simResponse.data, null, 2)}</pre>
+                </div>
+              </div>
+            ) : (
+              <div className="p-12 text-center text-slate-500 text-xs">
+                Click <strong>"Simulate Ingestion"</strong> on the left to test the webhook and see normalized state updates.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: Gateway Setup Guide */}
+      {activeTab === 'guide' && (
+        <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-6 space-y-6">
+          <div>
+            <h3 className="text-lg font-bold text-white">Telematics Gateway Configuration Guide</h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Configure your telematics platform (Flespi stream, Teltonika FOTA WEB, Traccar forwarder) to push telemetry to Fleet360.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+              <p className="font-bold text-cyan-400 uppercase tracking-wider">1. Webhook Endpoint URL</p>
+              <div className="flex items-center justify-between p-2 rounded bg-slate-900 font-mono text-slate-200 border border-slate-800">
+                <span className="truncate">https://your-domain.com/api/telematics/webhook</span>
+                <button
+                  onClick={() => handleCopyUrl('https://your-domain.com/api/telematics/webhook')}
+                  className="text-slate-400 hover:text-white ml-2"
+                >
+                  {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+              <p className="font-bold text-cyan-400 uppercase tracking-wider">2. Webhook Secret Header</p>
+              <div className="p-2 rounded bg-slate-900 font-mono text-slate-200 border border-slate-800">
+                <span>x-webhook-secret: fleet360-telematics-live</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+              Sample cURL Test Command:
+            </p>
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-emerald-400 overflow-x-auto">
+              <code>{`curl -X POST https://your-domain.com/api/telematics/webhook \\
+  -H "Content-Type: application/json" \\
+  -H "x-webhook-secret: fleet360-telematics-live" \\
+  -d '[
+    {
+      "ident": "864201047281920",
+      "timestamp": ${Math.floor(Date.now() / 1000)},
+      "position.latitude": 25.0418,
+      "position.longitude": 55.1402,
+      "position.speed": 64.5,
+      "position.direction": 142,
+      "can.vehicle.mileage": 148200,
+      "can.fuel.level": 78
+    }
+  ]'`}</code>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Device Pairing Modal */}
+      {pairModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl text-xs">
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">
+                  Hardware Pairing
+                </span>
+                <h3 className="text-base font-bold text-white mt-0.5">
+                  {pairModal.vehicleCode || pairModal.licensePlate}
+                </h3>
+              </div>
+              <button
+                onClick={() => setPairModal(null)}
+                className="text-slate-500 hover:text-slate-300 text-lg leading-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePairing} className="space-y-3">
+              <div>
+                <label className="block text-slate-300 font-medium mb-1">
+                  Device Hardware IMEI / Tracker ID *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 864201047281920"
+                  value={editImei}
+                  onChange={(e) => setEditImei(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-100 focus:outline-none focus:border-cyan-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-medium mb-1">
+                  SIM Card Phone Number / ICCID (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. +971501234567"
+                  value={editSim}
+                  onChange={(e) => setEditSim(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-100 focus:outline-none focus:border-cyan-500 font-mono"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setPairModal(null)}
+                  disabled={pairingSaving}
+                  className="px-3 py-1.5 text-slate-400 hover:text-slate-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={pairingSaving}
+                  className="px-4 py-2 font-bold text-slate-950 bg-cyan-400 hover:bg-cyan-300 rounded-xl shadow transition disabled:opacity-50"
+                >
+                  {pairingSaving ? 'Saving...' : 'Save Pairing'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
