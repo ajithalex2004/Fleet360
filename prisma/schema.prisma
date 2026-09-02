@@ -6177,6 +6177,24 @@ enum InvoiceVarianceReason {
   @@schema("public")
 }
 
+enum MarketplacePartnerStatus {
+  NOT_APPLIED
+  UNDER_REVIEW
+  APPROVED
+  SUSPENDED
+  REJECTED
+
+  @@schema("public")
+}
+
+enum OutsourceVisibility {
+  DIRECT
+  TENANT_NETWORK
+  EXCHANGE_NETWORK
+
+  @@schema("public")
+}
+
 model TransportPartner {
   id                    String                    @id @default(uuid())
   createdAt             DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -6197,6 +6215,7 @@ model TransportPartner {
 
   onboardingStatus      PartnerOnboardingStatus   @default(DRAFT) @map("onboarding_status")
   operationalStatus     PartnerOperationalStatus  @default(ACTIVE) @map("operational_status")
+  marketplaceStatus     MarketplacePartnerStatus  @default(APPROVED) @map("marketplace_status")
 
   approvedAt            DateTime?                 @map("approved_at") @db.Timestamptz(6)
   approvedBy            String?                   @map("approved_by")
@@ -6428,15 +6447,36 @@ model OutsourceRequest {
   vehicleTypeRequired String?                   @map("vehicle_type_required")
   specialInstructions String?                   @map("special_instructions")
 
-  closesAt            DateTime                  @map("closes_at") @db.Timestamptz(6)
-  createdBy           String                    @map("created_by")
-
   invitedPartners     OutsourceRequestPartner[]
   quotes              PartnerQuote[]
   award               OutsourceAward?
+  opportunity         MarketplaceOpportunity?
 
   @@index([tenantId, status], map: "idx_outsource_req_tenant_status")
   @@map("outsource_requests")
+  @@schema("public")
+}
+
+model MarketplaceOpportunity {
+  id                  String               @id @default(uuid())
+  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId            String               @map("tenant_id")
+  outsourceRequestId  String               @unique @map("outsource_request_id")
+  domain              PartnerServiceDomain @map("domain")
+  visibility          OutsourceVisibility  @default(EXCHANGE_NETWORK) @map("visibility")
+  status              String               @default("OPEN") // OPEN, AWARDED, CLOSED, CANCELLED
+  publishedAt         DateTime             @default(now()) @map("published_at") @db.Timestamptz(6)
+  closesAt            DateTime             @map("closes_at") @db.Timestamptz(6)
+  disclosurePayload   Json                 @map("disclosure_payload")
+  requirementsVersion Int                  @default(1) @map("requirements_version")
+  createdBy           String               @map("created_by")
+
+  request             OutsourceRequest     @relation(fields: [outsourceRequestId], references: [id], onDelete: Cascade)
+
+  @@index([domain, status, visibility], map: "idx_marketplace_opps_domain_status")
+  @@index([tenantId], map: "idx_marketplace_opps_tenant")
+  @@map("marketplace_opportunities")
   @@schema("public")
 }
 
