@@ -33,6 +33,7 @@ export default function PartnerDriverTripPage() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [gpsActive, setGpsActive] = useState(false);
   const [lastPingTime, setLastPingTime] = useState<string | null>(null);
+  const [waypointData, setWaypointData] = useState<any | null>(null);
 
   // POD Form state
   const [passengerCount, setPassengerCount] = useState('48');
@@ -56,9 +57,37 @@ export default function PartnerDriverTripPage() {
     }
   };
 
+  const loadWaypoints = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`/api/public/partner-driver/${token}/waypoint`);
+      if (res.ok) {
+        const data = await res.json();
+        setWaypointData(data);
+      }
+    } catch {}
+  };
+
   useEffect(() => {
     void loadTrip();
+    void loadWaypoints();
   }, [token]);
+
+  const handleWaypointCheckin = async (sequence: number, action: 'ARRIVED' | 'DEPARTED' | 'CHECKIN') => {
+    try {
+      const res = await fetch(`/api/public/partner-driver/${token}/waypoint`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sequence, action }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWaypointData(data);
+        setFeedback(`✓ Stop ${sequence} checked in successfully!`);
+        setTimeout(() => setFeedback(null), 3000);
+      }
+    } catch {}
+  };
 
   // Continuous HTML5 GPS Telemetry Stream
   useEffect(() => {
@@ -229,6 +258,79 @@ export default function PartnerDriverTripPage() {
             </div>
           </div>
         </div>
+
+        {/* Multi-Stop Intermediate Waypoint Stepper */}
+        {waypointData && waypointData.waypoints?.length > 1 && (
+          <div className="p-4 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-3 font-sans">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-bold text-cyan-400 tracking-wider">
+                Multi-Stop Route Stepper ({waypointData.completedWaypoints}/{waypointData.totalWaypoints} Done)
+              </span>
+              <span className="text-[10px] font-mono font-bold text-slate-400">
+                {waypointData.progressPercentage}%
+              </span>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+              <div
+                className="bg-cyan-500 h-full rounded-full transition-all duration-500"
+                style={{ width: `${waypointData.progressPercentage}%` }}
+              />
+            </div>
+
+            {/* Vertical Stops Timeline */}
+            <div className="space-y-2 pt-1">
+              {waypointData.waypoints.map((wp: any) => {
+                const isTarget = wp.sequence === waypointData.currentActiveSequence && !wp.isCompleted;
+                return (
+                  <div
+                    key={wp.sequence}
+                    className={`p-3 rounded-2xl border transition ${
+                      wp.isCompleted
+                        ? 'bg-emerald-950/20 border-emerald-500/30 text-slate-300'
+                        : isTarget
+                        ? 'bg-cyan-950/30 border-cyan-500/50 text-white shadow-lg ring-1 ring-cyan-500/30'
+                        : 'bg-slate-950/50 border-slate-800/80 text-slate-500'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2">
+                        <span
+                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 ${
+                            wp.isCompleted
+                              ? 'bg-emerald-500 text-white'
+                              : isTarget
+                              ? 'bg-cyan-500 text-white animate-pulse'
+                              : 'bg-slate-800 text-slate-500'
+                          }`}
+                        >
+                          {wp.isCompleted ? '✓' : wp.sequence}
+                        </span>
+                        <div>
+                          <span className="font-bold text-xs block">{wp.name}</span>
+                          <span className="text-[10px] text-slate-400">
+                            {wp.type} {wp.passengerCount ? `• ${wp.passengerCount} Pax` : ''}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Checkin Action for Active Stop */}
+                      {isTarget && (
+                        <button
+                          onClick={() => handleWaypointCheckin(wp.sequence, 'CHECKIN')}
+                          className="px-2.5 py-1 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[10px] shrink-0 transition"
+                        >
+                          ✓ Check-In
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Assigned Vehicle & Driver Card */}
         <div className="p-4 rounded-3xl bg-slate-900/40 border border-slate-800 text-xs space-y-1.5">
