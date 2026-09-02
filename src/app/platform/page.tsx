@@ -11,6 +11,18 @@ interface ModuleDef {
 }
 const modules: ModuleDef[] = [
   {
+    id: 'exchange',
+    title: 'Fleet360 Exchange & Partner Marketplace',
+    description: 'Private transport partner network & outsourced dispatch marketplace — Blind RFQ bidding, zone rate cards, zero-login driver tracking, automated geofencing, 3-way commercial reconciliation, partner performance scorecards, and UAE FTA Tax Invoices.',
+    href: '/exchange/dashboard',
+    icon: 'EX',
+    gradient: 'from-cyan-500 to-emerald-600',
+    glow: 'shadow-cyan-500/30',
+    border: 'border-cyan-500/40 ring-1 ring-cyan-500/20',
+    tags: ['Marketplace', 'Outsourcing', 'Telematics', 'FTA Tax Invoices', 'Scorecards'],
+    status: 'live',
+  },
+  {
     id: 'service-tickets', title: 'Service & Support Ticketing',
     description: 'One-stop ticketing for Maintenance, Renewal, Cleaning, Support, Incident, Towing & Complaint requests — shared SLA, assignment and notification engines with per-tenant access control.',
     href: '/service-tickets', icon: 'ST',
@@ -166,6 +178,7 @@ export default function PlatformPage() {
 
   // Module cards stay static so the landing page never waits on analytics APIs.
   const moduleStats: Record<string, Array<{ label: string; value: string | number }>> = {
+    exchange: [{ label: 'Partner Network', value: 'Active' }, { label: 'Marketplace', value: 'Live' }],
     maintenance: [{ label: 'Workflow', value: 'Ready' }, { label: 'Approvals', value: 'Ready' }],
     leasing: [{ label: 'Contracts', value: 'Ready' }, { label: 'Renewals', value: 'Ready' }],
     rental: [{ label: 'Bookings', value: 'Ready' }, { label: 'Damage', value: 'Ready' }],

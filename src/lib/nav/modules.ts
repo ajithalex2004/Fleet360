@@ -25,6 +25,8 @@ import {
   CalendarCheck2,
   Gauge,
   Cpu,
+  Briefcase,
+  Globe,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -64,6 +66,24 @@ export interface ModuleDef {
 }
 
 export const MODULES: ModuleDef[] = [
+  {
+    id: 'exchange',
+    label: 'Fleet360 Exchange',
+    href: '/exchange/dashboard',
+    icon: ArrowLeftRight,
+    subPages: [
+      { label: 'Dashboard', href: '/exchange/dashboard', icon: LayoutDashboard },
+      { label: 'Marketplace Feed', href: '/exchange/marketplace', icon: Globe, group: 'Sourcing' },
+      { label: 'Jobs & Requests', href: '/exchange/jobs', icon: Briefcase, group: 'Sourcing' },
+      { label: 'Quotations', href: '/exchange/quotations', icon: DollarSign, group: 'Sourcing' },
+      { label: 'Performance Scorecard', href: '/exchange/scorecard', icon: Trophy, group: 'Operations' },
+      { label: 'Settlement Statements', href: '/exchange/statements', icon: Receipt, group: 'Settlement' },
+      { label: 'Fleet Register', href: '/exchange/fleet', icon: Truck, group: 'Network' },
+      { label: 'Driver Roster', href: '/exchange/drivers', icon: Users, group: 'Network' },
+      { label: 'Compliance Vault', href: '/exchange/compliance', icon: ShieldCheck, group: 'Network' },
+      { label: 'Company Profile', href: '/exchange/profile', icon: Building2, group: 'Network' },
+    ],
+  },
   { id: 'service-tickets', label: 'Service tickets', href: '/service-tickets', icon: Headphones },
   { id: 'agents',          label: 'AI agents',       href: '/agents',          icon: Bot },
   {
