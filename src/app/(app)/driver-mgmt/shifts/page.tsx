@@ -2,15 +2,21 @@
 
 import React, { useState, useEffect } from 'react';
 
+// Matches the real DriverShift Prisma model (src/app/api/drivers/shifts/route.ts
+// returns raw rows, no relation include) — driverId/vehicleId are plain scalar
+// FKs, not joined name strings; there's no driver/vehicle relation object to
+// read a display name from. startTime/endTime are full Timestamptz values,
+// not bare "HH:mm" strings. status is stored uppercase (SCHEDULED|ACTIVE|
+// COMPLETED|ABSENT per the schema comment).
 interface Shift {
   id: string;
-  driver: string;
-  vehicle: string;
+  driverId: string;
+  vehicleId: string | null;
   shiftDate: string;
   startTime: string;
-  endTime: string;
-  totalHours: number;
-  status: string;
+  endTime: string | null;
+  totalHours: number | null;
+  status: string | null;
 }
 
 export default function ShiftManagement() {
@@ -21,11 +27,11 @@ export default function ShiftManagement() {
   const [filterEndDate, setFilterEndDate] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
-    driver: '',
+    driverId: '',
     shiftDate: '',
     startTime: '',
     endTime: '',
-    vehicle: '',
+    vehicleId: '',
     notes: '',
   });
 
@@ -39,8 +45,10 @@ export default function ShiftManagement() {
       setError('');
       const res = await fetch('/api/drivers/shifts');
       if (!res.ok) throw new Error('Failed to fetch shifts');
-      const data = await res.json();
-      setShifts(data);
+      const json = await res.json();
+      // GET /api/drivers/shifts returns a paginated envelope
+      // ({ data, total, page, limit, ... }), not a bare array.
+      setShifts(Array.isArray(json?.data) ? json.data : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load shifts');
     } finally {
@@ -58,34 +66,50 @@ export default function ShiftManagement() {
   const handleAddShift = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // startTime/endTime inputs are bare "HH:mm" (type="time"), but the
+      // model stores full Timestamptz values — combine with shiftDate
+      // before sending, or Prisma rejects "09:00" as an invalid DateTime.
+      const payload = {
+        driverId:  formData.driverId,
+        vehicleId: formData.vehicleId || undefined,
+        shiftDate: new Date(formData.shiftDate).toISOString(),
+        startTime: new Date(`${formData.shiftDate}T${formData.startTime}`).toISOString(),
+        endTime:   formData.endTime ? new Date(`${formData.shiftDate}T${formData.endTime}`).toISOString() : undefined,
+        notes:     formData.notes || undefined,
+      };
       const res = await fetch('/api/drivers/shifts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error('Failed to add shift');
       setShowModal(false);
-      setFormData({ driver: '', shiftDate: '', startTime: '', endTime: '', vehicle: '', notes: '' });
+      setFormData({ driverId: '', shiftDate: '', startTime: '', endTime: '', vehicleId: '', notes: '' });
       fetchShifts();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to add shift');
     }
   };
 
-  const getStatusColor = (status: string) => {
+  // Stored uppercase (SCHEDULED|ACTIVE|COMPLETED|ABSENT) — matching against
+  // the DB's actual casing, not a display-cased guess.
+  const getStatusColor = (status: string | null) => {
     switch (status) {
-      case 'Scheduled':
+      case 'SCHEDULED':
         return 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30';
-      case 'Active':
+      case 'ACTIVE':
         return 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 animate-pulse';
-      case 'Completed':
+      case 'COMPLETED':
         return 'bg-slate-500/20 text-slate-400 border border-slate-500/30';
-      case 'Absent':
+      case 'ABSENT':
         return 'bg-red-500/20 text-red-400 border border-red-500/30';
       default:
         return 'bg-slate-500/20 text-slate-400 border border-slate-500/30';
     }
   };
+
+  const fmtTime = (iso: string | null) =>
+    iso ? new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—';
 
   if (loading) {
     return (
@@ -169,15 +193,15 @@ export default function ShiftManagement() {
               <tbody>
                 {filteredShifts.map((shift) => (
                   <tr key={shift.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td className="px-6 py-4 text-sm text-white font-medium">{shift.driver}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{shift.vehicle}</td>
+                    <td className="px-6 py-4 text-sm text-white font-medium">{shift.driverId}</td>
+                    <td className="px-6 py-4 text-sm text-slate-200">{shift.vehicleId ?? '—'}</td>
                     <td className="px-6 py-4 text-sm text-slate-200">{new Date(shift.shiftDate).toLocaleDateString()}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{shift.startTime}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{shift.endTime}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{shift.totalHours.toFixed(1)} hrs</td>
+                    <td className="px-6 py-4 text-sm text-slate-200">{fmtTime(shift.startTime)}</td>
+                    <td className="px-6 py-4 text-sm text-slate-200">{fmtTime(shift.endTime)}</td>
+                    <td className="px-6 py-4 text-sm text-slate-200">{shift.totalHours != null ? `${shift.totalHours.toFixed(1)} hrs` : '—'}</td>
                     <td className="px-6 py-4 text-sm">
                       <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(shift.status)}`}>
-                        {shift.status}
+                        {shift.status ?? 'UNKNOWN'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm">
@@ -199,11 +223,11 @@ export default function ShiftManagement() {
 
             <form onSubmit={handleAddShift} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Driver</label>
+                <label className="block text-sm font-medium text-slate-400 mb-2">Driver ID</label>
                 <input
                   type="text"
-                  value={formData.driver}
-                  onChange={(e) => setFormData({ ...formData, driver: e.target.value })}
+                  value={formData.driverId}
+                  onChange={(e) => setFormData({ ...formData, driverId: e.target.value })}
                   className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   required
                 />
@@ -245,13 +269,12 @@ export default function ShiftManagement() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Vehicle</label>
+                <label className="block text-sm font-medium text-slate-400 mb-2">Vehicle ID (optional)</label>
                 <input
                   type="text"
-                  value={formData.vehicle}
-                  onChange={(e) => setFormData({ ...formData, vehicle: e.target.value })}
+                  value={formData.vehicleId}
+                  onChange={(e) => setFormData({ ...formData, vehicleId: e.target.value })}
                   className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  required
                 />
               </div>
 
