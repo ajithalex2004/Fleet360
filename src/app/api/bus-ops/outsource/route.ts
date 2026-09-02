@@ -145,6 +145,9 @@ export async function POST(req: NextRequest) {
           approvedByUserId: userId || 'FINANCE',
         });
 
+        return NextResponse.json({ ok: true, invoice: res.invoice, payable: res.payable });
+      }
+
       if (action === 'LOOKUP_CONTRACT_RATE') {
         const { partnerId, originLocation, destinationLocation, vehicleType, requiredCapacity } = body;
         const { RateCardService } = await import('@/lib/exchange/rate-card-service');
