@@ -24,6 +24,7 @@ import type { TicketType, ServiceTicket, TenantTicketTypeAccess, FormFieldDef } 
 import type { ServiceTone } from '@/types/service-config';
 import { getServiceIcon } from '@/lib/service-tickets/icons';
 import { createMaintenanceRequest } from '@/services/mockData';
+import { ContextDrawer360 } from './components/context-drawer-360';
 
 /** Map of ticket type → resolved form fields, sourced from
  *  /api/service-tickets/form-fields. Empty array for a type means
@@ -127,6 +128,7 @@ export default function ServiceTicketsHome() {
 
   const [activeType, setActiveType]   = useState<TicketType | 'ALL'>('ALL');
   const [showForm, setShowForm]       = useState(false);
+  const [drawerTicketId, setDrawerTicketId] = useState<string | null>(null);
 
   // Bulk select
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -454,10 +456,24 @@ export default function ServiceTicketsHome() {
               selected={selectedIds.has(t.id)}
               onToggleSelect={() => toggleSelected(t.id)}
               onStatusChange={(status) => handleStatusChange(t, status)}
+              onOpen360={() => setDrawerTicketId(t.id)}
             />
           ))}
         </div>
       )}
+
+      {/* Slide-Over Context 360 Drawer */}
+      <ContextDrawer360
+        ticketId={drawerTicketId}
+        onClose={() => setDrawerTicketId(null)}
+        onStatusChange={(newStatus) => {
+          const target = tickets.find(x => x.id === drawerTicketId);
+          if (target) {
+            handleStatusChange(target, newStatus);
+            setDrawerTicketId(null);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -495,13 +511,14 @@ function BulkBtn({ label, onClick, disabled, cls }: { label: string; onClick: ()
   );
 }
 
-function TicketCard({ ticket, formFields, typeConfig, selected, onToggleSelect, onStatusChange }: {
+function TicketCard({ ticket, formFields, typeConfig, selected, onToggleSelect, onStatusChange, onOpen360 }: {
   ticket: ServiceTicket;
   formFields?: FormFieldDef[];
   typeConfig?: ServiceTypeConfig;
   selected: boolean;
   onToggleSelect: () => void;
   onStatusChange: (s: 'Acknowledged' | 'Resolved' | 'Assigned' | 'Escalated' | 'Pending' | 'Rejected') => void;
+  onOpen360?: () => void;
 }) {
   const Icon = getServiceIcon(typeConfig?.iconName);
   const tone = typeConfig?.tone ?? 'violet';
@@ -648,7 +665,19 @@ function TicketCard({ ticket, formFields, typeConfig, selected, onToggleSelect, 
       </div>
 
       {/* Actions */}
-      <div className="flex flex-wrap gap-1.5 mt-4">
+      <div className="flex flex-wrap items-center gap-1.5 mt-4">
+        {onOpen360 && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen360();
+            }}
+            className="text-[11px] px-2 py-1 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 font-semibold inline-flex items-center gap-1 transition-colors"
+            title="Open Vehicle, Driver, Lease & Incident 360 Drawer"
+          >
+            🔍 360 Context
+          </button>
+        )}
         {awaitingApproval && (
           <>
             <button onClick={() => onStatusChange('Pending')}
