@@ -2,9 +2,13 @@
  * src/lib/exchange/outsource-engine.ts
  *
  * Core Outsourcing Workflow Engine for Fleet360 Operations & Exchange.
- * Hardened for Phase 1.5 Production Readiness:
+ * Hardened for Phase 1.5 & Phase 2:
+ * - Deterministic Partner Eligibility and Multi-Partner RFQ
+ * - Partner Quote Decline with structured reason codes
+ * - Deadline Governance & Extensions
+ * - Contract-Rate Direct Award
  * - SHA-256 hashed driver execution tokens (zero plaintext in DB)
- * - Strict backend state machine enforcement (ASSIGNED -> REACHED -> STARTED -> COMPLETED)
+ * - Strict backend state machine enforcement (ASSIGNED -> REACHED -> STARTED -> COMPLETED / CANCELLED / ABORTED)
  * - Server-side compliance validation gates (vehicle mulkiya, driver license & RTA permits)
  * - TenantPartnerRelationship authorization validation
  * - Immutable execution telemetry via PartnerTripEvent
@@ -16,6 +20,7 @@ import { logAudit } from '@/lib/audit';
 import { raiseAlert } from '@/lib/alerts/raise';
 import { randomBytes, createHash } from 'crypto';
 import {
+  OutsourceDeclineReason,
   OutsourcePricingMethod,
   OutsourceRequestStatus,
   PartnerQuoteStatus,
@@ -44,6 +49,7 @@ export interface CreateOutsourceRequestInput {
   vehicleTypeRequired?: string;
   specialInstructions?: string;
   closesInHours?: number;
+  closesAt?: Date | string;
   invitedPartnerIds?: string[];
   createdByUserId: string;
 }
@@ -58,6 +64,14 @@ export interface SubmitQuoteInput {
   proposedVehicleId?: string;
   proposedDriverId?: string;
   notes?: string;
+  actorUserId?: string;
+}
+
+export interface DeclineQuoteInput {
+  requestId: string;
+  partnerId: string;
+  declineReason: OutsourceDeclineReason;
+  declineNotes?: string;
   actorUserId?: string;
 }
 
@@ -79,14 +93,29 @@ export interface AssignVehicleDriverInput {
   actorUserId?: string;
 }
 
+export interface ContractDirectAwardInput {
+  tenantId: string;
+  sourceReferenceId: string;
+  partnerId: string;
+  serviceDate: Date | string;
+  pickupTime: string;
+  pickupLocation: string;
+  dropoffLocation: string;
+  requiredCapacity?: number;
+  agreedPrice: number;
+  vatAmount?: number;
+  currency?: string;
+  awardedByUserId: string;
+}
+
 export class OutsourceEngine {
   /**
    * Create an Outsource Request from Fleet360 Operations
    */
   static async createOutsourceRequest(input: CreateOutsourceRequestInput) {
-    const closesAt = new Date(
-      Date.now() + (input.closesInHours || 24) * 60 * 60 * 1000
-    );
+    const closesAt = input.closesAt
+      ? new Date(input.closesAt)
+      : new Date(Date.now() + (input.closesInHours || 24) * 60 * 60 * 1000);
 
     const count = await prisma.outsourceRequest.count({
       where: { tenantId: input.tenantId },
@@ -150,7 +179,7 @@ export class OutsourceEngine {
       'OutsourceRequest',
       request.id,
       'CREATE',
-      { requestNumber, pricingMethod: request.pricingMethod },
+      { requestNumber, pricingMethod: request.pricingMethod, invitedCount: allowedPartnerIds?.length || 0 },
       input.createdByUserId
     );
 
@@ -161,6 +190,17 @@ export class OutsourceEngine {
    * Submit or revise a partner quotation
    */
   static async submitOrReviseQuote(input: SubmitQuoteInput) {
+    const request = await prisma.outsourceRequest.findUnique({
+      where: { id: input.requestId },
+    });
+
+    if (!request) throw new Error('Outsource request not found');
+
+    // Deadline check
+    if (new Date() > request.closesAt) {
+      throw new Error(`Quote submission deadline passed on ${request.closesAt.toISOString()}`);
+    }
+
     const vatRate = 0.05; // UAE 5% VAT
     const subtotal = Number(input.amount);
     const vat = input.vatAmount != null ? Number(input.vatAmount) : subtotal * vatRate;
@@ -221,6 +261,14 @@ export class OutsourceEngine {
       data: { status: 'QUOTED' },
     });
 
+    // Update request status to QUOTED if still PUBLISHED
+    if (request.status === OutsourceRequestStatus.PUBLISHED) {
+      await prisma.outsourceRequest.update({
+        where: { id: request.id },
+        data: { status: OutsourceRequestStatus.QUOTED },
+      });
+    }
+
     // Notify Requesting Tenant
     await raiseAlert({
       tenantId: newQuote.request.tenantId,
@@ -235,6 +283,76 @@ export class OutsourceEngine {
     });
 
     return newQuote;
+  }
+
+  /**
+   * Partner declines an RFQ request with a structured reason
+   */
+  static async declineRequest(input: DeclineQuoteInput) {
+    const invite = await prisma.outsourceRequestPartner.findUnique({
+      where: {
+        requestId_partnerId: {
+          requestId: input.requestId,
+          partnerId: input.partnerId,
+        },
+      },
+      include: { request: true, partner: true },
+    });
+
+    if (!invite) throw new Error('Partner invite not found');
+
+    const updated = await prisma.outsourceRequestPartner.update({
+      where: { id: invite.id },
+      data: {
+        status: 'DECLINED',
+        declinedAt: new Date(),
+        declineReason: input.declineReason,
+        declineNotes: input.declineNotes,
+      },
+    });
+
+    await logAudit(
+      prisma,
+      invite.request.tenantId,
+      'OutsourceRequestPartner',
+      invite.id,
+      'UPDATE',
+      {
+        action: 'PARTNER_DECLINED_RFQ',
+        partnerId: input.partnerId,
+        declineReason: input.declineReason,
+      },
+      input.actorUserId || invite.partner.legalName
+    );
+
+    return updated;
+  }
+
+  /**
+   * Extend RFQ bidding deadline
+   */
+  static async extendDeadline(
+    requestId: string,
+    newDeadline: Date | string,
+    tenantId: string,
+    userId: string
+  ) {
+    const updated = await prisma.outsourceRequest.update({
+      where: { id: requestId, tenantId },
+      data: { closesAt: new Date(newDeadline) },
+    });
+
+    await logAudit(
+      prisma,
+      tenantId,
+      'OutsourceRequest',
+      requestId,
+      'UPDATE',
+      { action: 'DEADLINE_EXTENDED', newDeadline: new Date(newDeadline).toISOString() },
+      userId
+    );
+
+    return updated;
   }
 
   /**
@@ -328,13 +446,28 @@ export class OutsourceEngine {
         data: { status: PartnerQuoteStatus.REJECTED },
       });
 
-      // 5. Update Request status to AWARDED
+      // 5. Update Invited Partners statuses: winning is AWARDED, others are NOT_SELECTED
+      await tx.outsourceRequestPartner.updateMany({
+        where: { requestId: request.id, partnerId: quote.partnerId },
+        data: { status: 'AWARDED' },
+      });
+
+      await tx.outsourceRequestPartner.updateMany({
+        where: {
+          requestId: request.id,
+          partnerId: { not: quote.partnerId },
+          status: { in: ['INVITED', 'VIEWED', 'QUOTED'] },
+        },
+        data: { status: 'NOT_SELECTED' },
+      });
+
+      // 6. Update Request status to AWARDED
       await tx.outsourceRequest.update({
         where: { id: request.id },
         data: { status: OutsourceRequestStatus.AWARDED },
       });
 
-      // 6. Log Audit
+      // 7. Log Audit
       await logAudit(
         tx,
         input.tenantId,
@@ -348,6 +481,100 @@ export class OutsourceEngine {
         },
         input.awardedByUserId
       );
+
+      return award;
+    });
+  }
+
+  /**
+   * Direct Contract-Rate Award (Direct Procurement without RFQ bidding)
+   */
+  static async createContractDirectAward(input: ContractDirectAwardInput) {
+    return prisma.$transaction(async (tx) => {
+      const subtotal = Number(input.agreedPrice);
+      const vat = input.vatAmount != null ? Number(input.vatAmount) : subtotal * 0.05;
+      const total = subtotal + vat;
+
+      const partner = await tx.transportPartner.findUnique({
+        where: { id: input.partnerId },
+      });
+      if (!partner) throw new Error('Partner not found');
+
+      const count = await tx.outsourceRequest.count({
+        where: { tenantId: input.tenantId },
+      });
+      const requestNumber = `OUT-CTR-${new Date().getFullYear()}-${String(count + 1).padStart(5, '0')}`;
+
+      // Create OutsourceRequest in AWARDED status
+      const request = await tx.outsourceRequest.create({
+        data: {
+          tenantId: input.tenantId,
+          requestNumber,
+          domain: PartnerServiceDomain.PASSENGER_TRANSPORT,
+          sourceReferenceType: 'TRIP_SCHEDULE',
+          sourceReferenceId: input.sourceReferenceId,
+          pricingMethod: OutsourcePricingMethod.CONTRACT_RATE,
+          status: OutsourceRequestStatus.AWARDED,
+          serviceDate: new Date(input.serviceDate),
+          pickupTime: input.pickupTime,
+          pickupLocation: input.pickupLocation,
+          dropoffLocation: input.dropoffLocation,
+          requiredCapacity: input.requiredCapacity || 50,
+          closesAt: new Date(),
+          createdBy: input.awardedByUserId,
+          invitedPartners: {
+            create: [{ partnerId: partner.id, status: 'AWARDED' }],
+          },
+        },
+      });
+
+      // Create Quote in ACCEPTED status
+      const quote = await tx.partnerQuote.create({
+        data: {
+          requestId: request.id,
+          partnerId: partner.id,
+          revisionNo: 1,
+          amount: subtotal,
+          vatAmount: vat,
+          totalAmount: total,
+          currency: input.currency || 'AED',
+          validUntil: new Date(Date.now() + 30 * 86400000),
+          status: PartnerQuoteStatus.ACCEPTED,
+          notes: 'Direct contracted rate award',
+        },
+      });
+
+      const commercialSnapshot = {
+        requestId: request.id,
+        requestNumber: request.requestNumber,
+        quoteId: quote.id,
+        partnerId: partner.id,
+        partnerName: partner.legalName,
+        partnerCode: partner.partnerCode,
+        pricingMethod: 'CONTRACT_RATE',
+        amount: subtotal,
+        vatAmount: vat,
+        totalAmount: total,
+        currency: input.currency || 'AED',
+        serviceDate: new Date(input.serviceDate).toISOString(),
+        awardedAt: new Date().toISOString(),
+      };
+
+      const award = await tx.outsourceAward.create({
+        data: {
+          tenantId: input.tenantId,
+          requestId: request.id,
+          quoteId: quote.id,
+          partnerId: partner.id,
+          awardedPrice: subtotal,
+          vatAmount: vat,
+          totalAwarded: total,
+          currency: input.currency || 'AED',
+          commercialSnapshot,
+          awardedBy: input.awardedByUserId,
+          status: 'AWARDED',
+        },
+      });
 
       return award;
     });
@@ -472,7 +699,7 @@ export class OutsourceEngine {
 
   /**
    * Driver execution status milestone updates with strict State Machine
-   * Sequence: ASSIGNED -> REACHED -> STARTED -> COMPLETED
+   * Sequence: ASSIGNED -> REACHED -> STARTED -> COMPLETED / ABORTED
    */
   static async updateDriverMilestone(
     rawToken: string,
@@ -502,12 +729,15 @@ export class OutsourceEngine {
       throw new Error('Driver execution link has expired');
     }
 
-    // 1. Strict State Machine Validation: Completed trips become strictly read-only
+    // 1. Strict State Machine Validation: Completed or cancelled trips become strictly read-only
     if (assignment.completedAt || assignment.award.status === 'COMPLETED') {
       throw new Error('Trip is already completed and finalized; further milestone mutations rejected');
     }
     if (assignment.cancelledAt || assignment.award.status === 'CANCELLED') {
       throw new Error('Trip is cancelled; further mutations rejected');
+    }
+    if (assignment.award.status === 'ABORTED') {
+      throw new Error('Trip was aborted due to operational incident; further mutations rejected');
     }
 
     const now = new Date();

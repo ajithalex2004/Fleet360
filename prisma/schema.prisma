@@ -6124,6 +6124,18 @@ enum PartnerQuoteStatus {
   @@schema("public")
 }
 
+enum OutsourceDeclineReason {
+  NO_VEHICLE
+  NO_DRIVER
+  AREA_NOT_SUPPORTED
+  TIMING_NOT_POSSIBLE
+  PRICE_NOT_VIABLE
+  COMPLIANCE_RESTRICTION
+  OTHER
+
+  @@schema("public")
+}
+
 model TransportPartner {
   id                    String                    @id @default(uuid())
   createdAt             DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -6387,15 +6399,18 @@ model OutsourceRequest {
 }
 
 model OutsourceRequestPartner {
-  id          String           @id @default(uuid())
-  requestId   String           @map("request_id")
-  partnerId   String           @map("partner_id")
-  invitedAt   DateTime         @default(now()) @map("invited_at") @db.Timestamptz(6)
-  viewedAt    DateTime?        @map("viewed_at") @db.Timestamptz(6)
-  status      String           @default("INVITED") // INVITED, VIEWED, QUOTED, DECLINED
+  id            String                  @id @default(uuid())
+  requestId     String                  @map("request_id")
+  partnerId     String                  @map("partner_id")
+  invitedAt     DateTime                @default(now()) @map("invited_at") @db.Timestamptz(6)
+  viewedAt      DateTime?               @map("viewed_at") @db.Timestamptz(6)
+  declinedAt    DateTime?               @map("declined_at") @db.Timestamptz(6)
+  declineReason OutsourceDeclineReason? @map("decline_reason")
+  declineNotes  String?                 @map("decline_notes")
+  status        String                  @default("INVITED") // INVITED, VIEWED, QUOTED, DECLINED, NOT_SELECTED, AWARDED
 
-  request     OutsourceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  partner     TransportPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  request       OutsourceRequest        @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  partner       TransportPartner        @relation(fields: [partnerId], references: [id], onDelete: Cascade)
 
   @@unique([requestId, partnerId], map: "uq_outsource_req_partner")
   @@map("outsource_request_partners")
@@ -6446,7 +6461,9 @@ model OutsourceAward {
 
   awardedAt           DateTime           @default(now()) @map("awarded_at") @db.Timestamptz(6)
   awardedBy           String             @map("awarded_by")
-  status              String             @default("AWARDED") // AWARDED, ASSIGNED, IN_PROGRESS, COMPLETED, CANCELLED
+  status              String             @default("AWARDED") // AWARDED, ASSIGNED, IN_PROGRESS, COMPLETED, CANCELLED, ABORTED
+  abortedAt           DateTime?          @map("aborted_at") @db.Timestamptz(6)
+  abortReason         String?            @map("abort_reason")
 
   request             OutsourceRequest   @relation(fields: [requestId], references: [id], onDelete: Restrict)
   quote               PartnerQuote       @relation(fields: [quoteId], references: [id], onDelete: Restrict)
