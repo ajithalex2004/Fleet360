@@ -3,7 +3,10 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { logInteraction } from '@/lib/agents/whatsapp-agent/agent';
-
+import {
+  parseInboundMessage,
+  createTicketFromParsedIntent,
+} from '@/lib/service-tickets/whatsapp-nlp-engine';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const INIT = `
   CREATE TABLE IF NOT EXISTS whatsapp_messages (
@@ -129,7 +132,40 @@ export async function POST(req: NextRequest) {
   const toNumber = (params.get('To') ?? '').replace('whatsapp:', '');
 
   const lowerBody = body.toLowerCase().trim();
-  const { intent, module, autoReply } = detectIntentAndModule(lowerBody, profileName);
+  
+  // 1. Check if this is a Service / Maintenance / Towing request via Hybrid NLP
+  let intent = 'GENERAL';
+  let module = 'GENERAL';
+  let autoReply = '';
+
+  const nlpIntent = await parseInboundMessage({
+    from,
+    body,
+    customerName: profileName,
+    mediaUrl,
+  });
+
+  if (nlpIntent && nlpIntent.ticketType && nlpIntent.ticketType !== 'SUPPORT') {
+    intent = `TICKET_${nlpIntent.ticketType}`;
+    module = 'SERVICE_TICKETS';
+    // Create the ticket under the default tenant
+    try {
+      const ticketResult = await createTicketFromParsedIntent(
+        nlpIntent,
+        { from, body, customerName: profileName, mediaUrl },
+        'default'
+      );
+      autoReply = ticketResult.autoReply;
+    } catch (e) {
+      console.error('Failed to auto-create service ticket from WhatsApp', e);
+      autoReply = nlpIntent.suggestedAutoReply;
+    }
+  } else {
+    const detected = detectIntentAndModule(lowerBody, profileName);
+    intent = detected.intent;
+    module = detected.module;
+    autoReply = detected.autoReply;
+  }
 
   const messageType = numMedia > 0 ? 'MEDIA' : 'TEXT';
 

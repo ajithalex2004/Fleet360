@@ -16,7 +16,8 @@
  */
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Headphones, Plus, AlertCircle, Clock, ChevronRight, ArrowUpRight } from 'lucide-react';
+import Link from 'next/link';
+import { Headphones, Plus, AlertCircle, Clock, ChevronRight, ArrowUpRight, MessageSquare } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import { TICKET_TYPES_ORDER } from '@/types/service-tickets';
 import type { TicketType, ServiceTicket, TenantTicketTypeAccess, FormFieldDef } from '@/types/service-tickets';
@@ -355,11 +356,19 @@ export default function ServiceTicketsHome() {
         icon={Headphones}
         accent="violet"
         actions={
-          <button onClick={() => setShowForm(s => !s)}
-            disabled={enabledTypes.length === 0}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-violet-500/30">
-            <Plus className="w-4 h-4" /> {showForm ? 'Hide form' : 'New ticket'}
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/service-tickets/simulator"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 border border-emerald-500/30 px-3.5 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-950/40 hover:border-emerald-500/60 transition-all shadow-sm"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-emerald-400" /> WhatsApp Simulator
+            </Link>
+            <button onClick={() => setShowForm(s => !s)}
+              disabled={enabledTypes.length === 0}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-violet-500/30">
+              <Plus className="w-4 h-4" /> {showForm ? 'Hide form' : 'New ticket'}
+            </button>
+          </div>
         }
       />
 
