@@ -17,7 +17,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { Headphones, Plus, AlertCircle, Clock, ChevronRight, ArrowUpRight, MessageSquare } from 'lucide-react';
+import { Headphones, Plus, AlertCircle, Clock, ChevronRight, ArrowUpRight, MessageSquare, Star } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import { TICKET_TYPES_ORDER } from '@/types/service-tickets';
 import type { TicketType, ServiceTicket, TenantTicketTypeAccess, FormFieldDef } from '@/types/service-tickets';
@@ -364,6 +364,12 @@ export default function ServiceTicketsHome() {
               className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 border border-rose-500/30 px-3.5 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-950/40 hover:border-rose-500/60 transition-all shadow-sm"
             >
               <AlertCircle className="w-3.5 h-3.5 text-rose-400" /> SLA Control Tower
+            </Link>
+            <Link
+              href="/service-tickets/csat"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 border border-amber-500/30 px-3.5 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-950/40 hover:border-amber-500/60 transition-all shadow-sm"
+            >
+              <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" /> CSAT & Feedback
             </Link>
             <Link
               href="/service-tickets/simulator"
