@@ -181,6 +181,7 @@ model User {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime
   userTenants  UserTenant[]
+  partnerUsers PartnerUser[]
 
   @@schema("public")
 }
@@ -4108,6 +4109,12 @@ model Tenant {
   defaultRequiredArrivalTime String?     @map("default_required_arrival_time") // 'HH:MM' 24h
   workOrders                 WorkOrder[]
 
+  // Fleet360 Exchange relations
+  partnerPlatformLinks       PartnerPlatformLink[]
+  tenantPartnerRelationships TenantPartnerRelationship[]
+  partnerContracts           PartnerContract[]
+  partnerRateCards           PartnerRateCard[]
+
   @@map("tenants")
   @@schema("public")
 }
@@ -6054,3 +6061,484 @@ model FleetOptimizationRunUnassigned {
   @@map("fleet_optimization_run_unassigned")
   @@schema("public")
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// FLEET360 EXCHANGE — PHASE 1: OUTSOURCE PARTNER MANAGEMENT
+// ═════════════════════════════════════════════════════════════════════════════
+
+enum PartnerOnboardingStatus {
+  DRAFT
+  APPLICATION_SUBMITTED
+  UNDER_REVIEW
+  MORE_INFO_REQUIRED
+  APPROVED
+  REJECTED
+
+  @@schema("public")
+}
+
+enum PartnerOperationalStatus {
+  ACTIVE
+  SUSPENDED
+  BLACKLISTED
+
+  @@schema("public")
+}
+
+enum PartnerServiceDomain {
+  PASSENGER_TRANSPORT
+  LIMOUSINE
+  FREIGHT
+  RECOVERY
+
+  @@schema("public")
+}
+
+enum OutsourcePricingMethod {
+  CONTRACT_RATE
+  RFQ
+  MANUAL_PRICE
+
+  @@schema("public")
+}
+
+enum OutsourceRequestStatus {
+  DRAFT
+  PUBLISHED
+  QUOTED
+  AWARDED
+  CANCELLED
+
+  @@schema("public")
+}
+
+enum PartnerQuoteStatus {
+  DRAFT
+  SUBMITTED
+  SUPERSEDED
+  WITHDRAWN
+  ACCEPTED
+  REJECTED
+  EXPIRED
+
+  @@schema("public")
+}
+
+model TransportPartner {
+  id                    String                    @id @default(uuid())
+  createdAt             DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt             DateTime?                 @map("deleted_at") @db.Timestamptz(6)
+
+  legalName             String                    @map("legal_name")
+  tradeName             String?                   @map("trade_name")
+  partnerCode           String                    @unique @map("partner_code")
+  country               String                    @default("AE")
+  city                  String?
+  address               String?
+  tradeLicenseNumber    String?                   @map("trade_license_number")
+  taxRegistrationNumber String?                   @map("tax_registration_number")
+  primaryContactName    String?                   @map("primary_contact_name")
+  primaryContactEmail   String?                   @map("primary_contact_email")
+  primaryContactPhone   String?                   @map("primary_contact_phone")
+
+  onboardingStatus      PartnerOnboardingStatus   @default(DRAFT) @map("onboarding_status")
+  operationalStatus     PartnerOperationalStatus  @default(ACTIVE) @map("operational_status")
+
+  approvedAt            DateTime?                 @map("approved_at") @db.Timestamptz(6)
+  approvedBy            String?                   @map("approved_by")
+  rejectionReason       String?                   @map("rejection_reason")
+
+  // Relationships
+  users                 PartnerUser[]
+  vehicles              PartnerVehicle[]
+  drivers               PartnerDriver[]
+  complianceDocuments   PartnerComplianceDoc[]
+  capabilities          PartnerCapability[]
+  serviceAreas          PartnerServiceArea[]
+  tenantRelationships   TenantPartnerRelationship[]
+  contracts             PartnerContract[]
+  rateCards             PartnerRateCard[]
+  platformLink          PartnerPlatformLink?
+  invitedRequests       OutsourceRequestPartner[]
+  quotes                PartnerQuote[]
+  awards                OutsourceAward[]
+  invoices              PartnerInvoice[]
+
+  @@index([onboardingStatus], map: "idx_partners_onboarding")
+  @@index([operationalStatus], map: "idx_partners_operational")
+  @@map("transport_partners")
+  @@schema("public")
+}
+
+model PartnerPlatformLink {
+  id        String           @id @default(uuid())
+  partnerId String           @unique @map("partner_id")
+  tenantId  String           @unique @map("tenant_id")
+  linkedAt  DateTime         @default(now()) @map("linked_at") @db.Timestamptz(6)
+
+  partner   TransportPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("partner_platform_links")
+  @@schema("public")
+}
+
+model TenantPartnerRelationship {
+  id              String           @id @default(uuid())
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId        String           @map("tenant_id")
+  partnerId       String           @map("partner_id")
+
+  status          String           @default("APPROVED") // APPROVED, PREFERRED, BLOCKED
+  paymentTerms    String?          @map("payment_terms") // Net 30, Net 60, COD
+  commercialNotes String?          @map("commercial_notes")
+
+  partner         TransportPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, partnerId], map: "uq_tenant_partner_relationship")
+  @@index([tenantId], map: "idx_tpr_tenant")
+  @@index([partnerId], map: "idx_tpr_partner")
+  @@map("tenant_partner_relationships")
+  @@schema("public")
+}
+
+model PartnerCapability {
+  id          String               @id @default(uuid())
+  createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  partnerId   String               @map("partner_id")
+  domain      PartnerServiceDomain @default(PASSENGER_TRANSPORT) @map("domain")
+  serviceType String               @map("service_type") // STAFF_BUS, SHUTTLE, COACH, FLATBED_RECOVERY, etc.
+  isApproved  Boolean              @default(true) @map("is_approved")
+
+  partner     TransportPartner     @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerId, domain, serviceType], map: "uq_partner_capability")
+  @@map("partner_capabilities")
+  @@schema("public")
+}
+
+model PartnerServiceArea {
+  id          String           @id @default(uuid())
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  partnerId   String           @map("partner_id")
+  emirate     String           @map("emirate") // Dubai, Abu Dhabi, Sharjah, Ajman, RAK, Fujairah, UAQ
+  zones       String[]         @default([])
+
+  partner     TransportPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerId, emirate], map: "uq_partner_service_area")
+  @@map("partner_service_areas")
+  @@schema("public")
+}
+
+model PartnerUser {
+  id          String           @id @default(uuid())
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  partnerId   String           @map("partner_id")
+  userId      String           @map("user_id")
+  role        String           @default("PARTNER_OPERATIONS") // PARTNER_ADMIN, PARTNER_OPERATIONS, PARTNER_FINANCE, PARTNER_VIEWER
+
+  partner     TransportPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerId, userId], map: "uq_partner_user")
+  @@map("partner_users")
+  @@schema("public")
+}
+
+model PartnerVehicle {
+  id              String           @id @default(uuid())
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  partnerId       String           @map("partner_id")
+  licensePlate    String           @map("license_plate")
+  plateEmirate    String           @default("Dubai") @map("plate_emirate")
+  vehicleType     String           @map("vehicle_type") // Mini Bus, 30-Seat Bus, 50-Seat Luxury Coach
+  seatingCapacity Int              @map("seating_capacity")
+  make            String?
+  model           String?
+  year            Int?
+  mulkiyaExpiry   DateTime?        @map("mulkiya_expiry") @db.Date
+  isActive        Boolean          @default(true) @map("is_active")
+
+  partner         TransportPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerId, licensePlate], map: "uq_partner_vehicle_plate")
+  @@map("partner_vehicles")
+  @@schema("public")
+}
+
+model PartnerDriver {
+  id              String           @id @default(uuid())
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  partnerId       String           @map("partner_id")
+  fullName        String           @map("full_name")
+  mobileNumber    String           @map("mobile_number")
+  licenseNumber   String?          @map("license_number")
+  licenseExpiry   DateTime?        @map("license_expiry") @db.Date
+  permitType      String?          @map("permit_type") // RTA Bus Driver Permit
+  permitExpiry    DateTime?        @map("permit_expiry") @db.Date
+  isActive        Boolean          @default(true) @map("is_active")
+
+  partner         TransportPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@map("partner_drivers")
+  @@schema("public")
+}
+
+model PartnerComplianceDoc {
+  id              String           @id @default(uuid())
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  partnerId       String           @map("partner_id")
+  docType         String           @map("doc_type") // TRADE_LICENSE, TAX_CERTIFICATE, COMMERCIAL_INSURANCE, RTA_PERMIT
+  docNumber       String?          @map("doc_number")
+  fileUrl         String           @map("file_url")
+  expiryDate      DateTime?        @map("expiry_date") @db.Date
+  status          String           @default("VALID") // PENDING, VALID, EXPIRING, EXPIRED, REJECTED
+
+  partner         TransportPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId, docType], map: "idx_partner_compliance_doc")
+  @@map("partner_compliance_docs")
+  @@schema("public")
+}
+
+model PartnerContract {
+  id              String           @id @default(uuid())
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  partnerId       String           @map("partner_id")
+  tenantId        String           @map("tenant_id")
+  contractNumber  String           @map("contract_number")
+  title           String
+  validFrom       DateTime         @map("valid_from") @db.Date
+  validUntil      DateTime         @map("valid_until") @db.Date
+  status          String           @default("ACTIVE") // ACTIVE, EXPIRED, TERMINATED
+  paymentTerms    String?          @map("payment_terms")
+  documentUrl     String?          @map("document_url")
+
+  partner         TransportPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, contractNumber], map: "uq_partner_contract_number")
+  @@map("partner_contracts")
+  @@schema("public")
+}
+
+model PartnerRateCard {
+  id              String           @id @default(uuid())
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  partnerId       String           @map("partner_id")
+  tenantId        String           @map("tenant_id")
+  title           String
+  domain          PartnerServiceDomain @default(PASSENGER_TRANSPORT) @map("domain")
+  vehicleType     String           @map("vehicle_type")
+  originZone      String?          @map("origin_zone")
+  destinationZone String?          @map("destination_zone")
+  rateAmount      Decimal          @map("rate_amount") @db.Decimal(12, 2)
+  currency        String           @default("AED")
+  unitType        String           @default("PER_TRIP") @map("unit_type") // PER_TRIP, PER_DAY, PER_MONTH
+
+  partner         TransportPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("partner_rate_cards")
+  @@schema("public")
+}
+
+model OutsourceRequest {
+  id                  String                    @id @default(uuid())
+  createdAt           DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId            String                    @map("tenant_id")
+  requestNumber       String                    @unique @map("request_number")
+
+  domain              PartnerServiceDomain      @default(PASSENGER_TRANSPORT) @map("domain")
+  sourceReferenceType String                    @default("TRIP_SCHEDULE") @map("source_reference_type")
+  sourceReferenceId   String                    @map("source_reference_id")
+
+  pricingMethod       OutsourcePricingMethod    @default(RFQ) @map("pricing_method")
+  status              OutsourceRequestStatus    @default(PUBLISHED) @map("status")
+
+  serviceDate         DateTime                  @map("service_date") @db.Date
+  pickupTime          String                    @map("pickup_time")
+  pickupLocation      String                    @map("pickup_location")
+  pickupLatitude      Float?                    @map("pickup_latitude")
+  pickupLongitude     Float?                    @map("pickup_longitude")
+  dropoffLocation     String                    @map("dropoff_location")
+  dropoffLatitude     Float?                    @map("dropoff_latitude")
+  dropoffLongitude    Float?                    @map("dropoff_longitude")
+  requiredCapacity    Int                       @default(50) @map("required_capacity")
+  vehicleTypeRequired String?                   @map("vehicle_type_required")
+  specialInstructions String?                   @map("special_instructions")
+
+  closesAt            DateTime                  @map("closes_at") @db.Timestamptz(6)
+  createdBy           String                    @map("created_by")
+
+  invitedPartners     OutsourceRequestPartner[]
+  quotes              PartnerQuote[]
+  award               OutsourceAward?
+
+  @@index([tenantId, status], map: "idx_outsource_req_tenant_status")
+  @@map("outsource_requests")
+  @@schema("public")
+}
+
+model OutsourceRequestPartner {
+  id          String           @id @default(uuid())
+  requestId   String           @map("request_id")
+  partnerId   String           @map("partner_id")
+  invitedAt   DateTime         @default(now()) @map("invited_at") @db.Timestamptz(6)
+  viewedAt    DateTime?        @map("viewed_at") @db.Timestamptz(6)
+  status      String           @default("INVITED") // INVITED, VIEWED, QUOTED, DECLINED
+
+  request     OutsourceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  partner     TransportPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, partnerId], map: "uq_outsource_req_partner")
+  @@map("outsource_request_partners")
+  @@schema("public")
+}
+
+model PartnerQuote {
+  id                String             @id @default(uuid())
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  requestId         String             @map("request_id")
+  partnerId         String             @map("partner_id")
+  revisionNo        Int                @default(1) @map("revision_no")
+  supersedesQuoteId String?            @map("supersedes_quote_id")
+
+  amount            Decimal            @map("amount") @db.Decimal(12, 2)
+  vatAmount         Decimal            @default(0) @map("vat_amount") @db.Decimal(12, 2)
+  totalAmount       Decimal            @map("total_amount") @db.Decimal(12, 2)
+  currency          String             @default("AED")
+  validUntil        DateTime           @map("valid_until") @db.Timestamptz(6)
+  status            PartnerQuoteStatus @default(SUBMITTED) @map("status")
+  notes             String?
+
+  proposedVehicleId String?            @map("proposed_vehicle_id")
+  proposedDriverId  String?            @map("proposed_driver_id")
+
+  request           OutsourceRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  partner           TransportPartner   @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  award             OutsourceAward?
+
+  @@index([requestId, partnerId], map: "idx_partner_quotes_req_partner")
+  @@map("partner_quotes")
+  @@schema("public")
+}
+
+model OutsourceAward {
+  id                  String             @id @default(uuid())
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId            String             @map("tenant_id")
+  requestId           String             @unique @map("request_id")
+  quoteId             String             @unique @map("quote_id")
+  partnerId           String             @map("partner_id")
+
+  awardedPrice        Decimal            @map("awarded_price") @db.Decimal(12, 2)
+  vatAmount           Decimal            @default(0) @map("vat_amount") @db.Decimal(12, 2)
+  totalAwarded        Decimal            @map("total_awarded") @db.Decimal(12, 2)
+  currency            String             @default("AED")
+  commercialSnapshot  Json               @map("commercial_snapshot")
+
+  awardedAt           DateTime           @default(now()) @map("awarded_at") @db.Timestamptz(6)
+  awardedBy           String             @map("awarded_by")
+  status              String             @default("AWARDED") // AWARDED, ASSIGNED, IN_PROGRESS, COMPLETED, CANCELLED
+
+  request             OutsourceRequest   @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  quote               PartnerQuote       @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  partner             TransportPartner   @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  assignment          PartnerAssignment?
+  invoice             PartnerInvoice?
+
+  @@index([tenantId], map: "idx_outsource_awards_tenant")
+  @@index([partnerId], map: "idx_outsource_awards_partner")
+  @@map("outsource_awards")
+  @@schema("public")
+}
+
+model PartnerAssignment {
+  id              String             @id @default(uuid())
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  awardId         String             @unique @map("award_id")
+  partnerId       String             @map("partner_id")
+
+  vehicleId       String?            @map("vehicle_id")
+  vehiclePlate    String?            @map("vehicle_plate")
+  driverId        String?            @map("driver_id")
+  driverName      String?            @map("driver_name")
+  driverPhone     String?            @map("driver_phone")
+
+  // Driver Secure Link
+  driverToken     String             @unique @map("driver_token")
+  driverTokenExp  DateTime           @map("driver_token_exp") @db.Timestamptz(6)
+
+  // Execution Timestamps
+  driverAssignedAt DateTime?         @map("driver_assigned_at") @db.Timestamptz(6)
+  reachedAt       DateTime?          @map("reached_at") @db.Timestamptz(6)
+  startedAt       DateTime?          @map("started_at") @db.Timestamptz(6)
+  completedAt     DateTime?          @map("completed_at") @db.Timestamptz(6)
+  cancelledAt     DateTime?          @map("cancelled_at") @db.Timestamptz(6)
+
+  award           OutsourceAward     @relation(fields: [awardId], references: [id], onDelete: Cascade)
+  pod             OutsourcePod?
+
+  @@index([driverToken], map: "idx_assignment_driver_token")
+  @@map("partner_assignments")
+  @@schema("public")
+}
+
+model OutsourcePod {
+  id              String            @id @default(uuid())
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  assignmentId    String            @unique @map("assignment_id")
+  passengerCount  Int?              @map("passenger_count")
+  signedByName    String?           @map("signed_by_name")
+  signatureUrl    String?           @map("signature_url")
+  photoUrl        String?           @map("photo_url")
+  completionNotes String?           @map("completion_notes")
+  submittedAt     DateTime          @default(now()) @map("submitted_at") @db.Timestamptz(6)
+
+  assignment      PartnerAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@map("outsource_pods")
+  @@schema("public")
+}
+
+model PartnerInvoice {
+  id              String            @id @default(uuid())
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  partnerId       String            @map("partner_id")
+  tenantId        String            @map("tenant_id")
+  awardId         String            @unique @map("award_id")
+
+  invoiceNumber   String            @map("invoice_number")
+  invoiceDate     DateTime          @map("invoice_date") @db.Date
+  subtotalAmount  Decimal           @map("subtotal_amount") @db.Decimal(12, 2)
+  vatAmount       Decimal           @default(0) @map("vat_amount") @db.Decimal(12, 2)
+  totalAmount     Decimal           @map("total_amount") @db.Decimal(12, 2)
+  currency        String            @default("AED")
+  status          String            @default("SUBMITTED") // SUBMITTED, APPROVED, REJECTED, PAID
+
+  approvedAmount  Decimal?          @map("approved_amount") @db.Decimal(12, 2)
+  approvedAt      DateTime?         @map("approved_at") @db.Timestamptz(6)
+  approvedBy      String?           @map("approved_by")
+  rejectionReason String?           @map("rejection_reason")
+
+  // Linkage to Core Finance AP
+  payableId       String?           @map("payable_id")
+
+  award           OutsourceAward    @relation(fields: [awardId], references: [id], onDelete: Restrict)
+  partner         TransportPartner  @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+
+  @@unique([partnerId, invoiceNumber], map: "uq_partner_invoice_number")
+  @@index([tenantId, status], map: "idx_partner_invoices_tenant_status")
+  @@map("partner_invoices")
+  @@schema("public")
+}
+

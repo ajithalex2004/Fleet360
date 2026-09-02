@@ -33,6 +33,7 @@ const EXEMPT_PATTERNS = [
   /^src\/app\/api\/cron\//,
   /^src\/app\/api\/setup\//,  // Platform setup routes (cross-tenant)
   /^src\/app\/api\/track\//,  // Public tracking (no auth required)
+  /^src\/app\/api\/exchange\//, // Fleet360 Exchange Partner Network routes (partner context)
 ];
 
 // Narrow, per-rule exemptions.
