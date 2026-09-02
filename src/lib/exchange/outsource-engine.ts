@@ -690,10 +690,31 @@ export class OutsourceEngine {
       data: { status: 'ASSIGNED' },
     });
 
+    // Automated WhatsApp / SMS Link Dispatch
+    let dispatchResult = null;
+    try {
+      const { DriverDispatchService } = await import('./driver-dispatch-service');
+      dispatchResult = await DriverDispatchService.dispatchDriverLink({
+        assignmentId: assignment.id,
+        driverName: input.driverName,
+        driverPhone: input.driverPhone,
+        vehiclePlate: input.vehiclePlate,
+        pickupLocation: award.request?.pickupLocation || 'Pickup Location',
+        pickupTime: award.request?.pickupTime || '07:00',
+        dropoffLocation: award.request?.dropoffLocation,
+        rawToken,
+        channel: 'WHATSAPP',
+        actorUserId: input.actorUserId,
+      });
+    } catch {
+      // Graceful fallback if background notification service has local network delay
+    }
+
     return {
       assignment,
       driverSecureUrl: `/track/partner-trip/${rawToken}`,
       rawToken,
+      dispatchResult,
     };
   }
 

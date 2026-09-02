@@ -145,7 +145,52 @@ export async function POST(req: NextRequest) {
           approvedByUserId: userId || 'FINANCE',
         });
 
-        return NextResponse.json({ ok: true, ...res });
+      if (action === 'LOOKUP_CONTRACT_RATE') {
+        const { partnerId, originLocation, destinationLocation, vehicleType, requiredCapacity } = body;
+        const { RateCardService } = await import('@/lib/exchange/rate-card-service');
+        const rate = await RateCardService.lookupContractRate({
+          tenantId,
+          partnerId,
+          originLocation,
+          destinationLocation,
+          vehicleType,
+          requiredCapacity,
+        });
+
+        return NextResponse.json({ ok: true, rate });
+      }
+
+      if (action === 'CONTRACT_DIRECT_AWARD') {
+        const {
+          tripId,
+          partnerId,
+          serviceDate,
+          pickupTime,
+          pickupLocation,
+          dropoffLocation,
+          requiredCapacity,
+          agreedPrice,
+        } = body;
+
+        const award = await OutsourceEngine.createContractDirectAward({
+          tenantId,
+          sourceReferenceId: tripId,
+          partnerId,
+          serviceDate: serviceDate || new Date(),
+          pickupTime: pickupTime || '07:00',
+          pickupLocation: pickupLocation || 'Pickup Point',
+          dropoffLocation: dropoffLocation || 'Dropoff Point',
+          requiredCapacity: Number(requiredCapacity) || 50,
+          agreedPrice: Number(agreedPrice),
+          awardedByUserId: userId || 'OPERATIONS',
+        });
+
+        if (tripId) {
+          const adapter = new BusOpsOutsourcingAdapter();
+          await adapter.markAwarded(award.id, tripId, tenantId);
+        }
+
+        return NextResponse.json({ ok: true, award });
       }
 
       return NextResponse.json({ error: 'Unknown action' }, { status: 400 });

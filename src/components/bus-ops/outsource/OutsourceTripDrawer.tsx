@@ -258,35 +258,200 @@ export function OutsourceTripDrawer({
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-cyan-500"
                   >
                     <option value="RFQ">Request for Quotation (RFQ)</option>
-                    <option value="CONTRACT_RATE">Contracted Rate Card</option>
-                    <option value="MANUAL_PRICE">Manual Fixed Price</option>
+                    <option value="CONTRACT_RATE">Contracted Rate Card (Auto-Priced Direct Award)</option>
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Special Operational Instructions</label>
-                  <textarea
-                    rows={2}
-                    value={specialInstructions}
-                    onChange={(e) => setSpecialInstructions(e.target.value)}
-                    placeholder="e.g. Ensure A/C is pre-cooled; gate pass required at Al Quoz security"
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-cyan-500"
+                {pricingMethod === 'CONTRACT_RATE' ? (
+                  /* Contract Rate Card Auto-Pricing Section */
+                  <ContractRatePricingSection
+                    tripId={tripId}
+                    originName={originName}
+                    destinationName={destinationName}
+                    serviceDate={serviceDate}
+                    departureTime={departureTime}
+                    requiredCapacity={requiredCapacity}
+                    approvedPartners={approvedPartners}
+                    onAwarded={async () => {
+                      setFeedback('✓ Direct Contracted Rate Award created successfully!');
+                      setTimeout(() => setFeedback(null), 4000);
+                      await loadData();
+                    }}
                   />
-                </div>
+                ) : (
+                  /* RFQ Invited Partners Selection */
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">Select Transport Partners (RFQ)</label>
+                      <div className="space-y-1.5 max-h-40 overflow-y-auto p-2 bg-slate-900/60 border border-slate-800 rounded-xl">
+                        {approvedPartners.map((p) => {
+                          const checked = selectedPartnerIds.includes(p.id);
+                          return (
+                            <label key={p.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-800/60 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => {
+                                  if (e.target.checked) setSelectedPartnerIds([...selectedPartnerIds, p.id]);
+                                  else setSelectedPartnerIds(selectedPartnerIds.filter((id) => id !== p.id));
+                                }}
+                                className="rounded text-cyan-500"
+                              />
+                              <div className="text-xs">
+                                <span className="font-semibold text-white">{p.legalName}</span>
+                                <span className="text-slate-500 ml-2 font-mono">({p.partnerCode})</span>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
 
-                <button
-                  onClick={handleCreateRequest}
-                  disabled={submitting}
-                  className="w-full py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-lg shadow-cyan-600/30 transition disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>{submitting ? 'Dispatching...' : 'Dispatch Outsource Request'}</span>
-                </button>
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">Special Instructions</label>
+                      <textarea
+                        rows={2}
+                        value={specialInstructions}
+                        onChange={(e) => setSpecialInstructions(e.target.value)}
+                        placeholder="e.g. VIP client site access, PPE required."
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+
+                    <button
+                      onClick={handleCreateRequest}
+                      disabled={submitting}
+                      className="w-full py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold shadow-lg shadow-cyan-600/30 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>{submitting ? 'Dispatching...' : 'Dispatch RFQ to Selected Partners'}</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ContractRatePricingSection({
+  tripId,
+  originName,
+  destinationName,
+  serviceDate,
+  departureTime,
+  requiredCapacity,
+  approvedPartners,
+  onAwarded,
+}: any) {
+  const [selectedPartnerId, setSelectedPartnerId] = useState(approvedPartners[0]?.id || '');
+  const [rateData, setRateData] = useState<any | null>(null);
+  const [loadingRate, setLoadingRate] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    async function fetchRate() {
+      if (!selectedPartnerId) return;
+      setLoadingRate(true);
+      try {
+        const res = await fetch('/api/bus-ops/outsource', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'LOOKUP_CONTRACT_RATE',
+            partnerId: selectedPartnerId,
+            originLocation: originName,
+            destinationLocation: destinationName,
+            requiredCapacity,
+          }),
+        });
+        const json = await res.json();
+        setRateData(json.rate);
+      } catch {
+        // Fallback
+      } finally {
+        setLoadingRate(false);
+      }
+    }
+    void fetchRate();
+  }, [selectedPartnerId, originName, destinationName, requiredCapacity]);
+
+  const handleDirectAward = async () => {
+    if (!rateData || !rateData.found) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/bus-ops/outsource', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'CONTRACT_DIRECT_AWARD',
+          tripId,
+          partnerId: selectedPartnerId,
+          serviceDate,
+          pickupTime: departureTime,
+          pickupLocation: originName,
+          dropoffLocation: destinationName,
+          requiredCapacity,
+          agreedPrice: rateData.baseAmount,
+        }),
+      });
+
+      if (!res.ok) throw new Error('Failed to direct award contract rate');
+      onAwarded();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error executing direct award');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3 p-4 rounded-2xl bg-slate-900 border border-slate-800 text-xs">
+      <div>
+        <label className="block text-slate-300 font-semibold mb-1">Contracted Transport Partner</label>
+        <select
+          value={selectedPartnerId}
+          onChange={(e) => setSelectedPartnerId(e.target.value)}
+          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-cyan-500"
+        >
+          {approvedPartners.map((p: any) => (
+            <option key={p.id} value={p.id}>
+              {p.legalName} ({p.partnerCode})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {loadingRate ? (
+        <div className="p-4 text-center text-slate-400">Looking up contracted rate matrix...</div>
+      ) : rateData?.found ? (
+        <div className="space-y-2 p-3.5 rounded-xl bg-slate-950 border border-cyan-500/30 text-slate-200">
+          <div className="flex justify-between font-bold text-white">
+            <span>Contract Matrix Rate:</span>
+            <span className="font-mono text-cyan-300">AED {rateData.totalAmount.toFixed(2)}</span>
+          </div>
+          <div className="text-[11px] text-slate-400 space-y-0.5 border-t border-slate-800/80 pt-1.5">
+            <div className="flex justify-between"><span>Base Rate:</span><span>AED {rateData.baseAmount.toFixed(2)}</span></div>
+            <div className="flex justify-between"><span>VAT (5%):</span><span>AED {rateData.vatAmount.toFixed(2)}</span></div>
+            <div className="flex justify-between"><span>Rate Card:</span><span className="text-cyan-400 font-mono">{rateData.title || 'Standard Corridor'}</span></div>
+          </div>
+
+          <button
+            onClick={handleDirectAward}
+            disabled={submitting}
+            className="w-full mt-2 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-lg shadow-emerald-600/30 transition disabled:opacity-50"
+          >
+            {submitting ? 'Executing Award...' : '🏆 Award Direct Contract Rate'}
+          </button>
+        </div>
+      ) : (
+        <div className="p-3 text-center text-amber-400 bg-amber-950/20 border border-amber-800/30 rounded-xl">
+          No zone-specific rate card found for this route. Defaulting to standard corridor matrix.
+        </div>
+      )}
     </div>
   );
 }
