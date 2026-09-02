@@ -25,10 +25,16 @@ export async function registerNode(): Promise<void> {
 
   if (process.env.FLEET360_SKIP_DB_PREWARM === 'true') {
     console.warn('[Startup] Neon pre-warm skipped by FLEET360_SKIP_DB_PREWARM=true');
-    return;
+  } else {
+    void warmNeonConnection();
   }
 
-  void warmNeonConnection();
+  try {
+    const { startJobScheduler } = await import('@/lib/jobs/scheduler');
+    startJobScheduler();
+  } catch (err) {
+    console.warn('[Startup] Job scheduler failed to start:', err);
+  }
 }
 
 async function warmNeonConnection(): Promise<void> {
