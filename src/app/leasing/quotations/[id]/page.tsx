@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import {
   ArrowLeft,
   Printer,
   Check,
-  Send,
   FileText,
   Download,
   X,
@@ -14,88 +13,101 @@ import {
 } from 'lucide-react';
 
 interface Vehicle {
-  vehicleType: 'SEDAN' | 'SUV' | 'VAN' | 'BUS' | 'TRUCK' | 'LUXURY';
-  make: string;
-  model: string;
-  year: number;
-  quantity: number;
-  monthlyRate: number;
-}
-
-interface CostBreakdown {
-  baseMonthlyRate: number;
-  interestRate: number;
-  interestAmount: number;
-  markupRate: number;
-  markupAmount: number;
-  accessoriesCost: number;
-  servicesCost: number;
-  insuranceCost: number;
-  insuranceIncluded: boolean;
-  maintenanceCost: number;
-  maintenanceIncluded: boolean;
-  driverCost: number;
-  driverIncluded: boolean;
-  securityDeposit: number;
-  totalMonthlyRate: number;
+  id?: string;
+  vehicleType: string;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  quantity: number | null;
+  monthlyRate: number | string | null;
 }
 
 interface ApprovalStep {
   id: string;
   stepName: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
-  approverName: string;
-  approverEmail: string;
-  comment: string;
-  timestamp: string;
+  stepOrder: number;
+  status: string;
+  approverName: string | null;
+  comments: string | null;
+  actionAt: string | null;
 }
 
 interface LeaseQuotation {
   id: string;
-  quotationNumber: string;
-  lesseeId: string;
-  lesseeName: string;
-  leaseType: 'LONG_TERM' | 'SHORT_TERM' | 'DAILY' | 'MONTHLY';
-  duration: number;
-  startDate: string;
-  endDate: string;
-  currency: 'AED' | 'USD' | 'EUR' | 'SAR';
-  status:
-    | 'NEW'
-    | 'INTERNAL_APPROVAL'
-    | 'SENT_TO_CUSTOMER'
-    | 'CUSTOMER_APPROVED'
-    | 'CREDIT_APPROVAL'
-    | 'PO_PREPARED'
-    | 'DELIVERY_IN_PROGRESS'
-    | 'DELIVERED'
-    | 'REJECTED'
-    | 'CANCELLED';
-  validUntil: string;
+  quotationNumber: string | null;
+  lesseeId: string | null;
+  lessee?: { name: string } | null;
+  leaseType: string | null;
+  durationMonths: number | null;
+  startDate: string | null;
+  endDate: string | null;
+  currency: string | null;
+  status: string;
+  validUntil: string | null;
   vehicles: Vehicle[];
-  costs: CostBreakdown;
-  totalMonthlyRate: number;
-  totalValue: number;
-  mileageCap: number;
-  insuranceIncluded: boolean;
-  maintenanceIncluded: boolean;
-  driverIncluded: boolean;
-  notes: string;
+  baseMonthlyRate: number | string | null;
+  interestRate: number | string | null;
+  markupPct: number | string | null;
+  accessoriesCost: number | string | null;
+  servicesCost: number | string | null;
+  insuranceCost: number | string | null;
+  maintenanceCost: number | string | null;
+  driverCost: number | string | null;
+  totalMonthlyRate: number | string | null;
+  totalContractValue: number | string | null;
+  securityDeposit: number | string | null;
+  mileageCap: number | null;
+  insuranceIncluded: boolean | null;
+  maintenanceIncluded: boolean | null;
+  driverIncluded: boolean | null;
+  notes: string | null;
   createdAt: string;
+  history: ApprovalStep[];
 }
 
+// Mirrors the status-map the real approve endpoint advances through
+// (src/app/api/leasing/quotations/[id]/approve/route.ts). REJECTED/CANCELLED
+// are terminal and deliberately not part of the linear timeline.
 const STATUS_PIPELINE = [
   'NEW',
-  'INTERNAL_APPROVAL',
+  'PENDING_APPROVAL',
+  'DRAFT_APPROVED',
   'SENT_TO_CUSTOMER',
   'CUSTOMER_APPROVED',
-  'CREDIT_APPROVAL',
+  'PENDING_CREDIT_APPROVAL',
+  'CREDIT_APPROVED',
+  'PO_PREPARATION',
   'PO_PREPARED',
   'DELIVERY_IN_PROGRESS',
   'DELIVERED',
-  'REJECTED',
-  'CANCELLED',
 ];
+
+// The approve endpoint auto-advances one step per call and sends the
+// customer email itself once it reaches SENT_TO_CUSTOMER — there's no
+// separate "send to customer" operation to wire up.
+const CAN_APPROVE_STATUSES = ['NEW', 'PENDING_APPROVAL', 'DRAFT_APPROVED'];
+
+// Matches ALLOWED_CONVERT_STATUSES in
+// src/app/api/leasing/quotations/[id]/convert/route.ts
+const CAN_CONVERT_STATUSES = [
+  'CUSTOMER_APPROVED',
+  'PENDING_CREDIT_APPROVAL',
+  'CREDIT_APPROVED',
+  'PO_PREPARATION',
+  'PO_PREPARED',
+  'DELIVERY_IN_PROGRESS',
+  'DELIVERED',
+];
+
+function fmtDate(iso: string | null | undefined) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? String(iso) : d.toLocaleDateString('en-AE');
+}
+
+function num(v: number | string | null | undefined) {
+  return Number(v ?? 0);
+}
 
 export default function QuotationDetailPage() {
   const router = useRouter();
@@ -103,108 +115,44 @@ export default function QuotationDetailPage() {
   const quotationId = params?.id as string;
 
   const [quotation, setQuotation] = useState<LeaseQuotation | null>(null);
-  const [approvalSteps, setApprovalSteps] = useState<ApprovalStep[]>([]);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [approverName, setApproverName] = useState('');
   const [approverComment, setApproverComment] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState('');
 
-  // Mock data
-  const mockQuotation: LeaseQuotation = {
-    id: '1',
-    quotationNumber: 'QT-001',
-    lesseeId: 'LESS-001',
-    lesseeName: 'Al Mansouri Trading',
-    leaseType: 'LONG_TERM',
-    duration: 36,
-    startDate: '2024-05-01',
-    endDate: '2027-05-01',
-    currency: 'AED',
-    status: 'NEW',
-    validUntil: '2024-05-15',
-    vehicles: [
-      {
-        vehicleType: 'SUV',
-        make: 'Toyota',
-        model: 'Land Cruiser',
-        year: 2024,
-        quantity: 5,
-        monthlyRate: 4500,
-      },
-    ],
-    costs: {
-      baseMonthlyRate: 22500,
-      interestRate: 5,
-      interestAmount: 1125,
-      markupRate: 3,
-      markupAmount: 675,
-      accessoriesCost: 500,
-      servicesCost: 800,
-      insuranceCost: 2000,
-      insuranceIncluded: true,
-      maintenanceCost: 1500,
-      maintenanceIncluded: true,
-      driverCost: 0,
-      driverIncluded: false,
-      securityDeposit: 50000,
-      totalMonthlyRate: 29200,
-    },
-    totalMonthlyRate: 29200,
-    totalValue: 1051200,
-    mileageCap: 100000,
-    insuranceIncluded: true,
-    maintenanceIncluded: true,
-    driverIncluded: false,
-    notes: 'VIP customer, white glove service',
-    createdAt: '2024-04-12',
-  };
-
-  const mockApprovalSteps: ApprovalStep[] = [
-    {
-      id: '1',
-      stepName: 'Manager Review',
-      status: 'PENDING',
-      approverName: 'Ahmed Khalil',
-      approverEmail: 'ahmed.khalil@company.com',
-      comment: 'Awaiting manager approval',
-      timestamp: '2024-04-12T10:00:00Z',
-    },
-    {
-      id: '2',
-      stepName: 'Finance Review',
-      status: 'PENDING',
-      approverName: 'Fatima Al Mansoori',
-      approverEmail: 'fatima@company.com',
-      comment: 'Pending finance review',
-      timestamp: '2024-04-13T00:00:00Z',
-    },
-    {
-      id: '3',
-      stepName: 'Director Approval',
-      status: 'PENDING',
-      approverName: 'Mohammed Hassan',
-      approverEmail: 'mohammed@company.com',
-      comment: 'Awaiting director sign-off',
-      timestamp: '2024-04-13T00:00:00Z',
-    },
-  ];
+  const fetchQuotation = useCallback(async () => {
+    const res = await fetch(`/api/leasing/quotations/${quotationId}`);
+    if (!res.ok) {
+      setNotFound(true);
+      setQuotation(null);
+      return;
+    }
+    const data = await res.json();
+    setQuotation(data);
+    setNotFound(false);
+  }, [quotationId]);
 
   useEffect(() => {
-    // In production, fetch from /api/leasing/quotations/[id]
-    setQuotation(mockQuotation);
-    setApprovalSteps(mockApprovalSteps);
-    setLoading(false);
-  }, [quotationId]);
+    if (!quotationId) return;
+    setLoading(true);
+    fetchQuotation().finally(() => setLoading(false));
+  }, [quotationId, fetchQuotation]);
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       NEW: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-      INTERNAL_APPROVAL: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+      PENDING_APPROVAL: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+      DRAFT_APPROVED: 'bg-violet-500/20 text-violet-400 border-violet-500/30',
       SENT_TO_CUSTOMER: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
       CUSTOMER_APPROVED: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
-      CREDIT_APPROVAL: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-      PO_PREPARED: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-      DELIVERY_IN_PROGRESS: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+      PENDING_CREDIT_APPROVAL: 'bg-fuchsia-500/20 text-fuchsia-400 border-fuchsia-500/30',
+      CREDIT_APPROVED: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+      PO_PREPARATION: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+      PO_PREPARED: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+      DELIVERY_IN_PROGRESS: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
       DELIVERED: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
       REJECTED: 'bg-red-500/20 text-red-400 border-red-500/30',
       CANCELLED: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
@@ -213,52 +161,95 @@ export default function QuotationDetailPage() {
   };
 
   const isStepCompleted = (step: string) => {
-    const currentIndex = STATUS_PIPELINE.indexOf(
-      quotation?.status as string
-    );
+    const currentIndex = STATUS_PIPELINE.indexOf(quotation?.status as string);
     const stepIndex = STATUS_PIPELINE.indexOf(step);
-    return stepIndex < currentIndex;
+    return currentIndex >= 0 && stepIndex < currentIndex;
   };
 
-  const isStepCurrent = (step: string) => {
-    return quotation?.status === step;
-  };
+  const isStepCurrent = (step: string) => quotation?.status === step;
 
   const handleApproveInternally = async (e: React.FormEvent) => {
     e.preventDefault();
-    // In production, POST to /api/leasing/quotations/[id]/approve
-    if (quotation) {
-      setQuotation({
-        ...quotation,
-        status: 'INTERNAL_APPROVAL',
-      });
+    if (!approverName.trim()) {
+      setActionError('Enter an approver name first');
+      return;
     }
-    setShowApproveModal(false);
-    setApproverName('');
-    setApproverComment('');
-  };
-
-  const handleSendToCustomer = () => {
-    if (quotation) {
-      setQuotation({
-        ...quotation,
-        status: 'SENT_TO_CUSTOMER',
+    setActionLoading(true);
+    setActionError('');
+    try {
+      const res = await fetch(`/api/leasing/quotations/${quotationId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'APPROVE',
+          approverName,
+          comments: approverComment || undefined,
+        }),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to record approval');
+      }
+      await fetchQuotation();
+      setShowApproveModal(false);
+      setApproverName('');
+      setApproverComment('');
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to record approval');
+    } finally {
+      setActionLoading(false);
     }
   };
 
-  const handleConvertToContract = () => {
-    // In production, POST to /api/leasing/quotations/[id]/convert
-    router.push(`/leasing/contracts-v2/${quotation?.id}`);
+  const handleConvertToContract = async () => {
+    setActionLoading(true);
+    setActionError('');
+    try {
+      const res = await fetch(`/api/leasing/quotations/${quotationId}/convert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to convert quotation');
+      }
+      const result = await res.json();
+      router.push(`/leasing/contracts-v2/${result.contract.id}`);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to convert quotation');
+      setActionLoading(false);
+    }
   };
 
-  if (loading || !quotation) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-[#0c1a3e] p-8 flex items-center justify-center">
         <div className="text-slate-400">Loading quotation...</div>
       </div>
     );
   }
+
+  if (notFound || !quotation) {
+    return (
+      <div className="min-h-screen bg-[#0c1a3e] p-8 flex items-center justify-center">
+        <div className="text-slate-400">Quotation not found.</div>
+      </div>
+    );
+  }
+
+  const base = num(quotation.baseMonthlyRate);
+  const interestAmount = base * (num(quotation.interestRate) / 100);
+  const markupAmount = base * (num(quotation.markupPct) / 100);
+  const accessoriesCost = num(quotation.accessoriesCost);
+  const servicesCost = num(quotation.servicesCost);
+  const insuranceCost = num(quotation.insuranceCost);
+  const maintenanceCost = num(quotation.maintenanceCost);
+  const driverCost = num(quotation.driverCost);
+  const totalMonthlyRate = num(quotation.totalMonthlyRate);
+  const totalContractValue = num(quotation.totalContractValue);
+  const securityDeposit = num(quotation.securityDeposit);
+  const lesseeName = quotation.lessee?.name ?? quotation.lesseeId ?? '—';
 
   return (
     <div className="min-h-screen bg-[#0c1a3e] p-8 print:bg-white" style={{ colorScheme: 'light' }}>
@@ -274,10 +265,10 @@ export default function QuotationDetailPage() {
             </button>
             <div>
               <h1 className="text-3xl font-bold text-white print:text-black">
-                {quotation.quotationNumber}
+                {quotation.quotationNumber ?? '(unnumbered)'}
               </h1>
               <p className="text-slate-400 print:text-gray-600 text-sm">
-                Quotation dated {quotation.createdAt}
+                Quotation dated {fmtDate(quotation.createdAt)}
               </p>
             </div>
           </div>
@@ -329,7 +320,7 @@ export default function QuotationDetailPage() {
                     Quotation Number
                   </p>
                   <p className="text-white print:text-black font-medium">
-                    {quotation.quotationNumber}
+                    {quotation.quotationNumber ?? '(unnumbered)'}
                   </p>
                 </div>
                 <div>
@@ -337,7 +328,7 @@ export default function QuotationDetailPage() {
                     Issued Date
                   </p>
                   <p className="text-white print:text-black font-medium">
-                    {quotation.createdAt}
+                    {fmtDate(quotation.createdAt)}
                   </p>
                 </div>
                 <div>
@@ -345,7 +336,7 @@ export default function QuotationDetailPage() {
                     Valid Until
                   </p>
                   <p className="text-white print:text-black font-medium">
-                    {quotation.validUntil}
+                    {fmtDate(quotation.validUntil)}
                   </p>
                 </div>
                 <div>
@@ -353,7 +344,7 @@ export default function QuotationDetailPage() {
                     Lessee Name
                   </p>
                   <p className="text-white print:text-black font-medium">
-                    {quotation.lesseeName}
+                    {lesseeName}
                   </p>
                 </div>
                 <div>
@@ -361,7 +352,7 @@ export default function QuotationDetailPage() {
                     Lease Type
                   </p>
                   <p className="text-white print:text-black font-medium">
-                    {quotation.leaseType}
+                    {quotation.leaseType ?? '—'}
                   </p>
                 </div>
                 <div>
@@ -369,7 +360,7 @@ export default function QuotationDetailPage() {
                     Duration
                   </p>
                   <p className="text-white print:text-black font-medium">
-                    {quotation.duration} months
+                    {quotation.durationMonths ?? '—'} months
                   </p>
                 </div>
                 <div>
@@ -377,7 +368,7 @@ export default function QuotationDetailPage() {
                     Currency
                   </p>
                   <p className="text-white print:text-black font-medium">
-                    {quotation.currency}
+                    {quotation.currency ?? 'AED'}
                   </p>
                 </div>
               </div>
@@ -414,31 +405,36 @@ export default function QuotationDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
+                  {quotation.vehicles.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-4 text-sm text-slate-500 print:text-gray-500">
+                        No vehicles on this quotation.
+                      </td>
+                    </tr>
+                  )}
                   {quotation.vehicles.map((vehicle, index) => (
                     <tr
-                      key={index}
+                      key={vehicle.id ?? index}
                       className="border-b border-white/5 hover:bg-white/5 print:border-gray-300"
                     >
                       <td className="px-6 py-4 text-sm text-white print:text-black">
                         {vehicle.vehicleType}
                       </td>
                       <td className="px-6 py-4 text-sm text-white print:text-black">
-                        {vehicle.make}
+                        {vehicle.make ?? '—'}
                       </td>
                       <td className="px-6 py-4 text-sm text-white print:text-black">
-                        {vehicle.model}
+                        {vehicle.model ?? '—'}
                       </td>
                       <td className="px-6 py-4 text-sm text-white print:text-black">
-                        {vehicle.year}
+                        {vehicle.year ?? '—'}
                       </td>
                       <td className="px-6 py-4 text-sm text-white print:text-black">
-                        {vehicle.quantity}
+                        {vehicle.quantity ?? 1}
                       </td>
                       <td className="px-6 py-4 text-sm text-white print:text-black font-medium">
-                        {(
-                          vehicle.monthlyRate * vehicle.quantity
-                        ).toLocaleString('en-AE')}{' '}
-                        {quotation.currency}
+                        {(num(vehicle.monthlyRate) * (vehicle.quantity ?? 1)).toLocaleString('en-AE')}{' '}
+                        {quotation.currency ?? 'AED'}
                       </td>
                     </tr>
                   ))}
@@ -457,84 +453,76 @@ export default function QuotationDetailPage() {
                     Base Monthly Rate
                   </span>
                   <span className="text-white print:text-black font-medium">
-                    {quotation.costs.baseMonthlyRate.toLocaleString('en-AE')}{' '}
-                    {quotation.currency}
+                    {base.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                   </span>
                 </div>
-                {quotation.costs.interestAmount > 0 && (
+                {interestAmount > 0 && (
                   <div className="flex justify-between">
                     <span className="text-slate-400 print:text-gray-600">
-                      Interest ({quotation.costs.interestRate}%)
+                      Interest ({num(quotation.interestRate)}%)
                     </span>
                     <span className="text-white print:text-black">
-                      {quotation.costs.interestAmount.toLocaleString('en-AE')}{' '}
-                      {quotation.currency}
+                      {interestAmount.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                     </span>
                   </div>
                 )}
-                {quotation.costs.markupAmount > 0 && (
+                {markupAmount > 0 && (
                   <div className="flex justify-between">
                     <span className="text-slate-400 print:text-gray-600">
-                      Markup ({quotation.costs.markupRate}%)
+                      Markup ({num(quotation.markupPct)}%)
                     </span>
                     <span className="text-white print:text-black">
-                      {quotation.costs.markupAmount.toLocaleString('en-AE')}{' '}
-                      {quotation.currency}
+                      {markupAmount.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                     </span>
                   </div>
                 )}
-                {quotation.costs.accessoriesCost > 0 && (
+                {accessoriesCost > 0 && (
                   <div className="flex justify-between">
                     <span className="text-slate-400 print:text-gray-600">
                       Accessories
                     </span>
                     <span className="text-white print:text-black">
-                      {quotation.costs.accessoriesCost.toLocaleString('en-AE')}{' '}
-                      {quotation.currency}
+                      {accessoriesCost.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                     </span>
                   </div>
                 )}
-                {quotation.costs.servicesCost > 0 && (
+                {servicesCost > 0 && (
                   <div className="flex justify-between">
                     <span className="text-slate-400 print:text-gray-600">
                       Services
                     </span>
                     <span className="text-white print:text-black">
-                      {quotation.costs.servicesCost.toLocaleString('en-AE')}{' '}
-                      {quotation.currency}
+                      {servicesCost.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                     </span>
                   </div>
                 )}
-                {quotation.costs.insuranceIncluded && (
+                {quotation.insuranceIncluded && (
                   <div className="flex justify-between">
                     <span className="text-slate-400 print:text-gray-600">
                       Insurance
                     </span>
                     <span className="text-white print:text-black">
-                      {quotation.costs.insuranceCost.toLocaleString('en-AE')}{' '}
-                      {quotation.currency}
+                      {insuranceCost.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                     </span>
                   </div>
                 )}
-                {quotation.costs.maintenanceIncluded && (
+                {quotation.maintenanceIncluded && (
                   <div className="flex justify-between">
                     <span className="text-slate-400 print:text-gray-600">
                       Maintenance
                     </span>
                     <span className="text-white print:text-black">
-                      {quotation.costs.maintenanceCost.toLocaleString('en-AE')}{' '}
-                      {quotation.currency}
+                      {maintenanceCost.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                     </span>
                   </div>
                 )}
-                {quotation.costs.driverIncluded && (
+                {quotation.driverIncluded && (
                   <div className="flex justify-between">
                     <span className="text-slate-400 print:text-gray-600">
                       Driver
                     </span>
                     <span className="text-white print:text-black">
-                      {quotation.costs.driverCost.toLocaleString('en-AE')}{' '}
-                      {quotation.currency}
+                      {driverCost.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                     </span>
                   </div>
                 )}
@@ -543,8 +531,7 @@ export default function QuotationDetailPage() {
                     Total Monthly Rate
                   </span>
                   <span className="text-emerald-400 print:text-green-600 text-lg">
-                    {quotation.totalMonthlyRate.toLocaleString('en-AE')}{' '}
-                    {quotation.currency}
+                    {totalMonthlyRate.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                   </span>
                 </div>
                 <div className="bg-blue-600/10 print:bg-blue-50 border border-blue-500/30 print:border-blue-300 rounded-lg p-3 flex justify-between items-center">
@@ -552,8 +539,7 @@ export default function QuotationDetailPage() {
                     Total Contract Value
                   </span>
                   <span className="text-blue-400 print:text-blue-600 text-2xl font-bold">
-                    {quotation.totalValue.toLocaleString('en-AE')}{' '}
-                    {quotation.currency}
+                    {totalContractValue.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                   </span>
                 </div>
               </div>
@@ -570,7 +556,7 @@ export default function QuotationDetailPage() {
                     Mileage Cap
                   </p>
                   <p className="text-white print:text-black font-medium">
-                    {quotation.mileageCap.toLocaleString('en-AE')} km
+                    {(quotation.mileageCap ?? 0).toLocaleString('en-AE')} km
                   </p>
                 </div>
                 <div className="flex gap-4">
@@ -604,8 +590,7 @@ export default function QuotationDetailPage() {
                     Security Deposit
                   </p>
                   <p className="text-white print:text-black font-medium">
-                    {quotation.costs.securityDeposit.toLocaleString('en-AE')}{' '}
-                    {quotation.currency}
+                    {securityDeposit.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                   </p>
                 </div>
               </div>
@@ -683,7 +668,12 @@ export default function QuotationDetailPage() {
                 Approval Steps
               </h2>
               <div className="space-y-3 max-h-96 overflow-y-auto">
-                {approvalSteps.map((step) => (
+                {quotation.history.length === 0 && (
+                  <p className="text-xs text-slate-500">
+                    No approval steps recorded yet.
+                  </p>
+                )}
+                {quotation.history.map((step) => (
                   <div
                     key={step.id}
                     className="bg-slate-700/30 border border-white/5 rounded-lg p-3"
@@ -705,16 +695,18 @@ export default function QuotationDetailPage() {
                       </span>
                     </div>
                     <p className="text-xs text-slate-400 mb-1">
-                      {step.approverName}
+                      {step.approverName ?? 'Unassigned'}
                     </p>
-                    <p className="text-xs text-slate-500">{step.comment}</p>
+                    {step.comments && (
+                      <p className="text-xs text-slate-500">{step.comments}</p>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Action Buttons */}
-            {quotation.status === 'NEW' && (
+            {CAN_APPROVE_STATUSES.includes(quotation.status) && (
               <button
                 onClick={() => setShowApproveModal(true)}
                 className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90 flex items-center justify-center gap-2"
@@ -723,24 +715,18 @@ export default function QuotationDetailPage() {
                 Approve Internally
               </button>
             )}
-            {quotation.status === 'INTERNAL_APPROVAL' && (
-              <button
-                onClick={handleSendToCustomer}
-                className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90 flex items-center justify-center gap-2"
-              >
-                <Send className="h-4 w-4" />
-                Send to Customer
-              </button>
-            )}
-            {(quotation.status === 'CUSTOMER_APPROVED' ||
-              quotation.status === 'CREDIT_APPROVAL') && (
+            {CAN_CONVERT_STATUSES.includes(quotation.status) && (
               <button
                 onClick={handleConvertToContract}
-                className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90 flex items-center justify-center gap-2"
+                disabled={actionLoading}
+                className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90 flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <FileText className="h-4 w-4" />
-                Convert to Contract
+                {actionLoading ? 'Converting...' : 'Convert to Contract'}
               </button>
+            )}
+            {actionError && !showApproveModal && (
+              <p className="text-xs text-red-400">{actionError}</p>
             )}
           </div>
         </div>
@@ -788,12 +774,17 @@ export default function QuotationDetailPage() {
                 />
               </div>
 
+              {actionError && (
+                <p className="text-xs text-red-400">{actionError}</p>
+              )}
+
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
-                  className="flex-1 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+                  disabled={actionLoading}
+                  className="flex-1 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
                 >
-                  Approve
+                  {actionLoading ? 'Approving...' : 'Approve'}
                 </button>
                 <button
                   type="button"

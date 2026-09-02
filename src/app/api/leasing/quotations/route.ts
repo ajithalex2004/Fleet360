@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
 
 
 export async function POST(request: NextRequest) {
-  const authz = requireAuthorizedTenant(req);
+  const authz = requireAuthorizedTenant(request);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
               year:        v.year        ?? new Date().getFullYear(),
               quantity:    Number(v.quantity)    || 1,
               monthlyRate: Number(v.monthlyRate) || 0,
+              tenantId,
             })),
           },
         } : {}),

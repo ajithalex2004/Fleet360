@@ -28,6 +28,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
           include: {
             vehicles: true,
             lineItems: true,
+            lessee: true,
           },
         });
 
