@@ -358,6 +358,12 @@ export default function ServiceTicketsHome() {
         actions={
           <div className="flex items-center gap-2">
             <Link
+              href="/service-tickets/sla"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 border border-rose-500/30 px-3.5 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-950/40 hover:border-rose-500/60 transition-all shadow-sm"
+            >
+              <AlertCircle className="w-3.5 h-3.5 text-rose-400" /> SLA Control Tower
+            </Link>
+            <Link
               href="/service-tickets/simulator"
               className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 border border-emerald-500/30 px-3.5 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-950/40 hover:border-emerald-500/60 transition-all shadow-sm"
             >
