@@ -31,6 +31,8 @@ export default function PartnerDriverTripPage() {
   const [submittingAction, setSubmittingAction] = useState(false);
   const [podModalOpen, setPodModalOpen] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [gpsActive, setGpsActive] = useState(false);
+  const [lastPingTime, setLastPingTime] = useState<string | null>(null);
 
   // POD Form state
   const [passengerCount, setPassengerCount] = useState('48');
@@ -57,6 +59,42 @@ export default function PartnerDriverTripPage() {
   useEffect(() => {
     void loadTrip();
   }, [token]);
+
+  // Continuous HTML5 GPS Telemetry Stream
+  useEffect(() => {
+    if (!token || !navigator.geolocation || tripData?.completedAt) return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      async (pos) => {
+        setGpsActive(true);
+        setLastPingTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        try {
+          const res = await fetch(`/api/public/partner-driver/${token}/telemetry`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+              speed: pos.coords.speed ? pos.coords.speed * 3.6 : undefined, // Convert m/s to km/h
+              heading: pos.coords.heading || undefined,
+              accuracy: pos.coords.accuracy,
+            }),
+          });
+          const result = await res.json();
+          if (result.geofenceTriggered === 'PICKUP_REACHED' && !tripData?.reachedAt) {
+            setFeedback('📍 Pickup Geofence Entered! Status updated to Reached.');
+            await loadTrip();
+          }
+        } catch {
+          // Silent ping failure recovery
+        }
+      },
+      () => setGpsActive(false),
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [token, tripData?.completedAt, tripData?.reachedAt]);
 
   const handleAction = async (action: 'REACHED' | 'STARTED' | 'COMPLETED', podPayload?: any) => {
     setSubmittingAction(true);
@@ -131,6 +169,19 @@ export default function PartnerDriverTripPage() {
             {completed ? 'COMPLETED' : started ? 'IN PROGRESS' : reached ? 'AT PICKUP' : 'ASSIGNED'}
           </span>
         </div>
+
+        {/* Live GPS Telemetry Indicator */}
+        {!completed && (
+          <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px]">
+            <div className="flex items-center gap-1.5">
+              <span className={`w-2 h-2 rounded-full ${gpsActive ? 'bg-emerald-400 animate-ping' : 'bg-slate-600'}`} />
+              <span className={gpsActive ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
+                {gpsActive ? '📡 Live GPS Broadcasting Active' : 'Acquiring GPS Signal...'}
+              </span>
+            </div>
+            {lastPingTime && <span className="text-slate-500 font-mono">Ping: {lastPingTime}</span>}
+          </div>
+        )}
       </header>
 
       {/* Main Body */}
