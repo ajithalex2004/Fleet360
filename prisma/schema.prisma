@@ -6226,6 +6226,16 @@ enum DeductionType {
   @@schema("public")
 }
 
+enum PartnerPerformanceTier {
+  STANDARD
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+
+  @@schema("public")
+}
+
 model TransportPartner {
   id                    String                    @id @default(uuid())
   createdAt             DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -6270,6 +6280,7 @@ model TransportPartner {
   exceptions            OutsourceException[]
   settlementStatements  PartnerSettlementStatement[]
   disputes              OutsourceDispute[]
+  scorecard             PartnerScorecard?
 
   @@index([onboardingStatus], map: "idx_partners_onboarding")
   @@index([operationalStatus], map: "idx_partners_operational")
@@ -6832,6 +6843,42 @@ model OutsourceDispute {
 
   @@index([tenantId, status], map: "idx_disputes_tenant_status")
   @@map("outsource_disputes")
+  @@schema("public")
+}
+
+model PartnerScorecard {
+  id                String                 @id @default(uuid())
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  partnerId         String                 @unique @map("partner_id")
+  tenantId          String?                @map("tenant_id")
+
+  tier              PartnerPerformanceTier @default(STANDARD) @map("tier")
+  compositeScore    Float                  @default(100.0) @map("composite_score")
+
+  // Core KPI Breakdown (Percentages 0 - 100)
+  onTimePerformance Float                  @default(100.0) @map("on_time_performance")
+  quoteResponseRate Float                  @default(100.0) @map("quote_response_rate")
+  exceptionRate     Float                  @default(0.0) @map("exception_rate")
+  disputeRate       Float                  @default(0.0) @map("dispute_rate")
+  podQualityRate    Float                  @default(100.0) @map("pod_quality_rate")
+
+  // Volume Counters
+  totalAwardedTrips Int                    @default(0) @map("total_awarded_trips")
+  completedTrips    Int                    @default(0) @map("completed_trips")
+  onTimeTrips       Int                    @default(0) @map("on_time_trips")
+  lateTrips         Int                    @default(0) @map("late_trips")
+  exceptionsCount   Int                    @default(0) @map("exceptions_count")
+  disputesCount     Int                    @default(0) @map("disputes_count")
+  quotesSubmitted   Int                    @default(0) @map("quotes_submitted")
+  quotesInvited     Int                    @default(0) @map("quotes_invited")
+
+  evaluatedAt       DateTime               @default(now()) @map("evaluated_at") @db.Timestamptz(6)
+
+  partner           TransportPartner       @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([tier, compositeScore], map: "idx_scorecard_tier_score")
+  @@map("partner_scorecards")
   @@schema("public")
 }
 
