@@ -6195,6 +6195,37 @@ enum OutsourceVisibility {
   @@schema("public")
 }
 
+enum SettlementStatementStatus {
+  DRAFT
+  ISSUED
+  APPROVED
+  PAID
+  CANCELLED
+
+  @@schema("public")
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  SETTLED
+  CREDIT_NOTE_ISSUED
+  REJECTED
+
+  @@schema("public")
+}
+
+enum DeductionType {
+  LATE_ARRIVAL_PENALTY
+  CARGO_DAMAGE
+  VEHICLE_BREAKDOWN_PENALTY
+  HEADCOUNT_SHORTFALL
+  UNFULFILLED_SERVICE
+  OTHER
+
+  @@schema("public")
+}
+
 model TransportPartner {
   id                    String                    @id @default(uuid())
   createdAt             DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -6237,6 +6268,8 @@ model TransportPartner {
   awards                OutsourceAward[]
   invoices              PartnerInvoice[]
   exceptions            OutsourceException[]
+  settlementStatements  PartnerSettlementStatement[]
+  disputes              OutsourceDispute[]
 
   @@index([onboardingStatus], map: "idx_partners_onboarding")
   @@index([operationalStatus], map: "idx_partners_operational")
@@ -6695,11 +6728,14 @@ model PartnerInvoice {
   rejectionReason    String?              @map("rejection_reason")
 
   // Linkage to Core Finance AP
-  payableId          String?              @map("payable_id")
+  payableId              String?                     @map("payable_id")
+  settlementStatementId  String?                     @map("settlement_statement_id")
 
-  award              OutsourceAward       @relation(fields: [awardId], references: [id], onDelete: Restrict)
-  partner            TransportPartner     @relation(fields: [partnerId], references: [id], onDelete: Restrict)
-  items              PartnerInvoiceItem[]
+  award                  OutsourceAward              @relation(fields: [awardId], references: [id], onDelete: Restrict)
+  partner                TransportPartner            @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  statement              PartnerSettlementStatement? @relation(fields: [settlementStatementId], references: [id], onDelete: SetNull)
+  items                  PartnerInvoiceItem[]
+  disputes               OutsourceDispute[]
 
   @@unique([partnerId, invoiceNumber], map: "uq_partner_invoice_number")
   @@index([tenantId, status], map: "idx_partner_invoices_tenant_status")
@@ -6721,6 +6757,81 @@ model PartnerInvoiceItem {
   invoice        PartnerInvoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@map("partner_invoice_items")
+  @@schema("public")
+}
+
+model PartnerSettlementStatement {
+  id               String                    @id @default(uuid())
+  createdAt        DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId         String                    @map("tenant_id")
+  partnerId        String                    @map("partner_id")
+  statementNumber  String                    @map("statement_number")
+  periodStart      DateTime                  @map("period_start") @db.Date
+  periodEnd        DateTime                  @map("period_end") @db.Date
+
+  grossAmount      Decimal                   @map("gross_amount") @db.Decimal(12, 2)
+  vatAmount        Decimal                   @default(0) @map("vat_amount") @db.Decimal(12, 2)
+  totalDeductions  Decimal                   @default(0) @map("total_deductions") @db.Decimal(12, 2)
+  netPayable       Decimal                   @map("net_payable") @db.Decimal(12, 2)
+  currency         String                    @default("AED")
+  status           SettlementStatementStatus @default(DRAFT) @map("status")
+
+  tenantTrn        String?                   @map("tenant_trn")
+  partnerTrn       String?                   @map("partner_trn")
+  paymentReference String?                   @map("payment_reference")
+  paidAt           DateTime?                 @map("paid_at") @db.Timestamptz(6)
+
+  partner          TransportPartner          @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  invoices         PartnerInvoice[]
+  deductions       SettlementDeduction[]
+
+  @@unique([tenantId, statementNumber], map: "uq_settlement_statement_number")
+  @@index([tenantId, status], map: "idx_settlement_tenant_status")
+  @@map("partner_settlement_statements")
+  @@schema("public")
+}
+
+model SettlementDeduction {
+  id           String                     @id @default(uuid())
+  createdAt    DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  statementId  String                     @map("statement_id")
+  invoiceId    String?                    @map("invoice_id")
+  type         DeductionType              @map("type")
+  description  String
+  amount       Decimal                    @db.Decimal(12, 2)
+  appliedBy    String                     @map("applied_by")
+
+  statement    PartnerSettlementStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+
+  @@map("settlement_deductions")
+  @@schema("public")
+}
+
+model OutsourceDispute {
+  id              String           @id @default(uuid())
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId        String           @map("tenant_id")
+  partnerId       String           @map("partner_id")
+  invoiceId       String           @map("invoice_id")
+  invoiceItemId   String?          @map("invoice_item_id")
+  disputeNumber   String           @unique @map("dispute_number")
+  disputedAmount  Decimal          @map("disputed_amount") @db.Decimal(12, 2)
+  status          DisputeStatus    @default(OPEN) @map("status")
+  reason          String
+  resolutionNotes String?          @map("resolution_notes")
+  resolvedAmount  Decimal?         @map("resolved_amount") @db.Decimal(12, 2)
+  creditNoteRef   String?          @map("credit_note_ref")
+  raisedBy        String           @map("raised_by")
+  resolvedAt      DateTime?        @map("resolved_at") @db.Timestamptz(6)
+  resolvedBy      String?          @map("resolved_by")
+
+  invoice         PartnerInvoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  partner         TransportPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status], map: "idx_disputes_tenant_status")
+  @@map("outsource_disputes")
   @@schema("public")
 }
 
