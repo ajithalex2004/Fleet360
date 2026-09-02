@@ -31,7 +31,7 @@ export async function registerNode(): Promise<void> {
 
   try {
     const { startJobScheduler } = await import('@/lib/jobs/scheduler');
-    startJobScheduler();
+    void startJobScheduler();
   } catch (err) {
     console.warn('[Startup] Job scheduler failed to start:', err);
   }

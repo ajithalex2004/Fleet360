@@ -1,69 +1,102 @@
 /**
- * In-process cron scheduler for JOB_REGISTRY (G2 fix).
+ * In-process cron scheduler for the jobs in JOB_REGISTRY.
  *
- * Root cause: vercel.json's `crons` array is Vercel-only config and is
- * silently ignored on Railway, which is where this app actually deploys —
- * there is no railway.json/toml cron equivalent either. Result: every job
- * in JOB_REGISTRY only ran if a human or external system called
- * /api/jobs/run by hand.
- *
- * Railway runs this app as a single long-lived container (numReplicas: 1),
- * not a serverless function, so scheduling in-process — inside the same
- * server that already handles HTTP traffic, started once from
- * instrumentation-node.ts on boot — is the natural fix: no extra Railway
- * service, no external scheduler infra, and it reuses JOB_REGISTRY exactly
- * as /api/jobs/run does, so `?job=` manual runs and the CRON_SECRET auth
- * story stay the single source of truth for what a job does.
- *
- * Schedules below are inferred from each job's JOB_REGISTRY description —
- * the codebase never wrote down explicit cadences except dunning-sweep,
- * which vercel.json pinned to "0 2 * * *"; that's used here as the one
- * ground truth and the anchor for staggering the rest so heavier sweeps
- * don't all fire at once. Override any of them via JOB_CRON_<NAME> env
- * vars (name uppercased, hyphens to underscores) without a code change;
- * set the value to "off" to disable a specific job.
+ * Lightweight, zero-dependency cron runner compatible with Next.js 15
+ * Node & Edge compiler passes.
  */
-
-import cron from 'node-cron';
-import { JOB_REGISTRY, type JobContext, type JobDef } from '@/lib/jobs/registry';
 
 const TIMEZONE = 'Asia/Dubai';
 
 const DEFAULT_SCHEDULES: Record<string, string> = {
   // Frequent — near-real-time operational sweeps.
-  'outbox-publisher':                    '* * * * *',
-  'auto-close-trips':                    '*/15 * * * *',
-  'alert-trip-overdue':                  '*/15 * * * *',
-  'push-scheduler':                      '*/5 * * * *',
-  // Daily batch sweeps — staggered through the early morning so they
-  // don't all hit the DB connection cap (see SWEEP_CONCURRENCY_CAP in
-  // prisma-sweep.ts) at once.
-  'document-expiry-sweep':               '0 1 * * *',
-  'insurance-expiry-sweep':               '15 1 * * *',
-  'bookings-sweep-penalties':            '30 1 * * *',
-  'dunning-sweep':                       '0 2 * * *',
+  'outbox-publisher': '* * * * *',
+  'auto-close-trips': '*/15 * * * *',
+  'alert-trip-overdue': '*/15 * * * *',
+  'push-scheduler': '*/5 * * * *',
+  // Daily batch sweeps
+  'document-expiry-sweep': '0 1 * * *',
+  'insurance-expiry-sweep': '15 1 * * *',
+  'bookings-sweep-penalties': '30 1 * * *',
+  'dunning-sweep': '0 2 * * *',
   'bus-ops-generate-schedule-templates': '30 2 * * *',
-  'inquiries-sweep-followups':           '0 9 * * *',
-  'attendance-sweep-no-show':            '0 17 * * *',
+  'inquiries-sweep-followups': '0 9 * * *',
+  'attendance-sweep-no-show': '0 17 * * *',
   // Weekly / monthly.
-  'mileage-sweep-stale':                 '0 4 * * 0',
-  'fuel-sweep-bill':                     '0 3 1 * *',
-  'traffic-fines-sweep-bill':            '30 3 1 * *',
+  'mileage-sweep-stale': '0 4 * * 0',
+  'fuel-sweep-bill': '0 3 1 * *',
+  'traffic-fines-sweep-bill': '30 3 1 * *',
 };
+
+const JOB_NAMES = Object.keys(DEFAULT_SCHEDULES);
 
 function envKeyFor(jobName: string): string {
   return `JOB_CRON_${jobName.toUpperCase().replace(/-/g, '_')}`;
 }
 
-function scheduleFor(job: JobDef): string | null {
-  const override = process.env[envKeyFor(job.name)];
+function scheduleFor(jobName: string): string | null {
+  const override = process.env[envKeyFor(jobName)];
   if (override === 'off' || override === 'disabled') return null;
-  return override || DEFAULT_SCHEDULES[job.name] || null;
+  return override || DEFAULT_SCHEDULES[jobName] || null;
+}
+
+/**
+ * Match a cron field (e.g. "*", "5", "star/15", "1,2") against a numeric value
+ */
+function matchCronField(field: string, value: number): boolean {
+  if (field === '*') return true;
+  if (field.startsWith('*/')) {
+    const step = parseInt(field.slice(2), 10);
+    return !isNaN(step) && step > 0 && value % step === 0;
+  }
+  if (field.includes(',')) {
+    return field.split(',').some((sub) => matchCronField(sub.trim(), value));
+  }
+  const exact = parseInt(field, 10);
+  return exact === value;
+}
+
+/**
+ * Check if a 5-part cron expression matches the current date/time in Asia/Dubai
+ */
+function isCronDue(cronExpr: string, date: Date): boolean {
+  const parts = cronExpr.trim().split(/\s+/);
+  if (parts.length !== 5) return false;
+
+  const [minField, hourField, domField, monField, dowField] = parts;
+
+  // Format into Dubai timezone parts
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: TIMEZONE,
+    minute: 'numeric',
+    hour: 'numeric',
+    hour12: false,
+    day: 'numeric',
+    month: 'numeric',
+    weekday: 'narrow',
+  });
+
+  const partsObj: Record<string, number> = {};
+  const dubaiDate = new Date(date.toLocaleString('en-US', { timeZone: TIMEZONE }));
+
+  const minute = dubaiDate.getMinutes();
+  const hour = dubaiDate.getHours();
+  const dayOfMonth = dubaiDate.getDate();
+  const month = dubaiDate.getMonth() + 1; // 1-12
+  const dayOfWeek = dubaiDate.getDay(); // 0-6 (Sun-Sat)
+
+  return (
+    matchCronField(minField, minute) &&
+    matchCronField(hourField, hour) &&
+    matchCronField(domField, dayOfMonth) &&
+    matchCronField(monField, month) &&
+    matchCronField(dowField, dayOfWeek)
+  );
 }
 
 let started = false;
+let timerId: any = null;
 
-/** Idempotent — safe to call more than once, only the first call schedules anything. */
+/** Idempotent — starts an interval-based cron checker once on boot */
 export function startJobScheduler(): void {
   if (started) return;
   if (process.env.DISABLE_JOB_SCHEDULER === 'true') {
@@ -72,42 +105,49 @@ export function startJobScheduler(): void {
   }
   started = true;
 
-  let registered = 0;
-  for (const job of JOB_REGISTRY) {
-    const expr = scheduleFor(job);
-    if (!expr) {
-      console.warn(`[job-scheduler] no schedule for "${job.name}" — skipped (set ${envKeyFor(job.name)} to enable)`);
-      continue;
+  console.log(`[job-scheduler] started — ${JOB_NAMES.length} jobs scheduled (tz ${TIMEZONE})`);
+
+  let lastCheckedMinute = -1;
+
+  timerId = setInterval(() => {
+    const now = new Date();
+    const currentMinute = now.getMinutes();
+
+    // Only evaluate once per minute
+    if (currentMinute === lastCheckedMinute) return;
+    lastCheckedMinute = currentMinute;
+
+    for (const name of JOB_NAMES) {
+      const expr = scheduleFor(name);
+      if (!expr) continue;
+
+      if (isCronDue(expr, now)) {
+        void runScheduled(name);
+      }
     }
-    if (!cron.validate(expr)) {
-      console.error(`[job-scheduler] invalid cron expression for "${job.name}": "${expr}" — skipped`);
-      continue;
-    }
-    cron.schedule(expr, () => void runScheduled(job), { timezone: TIMEZONE });
-    registered++;
-  }
-  console.log(`[job-scheduler] started — ${registered}/${JOB_REGISTRY.length} jobs scheduled (tz ${TIMEZONE})`);
+  }, 15000); // Check every 15s to never miss a minute boundary
 }
 
-async function runScheduled(job: JobDef): Promise<void> {
-  // No inbound HTTP request exists for a cron tick. Every handler in
-  // JOB_REGISTRY reads only ctx.tenantId/ctx.searchParams (verified via
-  // grep across src/lib/jobs) — ctx.request is unused, so this stand-in
-  // is safe despite JobContext typing it as non-optional.
-  const ctx: JobContext = {
-    tenantId: null,
-    userId: 'system:cron',
-    searchParams: new URLSearchParams(),
-    request: undefined as unknown as JobContext['request'],
-  };
+async function runScheduled(jobName: string): Promise<void> {
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+  const url = `${base}/api/jobs/run?job=${encodeURIComponent(jobName)}`;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (process.env.CRON_SECRET) {
+    headers['Authorization'] = `Bearer ${process.env.CRON_SECRET}`;
+  }
 
   const start = Date.now();
   try {
-    const result = await job.handler(ctx);
+    const res = await fetch(url, { method: 'POST', headers, body: '{}' });
+    const body = await res.json().catch(() => ({}));
     const durationMs = Date.now() - start;
-    console.info(`[job-scheduler] ${job.name} -> ${result.status} in ${durationMs}ms - ${result.summary}`);
+    if (!res.ok) {
+      console.error(`[job-scheduler] ${jobName} -> HTTP ${res.status} in ${durationMs}ms -`, body);
+      return;
+    }
+    console.info(`[job-scheduler] ${jobName} -> ${body.status ?? 'ok'} in ${durationMs}ms - ${body.summary ?? ''}`);
   } catch (err) {
     const durationMs = Date.now() - start;
-    console.error(`[job-scheduler] ${job.name} threw after ${durationMs}ms:`, err);
+    console.error(`[job-scheduler] ${jobName} unreachable after ${durationMs}ms:`, err);
   }
 }
