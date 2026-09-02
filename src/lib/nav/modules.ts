@@ -103,17 +103,45 @@ export const MODULES: ModuleDef[] = [
     id: 'leasing', label: 'Leasing', href: '/leasing', icon: FileText,
     subPages: [
       { label: 'Dashboard',           href: '/leasing',                     icon: LayoutDashboard },
-      { label: 'Inquiries',           href: '/leasing/inquiries',           icon: MessageCircle },
-      { label: 'Quotations',          href: '/leasing/quotations',          icon: FileText },
-      { label: 'Credit assessments',  href: '/leasing/credit-assessments',  icon: ShieldCheck },
-      { label: 'Lease agreements',    href: '/leasing/contracts-v2',        icon: FileText },
-      { label: 'Amendments',          href: '/leasing/amendments',          icon: RefreshCw },
-      { label: 'Renewals',            href: '/leasing/renewals',            icon: RefreshCw },
-      { label: 'Early terminations',  href: '/leasing/early-terminations',  icon: AlertTriangle },
-      { label: 'Mileage',             href: '/leasing/mileage',             icon: Activity },
-      { label: 'Drivers',             href: '/leasing/drivers',             icon: UserCog },
-      { label: 'Alerts',              href: '/leasing/alerts',              icon: Bell },
-      { label: 'Analytics',           href: '/leasing/analytics',           icon: BarChart3 },
+
+      // Sales — lead capture through quotation.
+      { label: 'Inquiries',           href: '/leasing/inquiries',           icon: MessageCircle,  group: 'Sales' },
+      { label: 'Lead channels',       href: '/leasing/lead-channels',       icon: Radio,           group: 'Sales' },
+      { label: 'CRM & leads',         href: '/leasing/crm',                 icon: Target,          group: 'Sales' },
+      { label: 'Quotations',          href: '/leasing/quotations',          icon: FileText,        group: 'Sales' },
+      { label: 'Credit assessments',  href: '/leasing/credit-assessments',  icon: ShieldCheck,     group: 'Sales' },
+
+      // Contracts — post-sale lifecycle events.
+      { label: 'Lease agreements',    href: '/leasing/contracts-v2',        icon: FileText,        group: 'Contracts' },
+      { label: 'Amendments',          href: '/leasing/amendments',          icon: RefreshCw,       group: 'Contracts' },
+      { label: 'Renewals',            href: '/leasing/renewals',            icon: RefreshCw,       group: 'Contracts' },
+      { label: 'Early terminations',  href: '/leasing/early-terminations',  icon: AlertTriangle,   group: 'Contracts' },
+      { label: 'Transfers',           href: '/leasing/transfers',           icon: ArrowLeftRight,  group: 'Contracts' },
+
+      // Fleet & drivers — in-life vehicle and driver operations.
+      { label: 'Drivers',             href: '/leasing/drivers',             icon: UserCog,         group: 'Fleet & drivers' },
+      { label: 'Mileage',             href: '/leasing/mileage',             icon: Activity,        group: 'Fleet & drivers' },
+      { label: 'Vehicle exchanges',   href: '/leasing/vehicle-exchange',    icon: Repeat,          group: 'Fleet & drivers' },
+      { label: 'Handover',            href: '/leasing/handover',            icon: Send,            group: 'Fleet & drivers' },
+      { label: 'Field operations',    href: '/leasing/field',               icon: Smartphone,      group: 'Fleet & drivers' },
+
+      // Billing & records — leasing-native billing paperwork and document
+      // vault. Insurance, fuel, traffic fines, payments/receipts and
+      // receivables are intentionally NOT here — those pages are retired
+      // redirect stubs pointing at /fleet/* and /finance/*, where the real
+      // functionality (and its own nav entry) already lives.
+      { label: 'Pre-billing',         href: '/leasing/pre-billing',         icon: Receipt,         group: 'Billing & records' },
+      { label: 'Invoices',            href: '/leasing/invoices',            icon: CreditCard,      group: 'Billing & records' },
+      { label: 'Documents',           href: '/leasing/documents',           icon: Paperclip,       group: 'Billing & records' },
+
+      // Master data.
+      { label: 'Lessees',             href: '/leasing/lessees',             icon: Users,           group: 'Master data' },
+      { label: 'Branch staff',        href: '/leasing/staff',               icon: Building2,       group: 'Master data' },
+      { label: 'Bulk import',         href: '/leasing/import',              icon: Package,         group: 'Master data' },
+
+      // Monitoring.
+      { label: 'Alerts',              href: '/leasing/alerts',              icon: Bell,            group: 'Monitoring' },
+      { label: 'Analytics',           href: '/leasing/analytics',           icon: BarChart3,       group: 'Monitoring' },
     ],
   },
   {
