@@ -12,10 +12,16 @@ export const dynamic = 'force-dynamic';
  *     newDeparture?: ISO string,              // for DELAY / ROUTE_CHANGE
  *     reason?: string,                        // free-text augmentation
  *     customMessage?: string,                 // for CUSTOM
- *     channels?: ('WHATSAPP' | 'EMAIL')[],    // default: both
+ *     channels?: ('WHATSAPP' | 'EMAIL' | 'SMS')[], // default: all three
  *     includeDispatcher?: boolean,            // default: true — also pings ops digest
  *     dryRun?: boolean,
  *   }
+ *
+ * SMS is a fallback, not a parallel broadcast channel: it only fires for a
+ * given recipient when WhatsApp wasn't attempted or didn't land (no
+ * WhatsApp/smartphone, Twilio error, etc) — see the per-recipient loop
+ * below. This is what actually reaches staff without a smartphone or
+ * WhatsApp account, a real population in blue-collar transport contexts.
  *
  * Returns per-passenger send results so the dispatcher can see who got it.
  * Best-effort — individual failures don't fail the request.
@@ -26,6 +32,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { sendWhatsApp } from '@/lib/whatsapp';
 import { sendEmail } from '@/lib/email';
+import { sendSms } from '@/lib/sms';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -108,9 +115,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         if (kind === 'CUSTOM' && !body.customMessage) {
           return NextResponse.json({ error: 'customMessage is required for CUSTOM kind' }, { status: 400 });
         }
-        const channels: Array<'WHATSAPP' | 'EMAIL'> = Array.isArray(body.channels) && body.channels.length > 0
-          ? body.channels.map((c: string) => c.toUpperCase()).filter((c: string) => c === 'WHATSAPP' || c === 'EMAIL')
-          : ['WHATSAPP', 'EMAIL'];
+        const channels: Array<'WHATSAPP' | 'EMAIL' | 'SMS'> = Array.isArray(body.channels) && body.channels.length > 0
+          ? body.channels.map((c: string) => c.toUpperCase()).filter((c: string) => c === 'WHATSAPP' || c === 'EMAIL' || c === 'SMS')
+          : ['WHATSAPP', 'EMAIL', 'SMS'];
         const includeDispatcher = body.includeDispatcher !== false;
         const dryRun = body.dryRun === true;
 
@@ -145,6 +152,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           employeeName: string | null;
           whatsapp: { sent: boolean; reason?: string } | null;
           email:    { sent: boolean; reason?: string } | null;
+          sms:      { sent: boolean; reason?: string } | null;
         }
         const results: PerRecipient[] = [];
 
@@ -156,6 +164,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
             let whatsappResult = null;
             let emailResult = null;
+            let smsResult = null;
 
             if (channels.includes('WHATSAPP') && phone) {
               const r1 = await sendWhatsApp({ to: phone, body: messageBody });
@@ -165,12 +174,21 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
               const r2 = await sendEmail({ to: email, subject, text: messageBody });
               emailResult = { sent: r2.sent, reason: r2.reason };
             }
+            // Fallback, not a broadcast: fires whenever WhatsApp wasn't
+            // attempted (no phone, channel not requested) or was attempted
+            // and didn't land (no WhatsApp/smartphone, Twilio error) — this
+            // is what reaches a passenger with a basic phone and no data.
+            if (channels.includes('SMS') && phone && !whatsappResult?.sent) {
+              const r3 = await sendSms({ to: phone, body: messageBody });
+              smsResult = { sent: r3.sent, reason: r3.reason };
+            }
 
             results.push({
               passengerId: r.id,
               employeeName: r.employeeName ?? s?.name ?? null,
               whatsapp: whatsappResult,
               email: emailResult,
+              sms: smsResult,
             });
           }
         }
@@ -178,10 +196,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         // Dispatcher digest — same format, sent to ops contact.
         let dispatcherEmail: { sent: boolean; reason?: string } | null = null;
         let dispatcherWhatsApp: { sent: boolean; reason?: string } | null = null;
+        let dispatcherSms: { sent: boolean; reason?: string } | null = null;
         if (!dryRun && includeDispatcher) {
           const opsEmail = process.env.OPERATIONS_EMAIL;
           const opsPhone = process.env.OPERATIONS_PHONE;
-          const sentOk = results.filter(r => r.whatsapp?.sent || r.email?.sent).length;
+          const sentOk = results.filter(r => r.whatsapp?.sent || r.email?.sent || r.sms?.sent).length;
           const digestBody = `[OPS] ${subject}\n\nNotified ${sentOk}/${results.length} passengers.\n\n${messageBody}`;
           if (opsEmail) {
             const r = await sendEmail({ to: opsEmail, subject: `[OPS] ${subject}`, text: digestBody });
@@ -190,6 +209,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           if (opsPhone) {
             const r = await sendWhatsApp({ to: opsPhone, body: digestBody });
             dispatcherWhatsApp = { sent: r.sent, reason: r.reason };
+            if (!r.sent) {
+              const r2 = await sendSms({ to: opsPhone, body: digestBody });
+              dispatcherSms = { sent: r2.sent, reason: r2.reason };
+            }
           }
         }
 
@@ -224,11 +247,17 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           recipients: results.length,
           sentWhatsApp: results.filter(r => r.whatsapp?.sent).length,
           sentEmail:    results.filter(r => r.email?.sent).length,
+          sentSms:      results.filter(r => r.sms?.sent).length,
           noPhone:      results.filter(r => channels.includes('WHATSAPP') && r.whatsapp === null).length,
           noEmail:      results.filter(r => channels.includes('EMAIL')    && r.email    === null).length,
+          // Recipients WhatsApp never reached (no attempt or a failed send)
+          // and SMS also couldn't cover — i.e. genuinely unreachable, not
+          // just "SMS wasn't tried because WhatsApp already worked".
+          unreachable:  results.filter(r => !r.whatsapp?.sent && !r.email?.sent && !r.sms?.sent).length,
           results,
           dispatcherEmail,
           dispatcherWhatsApp,
+          dispatcherSms,
           preview: { subject, body: messageBody },
         });
         } catch (err) {

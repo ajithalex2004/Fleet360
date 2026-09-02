@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   BusFront, Map as MapIcon, Calendar, Clock as ClockIcon, Users, AlertTriangle, FileText, ArrowRight, Sparkles,
-  Timer, Scale, BarChart3, Layers, Smartphone, Shield, GitMerge, Repeat, Calculator, Zap,
+  Timer, Scale, BarChart3, Layers, Smartphone, Shield, GitMerge, Repeat, Calculator, Zap, Leaf,
 } from 'lucide-react';
 import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/bus-ops/theme';
 import { useFetchedData } from '@/hooks/useFetchedData';
@@ -192,6 +192,14 @@ export default function BusOpsDashboard() {
               ] : []),
               { label: 'Shift SLA Monitor', href: '/bus-ops/sla-monitor',  icon: Shield,        accent: 'rose' as const,   badge: 'P0' },
               { label: 'Driver Fatigue & Rest', href: '/bus-ops/drivers/fatigue', icon: Shield, accent: 'rose' as const, badge: 'P1' },
+              // Shifts and vehicle-document expiry are owned by Driver
+              // Management and Fleet respectively (shared resources across
+              // every module, not bus-ops-exclusive) — these link out rather
+              // than duplicating a second CRUD surface here. RVE's D3 "no
+              // shift" warning and its vehicle-document checks both read
+              // from exactly what these two screens manage.
+              { label: 'Driver Shifts',     href: '/driver-mgmt/shifts',    icon: ClockIcon,     accent: 'rose' as const,   badge: 'Drivers' },
+              { label: 'Vehicle Doc Expiry', href: '/fleet/documents',      icon: FileText,      accent: 'amber' as const,  badge: 'Fleet' },
               { label: 'Ad-Hoc / Overtime Dispatch', href: '/bus-ops/adhoc-dispatch', icon: Zap, accent: 'amber' as const, badge: 'P0' },
               { label: 'Cost Allocation & Recharge', href: '/bus-ops/cost-allocation', icon: Calculator, accent: 'emerald' as const, badge: 'P0' },
               { label: 'ESG Carbon Footprint', href: '/bus-ops/esg',       icon: Leaf,          accent: 'emerald' as const,badge: 'P2' },

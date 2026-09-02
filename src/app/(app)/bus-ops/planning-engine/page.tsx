@@ -94,6 +94,14 @@ function PlanningEngineInner() {
   // see resolvePlanningEngineTab for the exact rules.
   const activeId = resolvePlanningEngineTab(searchParams.get('tab'));
 
+  // Demand Forecast's "Draft Plan" action deep-links here with
+  // ?tab=core&dateFrom=&dateTo=&autoCompute=1 so a flagged capacity-risk
+  // row lands on an already-computed plan for that day, instead of a
+  // manual "go figure out a plan yourself" hand-off.
+  const forecastDateFrom = searchParams.get('dateFrom');
+  const forecastDateTo = searchParams.get('dateTo');
+  const forecastAutoCompute = searchParams.get('autoCompute') === '1';
+
   // Tabs the user has opened at least once. Panels mount lazily and then
   // stay mounted (see the render block) so in-progress work survives a
   // tab switch.
@@ -217,6 +225,9 @@ function PlanningEngineInner() {
               // affordance so the route from "my plan is gated" to "edit the
               // rule" stays one click.
               onEditPceRules={canEditPce ? () => setTab('constraints') : undefined}
+              initialDateFrom={forecastDateFrom ?? undefined}
+              initialDateTo={forecastDateTo ?? undefined}
+              autoCompute={forecastAutoCompute}
             />
           )}
         </div>

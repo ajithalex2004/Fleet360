@@ -234,6 +234,21 @@ export interface PlanningCorePanelProps {
   pceRevision?: number;
   /** Switches to the Constraints tab. Omitted when the user can't edit PCE. */
   onEditPceRules?: () => void;
+  /**
+   * Pre-fill the date range from an external caller (currently: the Demand
+   * Forecast page's "Draft Plan" action on a flagged row). Falls back to
+   * the normal today→today+6 default when omitted.
+   */
+  initialDateFrom?: string;
+  initialDateTo?: string;
+  /**
+   * Run compute() once on mount using the initial date range above, so the
+   * operator lands on an already-computed plan instead of a pre-filled form
+   * they still have to click through. Only fires once, on first mount —
+   * never re-triggers on a later prop change, so it can't clobber
+   * in-progress work.
+   */
+  autoCompute?: boolean;
 }
 
 /**
@@ -245,10 +260,14 @@ export interface PlanningCorePanelProps {
  * page on bus-ops:admin:planning-core, so wrapping again would just
  * double-render the permission check.
  */
-export function PlanningCorePanel({ cbaRevision = 0, pceRevision = 0, onEditPceRules }: PlanningCorePanelProps = {}) {
-  // Date range: today → today+6 by default
-  const [dateFrom, setDateFrom] = useState(todayIso());
-  const [dateTo,   setDateTo]   = useState(addDays(todayIso(), 6));
+export function PlanningCorePanel({
+  cbaRevision = 0, pceRevision = 0, onEditPceRules,
+  initialDateFrom, initialDateTo, autoCompute = false,
+}: PlanningCorePanelProps = {}) {
+  // Date range: today → today+6 by default, or the caller-supplied window
+  // (e.g. a specific day flagged by the Demand Forecast page).
+  const [dateFrom, setDateFrom] = useState(initialDateFrom ?? todayIso());
+  const [dateTo,   setDateTo]   = useState(initialDateTo ?? addDays(todayIso(), 6));
 
   const [workRules, setWorkRules] = useState<WorkRules>(DEFAULT_RULES);
   // True once the user has edited any Operator Pay Rules field — once set,
@@ -395,6 +414,18 @@ export function PlanningCorePanel({ cbaRevision = 0, pceRevision = 0, onEditPceR
       setComputing(false);
     }
   };
+
+  // Auto-draft: when arriving from Demand Forecast with autoCompute=1, run
+  // the compute the operator would otherwise have clicked for themselves.
+  // Fires once on mount only (autoComputeRan guard) — never re-triggers on
+  // a later render, so it can't clobber a plan the operator is editing.
+  const autoComputeRan = useRef(false);
+  useEffect(() => {
+    if (!autoCompute || autoComputeRan.current) return;
+    autoComputeRan.current = true;
+    compute();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoCompute]);
 
   // ── Save ────────────────────────────────────────────────────────────────
   const save = async () => {

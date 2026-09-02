@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { TrendingUp, Plus, Flag } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { TrendingUp, Plus, Flag, Sparkles } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
 
 // Session → default departure time-of-day when spawning a trip from a
@@ -20,6 +21,13 @@ function nextDateForDayOfWeek(dow: number): Date {
   const delta = ((dow - now.getDay()) + 7) % 7;
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + delta);
   return d;
+}
+
+function toIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 interface ForecastRow {
@@ -57,6 +65,7 @@ const CONF_PILL: Record<string, string> = {
 };
 
 export default function DemandForecastPage() {
+  const router = useRouter();
   const [data, setData] = useState<ForecastResponse | null>(null);
   const [weeks, setWeeks] = useState(4);
   const [aiOn, setAiOn] = useState(true);
@@ -149,6 +158,23 @@ export default function DemandForecastPage() {
     } finally {
       setRowBusy(b => ({ ...b, [key]: null }));
     }
+  };
+
+  // Closes the "forecast flags risk → someone has to manually go plan for
+  // it" gap: hands the flagged day straight to Planning Core with the date
+  // pre-filled and a compute already triggered, so the operator lands on a
+  // ready-to-review plan instead of a blank form. Planning Core computes
+  // fleet-wide for a date range (not scoped to one route), so this seeds a
+  // single-day window on the flagged date — the day that's actually at risk.
+  const draftPlanFromRow = (r: ForecastRow) => {
+    const target = toIsoDate(nextDateForDayOfWeek(r.dayOfWeek));
+    const params = new URLSearchParams({
+      tab: 'core',
+      dateFrom: target,
+      dateTo: target,
+      autoCompute: '1',
+    });
+    router.push(`/bus-ops/planning-engine?${params.toString()}`);
   };
 
   if (loading && !data) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading forecast...</div></div>;
@@ -258,6 +284,14 @@ export default function DemandForecastPage() {
                                 className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20 disabled:opacity-50">
                                 <Flag className="w-3 h-3" />
                                 {busy === 'flag' ? '…' : 'Flag'}
+                              </button>
+                              <button
+                                onClick={() => draftPlanFromRow(r)}
+                                disabled={!!busy}
+                                title={`Open Planning Core with a plan already computed for next ${DAYS[r.dayOfWeek]}`}
+                                className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-cyan-500/40 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50">
+                                <Sparkles className="w-3 h-3" />
+                                Draft plan
                               </button>
                             </div>
                             {msg && <div className="text-[10px] text-slate-400 max-w-[16rem] text-right truncate" title={msg}>{msg}</div>}
