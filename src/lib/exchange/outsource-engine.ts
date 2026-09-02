@@ -807,4 +807,188 @@ export class OutsourceEngine {
       data: updateData,
     });
   }
+
+  /**
+   * Replace Resource (Vehicle/Driver) with Revision History & Token Rotation
+   */
+  static async replaceResource(input: {
+    awardId: string;
+    partnerId: string;
+    vehiclePlate: string;
+    driverName: string;
+    driverPhone: string;
+    replacedReason: string;
+    actorUserId?: string;
+  }) {
+    const assignment = await prisma.partnerAssignment.findUnique({
+      where: { awardId: input.awardId },
+      include: { revisions: true },
+    });
+
+    if (!assignment) throw new Error('Assignment not found');
+    if (assignment.partnerId !== input.partnerId) throw new Error('Unauthorized partner');
+
+    const nextRevNo = assignment.revisions.length + 1;
+
+    // 1. Archive current resource to PartnerAssignmentRevision
+    await prisma.partnerAssignmentRevision.create({
+      data: {
+        assignmentId: assignment.id,
+        revisionNo: nextRevNo,
+        vehiclePlate: assignment.vehiclePlate || 'UNKNOWN',
+        driverName: assignment.driverName || 'UNKNOWN',
+        driverPhone: assignment.driverPhone || 'UNKNOWN',
+        replacedReason: input.replacedReason,
+        replacedBy: input.actorUserId || 'PARTNER_OPERATIONS',
+      },
+    });
+
+    // 2. Generate new raw token & hash
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = hashDriverToken(rawToken);
+    const tokenExp = new Date(Date.now() + 7 * 86400000);
+
+    // 3. Update assignment with new resources and rotated token
+    const updated = await prisma.partnerAssignment.update({
+      where: { id: assignment.id },
+      data: {
+        vehiclePlate: input.vehiclePlate.trim().toUpperCase(),
+        driverName: input.driverName.trim(),
+        driverPhone: input.driverPhone.trim(),
+        driverTokenHash: tokenHash,
+        driverTokenExp: tokenExp,
+        isTokenRevoked: false,
+        updatedAt: new Date(),
+      },
+    });
+
+    // 4. Record PartnerTripEvent
+    await prisma.partnerTripEvent.create({
+      data: {
+        assignmentId: assignment.id,
+        eventType: 'RESOURCE_SUBSTITUTED',
+        actor: input.actorUserId || 'PARTNER_DISPATCH',
+        payload: {
+          revisionNo: nextRevNo,
+          newVehiclePlate: input.vehiclePlate,
+          newDriverName: input.driverName,
+          reason: input.replacedReason,
+        },
+      },
+    });
+
+    return {
+      assignment: updated,
+      driverSecureUrl: `/track/partner-trip/${rawToken}`,
+      rawToken,
+    };
+  }
+
+  /**
+   * Withdraw a submitted quote before award
+   */
+  static async withdrawQuote(quoteId: string, partnerId: string, actorUserId?: string) {
+    const quote = await prisma.partnerQuote.findUnique({
+      where: { id: quoteId, partnerId },
+      include: { request: true },
+    });
+
+    if (!quote) throw new Error('Quote not found');
+    if (quote.status !== PartnerQuoteStatus.SUBMITTED) {
+      throw new Error(`Cannot withdraw quote in ${quote.status} status`);
+    }
+
+    const updated = await prisma.partnerQuote.update({
+      where: { id: quote.id },
+      data: { status: PartnerQuoteStatus.WITHDRAWN },
+    });
+
+    await logAudit(
+      prisma,
+      quote.request.tenantId,
+      'PartnerQuote',
+      quote.id,
+      'UPDATE',
+      { action: 'QUOTE_WITHDRAWN', partnerId },
+      actorUserId || partnerId
+    );
+
+    return updated;
+  }
+
+  /**
+   * Cancel an awarded trip before departure
+   */
+  static async cancelAward(awardId: string, tenantId: string, reason: string, actorUserId: string) {
+    const award = await prisma.outsourceAward.findUnique({
+      where: { id: awardId, tenantId },
+      include: { assignment: true },
+    });
+
+    if (!award) throw new Error('Award not found');
+    if (award.status === 'IN_PROGRESS' || award.status === 'COMPLETED') {
+      throw new Error('Cannot cancel a trip that has already started or completed');
+    }
+
+    const updated = await prisma.outsourceAward.update({
+      where: { id: award.id },
+      data: { status: 'CANCELLED' },
+    });
+
+    if (award.assignment) {
+      await prisma.partnerAssignment.update({
+        where: { id: award.assignment.id },
+        data: { cancelledAt: new Date(), isTokenRevoked: true },
+      });
+    }
+
+    await logAudit(
+      prisma,
+      tenantId,
+      'OutsourceAward',
+      award.id,
+      'UPDATE',
+      { action: 'AWARD_CANCELLED', reason },
+      actorUserId
+    );
+
+    return updated;
+  }
+
+  /**
+   * Abort a trip due to operational emergency / road accident
+   */
+  static async abortTrip(awardId: string, reason: string, actorUserId: string) {
+    const award = await prisma.outsourceAward.findUnique({
+      where: { id: awardId },
+      include: { assignment: true },
+    });
+
+    if (!award) throw new Error('Award not found');
+    if (award.status === 'COMPLETED') {
+      throw new Error('Cannot abort a trip that is already completed');
+    }
+
+    const updated = await prisma.outsourceAward.update({
+      where: { id: award.id },
+      data: {
+        status: 'ABORTED',
+        abortedAt: new Date(),
+        abortReason: reason,
+      },
+    });
+
+    if (award.assignment) {
+      await prisma.partnerTripEvent.create({
+        data: {
+          assignmentId: award.assignment.id,
+          eventType: 'TRIP_ABORTED',
+          actor: actorUserId || 'DISPATCH',
+          payload: { reason },
+        },
+      });
+    }
+
+    return updated;
+  }
 }
