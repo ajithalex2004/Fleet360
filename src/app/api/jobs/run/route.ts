@@ -12,19 +12,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { JOB_MAP, JOB_REGISTRY, isJobAuthorized, type JobContext } from '@/lib/jobs/registry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const dynamic     = 'force-dynamic';
 export const maxDuration = 300; // seconds — Vercel Pro plan max
 
 // ── GET /api/jobs — list registered jobs (authenticated) ─────────────────────
+//
+// Auth is isJobAuthorized alone (CRON_SECRET Bearer OR an operator session)
+// — this is a system-wide cron endpoint, not a tenant-scoped one, so it must
+// not also require requireAuthorizedTenant's x-tenant-id. That extra gate
+// used to run first and fail closed with 401 for every secret-only caller
+// (its resolved tenantId was never even used afterward), which meant this
+// endpoint was never actually reachable by CRON_SECRET alone despite the
+// docstring above promising exactly that — including the one real cron
+// entry vercel.json ever pointed here.
 
 export async function GET(request: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
-  }
-  const { tenantId } = authz;
-
   if (!isJobAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -41,12 +43,6 @@ export async function GET(request: NextRequest) {
 // ── POST /api/jobs/run?job=<name> — run a job ─────────────────────────────────
 
 export async function POST(request: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
-  }
-  const { tenantId } = authz;
-
   const start = Date.now();
 
   if (!isJobAuthorized(request)) {
