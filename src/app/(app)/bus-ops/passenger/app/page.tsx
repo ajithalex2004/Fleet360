@@ -2,26 +2,19 @@
 /**
  * /bus-ops/passenger/app — Mobile-first PWA shell for the Staff Rider.
  *
- * The "mobile app" lives here as a single-page experience with bottom
- * navigation. It uses the same data endpoints as the desktop passenger
- * page, but the layout is touch-first:
- *   - Large hit targets (≥ 44 px)
+ * Features:
  *   - Bottom tab bar (Today · Trips · Board · Profile)
- *   - Trip cards with quick actions
- *   - PWA install banner when the browser fires `beforeinstallprompt`
- *   - Browser Notification API for trip reminders (when permission granted)
- *
- * PWA bits:
- *   - manifest.json at /manifest.json
- *   - service worker at /sw.js (registered once on mount)
- *   - this page is the start_url, so the OS opens here when launched
- *     from the home screen
+ *   - 1-Click Boarding, Running Late, Skip Trip actions
+ *   - Pickup Location Change Request & "Mark as New Stop Point"
+ *   - Ad-Hoc & Overtime On-Demand Transport Booking
+ *   - PWA install banner + Push notification reminders
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Bus, Bell, MapPin, CheckCircle2, AlertTriangle, Clock,
   User, ListChecks, Wifi, WifiOff, X, RefreshCw, ChevronRight,
   Play, SkipForward, Hourglass, Navigation, Zap, QrCode, Send, Ticket, Car,
+  Crosshair, LocateFixed, CheckSquare, Square,
 } from 'lucide-react';
 import { useFetchedData, fetchOnce } from '@/hooks/useFetchedData';
 
@@ -67,6 +60,13 @@ export default function MobilePassengerApp() {
   const [actionInFlight, setActionInFlight] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
+  // Stop Change Modal State
+  const [showStopModal, setShowStopModal] = useState(false);
+  const [stopChangeTargetTripId, setStopChangeTargetTripId] = useState<string | null>(null);
+
+  // Adhoc Request Modal State
+  const [showAdhocModal, setShowAdhocModal] = useState(false);
+
   // Online status
   useEffect(() => {
     if (typeof navigator === 'undefined') return;
@@ -95,61 +95,11 @@ export default function MobilePassengerApp() {
     return () => window.removeEventListener('beforeinstallprompt', onPrompt);
   }, []);
 
-  // Data: today's trips + week-ahead
+  // Data: today's trips
   const todayRes = useFetchedData<Today>('/api/bus-ops/passenger/today');
   const today = todayRes.data;
 
-  // PWA: subscribe to push once permission is granted + we know the staff employeeId.
-  // The PWA does NOT have its own login — the admin tenant supplies the
-  // employeeId via URL search params (?employeeId=EMP-001) or via the
-  // /api/bus-ops/passenger/today response. We store it in sessionStorage.
-  const [pushSubscribed, setPushSubscribed] = useState(false);
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (notificationPermission !== 'granted') return;
-    if (!('serviceWorker' in navigator)) return;
-    const employeeId =
-      sessionStorage.getItem('fleet360.employeeId') ||
-      new URL(window.location.href).searchParams.get('employeeId') ||
-      today?.staff?.employeeId;
-    if (!employeeId) return;
-    sessionStorage.setItem('fleet360.employeeId', employeeId);
-
-    (async () => {
-      try {
-        const reg = await navigator.serviceWorker.ready;
-        let sub = await reg.pushManager.getSubscription();
-        if (!sub) {
-          const keyRes = await fetch('/api/push/public-key');
-          if (!keyRes.ok) return;
-          const { publicKey } = await keyRes.json();
-          if (!publicKey) return;
-          sub = await reg.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(publicKey),
-          });
-        }
-        const j = sub.toJSON() as { keys?: { p256dh?: string; auth?: string } };
-        if (!j.keys?.p256dh || !j.keys?.auth) return;
-        const r = await fetch('/api/push/subscribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            endpoint: sub.endpoint,
-            keys: { p256dh: j.keys.p256dh, auth: j.keys.auth },
-            userAgent: navigator.userAgent,
-            employeeId,
-          }),
-        });
-        if (r.ok) setPushSubscribed(true);
-      } catch (e) {
-        console.warn('Push subscribe failed', e);
-      }
-    })();
-  }, [notificationPermission, today?.staff?.employeeId]);
-
-  // Notification reminders — fire a browser notification 10 min before
-  // each of today's SCHEDULED trips.
+  // Notification reminders
   useEffect(() => {
     if (!today || notificationPermission !== 'granted') return;
     const reminders = today.trips
@@ -189,10 +139,10 @@ export default function MobilePassengerApp() {
     setActionFeedback(null);
     try {
       const url = action === 'board'
-        ? `/api/bus-ops/passenger/board` // existing endpoint
+        ? `/api/bus-ops/passenger/board`
         : action === 'skip'
-        ? `/api/bus-ops/passenger/${passengerId}/skip` // new
-        : `/api/bus-ops/passenger/${passengerId}/running-late`; // new
+        ? `/api/bus-ops/passenger/${passengerId}/skip`
+        : `/api/bus-ops/passenger/${passengerId}/running-late`;
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -212,6 +162,11 @@ export default function MobilePassengerApp() {
       setActionInFlight(null);
       setTimeout(() => setActionFeedback(null), 3500);
     }
+  };
+
+  const openStopChangeModal = (tripPassengerId?: string) => {
+    setStopChangeTargetTripId(tripPassengerId || null);
+    setShowStopModal(true);
   };
 
   return (
@@ -261,11 +216,59 @@ export default function MobilePassengerApp() {
 
       {/* Tab content */}
       <main className="flex-1 p-4 pb-24 max-w-2xl mx-auto w-full">
-        {tab === 'today'   && <TodayTab today={today ?? null} onAction={tripAction} actionInFlight={actionInFlight} />}
-        {tab === 'trips'   && <TripsTab today={today ?? null} />}
+        {tab === 'today'   && (
+          <TodayTab
+            today={today ?? null}
+            onAction={tripAction}
+            actionInFlight={actionInFlight}
+            onOpenAdhoc={() => setShowAdhocModal(true)}
+            onOpenStopChange={openStopChangeModal}
+          />
+        )}
+        {tab === 'trips'   && <TripsTab today={today ?? null} onOpenStopChange={openStopChangeModal} />}
         {tab === 'board'   && <BoardTab today={today ?? null} onAction={tripAction} actionInFlight={actionInFlight} />}
-        {tab === 'profile' && <ProfileTab today={today ?? null} notificationPermission={notificationPermission} onAskPerm={askNotificationPermission} />}
+        {tab === 'profile' && (
+          <ProfileTab
+            today={today ?? null}
+            notificationPermission={notificationPermission}
+            onAskPerm={askNotificationPermission}
+            onOpenStopChange={openStopChangeModal}
+          />
+        )}
       </main>
+
+      {/* Modal: Pickup Location & Stop Change */}
+      {showStopModal && (
+        <PickupStopChangeModal
+          staff={today?.staff || null}
+          tripPassengerId={stopChangeTargetTripId}
+          onClose={() => {
+            setShowStopModal(false);
+            setStopChangeTargetTripId(null);
+          }}
+          onSuccess={(msg) => {
+            setShowStopModal(false);
+            setStopChangeTargetTripId(null);
+            setActionFeedback(`✓ ${msg}`);
+            todayRes.refresh();
+            setTimeout(() => setActionFeedback(null), 4000);
+          }}
+        />
+      )}
+
+      {/* Modal: Ad-Hoc / Overtime Ride Request */}
+      {showAdhocModal && (
+        <AdhocRideModal
+          staff={today?.staff || null}
+          onClose={() => setShowAdhocModal(false)}
+          onSuccess={(msg) => {
+            setShowAdhocModal(false);
+            setActionFeedback(`✓ ${msg}`);
+            todayRes.refresh();
+            setTimeout(() => setActionFeedback(null), 4000);
+          }}
+        />
+      )}
 
       {/* Bottom navigation */}
       <nav className="fixed bottom-0 inset-x-0 z-30 bg-slate-900/95 backdrop-blur border-t border-white/10">
@@ -296,19 +299,19 @@ export default function MobilePassengerApp() {
 
 // ── Tab: Today ────────────────────────────────────────────────────────────
 
-function TodayTab({ today, onAction, actionInFlight }: {
+function TodayTab({
+  today,
+  onAction,
+  actionInFlight,
+  onOpenAdhoc,
+  onOpenStopChange,
+}: {
   today: Today | null;
   onAction: (id: string, action: 'late' | 'skip' | 'board', trip: PassengerTrip['trip']) => void;
   actionInFlight: string | null;
+  onOpenAdhoc: () => void;
+  onOpenStopChange: (tripPassengerId?: string) => void;
 }) {
-  const [showAdhocModal, setShowAdhocModal] = useState(false);
-  const [pickupLoc, setPickupLoc] = useState('');
-  const [dropLoc, setDropLoc] = useState('');
-  const [tripDateTime, setTripDateTime] = useState('');
-  const [reason, setReason] = useState('Production Overtime');
-  const [notes, setNotes] = useState('');
-  const [submittingAdhoc, setSubmittingAdhoc] = useState(false);
-
   const [adhocRequests, setAdhocRequests] = useState<any[]>([]);
 
   const loadAdhoc = useCallback(() => {
@@ -322,43 +325,6 @@ function TodayTab({ today, onAction, actionInFlight }: {
   useEffect(() => {
     loadAdhoc();
   }, [loadAdhoc]);
-
-  const handleCreateAdhoc = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!today?.staff?.id || !tripDateTime || !pickupLoc || !dropLoc) return;
-
-    setSubmittingAdhoc(true);
-    try {
-      const res = await fetch('/api/bus-ops/adhoc-requests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          staffMemberId: today.staff.id,
-          tripDate: new Date(tripDateTime).toISOString(),
-          pickupLocation: pickupLoc,
-          dropLocation: dropLoc,
-          reason,
-          notes,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to submit request');
-      }
-
-      setShowAdhocModal(false);
-      setPickupLoc('');
-      setDropLoc('');
-      setTripDateTime('');
-      setNotes('');
-      loadAdhoc();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to request adhoc transport');
-    } finally {
-      setSubmittingAdhoc(false);
-    }
-  };
 
   if (!today) return <Splash label="Loading today's trips…" />;
   const now = new Date();
@@ -385,13 +351,21 @@ function TodayTab({ today, onAction, actionInFlight }: {
             )}
           </div>
 
-          <button
-            onClick={() => setShowAdhocModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs shadow hover:bg-amber-300 transition"
-          >
-            <Zap className="w-3.5 h-3.5" />
-            Ad-Hoc / Overtime
-          </button>
+          <div className="flex flex-col gap-2 items-end">
+            <button
+              onClick={onOpenAdhoc}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs shadow hover:bg-amber-300 transition"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              Ad-Hoc / Overtime
+            </button>
+            <button
+              onClick={() => onOpenStopChange()}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white font-medium text-[11px] transition"
+            >
+              <MapPin className="w-3 h-3" /> Change Stop
+            </button>
+          </div>
         </div>
       </div>
 
@@ -448,123 +422,55 @@ function TodayTab({ today, onAction, actionInFlight }: {
         </div>
       )}
 
-      {/* Scheduled Upcoming Trips */}
-      {upcoming.length === 0 && activeAdhoc.length === 0 ? (
-        <div className="rounded-2xl bg-slate-900/60 border border-white/10 p-6 text-center">
-          <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
-          <p className="text-sm text-slate-200">All trips done for today.</p>
+      {/* Upcoming Trips */}
+      {upcoming.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Upcoming today</h2>
+          {upcoming.map((t) => (
+            <TripCard
+              key={t.passengerId}
+              trip={t}
+              onAction={onAction}
+              actionInFlight={actionInFlight}
+              onOpenStopChange={() => onOpenStopChange(t.passengerId)}
+            />
+          ))}
         </div>
-      ) : (
-        upcoming.map((t) => <TripCard key={t.passengerId} trip={t} onAction={onAction} actionInFlight={actionInFlight} />)
       )}
 
+      {/* Past Trips */}
       {past.length > 0 && (
-        <details className="rounded-2xl bg-slate-900/40 border border-white/10 overflow-hidden">
-          <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-400">Past trips ({past.length})</summary>
-          <div className="p-3 space-y-2">
-            {past.map((t) => <TripCard key={t.passengerId} trip={t} onAction={onAction} actionInFlight={actionInFlight} muted />)}
-          </div>
-        </details>
-      )}
-
-      {/* Ad-Hoc Request Modal */}
-      {showAdhocModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 space-y-3.5 shadow-2xl text-xs">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">
-                  ⚡ On-Demand
-                </span>
-                <h3 className="text-base font-bold text-white mt-0.5">Request Overtime Shuttle</h3>
-              </div>
-              <button
-                onClick={() => setShowAdhocModal(false)}
-                className="text-slate-500 hover:text-slate-300 text-lg leading-none"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateAdhoc} className="space-y-3">
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">Required Pickup Time *</label>
-                <input
-                  type="datetime-local"
-                  value={tripDateTime}
-                  onChange={(e) => setTripDateTime(e.target.value)}
-                  required
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-100 focus:outline-none focus:border-amber-500 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">Pickup Location *</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Plant Gate 4"
-                  value={pickupLoc}
-                  onChange={(e) => setPickupLoc(e.target.value)}
-                  required
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-100 focus:outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">Drop-off Location *</label>
-                <input
-                  type="text"
-                  placeholder="e.g. DIP Accommodation"
-                  value={dropLoc}
-                  onChange={(e) => setDropLoc(e.target.value)}
-                  required
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-100 focus:outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">Reason *</label>
-                <select
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-100 focus:outline-none focus:border-amber-500"
-                >
-                  <option value="Production Overtime">Production Overtime</option>
-                  <option value="Emergency Maintenance">Emergency Maintenance</option>
-                  <option value="Flight / Shift Extension">Flight / Shift Extension</option>
-                  <option value="Hospital Urgent Coverage">Hospital Urgent Coverage</option>
-                </select>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAdhocModal(false)}
-                  disabled={submittingAdhoc}
-                  className="px-3 py-1.5 text-slate-400 hover:text-slate-200"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingAdhoc}
-                  className="flex items-center gap-1.5 px-4 py-2 font-bold text-white bg-amber-600 hover:bg-amber-500 rounded-xl shadow transition disabled:opacity-50"
-                >
-                  <Send className="w-3 h-3" />
-                  {submittingAdhoc ? 'Submitting...' : 'Request Transport'}
-                </button>
-              </div>
-            </form>
-          </div>
+        <div className="space-y-3 pt-2">
+          <h2 className="text-xs uppercase tracking-wider text-slate-500 font-semibold">Completed today</h2>
+          {past.map((t) => (
+            <TripCard
+              key={t.passengerId}
+              trip={t}
+              onAction={onAction}
+              actionInFlight={actionInFlight}
+              muted
+            />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function TripCard({ trip, onAction, actionInFlight, muted }: {
-  trip: PassengerTrip; onAction: (id: string, action: 'late' | 'skip' | 'board', trip: PassengerTrip['trip']) => void;
-  actionInFlight: string | null; muted?: boolean;
+// ── Trip Card ─────────────────────────────────────────────────────────────
+
+function TripCard({
+  trip,
+  onAction,
+  actionInFlight,
+  onOpenStopChange,
+  muted,
+}: {
+  trip: PassengerTrip;
+  onAction: (id: string, action: 'late' | 'skip' | 'board', trip: PassengerTrip['trip']) => void;
+  actionInFlight: string | null;
+  onOpenStopChange?: () => void;
+  muted?: boolean;
 }) {
   const t = trip.trip;
   const status = (trip.status ?? 'PENDING').toUpperCase();
@@ -595,13 +501,24 @@ function TripCard({ trip, onAction, actionInFlight, muted }: {
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-[11px] mb-3">
-        <div className="rounded-lg bg-slate-950/60 border border-white/5 px-2.5 py-1.5">
-          <p className="text-slate-500 text-[9px] uppercase tracking-wider">Boarding</p>
-          <p className="text-slate-200">{trip.boardingStop ?? '—'}</p>
+        <div className="rounded-lg bg-slate-950/60 border border-white/5 px-2.5 py-1.5 flex items-center justify-between">
+          <div>
+            <p className="text-slate-500 text-[9px] uppercase tracking-wider">Boarding Stop</p>
+            <p className="text-slate-200 truncate max-w-[140px]">{trip.boardingStop ?? 'Default'}</p>
+          </div>
+          {onOpenStopChange && isFuture && !isBoarded && (
+            <button
+              onClick={onOpenStopChange}
+              title="Change pickup stop for this trip"
+              className="text-cyan-400 hover:text-cyan-300 p-1"
+            >
+              <MapPin className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
         <div className="rounded-lg bg-slate-950/60 border border-white/5 px-2.5 py-1.5">
           <p className="text-slate-500 text-[9px] uppercase tracking-wider">Alighting</p>
-          <p className="text-slate-200">{trip.alightingStop ?? '—'}</p>
+          <p className="text-slate-200 truncate">{trip.alightingStop ?? '—'}</p>
         </div>
       </div>
 
@@ -637,13 +554,21 @@ function TripCard({ trip, onAction, actionInFlight, muted }: {
   );
 }
 
-// ── Tab: Trips (week ahead placeholder) ──────────────────────────────────
+// ── Tab: Trips ────────────────────────────────────────────────────────────
 
-function TripsTab({ today }: { today: Today | null }) {
+function TripsTab({ today, onOpenStopChange }: { today: Today | null; onOpenStopChange: (id?: string) => void }) {
   return (
     <div className="space-y-3">
-      <h2 className="text-sm font-bold text-white">Trips</h2>
-      <p className="text-[11px] text-slate-400">Today&apos;s roster. Multi-day view is on the roadmap.</p>
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-bold text-white">Trips & Schedule</h2>
+        <button
+          onClick={() => onOpenStopChange()}
+          className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
+        >
+          <MapPin className="w-3.5 h-3.5" /> Update Pickup Stop
+        </button>
+      </div>
+      <p className="text-[11px] text-slate-400">Today&apos;s assigned roster.</p>
       {today ? (
         <div className="space-y-2">
           {today.trips.map((t) => (
@@ -652,7 +577,10 @@ function TripsTab({ today }: { today: Today | null }) {
                 <span className="text-white font-semibold">{t.trip.route.name ?? `${t.trip.route.origin} → ${t.trip.route.destination}`}</span>
                 <span className="text-slate-400 font-mono">{timeOf(t.trip.departureTime)}</span>
               </div>
-              <p className="text-slate-500 mt-0.5">{relativeOf(t.trip.departureTime)} · {t.trip.shiftType ?? '—'}</p>
+              <div className="flex items-center justify-between text-slate-500 mt-1">
+                <span>{relativeOf(t.trip.departureTime)} · {t.trip.shiftType ?? '—'}</span>
+                <span className="text-cyan-400">Stop: {t.boardingStop || 'Default'}</span>
+              </div>
             </div>
           ))}
         </div>
@@ -661,7 +589,7 @@ function TripsTab({ today }: { today: Today | null }) {
   );
 }
 
-// ── Tab: Board (live + self-board) ────────────────────────────────────────
+// ── Tab: Board ────────────────────────────────────────────────────────────
 
 function BoardTab({ today, onAction, actionInFlight }: {
   today: Today | null;
@@ -706,9 +634,16 @@ function BoardTab({ today, onAction, actionInFlight }: {
 
 // ── Tab: Profile ────────────────────────────────────────────────────────
 
-function ProfileTab({ today, notificationPermission, onAskPerm }: {
-  today: Today | null; notificationPermission: NotificationPermission;
+function ProfileTab({
+  today,
+  notificationPermission,
+  onAskPerm,
+  onOpenStopChange,
+}: {
+  today: Today | null;
+  notificationPermission: NotificationPermission;
   onAskPerm: () => void;
+  onOpenStopChange: () => void;
 }) {
   return (
     <div className="space-y-4">
@@ -723,9 +658,21 @@ function ProfileTab({ today, notificationPermission, onAskPerm }: {
             <p className="text-[11px] text-slate-400">{today?.staff?.department ?? '—'}</p>
           </div>
         </div>
-        <div className="rounded-lg bg-slate-950/60 border border-white/5 px-3 py-2 text-[11px]">
-          <p className="text-slate-500 text-[10px] uppercase tracking-wider">Default stop</p>
-          <p className="text-slate-200">{today?.staff?.defaultStopName ?? '—'}</p>
+
+        {/* Pickup Stop Management */}
+        <div className="rounded-xl bg-slate-950/80 border border-white/10 p-3 flex items-center justify-between">
+          <div>
+            <p className="text-slate-500 text-[10px] uppercase tracking-wider">Default Pickup Stop</p>
+            <p className="text-slate-100 font-semibold text-xs mt-0.5">
+              {today?.staff?.defaultStopName || 'Not Set'}
+            </p>
+          </div>
+          <button
+            onClick={onOpenStopChange}
+            className="px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 text-xs font-semibold flex items-center gap-1 transition"
+          >
+            <MapPin className="w-3.5 h-3.5" /> Change
+          </button>
         </div>
       </div>
 
@@ -749,10 +696,338 @@ function ProfileTab({ today, notificationPermission, onAskPerm }: {
       <div className="rounded-2xl bg-slate-900/60 border border-white/10 p-5">
         <h3 className="text-sm font-bold text-white mb-3">App info</h3>
         <div className="space-y-2 text-[11px] text-slate-300">
-          <Row label="Version" value="Fleet360 Passenger v1.0" />
-          <Row label="Build" value="PWA · standalone" />
-          <Row label="Support" value="support@fleet360.example" />
+          <Row label="Version" value="Fleet360 Passenger v2.0" />
+          <Row label="Features" value="Live Boarding · Stop Change · Ad-Hoc" />
+          <Row label="Build" value="PWA & Mobile Native" />
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal: Pickup Location & Stop Change ──────────────────────────────────
+
+function PickupStopChangeModal({
+  staff,
+  tripPassengerId,
+  onClose,
+  onSuccess,
+}: {
+  staff: Today['staff'] | null;
+  tripPassengerId: string | null;
+  onClose: () => void;
+  onSuccess: (msg: string) => void;
+}) {
+  const [address, setAddress] = useState(staff?.defaultStopName || '');
+  const [lat, setLat] = useState<number | undefined>(undefined);
+  const [lng, setLng] = useState<number | undefined>(undefined);
+  const [markPermanent, setMarkPermanent] = useState(true);
+  const [reason, setReason] = useState('Home relocation / Preferred stop update');
+  const [detectingGps, setDetectingGps] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleGpsDetect = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser');
+      return;
+    }
+    setDetectingGps(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLat(pos.coords.latitude);
+        setLng(pos.coords.longitude);
+        setAddress(`GPS (${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)})`);
+        setDetectingGps(false);
+      },
+      (err) => {
+        alert('Could not detect GPS location: ' + err.message);
+        setDetectingGps(false);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!address.trim()) return;
+
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/bus-ops/passenger/change-pickup-stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          staffMemberId: staff?.id,
+          employeeId: staff?.employeeId,
+          newLocationAddress: address.trim(),
+          latitude: lat,
+          longitude: lng,
+          markAsPermanentNewStop: markPermanent,
+          tripPassengerId: tripPassengerId || undefined,
+          reason,
+        }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to update pickup stop');
+      }
+
+      const json = await res.json();
+      onSuccess(json.message || 'Pickup stop updated successfully');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error updating pickup stop');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-300">
+              <MapPin className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white">Change Pickup Location</h3>
+              <p className="text-[11px] text-slate-400">Request stop update or mark as new stop</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-white">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+          <div>
+            <label className="block text-slate-300 font-semibold mb-1">New Pickup Location Address *</label>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="e.g. Dubai Marina Mall / Building 4"
+                required
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-cyan-500"
+              />
+              <button
+                type="button"
+                onClick={handleGpsDetect}
+                disabled={detectingGps}
+                title="Use Current GPS Location"
+                className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 transition"
+              >
+                <LocateFixed className={`w-4 h-4 ${detectingGps ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+          </div>
+
+          {/* Mark as Permanent New Stop Point Toggle */}
+          <div
+            onClick={() => setMarkPermanent(!markPermanent)}
+            className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-start gap-2.5 cursor-pointer hover:border-cyan-500/50 transition"
+          >
+            <div className="mt-0.5 text-cyan-400">
+              {markPermanent ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4 text-slate-600" />}
+            </div>
+            <div>
+              <div className="font-semibold text-white text-xs">
+                Mark this location as my permanent new Stop Point
+              </div>
+              <div className="text-[10px] text-slate-400 mt-0.5">
+                Automatically sets this as your default stop for all upcoming shifts.
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-slate-300 font-semibold mb-1">Reason for Change</label>
+            <select
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-cyan-500"
+            >
+              <option value="Home relocation / Preferred stop update">Home relocation / Preferred stop update</option>
+              <option value="Temporary project / site deployment">Temporary project / site deployment</option>
+              <option value="Traffic avoidance / Walking distance">Traffic avoidance / Walking distance</option>
+              <option value="Emergency shift coverage">Emergency shift coverage</option>
+            </select>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={submitting}
+              className="px-3.5 py-2 text-slate-400 hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold shadow-lg shadow-cyan-600/30 transition disabled:opacity-50"
+            >
+              {submitting ? 'Saving...' : 'Update Stop'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal: Ad-Hoc / Overtime Ride Request ──────────────────────────────────
+
+function AdhocRideModal({
+  staff,
+  onClose,
+  onSuccess,
+}: {
+  staff: Today['staff'] | null;
+  onClose: () => void;
+  onSuccess: (msg: string) => void;
+}) {
+  const [pickupLoc, setPickupLoc] = useState(staff?.defaultStopName || '');
+  const [dropLoc, setDropLoc] = useState('Factory HQ / Main Depot');
+  const [tripDateTime, setTripDateTime] = useState('');
+  const [reason, setReason] = useState('Production Overtime');
+  const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!staff?.id || !tripDateTime || !pickupLoc || !dropLoc) return;
+
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/bus-ops/adhoc-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          staffMemberId: staff.id,
+          tripDate: new Date(tripDateTime).toISOString(),
+          pickupLocation: pickupLoc,
+          dropLocation: dropLoc,
+          reason,
+          notes,
+          department: staff.department || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to submit ad-hoc transport request');
+      }
+
+      onSuccess('Ad-Hoc transport request submitted. Evaluating optimal dispatch match.');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error submitting ad-hoc request');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-300">
+              <Zap className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white">Ad-Hoc / Overtime Ride</h3>
+              <p className="text-[11px] text-slate-400">On-demand transport & route fit</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-white">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3 text-xs">
+          <div>
+            <label className="block text-slate-300 font-medium mb-1">Required Date & Time *</label>
+            <input
+              type="datetime-local"
+              value={tripDateTime}
+              onChange={(e) => setTripDateTime(e.target.value)}
+              required
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-slate-300 font-medium mb-1">Pickup Location *</label>
+            <input
+              type="text"
+              placeholder="e.g. Al Quoz Gate 4"
+              value={pickupLoc}
+              onChange={(e) => setPickupLoc(e.target.value)}
+              required
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-slate-300 font-medium mb-1">Destination / Drop Location *</label>
+            <input
+              type="text"
+              placeholder="e.g. DIP Staff Accommodation"
+              value={dropLoc}
+              onChange={(e) => setDropLoc(e.target.value)}
+              required
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-slate-300 font-medium mb-1">Reason *</label>
+            <select
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-amber-500"
+            >
+              <option value="Production Overtime">Production Overtime</option>
+              <option value="Emergency Maintenance">Emergency Maintenance</option>
+              <option value="Shift Extension">Shift Extension</option>
+              <option value="Urgent Project Delivery">Urgent Project Delivery</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-slate-300 font-medium mb-1">Special Notes</label>
+            <input
+              type="text"
+              placeholder="e.g. Traveling with 2 heavy toolboxes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={submitting}
+              className="px-3.5 py-2 text-slate-400 hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="flex items-center gap-1.5 px-4 py-2 font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-xl shadow transition disabled:opacity-50"
+            >
+              <Send className="w-3.5 h-3.5" />
+              {submitting ? 'Submitting...' : 'Request Ride'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -774,15 +1049,4 @@ function Splash({ label }: { label: string }) {
       {label}
     </div>
   );
-}
-
-// Convert a base64url VAPID public key to a Uint8Array for
-// PushManager.subscribe({ applicationServerKey: ... }).
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const raw = typeof atob === 'function' ? atob(base64) : Buffer.from(base64, 'base64').toString('binary');
-  const output = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; ++i) output[i] = raw.charCodeAt(i);
-  return output;
 }

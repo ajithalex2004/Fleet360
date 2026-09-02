@@ -55,7 +55,7 @@ export function evaluateAdhocFulfillmentSync(params: {
   pickupLocation: string;
   dropLocation: string;
   passengerCount: number;
-  scheduledTrips: Array<{
+  scheduledTrips?: Array<{
     id: string;
     tripNumber: string | null;
     departureTime: string;
@@ -65,13 +65,13 @@ export function evaluateAdhocFulfillmentSync(params: {
     vehicle?: { id: string; vehicleCode: string; licensePlate?: string };
     driver?: { id: string; firstName: string; lastName: string };
   }>;
-  standbyVehicles: Array<{
+  standbyVehicles?: Array<{
     id: string;
     vehicleCode: string;
     licensePlate?: string;
     capacity?: number;
   }>;
-  availableDrivers: Array<{
+  availableDrivers?: Array<{
     id: string;
     firstName: string;
     lastName: string;
@@ -80,9 +80,12 @@ export function evaluateAdhocFulfillmentSync(params: {
   const reqTime = new Date(params.tripDate).getTime();
   const count = Math.max(1, params.passengerCount || 1);
   const candidates: FulfillmentCandidate[] = [];
+  const scheduledTrips = params.scheduledTrips || [];
+  const standbyVehicles = params.standbyVehicles || [];
+  const availableDrivers = params.availableDrivers || [];
 
   // 1. Tier 1: Check for existing scheduled trips with spare capacity within +/- 45 minutes
-  for (const trip of params.scheduledTrips) {
+  for (const trip of scheduledTrips) {
     const depTime = new Date(trip.departureTime).getTime();
     const diffMins = Math.abs(depTime - reqTime) / (60 * 1000);
 
@@ -111,9 +114,9 @@ export function evaluateAdhocFulfillmentSync(params: {
   }
 
   // 2. Tier 2: Check for standby internal vehicle and available driver
-  if (params.standbyVehicles.length > 0 && params.availableDrivers.length > 0) {
-    const veh = params.standbyVehicles[0];
-    const drv = params.availableDrivers[0];
+  if (standbyVehicles.length > 0 && availableDrivers.length > 0) {
+    const veh = standbyVehicles[0];
+    const drv = availableDrivers[0];
     candidates.push({
       tier: 'STANDBY_SHUTTLE',
       title: 'Tier 2: Dedicated Standby Shuttle',
