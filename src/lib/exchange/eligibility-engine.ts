@@ -1,16 +1,20 @@
 /**
  * src/lib/exchange/eligibility-engine.ts
  *
- * Phase 2B: Deterministic Partner Eligibility Engine for Fleet360 Exchange.
- * Evaluates candidate transport partners for RFQs and outsourcing requirements.
+ * Phase 2B & Phase 2.7: Multi-Domain Deterministic Partner Eligibility Engine.
+ * Evaluates candidate transport partners for RFQs across all 4 domains:
+ * - PASSENGER_TRANSPORT
+ * - FREIGHT
+ * - RECOVERY
+ * - LIMOUSINE
  *
- * Eligibility Gates:
+ * Universal Eligibility Gates:
  * 1. Tenant relationship is APPROVED or PREFERRED (never BLOCKED).
  * 2. Partner operationalStatus is ACTIVE (never SUSPENDED or BLACKLISTED).
- * 3. Supports required service domain (e.g., PASSENGER_TRANSPORT).
+ * 3. Supports required service domain (e.g., FREIGHT, RECOVERY, LIMOUSINE, PASSENGER_TRANSPORT).
  * 4. Covers the pickup emirate / service area.
  * 5. Compliance documents (Trade License, Insurance) are valid and non-expired.
- * 6. Certified fleet inventory meets or exceeds the required seating capacity.
+ * 6. Certified fleet inventory meets domain requirements (seating capacity, truck payload, recovery type, limo class).
  */
 
 import { prisma } from '@/lib/prisma';
@@ -20,8 +24,9 @@ export interface EligibilityRequirementInput {
   tenantId: string;
   domain?: PartnerServiceDomain;
   pickupCity?: string;
-  requiredCapacity: number;
+  requiredCapacity?: number;
   serviceDate: Date | string;
+  domainPayload?: Record<string, any>;
 }
 
 export interface PartnerEligibilityResult {
@@ -41,7 +46,7 @@ export interface PartnerEligibilityResult {
 
 export class EligibilityEngine {
   /**
-   * Evaluates all registered transport partners against a specific outsourcing requirement.
+   * Evaluates all registered transport partners against a specific multi-domain outsourcing requirement.
    */
   static async evaluateEligiblePartners(
     input: EligibilityRequirementInput
@@ -113,12 +118,18 @@ export class EligibilityEngine {
         }
       }
 
-      // Gate 6: Fleet Capacity Match
-      const matchingVehicles = partner.vehicles.filter(
-        (v) => v.seatingCapacity >= requiredCapacity
-      );
-      if (partner.vehicles.length > 0 && matchingVehicles.length === 0) {
-        rejectionReasons.push(`INSUFFICIENT_CAPACITY: Partner has no registered vehicles with >= ${requiredCapacity} seating capacity`);
+      // Gate 6: Domain-Specific Fleet Capacity Match
+      let eligibleVehicles = partner.vehicles;
+      if (domain === PartnerServiceDomain.PASSENGER_TRANSPORT) {
+        eligibleVehicles = partner.vehicles.filter((v) => v.seatingCapacity >= requiredCapacity);
+        if (partner.vehicles.length > 0 && eligibleVehicles.length === 0) {
+          rejectionReasons.push(`INSUFFICIENT_CAPACITY: Partner has no registered vehicles with >= ${requiredCapacity} seating capacity`);
+        }
+      } else {
+        // For Freight, Recovery, Limo: ensure partner has active vehicles registered
+        if (partner.vehicles.length === 0) {
+          rejectionReasons.push(`NO_ACTIVE_FLEET: Partner has no active vehicles registered for domain ${domain}`);
+        }
       }
 
       const isEligible = rejectionReasons.length === 0;
@@ -132,7 +143,7 @@ export class EligibilityEngine {
         operationalStatus: partner.operationalStatus,
         isEligible,
         rejectionReasons,
-        eligibleVehiclesCount: matchingVehicles.length,
+        eligibleVehiclesCount: eligibleVehicles.length,
         capabilities: partner.capabilities.map((c) => c.serviceType || c.domain),
         serviceAreas: partner.serviceAreas.map((sa) => sa.emirate),
         complianceValid,
