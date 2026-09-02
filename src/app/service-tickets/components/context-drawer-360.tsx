@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   X,
   Car,
@@ -20,8 +20,12 @@ import {
   CheckCircle2,
   ExternalLink,
   RefreshCw,
+  Truck,
+  Zap,
+  RotateCcw,
 } from 'lucide-react';
 import type { TicketContext360Data } from '@/lib/service-tickets/context-360-engine';
+import type { RecoveryOptionsData } from '@/lib/service-tickets/towing-recovery-engine';
 
 interface ContextDrawer360Props {
   ticketId: string | null;
@@ -34,37 +38,90 @@ interface ContextDrawer360Props {
 export function ContextDrawer360({ ticketId, onClose, onStatusChange }: ContextDrawer360Props) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<TicketContext360Data | null>(null);
+  const [recoveryOptions, setRecoveryOptions] = useState<RecoveryOptionsData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [dispatching, setDispatching] = useState(false);
+  const [provisioning, setProvisioning] = useState(false);
+
+  const fetchContext = useCallback(async (id: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [resContext, resRecovery] = await Promise.all([
+        fetch(`/api/service-tickets/${id}/context-360`),
+        fetch(`/api/service-tickets/${id}/recovery-options`),
+      ]);
+
+      if (!resContext.ok) throw new Error('Failed to load 360 context');
+      const jsonContext = await resContext.json();
+      setData(jsonContext.context360);
+
+      if (resRecovery.ok) {
+        const jsonRecovery = await resRecovery.json();
+        setRecoveryOptions(jsonRecovery.data);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error loading context');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!ticketId) {
       setData(null);
+      setRecoveryOptions(null);
+      setActionNotice(null);
       return;
     }
+    fetchContext(ticketId);
+  }, [ticketId, fetchContext]);
 
-    let active = true;
-    setLoading(true);
-    setError(null);
-
-    fetch(`/api/service-tickets/${ticketId}/context-360`)
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to load 360 context');
-        return res.json();
-      })
-      .then((json) => {
-        if (active) setData(json.context360);
-      })
-      .catch((e) => {
-        if (active) setError(e.message);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
+  const handleDispatchTowing = async (vendorId: string, vendorName: string) => {
+    if (!ticketId) return;
+    setDispatching(true);
+    setActionNotice(null);
+    try {
+      const res = await fetch(`/api/service-tickets/${ticketId}/dispatch-towing`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vendorId, vendorName }),
       });
+      if (!res.ok) throw new Error('Failed to dispatch recovery vendor');
+      const json = await res.json();
+      setActionNotice(`✅ ${json.result?.dispatchMessage || 'Recovery dispatched successfully'}`);
+      await fetchContext(ticketId);
+    } catch (e) {
+      setActionNotice(e instanceof Error ? `❌ ${e.message}` : '❌ Dispatch failed');
+    } finally {
+      setDispatching(false);
+    }
+  };
 
-    return () => {
-      active = false;
-    };
-  }, [ticketId]);
+  const handleProvisionReplacement = async (replacementVehicleId: string) => {
+    if (!ticketId) return;
+    setProvisioning(true);
+    setActionNotice(null);
+    try {
+      const res = await fetch(`/api/service-tickets/${ticketId}/provision-replacement`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ replacementVehicleId }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to provision replacement');
+      }
+      const json = await res.json();
+      setActionNotice(`✅ ${json.result?.message || 'Replacement provisioned'}`);
+      await fetchContext(ticketId);
+    } catch (e) {
+      setActionNotice(e instanceof Error ? `❌ ${e.message}` : '❌ Provisioning failed');
+    } finally {
+      setProvisioning(false);
+    }
+  };
 
   if (!ticketId) return null;
 
@@ -89,6 +146,16 @@ export function ContextDrawer360({ ticketId, onClose, onStatusChange }: ContextD
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Action Notice */}
+        {actionNotice && (
+          <div className="p-3 bg-slate-900 border-b border-slate-800 text-xs text-emerald-300 flex items-center justify-between">
+            <span>{actionNotice}</span>
+            <button onClick={() => setActionNotice(null)} className="text-slate-500 hover:text-white">
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Drawer Body */}
         <div className="flex-1 overflow-y-auto p-5 space-y-5 text-xs">
@@ -132,7 +199,114 @@ export function ContextDrawer360({ ticketId, onClose, onStatusChange }: ContextD
                 </div>
               )}
 
-              {/* 1. Vehicle Health & Telematics 360 */}
+              {/* 1. Towing & Replacement Hub (Pillar 4) */}
+              <div className="rounded-2xl border border-amber-500/30 bg-amber-950/10 p-4 space-y-3">
+                <div className="flex items-center justify-between border-b border-amber-500/20 pb-2">
+                  <div className="flex items-center gap-2 text-amber-400 font-semibold">
+                    <Truck className="w-4 h-4" />
+                    <span>Towing Recovery & Vehicle Swap Hub</span>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    Pillar 4 Active
+                  </span>
+                </div>
+
+                {/* Towing Dispatch Status / Trigger */}
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold text-slate-300 flex items-center justify-between">
+                    <span>1-Click Recovery Vendor Dispatch</span>
+                    {recoveryOptions?.isTowingDispatched && (
+                      <span className="text-emerald-400 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> Dispatched (ETA:{' '}
+                        {recoveryOptions.towingDispatchDetails?.etaMinutes}m)
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2">
+                    {recoveryOptions?.approvedVendors.map((vendor) => (
+                      <div
+                        key={vendor.id}
+                        className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between"
+                      >
+                        <div>
+                          <div className="font-semibold text-white text-[11px] flex items-center gap-1.5">
+                            {vendor.name}
+                            <span className="text-[10px] text-amber-400 font-mono">
+                              ★ {vendor.rating}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            {vendor.coverageEmirate} · Phone: {vendor.phone}
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => handleDispatchTowing(vendor.id, vendor.name)}
+                          disabled={dispatching || recoveryOptions?.isTowingDispatched}
+                          className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-semibold text-[11px] flex items-center gap-1 transition-colors"
+                        >
+                          <Zap className="w-3 h-3 text-amber-200" />
+                          {recoveryOptions?.isTowingDispatched ? 'Dispatched' : `Dispatch (${vendor.estimatedEtaMinutes}m)`}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Replacement Vehicle Swap Pool */}
+                <div className="space-y-2 pt-2 border-t border-amber-500/20">
+                  <div className="text-[11px] font-semibold text-slate-300 flex items-center justify-between">
+                    <span>Available Replacement Fleet Pool ({data.vehicle?.make || 'Same Category'})</span>
+                    {recoveryOptions?.isReplacementProvisioned && (
+                      <span className="text-emerald-400 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> Swap Active (
+                        {recoveryOptions.replacementDetails?.replacementPlate})
+                      </span>
+                    )}
+                  </div>
+
+                  {recoveryOptions?.availableReplacements &&
+                  recoveryOptions.availableReplacements.length > 0 ? (
+                    <div className="grid grid-cols-1 gap-2">
+                      {recoveryOptions.availableReplacements.map((rep) => (
+                        <div
+                          key={rep.id}
+                          className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between"
+                        >
+                          <div>
+                            <div className="font-semibold text-white text-[11px]">
+                              {rep.make} {rep.model} ({rep.year}) ·{' '}
+                              <span className="text-emerald-400 font-mono">
+                                {rep.licensePlate}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              Fuel: {rep.fuelLevel}% · Mileage:{' '}
+                              {rep.currentMileage?.toLocaleString()} km
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => handleProvisionReplacement(rep.id)}
+                            disabled={provisioning || recoveryOptions?.isReplacementProvisioned}
+                            className="px-3 py-1 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold text-[11px] flex items-center gap-1 transition-colors"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            {recoveryOptions?.isReplacementProvisioned ? 'Swapped' : 'Provision Swap'}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-slate-500 text-[11px]">
+                      No available replacement vehicles found in this depot pool.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 2. Vehicle Health & Telematics 360 */}
               <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                   <div className="flex items-center gap-2 text-cyan-400 font-semibold">
@@ -210,7 +384,7 @@ export function ContextDrawer360({ ticketId, onClose, onStatusChange }: ContextD
                 )}
               </div>
 
-              {/* 2. Driver & Contract 360 */}
+              {/* 3. Driver & Contract 360 */}
               <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                   <div className="flex items-center gap-2 text-violet-400 font-semibold">
@@ -272,7 +446,7 @@ export function ContextDrawer360({ ticketId, onClose, onStatusChange }: ContextD
                 </div>
               </div>
 
-              {/* 3. Recent 90-Day Incident History */}
+              {/* 4. Recent 90-Day Incident History */}
               <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                   <div className="flex items-center gap-2 text-amber-400 font-semibold">
