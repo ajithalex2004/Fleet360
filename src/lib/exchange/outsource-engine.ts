@@ -2,19 +2,29 @@
  * src/lib/exchange/outsource-engine.ts
  *
  * Core Outsourcing Workflow Engine for Fleet360 Operations & Exchange.
- * Handles Outsource Requests, Partner Invitations, Quotes with Revisions, Awards, and Execution Tokens.
+ * Hardened for Phase 1.5 Production Readiness:
+ * - SHA-256 hashed driver execution tokens (zero plaintext in DB)
+ * - Strict backend state machine enforcement (ASSIGNED -> REACHED -> STARTED -> COMPLETED)
+ * - Server-side compliance validation gates (vehicle mulkiya, driver license & RTA permits)
+ * - TenantPartnerRelationship authorization validation
+ * - Immutable execution telemetry via PartnerTripEvent
+ * - Concurrency and race-condition defenses
  */
 
 import { prisma } from '@/lib/prisma';
 import { logAudit } from '@/lib/audit';
 import { raiseAlert } from '@/lib/alerts/raise';
-import { randomBytes } from 'crypto';
+import { randomBytes, createHash } from 'crypto';
 import {
   OutsourcePricingMethod,
   OutsourceRequestStatus,
   PartnerQuoteStatus,
   PartnerServiceDomain,
 } from '@prisma/client';
+
+export function hashDriverToken(token: string): string {
+  return createHash('sha256').update(token.trim()).digest('hex');
+}
 
 export interface CreateOutsourceRequestInput {
   tenantId: string;
@@ -83,6 +93,21 @@ export class OutsourceEngine {
     });
     const requestNumber = `OUT-${new Date().getFullYear()}-${String(count + 1).padStart(5, '0')}`;
 
+    // Filter invited partners against TenantPartnerRelationship blocklists
+    let allowedPartnerIds = input.invitedPartnerIds;
+    if (allowedPartnerIds && allowedPartnerIds.length > 0) {
+      const blockedRelationships = await prisma.tenantPartnerRelationship.findMany({
+        where: {
+          tenantId: input.tenantId,
+          partnerId: { in: allowedPartnerIds },
+          status: 'BLOCKED',
+        },
+        select: { partnerId: true },
+      });
+      const blockedSet = new Set(blockedRelationships.map((b) => b.partnerId));
+      allowedPartnerIds = allowedPartnerIds.filter((pid) => !blockedSet.has(pid));
+    }
+
     const request = await prisma.outsourceRequest.create({
       data: {
         tenantId: input.tenantId,
@@ -105,9 +130,9 @@ export class OutsourceEngine {
         specialInstructions: input.specialInstructions,
         closesAt,
         createdBy: input.createdByUserId,
-        invitedPartners: input.invitedPartnerIds
+        invitedPartners: allowedPartnerIds
           ? {
-              create: input.invitedPartnerIds.map((pid) => ({
+              create: allowedPartnerIds.map((pid) => ({
                 partnerId: pid,
                 status: 'INVITED',
               })),
@@ -213,7 +238,7 @@ export class OutsourceEngine {
   }
 
   /**
-   * Award an Outsource Quote (Transaction-Safe)
+   * Award an Outsource Quote (Transaction-Safe with Row Locking & State Checks)
    */
   static async awardQuote(input: AwardQuoteInput) {
     return prisma.$transaction(async (tx) => {
@@ -237,6 +262,19 @@ export class OutsourceEngine {
       if (!quote) throw new Error('Quote not found for this request');
       if (quote.status !== PartnerQuoteStatus.SUBMITTED) {
         throw new Error(`Quote status is ${quote.status}; only SUBMITTED quotes can be awarded`);
+      }
+
+      // Check tenant relationship authorization
+      const relationship = await tx.tenantPartnerRelationship.findUnique({
+        where: {
+          tenantId_partnerId: {
+            tenantId: input.tenantId,
+            partnerId: quote.partnerId,
+          },
+        },
+      });
+      if (relationship && relationship.status === 'BLOCKED') {
+        throw new Error(`Partner ${quote.partner.legalName} is blocked by this tenant`);
       }
 
       // 2. Snapshot commercial terms
@@ -316,11 +354,66 @@ export class OutsourceEngine {
   }
 
   /**
-   * Assign Vehicle & Driver and generate secure driver execution link
+   * Assign Vehicle & Driver with Server-Side Compliance Enforcement Gates
+   * and SHA-256 Hashed Driver Execution Token
    */
   static async assignVehicleAndDriver(input: AssignVehicleDriverInput) {
-    const token = randomBytes(32).toString('hex');
+    const award = await prisma.outsourceAward.findUnique({
+      where: { id: input.awardId },
+      include: {
+        partner: {
+          include: { complianceDocuments: true },
+        },
+      },
+    });
+
+    if (!award) throw new Error('Award not found');
+    if (award.partnerId !== input.partnerId) {
+      throw new Error('Partner unauthorized for this award');
+    }
+
+    // 1. Compliance Gate: Partner Operational Status
+    if (award.partner.operationalStatus !== 'ACTIVE') {
+      throw new Error(`Partner is not in ACTIVE operational status (current: ${award.partner.operationalStatus})`);
+    }
+
+    // 2. Compliance Gate: Vehicle Mulkiya
+    if (input.vehicleId) {
+      const vehicle = await prisma.partnerVehicle.findUnique({
+        where: { id: input.vehicleId },
+      });
+      if (vehicle) {
+        if (!vehicle.isActive) throw new Error(`Vehicle ${vehicle.licensePlate} is inactive`);
+        if (vehicle.mulkiyaExpiry && new Date(vehicle.mulkiyaExpiry) < new Date()) {
+          throw new Error(`Vehicle ${vehicle.licensePlate} Mulkiya registration expired on ${new Date(vehicle.mulkiyaExpiry).toLocaleDateString()}`);
+        }
+      }
+    }
+
+    // 3. Compliance Gate: Driver License & Regulatory Permit
+    if (input.driverId) {
+      const driver = await prisma.partnerDriver.findUnique({
+        where: { id: input.driverId },
+      });
+      if (driver) {
+        if (!driver.isActive) throw new Error(`Driver ${driver.fullName} is inactive`);
+        if (driver.licenseExpiry && new Date(driver.licenseExpiry) < new Date()) {
+          throw new Error(`Driver ${driver.fullName} driving license expired on ${new Date(driver.licenseExpiry).toLocaleDateString()}`);
+        }
+        if (driver.permitExpiry && new Date(driver.permitExpiry) < new Date()) {
+          throw new Error(`Driver ${driver.fullName} RTA/regulatory permit expired on ${new Date(driver.permitExpiry).toLocaleDateString()}`);
+        }
+      }
+    }
+
+    // 4. Generate 64-character raw token and compute SHA-256 hash
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = hashDriverToken(rawToken);
     const tokenExp = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    const existingAssignment = await prisma.partnerAssignment.findUnique({
+      where: { awardId: input.awardId },
+    });
 
     const assignment = await prisma.partnerAssignment.upsert({
       where: { awardId: input.awardId },
@@ -330,8 +423,9 @@ export class OutsourceEngine {
         driverId: input.driverId,
         driverName: input.driverName.trim(),
         driverPhone: input.driverPhone.trim(),
-        driverToken: token,
+        driverTokenHash: tokenHash,
         driverTokenExp: tokenExp,
+        isTokenRevoked: false,
         driverAssignedAt: new Date(),
         updatedAt: new Date(),
       },
@@ -343,9 +437,23 @@ export class OutsourceEngine {
         driverId: input.driverId,
         driverName: input.driverName.trim(),
         driverPhone: input.driverPhone.trim(),
-        driverToken: token,
+        driverTokenHash: tokenHash,
         driverTokenExp: tokenExp,
+        isTokenRevoked: false,
         driverAssignedAt: new Date(),
+      },
+    });
+
+    // Record Immutable PartnerTripEvent
+    await prisma.partnerTripEvent.create({
+      data: {
+        assignmentId: assignment.id,
+        eventType: existingAssignment ? 'TOKEN_ROTATED' : 'DRIVER_ASSIGNED',
+        actor: input.actorUserId || 'PARTNER_DISPATCH',
+        payload: {
+          vehiclePlate: input.vehiclePlate,
+          driverName: input.driverName,
+        },
       },
     });
 
@@ -357,15 +465,17 @@ export class OutsourceEngine {
 
     return {
       assignment,
-      driverSecureUrl: `/track/partner-trip/${token}`,
+      driverSecureUrl: `/track/partner-trip/${rawToken}`,
+      rawToken,
     };
   }
 
   /**
-   * Driver execution status milestone updates
+   * Driver execution status milestone updates with strict State Machine
+   * Sequence: ASSIGNED -> REACHED -> STARTED -> COMPLETED
    */
   static async updateDriverMilestone(
-    token: string,
+    rawToken: string,
     milestone: 'REACHED' | 'STARTED' | 'COMPLETED',
     podData?: {
       passengerCount?: number;
@@ -375,8 +485,10 @@ export class OutsourceEngine {
       completionNotes?: string;
     }
   ) {
+    const tokenHash = hashDriverToken(rawToken);
+
     const assignment = await prisma.partnerAssignment.findUnique({
-      where: { driverToken: token },
+      where: { driverTokenHash: tokenHash },
       include: {
         award: {
           include: { request: true },
@@ -384,23 +496,44 @@ export class OutsourceEngine {
       },
     });
 
-    if (!assignment) throw new Error('Invalid or expired driver execution token');
+    if (!assignment) throw new Error('Invalid or expired driver execution link');
+    if (assignment.isTokenRevoked) throw new Error('Driver execution token has been revoked');
     if (new Date() > assignment.driverTokenExp) {
-      throw new Error('Driver token has expired');
+      throw new Error('Driver execution link has expired');
+    }
+
+    // 1. Strict State Machine Validation: Completed trips become strictly read-only
+    if (assignment.completedAt || assignment.award.status === 'COMPLETED') {
+      throw new Error('Trip is already completed and finalized; further milestone mutations rejected');
+    }
+    if (assignment.cancelledAt || assignment.award.status === 'CANCELLED') {
+      throw new Error('Trip is cancelled; further mutations rejected');
     }
 
     const now = new Date();
     const updateData: any = {};
 
     if (milestone === 'REACHED') {
+      if (assignment.reachedAt) {
+        throw new Error('Milestone REACHED was already recorded');
+      }
       updateData.reachedAt = now;
     } else if (milestone === 'STARTED') {
+      if (!assignment.reachedAt) {
+        throw new Error('Cannot transition to STARTED before reaching pickup location (REACHED required)');
+      }
+      if (assignment.startedAt) {
+        throw new Error('Milestone STARTED was already recorded');
+      }
       updateData.startedAt = now;
       await prisma.outsourceAward.update({
         where: { id: assignment.awardId },
         data: { status: 'IN_PROGRESS' },
       });
     } else if (milestone === 'COMPLETED') {
+      if (!assignment.startedAt) {
+        throw new Error('Cannot transition to COMPLETED before starting the trip (STARTED required)');
+      }
       updateData.completedAt = now;
       await prisma.outsourceAward.update({
         where: { id: assignment.awardId },
@@ -428,6 +561,16 @@ export class OutsourceEngine {
         });
       }
     }
+
+    // Record Immutable PartnerTripEvent
+    await prisma.partnerTripEvent.create({
+      data: {
+        assignmentId: assignment.id,
+        eventType: milestone,
+        actor: 'DRIVER',
+        payload: podData ? { podData } : undefined,
+      },
+    });
 
     return prisma.partnerAssignment.update({
       where: { id: assignment.id },

@@ -6473,9 +6473,10 @@ model PartnerAssignment {
   driverName      String?            @map("driver_name")
   driverPhone     String?            @map("driver_phone")
 
-  // Driver Secure Link
-  driverToken     String             @unique @map("driver_token")
+  // Driver Secure Link (Hashed with SHA-256)
+  driverTokenHash String             @unique @map("driver_token_hash")
   driverTokenExp  DateTime           @map("driver_token_exp") @db.Timestamptz(6)
+  isTokenRevoked  Boolean            @default(false) @map("is_token_revoked")
 
   // Execution Timestamps
   driverAssignedAt DateTime?         @map("driver_assigned_at") @db.Timestamptz(6)
@@ -6486,9 +6487,27 @@ model PartnerAssignment {
 
   award           OutsourceAward     @relation(fields: [awardId], references: [id], onDelete: Cascade)
   pod             OutsourcePod?
+  events          PartnerTripEvent[]
 
-  @@index([driverToken], map: "idx_assignment_driver_token")
+  @@index([driverTokenHash], map: "idx_assignment_driver_token_hash")
   @@map("partner_assignments")
+  @@schema("public")
+}
+
+model PartnerTripEvent {
+  id           String            @id @default(uuid())
+  assignmentId String            @map("assignment_id")
+  eventType    String            @map("event_type") // REACHED, STARTED, COMPLETED, POD_SUBMITTED, TOKEN_ROTATED, TOKEN_REVOKED
+  occurredAt   DateTime          @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  actor        String            @default("DRIVER") @map("actor")
+  latitude     Float?            @map("latitude")
+  longitude    Float?            @map("longitude")
+  payload      Json?             @map("payload")
+
+  assignment   PartnerAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@index([assignmentId, occurredAt], map: "idx_trip_event_assignment")
+  @@map("partner_trip_events")
   @@schema("public")
 }
 

@@ -2,6 +2,10 @@
  * src/lib/exchange/partner-invoice-service.ts
  *
  * Handles Partner Invoice generation, Enterprise Review, and Core Finance AP (FinancePayable) Handoff.
+ * Hardened for Phase 1.5:
+ * - Strict 1:1 Invariant between PartnerInvoice and FinancePayable
+ * - Idempotent approval retries (safely returns existing payable without duplicate AP entries)
+ * - Complete audit trail logging
  */
 
 import { prisma } from '@/lib/prisma';
@@ -32,10 +36,13 @@ export class PartnerInvoiceService {
   static async submitInvoice(input: SubmitPartnerInvoiceInput) {
     const award = await prisma.outsourceAward.findUnique({
       where: { id: input.awardId, partnerId: input.partnerId },
-      include: { partner: true, request: true },
+      include: { partner: true, request: true, invoice: true },
     });
 
     if (!award) throw new Error('Award not found for this partner');
+    if (award.invoice) {
+      throw new Error(`An invoice (${award.invoice.invoiceNumber}) has already been submitted for this award`);
+    }
 
     const subtotal = Number(input.subtotalAmount);
     const vat = input.vatAmount != null ? Number(input.vatAmount) : subtotal * 0.05;
@@ -72,7 +79,8 @@ export class PartnerInvoiceService {
   }
 
   /**
-   * Enterprise Finance approves invoice and hands off to FinancePayable in core ledger
+   * Enterprise Finance approves invoice and hands off to FinancePayable in core ledger.
+   * Fully idempotent under network retries and double-clicks.
    */
   static async approveInvoice(input: ApprovePartnerInvoiceInput) {
     return prisma.$transaction(async (tx) => {
@@ -82,8 +90,21 @@ export class PartnerInvoiceService {
       });
 
       if (!invoice) throw new Error('Invoice not found');
-      if (invoice.status === 'APPROVED' || invoice.status === 'PAID') {
-        throw new Error(`Invoice is already ${invoice.status}`);
+
+      // Idempotency: if already approved, retrieve the existing FinancePayable
+      if (invoice.status === 'APPROVED' && invoice.payableId) {
+        const existingPayable = await tx.financePayable.findUnique({
+          where: { id: invoice.payableId },
+        });
+        return {
+          invoice,
+          payable: existingPayable,
+          isRetry: true,
+        };
+      }
+
+      if (invoice.status === 'PAID') {
+        throw new Error('Invoice is already paid');
       }
 
       const approvedTotal = input.approvedAmount != null ? Number(input.approvedAmount) : Number(invoice.totalAmount);
@@ -109,7 +130,7 @@ export class PartnerInvoiceService {
         },
       });
 
-      // 2. Update PartnerInvoice
+      // 2. Update PartnerInvoice with payableId linkage
       const updatedInvoice = await tx.partnerInvoice.update({
         where: { id: invoice.id },
         data: {
@@ -139,6 +160,7 @@ export class PartnerInvoiceService {
       return {
         invoice: updatedInvoice,
         payable,
+        isRetry: false,
       };
     });
   }

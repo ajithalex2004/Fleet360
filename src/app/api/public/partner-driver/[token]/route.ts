@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { OutsourceEngine } from '@/lib/exchange/outsource-engine';
+import { OutsourceEngine, hashDriverToken } from '@/lib/exchange/outsource-engine';
 import { BusOpsOutsourcingAdapter } from '@/lib/exchange/bus-ops-adapter';
 
 export const runtime = 'nodejs';
@@ -11,15 +11,21 @@ export const runtime = 'nodejs';
  * GET /api/public/partner-driver/[token]
  *
  * Public endpoint for external partner driver to load trip details without login.
+ * Queries assignment via SHA-256 hash of the opaque URL token.
  */
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params;
+  if (!token || token.length < 16) {
+    return NextResponse.json({ error: 'Invalid driver token format' }, { status: 400 });
+  }
+
+  const tokenHash = hashDriverToken(token);
 
   const assignment = await prisma.partnerAssignment.findUnique({
-    where: { driverToken: token },
+    where: { driverTokenHash: tokenHash },
     include: {
       award: {
         include: {
@@ -33,6 +39,10 @@ export async function GET(
 
   if (!assignment) {
     return NextResponse.json({ error: 'Trip not found or invalid link' }, { status: 404 });
+  }
+
+  if (assignment.isTokenRevoked) {
+    return NextResponse.json({ error: 'This driver link has been revoked or rotated' }, { status: 404 });
   }
 
   if (new Date() > assignment.driverTokenExp) {
@@ -73,6 +83,9 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params;
+  if (!token || token.length < 16) {
+    return NextResponse.json({ error: 'Invalid driver token format' }, { status: 400 });
+  }
 
   try {
     const body = await req.json().catch(() => ({}));
@@ -111,6 +124,8 @@ export async function POST(
       assignment: updated,
     });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to update milestone' }, { status: 500 });
+    const msg = err instanceof Error ? err.message : 'Failed to update milestone';
+    const status = msg.includes('finalized') || msg.includes('already') || msg.includes('cancelled') ? 409 : 400;
+    return NextResponse.json({ error: msg }, { status });
   }
 }
