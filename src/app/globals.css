@@ -312,3 +312,87 @@ html.light .hover\:bg-slate-800:hover,
 html.light .hover\:bg-slate-800\/40:hover,
 html.light .hover\:bg-slate-800\/80:hover { background-color: #e2e8f0 !important; }
 html.light .hover\:border-white\/20:hover { border-color: rgba(15, 23, 42, 0.16) !important; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   ONYX GOLD EXECUTIVE — Full Protection from Global html.light inverters
+   ════════════════════════════════════════════════════════════════════════════ */
+.onyx-gold-executive,
+.onyx-gold-executive * {
+  color-scheme: dark !important;
+}
+
+html.light .onyx-gold-executive,
+html.light .onyx-gold-executive div,
+html.light .onyx-gold-executive main,
+html.light .onyx-gold-executive section,
+html.light .onyx-gold-executive aside {
+  color-scheme: dark !important;
+}
+
+html.light .onyx-gold-executive {
+  background-color: #09090b !important;
+  color: #ffffff !important;
+}
+
+html.light .onyx-gold-executive .text-white {
+  color: #ffffff !important;
+}
+
+html.light .onyx-gold-executive .text-amber-300 {
+  color: #fcd34d !important;
+}
+
+html.light .onyx-gold-executive .text-amber-400 {
+  color: #fbbf24 !important;
+}
+
+html.light .onyx-gold-executive .text-zinc-200 {
+  color: #e4e4e7 !important;
+}
+
+html.light .onyx-gold-executive .text-zinc-300 {
+  color: #d4d4d8 !important;
+}
+
+html.light .onyx-gold-executive .text-zinc-400 {
+  color: #a1a1aa !important;
+}
+
+html.light .onyx-gold-executive .text-zinc-500 {
+  color: #71717a !important;
+}
+
+html.light .onyx-gold-executive .bg-\[\#09090b\] {
+  background-color: #09090b !important;
+}
+
+html.light .onyx-gold-executive .bg-\[\#0c0d12\] {
+  background-color: #0c0d12 !important;
+}
+
+html.light .onyx-gold-executive .bg-\[\#121318\] {
+  background-color: #121318 !important;
+}
+
+html.light .onyx-gold-executive .bg-\[\#181920\] {
+  background-color: #181920 !important;
+}
+
+html.light .onyx-gold-executive input,
+html.light .onyx-gold-executive textarea,
+html.light .onyx-gold-executive select {
+  background-color: #181920 !important;
+  color: #ffffff !important;
+  border-color: rgba(245, 158, 11, 0.3) !important;
+}
+
+html.light .onyx-gold-executive input::placeholder,
+html.light .onyx-gold-executive textarea::placeholder {
+  color: #71717a !important;
+}
+
+html.light .onyx-gold-executive select option {
+  background-color: #121318 !important;
+  color: #ffffff !important;
+}
+

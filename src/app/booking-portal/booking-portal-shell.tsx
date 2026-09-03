@@ -19,7 +19,7 @@ export default function BookingPortalShell({ children }: { children: React.React
 
   return (
     <ModuleGuard moduleId="booking-portal" moduleName="Booking Portal" moduleIcon="📲">
-      <div className="dark [color-scheme:dark] flex flex-col h-screen bg-[#09090b] text-white selection:bg-amber-500/30 selection:text-amber-200">
+      <div className="onyx-gold-executive dark [color-scheme:dark] flex flex-col h-screen bg-[#09090b] text-white selection:bg-amber-500/30 selection:text-amber-200">
         <PlatformHomeBar moduleName="Booking Portal" moduleIcon="🎫" accentColor="from-amber-500 via-yellow-500 to-amber-600" />
         <div className="flex flex-1 overflow-hidden">
           {/* Sidebar */}

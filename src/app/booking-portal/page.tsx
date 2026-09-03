@@ -208,7 +208,7 @@ export default function BookingPortal() {
   const completed = bookings.filter(b => b.status === 'COMPLETED').length;
 
   return (
-    <div className="space-y-6 text-white">
+    <div className="onyx-gold-executive dark [color-scheme:dark] space-y-6 text-white bg-[#09090b]">
       {/* ── Executive Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-amber-500/20 pb-6">
         <div>

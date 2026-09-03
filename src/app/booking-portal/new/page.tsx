@@ -1002,7 +1002,7 @@ function NewBookingInner() {
   const meta = serviceType ? SERVICE_META[serviceType as ServiceType] : null;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8 min-h-screen text-white">
+    <div className="onyx-gold-executive dark [color-scheme:dark] max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8 min-h-screen text-white bg-[#09090b]">
 
       {/* ── Page header ── */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-amber-500/20 pb-6">
