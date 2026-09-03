@@ -9,6 +9,7 @@ import { InstantPricingCostCenter } from '@/components/booking/InstantPricingCos
 import { OmnichannelNotificationPreferences } from '@/components/booking/OmnichannelNotificationPreferences';
 import { DigitalKycUaePass } from '@/components/booking/DigitalKycUaePass';
 import { MultiStopRoutePicker } from '@/components/booking/MultiStopRoutePicker';
+import { DigitalEbolScanner } from '@/components/booking/DigitalEbolScanner';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service type card definitions (Step 1)
@@ -1018,6 +1019,9 @@ function NewBookingInner() {
                 section={section}
                 form={form}
                 onChange={onChange}
+              />
+            ))}
+
             {/* Multi-Stop Waypoints & LTL Route Optimizer for Freight/Logistics */}
             {serviceType === 'LOGISTICS' && (
               <MultiStopRoutePicker
@@ -1034,6 +1038,22 @@ function NewBookingInner() {
                     onChange('ltlConsolidationEligible', true);
                     onChange('ltlDiscountAed', routeRes.ltlConsolidation.discountAmountAed);
                   }
+                }}
+              />
+            )}
+
+            {/* Digital Bill of Lading (e-BOL) & Barcode Consignment Scanner */}
+            {serviceType === 'LOGISTICS' && (
+              <DigitalEbolScanner
+                bookingRef={`EXL-FRT-${Math.floor(1000 + Math.random() * 9000)}`}
+                shipperName={(form.requestorName as string) || 'EIN360 General Trading LLC'}
+                shipperAddress={(form.origin as string) || 'JAFZA Logistics Base Gate 4'}
+                consigneeName="Dubai Mall Logistics Dock 3"
+                consigneeAddress={(form.destination as string) || 'Dubai Mall Service Dock 3'}
+                onEbolGenerated={(ebol) => {
+                  onChange('ebolNumber', ebol.ebolNumber);
+                  onChange('uaeCustomsDeclarationNo', ebol.uaeCustomsDeclarationNo);
+                  onChange('ebolCryptographicSeal', ebol.cryptographicSeal);
                 }}
               />
             )}
