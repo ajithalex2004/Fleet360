@@ -1,9 +1,10 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Smartphone, Plus } from 'lucide-react';
+import { Smartphone, Plus, MessageSquare } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import { usePermissions } from '@/contexts/PermissionContext';
+import { PassengerDriverChat } from '@/components/booking/PassengerDriverChat';
 
 interface Booking {
   id: string;
@@ -166,6 +167,13 @@ export default function BookingPortal() {
       setLoading(false);
     }
   }, []);
+
+  const [activeChat, setActiveChat] = useState<{
+    ref: string;
+    model?: string;
+    plate?: string;
+    driverName?: string;
+  } | null>(null);
 
   useEffect(() => { load(); }, [load]);
 
@@ -364,16 +372,32 @@ export default function BookingPortal() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        {b.serviceType === 'LOGISTICS' ? (
-                          <Link href="/logistics/dispatch"
-                            className="text-xs text-amber-400 hover:text-amber-300 transition-colors">
-                            Dispatch →
-                          </Link>
-                        ) : (
-                          <button className="text-xs text-violet-400 hover:text-violet-300 transition-colors">
-                            View
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() =>
+                              setActiveChat({
+                                ref: b.bookingRef || b.id.slice(0, 10),
+                                model: parsed.sampleModels || 'Assigned Vehicle',
+                                plate: 'DXB A 10293',
+                                driverName: 'Ahmed Al-Sayed',
+                              })
+                            }
+                            className="inline-flex items-center gap-1 text-xs text-teal-400 hover:text-teal-300 bg-teal-500/10 hover:bg-teal-500/20 px-2.5 py-1 rounded-lg border border-teal-500/20 transition-colors"
+                          >
+                            <MessageSquare className="w-3 h-3" />
+                            Chat
                           </button>
-                        )}
+                          {b.serviceType === 'LOGISTICS' ? (
+                            <Link href="/logistics/dispatch"
+                              className="text-xs text-amber-400 hover:text-amber-300 transition-colors">
+                              Dispatch →
+                            </Link>
+                          ) : (
+                            <button className="text-xs text-violet-400 hover:text-violet-300 transition-colors">
+                              View
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -383,6 +407,18 @@ export default function BookingPortal() {
           </div>
         )}
       </div>
+
+      {/* Floating Passenger - Driver Live Chat Drawer */}
+      {activeChat && (
+        <PassengerDriverChat
+          isOpen={!!activeChat}
+          onClose={() => setActiveChat(null)}
+          bookingRef={activeChat.ref}
+          driverName={activeChat.driverName}
+          vehicleModel={activeChat.model}
+          vehiclePlate={activeChat.plate}
+        />
+      )}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { usePermissions } from '@/contexts/PermissionContext';
 import { InteractiveRoutePicker } from '@/components/booking/InteractiveRoutePicker';
 import { AssetAvailabilitySelector } from '@/components/booking/AssetAvailabilitySelector';
 import { InstantPricingCostCenter } from '@/components/booking/InstantPricingCostCenter';
+import { OmnichannelNotificationPreferences } from '@/components/booking/OmnichannelNotificationPreferences';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service type card definitions (Step 1)
@@ -1039,6 +1040,22 @@ function NewBookingInner() {
               }}
             />
 
+            {/* Omnichannel Passenger Alerts & WhatsApp Notifications */}
+            <OmnichannelNotificationPreferences
+              serviceType={serviceType as string}
+              vehicleCategory={(form.vehicleCategory as string) || ''}
+              pickupLocation={(form.origin as string) || ''}
+              destinationLocation={(form.destination as string) || ''}
+              totalFareAed={Number(form.totalFareAed) || 0}
+              requestorName={(form.requestorName as string) || 'Passenger'}
+              phone={(form.contactPhone as string) || '+971 50 123 4567'}
+              email={(form.requestorEmail as string) || ''}
+              onChange={(channels, phone) => {
+                onChange('notificationChannels', JSON.stringify(channels));
+                onChange('contactPhone', phone);
+              }}
+            />
+
             {error && (
               <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 text-sm flex items-start gap-2">
                 <span className="flex-shrink-0">⚠️</span>
@@ -1135,6 +1152,9 @@ function NewBookingInner() {
                   value={form.budgetStatus === 'WITHIN_POLICY' ? '✅ Within Policy (Pre-Approved)' : '⚠️ Exceeds Cap (Level 2 Escalation)'}
                 />
               )}
+              {form.contactPhone ? (
+                <ConfirmationDetail label="Passenger WhatsApp / Mobile" value={form.contactPhone as string} />
+              ) : null}
               {form.studentName && <ConfirmationDetail label="Student" value={form.studentName as string} />}
               {form.companyName && <ConfirmationDetail label="Company" value={form.companyName as string} />}
               {form.leaseDuration && <ConfirmationDetail label="Lease Duration" value={form.leaseDuration as string} />}
