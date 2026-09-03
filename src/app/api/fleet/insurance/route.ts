@@ -48,14 +48,14 @@ export async function GET(req: NextRequest) {
           tx.$queryRawUnsafe<Array<{ count: bigint }>>(
             `SELECT COUNT(*) as count
              FROM fleet_vehicle_insurance fvi
-             LEFT JOIN vehicles v ON v.id = fvi.vehicle_id
+             LEFT JOIN vehicles v ON v.id = fvi.vehicle_id::text
              ${where}`,
             ...countParams,
           ),
           tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
             `SELECT fvi.*, v.vehicle_code, v.make, v.model, v.license_plate
              FROM fleet_vehicle_insurance fvi
-             LEFT JOIN vehicles v ON v.id = fvi.vehicle_id
+             LEFT JOIN vehicles v ON v.id = fvi.vehicle_id::text
              ${where}
              ORDER BY fvi.end_date ASC
              LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`,

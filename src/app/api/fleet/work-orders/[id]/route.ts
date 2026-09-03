@@ -29,7 +29,7 @@ export async function GET(
           `SELECT fwo.*, v.vehicle_code, v.make, v.model, v.license_plate,
                   v.vehicle_type_id, v.branch_id, v.branch_name
            FROM fleet_work_orders fwo
-           LEFT JOIN vehicles v ON v.id = fwo.vehicle_id
+           LEFT JOIN vehicles v ON v.id = fwo.vehicle_id::text
            WHERE fwo.id = $1`,
           id,
         );
