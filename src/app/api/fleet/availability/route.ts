@@ -4,26 +4,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
-
-export interface CategoryStock {
-  category: string;
-  availableCount: number;
-  totalCount: number;
-  lowStock: boolean;
-  isAvailable: boolean;
-  sampleModels: string;
-  depots: Record<string, number>;
-}
-
-export interface AvailabilityResponse {
-  serviceType: string;
-  requestedDate?: string;
-  leadTimeHoursRequired: number;
-  leadTimeViolated: boolean;
-  leadTimeWarning?: string;
-  categories: CategoryStock[];
-  depotsList: Array<{ id: string; name: string; city: string }>;
-}
+import type { CategoryStock, AvailabilityResponse } from '@/lib/fleet/availability-types';
+import { STANDARD_DEPOTS } from '@/lib/fleet/availability-types';
 
 export const LEAD_TIME_RULES_HOURS: Record<string, number> = {
   EXECUTIVE: 2,
@@ -33,14 +15,6 @@ export const LEAD_TIME_RULES_HOURS: Record<string, number> = {
   RENTAL: 2,
   LEASING: 24,
 };
-
-export const STANDARD_DEPOTS = [
-  { id: 'DXB_HUB', name: 'Dubai Airport (DXB) Mobility Hub', city: 'Dubai' },
-  { id: 'DSO_CENTRAL', name: 'Dubai Silicon Oasis (DSO) Central Depot', city: 'Dubai' },
-  { id: 'JAFZA_LOGISTICS', name: 'Jebel Ali (JAFZA) Logistics Base', city: 'Dubai' },
-  { id: 'AUH_YAS', name: 'Abu Dhabi Yas Island Operations Depot', city: 'Abu Dhabi' },
-  { id: 'SHJ_AIRPORT', name: 'Sharjah Airport Transit Station', city: 'Sharjah' },
-];
 
 export const CATEGORY_SAMPLE_MODELS: Record<string, string> = {
   // Rental & Leasing

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Car, Building2, AlertTriangle, CheckCircle2, ShieldAlert, Sparkles, RefreshCw } from 'lucide-react';
-import { CategoryStock, AvailabilityResponse, STANDARD_DEPOTS } from '@/app/api/fleet/availability/route';
+import { CategoryStock, AvailabilityResponse, STANDARD_DEPOTS } from '@/lib/fleet/availability-types';
 
 interface AssetAvailabilitySelectorProps {
   serviceType: string;
