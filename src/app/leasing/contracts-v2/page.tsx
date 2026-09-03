@@ -125,6 +125,7 @@ export default function ContractsV2Page() {
   const [addingVehicle, setAddingVehicle] = useState(false);
   const [addVehicleMsg, setAddVehicleMsg] = useState('');
   const [saving, setSaving] = useState(false);
+  const [lessees, setLessees] = useState<{ id: string; name: string }[]>([]);
 
   const [newContractForm, setNewContractForm] = useState<NewContractForm>({
     step: 1, lessee: '', agreementType: 'INDIVIDUAL', masterContractId: '',
@@ -148,6 +149,13 @@ export default function ContractsV2Page() {
 
   useEffect(() => { loadContracts(); }, [loadContracts]);
 
+  useEffect(() => {
+    fetch('/api/leasing/lessees')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setLessees(Array.isArray(data) ? data.map((l: { id: string; name: string }) => ({ id: l.id, name: l.name })) : []))
+      .catch(() => setLessees([]));
+  }, []);
+
   const prefillFromQuotation = useCallback(async (quotationId: string) => {
     try {
       const res = await fetch(`/api/leasing/quotations/${quotationId}`);
@@ -156,7 +164,9 @@ export default function ContractsV2Page() {
       const filled = quotationToContract(q);
       setNewContractForm(prev => ({
         ...prev,
-        lessee: q.lesseeName ?? q.lesseeId ?? '',
+        // The lessee field is a <select> keyed by id — prefer the actual id
+        // so the dropdown lands on the right option instead of showing blank.
+        lessee: q.lesseeId ?? '',
         leaseType: (filled.leaseType as any) ?? 'LONG_TERM',
         durationMonths: String(q.durationMonths ?? ''),
         startDate: filled.startDate,
@@ -215,7 +225,11 @@ export default function ContractsV2Page() {
       const res = await fetch('/api/leasing/contracts-v2', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newContractForm),
+        // The backend requires `lesseeId` specifically — newContractForm.lessee
+        // holds the selected lessee's id (the field is a <select> below, not
+        // free text), but was never being sent under the key the API expects,
+        // so every contract creation 400'd with "lesseeId is required".
+        body: JSON.stringify({ ...newContractForm, lesseeId: newContractForm.lessee }),
       });
       if (res.ok) {
         setShowNewContract(false);
@@ -715,11 +729,16 @@ export default function ContractsV2Page() {
               {/* Step 1 */}
               {newContractForm.step === 1 && (<>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Lessee Name / ID</label>
-                  <input type="text" value={newContractForm.lessee}
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Lessee</label>
+                  <select value={newContractForm.lessee}
                     onChange={e => setNewContractForm(p => ({ ...p, lessee: e.target.value }))}
-                    placeholder="Enter lessee name or ID"
-                    className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500/50" />
+                    className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50">
+                    <option value="">Select lessee</option>
+                    {lessees.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                  {lessees.length === 0 && (
+                    <p className="text-xs text-amber-400 mt-1">No lessees on file — create one on the Lessees page first.</p>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
