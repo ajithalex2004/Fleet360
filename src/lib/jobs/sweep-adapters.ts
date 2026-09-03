@@ -12,7 +12,7 @@ import type { JobContext, JobResult } from '@/lib/jobs/registry';
 // sweeps keep working without duplicating logic. All sweeps accept POST and
 // check CRON_SECRET or x-tenant-id, so we forward both.
 
-async function forwardToRoute(path: string, ctx: JobContext): Promise<JobResult> {
+async function forwardToRoute(path: string, ctx: JobContext, opts: { secretEnvVar?: string } = {}): Promise<JobResult> {
   const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
   const qs   = ctx.searchParams.toString();
   const url  = `${base}${path}${qs ? '?' + qs : ''}`;
@@ -20,8 +20,11 @@ async function forwardToRoute(path: string, ctx: JobContext): Promise<JobResult>
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  if (process.env.CRON_SECRET) {
-    headers['Authorization'] = `Bearer ${process.env.CRON_SECRET}`;
+  // push/run-scheduler checks PUSH_CRON_SECRET, not the generic CRON_SECRET
+  // every other sweep route uses — sending the wrong one silently 401'd it.
+  const secret = process.env[opts.secretEnvVar ?? 'CRON_SECRET'];
+  if (secret) {
+    headers['Authorization'] = `Bearer ${secret}`;
   }
   if (ctx.tenantId) {
     headers['x-tenant-id'] = ctx.tenantId;
@@ -75,5 +78,5 @@ export async function runAttendanceSweepNoShow(ctx: JobContext): Promise<JobResu
 }
 
 export async function runPushScheduler(ctx: JobContext): Promise<JobResult> {
-  return forwardToRoute('/api/push/run-scheduler', ctx);
+  return forwardToRoute('/api/push/run-scheduler', ctx, { secretEnvVar: 'PUSH_CRON_SECRET' });
 }

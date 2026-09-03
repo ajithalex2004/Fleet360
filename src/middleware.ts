@@ -85,6 +85,32 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     return NextResponse.next();
   }
 
+  // 1b. System cron — a valid CRON_SECRET bearer bypasses the session
+  // requirement on API routes, same as the individual sweep routes' own
+  // internal `cronSecret && !tenantHeader` checks already assume.
+  //
+  // Those internal checks were unreachable: /api/jobs/run forwards to
+  // routes like /api/leasing/documents/sweep-expiry via an internal
+  // fetch(), which is a fresh incoming request that hits this middleware
+  // exactly like an external call. Since those routes aren't in
+  // PUBLIC_PREFIXES and the forwarded request carries no xl-session
+  // cookie, step 3 below 401'd it before the route's own CRON_SECRET
+  // check ever ran — meaning every job registered through
+  // sweep-adapters.ts's forwardToRoute() silently never worked.
+  //
+  // Scoped to /api/ (no UI path ever needs this) and to an exact match
+  // against the server's own CRON_SECRET — if that env var isn't set,
+  // this branch never matches, so there's no bypass-by-absence.
+  if (pathname.startsWith('/api/')) {
+    const cronSecret = process.env.CRON_SECRET;
+    if (cronSecret) {
+      const got = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+      if (got === cronSecret) {
+        return NextResponse.next();
+      }
+    }
+  }
+
   // 2. Verify session cookie
   const token = request.cookies.get('xl-session')?.value;
   const session = token ? await verifySession(token) : null;
