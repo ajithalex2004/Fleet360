@@ -1288,12 +1288,11 @@ function NewBookingInner() {
 
                 {/* Cold Chain IoT Temperature Telematics Sensor Graph */}
                 {serviceType === 'LOGISTICS' && (
-                  <ColdChainTelematics
-                    targetTempC={-18}
-                    cargoDesc={(form.cargo as string) || 'Pharma Vaccines & Frozen Meat'}
-                    onAlertTriggered={(alert) => {
-                      onChange('coldChainIncident', true);
-                      onChange('coldChainIncidentDesc', `${alert.type}: ${alert.message}`);
+                  <ColdChainTelemetryGraph
+                    tripRef={`TRIP-${Math.floor(1000 + Math.random() * 9000)}`}
+                    cargoTypeKey="FROZEN_PHARMA"
+                    onAlertTriggered={(alertMsg) => {
+                      onChange('coldChainAlert', alertMsg);
                     }}
                   />
                 )}
@@ -1301,12 +1300,14 @@ function NewBookingInner() {
                 {/* Recurring Schedule Rule Picker */}
                 <RecurringSchedulePicker
                   serviceType={serviceType as string}
-                  onChange={(rule) => {
-                    onChange('isRecurring', rule.enabled);
-                    onChange('recurringFrequency', rule.frequency);
-                    onChange('recurringDaysOfWeek', JSON.stringify(rule.daysOfWeek));
-                    onChange('recurringEndDate', rule.endDate);
-                    onChange('recurringAutoDispatch', rule.autoDispatch);
+                  singleTripFareAed={Number(form.fareSubtotal) || 550}
+                  onScheduleChange={({ config, trips, pricing }) => {
+                    onChange('recurringScheduleType', config.scheduleType);
+                    onChange('recurringFrequency', config.frequency);
+                    onChange('recurringDays', JSON.stringify(config.daysOfWeek));
+                    onChange('recurringTotalTrips', trips.length);
+                    onChange('recurringDiscountPercent', pricing.discountPercent);
+                    onChange('recurringTotalContractAed', pricing.totalWithVatAed);
                   }}
                 />
 
@@ -1314,15 +1315,19 @@ function NewBookingInner() {
                 <InstantPricingCostCenter
                   serviceType={serviceType as string}
                   vehicleCategory={(form.vehicleCategory as string) || ''}
-                  distanceKm={Number(form.distanceKm) || 25}
-                  durationMins={Number(form.durationMins) || 30}
-                  isPeakHours={false}
-                  onPricingCalculated={(pricing) => {
-                    onChange('fareSubtotal', pricing.baseFare);
-                    onChange('vatAmount', pricing.vat);
-                    onChange('totalFareAed', pricing.totalFare);
+                  distanceKm={Number(form.distanceKm) || 0}
+                  salikTollsAed={Number(form.salikTollsAed) || 0}
+                  costCenter={(form.costCenter as string) || 'CC-OPS-3003'}
+                  projectCode={(form.projectCode as string) || ''}
+                  billingMethod={(form.billingMethod as string) || 'CORPORATE_ACCOUNT'}
+                  onChange={(pricing) => {
+                    onChange('fareSubtotal', pricing.fareSubtotal);
+                    onChange('vatAmount', pricing.vatAmount);
+                    onChange('totalFareAed', pricing.totalFareAed);
                     onChange('costCenter', pricing.costCenter);
-                    onChange('glCode', pricing.glCode);
+                    onChange('projectCode', pricing.projectCode);
+                    onChange('billingMethod', pricing.billingMethod);
+                    onChange('budgetStatus', pricing.budgetStatus);
                   }}
                 />
 
