@@ -13,6 +13,7 @@ import { DigitalEbolScanner } from '@/components/booking/DigitalEbolScanner';
 import { RecurringSchedulePicker } from '@/components/booking/RecurringSchedulePicker';
 import { DriverHandoverEpod } from '@/components/booking/DriverHandoverEpod';
 import { ColdChainTelemetryGraph } from '@/components/booking/ColdChainTelemetryGraph';
+import { BulkConsignmentUploader } from '@/components/booking/BulkConsignmentUploader';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service type card definitions (Step 1)
@@ -1024,6 +1025,18 @@ function NewBookingInner() {
                 onChange={onChange}
               />
             ))}
+
+            {/* B2B Bulk Consignment Excel / CSV Uploader & Auto-Clustering Route Optimizer */}
+            {serviceType === 'LOGISTICS' && (
+              <BulkConsignmentUploader
+                onBatchDispatched={(analysis) => {
+                  onChange('bulkBatchManifestNo', analysis.masterManifestNumber);
+                  onChange('bulkBatchTotalPallets', analysis.totalPallets);
+                  onChange('bulkBatchTotalRoutes', analysis.clusters.length);
+                  onChange('fareSubtotal', analysis.summaryPricingAed);
+                }}
+              />
+            )}
 
             {/* Multi-Stop Waypoints & LTL Route Optimizer for Freight/Logistics */}
             {serviceType === 'LOGISTICS' && (
