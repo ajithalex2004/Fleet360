@@ -63,10 +63,30 @@ export const POST = withAudit(
       if (!lessee) {
         return NextResponse.json({ error: 'Lessee not found in this tenant' }, { status: 404 });
       }
-      const subTotal = lines.reduce((s: number, l: any) => s + parseFloat(l.totalAmount || '0'), 0);
+      // Compute each line's totalAmount from quantity*unitAmount when the
+      // caller doesn't supply one — the manual "New Invoice" UI form never
+      // sent totalAmount at all (only quantity/unitAmount), so subTotal was
+      // silently computing to 0 on every invoice created through it. Callers
+      // that do pass an explicit totalAmount (e.g. a pre-computed one-off
+      // charge) keep taking precedence.
+      const linesWithTotals = lines.map((l: any) => {
+        const quantity = Number(l.quantity ?? 1);
+        const unitAmount = Number(l.unitAmount ?? 0);
+        const totalAmount = l.totalAmount != null && l.totalAmount !== ''
+          ? Number(l.totalAmount)
+          : quantity * unitAmount;
+        return { ...l, quantity, unitAmount, totalAmount };
+      });
+      const subTotal = linesWithTotals.reduce((s: number, l: any) => s + l.totalAmount, 0);
       const vatPct   = parseFloat(invoiceData.vatPct ?? '5');
       const vatAmount = subTotal * (vatPct / 100);
       const totalAmount = subTotal + vatAmount;
+      // <input type="date"> sends a bare "YYYY-MM-DD" string, which Prisma's
+      // strict DateTime parser rejects ("premature end of input") — the
+      // manual invoice form 500'd on every submission because of this.
+      // Native Date objects are accepted regardless of string format.
+      const issueDate = invoiceData.issueDate ? new Date(invoiceData.issueDate) : new Date();
+      const dueDate = invoiceData.dueDate ? new Date(invoiceData.dueDate) : issueDate;
       const invoice = await withTenantRls(prisma, tenantId, async (tx) => {
         // G13: lock before count() — shared 'invoice' series with the other
         // three invoice-number generators (mileage overage, traffic-fines
@@ -81,6 +101,8 @@ export const POST = withAudit(
             ...invoiceData,
             tenantId,
             invoiceNo,
+            issueDate,
+            dueDate,
             subTotal,
             vatAmount,
             totalAmount,
@@ -88,7 +110,7 @@ export const POST = withAudit(
             // "Argument tenant is missing" (same bug class as the
             // quotation-vehicles and contract-vehicles nested creates
             // fixed earlier; this one was still live).
-            lines: { create: lines.map((l: any) => ({ ...l, tenantId })) },
+            lines: { create: linesWithTotals.map((l: any) => ({ ...l, tenantId })) },
           },
           include: { lines: true, lessee: { select: { name: true } } },
         });

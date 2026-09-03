@@ -583,15 +583,24 @@ export default function LeaseQuotationsPage() {
 
   const handleConvertToContract = async (quotationId: string) => {
     if (!confirm('Are you sure you want to convert this quotation into a live contract?')) return;
-    
+
     setProcessingActionId(quotationId);
     try {
+      // Default to the quotation's own negotiated start date, not "now" —
+      // the convert route falls back to `new Date()` when startDate is
+      // omitted, so every contract was starting (and billing) from
+      // whenever staff happened to click Convert instead of the agreed
+      // lease start date.
+      const sourceQuotation = quotations.find(q => q.id === quotationId);
+      const startDate = sourceQuotation?.startDate
+        ? new Date(sourceQuotation.startDate).toISOString()
+        : new Date().toISOString();
       const res = await fetch(`/api/leasing/quotations/${quotationId}/convert`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           agreementType: 'INDIVIDUAL', // Default
-          startDate: new Date().toISOString(),
+          startDate,
         }),
       });
 

@@ -144,7 +144,13 @@ export async function POST(request: NextRequest) {
           },
         } : {}),
       },
-      include: { lineItems: true, vehicles: true },
+      // lessee: true so the row the frontend adds to its list immediately
+      // after create has a real lessee.name — without it, the create
+      // response's `lessee` field is missing (not just null), and every
+      // subsequent optimistic status update in the wizard spreads that same
+      // object forward, so the row shows blank/'-' for lessee until a full
+      // page reload re-fetches from GET (which already included it).
+      include: { lineItems: true, vehicles: true, lessee: true },
     });
     });
 

@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     const contracts = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.leaseContract2.findMany({
         where: { tenantId, deletedAt: null },
-        include: { vehicles: true, lessee: true },
+        include: { vehicles: true, lessee: true, openingBranch: true },
         orderBy: { createdAt: 'desc' },
       }),
     );
@@ -52,6 +52,15 @@ export async function GET(req: NextRequest) {
           : '',
         endDate: c.endDate ? new Date(c.endDate).toISOString().split('T')[0] : '',
         status: c.status ?? 'Draft',
+        // These three were previously omitted from this hand-mapped
+        // response, even though the list UI reads them directly
+        // (c.monthlyRate / c.branch) — every contract showed "0 AED" and
+        // "-" for branch regardless of its real stored value.
+        monthlyRate: c.monthlyRate != null ? Number(c.monthlyRate) : 0,
+        currency: c.currency ?? 'AED',
+        branch:
+          (c as { openingBranch?: { name?: string | null } }).openingBranch
+            ?.name ?? null,
       })),
     );
   } catch (e) {
