@@ -1,3 +1,16 @@
+export interface AuthorizedClientUser {
+  id: string;
+  name: string;
+  mobileNumber: string; // for WhatsApp OTP
+  email: string;
+  role: 'LOGISTICS_LEAD' | 'DISPATCHER' | 'PROCUREMENT_MANAGER' | 'REQUESTER';
+  costCenter: string;
+  maxSpendingLimitAed?: number;
+  status: 'ACTIVE' | 'SUSPENDED';
+  lastLoginAt?: string;
+  createdAt: string;
+}
+
 export interface CorporateClientRecord {
   id: string;
   clientName: string;
@@ -10,9 +23,10 @@ export interface CorporateClientRecord {
   creditLimitAed: number;
   status: 'ACTIVE' | 'SUSPENDED';
   createdAt: string;
+  userRoster: AuthorizedClientUser[];
 }
 
-// Master in-memory registry for corporate client domain mappings
+// Master in-memory registry for corporate client domain mappings and rosters
 export const CORPORATE_CLIENTS_REGISTRY: CorporateClientRecord[] = [
   {
     id: 'cli-ein360-001',
@@ -26,6 +40,43 @@ export const CORPORATE_CLIENTS_REGISTRY: CorporateClientRecord[] = [
     creditLimitAed: 50000,
     status: 'ACTIVE',
     createdAt: '2026-09-01T00:00:00.000Z',
+    userRoster: [
+      {
+        id: 'usr-ein-001',
+        name: 'Fatima Al-Nuaimi',
+        mobileNumber: '+971 50 887 6543',
+        email: 'fatima@ein360.ae',
+        role: 'LOGISTICS_LEAD',
+        costCenter: 'CC-EIN360-LOGISTICS',
+        maxSpendingLimitAed: 15000,
+        status: 'ACTIVE',
+        lastLoginAt: '2026-09-03T11:45:00.000Z',
+        createdAt: '2026-09-01T00:00:00.000Z',
+      },
+      {
+        id: 'usr-ein-002',
+        name: 'Rashid Al-Mansoori',
+        mobileNumber: '+971 50 112 3344',
+        email: 'rashid@ein360.ae',
+        role: 'DISPATCHER',
+        costCenter: 'CC-EIN360-LOGISTICS',
+        maxSpendingLimitAed: 5000,
+        status: 'ACTIVE',
+        lastLoginAt: '2026-09-02T16:20:00.000Z',
+        createdAt: '2026-09-01T00:00:00.000Z',
+      },
+      {
+        id: 'usr-ein-003',
+        name: 'Procurement Operations Desk',
+        mobileNumber: '+971 4 800 3463',
+        email: 'procurement@ein360.ae',
+        role: 'PROCUREMENT_MANAGER',
+        costCenter: 'CC-EIN360-LOGISTICS',
+        maxSpendingLimitAed: 50000,
+        status: 'ACTIVE',
+        createdAt: '2026-09-01T00:00:00.000Z',
+      },
+    ],
   },
   {
     id: 'cli-emaar-002',
@@ -39,6 +90,19 @@ export const CORPORATE_CLIENTS_REGISTRY: CorporateClientRecord[] = [
     creditLimitAed: 100000,
     status: 'ACTIVE',
     createdAt: '2026-09-01T00:00:00.000Z',
+    userRoster: [
+      {
+        id: 'usr-emaar-001',
+        name: 'Zaid Al-Hashimi',
+        mobileNumber: '+971 50 554 9988',
+        email: 'zaid@emaar.ae',
+        role: 'LOGISTICS_LEAD',
+        costCenter: 'CC-EMAAR-EXP2026',
+        maxSpendingLimitAed: 25000,
+        status: 'ACTIVE',
+        createdAt: '2026-09-01T00:00:00.000Z',
+      },
+    ],
   },
   {
     id: 'cli-chalhoub-003',
@@ -52,5 +116,18 @@ export const CORPORATE_CLIENTS_REGISTRY: CorporateClientRecord[] = [
     creditLimitAed: 75000,
     status: 'ACTIVE',
     createdAt: '2026-09-01T00:00:00.000Z',
+    userRoster: [
+      {
+        id: 'usr-chalhoub-001',
+        name: 'Nadine Kassam',
+        mobileNumber: '+971 50 776 1122',
+        email: 'nadine@chalhoub.com',
+        role: 'REQUESTER',
+        costCenter: 'CC-CHALHOUB-RETAIL',
+        maxSpendingLimitAed: 8000,
+        status: 'ACTIVE',
+        createdAt: '2026-09-01T00:00:00.000Z',
+      },
+    ],
   },
 ];
