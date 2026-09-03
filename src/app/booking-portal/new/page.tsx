@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { usePermissions } from '@/contexts/PermissionContext';
+import { InteractiveRoutePicker } from '@/components/booking/InteractiveRoutePicker';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service type card definitions (Step 1)
@@ -713,9 +714,14 @@ function FormSection({
   form: FormData;
   onChange: (k: string, v: string | boolean | number) => void;
 }) {
-  const visibleFields = section.fields.filter(f => !f.showIf || f.showIf(form));
+  const hasRoutePicker = section.fields.some(f => f.key === 'origin');
 
-  if (visibleFields.length === 0) return null;
+  // If section has origin/destination, separate them from any other non-route fields
+  const fieldsToRender = hasRoutePicker
+    ? section.fields.filter(f => f.key !== 'origin' && f.key !== 'destination')
+    : section.fields;
+
+  const visibleFields = fieldsToRender.filter(f => !f.showIf || f.showIf(form));
 
   // Group consecutive half-width fields into rows of 2
   const rows: FieldDef[][] = [];
@@ -738,8 +744,33 @@ function FormSection({
         <span className="text-base">{section.icon}</span>
         <h3 className="text-sm font-bold text-white tracking-wide">{section.title}</h3>
       </div>
+
       {/* Fields */}
       <div className="p-5 space-y-4">
+        {hasRoutePicker && (
+          <InteractiveRoutePicker
+            origin={(form.origin as string) || ''}
+            destination={
+              form.sameReturnLoc
+                ? (form.origin as string) || ''
+                : (form.destination as string) || ''
+            }
+            onOriginChange={(addr, coords) => {
+              onChange('origin', addr);
+              if (coords) onChange('originCoords', JSON.stringify(coords));
+            }}
+            onDestinationChange={(addr, coords) => {
+              onChange('destination', addr);
+              if (coords) onChange('destCoords', JSON.stringify(coords));
+            }}
+            onRouteChange={(stats) => {
+              onChange('distanceKm', stats.distanceKm);
+              onChange('durationMins', stats.durationMins);
+              onChange('salikTollsAed', stats.salikTollsAed);
+            }}
+          />
+        )}
+
         {rows.map((row, ri) => (
           row.length === 2 ? (
             <div key={ri} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1034,6 +1065,11 @@ function NewBookingInner() {
               {form.vehicleCategory && <ConfirmationDetail label="Vehicle Category" value={form.vehicleCategory as string} />}
               {form.origin && <ConfirmationDetail label="From" value={form.origin as string} />}
               {form.destination && <ConfirmationDetail label="To" value={form.destination as string} />}
+              {form.distanceKm ? <ConfirmationDetail label="Driving Distance" value={`${form.distanceKm} km`} /> : null}
+              {form.durationMins ? <ConfirmationDetail label="Est. Travel Time" value={`${form.durationMins} mins`} /> : null}
+              {form.salikTollsAed !== undefined && Number(form.salikTollsAed) > 0 ? (
+                <ConfirmationDetail label="Estimated UAE Tolls (Salik)" value={`AED ${form.salikTollsAed}`} />
+              ) : null}
               {form.studentName && <ConfirmationDetail label="Student" value={form.studentName as string} />}
               {form.companyName && <ConfirmationDetail label="Company" value={form.companyName as string} />}
               {form.leaseDuration && <ConfirmationDetail label="Lease Duration" value={form.leaseDuration as string} />}
