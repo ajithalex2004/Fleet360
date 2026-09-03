@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import { getSignature } from '@/lib/leasing/esignature-store';
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -38,7 +39,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
           },
         });
         if (!contract) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-        return NextResponse.json(contract);
+        const signature = await getSignature(tenantId, 'CONTRACT', contract.id);
+        return NextResponse.json({ ...contract, signature });
       } catch (e) {
         console.error(e);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

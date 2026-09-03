@@ -7,8 +7,9 @@ interface Vehicle { id: string; vehicleType: string; make: string | null; model:
 interface Contract {
   id: string; contractNumber: string | null; status: string; leaseType: string | null;
   startDate: string; endDate: string; monthlyRate: number | string; currency: string | null;
-  vehicles: Vehicle[];
+  vehicles: Vehicle[]; signed: boolean;
 }
+const TERMINAL_STATUSES = new Set(['TERMINATED', 'CLOSED']);
 interface Renewal {
   id: string; status: string; proposedStartDate: string; proposedEndDate: string;
   proposedMonthlyRate: number | string | null; newContractId: string | null;
@@ -21,6 +22,7 @@ export default function ContractsPage() {
   const [renewals, setRenewals] = useState<Renewal[]>([]);
   const [loading, setLoading] = useState(true);
   const [signing, setSigning] = useState<string | null>(null);
+  const [signingContract, setSigningContract] = useState<string | null>(null);
   const [signerName, setSignerName] = useState('');
   const [toast, setToast] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null);
   const [requesting, setRequesting] = useState<{ contractId: string; type: 'RENEWAL' | 'TERMINATION' } | null>(null);
@@ -53,6 +55,21 @@ export default function ContractsPage() {
     if (!res.ok) { setToast({ type: 'err', msg: data.error ?? 'Failed to sign' }); return; }
     setToast({ type: 'ok', msg: 'Renewal signed — your new contract has been created.' });
     setSigning(null);
+    setSignerName('');
+    void load();
+  };
+
+  const signContract = async (contractId: string) => {
+    if (!signerName.trim()) { setToast({ type: 'err', msg: 'Enter your full name to sign.' }); return; }
+    const res = await fetch(`/api/leasing-portal/contracts/${contractId}/sign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ signerName }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setToast({ type: 'err', msg: data.error ?? 'Failed to sign' }); return; }
+    setToast({ type: 'ok', msg: 'Contract signed.' });
+    setSigningContract(null);
     setSignerName('');
     void load();
   };
@@ -111,6 +128,36 @@ export default function ContractsPage() {
             {c.vehicles.length > 0 && (
               <div className="text-xs text-slate-400">
                 {c.vehicles.map(v => `${v.vehicleType}${v.make ? ` ${v.make}` : ''}${v.model ? ` ${v.model}` : ''}`).join(', ')}
+              </div>
+            )}
+
+            {c.signed ? (
+              <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Signed
+              </div>
+            ) : !TERMINAL_STATUSES.has(c.status) && (
+              <div className="mt-1 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 space-y-2">
+                <p className="text-sm text-amber-200">This contract is awaiting your signature.</p>
+                {signingContract === c.id ? (
+                  <div className="flex gap-2">
+                    <input
+                      value={signerName}
+                      onChange={e => setSignerName(e.target.value)}
+                      placeholder="Type your full name to sign"
+                      className="flex-1 bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white"
+                    />
+                    <button onClick={() => signContract(c.id)} className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-sm font-medium">
+                      Confirm & sign
+                    </button>
+                    <button onClick={() => setSigningContract(null)} className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-300 text-sm">
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => setSigningContract(c.id)} className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-sm font-medium">
+                    Review & sign contract
+                  </button>
+                )}
               </div>
             )}
 

@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireLeasingPortal } from '@/lib/leasing-portal/auth';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import { getSignature } from '@/lib/leasing/esignature-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,5 +28,12 @@ export async function GET(req: NextRequest) {
     }),
   );
 
-  return NextResponse.json(contracts);
+  const withSignatures = await Promise.all(
+    contracts.map(async (c) => ({
+      ...c,
+      signed: !!(await getSignature(ctx.tenantId, 'CONTRACT', c.id)),
+    })),
+  );
+
+  return NextResponse.json(withSignatures);
 }
