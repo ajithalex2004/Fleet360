@@ -620,11 +620,11 @@ function buildPayload(serviceType: ServiceType, form: FormData) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const inputCls =
-  'w-full bg-slate-800/60 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm ' +
-  'placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 ' +
-  'transition-all';
+  'w-full bg-zinc-900/90 border border-amber-500/25 rounded-xl px-4 py-2.5 text-white text-sm ' +
+  'placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-400 ' +
+  'transition-all shadow-inner';
 
-const labelCls = 'block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5';
+const labelCls = 'block text-xs font-semibold text-amber-300/80 uppercase tracking-wider mb-1.5';
 
 function FieldRenderer({
   field,
@@ -637,21 +637,21 @@ function FieldRenderer({
 }) {
   if (field.type === 'toggle') {
     return (
-      <div className="flex items-start gap-3 bg-slate-800/30 border border-white/8 rounded-xl px-4 py-3">
+      <div className="flex items-start gap-3 bg-zinc-900/50 border border-amber-500/20 rounded-xl px-4 py-3">
         <button
           type="button"
           role="switch"
           aria-checked={!!value}
           onClick={() => onChange(field.key, !value)}
           className={`relative mt-0.5 flex-shrink-0 w-10 h-6 rounded-full transition-colors ${
-            value ? 'bg-violet-500' : 'bg-slate-700'
+            value ? 'bg-amber-500' : 'bg-zinc-800'
           }`}
         >
-          <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-4' : 'translate-x-0'}`} />
+          <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-black shadow transition-transform ${value ? 'translate-x-4' : 'translate-x-0'}`} />
         </button>
         <div>
           <p className="text-sm font-medium text-white">{field.label}</p>
-          {field.hint && <p className="text-xs text-slate-500 mt-0.5">{field.hint}</p>}
+          {field.hint && <p className="text-xs text-amber-200/50 mt-0.5">{field.hint}</p>}
         </div>
       </div>
     );
@@ -660,17 +660,17 @@ function FieldRenderer({
   if (field.type === 'select') {
     return (
       <div>
-        <label className={labelCls}>{field.label}{field.required && <span className="text-red-400 ml-0.5">*</span>}</label>
+        <label className={labelCls}>{field.label}{field.required && <span className="text-amber-400 ml-0.5">*</span>}</label>
         <select
           value={value as string}
           onChange={e => onChange(field.key, e.target.value)}
           required={field.required}
           className={inputCls}
         >
-          <option value="">— Select —</option>
-          {field.options?.map(o => <option key={o} value={o}>{o}</option>)}
+          <option value="" className="bg-zinc-950 text-slate-400">— Select —</option>
+          {field.options?.map(o => <option key={o} value={o} className="bg-zinc-950 text-white">{o}</option>)}
         </select>
-        {field.hint && <p className="text-xs text-slate-500 mt-1">{field.hint}</p>}
+        {field.hint && <p className="text-xs text-amber-200/50 mt-1">{field.hint}</p>}
       </div>
     );
   }
@@ -686,7 +686,7 @@ function FieldRenderer({
           rows={3}
           className={`${inputCls} resize-none`}
         />
-        {field.hint && <p className="text-xs text-slate-500 mt-1">{field.hint}</p>}
+        {field.hint && <p className="text-xs text-amber-200/50 mt-1">{field.hint}</p>}
       </div>
     );
   }
@@ -695,8 +695,8 @@ function FieldRenderer({
     <div>
       <label className={labelCls}>
         {field.label}
-        {field.required && <span className="text-red-400 ml-0.5">*</span>}
-        {field.unit && <span className="text-slate-600 ml-1 normal-case font-normal">({field.unit})</span>}
+        {field.required && <span className="text-amber-400 ml-0.5">*</span>}
+        {field.unit && <span className="text-amber-300/60 ml-1 normal-case font-normal">({field.unit})</span>}
       </label>
       <input
         type={field.type}
@@ -706,7 +706,7 @@ function FieldRenderer({
         required={field.required}
         className={inputCls}
       />
-      {field.hint && <p className="text-xs text-slate-500 mt-1">{field.hint}</p>}
+      {field.hint && <p className="text-xs text-amber-200/50 mt-1">{field.hint}</p>}
     </div>
   );
 }
@@ -753,11 +753,16 @@ function FormSection({
   }
 
   return (
-    <div className="bg-slate-900/50 border border-white/8 rounded-2xl overflow-hidden">
+    <div className="bg-zinc-950/80 border border-amber-500/20 hover:border-amber-500/40 rounded-2xl overflow-hidden backdrop-blur-xl shadow-xl shadow-amber-500/5 transition-all">
       {/* Section header */}
-      <div className="px-5 py-3 border-b border-white/8 bg-slate-800/30 flex items-center gap-2">
-        <span className="text-base">{section.icon}</span>
-        <h3 className="text-sm font-bold text-white tracking-wide">{section.title}</h3>
+      <div className="px-5 py-3.5 border-b border-amber-500/20 bg-gradient-to-r from-amber-950/40 via-zinc-900/40 to-transparent flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <span className="text-lg">{section.icon}</span>
+          <h3 className="text-sm font-bold text-white tracking-wide">{section.title}</h3>
+        </div>
+        <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+          REQUIRED
+        </span>
       </div>
 
       {/* Fields */}
@@ -822,8 +827,8 @@ function FormSection({
 
 function ConfirmationDetail({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs text-slate-500 uppercase tracking-wider">{label}</span>
+    <div className="flex flex-col gap-0.5 bg-zinc-900/60 border border-amber-500/15 rounded-xl p-3">
+      <span className="text-[10px] text-amber-300/70 uppercase tracking-wider font-semibold">{label}</span>
       <span className="text-sm text-white font-medium">{value}</span>
     </div>
   );
@@ -929,63 +934,87 @@ function NewBookingInner() {
   const meta = serviceType ? SERVICE_META[serviceType as ServiceType] : null;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8 min-h-screen text-white">
 
       {/* ── Page header ── */}
-      <div>
-        <h1 className="text-3xl font-bold text-white">New Booking Request</h1>
-        <p className="text-slate-400 mt-1">Create a transport booking across any service</p>
-      </div>
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-amber-500/20 pb-6">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 mb-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span className="text-amber-300 text-xs font-mono font-bold tracking-wider">EXECUTIVE BOOKING CONSOLE</span>
+          </div>
+          <h1 className="text-3xl font-extrabold text-white tracking-tight">
+            Fleet360 <span className="bg-gradient-to-r from-amber-400 to-yellow-500 bg-clip-text text-transparent">Booking Portal</span>
+          </h1>
+          <p className="text-zinc-400 text-sm mt-1">Multi-modal booking & freight dispatch console across all transport domains</p>
+        </div>
 
-      {/* ── Progress stepper ── */}
-      <div className="flex items-center gap-3">
-        {(['Select Service', 'Booking Details', 'Confirmation'] as const).map((label, i) => {
-          const n = (i + 1) as 1 | 2 | 3;
-          return (
-            <React.Fragment key={label}>
-              <div className="flex items-center gap-2">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                  step > n  ? 'bg-emerald-500 text-white' :
-                  step === n ? 'bg-violet-500 text-white' :
-                  'bg-slate-700 text-slate-500'
-                }`}>
-                  {step > n ? '✓' : n}
+        {/* ── Progress stepper ── */}
+        <div className="flex items-center gap-3 bg-zinc-950/80 border border-amber-500/20 rounded-2xl px-5 py-3 backdrop-blur-xl">
+          {(['Select Service', 'Booking Details', 'Confirmation'] as const).map((label, i) => {
+            const n = (i + 1) as 1 | 2 | 3;
+            return (
+              <React.Fragment key={label}>
+                <div className="flex items-center gap-2">
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                    step > n  ? 'bg-emerald-500 text-black font-bold' :
+                    step === n ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-bold shadow-md shadow-amber-500/30' :
+                    'bg-zinc-800 text-zinc-500'
+                  }`}>
+                    {step > n ? '✓' : n}
+                  </div>
+                  <span className={`text-xs hidden md:block font-medium transition-colors ${
+                    step >= n ? 'text-amber-200' : 'text-zinc-500'
+                  }`}>{label}</span>
                 </div>
-                <span className={`text-xs hidden sm:block font-medium transition-colors ${
-                  step >= n ? 'text-white' : 'text-slate-600'
-                }`}>{label}</span>
-              </div>
-              {i < 2 && (
-                <div className={`flex-1 h-0.5 rounded-full transition-all ${
-                  step > n ? 'bg-emerald-500' : 'bg-slate-700'
-                }`} />
-              )}
-            </React.Fragment>
-          );
-        })}
+                {i < 2 && (
+                  <div className={`w-8 h-0.5 rounded-full transition-all ${
+                    step > n ? 'bg-emerald-500' : 'bg-zinc-800'
+                  }`} />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
       </div>
 
       {/* ══════════════════════════════════════════════════════════════
           Step 1 — Service Type Selection
       ══════════════════════════════════════════════════════════════ */}
       {step === 1 && (
-        <div className="space-y-5">
-          <h2 className="text-xl font-bold text-white">Select Service Type</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold text-white tracking-wide">Select Transport Service Category</h2>
+            <span className="text-xs font-mono text-zinc-400">Step 1 of 3</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {visibleCards.map(opt => (
               <button
                 key={opt.type}
                 onClick={() => { setServiceType(opt.type as ServiceType); setStep(2); }}
-                className={`bg-gradient-to-br ${opt.gradient} rounded-2xl p-6 text-left hover:shadow-xl hover:shadow-black/30 transition-all hover:scale-[1.02] active:scale-100`}
+                className="group relative bg-zinc-950/80 border border-amber-500/20 hover:border-amber-400/60 rounded-2xl p-6 text-left hover:shadow-2xl hover:shadow-amber-500/10 transition-all duration-200 hover:scale-[1.02] active:scale-100 flex flex-col justify-between space-y-4 backdrop-blur-xl"
               >
-                <div className="flex items-start justify-between mb-4">
-                  <span className="text-4xl">{opt.icon}</span>
-                  <span className="text-xs font-bold bg-black/25 px-2.5 py-1 rounded-lg text-white/80 tracking-wider">
-                    {opt.badge}
-                  </span>
+                <div>
+                  <div className="flex items-start justify-between mb-3">
+                    <span className="text-3xl p-3 bg-zinc-900 border border-amber-500/20 rounded-2xl group-hover:scale-110 transition-transform">
+                      {opt.icon}
+                    </span>
+                    <span className="text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg tracking-wider">
+                      {opt.badge}
+                    </span>
+                  </div>
+                  <h3 className="text-base font-bold text-white group-hover:text-amber-300 transition-colors">
+                    {opt.title}
+                  </h3>
+                  <p className="text-zinc-400 text-xs mt-1.5 leading-relaxed">
+                    {opt.desc}
+                  </p>
                 </div>
-                <h3 className="text-base font-bold text-white mb-1">{opt.title}</h3>
-                <p className="text-white/70 text-sm leading-relaxed">{opt.desc}</p>
+                <div className="flex items-center justify-between pt-2 border-t border-white/5 text-xs text-amber-400 font-semibold group-hover:translate-x-1 transition-transform">
+                  <span>Configure Booking</span>
+                  <span>→</span>
+                </div>
               </button>
             ))}
           </div>
@@ -993,206 +1022,297 @@ function NewBookingInner() {
       )}
 
       {/* ══════════════════════════════════════════════════════════════
-          Step 2 — Dynamic Form
+          Step 2 — Dynamic Form (2-Column Split Layout)
       ══════════════════════════════════════════════════════════════ */}
       {step === 2 && card && (
-        <div className="space-y-5">
-          {/* Selected service banner */}
-          <div className={`bg-gradient-to-br ${card.gradient} rounded-2xl p-4 flex items-center gap-3`}>
-            <span className="text-3xl">{card.icon}</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-white font-bold">{card.title}</p>
-              <p className="text-white/65 text-xs">{card.desc}</p>
+        <div className="space-y-6">
+          {/* Top Segmented Service Selector Pills */}
+          <div className="bg-zinc-950/80 border border-amber-500/20 rounded-2xl p-2 backdrop-blur-xl shadow-xl shadow-amber-500/5">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+              {visibleCards.map((opt) => {
+                const isActive = serviceType === opt.type;
+                return (
+                  <button
+                    key={opt.type}
+                    type="button"
+                    onClick={() => {
+                      setServiceType(opt.type as ServiceType);
+                      setForm(EMPTY_FORM);
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                      isActive
+                        ? 'bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-black shadow-lg shadow-amber-500/25 scale-[1.02]'
+                        : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+                    }`}
+                  >
+                    <span>{opt.icon}</span>
+                    <span>{opt.title}</span>
+                  </button>
+                );
+              })}
             </div>
-            {!initialType && (
-              <button
-                type="button"
-                onClick={resetForm}
-                className="flex-shrink-0 text-white/60 hover:text-white text-xs border border-white/20 rounded-lg px-3 py-1.5 transition-colors"
-              >
-                Change
-              </button>
-            )}
           </div>
 
-          {/* Form sections */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {schema.map(section => (
-              <FormSection
-                key={section.title}
-                section={section}
-                form={form}
-                onChange={onChange}
-              />
-            ))}
+          <form onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              {/* ── LEFT COLUMN (Inputs & Specialized Widgets) ── */}
+              <div className="lg:col-span-8 space-y-6">
+                {/* Form Schema Sections */}
+                {schema.map((section) => (
+                  <FormSection
+                    key={section.title}
+                    section={section}
+                    form={form}
+                    onChange={onChange}
+                  />
+                ))}
 
-            {/* B2B Bulk Consignment Excel / CSV Uploader & Auto-Clustering Route Optimizer */}
-            {serviceType === 'LOGISTICS' && (
-              <BulkConsignmentUploader
-                onBatchDispatched={(analysis) => {
-                  onChange('bulkBatchManifestNo', analysis.masterManifestNumber);
-                  onChange('bulkBatchTotalPallets', analysis.totalPallets);
-                  onChange('bulkBatchTotalRoutes', analysis.clusters.length);
-                  onChange('fareSubtotal', analysis.summaryPricingAed);
-                }}
-              />
-            )}
-
-            {/* Multi-Stop Waypoints & LTL Route Optimizer for Freight/Logistics */}
-            {serviceType === 'LOGISTICS' && (
-              <MultiStopRoutePicker
-                initialOrigin={(form.origin as string) || 'Jebel Ali (JAFZA) Base Gate 4'}
-                initialDestination={(form.destination as string) || 'Abu Dhabi Kizad Dock 2'}
-                baseFareAed={Number(form.fareSubtotal) || 550}
-                onRouteChange={(routeRes) => {
-                  onChange('distanceKm', routeRes.totalDistanceKm);
-                  onChange('durationMins', routeRes.totalDurationMins);
-                  onChange('salikTollsAed', routeRes.totalSalikTollsAed);
-                  onChange('multiStopWaypoints', JSON.stringify(routeRes.optimizedWaypoints));
-                  onChange('co2EmissionsKg', routeRes.co2EmissionsKg);
-                  if (routeRes.ltlConsolidation.isEligible) {
-                    onChange('ltlConsolidationEligible', true);
-                    onChange('ltlDiscountAed', routeRes.ltlConsolidation.discountAmountAed);
-                  }
-                }}
-              />
-            )}
-
-            {/* Digital Bill of Lading (e-BOL) & Barcode Consignment Scanner */}
-            {serviceType === 'LOGISTICS' && (
-              <DigitalEbolScanner
-                bookingRef={`EXL-FRT-${Math.floor(1000 + Math.random() * 9000)}`}
-                shipperName={(form.requestorName as string) || 'EIN360 General Trading LLC'}
-                shipperAddress={(form.origin as string) || 'JAFZA Logistics Base Gate 4'}
-                consigneeName="Dubai Mall Logistics Dock 3"
-                consigneeAddress={(form.destination as string) || 'Dubai Mall Service Dock 3'}
-                onEbolGenerated={(ebol) => {
-                  onChange('ebolNumber', ebol.ebolNumber);
-                  onChange('uaeCustomsDeclarationNo', ebol.uaeCustomsDeclarationNo);
-                  onChange('ebolCryptographicSeal', ebol.cryptographicSeal);
-                }}
-              />
-            )}
-
-            {/* Driver Mobile Handover & Electronic Proof of Delivery (e-POD) */}
-            {serviceType === 'LOGISTICS' && (
-              <DriverHandoverEpod
-                bookingRef={`EXL-FRT-${Math.floor(1000 + Math.random() * 9000)}`}
-                ebolNumber={(form.ebolNumber as string) || 'EBOL-EXL-2026-8891'}
-                consigneeName={(form.destination as string) || 'Dubai Mall Logistics Dock 3'}
-                onEpodCompleted={(epod) => {
-                  onChange('epodNumber', epod.epodNumber);
-                  onChange('epodSeal', epod.cryptographicPODSeal);
-                  onChange('deliveryConfirmed', true);
-                }}
-              />
-            )}
-
-            {/* Live IoT Telematics & Continuous Cold-Chain Temperature Graph */}
-            {serviceType === 'LOGISTICS' && (
-              <ColdChainTelemetryGraph
-                tripRef={`TRIP-${Math.floor(1000 + Math.random() * 9000)}`}
-                cargoTypeKey="FROZEN_PHARMA"
-                onAlertTriggered={(alertMsg) => {
-                  onChange('coldChainAlert', alertMsg);
-                }}
-              />
-            )}
-            {/* Universal Booking Recurrence & Standing Contract Engine */}
-            <RecurringSchedulePicker
-              serviceType={serviceType as string}
-              singleTripFareAed={Number(form.fareSubtotal) || 550}
-              onScheduleChange={({ config, trips, pricing }) => {
-                onChange('recurringScheduleType', config.scheduleType);
-                onChange('recurringFrequency', config.frequency);
-                onChange('recurringDays', JSON.stringify(config.daysOfWeek));
-                onChange('recurringTotalTrips', trips.length);
-                onChange('recurringDiscountPercent', pricing.discountPercent);
-                onChange('recurringTotalContractAed', pricing.totalWithVatAed);
-              }}
-            />
-
-            {/* Instant Pricing & Corporate Cost Center Allocation */}
-            <InstantPricingCostCenter
-              serviceType={serviceType as string}
-              vehicleCategory={(form.vehicleCategory as string) || ''}
-              distanceKm={Number(form.distanceKm) || 0}
-              salikTollsAed={Number(form.salikTollsAed) || 0}
-              costCenter={(form.costCenter as string) || 'CC-OPS-3003'}
-              projectCode={(form.projectCode as string) || ''}
-              billingMethod={(form.billingMethod as string) || 'CORPORATE_ACCOUNT'}
-              onChange={(pricing) => {
-                onChange('fareSubtotal', pricing.fareSubtotal);
-                onChange('vatAmount', pricing.vatAmount);
-                onChange('totalFareAed', pricing.totalFareAed);
-                onChange('costCenter', pricing.costCenter);
-                onChange('projectCode', pricing.projectCode);
-                onChange('billingMethod', pricing.billingMethod);
-                onChange('budgetStatus', pricing.budgetStatus);
-              }}
-            />
-
-            {/* Omnichannel Passenger Alerts & WhatsApp Notifications */}
-            <OmnichannelNotificationPreferences
-              serviceType={serviceType as string}
-              vehicleCategory={(form.vehicleCategory as string) || ''}
-              pickupLocation={(form.origin as string) || ''}
-              destinationLocation={(form.destination as string) || ''}
-              totalFareAed={Number(form.totalFareAed) || 0}
-              requestorName={(form.requestorName as string) || 'Passenger'}
-              phone={(form.contactPhone as string) || '+971 50 123 4567'}
-              email={(form.requestorEmail as string) || ''}
-              onChange={(channels, phone) => {
-                onChange('notificationChannels', JSON.stringify(channels));
-                onChange('contactPhone', phone);
-              }}
-            />
-
-            {/* Digital KYC, UAE Pass & Electronic Signatures */}
-            <DigitalKycUaePass
-              requestorName={(form.requestorName as string) || ''}
-              requestorEmail={(form.requestorEmail as string) || ''}
-              onKycVerified={(kyc) => {
-                if (kyc.uaePassVerified) onChange('uaePassVerified', true);
-                if (kyc.emiratesId) onChange('emiratesId', kyc.emiratesId);
-                if (kyc.drivingLicenseNo) onChange('drivingLicenseNo', kyc.drivingLicenseNo);
-                if (kyc.licenseExpiry) onChange('licenseExpiry', kyc.licenseExpiry);
-                if (kyc.signatureHash) onChange('signatureHash', kyc.signatureHash);
-                if (kyc.signatureDataUrl) onChange('signatureDataUrl', kyc.signatureDataUrl);
-              }}
-            />
-
-            {error && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 text-sm flex items-start gap-2">
-                <span className="flex-shrink-0">⚠️</span>
-                <span>{error}</span>
-              </div>
-            )}
-
-            <div className="flex gap-4 pt-2">
-              {!initialType && (
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="flex-1 rounded-xl bg-slate-700/80 hover:bg-slate-700 px-6 py-3 text-sm font-medium text-slate-300 transition-all border border-white/10"
-                >
-                  ← Back
-                </button>
-              )}
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-3 text-sm font-semibold text-white hover:shadow-lg hover:shadow-violet-500/25 transition-all disabled:opacity-40"
-              >
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Submitting…
-                  </span>
-                ) : (
-                  'Submit Booking Request →'
+                {/* B2B Bulk Consignment Excel / CSV Uploader */}
+                {serviceType === 'LOGISTICS' && (
+                  <BulkConsignmentUploader
+                    onBatchDispatched={(analysis) => {
+                      onChange('bulkBatchManifestNo', analysis.masterManifestNumber);
+                      onChange('bulkBatchTotalPallets', analysis.totalPallets);
+                      onChange('bulkBatchTotalRoutes', analysis.clusters.length);
+                      onChange('fareSubtotal', analysis.summaryPricingAed);
+                    }}
+                  />
                 )}
-              </button>
+
+                {/* Multi-Stop Waypoints & LTL Route Optimizer */}
+                {serviceType === 'LOGISTICS' && (
+                  <MultiStopRoutePicker
+                    initialOrigin={(form.origin as string) || 'Jebel Ali (JAFZA) Base Gate 4'}
+                    initialDestination={(form.destination as string) || 'Abu Dhabi Kizad Dock 2'}
+                    baseFareAed={Number(form.fareSubtotal) || 550}
+                    onRouteChange={(routeRes) => {
+                      onChange('distanceKm', routeRes.totalDistanceKm);
+                      onChange('durationMins', routeRes.totalDurationMins);
+                      onChange('salikTollsAed', routeRes.totalSalikTollsAed);
+                      onChange('multiStopWaypoints', JSON.stringify(routeRes.optimizedWaypoints));
+                      onChange('co2EmissionsKg', routeRes.co2EmissionsKg);
+                      if (routeRes.ltlConsolidation.isEligible) {
+                        onChange('ltlConsolidationEligible', true);
+                        onChange('ltlDiscountAed', routeRes.ltlConsolidation.discountAmountAed);
+                      }
+                    }}
+                  />
+                )}
+
+                {/* Digital Bill of Lading (e-BOL) & Pallet Scanner */}
+                {serviceType === 'LOGISTICS' && (
+                  <DigitalEbolScanner
+                    bookingRef={`EXL-FRT-${Math.floor(1000 + Math.random() * 9000)}`}
+                    shipperName={(form.requestorName as string) || 'EIN360 General Trading LLC'}
+                    shipperAddress={(form.origin as string) || 'JAFZA Logistics Base Gate 4'}
+                    consigneeName="Dubai Mall Logistics Dock 3"
+                    consigneeAddress={(form.destination as string) || 'Dubai Mall Service Dock 3'}
+                    onEbolGenerated={(ebol) => {
+                      onChange('ebolNumber', ebol.ebolNumber);
+                      onChange('uaeCustomsDeclarationNo', ebol.uaeCustomsDeclarationNo);
+                      onChange('ebolCryptographicSeal', ebol.cryptographicSeal);
+                    }}
+                  />
+                )}
+
+                {/* Driver Mobile Handover & Electronic Proof of Delivery (e-POD) */}
+                {serviceType === 'LOGISTICS' && (
+                  <DriverHandoverEpod
+                    bookingRef={`EXL-FRT-${Math.floor(1000 + Math.random() * 9000)}`}
+                    ebolNumber={(form.ebolNumber as string) || 'EBOL-EXL-2026-8891'}
+                    consigneeName={(form.destination as string) || 'Dubai Mall Logistics Dock 3'}
+                    onEpodCompleted={(epod) => {
+                      onChange('epodNumber', epod.epodNumber);
+                      onChange('epodSeal', epod.cryptographicPODSeal);
+                      onChange('deliveryConfirmed', true);
+                    }}
+                  />
+                )}
+
+                {/* Live IoT Telematics & Continuous Cold-Chain Temperature Graph */}
+                {serviceType === 'LOGISTICS' && (
+                  <ColdChainTelemetryGraph
+                    tripRef={`TRIP-${Math.floor(1000 + Math.random() * 9000)}`}
+                    cargoTypeKey="FROZEN_PHARMA"
+                    onAlertTriggered={(alertMsg) => {
+                      onChange('coldChainAlert', alertMsg);
+                    }}
+                  />
+                )}
+
+                {/* Universal Booking Recurrence & Standing Contract Engine */}
+                <RecurringSchedulePicker
+                  serviceType={serviceType as string}
+                  singleTripFareAed={Number(form.fareSubtotal) || 550}
+                  onScheduleChange={({ config, trips, pricing }) => {
+                    onChange('recurringScheduleType', config.scheduleType);
+                    onChange('recurringFrequency', config.frequency);
+                    onChange('recurringDays', JSON.stringify(config.daysOfWeek));
+                    onChange('recurringTotalTrips', trips.length);
+                    onChange('recurringDiscountPercent', pricing.discountPercent);
+                    onChange('recurringTotalContractAed', pricing.totalWithVatAed);
+                  }}
+                />
+
+                {/* Omnichannel Passenger Alerts & WhatsApp Notifications */}
+                <OmnichannelNotificationPreferences
+                  serviceType={serviceType as string}
+                  vehicleCategory={(form.vehicleCategory as string) || ''}
+                  pickupLocation={(form.origin as string) || ''}
+                  destinationLocation={(form.destination as string) || ''}
+                  totalFareAed={Number(form.totalFareAed) || 0}
+                  requestorName={(form.requestorName as string) || 'Passenger'}
+                  phone={(form.contactPhone as string) || '+971 50 123 4567'}
+                  email={(form.requestorEmail as string) || ''}
+                  onChange={(channels, phone) => {
+                    onChange('notificationChannels', JSON.stringify(channels));
+                    onChange('contactPhone', phone);
+                  }}
+                />
+
+                {/* Digital KYC, UAE Pass & Electronic Signatures */}
+                <DigitalKycUaePass
+                  requestorName={(form.requestorName as string) || ''}
+                  requestorEmail={(form.requestorEmail as string) || ''}
+                  onKycVerified={(kyc) => {
+                    if (kyc.uaePassVerified) onChange('uaePassVerified', true);
+                    if (kyc.emiratesId) onChange('emiratesId', kyc.emiratesId);
+                    if (kyc.drivingLicenseNo) onChange('drivingLicenseNo', kyc.drivingLicenseNo);
+                    if (kyc.licenseExpiry) onChange('licenseExpiry', kyc.licenseExpiry);
+                    if (kyc.signatureHash) onChange('signatureHash', kyc.signatureHash);
+                    if (kyc.signatureDataUrl) onChange('signatureDataUrl', kyc.signatureDataUrl);
+                  }}
+                />
+
+                {error && (
+                  <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 text-sm flex items-start gap-2">
+                    <span className="flex-shrink-0">⚠️</span>
+                    <span>{error}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* ── RIGHT COLUMN (Sticky Floating Luxury Order Summary) ── */}
+              <div className="lg:col-span-4 sticky top-20 space-y-4">
+                <div className="bg-zinc-950/95 border border-amber-500/30 rounded-2xl p-6 shadow-2xl shadow-amber-500/10 space-y-5 backdrop-blur-xl">
+                  {/* Summary Header */}
+                  <div className="flex items-center justify-between border-b border-amber-500/20 pb-3.5">
+                    <div>
+                      <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-widest block">
+                        EXECUTIVE SUMMARY
+                      </span>
+                      <h3 className="text-base font-bold text-white mt-0.5">Booking Fare & Dispatch</h3>
+                    </div>
+                    <span className="text-2xl">{card.icon}</span>
+                  </div>
+
+                  {/* Trip Details Preview */}
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between text-zinc-400">
+                      <span>Service:</span>
+                      <strong className="text-white">{card.title}</strong>
+                    </div>
+                    {form.origin && (
+                      <div className="flex justify-between text-zinc-400">
+                        <span>Pickup:</span>
+                        <strong className="text-white truncate max-w-[150px]">{form.origin as string}</strong>
+                      </div>
+                    )}
+                    {form.destination && (
+                      <div className="flex justify-between text-zinc-400">
+                        <span>Destination:</span>
+                        <strong className="text-white truncate max-w-[150px]">{form.destination as string}</strong>
+                      </div>
+                    )}
+                    {form.vehicleCategory && (
+                      <div className="flex justify-between text-zinc-400">
+                        <span>Vehicle Class:</span>
+                        <strong className="text-amber-300">{form.vehicleCategory as string}</strong>
+                      </div>
+                    )}
+                    {form.distanceKm ? (
+                      <div className="flex justify-between text-zinc-400">
+                        <span>Distance / ETA:</span>
+                        <span className="font-mono text-white">
+                          {form.distanceKm} km · {form.durationMins || 45} mins
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {/* Pricing Breakdown */}
+                  <div className="bg-zinc-900/80 border border-amber-500/20 rounded-xl p-3.5 space-y-2 text-xs font-mono">
+                    <div className="flex justify-between text-zinc-400 font-sans">
+                      <span>Base Fare:</span>
+                      <span className="text-white">AED {Number(form.fareSubtotal) || 550}</span>
+                    </div>
+                    {Number(form.salikTollsAed) > 0 && (
+                      <div className="flex justify-between text-zinc-400 font-sans">
+                        <span>Salik Tolls:</span>
+                        <span className="text-white">AED {Number(form.salikTollsAed)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-zinc-400 font-sans">
+                      <span>UAE VAT (5%):</span>
+                      <span className="text-white">
+                        AED {Number(form.vatAmount) || Math.round((Number(form.fareSubtotal) || 550) * 0.05)}
+                      </span>
+                    </div>
+                    <div className="border-t border-amber-500/20 pt-2 flex justify-between items-baseline font-sans">
+                      <span className="text-sm font-bold text-white">Total Amount:</span>
+                      <span className="text-xl font-bold font-mono text-amber-400">
+                        AED{' '}
+                        {Number(form.totalFareAed) ||
+                          Math.round((Number(form.fareSubtotal) || 550) * 1.05 + (Number(form.salikTollsAed) || 0))}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Corporate Cost Center & Approval status */}
+                  <div className="space-y-2 text-xs">
+                    <div className="bg-zinc-900/50 rounded-lg p-2.5 flex items-center justify-between">
+                      <span className="text-zinc-400">Cost Center:</span>
+                      <span className="text-[11px] font-mono text-amber-300 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                        {(form.costCenter as string) || 'CC-EIN360-LOGISTICS'}
+                      </span>
+                    </div>
+                    <div className="bg-zinc-900/50 rounded-lg p-2.5 flex items-center justify-between">
+                      <span className="text-zinc-400">Workflow:</span>
+                      <span className="text-[11px] text-emerald-400 font-bold">
+                        ✓ 3-Tier Line Manager Flow
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="space-y-2 pt-1">
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full py-4 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-500 text-black text-sm font-bold shadow-lg shadow-amber-500/25 transition-all flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-100 disabled:opacity-50"
+                    >
+                      {loading ? (
+                        <span className="flex items-center gap-2">
+                          <span className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                          Processing Dispatch…
+                        </span>
+                      ) : (
+                        'Confirm & Dispatch Booking →'
+                      )}
+                    </button>
+
+                    {!initialType && (
+                      <button
+                        type="button"
+                        onClick={resetForm}
+                        className="w-full py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-xs font-semibold border border-white/10 transition-colors"
+                      >
+                        ← Back to Service Selection
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </form>
         </div>
@@ -1211,19 +1331,17 @@ function NewBookingInner() {
           </div>
 
           {/* Booking reference card */}
-          <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 space-y-5">
-            <div className="flex items-center justify-between">
+          <div className="bg-zinc-950/90 border border-amber-500/30 rounded-2xl p-6 space-y-5 shadow-2xl shadow-amber-500/10 backdrop-blur-xl">
+            <div className="flex items-center justify-between border-b border-amber-500/20 pb-4">
               <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Booking Reference</p>
-                <p className="text-3xl font-mono font-bold text-white">{bookingRef}</p>
+                <p className="text-xs text-amber-300/80 uppercase tracking-wider mb-1 font-semibold">Booking Reference</p>
+                <p className="text-3xl font-mono font-bold text-amber-400">{bookingRef}</p>
               </div>
-              <div className={`bg-gradient-to-br ${meta.gradient} rounded-xl p-3 text-3xl`}>{meta.icon}</div>
+              <div className="bg-zinc-900 border border-amber-500/30 rounded-2xl p-3 text-3xl shadow-inner">{meta.icon}</div>
             </div>
 
-            <div className="h-px bg-white/8" />
-
             {/* Key details */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <ConfirmationDetail label="Service" value={meta.title} />
               {form.requestorName && <ConfirmationDetail label="Requestor" value={form.requestorName as string} />}
               {form.startDate && (
@@ -1279,7 +1397,7 @@ function NewBookingInner() {
 
             {/* Service-specific notes */}
             {meta.confirmNote && (
-              <div className="bg-slate-900/60 border border-white/10 rounded-xl px-4 py-3 text-slate-300 text-xs leading-relaxed">
+              <div className="bg-zinc-900 border border-amber-500/20 rounded-xl px-4 py-3 text-zinc-300 text-xs leading-relaxed">
                 {meta.confirmNote}{' '}
                 {serviceType === 'LOGISTICS' && (
                   <a href="/logistics/dispatch" className="underline text-amber-400 hover:text-amber-300">
@@ -1291,7 +1409,7 @@ function NewBookingInner() {
 
             {/* Email confirmation */}
             {form.requestorEmail && (
-              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3 text-blue-300 text-xs">
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 text-amber-300 text-xs">
                 📧 A confirmation will be sent to <strong>{form.requestorEmail as string}</strong>
               </div>
             )}
@@ -1301,15 +1419,15 @@ function NewBookingInner() {
           <div className="flex gap-4">
             <button
               onClick={() => router.push('/booking-portal')}
-              className="flex-1 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-3 text-sm font-semibold text-white hover:opacity-90 transition-all"
+              className="flex-1 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 px-6 py-3.5 text-sm font-bold text-black shadow-lg shadow-amber-500/20 hover:scale-[1.01] transition-all"
             >
-              View All Bookings
+              View All Bookings →
             </button>
             <button
               onClick={resetForm}
-              className="flex-1 rounded-xl bg-slate-700 hover:bg-slate-600 px-6 py-3 text-sm font-medium text-slate-300 transition-all border border-white/10"
+              className="flex-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 px-6 py-3.5 text-sm font-medium text-zinc-300 transition-all border border-white/10"
             >
-              New Booking
+              + Create Another Booking
             </button>
           </div>
         </div>

@@ -196,53 +196,69 @@ export default function BookingPortal() {
   const completed = bookings.filter(b => b.status === 'COMPLETED').length;
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Booking Portal"
-        subtitle="Unified transport booking across all services"
-        icon={Smartphone}
-        accent="violet"
-        actions={
-          <Link href="/booking-portal/new"
-            className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition-all shadow-lg shadow-violet-500/30">
-            <Plus className="w-4 h-4" /> New booking
+    <div className="space-y-6 text-white">
+      {/* ── Executive Header ── */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-amber-500/20 pb-6">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 mb-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span className="text-amber-300 text-xs font-mono font-bold tracking-wider">BOOKING & DISPATCH HUB</span>
+          </div>
+          <h1 className="text-3xl font-extrabold text-white tracking-tight">
+            Fleet360 <span className="bg-gradient-to-r from-amber-400 to-yellow-500 bg-clip-text text-transparent">Booking Portal</span>
+          </h1>
+          <p className="text-zinc-400 text-sm mt-1">Multi-modal booking & freight dispatch console across all transport domains</p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Link
+            href="/booking-portal/new"
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 px-5 py-2.5 text-sm font-bold text-black shadow-lg shadow-amber-500/20 hover:scale-[1.02] transition-all"
+          >
+            <Plus className="w-4 h-4 text-black font-bold" /> New Booking Request
           </Link>
-        }
-      />
+        </div>
+      </div>
 
       {/* ── Summary tiles ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Total Bookings', value: bookings.length, color: 'text-white',         icon: '📋' },
-          { label: 'Pending',        value: pending,         color: 'text-amber-400',      icon: '⏳' },
-          { label: 'Active',         value: active,          color: 'text-emerald-400',    icon: '🟢' },
-          { label: 'Completed',      value: completed,       color: 'text-slate-400',      icon: '✅' },
+          { label: 'Pending Approval', value: pending,       color: 'text-amber-400',      icon: '⏳' },
+          { label: 'Active Trips',   value: active,          color: 'text-emerald-400',    icon: '🟢' },
+          { label: 'Completed',      value: completed,       color: 'text-zinc-400',       icon: '✅' },
         ].map(t => (
-          <div key={t.label} className="bg-slate-800/50 border border-white/10 rounded-2xl p-4">
-            <div className="text-xl mb-1">{t.icon}</div>
-            <div className={`text-2xl font-bold ${t.color}`}>{t.value}</div>
-            <div className="text-xs text-slate-500 mt-0.5">{t.label}</div>
+          <div key={t.label} className="bg-zinc-950/80 border border-amber-500/20 rounded-2xl p-5 shadow-xl shadow-amber-500/5 backdrop-blur-xl">
+            <div className="text-2xl mb-2">{t.icon}</div>
+            <div className={`text-2xl font-bold font-mono ${t.color}`}>{t.value}</div>
+            <div className="text-xs text-amber-200/60 mt-1 uppercase font-semibold tracking-wider">{t.label}</div>
           </div>
         ))}
       </div>
 
       {/* ── Service cards ── */}
       <div>
-        <h2 className="text-xl font-bold text-white mb-4">Book a Service</h2>
+        <h2 className="text-lg font-bold text-white mb-4">Book by Service Category</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {visibleCards.map(card => (
             <Link key={card.type} href={card.href}>
-              <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 hover:border-white/30 hover:bg-slate-800/80 transition-all cursor-pointer group h-full">
-                <div className="flex items-start justify-between mb-4">
-                  <span className="text-4xl">{card.icon}</span>
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg border ${card.badgeColor}`}>
-                    {card.badge}
-                  </span>
+              <div className="bg-zinc-950/80 border border-amber-500/20 hover:border-amber-400/60 rounded-2xl p-6 transition-all duration-200 hover:scale-[1.02] active:scale-100 flex flex-col justify-between space-y-4 backdrop-blur-xl group cursor-pointer h-full shadow-lg shadow-amber-500/5">
+                <div>
+                  <div className="flex items-start justify-between mb-4">
+                    <span className="text-3xl p-3 bg-zinc-900 border border-amber-500/20 rounded-2xl group-hover:scale-110 transition-transform">{card.icon}</span>
+                    <span className="text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg tracking-wider">
+                      {card.badge}
+                    </span>
+                  </div>
+                  <h3 className="text-base font-bold text-white mb-1 group-hover:text-amber-300 transition-colors">
+                    {card.title}
+                  </h3>
+                  <p className="text-zinc-400 text-xs leading-relaxed">{card.desc}</p>
                 </div>
-                <h3 className="text-base font-bold text-white mb-1 group-hover:text-violet-300 transition-colors">
-                  {card.title}
-                </h3>
-                <p className="text-slate-400 text-sm">{card.desc}</p>
+                <div className="flex items-center justify-between pt-2 border-t border-white/5 text-xs text-amber-400 font-semibold group-hover:translate-x-1 transition-transform">
+                  <span>Start Booking</span>
+                  <span>→</span>
+                </div>
               </div>
             </Link>
           ))}
@@ -250,39 +266,39 @@ export default function BookingPortal() {
       </div>
 
       {/* ── Bookings table ── */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="bg-zinc-950/80 border border-amber-500/20 rounded-2xl overflow-hidden shadow-2xl shadow-amber-500/5 backdrop-blur-xl">
+        <div className="px-6 py-4 border-b border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-amber-950/40 via-zinc-900/40 to-transparent">
           <div>
-            <h2 className="text-lg font-bold text-white">All Bookings</h2>
-            <p className="text-slate-500 text-xs mt-0.5">{filtered.length} of {bookings.length} shown</p>
+            <h2 className="text-base font-bold text-white">All Bookings & Manifests</h2>
+            <p className="text-amber-300/60 text-xs mt-0.5">{filtered.length} of {bookings.length} shown</p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={load} className="text-xs text-slate-400 hover:text-white border border-white/10 rounded-lg px-3 py-1.5 transition-colors">
+            <button onClick={load} className="text-xs text-amber-300 hover:text-white border border-amber-500/30 bg-zinc-900/80 rounded-lg px-3 py-1.5 transition-colors">
               ↻ Refresh
             </button>
           </div>
         </div>
 
         {/* Type filter tabs */}
-        <div className="px-6 py-3 border-b border-white/10 flex gap-2 overflow-x-auto">
+        <div className="px-6 py-3 border-b border-amber-500/15 flex gap-2 overflow-x-auto bg-zinc-950/40">
           {activeTypes.map(t => (
             <button key={t} onClick={() => setTypeFilter(t)}
-              className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+              className={`flex-shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
                 typeFilter === t
-                  ? 'bg-violet-500/20 text-violet-300 border-violet-500/30'
-                  : 'text-slate-400 border-white/10 hover:text-white hover:border-white/20'
+                  ? 'bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-black shadow-md shadow-amber-500/25'
+                  : 'text-zinc-400 border border-white/5 hover:text-white hover:bg-zinc-900/60'
               }`}>
-              {SERVICE_STYLE[t]?.icon} {t === 'ALL' ? 'All' : SERVICE_STYLE[t]?.label ?? t}
-              <span className="ml-1 opacity-60">({counts[t] ?? 0})</span>
+              {SERVICE_STYLE[t]?.icon} {t === 'ALL' ? 'All Services' : SERVICE_STYLE[t]?.label ?? t}
+              <span className="ml-1 opacity-70">({counts[t] ?? 0})</span>
             </button>
           ))}
         </div>
 
         {/* Search */}
-        <div className="px-6 py-3 border-b border-white/10">
-          <input type="text" placeholder="Search by ref, name, email, service type…"
+        <div className="px-6 py-3 border-b border-amber-500/15 bg-zinc-950/20">
+          <input type="text" placeholder="Search by reference number, requestor, email, or service…"
             value={search} onChange={e => setSearch(e.target.value)}
-            className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/40"
+            className="w-full bg-zinc-900/90 border border-amber-500/20 rounded-xl px-4 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-amber-400 focus:border-amber-400"
           />
         </div>
 
@@ -301,18 +317,18 @@ export default function BookingPortal() {
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center">
             <div className="text-5xl mb-3">📭</div>
-            <p className="text-slate-400 font-medium">
-              {bookings.length === 0 ? 'No bookings yet' : 'No bookings match your filter'}
+            <p className="text-zinc-300 font-medium">
+              {bookings.length === 0 ? 'No bookings recorded yet' : 'No bookings match your filter criteria'}
             </p>
-            <p className="text-slate-600 text-sm mt-1">
+            <p className="text-zinc-500 text-sm mt-1">
               {bookings.length === 0
-                ? 'Click "New Booking" above to create your first one'
-                : 'Try changing the service type or search term'}
+                ? 'Click "New Booking Request" above to dispatch your first booking'
+                : 'Try changing the service category or search term'}
             </p>
             {bookings.length === 0 && (
               <Link href="/booking-portal/new"
-                className="mt-4 inline-block bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:opacity-90 transition-all">
-                Create First Booking
+                className="mt-5 inline-block bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-black font-bold text-sm px-6 py-3 rounded-xl shadow-lg shadow-amber-500/20 hover:scale-[1.02] transition-all">
+                Create First Booking →
               </Link>
             )}
           </div>
@@ -320,54 +336,54 @@ export default function BookingPortal() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/10 text-slate-400 text-xs uppercase tracking-wider">
-                  <th className="text-left px-6 py-3">Ref</th>
-                  <th className="text-left px-6 py-3">Service</th>
-                  <th className="text-left px-6 py-3">Requestor</th>
-                  <th className="text-left px-6 py-3">Route / Category</th>
-                  <th className="text-left px-6 py-3">Start</th>
-                  <th className="text-left px-6 py-3">Status</th>
-                  <th className="text-right px-6 py-3">Action</th>
+                <tr className="border-b border-amber-500/20 text-amber-300/70 text-[11px] font-mono uppercase tracking-wider bg-zinc-950/60">
+                  <th className="text-left px-6 py-3.5">Ref #</th>
+                  <th className="text-left px-6 py-3.5">Service Category</th>
+                  <th className="text-left px-6 py-3.5">Requestor & Contact</th>
+                  <th className="text-left px-6 py-3.5">Corridor / Asset Class</th>
+                  <th className="text-left px-6 py-3.5">Schedule</th>
+                  <th className="text-left px-6 py-3.5">Status</th>
+                  <th className="text-right px-6 py-3.5">Dispatch Action</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map(b => {
-                  const svc    = SERVICE_STYLE[b.serviceType] ?? { label: b.serviceType, color: 'text-slate-400', icon: '📋' };
+                  const svc    = SERVICE_STYLE[b.serviceType] ?? { label: b.serviceType, color: 'text-zinc-400', icon: '📋' };
                   const parsed = parseNotes(b.notes);
                   const route  = parsed.origin && parsed.destination
                     ? `${parsed.origin} → ${parsed.destination}`
                     : parsed.origin ?? parsed.destination ?? b.vehicleCategory ?? '—';
 
                   return (
-                    <tr key={b.id} className="border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
+                    <tr key={b.id} className="border-b border-white/5 last:border-0 hover:bg-zinc-900/60 transition-colors">
                       <td className="px-6 py-4">
-                        <span className="font-mono text-xs text-white">
+                        <span className="font-mono text-xs font-bold text-amber-400">
                           {b.bookingRef ?? b.id.slice(0, 10)}
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`flex items-center gap-1.5 text-xs font-medium ${svc.color}`}>
+                        <span className={`flex items-center gap-1.5 text-xs font-semibold ${svc.color}`}>
                           {svc.icon} {svc.label}
                         </span>
                       </td>
                       <td className="px-6 py-4">
                         <div>
-                          <p className="text-slate-200 text-xs">{b.requestorName ?? '—'}</p>
+                          <p className="text-zinc-200 text-xs font-medium">{b.requestorName ?? '—'}</p>
                           {b.requestorEmail && (
-                            <p className="text-slate-500 text-xs">{b.requestorEmail}</p>
+                            <p className="text-zinc-500 text-[11px] font-mono">{b.requestorEmail}</p>
                           )}
                         </div>
                       </td>
                       <td className="px-6 py-4 max-w-xs">
-                        <p className="text-slate-300 text-xs truncate">{route}</p>
+                        <p className="text-zinc-300 text-xs truncate">{route}</p>
                       </td>
-                      <td className="px-6 py-4 text-slate-400 text-xs">
+                      <td className="px-6 py-4 text-zinc-400 text-xs font-mono">
                         {b.startDate
                           ? new Date(b.startDate).toLocaleDateString('en-AE', { day: '2-digit', month: 'short', year: 'numeric' })
                           : '—'}
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle(b.status)}`}>
+                        <span className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-bold ${statusStyle(b.status)}`}>
                           {b.status ?? 'PENDING'}
                         </span>
                       </td>
@@ -382,18 +398,18 @@ export default function BookingPortal() {
                                 driverName: 'Ahmed Al-Sayed',
                               })
                             }
-                            className="inline-flex items-center gap-1 text-xs text-teal-400 hover:text-teal-300 bg-teal-500/10 hover:bg-teal-500/20 px-2.5 py-1 rounded-lg border border-teal-500/20 transition-colors"
+                            className="inline-flex items-center gap-1 text-xs text-amber-300 hover:text-white bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-lg border border-amber-500/30 transition-colors"
                           >
-                            <MessageSquare className="w-3 h-3" />
+                            <MessageSquare className="w-3 h-3 text-amber-400" />
                             Chat
                           </button>
                           {b.serviceType === 'LOGISTICS' ? (
                             <Link href="/logistics/dispatch"
-                              className="text-xs text-amber-400 hover:text-amber-300 transition-colors">
+                              className="text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors">
                               Dispatch →
                             </Link>
                           ) : (
-                            <button className="text-xs text-violet-400 hover:text-violet-300 transition-colors">
+                            <button className="text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors">
                               View
                             </button>
                           )}

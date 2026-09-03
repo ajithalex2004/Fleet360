@@ -86,36 +86,36 @@ export function BulkConsignmentUploader({ onBatchDispatched }: BulkConsignmentUp
   };
 
   return (
-    <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 space-y-5">
+    <div className="bg-zinc-950/80 border border-amber-500/20 hover:border-amber-500/40 rounded-2xl p-5 space-y-5 backdrop-blur-xl shadow-xl shadow-amber-500/5 transition-all">
       {/* Top Header */}
-      <div className="flex items-center justify-between border-b border-white/10 pb-3">
+      <div className="flex items-center justify-between border-b border-amber-500/20 pb-3">
         <div className="flex items-center gap-2">
-          <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+          <FileSpreadsheet className="w-4 h-4 text-amber-400" />
           <span className="text-xs font-bold text-white uppercase tracking-wider">
-            B2B Bulk Consignment Excel / CSV Uploader & Auto-Clustering Engine
+            B2B Bulk Consignment Excel / CSV Ingestion Engine
           </span>
         </div>
-        <span className="text-[10px] bg-emerald-500/10 text-emerald-300 font-mono font-bold px-2 py-0.5 rounded-full border border-emerald-500/20">
-          LTL Multi-Drop Optimizer
+        <span className="text-[10px] bg-amber-500/15 text-amber-300 font-mono font-bold px-2 py-0.5 rounded-full border border-amber-500/30">
+          LTL Multi-Drop Auto-Clustering
         </span>
       </div>
 
       {/* Upload Dropzone & Sample Loader */}
       {!analysis && (
-        <div className="border-2 border-dashed border-white/15 hover:border-emerald-500/50 rounded-2xl p-6 text-center space-y-3 bg-slate-950/60 transition-all">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+        <div className="border-2 border-dashed border-amber-500/30 hover:border-amber-400/60 rounded-2xl p-6 text-center space-y-3 bg-zinc-950/60 transition-all">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
             <UploadCloud className="w-6 h-6" />
           </div>
           <div>
             <h4 className="text-sm font-bold text-white">Upload B2B Freight Manifest (.csv or .xlsx)</h4>
-            <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
+            <p className="text-xs text-zinc-400 max-w-md mx-auto mt-1">
               Upload multi-store consignments. Fleet360 will automatically validate addresses, cluster regional
               corridors, and generate optimized vehicle sequences.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-            <label className="cursor-pointer px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-500/25 transition-all">
+            <label className="cursor-pointer px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-500 text-black text-xs font-bold shadow-lg shadow-amber-500/25 transition-all">
               Choose Spreadsheet File
               <input type="file" accept=".csv,.txt" onChange={handleFileUpload} className="hidden" />
             </label>
@@ -123,10 +123,10 @@ export function BulkConsignmentUploader({ onBatchDispatched }: BulkConsignmentUp
               type="button"
               onClick={handleLoadSampleManifest}
               disabled={loading}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-white/10 flex items-center gap-1.5 transition-all"
+              className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-amber-300 text-xs font-bold border border-amber-500/30 transition-all flex items-center gap-1.5"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              {loading ? 'Processing…' : 'Load 10-Store Retail Manifest Demo'}
+              Load 10-Store Retail Manifest Demo
             </button>
           </div>
         </div>
