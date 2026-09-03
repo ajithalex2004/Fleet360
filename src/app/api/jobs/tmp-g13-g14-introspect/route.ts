@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
           'lease_inquiries','lease_quotations','lease_insurance_policies',
           'lease_insurance_claims','lease_traffic_fines','lease_early_terminations',
           'lease_renewals','lease_pre_billing_statements','lease_direct_debits',
-          'lease_invoices','lease_contracts_2'
+          'lease_invoices','lease_contracts_v2'
         )
         AND indexdef ILIKE '%UNIQUE%'
       ORDER BY tablename, indexname
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
           'lease_inquiries','lease_quotations','lease_insurance_policies',
           'lease_insurance_claims','lease_traffic_fines','lease_early_terminations',
           'lease_renewals','lease_pre_billing_statements','lease_direct_debits',
-          'lease_invoices','lease_contracts_2'
+          'lease_invoices','lease_contracts_v2'
         )
         AND tc.constraint_type IN ('UNIQUE','FOREIGN KEY')
       ORDER BY tc.table_name, tc.constraint_name
@@ -57,28 +57,28 @@ export async function GET(req: NextRequest) {
       SELECT table_name, column_name
       FROM information_schema.columns
       WHERE table_schema = 'public'
-        AND table_name IN ('lease_invoices','lease_quotations','lease_contracts_2')
+        AND table_name IN ('lease_invoices','lease_quotations','lease_contracts_v2')
         AND (column_name ILIKE '%no%' OR column_name ILIKE '%number%')
       ORDER BY table_name, column_name
     `).catch(() => []);
 
     const [badLessee] = await prisma.$queryRawUnsafe<Array<{ n: number }>>(`
-      SELECT count(*)::int AS n FROM lease_contracts_2 c
+      SELECT count(*)::int AS n FROM lease_contracts_v2 c
       LEFT JOIN lessees l ON l.id = c.lessee_id
       WHERE l.id IS NULL
     `);
     const [badOpeningBranch] = await prisma.$queryRawUnsafe<Array<{ n: number }>>(`
-      SELECT count(*)::int AS n FROM lease_contracts_2 c
+      SELECT count(*)::int AS n FROM lease_contracts_v2 c
       LEFT JOIN lease_branches b ON b.id = c.opening_branch_id
       WHERE c.opening_branch_id IS NOT NULL AND b.id IS NULL
     `);
     const [badClosingBranch] = await prisma.$queryRawUnsafe<Array<{ n: number }>>(`
-      SELECT count(*)::int AS n FROM lease_contracts_2 c
+      SELECT count(*)::int AS n FROM lease_contracts_v2 c
       LEFT JOIN lease_branches b ON b.id = c.closing_branch_id
       WHERE c.closing_branch_id IS NOT NULL AND b.id IS NULL
     `);
     const [totalContracts] = await prisma.$queryRawUnsafe<Array<{ n: number }>>(`
-      SELECT count(*)::int AS n FROM lease_contracts_2
+      SELECT count(*)::int AS n FROM lease_contracts_v2
     `);
     const [tenantCount] = await prisma.$queryRawUnsafe<Array<{ n: number }>>(`
       SELECT count(*)::int AS n FROM tenants
