@@ -145,13 +145,44 @@ export async function POST(req: NextRequest) {
 
     let totalScanned = 0;
     const allAssessments: Assessment[] = [];
-    const counts = { alertsCreated: 0, alertsSkipped: 0, errors: 0 };
+    const counts = { alertsCreated: 0, alertsSkipped: 0, errors: 0, emailsSent: 0 };
     for (const r of perTenant) {
       totalScanned += r.result.scanned;
       allAssessments.push(...r.result.assessments);
       counts.alertsCreated += r.result.alertsCreated;
       counts.alertsSkipped += r.result.alertsSkipped;
       counts.errors += r.result.errors;
+    }
+
+    // Staff-facing digest — capturing a mileage reading is an operations/
+    // finance task, not something the lessee can do, so this goes to the
+    // tenant's own contact address, one email per tenant per run.
+    if (!dryRun) {
+      for (const r of perTenant) {
+        const newHits = r.result.assessments.filter(a => a.alertCreated);
+        if (newHits.length === 0) continue;
+        try {
+          const tenant = await prisma.tenant.findUnique({
+            where: { id: r.tenantId },
+            select: { contactEmail: true, contactName: true, name: true },
+          });
+          if (!tenant?.contactEmail) continue;
+          const rows = newHits.map(h =>
+            `<li>${h.contractNumber ?? h.contractId.slice(0, 8)}: ${h.message}</li>`,
+          ).join('');
+          const result = await sendEmail({
+            to: [{ email: tenant.contactEmail, name: tenant.contactName ?? tenant.name }],
+            subject: `Mileage reading overdue on ${newHits.length} contract${newHits.length === 1 ? '' : 's'}`,
+            htmlBody: `<p>Dear ${tenant.contactName ?? tenant.name},</p>
+              <p>The following contract${newHits.length === 1 ? ' has' : 's have'} an overdue mileage reading:</p>
+              <ul>${rows}</ul>
+              <p>Best regards,<br/>Fleet360</p>`,
+          });
+          if (result.sent) counts.emailsSent += 1;
+        } catch (emailErr) {
+          captureException(emailErr, { context: 'leasing.mileage.sweep-stale.email', tags: { tenantId: r.tenantId } });
+        }
+      }
     }
 
     if (!dryRun && counts.alertsCreated > 0) {
@@ -161,7 +192,7 @@ export async function POST(req: NextRequest) {
         userRole: 'SYSTEM',
         entityType: 'LeaseContract2',
         action: 'UPDATE',
-        details: `Mileage stale-reading sweep (≥${staleAfterDays}d): scanned ${totalScanned} across ${perTenant.length} tenant(s), ${counts.alertsCreated} alerts emitted, ${counts.alertsSkipped} skipped, ${counts.errors} errors.`,
+        details: `Mileage stale-reading sweep (≥${staleAfterDays}d): scanned ${totalScanned} across ${perTenant.length} tenant(s), ${counts.alertsCreated} alerts emitted, ${counts.alertsSkipped} skipped, ${counts.emailsSent} digest emails sent, ${counts.errors} errors.`,
       });
     }
 
