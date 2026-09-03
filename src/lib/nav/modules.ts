@@ -227,6 +227,7 @@ export const MODULES: ModuleDef[] = [
 
       // Operations — day-of-service execution.
       { label: 'Trip Monitor',        href: '/bus-ops/dispatch',            icon: Radio,           group: 'Operations' },
+      { label: 'Outsource Management', href: '/exchange/jobs',              icon: ArrowLeftRight,  group: 'Operations' },
       { label: 'SLA Monitor & Alerts', href: '/bus-ops/sla-monitor',        icon: Clock,           group: 'Operations' },
       { label: 'Optimisation Status', href: '/bus-ops/optimisation',        icon: Sparkles,        group: 'Operations' },
       { label: 'Demand forecast',     href: '/bus-ops/demand-forecast',     icon: TrendingUp,      group: 'Operations' },
@@ -332,10 +333,15 @@ export const MODULES: ModuleDef[] = [
   },
 
   {
-    id: 'vendors', label: 'Vendors', href: '/vendors', icon: Building2,
+    id: 'vendors', label: 'Vendors & Partners', href: '/vendors', icon: Building2,
     subPages: [
-      { label: 'Garage management', href: '/vendors/garages',       icon: Building2 },
-      { label: 'Garage portal',     href: '/vendors/garage-portal', icon: Send },
+      { label: 'Overview',              href: '/vendors',              icon: LayoutDashboard },
+      { label: 'Outsource Management',  href: '/exchange/jobs',        icon: ArrowLeftRight, group: 'Transport Outsourcing' },
+      { label: 'Partner Marketplace',   href: '/exchange/marketplace', icon: Globe,          group: 'Transport Outsourcing' },
+      { label: 'Partner Scorecards',    href: '/exchange/scorecard',   icon: Trophy,         group: 'Transport Outsourcing' },
+      { label: 'Settlements & Tax Invoices', href: '/exchange/statements', icon: Receipt,    group: 'Transport Outsourcing' },
+      { label: 'Garage management',     href: '/vendors/garages',      icon: Building2,      group: 'Maintenance & Garages' },
+      { label: 'Garage portal',         href: '/vendors/garage-portal', icon: Send,          group: 'Maintenance & Garages' },
     ],
   },
 
