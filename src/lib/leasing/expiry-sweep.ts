@@ -193,7 +193,7 @@ export async function runExpirySweep(
                 const subject = expired
                   ? `Document expired: ${doc.docName}`
                   : `Document expiring in ${days} day${days === 1 ? '' : 's'}: ${doc.docName}`;
-                const result = await sendEmail({
+                await sendEmail({
                   to: [{ email: recipient.email, name: recipient.name }],
                   subject,
                   htmlBody: `
@@ -205,7 +205,7 @@ export async function runExpirySweep(
                     <p>Please upload a renewed copy via the lessee portal at your earliest convenience to avoid any disruption to your lease.</p>
                     <p>Best regards,<br/>Fleet360</p>`,
                 });
-                if (result.sent) tenantEmails += 1;
+                tenantEmails += 1;
               }
             } catch (emailErr) {
               captureException(emailErr, { context: 'leasing.expiry-sweep.email', tags: { documentId: doc.id } });

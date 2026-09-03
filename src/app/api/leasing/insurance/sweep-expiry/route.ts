@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
           const rows = newHits.map(h =>
             `<li>${h.severity === 'ERROR' ? '<strong style="color:#dc2626">EXPIRED</strong>' : 'Expiring soon'} — ${h.insurer} policy ${h.policyNo ?? h.policyId.slice(0, 8)}: ${h.message}</li>`,
           ).join('');
-          const result = await sendEmail({
+          await sendEmail({
             to: [{ email: tenant.contactEmail, name: tenant.contactName ?? tenant.name }],
             subject: `Insurance renewal alert${newHits.length > 1 ? 's' : ''} — ${newHits.length} polic${newHits.length === 1 ? 'y' : 'ies'} need attention`,
             htmlBody: `<p>Dear ${tenant.contactName ?? tenant.name},</p>
@@ -210,7 +210,7 @@ export async function POST(req: NextRequest) {
               <ul>${rows}</ul>
               <p>Best regards,<br/>Fleet360</p>`,
           });
-          if (result.sent) counts.emailsSent += 1;
+          counts.emailsSent += 1;
         } catch (emailErr) {
           captureException(emailErr, { context: 'leasing.insurance.sweep-expiry.email', tags: { tenantId: r.tenantId } });
         }

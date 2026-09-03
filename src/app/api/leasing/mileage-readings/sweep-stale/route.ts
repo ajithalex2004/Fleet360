@@ -170,7 +170,7 @@ export async function POST(req: NextRequest) {
           const rows = newHits.map(h =>
             `<li>${h.contractNumber ?? h.contractId.slice(0, 8)}: ${h.message}</li>`,
           ).join('');
-          const result = await sendEmail({
+          await sendEmail({
             to: [{ email: tenant.contactEmail, name: tenant.contactName ?? tenant.name }],
             subject: `Mileage reading overdue on ${newHits.length} contract${newHits.length === 1 ? '' : 's'}`,
             htmlBody: `<p>Dear ${tenant.contactName ?? tenant.name},</p>
@@ -178,7 +178,7 @@ export async function POST(req: NextRequest) {
               <ul>${rows}</ul>
               <p>Best regards,<br/>Fleet360</p>`,
           });
-          if (result.sent) counts.emailsSent += 1;
+          counts.emailsSent += 1;
         } catch (emailErr) {
           captureException(emailErr, { context: 'leasing.mileage.sweep-stale.email', tags: { tenantId: r.tenantId } });
         }
