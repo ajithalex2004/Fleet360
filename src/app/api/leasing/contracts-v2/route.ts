@@ -15,6 +15,8 @@ import {
   requireAuthorizedTenant,
   stripTenantOwnershipFields,
 } from '@/lib/tenant-context';
+import { sendEmail } from '@/services/email/emailService';
+import { captureException } from '@/lib/sentry';
 
 export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant(req);
@@ -92,7 +94,7 @@ export const POST = withAudit(async (request: NextRequest) => {
       (body.contractNumber as string | undefined) ??
       `LC-${Date.now().toString().slice(-6)}`;
 
-    const contract = await withTenantRls(prisma, tenantId, async (tx) => {
+    const { contract, lesseeContact } = await withTenantRls(prisma, tenantId, async (tx) => {
       // Ensure lessee belongs to the same tenant (relational attack defence)
       const lessee = await tx.lessee.findFirst({
         where: { id: lesseeId, tenantId, deletedAt: null },
@@ -101,7 +103,7 @@ export const POST = withAudit(async (request: NextRequest) => {
         throw Object.assign(new Error('Lessee not found in tenant'), { status: 404 });
       }
 
-      return tx.leaseContract2.create({
+      const contract = await tx.leaseContract2.create({
         data: {
           tenantId,
           contractNumber,
@@ -117,7 +119,28 @@ export const POST = withAudit(async (request: NextRequest) => {
           quotationId: (body.quotationId as string) ?? null,
         },
       });
+
+      return { contract, lesseeContact: { email: lessee.email, name: lessee.name } };
     });
+
+    // Best-effort — a lessee who doesn't hear about a new contract has no
+    // way to know it's waiting for them in the portal, since nothing else
+    // pushes to them. Must not fail contract creation if the send fails.
+    if (lesseeContact?.email) {
+      try {
+        await sendEmail({
+          to: [{ email: lesseeContact.email, name: lesseeContact.name }],
+          subject: `New lease contract ready for your review — ${contract.contractNumber ?? contract.id.slice(0, 8)}`,
+          htmlBody: `<p>Dear ${lesseeContact.name},</p>
+            <p>A new lease contract has been prepared for you: <strong>${contract.contractNumber ?? contract.id.slice(0, 8)}</strong>,
+            ${(body.monthlyRate != null ? Number(body.monthlyRate) : 0)} ${'AED'}/month.</p>
+            <p>Please log in to the lessee portal to review the terms and sign.</p>
+            <p>Best regards,<br/>Fleet360</p>`,
+        });
+      } catch (emailErr) {
+        captureException(emailErr, { context: 'leasing.contracts-v2.create.email', tags: { contractId: contract.id } });
+      }
+    }
 
     return NextResponse.json(contract, { status: 201 });
     } catch (e) {
