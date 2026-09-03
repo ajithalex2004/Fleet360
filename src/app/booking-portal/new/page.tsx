@@ -11,6 +11,7 @@ import { DigitalKycUaePass } from '@/components/booking/DigitalKycUaePass';
 import { MultiStopRoutePicker } from '@/components/booking/MultiStopRoutePicker';
 import { DigitalEbolScanner } from '@/components/booking/DigitalEbolScanner';
 import { RecurringSchedulePicker } from '@/components/booking/RecurringSchedulePicker';
+import { DriverHandoverEpod } from '@/components/booking/DriverHandoverEpod';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service type card definitions (Step 1)
@@ -1057,6 +1058,21 @@ function NewBookingInner() {
                   onChange('ebolCryptographicSeal', ebol.cryptographicSeal);
                 }}
               />
+            )}
+
+            {/* Driver Mobile Handover & Electronic Proof of Delivery (e-POD) */}
+            {serviceType === 'LOGISTICS' && (
+              <DriverHandoverEpod
+                bookingRef={`EXL-FRT-${Math.floor(1000 + Math.random() * 9000)}`}
+                ebolNumber={(form.ebolNumber as string) || 'EBOL-EXL-2026-8891'}
+                consigneeName={(form.destination as string) || 'Dubai Mall Logistics Dock 3'}
+                onEpodCompleted={(epod) => {
+                  onChange('epodNumber', epod.epodNumber);
+                  onChange('epodSeal', epod.cryptographicPODSeal);
+                  onChange('deliveryConfirmed', true);
+                }}
+              />
+            )}
             {/* Universal Booking Recurrence & Standing Contract Engine */}
             <RecurringSchedulePicker
               serviceType={serviceType as string}

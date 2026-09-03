@@ -33,6 +33,7 @@ import { OmnichannelNotificationPreferences } from '@/components/booking/Omnicha
 import { DigitalKycUaePass } from '@/components/booking/DigitalKycUaePass';
 import { DigitalEbolScanner } from '@/components/booking/DigitalEbolScanner';
 import { RecurringSchedulePicker } from '@/components/booking/RecurringSchedulePicker';
+import { DriverHandoverEpod } from '@/components/booking/DriverHandoverEpod';
 
 type AuthStep =
   | 'IDENTIFIER_INPUT' // Email or Mobile input
@@ -789,6 +790,20 @@ export function UniversalMobileBookingApp() {
                     ...prev,
                     ebolNumber: ebol.ebolNumber,
                     uaeCustomsDeclarationNo: ebol.uaeCustomsDeclarationNo,
+                  }))
+                }
+              />
+
+              {/* Driver Mobile Handover & Electronic Proof of Delivery (e-POD) */}
+              <DriverHandoverEpod
+                bookingRef="EXL-FRT-EIN360"
+                ebolNumber={form.ebolNumber || 'EBOL-EXL-2026-8891'}
+                consigneeName={form.destination || 'Dubai Mall Service Dock 3'}
+                onEpodCompleted={(epod) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    epodNumber: epod.epodNumber,
+                    epodConfirmed: true,
                   }))
                 }
               />
