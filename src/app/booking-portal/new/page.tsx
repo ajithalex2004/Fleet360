@@ -4,6 +4,7 @@ import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { InteractiveRoutePicker } from '@/components/booking/InteractiveRoutePicker';
+import { AssetAvailabilitySelector } from '@/components/booking/AssetAvailabilitySelector';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service type card definitions (Step 1)
@@ -709,17 +710,22 @@ function FormSection({
   section,
   form,
   onChange,
+  serviceType,
 }: {
   section: SectionDef;
   form: FormData;
   onChange: (k: string, v: string | boolean | number) => void;
+  serviceType?: string;
 }) {
   const hasRoutePicker = section.fields.some(f => f.key === 'origin');
+  const hasVehicleSelector = section.fields.some(f => f.key === 'vehicleCategory');
 
-  // If section has origin/destination, separate them from any other non-route fields
-  const fieldsToRender = hasRoutePicker
-    ? section.fields.filter(f => f.key !== 'origin' && f.key !== 'destination')
-    : section.fields;
+  // If section has origin/destination or vehicleCategory, handle them specially
+  const fieldsToRender = section.fields.filter(f => {
+    if (hasRoutePicker && (f.key === 'origin' || f.key === 'destination')) return false;
+    if (hasVehicleSelector && f.key === 'vehicleCategory') return false;
+    return true;
+  });
 
   const visibleFields = fieldsToRender.filter(f => !f.showIf || f.showIf(form));
 
@@ -747,6 +753,20 @@ function FormSection({
 
       {/* Fields */}
       <div className="p-5 space-y-4">
+        {hasVehicleSelector && (
+          <AssetAvailabilitySelector
+            serviceType={serviceType || 'RENTAL'}
+            startDate={form.startDate as string}
+            pickupTime={form.pickupTime as string}
+            value={(form.vehicleCategory as string) || ''}
+            onChange={(cat, meta) => {
+              onChange('vehicleCategory', cat);
+              if (meta?.sampleModels) onChange('sampleModels', meta.sampleModels);
+              if (meta?.depotId) onChange('depotId', meta.depotId);
+            }}
+          />
+        )}
+
         {hasRoutePicker && (
           <InteractiveRoutePicker
             origin={(form.origin as string) || ''}
@@ -989,7 +1009,13 @@ function NewBookingInner() {
           {/* Form sections */}
           <form onSubmit={handleSubmit} className="space-y-4">
             {schema.map(section => (
-              <FormSection key={section.title} section={section} form={form} onChange={onChange} />
+              <FormSection
+                key={section.title}
+                section={section}
+                form={form}
+                onChange={onChange}
+                serviceType={serviceType as string}
+              />
             ))}
 
             {error && (
@@ -1063,6 +1089,8 @@ function NewBookingInner() {
                 />
               )}
               {form.vehicleCategory && <ConfirmationDetail label="Vehicle Category" value={form.vehicleCategory as string} />}
+              {form.sampleModels && <ConfirmationDetail label="Assigned Model Class" value={form.sampleModels as string} />}
+              {form.depotId && <ConfirmationDetail label="Dispatch Station / Depot" value={form.depotId as string} />}
               {form.origin && <ConfirmationDetail label="From" value={form.origin as string} />}
               {form.destination && <ConfirmationDetail label="To" value={form.destination as string} />}
               {form.distanceKm ? <ConfirmationDetail label="Driving Distance" value={`${form.distanceKm} km`} /> : null}
