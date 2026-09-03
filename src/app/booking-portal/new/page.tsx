@@ -10,6 +10,7 @@ import { OmnichannelNotificationPreferences } from '@/components/booking/Omnicha
 import { DigitalKycUaePass } from '@/components/booking/DigitalKycUaePass';
 import { MultiStopRoutePicker } from '@/components/booking/MultiStopRoutePicker';
 import { DigitalEbolScanner } from '@/components/booking/DigitalEbolScanner';
+import { RecurringSchedulePicker } from '@/components/booking/RecurringSchedulePicker';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service type card definitions (Step 1)
@@ -1056,7 +1057,19 @@ function NewBookingInner() {
                   onChange('ebolCryptographicSeal', ebol.cryptographicSeal);
                 }}
               />
-            )}
+            {/* Universal Booking Recurrence & Standing Contract Engine */}
+            <RecurringSchedulePicker
+              serviceType={serviceType as string}
+              singleTripFareAed={Number(form.fareSubtotal) || 550}
+              onScheduleChange={({ config, trips, pricing }) => {
+                onChange('recurringScheduleType', config.scheduleType);
+                onChange('recurringFrequency', config.frequency);
+                onChange('recurringDays', JSON.stringify(config.daysOfWeek));
+                onChange('recurringTotalTrips', trips.length);
+                onChange('recurringDiscountPercent', pricing.discountPercent);
+                onChange('recurringTotalContractAed', pricing.totalWithVatAed);
+              }}
+            />
 
             {/* Instant Pricing & Corporate Cost Center Allocation */}
             <InstantPricingCostCenter

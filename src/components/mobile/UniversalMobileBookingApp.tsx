@@ -32,6 +32,7 @@ import { InstantPricingCostCenter } from '@/components/booking/InstantPricingCos
 import { OmnichannelNotificationPreferences } from '@/components/booking/OmnichannelNotificationPreferences';
 import { DigitalKycUaePass } from '@/components/booking/DigitalKycUaePass';
 import { DigitalEbolScanner } from '@/components/booking/DigitalEbolScanner';
+import { RecurringSchedulePicker } from '@/components/booking/RecurringSchedulePicker';
 
 type AuthStep =
   | 'IDENTIFIER_INPUT' // Email or Mobile input
@@ -707,6 +708,19 @@ export function UniversalMobileBookingApp() {
                     salikTollsAed: res.totalSalikTollsAed,
                     palletCount: String(res.totalPallets || prev.palletCount),
                     weightTons: String(res.totalWeightTons || prev.weightTons),
+                  }))
+                }
+              {/* Recurring Standing Schedule Engine */}
+              <RecurringSchedulePicker
+                serviceType="LOGISTICS"
+                singleTripFareAed={form.fareSubtotal || 550}
+                onScheduleChange={({ config, trips, pricing }) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    recurringScheduleType: config.scheduleType,
+                    recurringFrequency: config.frequency,
+                    recurringTotalTrips: trips.length,
+                    recurringTotalContractAed: pricing.totalWithVatAed,
                   }))
                 }
               />
