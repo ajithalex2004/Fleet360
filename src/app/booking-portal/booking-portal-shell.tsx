@@ -19,21 +19,21 @@ export default function BookingPortalShell({ children }: { children: React.React
 
   return (
     <ModuleGuard moduleId="booking-portal" moduleName="Booking Portal" moduleIcon="📲">
-      <div className="onyx-gold-executive dark [color-scheme:dark] flex flex-col h-screen bg-[#09090b] text-white selection:bg-amber-500/30 selection:text-amber-200">
-        <PlatformHomeBar moduleName="Booking Portal" moduleIcon="🎫" accentColor="from-amber-500 via-yellow-500 to-amber-600" />
+      <div className="obsidian-glass dark [color-scheme:dark] flex flex-col h-screen bg-[#0b0d14] text-white selection:bg-cyan-500/30 selection:text-cyan-200">
+        <PlatformHomeBar moduleName="Booking Portal" moduleIcon="🎫" accentColor="from-cyan-500 via-blue-500 to-indigo-600" />
         <div className="flex flex-1 overflow-hidden">
-          {/* Sidebar */}
-          <div className="w-64 border-r border-amber-500/25 bg-[#0c0d12] overflow-y-auto flex flex-col justify-between flex-shrink-0">
+          {/* Frosted Obsidian Glass Sidebar */}
+          <div className="w-64 border-r border-white/10 bg-[#0d111d]/85 backdrop-blur-xl overflow-y-auto flex flex-col justify-between flex-shrink-0">
             <div>
               {/* Header */}
-              <div className="p-5 border-b border-amber-500/20 bg-gradient-to-r from-amber-950/40 via-zinc-900/40 to-transparent">
+              <div className="p-5 border-b border-white/10 bg-gradient-to-r from-cyan-950/30 via-slate-900/30 to-transparent">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 via-amber-300 to-yellow-500 flex items-center justify-center text-black font-extrabold shadow-lg shadow-amber-500/25">
-                    <Sparkles className="w-4 h-4 text-black" />
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-400 via-blue-500 to-indigo-600 flex items-center justify-center text-white font-extrabold shadow-lg shadow-cyan-500/30">
+                    <Sparkles className="w-4 h-4 text-white" />
                   </div>
                   <div>
                     <h1 className="text-white font-bold text-sm tracking-wide">Booking Portal</h1>
-                    <p className="text-xs text-zinc-400">Fleet Reservations</p>
+                    <p className="text-xs text-slate-400">Fleet Reservations</p>
                   </div>
                 </div>
               </div>
@@ -49,11 +49,11 @@ export default function BookingPortalShell({ children }: { children: React.React
                       href={item.href}
                       className={`flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all ${
                         isActive
-                          ? 'bg-gradient-to-r from-amber-500/20 via-yellow-500/10 to-transparent text-amber-300 border-l-4 border-amber-400 font-bold shadow-md shadow-amber-500/10'
-                          : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+                          ? 'bg-gradient-to-r from-cyan-500/20 via-blue-500/10 to-transparent text-cyan-300 border-l-4 border-cyan-400 font-bold shadow-md shadow-cyan-500/15'
+                          : 'text-slate-400 hover:text-white hover:bg-white/5'
                       }`}
                     >
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-amber-400' : 'text-zinc-500'}`} />
+                      <Icon className={`w-4 h-4 ${isActive ? 'text-cyan-400' : 'text-slate-500'}`} />
                       <span className="text-xs font-semibold tracking-wide">{item.label}</span>
                     </Link>
                   );

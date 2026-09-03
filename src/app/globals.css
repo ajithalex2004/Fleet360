@@ -197,78 +197,93 @@ html.light:not(.dark) select:not([class*="bg-"]) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   ONYX GOLD EXECUTIVE & DARK SHELL ISOLATION
+/* ════════════════════════════════════════════════════════════════════════════
+   MODERN OBSIDIAN GLASS — High-Tech Glassmorphism Design System
    ════════════════════════════════════════════════════════════════════════════ */
-.onyx-gold-executive,
-.onyx-gold-executive * {
+.obsidian-glass,
+.obsidian-glass * {
   color-scheme: dark !important;
 }
 
-.onyx-gold-executive {
-  background-color: #09090b !important;
+.obsidian-glass {
+  background-color: #0b0d14 !important;
   color: #ffffff !important;
 }
 
-.onyx-gold-executive .text-white {
+.obsidian-glass .text-white {
   color: #ffffff !important;
 }
 
-.onyx-gold-executive .text-amber-300 {
-  color: #fcd34d !important;
+.obsidian-glass .text-cyan-300 {
+  color: #67e8f9 !important;
 }
 
-.onyx-gold-executive .text-amber-400 {
-  color: #fbbf24 !important;
+.obsidian-glass .text-cyan-400 {
+  color: #22d3ee !important;
 }
 
-.onyx-gold-executive .text-zinc-200 {
-  color: #e4e4e7 !important;
+.obsidian-glass .text-cyan-500 {
+  color: #06b6d4 !important;
 }
 
-.onyx-gold-executive .text-zinc-300 {
-  color: #d4d4d8 !important;
+.obsidian-glass .text-blue-400 {
+  color: #60a5fa !important;
 }
 
-.onyx-gold-executive .text-zinc-400 {
-  color: #a1a1aa !important;
+.obsidian-glass .text-slate-200 {
+  color: #e2e8f0 !important;
 }
 
-.onyx-gold-executive .text-zinc-500 {
-  color: #71717a !important;
+.obsidian-glass .text-slate-300 {
+  color: #cbd5e1 !important;
 }
 
-.onyx-gold-executive .bg-\[\#09090b\] {
-  background-color: #09090b !important;
+.obsidian-glass .text-slate-400 {
+  color: #94a3b8 !important;
 }
 
-.onyx-gold-executive .bg-\[\#0c0d12\] {
-  background-color: #0c0d12 !important;
+.obsidian-glass .text-slate-500 {
+  color: #64748b !important;
 }
 
-.onyx-gold-executive .bg-\[\#121318\] {
-  background-color: #121318 !important;
+/* Frosted glass card utility */
+.glass-panel-obsidian {
+  background: rgba(15, 23, 42, 0.65) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5) !important;
 }
 
-.onyx-gold-executive .bg-\[\#181920\] {
-  background-color: #181920 !important;
+.glass-panel-obsidian:hover {
+  border-color: rgba(6, 182, 212, 0.4) !important;
+  box-shadow: 0 20px 50px rgba(6, 182, 212, 0.15) !important;
 }
 
-.onyx-gold-executive input,
-.onyx-gold-executive textarea,
-.onyx-gold-executive select {
-  background-color: #181920 !important;
+.obsidian-glass input,
+.obsidian-glass textarea,
+.obsidian-glass select {
+  background-color: rgba(10, 14, 26, 0.75) !important;
   color: #ffffff !important;
-  border-color: rgba(245, 158, 11, 0.3) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
-.onyx-gold-executive input::placeholder,
-.onyx-gold-executive textarea::placeholder {
-  color: #71717a !important;
+.obsidian-glass input:focus,
+.obsidian-glass textarea:focus,
+.obsidian-glass select:focus {
+  border-color: #06b6d4 !important;
+  box-shadow: 0 0 15px rgba(6, 182, 212, 0.25) !important;
 }
 
-.onyx-gold-executive select option {
-  background-color: #121318 !important;
+.obsidian-glass input::placeholder,
+.obsidian-glass textarea::placeholder {
+  color: #64748b !important;
+}
+
+.obsidian-glass select option {
+  background-color: #0d111d !important;
   color: #ffffff !important;
 }
+
 
 

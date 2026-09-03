@@ -70,10 +70,10 @@ export function AssetAvailabilitySelector({
   return (
     <div className="space-y-4">
       {/* Header & Station Selector */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#181920] border border-amber-500/30 rounded-2xl p-3.5 shadow-md">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-3.5 shadow-xl">
         <div className="flex items-center gap-2">
-          <Building2 className="w-4 h-4 text-amber-400" />
-          <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+          <Building2 className="w-4 h-4 text-cyan-400" />
+          <span className="text-xs font-bold text-cyan-400 uppercase tracking-wider">
             Dispatch Depot / Station:
           </span>
         </div>
@@ -82,7 +82,7 @@ export function AssetAvailabilitySelector({
           <select
             value={selectedDepot}
             onChange={(e) => handleDepotChange(e.target.value)}
-            className="bg-[#121318] border border-amber-500/30 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-amber-400"
+            className="bg-slate-950/80 border border-white/15 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40"
           >
             {STANDARD_DEPOTS.map((d) => (
               <option key={d.id} value={d.id}>
@@ -94,7 +94,7 @@ export function AssetAvailabilitySelector({
             type="button"
             onClick={fetchAvailability}
             title="Refresh availability"
-            className="p-1.5 text-amber-400 hover:text-white border border-amber-500/30 rounded-xl hover:bg-amber-500/10 transition-colors"
+            className="p-1.5 text-cyan-400 hover:text-white border border-white/10 rounded-xl hover:bg-cyan-500/10 transition-colors"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -127,10 +127,10 @@ export function AssetAvailabilitySelector({
               disabled={!cat.isAvailable}
               className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
                 isSelected
-                  ? 'bg-amber-500/15 border-amber-400 shadow-xl shadow-amber-500/20 ring-1 ring-amber-400/50 scale-[1.01]'
+                  ? 'bg-cyan-500/15 border-cyan-400 shadow-xl shadow-cyan-500/20 ring-1 ring-cyan-400/50 scale-[1.01]'
                   : cat.isAvailable
-                  ? 'bg-[#181920] border-amber-500/25 hover:border-amber-400 hover:bg-[#1f2029]'
-                  : 'bg-[#121318]/50 border-white/5 opacity-40 cursor-not-allowed'
+                  ? 'bg-slate-900/60 backdrop-blur-xl border-white/10 hover:border-cyan-400/50 hover:bg-slate-900/90'
+                  : 'bg-slate-950/40 border-white/5 opacity-40 cursor-not-allowed'
               }`}
             >
               <div>
@@ -157,15 +157,15 @@ export function AssetAvailabilitySelector({
                   )}
                 </div>
 
-                <p className="text-xs text-zinc-400 line-clamp-1 mb-2">
+                <p className="text-xs text-slate-400 line-clamp-1 mb-2">
                   {cat.sampleModels}
                 </p>
               </div>
 
               {/* Depot Station Inventory Footnote */}
-              <div className="pt-2 border-t border-amber-500/15 flex items-center justify-between text-[11px] text-zinc-400">
+              <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
                 <span>At selected depot:</span>
-                <span className={`font-mono font-bold ${depotStock > 0 ? 'text-amber-300' : 'text-rose-400'}`}>
+                <span className={`font-mono font-bold ${depotStock > 0 ? 'text-cyan-300' : 'text-rose-400'}`}>
                   {depotStock} in station
                 </span>
               </div>

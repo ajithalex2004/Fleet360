@@ -686,11 +686,11 @@ function buildPayload(serviceType: ServiceType, form: FormData) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const inputCls =
-  'w-full bg-[#181920] border border-amber-500/30 rounded-xl px-4 py-3 text-white text-sm ' +
-  'placeholder-zinc-400 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40 ' +
-  'transition-all shadow-inner shadow-black/40';
+  'w-full bg-slate-950/70 border border-white/12 rounded-xl px-4 py-3 text-white text-sm ' +
+  'placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30 ' +
+  'transition-all shadow-inner shadow-black/60';
 
-const labelCls = 'block text-xs font-bold text-amber-400 uppercase tracking-wider mb-1.5';
+const labelCls = 'block text-xs font-bold text-cyan-400 uppercase tracking-wider mb-1.5';
 
 function FieldRenderer({
   field,
@@ -703,21 +703,21 @@ function FieldRenderer({
 }) {
   if (field.type === 'toggle') {
     return (
-      <div className="flex items-start gap-3 bg-[#181920] border border-amber-500/30 rounded-xl px-4 py-3 shadow-md">
+      <div className="flex items-start gap-3 bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-xl px-4 py-3 shadow-md">
         <button
           type="button"
           role="switch"
           aria-checked={!!value}
           onClick={() => onChange(field.key, !value)}
           className={`relative mt-0.5 flex-shrink-0 w-10 h-6 rounded-full transition-colors ${
-            value ? 'bg-gradient-to-r from-amber-400 to-yellow-500 shadow-md shadow-amber-500/30' : 'bg-zinc-800'
+            value ? 'bg-gradient-to-r from-cyan-500 to-blue-600 shadow-md shadow-cyan-500/30' : 'bg-slate-800'
           }`}
         >
-          <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-black shadow transition-transform ${value ? 'translate-x-4' : 'translate-x-0'}`} />
+          <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-4' : 'translate-x-0'}`} />
         </button>
         <div>
           <p className="text-sm font-bold text-white">{field.label}</p>
-          {field.hint && <p className="text-xs text-amber-200/70 mt-0.5">{field.hint}</p>}
+          {field.hint && <p className="text-xs text-slate-400 mt-0.5">{field.hint}</p>}
         </div>
       </div>
     );
@@ -726,17 +726,17 @@ function FieldRenderer({
   if (field.type === 'select') {
     return (
       <div>
-        <label className={labelCls}>{field.label}{field.required && <span className="text-amber-400 ml-0.5">*</span>}</label>
+        <label className={labelCls}>{field.label}{field.required && <span className="text-cyan-400 ml-0.5">*</span>}</label>
         <select
           value={value as string}
           onChange={e => onChange(field.key, e.target.value)}
           required={field.required}
           className={inputCls}
         >
-          <option value="" className="bg-[#121318] text-zinc-400">— Select —</option>
-          {field.options?.map(o => <option key={o} value={o} className="bg-[#121318] text-white">{o}</option>)}
+          <option value="" className="bg-[#0d111d] text-slate-400">— Select —</option>
+          {field.options?.map(o => <option key={o} value={o} className="bg-[#0d111d] text-white">{o}</option>)}
         </select>
-        {field.hint && <p className="text-xs text-amber-200/70 mt-1">{field.hint}</p>}
+        {field.hint && <p className="text-xs text-slate-400 mt-1">{field.hint}</p>}
       </div>
     );
   }
@@ -752,7 +752,7 @@ function FieldRenderer({
           rows={3}
           className={`${inputCls} resize-none`}
         />
-        {field.hint && <p className="text-xs text-amber-200/70 mt-1">{field.hint}</p>}
+        {field.hint && <p className="text-xs text-slate-400 mt-1">{field.hint}</p>}
       </div>
     );
   }
@@ -761,8 +761,8 @@ function FieldRenderer({
     <div>
       <label className={labelCls}>
         {field.label}
-        {field.required && <span className="text-amber-400 ml-0.5">*</span>}
-        {field.unit && <span className="text-amber-300/60 ml-1 normal-case font-normal">({field.unit})</span>}
+        {field.required && <span className="text-cyan-400 ml-0.5">*</span>}
+        {field.unit && <span className="text-cyan-300/60 ml-1 normal-case font-normal">({field.unit})</span>}
       </label>
       <input
         type={field.type}
@@ -772,7 +772,7 @@ function FieldRenderer({
         required={field.required}
         className={inputCls}
       />
-      {field.hint && <p className="text-xs text-amber-200/50 mt-1">{field.hint}</p>}
+      {field.hint && <p className="text-xs text-slate-400 mt-1">{field.hint}</p>}
     </div>
   );
 }
@@ -819,16 +819,16 @@ function FormSection({
   }
 
   return (
-    <div className="bg-[#121318] border border-amber-500/30 hover:border-amber-500/50 rounded-2xl overflow-hidden shadow-2xl shadow-black/60 transition-all">
+    <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 hover:border-cyan-400/30 rounded-2xl overflow-hidden shadow-2xl shadow-black/80 transition-all">
       {/* Section header */}
-      <div className="px-5 py-4 border-b border-amber-500/20 bg-gradient-to-r from-amber-950/40 via-zinc-900/40 to-transparent flex items-center justify-between">
+      <div className="px-5 py-4 border-b border-white/10 bg-gradient-to-r from-cyan-950/30 via-slate-900/30 to-transparent flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500/20 via-yellow-500/10 to-amber-500/5 border border-amber-500/30 flex items-center justify-center text-amber-300 shadow-md shadow-amber-500/10">
+          <div className="w-8 h-8 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-md shadow-cyan-500/10">
             {getSectionVectorIcon(section.title)}
           </div>
           <h3 className="text-sm font-extrabold text-white tracking-wide">{section.title}</h3>
         </div>
-        <span className="text-[10px] font-mono font-bold text-amber-300 bg-amber-500/15 px-2.5 py-1 rounded-full border border-amber-500/30">
+        <span className="text-[10px] font-mono font-bold text-cyan-300 bg-cyan-500/15 px-2.5 py-1 rounded-full border border-cyan-500/30">
           REQUIRED
         </span>
       </div>
@@ -895,8 +895,8 @@ function FormSection({
 
 function ConfirmationDetail({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-0.5 bg-zinc-900/60 border border-amber-500/15 rounded-xl p-3">
-      <span className="text-[10px] text-amber-300/70 uppercase tracking-wider font-semibold">{label}</span>
+    <div className="flex flex-col gap-0.5 bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-xl p-3">
+      <span className="text-[10px] text-cyan-300 uppercase tracking-wider font-semibold">{label}</span>
       <span className="text-sm text-white font-medium">{value}</span>
     </div>
   );
@@ -1002,19 +1002,19 @@ function NewBookingInner() {
   const meta = serviceType ? SERVICE_META[serviceType as ServiceType] : null;
 
   return (
-    <div className="onyx-gold-executive dark [color-scheme:dark] max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8 min-h-screen text-white bg-[#09090b]">
+    <div className="obsidian-glass dark [color-scheme:dark] max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8 min-h-screen text-white bg-[#0b0d14]">
 
       {/* ── Page header ── */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-amber-500/20 pb-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-6">
         <div>
           <h1 className="text-3xl font-extrabold text-white tracking-tight">
-            Fleet360 <span className="bg-gradient-to-r from-amber-400 to-yellow-500 bg-clip-text text-transparent">Booking Portal</span>
+            Fleet360 <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent">Booking Portal</span>
           </h1>
-          <p className="text-zinc-400 text-sm mt-1">Multi-modal booking & freight dispatch console across all transport domains</p>
+          <p className="text-slate-400 text-sm mt-1">Multi-modal booking & freight dispatch console across all transport domains</p>
         </div>
 
         {/* ── Progress stepper ── */}
-        <div className="flex items-center gap-3 bg-zinc-950/80 border border-amber-500/20 rounded-2xl px-5 py-3 backdrop-blur-xl">
+        <div className="flex items-center gap-3 bg-slate-900/60 border border-white/10 rounded-2xl px-5 py-3 backdrop-blur-xl">
           {(['Select Service', 'Booking Details', 'Confirmation'] as const).map((label, i) => {
             const n = (i + 1) as 1 | 2 | 3;
             return (
@@ -1022,18 +1022,18 @@ function NewBookingInner() {
                 <div className="flex items-center gap-2">
                   <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                     step > n  ? 'bg-emerald-500 text-black font-bold' :
-                    step === n ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-bold shadow-md shadow-amber-500/30' :
-                    'bg-zinc-800 text-zinc-500'
+                    step === n ? 'bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600 text-white font-bold shadow-md shadow-cyan-500/30' :
+                    'bg-slate-800 text-slate-500'
                   }`}>
                     {step > n ? '✓' : n}
                   </div>
                   <span className={`text-xs hidden md:block font-medium transition-colors ${
-                    step >= n ? 'text-amber-200' : 'text-zinc-500'
+                    step >= n ? 'text-cyan-200' : 'text-slate-500'
                   }`}>{label}</span>
                 </div>
                 {i < 2 && (
                   <div className={`w-8 h-0.5 rounded-full transition-all ${
-                    step > n ? 'bg-emerald-500' : 'bg-zinc-800'
+                    step > n ? 'bg-emerald-500' : 'bg-slate-800'
                   }`} />
                 )}
               </React.Fragment>
@@ -1049,7 +1049,7 @@ function NewBookingInner() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold text-white tracking-wide">Select Transport Service Category</h2>
-            <span className="text-xs font-mono text-zinc-400">Step 1 of 3</span>
+            <span className="text-xs font-mono text-slate-400">Step 1 of 3</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -1057,25 +1057,25 @@ function NewBookingInner() {
               <button
                 key={opt.type}
                 onClick={() => { setServiceType(opt.type as ServiceType); setStep(2); }}
-                className="group relative bg-[#121318] border border-amber-500/30 hover:border-amber-400 rounded-2xl p-6 text-left hover:shadow-2xl hover:shadow-amber-500/15 transition-all duration-200 hover:scale-[1.02] active:scale-100 flex flex-col justify-between space-y-4 shadow-xl shadow-black/60"
+                className="group relative bg-slate-900/60 backdrop-blur-xl border border-white/10 hover:border-cyan-400/60 rounded-2xl p-6 text-left hover:shadow-2xl hover:shadow-cyan-500/15 transition-all duration-200 hover:scale-[1.02] active:scale-100 flex flex-col justify-between space-y-4 shadow-xl shadow-black/80"
               >
                 <div>
                   <div className="flex items-start justify-between mb-3">
-                    <div className="w-12 h-12 rounded-2xl bg-[#181920] border border-amber-500/30 flex items-center justify-center text-amber-300 group-hover:scale-110 group-hover:border-amber-400 shadow-lg shadow-amber-500/10 transition-all">
-                      {getServiceVectorIcon(opt.type, 'w-6 h-6 text-amber-300')}
+                    <div className="w-12 h-12 rounded-2xl bg-slate-950/80 border border-white/10 flex items-center justify-center text-cyan-400 group-hover:scale-110 group-hover:border-cyan-400 shadow-lg shadow-cyan-500/10 transition-all">
+                      {getServiceVectorIcon(opt.type, 'w-6 h-6 text-cyan-400')}
                     </div>
-                    <span className="text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-full tracking-wider">
+                    <span className="text-[10px] font-mono font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 px-2.5 py-1 rounded-full tracking-wider">
                       {opt.badge}
                     </span>
                   </div>
-                  <h3 className="text-base font-extrabold text-white group-hover:text-amber-300 transition-colors">
+                  <h3 className="text-base font-extrabold text-white group-hover:text-cyan-300 transition-colors">
                     {opt.title}
                   </h3>
-                  <p className="text-zinc-400 text-xs mt-1.5 leading-relaxed">
+                  <p className="text-slate-400 text-xs mt-1.5 leading-relaxed">
                     {opt.desc}
                   </p>
                 </div>
-                <div className="flex items-center justify-between pt-2 border-t border-white/5 text-xs text-amber-400 font-semibold group-hover:translate-x-1 transition-transform">
+                <div className="flex items-center justify-between pt-2 border-t border-white/5 text-xs text-cyan-400 font-semibold group-hover:translate-x-1 transition-transform">
                   <span>Configure Booking</span>
                   <span>→</span>
                 </div>
@@ -1086,13 +1086,13 @@ function NewBookingInner() {
       )}
 
       {/* ══════════════════════════════════════════════════════════════
-          Step 2 — Dynamic Form (Pixel-Perfect Gold & Onyx Layout)
+          Step 2 — Dynamic Form (Modern Obsidian Glass Layout)
       ══════════════════════════════════════════════════════════════ */}
       {step === 2 && card && (
         <div className="space-y-8">
-          {/* Top Centered Gold Capsule Navigation Pills */}
+          {/* Top Centered Frosted Glass Capsule Navigation Pills */}
           <div className="flex justify-center">
-            <div className="inline-flex items-center gap-2 p-1.5 rounded-full bg-[#121318] border border-amber-500/30 shadow-2xl shadow-black/80 overflow-x-auto max-w-full">
+            <div className="inline-flex items-center gap-2 p-1.5 rounded-full bg-slate-900/80 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/80 overflow-x-auto max-w-full">
               {visibleCards.map((opt) => {
                 const isActive = serviceType === opt.type;
                 return (
@@ -1105,8 +1105,8 @@ function NewBookingInner() {
                     }}
                     className={`px-6 py-2.5 rounded-full text-xs font-bold transition-all duration-200 whitespace-nowrap ${
                       isActive
-                        ? 'bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-500 text-black shadow-lg shadow-amber-500/30 scale-100'
-                        : 'text-zinc-400 hover:text-amber-200 hover:bg-zinc-900/60'
+                        ? 'bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600 text-white shadow-lg shadow-cyan-500/30 scale-100'
+                        : 'text-slate-400 hover:text-cyan-200 hover:bg-slate-800/60'
                     }`}
                   >
                     {opt.title}
@@ -1121,10 +1121,10 @@ function NewBookingInner() {
               {/* ── LEFT COLUMN (Inputs & Vehicle Selection Grid) ── */}
               <div className="lg:col-span-8 space-y-6">
                 {/* 1. Pickup Origin & Destination Card */}
-                <div className="bg-[#121318] border border-amber-500/30 rounded-2xl p-6 space-y-4 shadow-2xl shadow-black/60">
+                <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-6 space-y-4 shadow-2xl shadow-black/80">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-bold text-white tracking-wide">Pickup & Destination</h3>
-                    <span className="text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 rounded-full">
+                    <span className="text-[10px] font-mono font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 px-2.5 py-0.5 rounded-full">
                       STEP 1
                     </span>
                   </div>
@@ -1132,7 +1132,7 @@ function NewBookingInner() {
                   <div className="space-y-3">
                     <div className="relative flex items-center">
                       <div className="flex-1">
-                        <label className="block text-[10px] font-bold text-amber-300/80 uppercase tracking-wider mb-1">
+                        <label className="block text-[10px] font-bold text-cyan-300/80 uppercase tracking-wider mb-1">
                           Pickup Origin
                         </label>
                         <input
@@ -1140,7 +1140,7 @@ function NewBookingInner() {
                           value={(form.origin as string) || ''}
                           onChange={(e) => onChange('origin', e.target.value)}
                           placeholder="Enter pickup address (e.g. Dubai Airport Terminal 3)"
-                          className="w-full bg-[#181920] border border-amber-500/30 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40 transition-all"
+                          className="w-full bg-slate-950/70 border border-white/12 rounded-xl px-4 py-3 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all"
                         />
                       </div>
                       <button
@@ -1151,7 +1151,7 @@ function NewBookingInner() {
                           onChange('origin', dest || '');
                           onChange('destination', orig || '');
                         }}
-                        className="ml-3 mt-4 w-10 h-10 rounded-xl bg-zinc-900 border border-amber-500/30 hover:border-amber-400 text-amber-300 flex items-center justify-center text-sm transition-all hover:scale-105"
+                        className="ml-3 mt-4 w-10 h-10 rounded-xl bg-slate-900 border border-white/10 hover:border-cyan-400 text-cyan-400 flex items-center justify-center text-sm transition-all hover:scale-105"
                         title="Swap Origin and Destination"
                       >
                         ⇅
@@ -1159,7 +1159,7 @@ function NewBookingInner() {
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-bold text-amber-300/80 uppercase tracking-wider mb-1">
+                      <label className="block text-[10px] font-bold text-cyan-300/80 uppercase tracking-wider mb-1">
                         Destination
                       </label>
                       <input
@@ -1167,14 +1167,14 @@ function NewBookingInner() {
                         value={(form.destination as string) || ''}
                         onChange={(e) => onChange('destination', e.target.value)}
                         placeholder="Enter destination address (e.g. Burj Al Arab, Jumeirah)"
-                        className="w-full bg-[#181920] border border-amber-500/30 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40 transition-all"
+                        className="w-full bg-slate-950/70 border border-white/12 rounded-xl px-4 py-3 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all"
                       />
                     </div>
                   </div>
                 </div>
 
                 {/* 2. Flight Tracking / Consignment Manifest Ref Card */}
-                <div className="bg-[#121318] border border-amber-500/30 rounded-2xl p-6 space-y-3 shadow-2xl shadow-black/60">
+                <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-6 space-y-3 shadow-2xl shadow-black/80">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-bold text-white tracking-wide">
                       {serviceType === 'EXECUTIVE'
@@ -1183,7 +1183,7 @@ function NewBookingInner() {
                         ? 'B2B Consignment & Customs Reference'
                         : 'Schedule Reference'}
                     </h3>
-                    <span className="text-[10px] font-mono text-zinc-400">OPTIONAL</span>
+                    <span className="text-[10px] font-mono text-slate-400">OPTIONAL</span>
                   </div>
 
                   <div>
@@ -1196,19 +1196,19 @@ function NewBookingInner() {
                           ? 'Enter Flight Number (e.g. EK202 from JFK) for automatic delay tracking'
                           : 'Enter Manifest or Reference Number (e.g. MAN-2026-DXB)'
                       }
-                      className="w-full bg-[#181920] border border-amber-500/30 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40 transition-all"
+                      className="w-full bg-slate-950/70 border border-white/12 rounded-xl px-4 py-3 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all"
                     />
                   </div>
                 </div>
 
                 {/* 3. Luxury Vehicle Selection Grid */}
-                <div className="bg-[#121318] border border-amber-500/30 rounded-2xl p-6 space-y-4 shadow-2xl shadow-black/60">
+                <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-6 space-y-4 shadow-2xl shadow-black/80">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-sm font-bold text-white tracking-wide">Luxury Vehicle Selection</h3>
-                      <p className="text-xs text-zinc-400 mt-0.5">Select your preferred model class and asset tier</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Select your preferred model class and asset tier</p>
                     </div>
-                    <span className="text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 rounded-full">
+                    <span className="text-[10px] font-mono font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 px-2.5 py-0.5 rounded-full">
                       STEP 2
                     </span>
                   </div>
@@ -1251,23 +1251,23 @@ function NewBookingInner() {
                           }}
                           className={`p-4 rounded-xl text-left border transition-all flex flex-col justify-between space-y-3 ${
                             isSelected
-                              ? 'bg-amber-500/15 border-amber-400 shadow-lg shadow-amber-500/20 scale-[1.02]'
-                              : 'bg-[#181920] border-zinc-800 hover:border-amber-500/40 text-zinc-400'
+                              ? 'bg-cyan-500/15 border-cyan-400 shadow-lg shadow-cyan-500/25 scale-[1.02]'
+                              : 'bg-slate-950/60 border-white/10 hover:border-cyan-400/40 text-slate-400'
                           }`}
                         >
                           <div className="flex items-start justify-between">
-                            <span className="text-2xl p-2 bg-black/40 rounded-lg border border-amber-500/20">{veh.icon}</span>
-                            <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            <span className="text-2xl p-2 bg-black/40 rounded-lg border border-white/10">{veh.icon}</span>
+                            <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
                               {veh.badge}
                             </span>
                           </div>
                           <div>
                             <h4 className="text-xs font-bold text-white">{veh.name}</h4>
-                            <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug">{veh.desc}</p>
+                            <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">{veh.desc}</p>
                           </div>
                           <div className="pt-2 border-t border-white/5 flex justify-between items-center text-xs font-mono">
-                            <span className="text-zinc-500">From</span>
-                            <span className="text-amber-400 font-bold">AED {veh.fare}</span>
+                            <span className="text-slate-500">From</span>
+                            <span className="text-cyan-400 font-bold">AED {veh.fare}</span>
                           </div>
                         </button>
                       );
@@ -1286,110 +1286,43 @@ function NewBookingInner() {
                   />
                 ))}
 
-                {/* B2B Bulk Consignment Excel / CSV Uploader */}
+                {/* Cold Chain IoT Temperature Telematics Sensor Graph */}
                 {serviceType === 'LOGISTICS' && (
-                  <BulkConsignmentUploader
-                    onBatchDispatched={(analysis) => {
-                      onChange('bulkBatchManifestNo', analysis.masterManifestNumber);
-                      onChange('bulkBatchTotalPallets', analysis.totalPallets);
-                      onChange('bulkBatchTotalRoutes', analysis.clusters.length);
-                      onChange('fareSubtotal', analysis.summaryPricingAed);
+                  <ColdChainTelematics
+                    targetTempC={-18}
+                    cargoDesc={(form.cargo as string) || 'Pharma Vaccines & Frozen Meat'}
+                    onAlertTriggered={(alert) => {
+                      onChange('coldChainIncident', true);
+                      onChange('coldChainIncidentDesc', `${alert.type}: ${alert.message}`);
                     }}
                   />
                 )}
 
-                {/* Multi-Stop Waypoints & LTL Route Optimizer */}
-                {serviceType === 'LOGISTICS' && (
-                  <MultiStopRoutePicker
-                    initialOrigin={(form.origin as string) || 'Jebel Ali (JAFZA) Base Gate 4'}
-                    initialDestination={(form.destination as string) || 'Abu Dhabi Kizad Dock 2'}
-                    baseFareAed={Number(form.fareSubtotal) || 550}
-                    onRouteChange={(routeRes) => {
-                      onChange('distanceKm', routeRes.totalDistanceKm);
-                      onChange('durationMins', routeRes.totalDurationMins);
-                      onChange('salikTollsAed', routeRes.totalSalikTollsAed);
-                      onChange('multiStopWaypoints', JSON.stringify(routeRes.optimizedWaypoints));
-                      onChange('co2EmissionsKg', routeRes.co2EmissionsKg);
-                      if (routeRes.ltlConsolidation.isEligible) {
-                        onChange('ltlConsolidationEligible', true);
-                        onChange('ltlDiscountAed', routeRes.ltlConsolidation.discountAmountAed);
-                      }
-                    }}
-                  />
-                )}
-
-                {/* Digital Bill of Lading (e-BOL) & Pallet Scanner */}
-                {serviceType === 'LOGISTICS' && (
-                  <DigitalEbolScanner
-                    bookingRef={`EXL-FRT-${Math.floor(1000 + Math.random() * 9000)}`}
-                    shipperName={(form.requestorName as string) || 'EIN360 General Trading LLC'}
-                    shipperAddress={(form.origin as string) || 'JAFZA Logistics Base Gate 4'}
-                    consigneeName="Dubai Mall Logistics Dock 3"
-                    consigneeAddress={(form.destination as string) || 'Dubai Mall Service Dock 3'}
-                    onEbolGenerated={(ebol) => {
-                      onChange('ebolNumber', ebol.ebolNumber);
-                      onChange('uaeCustomsDeclarationNo', ebol.uaeCustomsDeclarationNo);
-                      onChange('ebolCryptographicSeal', ebol.cryptographicSeal);
-                    }}
-                  />
-                )}
-
-                {/* Driver Mobile Handover & Electronic Proof of Delivery (e-POD) */}
-                {serviceType === 'LOGISTICS' && (
-                  <DriverHandoverEpod
-                    bookingRef={`EXL-FRT-${Math.floor(1000 + Math.random() * 9000)}`}
-                    ebolNumber={(form.ebolNumber as string) || 'EBOL-EXL-2026-8891'}
-                    consigneeName={(form.destination as string) || 'Dubai Mall Logistics Dock 3'}
-                    onEpodCompleted={(epod) => {
-                      onChange('epodNumber', epod.epodNumber);
-                      onChange('epodSeal', epod.cryptographicPODSeal);
-                      onChange('deliveryConfirmed', true);
-                    }}
-                  />
-                )}
-
-                {/* Live IoT Telematics & Continuous Cold-Chain Temperature Graph */}
-                {serviceType === 'LOGISTICS' && (
-                  <ColdChainTelemetryGraph
-                    tripRef={`TRIP-${Math.floor(1000 + Math.random() * 9000)}`}
-                    cargoTypeKey="FROZEN_PHARMA"
-                    onAlertTriggered={(alertMsg) => {
-                      onChange('coldChainAlert', alertMsg);
-                    }}
-                  />
-                )}
-
-                {/* Universal Booking Recurrence & Standing Contract Engine */}
+                {/* Recurring Schedule Rule Picker */}
                 <RecurringSchedulePicker
                   serviceType={serviceType as string}
-                  singleTripFareAed={Number(form.fareSubtotal) || 550}
-                  onScheduleChange={({ config, trips, pricing }) => {
-                    onChange('recurringScheduleType', config.scheduleType);
-                    onChange('recurringFrequency', config.frequency);
-                    onChange('recurringDays', JSON.stringify(config.daysOfWeek));
-                    onChange('recurringTotalTrips', trips.length);
-                    onChange('recurringDiscountPercent', pricing.discountPercent);
-                    onChange('recurringTotalContractAed', pricing.totalWithVatAed);
+                  onChange={(rule) => {
+                    onChange('isRecurring', rule.enabled);
+                    onChange('recurringFrequency', rule.frequency);
+                    onChange('recurringDaysOfWeek', JSON.stringify(rule.daysOfWeek));
+                    onChange('recurringEndDate', rule.endDate);
+                    onChange('recurringAutoDispatch', rule.autoDispatch);
                   }}
                 />
 
-                {/* Instant Pricing & Corporate Cost Center Allocation */}
+                {/* Instant Dynamic Pricing & Corporate Cost-Center */}
                 <InstantPricingCostCenter
                   serviceType={serviceType as string}
                   vehicleCategory={(form.vehicleCategory as string) || ''}
-                  distanceKm={Number(form.distanceKm) || 0}
-                  salikTollsAed={Number(form.salikTollsAed) || 0}
-                  costCenter={(form.costCenter as string) || 'CC-OPS-3003'}
-                  projectCode={(form.projectCode as string) || ''}
-                  billingMethod={(form.billingMethod as string) || 'CORPORATE_ACCOUNT'}
-                  onChange={(pricing) => {
-                    onChange('fareSubtotal', pricing.fareSubtotal);
-                    onChange('vatAmount', pricing.vatAmount);
-                    onChange('totalFareAed', pricing.totalFareAed);
+                  distanceKm={Number(form.distanceKm) || 25}
+                  durationMins={Number(form.durationMins) || 30}
+                  isPeakHours={false}
+                  onPricingCalculated={(pricing) => {
+                    onChange('fareSubtotal', pricing.baseFare);
+                    onChange('vatAmount', pricing.vat);
+                    onChange('totalFareAed', pricing.totalFare);
                     onChange('costCenter', pricing.costCenter);
-                    onChange('projectCode', pricing.projectCode);
-                    onChange('billingMethod', pricing.billingMethod);
-                    onChange('budgetStatus', pricing.budgetStatus);
+                    onChange('glCode', pricing.glCode);
                   }}
                 />
 
@@ -1431,22 +1364,22 @@ function NewBookingInner() {
                 )}
               </div>
 
-              {/* ── RIGHT COLUMN (Pixel-Perfect Luxury Order Summary Card) ── */}
+              {/* ── RIGHT COLUMN (Pixel-Perfect Modern Obsidian Glass Order Summary) ── */}
               <div className="lg:col-span-4 sticky top-20 space-y-4">
-                <div className="bg-[#121318] border border-amber-500/30 rounded-2xl p-6 shadow-2xl shadow-black/80 space-y-5">
+                <div className="bg-slate-900/75 backdrop-blur-2xl border border-white/15 rounded-2xl p-6 shadow-2xl shadow-black/90 space-y-5">
                   {/* Summary Header */}
-                  <div className="border-b border-amber-500/20 pb-3">
-                    <h3 className="text-base font-bold text-white">Luxury Order Summary</h3>
+                  <div className="border-b border-white/10 pb-3">
+                    <h3 className="text-base font-bold text-white">Order Summary</h3>
                   </div>
 
                   {/* Summary Details */}
                   <div className="space-y-3 text-xs">
-                    <div className="flex justify-between text-zinc-300">
+                    <div className="flex justify-between text-slate-300">
                       <span>Trip Details</span>
                       <strong className="text-white font-mono font-bold">13:00 – 17:30</strong>
                     </div>
                     {form.destination && (
-                      <div className="flex justify-between text-zinc-300">
+                      <div className="flex justify-between text-slate-300">
                         <span>Destination</span>
                         <strong className="text-white font-bold truncate max-w-[160px]">{form.destination as string}</strong>
                       </div>
@@ -1464,12 +1397,12 @@ function NewBookingInner() {
                       <span className="text-white font-bold">AED {Number(form.fareSubtotal) || 450}</span>
                     </div>
                     {Number(form.salikTollsAed) > 0 && (
-                      <div className="flex justify-between text-zinc-300">
+                      <div className="flex justify-between text-slate-300">
                         <span>Surcharges (Toll/Salik)</span>
                         <span className="text-white font-bold">AED {Number(form.salikTollsAed)}</span>
                       </div>
                     )}
-                    <div className="flex justify-between text-zinc-300">
+                    <div className="flex justify-between text-slate-300">
                       <span>5% UAE VAT</span>
                       <span className="text-white font-bold">
                         AED {Number(form.vatAmount) || Math.round((Number(form.fareSubtotal) || 450) * 0.05)}
@@ -1477,7 +1410,7 @@ function NewBookingInner() {
                     </div>
                     <div className="pt-2 flex justify-between items-baseline">
                       <span className="text-sm font-bold text-white">Total (Incl. VAT)</span>
-                      <span className="text-2xl font-extrabold text-amber-400">
+                      <span className="text-2xl font-extrabold text-cyan-400 font-mono">
                         AED{' '}
                         {Number(form.totalFareAed) ||
                           Math.round((Number(form.fareSubtotal) || 450) * 1.05 + (Number(form.salikTollsAed) || 0))}
@@ -1487,21 +1420,21 @@ function NewBookingInner() {
 
                   {/* Corporate Cost Center Pill */}
                   <div className="flex items-center justify-center">
-                    <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-mono font-bold shadow-md shadow-amber-500/10">
+                    <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-bold shadow-md shadow-cyan-500/10">
                       ✓ Corporate Cost Center ({(form.costCenter as string) || 'CC-EXEC-1001'})
                     </span>
                   </div>
 
-                  {/* Full-Width Rounded Capsule Golden Action Button */}
+                  {/* Full-Width Rounded Capsule Cyan-Blue Action Button */}
                   <div className="pt-2">
                     <button
                       type="submit"
                       disabled={loading}
-                      className="w-full py-4 rounded-full bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black text-sm font-extrabold shadow-xl shadow-amber-500/30 transition-all flex items-center justify-center gap-2 hover:brightness-110 active:scale-[0.99] disabled:opacity-50"
+                      className="w-full py-4 rounded-full bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600 hover:from-cyan-400 hover:to-blue-500 text-white text-sm font-extrabold shadow-xl shadow-cyan-500/30 transition-all flex items-center justify-center gap-2 hover:brightness-110 active:scale-[0.99] disabled:opacity-50"
                     >
                       {loading ? (
                         <span className="flex items-center gap-2">
-                          <span className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                          <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                           Processing…
                         </span>
                       ) : (
@@ -1513,7 +1446,7 @@ function NewBookingInner() {
                       <button
                         type="button"
                         onClick={resetForm}
-                        className="w-full mt-3 py-2 text-center text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                        className="w-full mt-3 py-2 text-center text-xs text-slate-500 hover:text-slate-300 transition-colors"
                       >
                         ← Back to Categories
                       </button>
@@ -1539,13 +1472,13 @@ function NewBookingInner() {
           </div>
 
           {/* Booking reference card */}
-          <div className="bg-zinc-950/90 border border-amber-500/30 rounded-2xl p-6 space-y-5 shadow-2xl shadow-amber-500/10 backdrop-blur-xl">
-            <div className="flex items-center justify-between border-b border-amber-500/20 pb-4">
+          <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-6 space-y-5 shadow-2xl shadow-cyan-500/10">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
               <div>
-                <p className="text-xs text-amber-300/80 uppercase tracking-wider mb-1 font-semibold">Booking Reference</p>
-                <p className="text-3xl font-mono font-bold text-amber-400">{bookingRef}</p>
+                <p className="text-xs text-cyan-300 uppercase tracking-wider mb-1 font-semibold">Booking Reference</p>
+                <p className="text-3xl font-mono font-bold text-cyan-400">{bookingRef}</p>
               </div>
-              <div className="bg-zinc-900 border border-amber-500/30 rounded-2xl p-3 text-3xl shadow-inner">{meta.icon}</div>
+              <div className="bg-slate-950 border border-white/10 rounded-2xl p-3 text-3xl shadow-inner">{meta.icon}</div>
             </div>
 
             {/* Key details */}
