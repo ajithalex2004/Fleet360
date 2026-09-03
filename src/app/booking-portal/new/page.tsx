@@ -7,6 +7,7 @@ import { InteractiveRoutePicker } from '@/components/booking/InteractiveRoutePic
 import { AssetAvailabilitySelector } from '@/components/booking/AssetAvailabilitySelector';
 import { InstantPricingCostCenter } from '@/components/booking/InstantPricingCostCenter';
 import { OmnichannelNotificationPreferences } from '@/components/booking/OmnichannelNotificationPreferences';
+import { DigitalKycUaePass } from '@/components/booking/DigitalKycUaePass';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service type card definitions (Step 1)
@@ -1056,6 +1057,20 @@ function NewBookingInner() {
               }}
             />
 
+            {/* Digital KYC, UAE Pass & Electronic Signatures */}
+            <DigitalKycUaePass
+              requestorName={(form.requestorName as string) || ''}
+              requestorEmail={(form.requestorEmail as string) || ''}
+              onKycVerified={(kyc) => {
+                if (kyc.uaePassVerified) onChange('uaePassVerified', true);
+                if (kyc.emiratesId) onChange('emiratesId', kyc.emiratesId);
+                if (kyc.drivingLicenseNo) onChange('drivingLicenseNo', kyc.drivingLicenseNo);
+                if (kyc.licenseExpiry) onChange('licenseExpiry', kyc.licenseExpiry);
+                if (kyc.signatureHash) onChange('signatureHash', kyc.signatureHash);
+                if (kyc.signatureDataUrl) onChange('signatureDataUrl', kyc.signatureDataUrl);
+              }}
+            />
+
             {error && (
               <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 text-sm flex items-start gap-2">
                 <span className="flex-shrink-0">⚠️</span>
@@ -1152,6 +1167,16 @@ function NewBookingInner() {
                   value={form.budgetStatus === 'WITHIN_POLICY' ? '✅ Within Policy (Pre-Approved)' : '⚠️ Exceeds Cap (Level 2 Escalation)'}
                 />
               )}
+              {form.uaePassVerified ? (
+                <ConfirmationDetail label="Identity Verification" value="🇦🇪 UAE PASS (SOP3 High Assurance)" />
+              ) : null}
+              {form.emiratesId ? <ConfirmationDetail label="Emirates ID" value={form.emiratesId as string} /> : null}
+              {form.drivingLicenseNo ? (
+                <ConfirmationDetail label="Driving License" value={form.drivingLicenseNo as string} />
+              ) : null}
+              {form.signatureHash ? (
+                <ConfirmationDetail label="Digital e-Signature" value={`SHA-256: ${(form.signatureHash as string).slice(0, 16)}…`} />
+              ) : null}
               {form.contactPhone ? (
                 <ConfirmationDetail label="Passenger WhatsApp / Mobile" value={form.contactPhone as string} />
               ) : null}
