@@ -70,10 +70,10 @@ export function AssetAvailabilitySelector({
   return (
     <div className="space-y-4">
       {/* Header & Station Selector */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-800/40 border border-white/10 rounded-2xl p-3.5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#181920] border border-amber-500/30 rounded-2xl p-3.5 shadow-md">
         <div className="flex items-center gap-2">
-          <Building2 className="w-4 h-4 text-violet-400" />
-          <span className="text-xs font-bold text-white uppercase tracking-wider">
+          <Building2 className="w-4 h-4 text-amber-400" />
+          <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
             Dispatch Depot / Station:
           </span>
         </div>
@@ -82,7 +82,7 @@ export function AssetAvailabilitySelector({
           <select
             value={selectedDepot}
             onChange={(e) => handleDepotChange(e.target.value)}
-            className="bg-slate-900 border border-white/15 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-violet-500/50"
+            className="bg-[#121318] border border-amber-500/30 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-amber-400"
           >
             {STANDARD_DEPOTS.map((d) => (
               <option key={d.id} value={d.id}>
@@ -94,7 +94,7 @@ export function AssetAvailabilitySelector({
             type="button"
             onClick={fetchAvailability}
             title="Refresh availability"
-            className="p-1.5 text-slate-400 hover:text-white border border-white/10 rounded-xl hover:bg-white/5 transition-colors"
+            className="p-1.5 text-amber-400 hover:text-white border border-amber-500/30 rounded-xl hover:bg-amber-500/10 transition-colors"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -127,45 +127,45 @@ export function AssetAvailabilitySelector({
               disabled={!cat.isAvailable}
               className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
                 isSelected
-                  ? 'bg-violet-950/40 border-violet-500/80 shadow-lg shadow-violet-500/10 ring-1 ring-violet-500/50'
+                  ? 'bg-amber-500/15 border-amber-400 shadow-xl shadow-amber-500/20 ring-1 ring-amber-400/50 scale-[1.01]'
                   : cat.isAvailable
-                  ? 'bg-slate-800/60 border-white/10 hover:border-white/25 hover:bg-slate-800/90'
-                  : 'bg-slate-900/40 border-white/5 opacity-50 cursor-not-allowed'
+                  ? 'bg-[#181920] border-amber-500/25 hover:border-amber-400 hover:bg-[#1f2029]'
+                  : 'bg-[#121318]/50 border-white/5 opacity-40 cursor-not-allowed'
               }`}
             >
               <div>
                 <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <span className="text-sm font-bold text-white group-hover:text-violet-300">
+                  <span className="text-sm font-bold text-white">
                     {cat.category}
                   </span>
 
                   {/* Live Stock Badge */}
                   {cat.availableCount === 0 ? (
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30">
                       Sold Out
                     </span>
                   ) : cat.lowStock ? (
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
                       Only {cat.availableCount} left
                     </span>
                   ) : (
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                       {cat.availableCount} available
                     </span>
                   )}
                 </div>
 
-                <p className="text-[11px] text-slate-400 line-clamp-1 mb-2">
+                <p className="text-xs text-zinc-400 line-clamp-1 mb-2">
                   {cat.sampleModels}
                 </p>
               </div>
 
               {/* Depot Station Inventory Footnote */}
-              <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[11px] text-slate-500">
+              <div className="pt-2 border-t border-amber-500/15 flex items-center justify-between text-[11px] text-zinc-400">
                 <span>At selected depot:</span>
-                <span className={`font-mono font-medium ${depotStock > 0 ? 'text-slate-300' : 'text-rose-400'}`}>
+                <span className={`font-mono font-bold ${depotStock > 0 ? 'text-amber-300' : 'text-rose-400'}`}>
                   {depotStock} in station
                 </span>
               </div>

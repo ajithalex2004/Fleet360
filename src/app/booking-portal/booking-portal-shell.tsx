@@ -33,7 +33,7 @@ export default function BookingPortalShell({ children }: { children: React.React
                   </div>
                   <div>
                     <h1 className="text-white font-bold text-sm tracking-wide">Booking Portal</h1>
-                    <p className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider">Onyx Gold Executive</p>
+                    <p className="text-xs text-zinc-400">Fleet Reservations</p>
                   </div>
                 </div>
               </div>
@@ -59,17 +59,6 @@ export default function BookingPortalShell({ children }: { children: React.React
                   );
                 })}
               </nav>
-            </div>
-
-            {/* Bottom Status Badge */}
-            <div className="p-4 border-t border-amber-500/20 bg-[#09090b]">
-              <div className="bg-[#121318] border border-amber-500/20 rounded-xl p-3 flex items-center gap-2.5">
-                <ShieldCheck className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                <div>
-                  <p className="text-[10px] font-mono font-bold text-amber-300 uppercase">Universal Engine</p>
-                  <p className="text-[11px] text-zinc-400">All 6 Mobility Modes</p>
-                </div>
-              </div>
             </div>
           </div>
 

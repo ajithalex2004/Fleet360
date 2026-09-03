@@ -1007,10 +1007,6 @@ function NewBookingInner() {
       {/* ── Page header ── */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-amber-500/20 pb-6">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 mb-2">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-            <span className="text-amber-300 text-xs font-mono font-bold tracking-wider">EXECUTIVE BOOKING CONSOLE</span>
-          </div>
           <h1 className="text-3xl font-extrabold text-white tracking-tight">
             Fleet360 <span className="bg-gradient-to-r from-amber-400 to-yellow-500 bg-clip-text text-transparent">Booking Portal</span>
           </h1>
@@ -1445,35 +1441,35 @@ function NewBookingInner() {
 
                   {/* Summary Details */}
                   <div className="space-y-3 text-xs">
-                    <div className="flex justify-between text-zinc-400">
+                    <div className="flex justify-between text-zinc-300">
                       <span>Trip Details</span>
-                      <strong className="text-white font-mono">13:00 – 17:30</strong>
+                      <strong className="text-white font-mono font-bold">13:00 – 17:30</strong>
                     </div>
                     {form.destination && (
-                      <div className="flex justify-between text-zinc-400">
+                      <div className="flex justify-between text-zinc-300">
                         <span>Destination</span>
-                        <strong className="text-white truncate max-w-[160px]">{form.destination as string}</strong>
+                        <strong className="text-white font-bold truncate max-w-[160px]">{form.destination as string}</strong>
                       </div>
                     )}
-                    <div className="flex justify-between text-zinc-400">
+                    <div className="flex justify-between text-zinc-300">
                       <span>Pickup Summary</span>
-                      <span className="text-white">Confirmed VIP</span>
+                      <span className="text-white font-bold">Confirmed VIP</span>
                     </div>
                   </div>
 
                   {/* Itemized Pricing */}
                   <div className="border-t border-b border-amber-500/20 py-3 space-y-2 text-xs font-mono">
-                    <div className="flex justify-between text-zinc-400">
+                    <div className="flex justify-between text-zinc-300">
                       <span>Base Fare</span>
                       <span className="text-white font-bold">AED {Number(form.fareSubtotal) || 450}</span>
                     </div>
                     {Number(form.salikTollsAed) > 0 && (
-                      <div className="flex justify-between text-zinc-400">
+                      <div className="flex justify-between text-zinc-300">
                         <span>Surcharges (Toll/Salik)</span>
                         <span className="text-white font-bold">AED {Number(form.salikTollsAed)}</span>
                       </div>
                     )}
-                    <div className="flex justify-between text-zinc-400">
+                    <div className="flex justify-between text-zinc-300">
                       <span>5% UAE VAT</span>
                       <span className="text-white font-bold">
                         AED {Number(form.vatAmount) || Math.round((Number(form.fareSubtotal) || 450) * 0.05)}
@@ -1491,7 +1487,7 @@ function NewBookingInner() {
 
                   {/* Corporate Cost Center Pill */}
                   <div className="flex items-center justify-center">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] font-mono font-bold">
+                    <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-mono font-bold shadow-md shadow-amber-500/10">
                       ✓ Corporate Cost Center ({(form.costCenter as string) || 'CC-EXEC-1001'})
                     </span>
                   </div>
