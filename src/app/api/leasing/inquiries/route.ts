@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
 
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import { lockSerialSeries } from '@/lib/leasing/serial-lock';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
 
 
 export async function POST(request: NextRequest) {
-  const authz = requireAuthorizedTenant(req);
+  const authz = requireAuthorizedTenant(request);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
@@ -48,20 +49,20 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // Generate a per-tenant inquiry number so concurrent tenants don't
-    // collide on INQ-<last6digits>.
-    const count = await prisma.leaseInquiry.count({ where: { tenantId } });
-    const inquiryNumber = `INQ-${String(count + 1).padStart(6, '0')}`;
-
-    const inquiry = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.leaseInquiry.create({
-      data: {
-        ...body,
-        inquiryNumber,
-        tenantId,
-      },
-    }),
-    );
+    const inquiry = await withTenantRls(prisma, tenantId, async (tx) => {
+      // G13: lock before count() so concurrent creates for the same tenant
+      // can't compute the same INQ-<n>.
+      await lockSerialSeries(tx, tenantId, 'inquiry');
+      const count = await tx.leaseInquiry.count({ where: { tenantId } });
+      const inquiryNumber = `INQ-${String(count + 1).padStart(6, '0')}`;
+      return tx.leaseInquiry.create({
+        data: {
+          ...body,
+          inquiryNumber,
+          tenantId,
+        },
+      });
+    });
 
     return NextResponse.json(inquiry, { status: 201 });
     } catch (e) {

@@ -3280,7 +3280,11 @@ model LeaseQuotation {
   maintenanceIncluded Boolean?                @default(false) @map("maintenance_included")
   driverIncluded      Boolean?                @default(false) @map("driver_included")
   validUntil          DateTime?               @map("valid_until") @db.Timestamptz(6)
-  // Status workflow: NEW|INTERNAL_APPROVAL|SENT_TO_CUSTOMER|CUSTOMER_APPROVED|CREDIT_APPROVAL|PO_PREPARED|DELIVERY_IN_PROGRESS|DELIVERED|REJECTED|CANCELLED
+  // Status workflow (as actually implemented by approve/convert routes —
+  // this comment previously listed CREDIT_APPROVAL/PO_PREPARED without the
+  // PENDING_/_PREPARATION intermediate steps the code has always used; see
+  // G16 in .audit-reports/LEASING-FUNCTIONALITY-GAP-DOCUMENT.md):
+  // NEW|INTERNAL_APPROVAL|SENT_TO_CUSTOMER|CUSTOMER_APPROVED|PENDING_CREDIT_APPROVAL|CREDIT_APPROVED|PO_PREPARATION|PO_PREPARED|DELIVERY_IN_PROGRESS|DELIVERED|REJECTED|CANCELLED
   status              String?                 @default("NEW")
   internalApprovedBy  String?                 @map("internal_approved_by")
   internalApprovedAt  DateTime?               @map("internal_approved_at") @db.Timestamptz(6)

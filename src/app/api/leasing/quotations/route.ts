@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { lockSerialSeries } from '@/lib/leasing/serial-lock';
 
 /**
  * Quotation list (GET) + create (POST).
@@ -56,9 +57,6 @@ export async function POST(request: NextRequest) {
   const { tenantId } = authz;
   try {
     const body = await request.json();
-    // Generate serial quotation number scoped to this tenant
-    const countExisting = await prisma.leaseQuotation.count({ where: { tenantId } });
-    const quotationNumber = `QUO-${String(countExisting + 1).padStart(4, '0')}`;
 
     // Strip relational/extra fields that aren't on the LeaseQuotation model
     const {
@@ -92,8 +90,13 @@ export async function POST(request: NextRequest) {
     }
     const durationMonths = Number(quotationData.durationMonths) || null;
 
-    const quotation = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.leaseQuotation.create({
+    const quotation = await withTenantRls(prisma, tenantId, async (tx) => {
+      // G13: serialize quotation-number generation per tenant so two
+      // concurrent creates can't compute the same count()+1.
+      await lockSerialSeries(tx, tenantId, 'quotation');
+      const countExisting = await tx.leaseQuotation.count({ where: { tenantId } });
+      const quotationNumber = `QUO-${String(countExisting + 1).padStart(4, '0')}`;
+      return tx.leaseQuotation.create({
       data: {
         ...quotationData,
         tenantId,
@@ -142,8 +145,8 @@ export async function POST(request: NextRequest) {
         } : {}),
       },
       include: { lineItems: true, vehicles: true },
-    }),
-    );
+    });
+    });
 
     return NextResponse.json({
       ...quotation,

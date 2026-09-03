@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import { lockSerialSeries } from '@/lib/leasing/serial-lock';
 
 /**
  * Insurance policies list (GET) + new policy (POST).
@@ -68,13 +69,14 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Contract not found in this tenant' }, { status: 404 });
       }
     }
-    const count = await prisma.leaseInsurancePolicy.count({ where: { tenantId } });
-    const policyNo = body.policyNo ?? `INS-${String(count + 1).padStart(5, '0')}`;
-    const policy = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.leaseInsurancePolicy.create({
-      data: { ...body, tenantId, policyNo },
-    }),
-    );
+    const policy = await withTenantRls(prisma, tenantId, async (tx) => {
+      await lockSerialSeries(tx, tenantId, 'insurance-policy');
+      const count = await tx.leaseInsurancePolicy.count({ where: { tenantId } });
+      const policyNo = body.policyNo ?? `INS-${String(count + 1).padStart(5, '0')}`;
+      return tx.leaseInsurancePolicy.create({
+        data: { ...body, tenantId, policyNo },
+      });
+    });
     return NextResponse.json(policy, { status: 201 });
     } catch (e) {
     console.error('POST /api/leasing/insurance error:', e);

@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import { lockSerialSeries } from '@/lib/leasing/serial-lock';
 
 export async function GET(req: NextRequest) {
 
@@ -59,8 +60,6 @@ export async function POST(req: NextRequest) {
     if (!contract) {
       return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
     }
-    const count = await prisma.leaseEarlyTermination.count({ where: { tenantId } });
-    const terminationNo = `ET-${String(count + 1).padStart(5, '0')}`;
     const penaltyPct = parseFloat(body.penaltyPct || '20');
     const monthlyRate = parseFloat(body.monthlyRate || '0');
     const remainingMonths = parseInt(body.remainingMonths || '0');
@@ -68,11 +67,14 @@ export async function POST(req: NextRequest) {
     const outstanding = parseFloat(body.outstandingPayments || '0');
     const depositRefund = parseFloat(body.depositRefund || '0');
     const totalSettlement = penaltyAmount + outstanding - depositRefund;
-    const et = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.leaseEarlyTermination.create({
-      data: { ...body, terminationNo, penaltyAmount, totalSettlement, tenantId },
-    }),
-    );
+    const et = await withTenantRls(prisma, tenantId, async (tx) => {
+      await lockSerialSeries(tx, tenantId, 'early-termination');
+      const count = await tx.leaseEarlyTermination.count({ where: { tenantId } });
+      const terminationNo = `ET-${String(count + 1).padStart(5, '0')}`;
+      return tx.leaseEarlyTermination.create({
+        data: { ...body, terminationNo, penaltyAmount, totalSettlement, tenantId },
+      });
+    });
     return NextResponse.json(et, { status: 201 });
     } catch (e) {
     return NextResponse.json({ error: 'Failed' }, { status: 500 });

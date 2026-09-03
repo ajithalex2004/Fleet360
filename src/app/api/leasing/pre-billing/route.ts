@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import { lockSerialSeries } from '@/lib/leasing/serial-lock';
 
 export async function GET(req: NextRequest) {
 
@@ -64,17 +65,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
     }
 
-    const count = await prisma.leasePreBillingStatement.count({ where: { tenantId } });
-    const statementNo = `PBS-${String(count + 1).padStart(5, '0')}`;
     const baseFields = ['baseRent','fuelCharges','fineCharges','maintenanceCharges','overageCharges','otherCharges'];
     const sub = baseFields.reduce((s, k) => s + parseFloat(body[k] || '0'), 0);
     const vatAmount = sub * 0.05;
     const totalAmount = sub + vatAmount;
-    const stmt = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.leasePreBillingStatement.create({
-      data: { ...body, statementNo, vatAmount, totalAmount, tenantId },
-    }),
-    );
+    const stmt = await withTenantRls(prisma, tenantId, async (tx) => {
+      await lockSerialSeries(tx, tenantId, 'pre-billing-statement');
+      const count = await tx.leasePreBillingStatement.count({ where: { tenantId } });
+      const statementNo = `PBS-${String(count + 1).padStart(5, '0')}`;
+      return tx.leasePreBillingStatement.create({
+        data: { ...body, statementNo, vatAmount, totalAmount, tenantId },
+      });
+    });
     return NextResponse.json(stmt, { status: 201 });
     } catch (e) {
     return NextResponse.json({ error: 'Failed' }, { status: 500 });

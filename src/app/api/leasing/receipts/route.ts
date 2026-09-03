@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json(receipts);
       } catch (e) {
         console.error('GET /api/leasing/receipts error:', e);
-        return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
       }
   });
 }
@@ -91,6 +91,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(receipt, { status: 201 });
     } catch (e) {
     console.error('POST /api/leasing/receipts error:', e);
-    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

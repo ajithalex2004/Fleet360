@@ -32,6 +32,7 @@ import { withTenantRls } from '@/lib/rls';
 import { aggregatePreBilling } from '@/lib/leasing/pre-billing-aggregator';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { lockSerialSeries } from '@/lib/leasing/serial-lock';
 
 export const runtime = 'nodejs';
 
@@ -109,31 +110,31 @@ export async function POST(req: NextRequest) {
     const billingPeriod =
       parsed.data.billingPeriod ?? aggregated.periodFrom.toISOString().slice(0, 7);
 
-    const count = await prisma.leasePreBillingStatement.count({ where: { tenantId } });
-    const statementNo = `PBS-${String(count + 1).padStart(5, '0')}`;
-
-    const statement = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.leasePreBillingStatement.create({
-      data: {
-        statementNo,
-        contractId: aggregated.contractId,
-        lesseeId: aggregated.lesseeId,
-        billingPeriod,
-        dueDate,
-        baseRent: aggregated.baseRent,
-        fuelCharges: aggregated.fuelCharges,
-        fineCharges: aggregated.fineCharges,
-        maintenanceCharges: aggregated.maintenanceCharges,
-        overageCharges: aggregated.overageCharges,
-        otherCharges: aggregated.otherCharges,
-        vatAmount: aggregated.vatAmount,
-        totalAmount: aggregated.totalAmount,
-        currency: aggregated.currency,
-        status: 'DRAFT',
-        tenantId,
-      },
-    }),
-    );
+    const statement = await withTenantRls(prisma, tenantId, async (tx) => {
+      await lockSerialSeries(tx, tenantId, 'pre-billing-statement');
+      const count = await tx.leasePreBillingStatement.count({ where: { tenantId } });
+      const statementNo = `PBS-${String(count + 1).padStart(5, '0')}`;
+      return tx.leasePreBillingStatement.create({
+        data: {
+          statementNo,
+          contractId: aggregated.contractId,
+          lesseeId: aggregated.lesseeId,
+          billingPeriod,
+          dueDate,
+          baseRent: aggregated.baseRent,
+          fuelCharges: aggregated.fuelCharges,
+          fineCharges: aggregated.fineCharges,
+          maintenanceCharges: aggregated.maintenanceCharges,
+          overageCharges: aggregated.overageCharges,
+          otherCharges: aggregated.otherCharges,
+          vatAmount: aggregated.vatAmount,
+          totalAmount: aggregated.totalAmount,
+          currency: aggregated.currency,
+          status: 'DRAFT',
+          tenantId,
+        },
+      });
+    });
 
     void logAudit({
       tenantId,
@@ -141,9 +142,9 @@ export async function POST(req: NextRequest) {
       userRole: req.headers.get('x-user-role') ?? undefined,
       entityType: 'LeasePreBillingStatement',
       entityId: statement.id,
-      entityName: statementNo,
+      entityName: statement.statementNo,
       action: 'CREATE',
-      details: `Aggregated pre-billing ${statementNo} for contract ${aggregated.contractNumber ?? aggregated.contractId} (${billingPeriod}): base ${aggregated.baseRent}, fuel ${aggregated.fuelCharges}, fines ${aggregated.fineCharges}, overage ${aggregated.overageCharges}, total ${aggregated.totalAmount.toFixed(2)} ${aggregated.currency}`,
+      details: `Aggregated pre-billing ${statement.statementNo} for contract ${aggregated.contractNumber ?? aggregated.contractId} (${billingPeriod}): base ${aggregated.baseRent}, fuel ${aggregated.fuelCharges}, fines ${aggregated.fineCharges}, overage ${aggregated.overageCharges}, total ${aggregated.totalAmount.toFixed(2)} ${aggregated.currency}`,
     });
 
     return NextResponse.json(

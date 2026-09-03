@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json(exchanges);
       } catch (e) {
         console.error(e);
-        return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
       }
   });
 }
@@ -80,6 +80,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(exchange, { status: 201 });
     } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

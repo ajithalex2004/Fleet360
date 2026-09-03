@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import { lockSerialSeries } from '@/lib/leasing/serial-lock';
 
 /**
  * Traffic fines list (GET) + record (POST).
@@ -65,14 +66,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const count = await prisma.leaseTrafficFine.count({ where: { tenantId } });
-    const fineNo = body.fineNo ?? `TF-${String(count + 1).padStart(6, '0')}`;
     const finalAmount = body.finalAmount ?? (parseFloat(body.fineAmount) - parseFloat(body.discountAmount || '0'));
-    const fine = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.leaseTrafficFine.create({
-      data: { ...body, tenantId, fineNo, finalAmount },
-    }),
-    );
+    const fine = await withTenantRls(prisma, tenantId, async (tx) => {
+      await lockSerialSeries(tx, tenantId, 'traffic-fine');
+      const count = await tx.leaseTrafficFine.count({ where: { tenantId } });
+      const fineNo = body.fineNo ?? `TF-${String(count + 1).padStart(6, '0')}`;
+      return tx.leaseTrafficFine.create({
+        data: { ...body, tenantId, fineNo, finalAmount },
+      });
+    });
     return NextResponse.json(fine, { status: 201 });
     } catch (e) {
     console.error('POST /api/leasing/traffic-fines error:', e);

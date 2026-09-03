@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json(branches);
       } catch (e) {
         console.error(e);
-        return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
       }
   });
 }
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(branch, { status: 201 });
     } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
@@ -84,7 +84,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json(branch);
   } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
@@ -115,6 +115,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: true });
     } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

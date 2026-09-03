@@ -41,7 +41,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
         return NextResponse.json(contract);
       } catch (e) {
         console.error(e);
-        return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
       }
   });
 }
@@ -75,7 +75,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     return NextResponse.json(contract);
   } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
@@ -103,6 +103,6 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
     return NextResponse.json({ success: true });
     } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

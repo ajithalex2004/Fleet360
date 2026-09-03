@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import { lockSerialSeries } from '@/lib/leasing/serial-lock';
 
 export async function GET(req: NextRequest) {
 
@@ -57,13 +58,14 @@ export async function POST(req: NextRequest) {
     if (!contract) {
       return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
     }
-    const count = await prisma.leaseRenewal.count({ where: { tenantId } });
-    const renewalNo = `RNW-${String(count + 1).padStart(5, '0')}`;
-    const renewal = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.leaseRenewal.create({
-      data: { ...body, renewalNo, tenantId },
-    }),
-    );
+    const renewal = await withTenantRls(prisma, tenantId, async (tx) => {
+      await lockSerialSeries(tx, tenantId, 'renewal');
+      const count = await tx.leaseRenewal.count({ where: { tenantId } });
+      const renewalNo = `RNW-${String(count + 1).padStart(5, '0')}`;
+      return tx.leaseRenewal.create({
+        data: { ...body, renewalNo, tenantId },
+      });
+    });
     return NextResponse.json(renewal, { status: 201 });
     } catch (e) {
     return NextResponse.json({ error: 'Failed' }, { status: 500 });

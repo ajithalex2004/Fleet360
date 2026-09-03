@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import nodemailer from 'nodemailer';
 import { NotificationEvent, RecipientType } from '@prisma/client';
+import { captureMessage } from '@/lib/sentry';
 
 // Global transporter cache to prevent re-instantiation
 let cachedTransporter: nodemailer.Transporter | null = null;
@@ -21,8 +22,34 @@ export const sendServerEmail = async (
         });
 
         if (!config || !config.isEnabled) {
+            // G19: this used to be a console.warn with no other trace — an
+            // unmonitored console line is not a "visible failure signal" in
+            // production, and returning `true` afterwards told every caller
+            // (dunning sweep included) the email was delivered when nothing
+            // was ever sent. Surface it to Sentry and record a distinct,
+            // queryable NotificationLog status so "did overdue-payment email
+            // X actually go out" has a real answer instead of just an app
+            // assuming yes.
             console.warn('[ServerNotification] SMTP config missing/disabled. Logging as Mock Sent.');
-            // ... (log mock)
+            captureMessage(
+                `Email to ${recipient} not sent: SMTP/EMAIL integration config is missing or disabled`,
+                { level: 'warning', context: 'notifications.sendServerEmail.mock', extra: { recipient, subject, triggerReason } },
+            );
+            try {
+                await prisma.notificationLog.create({
+                    data: {
+                        id: crypto.randomUUID(),
+                        recipient,
+                        type: 'Email',
+                        subject,
+                        body,
+                        triggerReason,
+                        status: 'MockSent',
+                    },
+                });
+            } catch (logError) {
+                console.error('[ServerNotification] Failed to log mock-sent:', logError);
+            }
             return true;
         }
 

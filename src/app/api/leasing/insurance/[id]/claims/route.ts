@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import { lockSerialSeries } from '@/lib/leasing/serial-lock';
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -57,13 +58,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     }
     const bodyRaw = await req.json();
   const body = stripTenantOwnershipFields(bodyRaw);
-    const count = await prisma.leaseInsuranceClaim.count({ where: { tenantId } });
-    const claimNo = `CLM-${String(count + 1).padStart(5, '0')}`;
-    const claim = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.leaseInsuranceClaim.create({
-      data: { ...body, policyId: params.id, claimNo, tenantId },
-    }),
-    );
+    const claim = await withTenantRls(prisma, tenantId, async (tx) => {
+      await lockSerialSeries(tx, tenantId, 'insurance-claim');
+      const count = await tx.leaseInsuranceClaim.count({ where: { tenantId } });
+      const claimNo = `CLM-${String(count + 1).padStart(5, '0')}`;
+      return tx.leaseInsuranceClaim.create({
+        data: { ...body, policyId: params.id, claimNo, tenantId },
+      });
+    });
     return NextResponse.json(claim, { status: 201 });
     } catch (e) {
     return NextResponse.json({ error: 'Failed' }, { status: 500 });

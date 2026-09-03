@@ -51,6 +51,13 @@ export async function POST(req: NextRequest) {
   try {
     const bodyRaw = await req.json();
   const body = stripTenantOwnershipFields(bodyRaw);
+    const contract = await prisma.leaseContract2.findFirst({
+      where: { id: body.contractId, tenantId },
+      select: { id: true },
+    });
+    if (!contract) {
+      return NextResponse.json({ error: 'Contract not found in this tenant' }, { status: 404 });
+    }
     const activity = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.leaseDunningActivity.create({
       data: { ...body, tenantId },

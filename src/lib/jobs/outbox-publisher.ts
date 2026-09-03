@@ -147,9 +147,8 @@ export async function runOutboxPublisher(ctx: JobContext): Promise<JobResult> {
       COUNT(*) FILTER (WHERE published_at IS NULL
                         AND  failed_at IS NOT NULL
                         AND  retry_count >= ${MAX_RETRIES})              AS parked,
-      EXTRACT(EPOCH FROM (NOW() - MIN(occurred_at))) * 1000
-        FILTER (WHERE published_at IS NULL
-                  AND (failed_at IS NULL OR retry_count < ${MAX_RETRIES})) AS lag_ms
+      EXTRACT(EPOCH FROM (NOW() - MIN(occurred_at) FILTER (WHERE published_at IS NULL
+                  AND (failed_at IS NULL OR retry_count < ${MAX_RETRIES})))) * 1000 AS lag_ms
     FROM event_outbox
   `.catch(() => [{ parked: 0, lag_ms: null }]);
 

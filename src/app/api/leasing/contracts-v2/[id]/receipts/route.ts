@@ -43,7 +43,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
         return NextResponse.json(receipts);
       } catch (e) {
         console.error('GET /api/leasing/contracts-v2/[id]/receipts error:', e);
-        return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
       }
   });
 }
@@ -92,6 +92,6 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return NextResponse.json(receipt, { status: 201 });
     } catch (e) {
     console.error('POST /api/leasing/contracts-v2/[id]/receipts error:', e);
-    return NextResponse.json({ error: 'Internal server e' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

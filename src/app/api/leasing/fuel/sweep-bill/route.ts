@@ -27,6 +27,7 @@ import { captureException } from '@/lib/sentry';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { runSweep } from '@/lib/prisma-sweep';
+import { lockSerialSeries } from '@/lib/leasing/serial-lock';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
@@ -123,58 +124,70 @@ export async function POST(req: NextRequest) {
         let invoicesCreated = 0;
         let logsBilled = 0;
         let errors = 0;
+        let spIdx = 0;
         for (const [lesseeId, items] of byLessee) {
+          // Real SQL SAVEPOINT for per-lessee atomicity/isolation within the
+          // single withSystemJob transaction. `tx.$transaction(...)` looks
+          // like the natural nested-transaction API but Prisma removes
+          // $transaction from a TransactionClient at runtime (see the
+          // denylist note in src/lib/rls.ts) — calling it here always threw
+          // "tx.$transaction is not a function", which this try/catch quietly
+          // turned into a per-lessee `errors` count. Net effect: this sweep
+          // never created a single invoice. SAVEPOINT/RELEASE/ROLLBACK TO is
+          // the documented way to get the same per-record recovery directly
+          // on `tx`.
+          const sp = `sp_fuel_${spIdx++}`;
           try {
-            // tx.$transaction is a savepoint; the withSystemJob
-            // GUC persists through it. Cast through `any` because
-            // Prisma's TxClient type does not expose $transaction.
-            await (tx as any).$transaction(async (lesseeTx: typeof tx) => {
-              const count = await lesseeTx.leaseInvoice.count({ where: { tenantId } });
-              const invoiceNo = `INV-${String(count + 1).padStart(6, '0')}`;
-              const currency = items[0].currency ?? 'AED';
-              const subTotal = items.reduce((s, l) => s + Number(l.totalCost ?? 0), 0);
-              const vatPct = 5;
-              const vatAmount = subTotal * (vatPct / 100);
-              const totalAmount = subTotal + vatAmount;
-              const issueDate = new Date();
-              const dueDate = new Date(issueDate.getTime() + 30 * 86400000);
-              const billingPeriod = periodMonth
-                ? `Fuel — ${periodMonth}`
-                : `Fuel — ${issueDate.toISOString().slice(0, 10)}`;
+            await tx.$executeRawUnsafe(`SAVEPOINT "${sp}"`);
+            await lockSerialSeries(tx, tenantId, 'invoice');
+            const count = await tx.leaseInvoice.count({ where: { tenantId } });
+            const invoiceNo = `INV-${String(count + 1).padStart(6, '0')}`;
+            const currency = items[0].currency ?? 'AED';
+            const subTotal = items.reduce((s, l) => s + Number(l.totalCost ?? 0), 0);
+            const vatPct = 5;
+            const vatAmount = subTotal * (vatPct / 100);
+            const totalAmount = subTotal + vatAmount;
+            const issueDate = new Date();
+            const dueDate = new Date(issueDate.getTime() + 30 * 86400000);
+            const billingPeriod = periodMonth
+              ? `Fuel — ${periodMonth}`
+              : `Fuel — ${issueDate.toISOString().slice(0, 10)}`;
 
-              const invoice = await lesseeTx.leaseInvoice.create({
-                data: {
-                  invoiceNo,
-                  lesseeId,
-                  billingPeriod,
-                  issueDate, dueDate,
-                  subTotal, vatPct, vatAmount, totalAmount, currency,
-                  status: 'DRAFT',
-                  notes: `Auto-generated consolidated fuel invoice for ${items.length} log${items.length === 1 ? '' : 's'}.`,
-                  tenantId,
-                  lines: {
-                    create: items.map(l => ({
-                      contractId: l.contract!.id,
-                      vehicleRef: l.vehicleId ?? null,
-                      description: `Fuel ${l.fuelDate.toISOString().slice(0, 10)}${l.station ? ` @ ${l.station}` : ''} — ${Number(l.liters).toFixed(2)} L${l.costPerLiter ? ` × ${Number(l.costPerLiter).toFixed(2)}/L` : ''}${l.fuelCardNo ? ` (card ${l.fuelCardNo})` : ''}`,
-                      lineType: 'FUEL',
-                      quantity: Number(l.liters ?? 0),
-                      unitAmount: Number(l.costPerLiter ?? 0),
-                      totalAmount: Number(l.totalCost ?? 0),
-                      currency,
-                    })),
-                  },
+            const invoice = await tx.leaseInvoice.create({
+              data: {
+                invoiceNo,
+                lesseeId,
+                billingPeriod,
+                issueDate, dueDate,
+                subTotal, vatPct, vatAmount, totalAmount, currency,
+                status: 'DRAFT',
+                notes: `Auto-generated consolidated fuel invoice for ${items.length} log${items.length === 1 ? '' : 's'}.`,
+                tenantId,
+                lines: {
+                  create: items.map(l => ({
+                    tenantId,
+                    contractId: l.contract!.id,
+                    vehicleRef: l.vehicleId ?? null,
+                    description: `Fuel ${l.fuelDate.toISOString().slice(0, 10)}${l.station ? ` @ ${l.station}` : ''} — ${Number(l.liters).toFixed(2)} L${l.costPerLiter ? ` × ${Number(l.costPerLiter).toFixed(2)}/L` : ''}${l.fuelCardNo ? ` (card ${l.fuelCardNo})` : ''}`,
+                    lineType: 'FUEL',
+                    quantity: Number(l.liters ?? 0),
+                    unitAmount: Number(l.costPerLiter ?? 0),
+                    totalAmount: Number(l.totalCost ?? 0),
+                    currency,
+                  })),
                 },
-              });
-
-              await lesseeTx.leaseFuelLog.updateMany({
-                where: { id: { in: items.map(l => l.id) } },
-                data: { billingStatus: 'INVOICED', receiptRef: invoice.invoiceNo },
-              });
+              },
             });
+
+            await tx.leaseFuelLog.updateMany({
+              where: { id: { in: items.map(l => l.id) } },
+              data: { billingStatus: 'INVOICED', receiptRef: invoice.invoiceNo },
+            });
+            await tx.$executeRawUnsafe(`RELEASE SAVEPOINT "${sp}"`);
             invoicesCreated += 1;
             logsBilled += items.length;
           } catch (err) {
+            await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT "${sp}"`).catch(() => {});
             errors += 1;
             captureException(err, {
               context: 'leasing.fuel.sweep-bill.apply',

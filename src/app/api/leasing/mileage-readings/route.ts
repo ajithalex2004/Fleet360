@@ -25,6 +25,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { lockSerialSeries } from '@/lib/leasing/serial-lock';
 
 const DEFAULT_OVERAGE_RATE_AED_PER_KM = 0.50;
 
@@ -124,7 +125,21 @@ export async function POST(req: NextRequest) {
     const currency = contract.currency ?? 'AED';
 
     // Atomic: create overage + invoice + invoice line in one transaction.
-    const result = await prisma.$transaction(async (tx) => {
+    //
+    // This used to be a bare `prisma.$transaction(...)` instead of
+    // `withTenantRls`, which never sets the `app.tenant_id` GUC that every
+    // tenant-scoped table's RLS policy (USING/WITH CHECK) checks. With
+    // FORCE ROW LEVEL SECURITY on lease_mileage_overages/lease_invoices/
+    // lease_invoice_lines, an unset app.tenant_id makes current_setting(...)
+    // return NULL, which satisfies neither USING nor WITH CHECK for a
+    // non-null tenant_id row — so every insert in this block would be
+    // rejected by Postgres. withTenantRls sets that GUC before handing back
+    // the same tx-shaped client, so the rest of the block is unchanged.
+    const result = await withTenantRls(prisma, tenantId, async (tx) => {
+      // G13: lock before count() so two concurrent overage invoices for the
+      // same tenant can't compute the same INV-<n> (shared 'invoice' series
+      // with the other three invoice-number generators).
+      await lockSerialSeries(tx, tenantId, 'invoice');
       const overage = await tx.leaseMileageOverage.create({
         data: {
           tenantId,
@@ -170,6 +185,7 @@ export async function POST(req: NextRequest) {
           lines: {
             create: [
               {
+                tenantId,
                 contractId: contract.id,
                 vehicleRef: body.vehicleId ?? null,
                 description: `Mileage overage: ${overageKm} km × ${ratePerKm} ${currency}/km`,
