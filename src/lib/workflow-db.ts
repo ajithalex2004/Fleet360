@@ -1,11 +1,31 @@
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 
 const _g = globalThis as { _workflowDbInit?: Promise<void> };
 
+function isInsufficientPrivilege(e: unknown): boolean {
+  return (
+    e instanceof Prisma.PrismaClientKnownRequestError &&
+    (e.meta as { code?: string } | undefined)?.code === '42501'
+  );
+}
+
 function _ensureWorkflowTablesOnce(): Promise<void> {
   if (_g._workflowDbInit) return _g._workflowDbInit;
   _g._workflowDbInit = _doInit().catch((e) => {
+    if (isInsufficientPrivilege(e)) {
+      // See the identical fix in src/lib/branding.ts / payment-schema.ts —
+      // a later hardening pass revoked the runtime role's CREATE privilege
+      // on the public schema, so this DDL bootstrap fails on every call
+      // regardless of whether the tables already exist. Found via E2E
+      // testing: the leasing quotation approval flow's workflow-trigger
+      // side effect was 500ing on every "Send for Credit Approval" /
+      // "Approve Credit" click because of this. Resolve instead of
+      // rethrowing so the cached promise sticks and callers stop retrying.
+      console.warn('[Workflow] DDL skipped: runtime role lacks CREATE privilege on public schema (assuming tables already exist)');
+      return;
+    }
     delete _g._workflowDbInit;
     throw e;
   });

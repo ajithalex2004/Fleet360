@@ -6,12 +6,35 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 
 let _ensured = false;
+
+function isInsufficientPrivilege(e: unknown): boolean {
+  return (
+    e instanceof Prisma.PrismaClientKnownRequestError &&
+    (e.meta as { code?: string } | undefined)?.code === '42501'
+  );
+}
 
 export async function ensureSelfServiceTables(): Promise<void> {
   if (_ensured) return;
 
+  try {
+    await ensureSelfServiceTablesInner();
+  } catch (e) {
+    if (!isInsufficientPrivilege(e)) throw e;
+    // See the identical fix in src/lib/branding.ts / payment-schema.ts —
+    // a later hardening pass revoked the runtime role's CREATE privilege
+    // on the public schema. These tables were created successfully before
+    // that change landed (verified live during the original G11 build),
+    // so assume they're already there.
+    console.warn('[ensureSelfServiceTables] DDL skipped: runtime role lacks CREATE privilege on public schema (assuming tables already exist)');
+  }
+  _ensured = true;
+}
+
+async function ensureSelfServiceTablesInner(): Promise<void> {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS lease_damage_reports (
       id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -67,6 +90,4 @@ export async function ensureSelfServiceTables(): Promise<void> {
     `CREATE UNIQUE INDEX IF NOT EXISTS uq_esignatures_entity
      ON lease_esignatures (entity_type, entity_id)`,
   );
-
-  _ensured = true;
 }

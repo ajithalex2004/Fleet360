@@ -11,12 +11,38 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 
 let _ensured = false;
+
+function isInsufficientPrivilege(e: unknown): boolean {
+  return (
+    e instanceof Prisma.PrismaClientKnownRequestError &&
+    (e.meta as { code?: string } | undefined)?.code === '42501'
+  );
+}
 
 export async function ensurePaymentIntentTables(): Promise<void> {
   if (_ensured) return;
 
+  try {
+    await ensurePaymentIntentTablesInner();
+  } catch (e) {
+    if (!isInsufficientPrivilege(e)) throw e;
+    // A later hardening pass revoked the runtime role's CREATE privilege
+    // on the public schema (see the identical fix in src/lib/branding.ts,
+    // src/lib/fleet/schema.ts, src/lib/assets/schema.ts, src/lib/billing.ts)
+    // — CREATE TABLE IF NOT EXISTS needs schema-level CREATE to even
+    // attempt the no-op, regardless of whether the table already exists.
+    // These tables were created successfully before that change landed
+    // (verified live during the original G4 build), so assume they're
+    // already there rather than hard-failing every payment confirmation.
+    console.warn('[ensurePaymentIntentTables] DDL skipped: runtime role lacks CREATE privilege on public schema (assuming tables already exist)');
+  }
+  _ensured = true;
+}
+
+async function ensurePaymentIntentTablesInner(): Promise<void> {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS lease_payment_intents (
       id                UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -57,6 +83,4 @@ export async function ensurePaymentIntentTables(): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_payment_intents_lessee
      ON lease_payment_intents (lessee_id, created_at DESC)`,
   );
-
-  _ensured = true;
 }
