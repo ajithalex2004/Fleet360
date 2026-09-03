@@ -31,6 +31,8 @@ export const ALERT_CONDITION_DETECTED = 'alert.condition_detected' as const;
  *   ROUTE_DEVIATION        — GPS evaluator: bus more than N metres off route corridor
  *   LATE_DEPARTURE         — depart: actual > scheduled + tolerance
  *   LATE_ARRIVAL           — arrive: actual > scheduled + tolerance (or trip.delayed with severity)
+ *   VEHICLE_GROUNDED       — fleet expiry sweep: mandatory document past grace period, auto-grounded
+ *   VEHICLE_RESTORED       — fleet expiry sweep: all mandatory documents valid again, auto-restored
  */
 export const ALERT_CODES = [
   'TRIP_OVERDUE',
@@ -43,6 +45,8 @@ export const ALERT_CODES = [
   'ROUTE_DEVIATION',
   'LATE_DEPARTURE',
   'LATE_ARRIVAL',
+  'VEHICLE_GROUNDED',
+  'VEHICLE_RESTORED',
 ] as const;
 
 export type AlertCondition = typeof ALERT_CODES[number];
