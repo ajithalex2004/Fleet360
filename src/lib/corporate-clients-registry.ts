@@ -1,8 +1,8 @@
 export interface AuthorizedClientUser {
   id: string;
   name: string;
-  mobileNumber: string; // for WhatsApp OTP
-  email: string;
+  mobileNumber: string; // e.g. "+971 50 887 6543"
+  email: string; // e.g. "fatima@ein360.ae"
   role: 'LOGISTICS_LEAD' | 'DISPATCHER' | 'PROCUREMENT_MANAGER' | 'REQUESTER';
   costCenter: string;
   maxSpendingLimitAed?: number;
@@ -25,6 +25,24 @@ export interface CorporateClientRecord {
   createdAt: string;
   userRoster: AuthorizedClientUser[];
 }
+
+export interface TenantAuthSettings {
+  tenantId: string;
+  enableSmsAuth: boolean; // Optional SMS authentication toggle
+  enableWhatsAppAuth: boolean;
+  enableEmailAuth: boolean;
+  otpExpirySeconds: number;
+}
+
+export const TENANT_AUTH_SETTINGS: Record<string, TenantAuthSettings> = {
+  'tnt-exl-solutions': {
+    tenantId: 'tnt-exl-solutions',
+    enableSmsAuth: true, // Configurable in Tenant Settings
+    enableWhatsAppAuth: true,
+    enableEmailAuth: true,
+    otpExpirySeconds: 300, // 5 minutes
+  },
+};
 
 // Master in-memory registry for corporate client domain mappings and rosters
 export const CORPORATE_CLIENTS_REGISTRY: CorporateClientRecord[] = [
@@ -131,3 +149,37 @@ export const CORPORATE_CLIENTS_REGISTRY: CorporateClientRecord[] = [
     ],
   },
 ];
+
+export function cleanPhone(phone: string): string {
+  return phone.replace(/[^0-9]/g, '');
+}
+
+export function lookupUserInCorporateRoster(query: string): {
+  client: CorporateClientRecord;
+  user: AuthorizedClientUser;
+} | null {
+  const clean = query.trim().toLowerCase();
+  const numericOnly = cleanPhone(query);
+
+  for (const client of CORPORATE_CLIENTS_REGISTRY) {
+    for (const user of client.userRoster) {
+      if (user.status !== 'ACTIVE') continue;
+
+      // Match by exact email
+      if (user.email.toLowerCase() === clean) {
+        return { client, user };
+      }
+
+      // Match by phone number
+      const userPhoneClean = cleanPhone(user.mobileNumber);
+      if (
+        numericOnly.length >= 7 &&
+        (userPhoneClean.includes(numericOnly) || numericOnly.includes(userPhoneClean))
+      ) {
+        return { client, user };
+      }
+    }
+  }
+
+  return null;
+}

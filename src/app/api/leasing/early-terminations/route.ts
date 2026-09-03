@@ -67,12 +67,17 @@ export async function POST(req: NextRequest) {
     const outstanding = parseFloat(body.outstandingPayments || '0');
     const depositRefund = parseFloat(body.depositRefund || '0');
     const totalSettlement = penaltyAmount + outstanding - depositRefund;
+    // <input type="date"> sends a bare "YYYY-MM-DD" string, which Prisma's
+    // strict DateTime parser rejects ("premature end of input") — same bug
+    // class as the invoices/renewals routes.
+    const requestDate = body.requestDate ? new Date(body.requestDate) : new Date();
+    const effectiveDate = body.effectiveDate ? new Date(body.effectiveDate) : requestDate;
     const et = await withTenantRls(prisma, tenantId, async (tx) => {
       await lockSerialSeries(tx, tenantId, 'early-termination');
       const count = await tx.leaseEarlyTermination.count({ where: { tenantId } });
       const terminationNo = `ET-${String(count + 1).padStart(5, '0')}`;
       return tx.leaseEarlyTermination.create({
-        data: { ...body, terminationNo, penaltyAmount, totalSettlement, tenantId },
+        data: { ...body, requestDate, effectiveDate, terminationNo, penaltyAmount, totalSettlement, tenantId },
       });
     });
     return NextResponse.json(et, { status: 201 });

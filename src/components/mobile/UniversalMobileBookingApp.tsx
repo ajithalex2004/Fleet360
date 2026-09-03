@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Truck,
   Mail,
+  Phone,
   Fingerprint,
   ShieldCheck,
   Building2,
@@ -12,11 +13,16 @@ import {
   ArrowRight,
   CheckCircle2,
   Sparkles,
-  Phone,
   MessageSquare,
   FileText,
   DollarSign,
   Lock,
+  Eye,
+  EyeOff,
+  KeyRound,
+  RefreshCw,
+  Smartphone,
+  AlertCircle,
 } from 'lucide-react';
 import { TenantMobileConfig } from '@/app/api/tenant/mobile-config/route';
 import { InteractiveRoutePicker } from '@/components/booking/InteractiveRoutePicker';
@@ -25,15 +31,40 @@ import { InstantPricingCostCenter } from '@/components/booking/InstantPricingCos
 import { OmnichannelNotificationPreferences } from '@/components/booking/OmnichannelNotificationPreferences';
 import { DigitalKycUaePass } from '@/components/booking/DigitalKycUaePass';
 
+type AuthStep =
+  | 'IDENTIFIER_INPUT' // Email or Mobile input
+  | 'DUAL_CHANNEL_OTP' // 6-digit OTP verification
+  | 'PASSWORD_CREATION_GATE' // Set password & Biometrics
+  | 'RETURNING_USER_LOGIN' // 1-Touch Biometrics or Password Login
+  | 'BOOKING_PORTAL'; // Authenticated in Freight Portal
+
 export function UniversalMobileBookingApp() {
-  // Authentication & Domain Discovery state
-  const [emailInput, setEmailInput] = useState('fatima@ein360.ae');
-  const [isConfigLoaded, setIsConfigLoaded] = useState(false);
-  const [config, setConfig] = useState<TenantMobileConfig | null>(null);
-  const [loadingConfig, setLoadingConfig] = useState(false);
-  const [biometricUnlocked, setBiometricUnlocked] = useState(false);
+  // Auth state machine
+  const [authStep, setAuthStep] = useState<AuthStep>('IDENTIFIER_INPUT');
+  const [identifier, setIdentifier] = useState('fatima@ein360.ae'); // email or mobile
+  const [rosterUser, setRosterUser] = useState<any>(null);
+  const [rosterClient, setRosterClient] = useState<any>(null);
+  const [channelsDispatched, setChannelsDispatched] = useState<string[]>(['EMAIL', 'WHATSAPP', 'SMS']);
+  const [enableSmsAuth, setEnableSmsAuth] = useState(true);
+
+  // OTP state
+  const [otpValue, setOtpValue] = useState(['8', '4', '9', '2', '0', '1']);
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpTimer, setOtpTimer] = useState(60);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
+
+  // Password Setup state
+  const [password, setPassword] = useState('FleetSecure2026!');
+  const [confirmPassword, setConfirmPassword] = useState('FleetSecure2026!');
+  const [showPassword, setShowPassword] = useState(false);
+  const [enableBiometrics, setEnableBiometrics] = useState(true);
+
+  // Returning user login state
+  const [savedPasswordInput, setSavedPasswordInput] = useState('');
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   // Freight Booking state
+  const [config, setConfig] = useState<TenantMobileConfig | null>(null);
   const [form, setForm] = useState<Record<string, any>>({
     serviceType: 'LOGISTICS',
     requestorName: 'Fatima Al-Nuaimi',
@@ -62,43 +93,114 @@ export function UniversalMobileBookingApp() {
   const [submittedBookingRef, setSubmittedBookingRef] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // 1. Resolve Corporate Email Domain (@ein360.ae -> EXL Solutions)
-  const handleResolveEmail = async (emailToResolve?: string) => {
-    const email = emailToResolve || emailInput;
+  // Step 1: Send Dual-Channel OTP
+  const handleSendOtp = async () => {
     try {
-      setLoadingConfig(true);
-      const res = await fetch('/api/tenant/mobile-config', {
+      setOtpError(null);
+      const res = await fetch('/api/auth/roster-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ action: 'SEND_OTP', identifier }),
       });
-      if (res.ok) {
-        const json = await res.json();
-        setConfig(json.config);
-        setIsConfigLoaded(true);
 
-        if (json.config?.client) {
-          setForm((prev) => ({
-            ...prev,
-            requestorEmail: email,
-            costCenter: json.config.client.costCenter,
-            billingMethod: json.config.client.billingMethod,
-          }));
-        }
+      const json = await res.json();
+      if (!res.ok) {
+        setOtpError(json.error || 'Identifier not found in authorized user roster');
+        return;
       }
+
+      setRosterUser(json.user);
+      setRosterClient(json.client);
+      setChannelsDispatched(json.channelsDispatched || ['EMAIL', 'WHATSAPP', 'SMS']);
+      setEnableSmsAuth(json.enableSmsAuth ?? true);
+      setAuthStep('DUAL_CHANNEL_OTP');
+      setOtpTimer(60);
     } catch (err) {
-      console.error('Failed to resolve email domain:', err);
-    } finally {
-      setLoadingConfig(false);
+      setOtpError('Failed to dispatch OTP. Please check your connection.');
     }
   };
 
-  // Quick Biometric TouchID Simulation
-  const handleBiometricTouch = () => {
-    setBiometricUnlocked(true);
-    handleResolveEmail('fatima@ein360.ae');
+  // Step 2: Verify Dual-Channel OTP
+  const handleVerifyOtp = async () => {
+    try {
+      setVerifyingOtp(true);
+      setOtpError(null);
+      const code = otpValue.join('');
+
+      const res = await fetch('/api/auth/roster-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'VERIFY_OTP', identifier, otp: code }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        setOtpError(json.error || 'Invalid OTP code');
+        return;
+      }
+
+      // Proceed to Password Creation Gate
+      setAuthStep('PASSWORD_CREATION_GATE');
+    } catch (err) {
+      setOtpError('Verification failed');
+    } finally {
+      setVerifyingOtp(false);
+    }
   };
 
+  // Step 3: Complete Password Creation & Biometrics
+  const handleCompletePasswordSetup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password !== confirmPassword) {
+      setOtpError('Passwords do not match');
+      return;
+    }
+
+    // Load Tenant Mobile Config
+    try {
+      const res = await fetch('/api/tenant/mobile-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: rosterUser?.email || identifier }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        setConfig(json.config);
+      }
+    } catch {}
+
+    setAuthStep('BOOKING_PORTAL');
+  };
+
+  // Returning User 1-Touch Biometric Sign In
+  const handleBiometricSignIn = async () => {
+    try {
+      const res = await fetch('/api/tenant/mobile-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'fatima@ein360.ae' }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        setConfig(json.config);
+        setAuthStep('BOOKING_PORTAL');
+      }
+    } catch {}
+  };
+
+  // Returning User Password Sign In
+  const handlePasswordSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!savedPasswordInput) {
+      setLoginError('Please enter your password');
+      return;
+    }
+    handleBiometricSignIn();
+  };
+
+  // Freight Booking Submit
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -148,12 +250,12 @@ export function UniversalMobileBookingApp() {
               {config ? `${config.tenantName} Logistics` : 'Fleet360 Mobile'}
             </h2>
             <p className="text-[10px] text-slate-400">
-              {config?.client ? `Corporate Client: ${config.client.name}` : 'Universal Enterprise Edition'}
+              {rosterClient ? `Client: ${rosterClient.name}` : 'Enterprise Client Portal'}
             </p>
           </div>
         </div>
 
-        {isConfigLoaded && (
+        {authStep === 'BOOKING_PORTAL' && (
           <span
             className="text-[10px] font-bold px-2 py-0.5 rounded-full border text-white"
             style={{
@@ -169,269 +271,510 @@ export function UniversalMobileBookingApp() {
       {/* ── Main Mobile Content ── */}
       <div className="p-4 flex-1 space-y-4">
         {/* ══════════════════════════════════════════════════════════════
-            1. First-Time Launch Screen (Corporate Email Discovery)
+            PHASE 1: Unified Email or Mobile Identifier Input
         ══════════════════════════════════════════════════════════════ */}
-        {!isConfigLoaded ? (
-          <div className="py-8 space-y-6 text-center">
+        {authStep === 'IDENTIFIER_INPUT' && (
+          <div className="py-6 space-y-5 text-center">
             <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-orange-600 to-amber-500 mx-auto flex items-center justify-center text-4xl shadow-xl shadow-orange-500/20">
               📱
             </div>
 
             <div className="space-y-1">
-              <h1 className="text-2xl font-black text-white">Fleet360 Mobile</h1>
+              <h1 className="text-2xl font-black text-white">Client Portal Sign In</h1>
               <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                Sign in with your corporate email to automatically configure your transport provider portal.
+                Enter your work email or registered mobile number to verify your corporate roster access.
               </p>
             </div>
 
-            {/* Corporate Email Input Box */}
+            {/* Identifier Box */}
             <div className="bg-slate-900/80 border border-white/10 rounded-2xl p-4 text-left space-y-3">
               <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
-                Corporate Email Address <span className="text-orange-400">*</span>
+                Work Email or Mobile Number <span className="text-orange-400">*</span>
               </label>
 
               <div className="relative">
-                <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
                 <input
-                  type="email"
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                  placeholder="name@ein360.ae"
-                  className="w-full bg-slate-950 border border-white/15 rounded-xl pl-10 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                  type="text"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder="fatima@ein360.ae or +971 50 887 6543"
+                  className="w-full bg-slate-950 border border-white/15 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
                 />
               </div>
 
-              {emailInput.toLowerCase().includes('ein360.ae') && (
-                <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-2.5 flex items-center gap-2 text-[11px] text-orange-300">
-                  <Sparkles className="w-4 h-4 text-orange-400 flex-shrink-0" />
-                  <span>
-                    Recognized: <strong>EIN360</strong> corporate client of <strong>EXL Solutions</strong>
-                  </span>
+              {/* Quick Suggestion Chips */}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIdentifier('fatima@ein360.ae')}
+                  className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-white/5"
+                >
+                  📧 fatima@ein360.ae
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIdentifier('+971 50 887 6543')}
+                  className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-white/5"
+                >
+                  📱 +971 50 887 6543
+                </button>
+              </div>
+
+              {otpError && (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-[11px] text-red-400 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{otpError}</span>
                 </div>
               )}
 
               <button
                 type="button"
-                onClick={() => handleResolveEmail()}
-                disabled={loadingConfig || !emailInput}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white text-xs font-bold shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-40"
+                onClick={handleSendOtp}
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white text-xs font-bold shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2 transition-all"
               >
-                {loadingConfig ? 'Discovering Corporate Domain…' : 'Open EXL Solutions Freight App →'}
+                Verify & Dispatch OTP Code →
               </button>
             </div>
 
-            {/* Quick Biometric Touch Option */}
-            <div className="pt-2">
-              <p className="text-[11px] text-slate-500 mb-2">Or Quick Sign In</p>
+            {/* Quick Link to Returning User Screen */}
+            <div className="pt-2 border-t border-white/5">
               <button
                 type="button"
-                onClick={handleBiometricTouch}
-                className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-300 text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
+                onClick={() => setAuthStep('RETURNING_USER_LOGIN')}
+                className="text-xs text-slate-400 hover:text-orange-400 flex items-center justify-center gap-1.5 mx-auto transition-colors"
               >
-                <Fingerprint className="w-4 h-4 text-orange-400" />
-                <span>1-Touch Biometric Sign In (Fatima @ EIN360)</span>
+                <Fingerprint className="w-4 h-4 text-orange-400" /> Returning user? 1-Touch Sign In
               </button>
             </div>
           </div>
-        ) : submittedBookingRef ? (
-          /* ══════════════════════════════════════════════════════════════
-              3. Booking Submitted Screen
-          ══════════════════════════════════════════════════════════════ */
-          <div className="py-8 space-y-5 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-3xl mx-auto flex items-center justify-center">
-              ✅
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════
+            PHASE 2: Dual-Channel Synchronized OTP Verification Gate
+        ══════════════════════════════════════════════════════════════ */}
+        {authStep === 'DUAL_CHANNEL_OTP' && rosterUser && (
+          <div className="py-6 space-y-5 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-orange-600/20 border border-orange-500/30 text-orange-400 text-2xl mx-auto flex items-center justify-center">
+              🔐
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-white">Freight Shipment Requested!</h2>
+              <h2 className="text-xl font-bold text-white">Enter Verification OTP</h2>
               <p className="text-xs text-slate-400 mt-1">
-                Dispatched to <strong>EXL Solutions Logistics Operations</strong>
+                Unified code dispatched for <strong>{rosterUser.name}</strong> ({rosterClient?.name})
               </p>
             </div>
 
-            <div className="bg-slate-900 border border-white/10 rounded-2xl p-4 text-left space-y-3">
-              <div className="flex justify-between text-xs border-b border-white/5 pb-2">
-                <span className="text-slate-400">Shipment Ref:</span>
-                <span className="font-mono font-bold text-orange-400">{submittedBookingRef}</span>
+            {/* Dual Channel Indicator Badge */}
+            <div className="bg-slate-900/90 border border-white/10 rounded-2xl p-4 text-left space-y-2.5">
+              <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
+                Synchronized OTP Sent To:
+              </span>
+              <div className="space-y-1.5 text-xs text-slate-300">
+                <div className="flex items-center gap-2">
+                  <Mail className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Work Email: <strong className="text-white">{rosterUser.email}</strong></span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>WhatsApp Cloud: <strong className="text-white">{rosterUser.mobileNumber}</strong></span>
+                </div>
+                {enableSmsAuth && (
+                  <div className="flex items-center gap-2">
+                    <Smartphone className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Cellular SMS: <strong className="text-white">{rosterUser.mobileNumber}</strong></span>
+                  </div>
+                )}
               </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-400">Shipper:</span>
-                <span className="font-semibold text-white">EIN360 (Fatima Al-Nuaimi)</span>
+            </div>
+
+            {/* 6-Digit OTP Boxes */}
+            <div className="flex justify-center gap-2">
+              {otpValue.map((digit, idx) => (
+                <input
+                  key={idx}
+                  type="text"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const next = [...otpValue];
+                    next[idx] = val;
+                    setOtpValue(next);
+                  }}
+                  className="w-11 h-12 text-center font-mono font-bold text-lg bg-slate-900 border border-white/20 rounded-xl focus:border-orange-500 focus:outline-none text-orange-400"
+                />
+              ))}
+            </div>
+
+            <p className="text-[11px] text-slate-500">
+              Demo Code: <strong className="text-slate-300 font-mono">849201</strong>
+            </p>
+
+            {otpError && (
+              <p className="text-xs text-rose-400 font-semibold">{otpError}</p>
+            )}
+
+            <button
+              type="button"
+              onClick={handleVerifyOtp}
+              disabled={verifyingOtp}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white text-xs font-bold shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2 transition-all"
+            >
+              {verifyingOtp ? 'Verifying OTP…' : 'Verify OTP & Open Password Gate →'}
+            </button>
+
+            <div className="flex justify-between text-xs text-slate-400 pt-1">
+              <button
+                type="button"
+                onClick={() => setAuthStep('IDENTIFIER_INPUT')}
+                className="hover:text-white"
+              >
+                ← Change email/mobile
+              </button>
+              <button
+                type="button"
+                onClick={handleSendOtp}
+                className="text-orange-400 hover:text-orange-300"
+              >
+                Resend OTP ↺
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════
+            PHASE 3: Password Creation Gate & Biometric Enrollment
+        ══════════════════════════════════════════════════════════════ */}
+        {authStep === 'PASSWORD_CREATION_GATE' && (
+          <form onSubmit={handleCompletePasswordSetup} className="py-4 space-y-4">
+            <div className="text-center space-y-1">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-2xl mx-auto flex items-center justify-center">
+                🔑
               </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-400">Cargo Type:</span>
-                <span className="text-slate-200">{form.cargoType}</span>
+              <h2 className="text-xl font-bold text-white">Create Account Password</h2>
+              <p className="text-xs text-slate-400">
+                OTP verified for <strong>{rosterUser?.name}</strong>. Set your password for future logins.
+              </p>
+            </div>
+
+            <div className="bg-slate-900 border border-white/10 rounded-2xl p-4 space-y-3 text-xs">
+              <div>
+                <label className="text-slate-300 block mb-1 font-semibold">New Password *</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-slate-950 border border-white/15 rounded-xl px-3.5 py-2.5 text-white pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-white"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-400">Total Contracted Fare:</span>
-                <span className="font-mono font-bold text-emerald-400">AED {form.totalFareAed}</span>
+
+              <div>
+                <label className="text-slate-300 block mb-1 font-semibold">Confirm Password *</label>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full bg-slate-950 border border-white/15 rounded-xl px-3.5 py-2.5 text-white"
+                />
               </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-400">Cost Center:</span>
-                <span className="font-mono text-slate-300">{form.costCenter}</span>
+
+              {/* Biometric Enrollment Toggle */}
+              <div className="pt-2 border-t border-white/10">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <Fingerprint className="w-5 h-5 text-orange-400" />
+                    <div>
+                      <span className="font-bold text-white block">Enable 1-Touch Biometrics</span>
+                      <span className="text-[10px] text-slate-400">Use Touch ID / Face ID for instant login</span>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={enableBiometrics}
+                    onChange={(e) => setEnableBiometrics(e.target.checked)}
+                    className="w-4 h-4 text-orange-600 rounded bg-slate-800 border-white/20"
+                  />
+                </label>
               </div>
             </div>
 
             <button
-              onClick={() => setSubmittedBookingRef(null)}
-              className="w-full py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold shadow-lg shadow-orange-600/25 transition-all"
+              type="submit"
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-orange-600 to-amber-600 text-white text-xs font-bold shadow-xl shadow-orange-600/30 flex items-center justify-center gap-2"
             >
-              + Book Another Cargo Load
+              Save Password & Enter EXL Freight Portal →
             </button>
-          </div>
-        ) : (
-          /* ══════════════════════════════════════════════════════════════
-              2. Dynamic Freight Booking Screen (EXL Solutions Logistics)
-          ══════════════════════════════════════════════════════════════ */
-          <form onSubmit={handleBookingSubmit} className="space-y-4">
-            {/* Client Context Banner */}
-            <div className="bg-gradient-to-r from-orange-950/40 to-slate-900 border border-orange-500/30 rounded-2xl p-3.5 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <Building2 className="w-4 h-4 text-orange-400" />
-                <div>
-                  <p className="text-xs font-bold text-white">EIN360 Corporate Account</p>
-                  <p className="text-[10px] text-orange-300/80 font-mono">
-                    Code: {config?.client?.costCenter} · 15% Discount Applied
-                  </p>
-                </div>
-              </div>
+          </form>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════
+            PHASE 4: Returning User Login (Biometrics & Password Fallback)
+        ══════════════════════════════════════════════════════════════ */}
+        {authStep === 'RETURNING_USER_LOGIN' && (
+          <div className="py-6 space-y-5 text-center">
+            <div className="w-20 h-20 rounded-3xl bg-slate-900 border border-white/15 mx-auto flex items-center justify-center text-4xl shadow-xl">
+              👤
+            </div>
+
+            <div className="space-y-1">
+              <h2 className="text-xl font-bold text-white">Welcome Back, Fatima</h2>
+              <p className="text-xs text-slate-400">EIN360 · EXL Solutions Logistics</p>
+            </div>
+
+            {/* Primary Action: 1-Touch Biometrics */}
+            <div className="bg-slate-900 border border-white/10 rounded-2xl p-5 space-y-3">
               <button
                 type="button"
-                onClick={() => setIsConfigLoaded(false)}
-                className="text-[10px] text-slate-400 hover:text-white border border-white/10 rounded-lg px-2 py-1"
+                onClick={handleBiometricSignIn}
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white text-sm font-bold shadow-xl shadow-orange-600/30 flex items-center justify-center gap-3 transition-all"
               >
-                Switch
+                <Fingerprint className="w-6 h-6" />
+                <span>1-Touch Biometric Sign In</span>
               </button>
+              <p className="text-[10px] text-slate-400">Touch sensor or look at camera</p>
             </div>
 
-            {/* Cargo Classification & Temperature */}
-            <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4 space-y-3">
-              <label className="block text-xs font-bold text-white uppercase tracking-wider">
-                1. Freight & Cargo Classification
-              </label>
+            {/* Fallback Action: Password Sign In */}
+            <form onSubmit={handlePasswordSignIn} className="bg-slate-900/60 border border-white/10 rounded-2xl p-4 text-left space-y-3">
+              <label className="text-xs font-bold text-slate-300 block">Or Sign In with Password</label>
+              <input
+                type="password"
+                value={savedPasswordInput}
+                onChange={(e) => setSavedPasswordInput(e.target.value)}
+                placeholder="Enter your saved password"
+                className="w-full bg-slate-950 border border-white/15 rounded-xl px-3 py-2 text-xs text-white"
+              />
 
-              <select
-                value={form.cargoType}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    cargoType: e.target.value,
-                    vehicleCategory: e.target.value,
-                  }))
-                }
-                className="w-full bg-slate-950 border border-white/15 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+              {loginError && <p className="text-xs text-rose-400">{loginError}</p>}
+
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold"
               >
-                <option value="3-Ton Reefer (Cold-Chain)">🧊 3-Ton Reefer Truck (-18°C Pharma/Food)</option>
-                <option value="3-Ton Box Truck">📦 3-Ton Dry Cargo Box Truck</option>
-                <option value="1-Ton Courier Van">🚐 1-Ton Express Courier Van</option>
-                <option value="7-Ton Curtain Sider">🚛 7-Ton Heavy Curtain Sider</option>
-                <option value="40ft Flatbed Trailer">🏗️ 40ft Heavy Flatbed Trailer</option>
-              </select>
+                Sign In with Password →
+              </button>
+            </form>
 
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <label className="text-[10px] text-slate-400 block mb-1">Pallet Count</label>
-                  <input
-                    type="number"
-                    value={form.palletCount}
-                    onChange={(e) => setForm((prev) => ({ ...prev, palletCount: e.target.value }))}
-                    className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
-                  />
+            <button
+              type="button"
+              onClick={() => setAuthStep('IDENTIFIER_INPUT')}
+              className="text-xs text-slate-500 hover:text-slate-300"
+            >
+              Sign in with different account
+            </button>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════
+            PHASE 5: Direct Freight Booking Landing Page (Authenticated)
+        ══════════════════════════════════════════════════════════════ */}
+        {authStep === 'BOOKING_PORTAL' && (
+          submittedBookingRef ? (
+            <div className="py-8 space-y-5 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-3xl mx-auto flex items-center justify-center">
+                ✅
+              </div>
+
+              <div>
+                <h2 className="text-xl font-bold text-white">Freight Shipment Requested!</h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Dispatched to <strong>EXL Solutions Logistics Operations</strong>
+                </p>
+              </div>
+
+              <div className="bg-slate-900 border border-white/10 rounded-2xl p-4 text-left space-y-3">
+                <div className="flex justify-between text-xs border-b border-white/5 pb-2">
+                  <span className="text-slate-400">Shipment Ref:</span>
+                  <span className="font-mono font-bold text-orange-400">{submittedBookingRef}</span>
                 </div>
-                <div>
-                  <label className="text-[10px] text-slate-400 block mb-1">Cargo Weight (Tons)</label>
-                  <input
-                    type="text"
-                    value={form.weightTons}
-                    onChange={(e) => setForm((prev) => ({ ...prev, weightTons: e.target.value }))}
-                    className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
-                  />
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-400">Shipper:</span>
+                  <span className="font-semibold text-white">EIN360 (Fatima Al-Nuaimi)</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-400">Cargo Type:</span>
+                  <span className="text-slate-200">{form.cargoType}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-400">Total Contracted Fare:</span>
+                  <span className="font-mono font-bold text-emerald-400">AED {form.totalFareAed}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-400">Cost Center:</span>
+                  <span className="font-mono text-slate-300">{form.costCenter}</span>
                 </div>
               </div>
-            </div>
 
-            {/* Interactive Route & Toll Picker */}
-            <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4 space-y-3">
-              <label className="block text-xs font-bold text-white uppercase tracking-wider">
-                2. Warehouse Route & UAE Tolls
-              </label>
-              <InteractiveRoutePicker
-                origin={form.origin}
-                destination={form.destination}
-                onOriginChange={(addr, coords) => setForm((prev) => ({ ...prev, origin: addr }))}
-                onDestinationChange={(addr, coords) => setForm((prev) => ({ ...prev, destination: addr }))}
-                onRouteChange={(stats) =>
+              <button
+                onClick={() => setSubmittedBookingRef(null)}
+                className="w-full py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold shadow-lg shadow-orange-600/25 transition-all"
+              >
+                + Book Another Cargo Load
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleBookingSubmit} className="space-y-4">
+              {/* Client Context Banner */}
+              <div className="bg-gradient-to-r from-orange-950/40 to-slate-900 border border-orange-500/30 rounded-2xl p-3.5 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <Building2 className="w-4 h-4 text-orange-400" />
+                  <div>
+                    <p className="text-xs font-bold text-white">EIN360 Corporate Account</p>
+                    <p className="text-[10px] text-orange-300/80 font-mono">
+                      Code: {rosterClient?.costCenter || 'CC-EIN360-LOGISTICS'} · 15% Discount Applied
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAuthStep('RETURNING_USER_LOGIN')}
+                  className="text-[10px] text-slate-400 hover:text-white border border-white/10 rounded-lg px-2 py-1"
+                >
+                  Lock
+                </button>
+              </div>
+
+              {/* Cargo Classification & Temperature */}
+              <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4 space-y-3">
+                <label className="block text-xs font-bold text-white uppercase tracking-wider">
+                  1. Freight & Cargo Classification
+                </label>
+
+                <select
+                  value={form.cargoType}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      cargoType: e.target.value,
+                      vehicleCategory: e.target.value,
+                    }))
+                  }
+                  className="w-full bg-slate-950 border border-white/15 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+                >
+                  <option value="3-Ton Reefer (Cold-Chain)">🧊 3-Ton Reefer Truck (-18°C Pharma/Food)</option>
+                  <option value="3-Ton Box Truck">📦 3-Ton Dry Cargo Box Truck</option>
+                  <option value="1-Ton Courier Van">🚐 1-Ton Express Courier Van</option>
+                  <option value="7-Ton Curtain Sider">🚛 7-Ton Heavy Curtain Sider</option>
+                  <option value="40ft Flatbed Trailer">🏗️ 40ft Heavy Flatbed Trailer</option>
+                </select>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1">Pallet Count</label>
+                    <input
+                      type="number"
+                      value={form.palletCount}
+                      onChange={(e) => setForm((prev) => ({ ...prev, palletCount: e.target.value }))}
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1">Cargo Weight (Tons)</label>
+                    <input
+                      type="text"
+                      value={form.weightTons}
+                      onChange={(e) => setForm((prev) => ({ ...prev, weightTons: e.target.value }))}
+                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Interactive Route & Toll Picker */}
+              <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4 space-y-3">
+                <label className="block text-xs font-bold text-white uppercase tracking-wider">
+                  2. Warehouse Route & UAE Tolls
+                </label>
+                <InteractiveRoutePicker
+                  origin={form.origin}
+                  destination={form.destination}
+                  onOriginChange={(addr, coords) => setForm((prev) => ({ ...prev, origin: addr }))}
+                  onDestinationChange={(addr, coords) => setForm((prev) => ({ ...prev, destination: addr }))}
+                  onRouteChange={(stats) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      distanceKm: stats.distanceKm,
+                      durationMins: stats.durationMins,
+                      salikTollsAed: stats.salikTollsAed,
+                    }))
+                  }
+                />
+              </div>
+
+              {/* Live Pricing & Cost Center */}
+              <InstantPricingCostCenter
+                serviceType="LOGISTICS"
+                vehicleCategory={form.vehicleCategory}
+                distanceKm={form.distanceKm}
+                salikTollsAed={form.salikTollsAed}
+                costCenter={form.costCenter}
+                billingMethod={form.billingMethod}
+                onChange={(pricing) =>
                   setForm((prev) => ({
                     ...prev,
-                    distanceKm: stats.distanceKm,
-                    durationMins: stats.durationMins,
-                    salikTollsAed: stats.salikTollsAed,
+                    fareSubtotal: pricing.fareSubtotal,
+                    vatAmount: pricing.vatAmount,
+                    totalFareAed: pricing.totalFareAed,
+                    budgetStatus: pricing.budgetStatus,
                   }))
                 }
               />
-            </div>
 
-            {/* Live Pricing & Cost Center */}
-            <InstantPricingCostCenter
-              serviceType="LOGISTICS"
-              vehicleCategory={form.vehicleCategory}
-              distanceKm={form.distanceKm}
-              salikTollsAed={form.salikTollsAed}
-              costCenter={form.costCenter}
-              billingMethod={form.billingMethod}
-              onChange={(pricing) =>
-                setForm((prev) => ({
-                  ...prev,
-                  fareSubtotal: pricing.fareSubtotal,
-                  vatAmount: pricing.vatAmount,
-                  totalFareAed: pricing.totalFareAed,
-                  budgetStatus: pricing.budgetStatus,
-                }))
-              }
-            />
+              {/* Omnichannel Alerts */}
+              <OmnichannelNotificationPreferences
+                serviceType="LOGISTICS"
+                vehicleCategory={form.vehicleCategory}
+                pickupLocation={form.origin}
+                destinationLocation={form.destination}
+                totalFareAed={form.totalFareAed}
+                requestorName={form.requestorName}
+                phone={form.contactPhone}
+                email={form.requestorEmail}
+                onChange={(channels, phone) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    notificationChannels: JSON.stringify(channels),
+                    contactPhone: phone,
+                  }))
+                }
+              />
 
-            {/* Omnichannel Alerts */}
-            <OmnichannelNotificationPreferences
-              serviceType="LOGISTICS"
-              vehicleCategory={form.vehicleCategory}
-              pickupLocation={form.origin}
-              destinationLocation={form.destination}
-              totalFareAed={form.totalFareAed}
-              requestorName={form.requestorName}
-              phone={form.contactPhone}
-              email={form.requestorEmail}
-              onChange={(channels, phone) =>
-                setForm((prev) => ({
-                  ...prev,
-                  notificationChannels: JSON.stringify(channels),
-                  contactPhone: phone,
-                }))
-              }
-            />
+              {/* Digital KYC & e-Sign */}
+              <DigitalKycUaePass
+                requestorName={form.requestorName}
+                requestorEmail={form.requestorEmail}
+                onKycVerified={(kyc) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    uaePassVerified: kyc.uaePassVerified,
+                    emiratesId: kyc.emiratesId,
+                    signatureHash: kyc.signatureHash,
+                  }))
+                }
+              />
 
-            {/* Digital KYC & e-Sign */}
-            <DigitalKycUaePass
-              requestorName={form.requestorName}
-              requestorEmail={form.requestorEmail}
-              onKycVerified={(kyc) =>
-                setForm((prev) => ({
-                  ...prev,
-                  uaePassVerified: kyc.uaePassVerified,
-                  emiratesId: kyc.emiratesId,
-                  signatureHash: kyc.signatureHash,
-                }))
-              }
-            />
-
-            {/* Submit Action */}
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white text-sm font-bold shadow-xl shadow-orange-600/30 flex items-center justify-center gap-2 transition-all disabled:opacity-40"
-            >
-              {submitting ? 'Dispatched to EXL Solutions…' : 'Confirm & Dispatch Freight Load →'}
-            </button>
-          </form>
+              {/* Submit Action */}
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white text-sm font-bold shadow-xl shadow-orange-600/30 flex items-center justify-center gap-2 transition-all disabled:opacity-40"
+              >
+                {submitting ? 'Dispatched to EXL Solutions…' : 'Confirm & Dispatch Freight Load →'}
+              </button>
+            </form>
+          )
         )}
       </div>
 

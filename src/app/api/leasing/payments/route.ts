@@ -60,9 +60,13 @@ export async function POST(req: NextRequest) {
   try {
     const bodyRaw = await req.json();
   const body = stripTenantOwnershipFields(bodyRaw);
+    // <input type="date"> sends a bare "YYYY-MM-DD" string, which Prisma's
+    // strict DateTime parser rejects ("premature end of input") — same bug
+    // class as the invoices/renewals routes.
+    const dueDate = body.dueDate ? new Date(body.dueDate) : new Date();
     const payment = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.leasePayment2.create({
-      data: { ...body, tenantId },
+      data: { ...body, dueDate, tenantId },
     }),
     );
     return NextResponse.json(payment, { status: 201 });

@@ -58,12 +58,17 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     }
     const bodyRaw = await req.json();
   const body = stripTenantOwnershipFields(bodyRaw);
+    // <input type="date"> sends a bare "YYYY-MM-DD" string, which Prisma's
+    // strict DateTime parser rejects ("premature end of input") — same bug
+    // class as the invoices/renewals routes.
+    const claimDate = body.claimDate ? new Date(body.claimDate) : new Date();
+    const incidentDate = body.incidentDate ? new Date(body.incidentDate) : undefined;
     const claim = await withTenantRls(prisma, tenantId, async (tx) => {
       await lockSerialSeries(tx, tenantId, 'insurance-claim');
       const count = await tx.leaseInsuranceClaim.count({ where: { tenantId } });
       const claimNo = `CLM-${String(count + 1).padStart(5, '0')}`;
       return tx.leaseInsuranceClaim.create({
-        data: { ...body, policyId: params.id, claimNo, tenantId },
+        data: { ...body, claimDate, incidentDate, policyId: params.id, claimNo, tenantId },
       });
     });
     return NextResponse.json(claim, { status: 201 });

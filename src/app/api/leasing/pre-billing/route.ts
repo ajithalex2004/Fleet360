@@ -69,12 +69,16 @@ export async function POST(req: NextRequest) {
     const sub = baseFields.reduce((s, k) => s + parseFloat(body[k] || '0'), 0);
     const vatAmount = sub * 0.05;
     const totalAmount = sub + vatAmount;
+    // <input type="date"> sends a bare "YYYY-MM-DD" string, which Prisma's
+    // strict DateTime parser rejects ("premature end of input") — same bug
+    // class as the invoices/renewals routes.
+    const dueDate = body.dueDate ? new Date(body.dueDate) : new Date();
     const stmt = await withTenantRls(prisma, tenantId, async (tx) => {
       await lockSerialSeries(tx, tenantId, 'pre-billing-statement');
       const count = await tx.leasePreBillingStatement.count({ where: { tenantId } });
       const statementNo = `PBS-${String(count + 1).padStart(5, '0')}`;
       return tx.leasePreBillingStatement.create({
-        data: { ...body, statementNo, vatAmount, totalAmount, tenantId },
+        data: { ...body, dueDate, statementNo, vatAmount, totalAmount, tenantId },
       });
     });
     return NextResponse.json(stmt, { status: 201 });

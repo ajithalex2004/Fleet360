@@ -58,9 +58,14 @@ export async function POST(req: NextRequest) {
     if (!lessee) {
       return NextResponse.json({ error: 'Lessee not found' }, { status: 404 });
     }
+    // <input type="date"> sends a bare "YYYY-MM-DD" string, which Prisma's
+    // strict DateTime parser rejects ("premature end of input") — same bug
+    // class as the invoices/renewals routes.
+    const assessmentDate = body.assessmentDate ? new Date(body.assessmentDate) : new Date();
+    const validUntil = body.validUntil ? new Date(body.validUntil) : undefined;
     const item = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.leaseCreditAssessment.create({
-      data: { ...body, tenantId },
+      data: { ...body, assessmentDate, validUntil, tenantId },
     }),
     );
     return NextResponse.json(item, { status: 201 });

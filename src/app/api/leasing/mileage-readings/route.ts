@@ -75,9 +75,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Contract not found in this tenant' }, { status: 404 });
     }
 
+    // <input type="date"> sends a bare "YYYY-MM-DD" string, which Prisma's
+    // strict DateTime parser rejects ("premature end of input") — same bug
+    // class as the invoices/renewals routes.
+    const readingDate = body.readingDate ? new Date(body.readingDate) : new Date();
     const reading = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.leaseMileageReading.create({
-      data: { ...body, tenantId },
+      data: { ...body, readingDate, tenantId },
     }),
     );
 

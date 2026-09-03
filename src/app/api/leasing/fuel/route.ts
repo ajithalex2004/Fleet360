@@ -62,9 +62,13 @@ export async function POST(req: NextRequest) {
       }
     }
     const totalCost = body.totalCost ?? (parseFloat(body.liters) * parseFloat(body.costPerLiter || '0'));
+    // <input type="date"> sends a bare "YYYY-MM-DD" string, which Prisma's
+    // strict DateTime parser rejects ("premature end of input") — same bug
+    // class as the invoices/renewals routes.
+    const fuelDate = body.fuelDate ? new Date(body.fuelDate) : new Date();
     const log = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.leaseFuelLog.create({
-      data: { ...body, tenantId, totalCost },
+      data: { ...body, fuelDate, tenantId, totalCost },
     }),
     );
     return NextResponse.json(log, { status: 201 });

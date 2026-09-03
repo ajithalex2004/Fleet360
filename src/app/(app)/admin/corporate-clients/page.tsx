@@ -33,11 +33,44 @@ export default function CorporateClientsPage() {
   const [selectedClient, setSelectedClient] = useState<CorporateClientRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [enableSmsAuth, setEnableSmsAuth] = useState(true);
 
   // Modals
   const [showAddClientModal, setShowAddClientModal] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [inviteSuccessMsg, setInviteSuccessMsg] = useState<string | null>(null);
+
+  // Load tenant auth settings
+  const loadTenantSettings = async () => {
+    try {
+      const res = await fetch('/api/auth/roster-otp');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.tenantSettings) {
+          setEnableSmsAuth(json.tenantSettings.enableSmsAuth ?? true);
+        }
+      }
+    } catch {}
+  };
+
+  const handleToggleSmsAuth = async (enabled: boolean) => {
+    try {
+      setEnableSmsAuth(enabled);
+      await fetch('/api/auth/roster-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'UPDATE_TENANT_SMS_SETTING',
+          tenantId: 'tnt-exl-solutions',
+          enableSmsAuth: enabled,
+        }),
+      });
+      setInviteSuccessMsg(`✅ Tenant SMS Authentication updated: ${enabled ? 'ENABLED' : 'DISABLED (WhatsApp & Email Only)'}`);
+      setTimeout(() => setInviteSuccessMsg(null), 4000);
+    } catch (err) {
+      console.error('Failed to update SMS auth setting:', err);
+    }
+  };
 
   // New Client Form State
   const [newClientName, setNewClientName] = useState('');
@@ -77,6 +110,7 @@ export default function CorporateClientsPage() {
 
   useEffect(() => {
     loadClients();
+    loadTenantSettings();
   }, []);
 
   // Handle Add Corporate Client
@@ -231,7 +265,44 @@ export default function CorporateClientsPage() {
             <ShieldCheck className="w-4 h-4 text-violet-400" />
           </div>
           <p className="text-3xl font-mono font-bold text-white">100%</p>
-          <span className="text-[11px] text-violet-300">Enabled for Mobile App</span>
+      </div>
+
+      {/* Tenant Authentication Policy & SMS Setting Banner */}
+      <div className="bg-slate-900/80 border border-white/10 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-violet-600/20 border border-violet-500/30 flex items-center justify-center text-violet-400">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-white flex items-center gap-2">
+              Tenant Authentication Policy & Dual-Channel OTP Settings
+              <span className="text-[10px] bg-emerald-500/10 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                Synchronized OTP
+              </span>
+            </h4>
+            <p className="text-[11px] text-slate-400">
+              When enabled, unified 6-digit OTPs are dispatched to both Email and WhatsApp / Cellular SMS.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-300 font-semibold cursor-pointer select-none">
+              Cellular SMS Authentication:
+            </label>
+            <button
+              type="button"
+              onClick={() => handleToggleSmsAuth(!enableSmsAuth)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${
+                enableSmsAuth
+                  ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                  : 'bg-slate-800 border-white/10 text-slate-400'
+              }`}
+            >
+              {enableSmsAuth ? '✅ SMS Enabled' : '⏸️ SMS Disabled (WhatsApp & Email Only)'}
+            </button>
+          </div>
         </div>
       </div>
 

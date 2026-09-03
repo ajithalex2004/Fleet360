@@ -58,12 +58,18 @@ export async function POST(req: NextRequest) {
     if (!contract) {
       return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
     }
+    // <input type="date"> sends a bare "YYYY-MM-DD" string, which Prisma's
+    // strict DateTime parser rejects ("premature end of input") — every
+    // renewal proposal 500'd on submission because of this (same bug class
+    // as the invoices route).
+    const proposedStartDate = body.proposedStartDate ? new Date(body.proposedStartDate) : undefined;
+    const proposedEndDate = body.proposedEndDate ? new Date(body.proposedEndDate) : undefined;
     const renewal = await withTenantRls(prisma, tenantId, async (tx) => {
       await lockSerialSeries(tx, tenantId, 'renewal');
       const count = await tx.leaseRenewal.count({ where: { tenantId } });
       const renewalNo = `RNW-${String(count + 1).padStart(5, '0')}`;
       return tx.leaseRenewal.create({
-        data: { ...body, renewalNo, tenantId },
+        data: { ...body, proposedStartDate, proposedEndDate, renewalNo, tenantId },
       });
     });
     return NextResponse.json(renewal, { status: 201 });
