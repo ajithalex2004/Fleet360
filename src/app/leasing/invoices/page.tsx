@@ -198,16 +198,25 @@ export default function InvoicesPage() {
   };
 
   const handleMarkPaid = async (invoiceId: string) => {
+    // G4's manual-reconciliation endpoint (record-payment) writes a real
+    // LeaseReceipt, not just a status flip -- this button used to PATCH
+    // {status:'PAID'} directly, which is how an invoice could show PAID
+    // with zero money-movement record behind it. No API route anywhere
+    // in the staff UI actually called record-payment before this; it was
+    // reachable only via the lessee-initiated "Pay now" confirmation path.
     try {
-      const response = await fetch(`/api/leasing/invoices/${invoiceId}`, {
-        method: 'PATCH',
+      const response = await fetch(`/api/leasing/invoices/${invoiceId}/record-payment`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'PAID' }),
+        body: JSON.stringify({ method: 'BANK_TRANSFER' }),
       });
-      if (!response.ok) throw new Error('Failed to mark invoice as paid');
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to record payment');
+      }
       fetchInvoices();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error marking invoice as paid');
+      setError(err instanceof Error ? err.message : 'Error recording payment');
     }
   };
 
@@ -345,7 +354,7 @@ export default function InvoicesPage() {
                             <button
                               onClick={() => handleMarkPaid(invoice.id)}
                               className="text-emerald-400 hover:text-emerald-300 transition"
-                              title="Mark as paid"
+                              title="Record payment received (creates a real receipt)"
                             >
                               <Check size={16} />
                             </button>
