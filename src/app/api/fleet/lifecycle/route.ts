@@ -19,8 +19,8 @@ export async function GET(req: NextRequest) {
   }
   const { tenantId } = authz;
 
+  await ensureFleetSchema();
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureFleetSchema();
       try {
         const sp = req.nextUrl.searchParams;
         const vehicleId = sp.get('vehicleId');
@@ -83,8 +83,8 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
+  await ensureFleetSchema();
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureFleetSchema();
       try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);

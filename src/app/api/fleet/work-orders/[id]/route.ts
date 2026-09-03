@@ -21,8 +21,8 @@ export async function GET(
   }
   const { tenantId } = authz;
 
+  await ensureFleetSchema();
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureFleetSchema();
       try {
         const { id } = await params;
         const rows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
@@ -58,8 +58,8 @@ export async function PUT(
   }
   const { tenantId } = authz;
 
+  await ensureFleetSchema();
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureFleetSchema();
       try {
         const { id } = await params;
         const bodyRaw = await req.json();
@@ -165,8 +165,8 @@ export async function DELETE(
   }
   const { tenantId } = authz;
 
+  await ensureFleetSchema();
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureFleetSchema();
       try {
         const { id } = await params;
         // Work orders are cancelled, not hard deleted

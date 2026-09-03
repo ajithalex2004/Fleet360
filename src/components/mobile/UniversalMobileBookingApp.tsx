@@ -35,6 +35,7 @@ import { DigitalEbolScanner } from '@/components/booking/DigitalEbolScanner';
 import { RecurringSchedulePicker } from '@/components/booking/RecurringSchedulePicker';
 import { DriverHandoverEpod } from '@/components/booking/DriverHandoverEpod';
 import { ColdChainTelemetryGraph } from '@/components/booking/ColdChainTelemetryGraph';
+import { BulkConsignmentUploader } from '@/components/booking/BulkConsignmentUploader';
 
 type AuthStep =
   | 'IDENTIFIER_INPUT' // Email or Mobile input
@@ -697,6 +698,19 @@ export function UniversalMobileBookingApp() {
                 </div>
               </div>
 
+              {/* B2B Bulk Consignment Excel / CSV Uploader & Auto-Clustering Engine */}
+              <BulkConsignmentUploader
+                onBatchDispatched={(analysis) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    bulkBatchManifestNo: analysis.masterManifestNumber,
+                    bulkBatchTotalPallets: analysis.totalPallets,
+                    bulkBatchTotalRoutes: analysis.clusters.length,
+                    fareSubtotal: analysis.summaryPricingAed,
+                  }))
+                }
+              />
+
               {/* Multi-Stop Warehouse Route & LTL Consolidation Optimizer */}
               <MultiStopRoutePicker
                 initialOrigin={form.origin}
@@ -712,6 +726,8 @@ export function UniversalMobileBookingApp() {
                     weightTons: String(res.totalWeightTons || prev.weightTons),
                   }))
                 }
+              />
+
               {/* Recurring Standing Schedule Engine */}
               <RecurringSchedulePicker
                 serviceType="LOGISTICS"

@@ -15,8 +15,8 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
   }
   const { tenantId } = authz;
 
+  await ensureFleetSchema();
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureFleetSchema();
       try {
         const rows = await tx.$queryRawUnsafe<any[]>(
           "SELECT * FROM fleet_allocations WHERE id = $1", params.id
@@ -39,8 +39,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
   }
   const { tenantId } = authz;
 
+  await ensureFleetSchema();
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureFleetSchema();
       try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
@@ -90,8 +90,8 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
   }
   const { tenantId } = authz;
 
+  await ensureFleetSchema();
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureFleetSchema();
       try {
         await tx.$executeRawUnsafe(
           "DELETE FROM fleet_allocations WHERE id = $1", params.id
