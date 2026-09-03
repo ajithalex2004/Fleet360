@@ -34,6 +34,7 @@ import { DigitalKycUaePass } from '@/components/booking/DigitalKycUaePass';
 import { DigitalEbolScanner } from '@/components/booking/DigitalEbolScanner';
 import { RecurringSchedulePicker } from '@/components/booking/RecurringSchedulePicker';
 import { DriverHandoverEpod } from '@/components/booking/DriverHandoverEpod';
+import { ColdChainTelemetryGraph } from '@/components/booking/ColdChainTelemetryGraph';
 
 type AuthStep =
   | 'IDENTIFIER_INPUT' // Email or Mobile input
@@ -805,6 +806,15 @@ export function UniversalMobileBookingApp() {
                     epodNumber: epod.epodNumber,
                     epodConfirmed: true,
                   }))
+                }
+              />
+
+              {/* Live IoT Telematics & Continuous Cold-Chain Temperature Graph */}
+              <ColdChainTelemetryGraph
+                tripRef="TRIP-EXL-9482"
+                cargoTypeKey="FROZEN_PHARMA"
+                onAlertTriggered={(msg) =>
+                  setForm((prev) => ({ ...prev, coldChainAlert: msg }))
                 }
               />
 

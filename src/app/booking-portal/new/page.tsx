@@ -12,6 +12,7 @@ import { MultiStopRoutePicker } from '@/components/booking/MultiStopRoutePicker'
 import { DigitalEbolScanner } from '@/components/booking/DigitalEbolScanner';
 import { RecurringSchedulePicker } from '@/components/booking/RecurringSchedulePicker';
 import { DriverHandoverEpod } from '@/components/booking/DriverHandoverEpod';
+import { ColdChainTelemetryGraph } from '@/components/booking/ColdChainTelemetryGraph';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service type card definitions (Step 1)
@@ -1070,6 +1071,17 @@ function NewBookingInner() {
                   onChange('epodNumber', epod.epodNumber);
                   onChange('epodSeal', epod.cryptographicPODSeal);
                   onChange('deliveryConfirmed', true);
+                }}
+              />
+            )}
+
+            {/* Live IoT Telematics & Continuous Cold-Chain Temperature Graph */}
+            {serviceType === 'LOGISTICS' && (
+              <ColdChainTelemetryGraph
+                tripRef={`TRIP-${Math.floor(1000 + Math.random() * 9000)}`}
+                cargoTypeKey="FROZEN_PHARMA"
+                onAlertTriggered={(alertMsg) => {
+                  onChange('coldChainAlert', alertMsg);
                 }}
               />
             )}
