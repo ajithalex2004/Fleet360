@@ -21,13 +21,12 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
-import { prisma } from '@/lib/prisma';
 import { loadStudentForNotify, notifyGuardians, ensureGuardianNotificationsTable } from '@/lib/school-bus-notify';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { runSweep } from '@/lib/prisma-sweep';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface TripRow {
@@ -39,165 +38,176 @@ interface TripRow {
   status: string;
 }
 
+interface Assessment {
+  tripId: string;
+  studentId: string;
+  studentName: string | null;
+  stopName: string | null;
+  reason: 'no_attendance_row' | 'recorded_absent';
+}
+
 export async function POST(req: NextRequest) {
+  const tenantHeader = req.headers.get('x-tenant-id');
+  const cronSecret = process.env.CRON_SECRET;
 
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  // A cron-triggered, all-tenants call has no tenant header at all.
+  // requireAuthorizedTenant unconditionally 401s when there's neither a
+  // tenant nor a user header, so it must never run for that case — it was
+  // called first, unconditionally, which made the CRON_SECRET check below
+  // unreachable dead code for every genuine cron invocation. This route
+  // was also single-tenant-only (a bare withTenantRls call, no runSweep),
+  // so there was no sensible tenant to scope to for an all-tenants call
+  // anyway — restructured below to iterate every active tenant, matching
+  // every sibling sweep route.
+  if (!tenantHeader) {
+    if (!cronSecret || req.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
+    }
+  } else {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
   }
-  const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    const cronSecret = process.env.CRON_SECRET;
-      if (cronSecret && !req.headers.get('x-tenant-id')) {
-        const auth = req.headers.get('authorization');
-        if (auth !== `Bearer ${cronSecret}`) {
-          return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
+  const sp = req.nextUrl.searchParams;
+  const dryRun = sp.get('dryRun') === '1';
+  const minAfterDepartureMins = Math.max(5, Number(sp.get('minAfterDepartureMins') ?? 15));
+  const todayDate = new Date().toISOString().slice(0, 10);
+
+  try {
+    const perTenant = await runSweep(async ({ tx, tenantId }) => {
+      await ensureGuardianNotificationsTable();
+
+      // 1. Find IN_PROGRESS morning trips where we're past the threshold.
+      const trips = await tx.$queryRawUnsafe<TripRow[]>(
+        `SELECT id::text, route_id::text, scheduled_departure::text,
+                actual_departure::text, session_type, status
+         FROM school_bus_trips
+         WHERE status IN ('IN_PROGRESS', 'COMPLETED')
+           AND DATE(scheduled_departure) = $1::date
+           AND session_type = 'MORNING'
+           AND actual_departure IS NOT NULL
+           AND actual_departure <= NOW() - ($2 || ' minutes')::interval`,
+        todayDate, String(minAfterDepartureMins),
+      ).catch(() => [] as TripRow[]);
+
+      const assessments: Assessment[] = [];
+
+      for (const trip of trips) {
+        // Active students on the route.
+        const routeStudents = await tx.$queryRawUnsafe<Array<{
+          id: string; first_name: string | null; last_name: string | null;
+          pickup_stop: string | null;
+        }>>(
+          `SELECT id::text, first_name, last_name, pickup_stop
+           FROM school_bus_students
+           WHERE route_id = $1::uuid AND deleted_at IS NULL AND is_active = true`,
+          trip.route_id,
+        ).catch(() => [] as Array<{ id: string; first_name: string | null; last_name: string | null; pickup_stop: string | null }>);
+
+        if (routeStudents.length === 0) continue;
+
+        // Today's attendance for this trip's session.
+        const att = await tx.$queryRawUnsafe<Array<{ student_id: string; status: string }>>(
+          `SELECT student_id::text, status FROM school_bus_attendance
+           WHERE date = $1::date AND session_type = $2
+             AND student_id = ANY($3::uuid[])`,
+          todayDate, trip.session_type ?? 'MORNING',
+          routeStudents.map(s => s.id),
+        ).catch(() => [] as Array<{ student_id: string; status: string }>);
+        const attByStudent = new Map(att.map(a => [a.student_id, a.status]));
+
+        for (const s of routeStudents) {
+          const status = attByStudent.get(s.id);
+          if (status === 'EXCUSED' || status === 'PRESENT' || status === 'LATE') continue;
+
+          assessments.push({
+            tripId: trip.id,
+            studentId: s.id,
+            studentName: [s.first_name, s.last_name].filter(Boolean).join(' ') || null,
+            stopName: s.pickup_stop,
+            reason: status === 'ABSENT' ? 'recorded_absent' : 'no_attendance_row',
+          });
         }
       }
 
-      try {
-        const sp = req.nextUrl.searchParams;
-        const dryRun = sp.get('dryRun') === '1';
-        const minAfterDepartureMins = Math.max(5, Number(sp.get('minAfterDepartureMins') ?? 15));
+      if (dryRun) {
+        return { tripsScanned: trips.length, candidates: assessments.length, notified: 0, errors: 0, assessments };
+      }
 
-        await ensureGuardianNotificationsTable();
-        const todayDate = new Date().toISOString().slice(0, 10);
-
-        // 1. Find IN_PROGRESS morning trips where we're past the threshold.
-        const trips = await tx.$queryRawUnsafe<TripRow[]>(
-          `SELECT id::text, route_id::text, scheduled_departure::text,
-                  actual_departure::text, session_type, status
-           FROM school_bus_trips
-           WHERE status IN ('IN_PROGRESS', 'COMPLETED')
-             AND DATE(scheduled_departure) = $1::date
-             AND session_type = 'MORNING'
-             AND actual_departure IS NOT NULL
-             AND actual_departure <= NOW() - ($2 || ' minutes')::interval`,
-          todayDate, String(minAfterDepartureMins),
-        ).catch(() => [] as TripRow[]);
-
-        if (trips.length === 0) {
-          return NextResponse.json({
-            dryRun, runAt: new Date().toISOString(),
-            tripsScanned: 0, students: 0, notified: 0, errors: 0,
-            message: 'No qualifying trips this run.',
-          });
-        }
-
-        interface Assessment {
-          tripId: string;
-          studentId: string;
-          studentName: string | null;
-          stopName: string | null;
-          reason: 'no_attendance_row' | 'recorded_absent';
-        }
-        const assessments: Assessment[] = [];
-
-        for (const trip of trips) {
-          // Active students on the route.
-          const routeStudents = await tx.$queryRawUnsafe<Array<{
-            id: string; first_name: string | null; last_name: string | null;
-            pickup_stop: string | null;
-          }>>(
-            `SELECT id::text, first_name, last_name, pickup_stop
-             FROM school_bus_students
-             WHERE route_id = $1::uuid AND deleted_at IS NULL AND is_active = true`,
-            trip.route_id,
-          ).catch(() => [] as Array<{ id: string; first_name: string | null; last_name: string | null; pickup_stop: string | null }>);
-
-          if (routeStudents.length === 0) continue;
-
-          // Today's attendance for this trip's session.
-          const att = await tx.$queryRawUnsafe<Array<{ student_id: string; status: string }>>(
-            `SELECT student_id::text, status FROM school_bus_attendance
-             WHERE date = $1::date AND session_type = $2
-               AND student_id = ANY($3::uuid[])`,
-            todayDate, trip.session_type ?? 'MORNING',
-            routeStudents.map(s => s.id),
-          ).catch(() => [] as Array<{ student_id: string; status: string }>);
-          const attByStudent = new Map(att.map(a => [a.student_id, a.status]));
-
-          for (const s of routeStudents) {
-            const status = attByStudent.get(s.id);
-            if (status === 'EXCUSED' || status === 'PRESENT' || status === 'LATE') continue;
-
-            assessments.push({
-              tripId: trip.id,
-              studentId: s.id,
-              studentName: [s.first_name, s.last_name].filter(Boolean).join(' ') || null,
-              stopName: s.pickup_stop,
-              reason: status === 'ABSENT' ? 'recorded_absent' : 'no_attendance_row',
-            });
+      let notified = 0;
+      let errors = 0;
+      for (const a of assessments) {
+        try {
+          // Mark ABSENT (auto) if no row yet.
+          if (a.reason === 'no_attendance_row') {
+            await tx.$executeRawUnsafe(
+              `INSERT INTO school_bus_attendance (student_id, date, session_type, status, reason)
+               VALUES ($1::uuid, $2::date, 'MORNING', 'ABSENT', 'AUTO_NO_SHOW')
+               ON CONFLICT (student_id, date, session_type) DO NOTHING`,
+              a.studentId, todayDate,
+            );
           }
-        }
 
-        if (dryRun) {
-          return NextResponse.json({
-            dryRun: true, runAt: new Date().toISOString(),
-            tripsScanned: trips.length, candidates: assessments.length, assessments,
+          // Skip if we've already notified for this student+kind today.
+          const alreadyNotified = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+            `SELECT id FROM school_bus_guardian_notifications
+             WHERE student_id = $1::uuid AND kind = 'NO_SHOW'
+               AND sent_at::date = CURRENT_DATE
+             LIMIT 1`,
+            a.studentId,
+          ).catch(() => [] as Array<{ id: string }>);
+          if (alreadyNotified.length > 0) continue;
+
+          const student = await loadStudentForNotify(a.studentId);
+          if (!student) continue;
+
+          const result = await notifyGuardians('NO_SHOW', student, {
+            stopName: a.stopName,
+            whenLabel: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
           });
-        }
-
-        let notified = 0;
-        let errors = 0;
-        for (const a of assessments) {
-          try {
-            // Mark ABSENT (auto) if no row yet.
-            if (a.reason === 'no_attendance_row') {
-              await tx.$executeRawUnsafe(
-                `INSERT INTO school_bus_attendance (student_id, date, session_type, status, reason)
-                 VALUES ($1::uuid, $2::date, 'MORNING', 'ABSENT', 'AUTO_NO_SHOW')
-                 ON CONFLICT (student_id, date, session_type) DO NOTHING`,
-                a.studentId, todayDate,
-              );
-            }
-
-            // Skip if we've already notified for this student+kind today.
-            const alreadyNotified = await tx.$queryRawUnsafe<Array<{ id: string }>>(
-              `SELECT id FROM school_bus_guardian_notifications
-               WHERE student_id = $1::uuid AND kind = 'NO_SHOW'
-                 AND sent_at::date = CURRENT_DATE
-               LIMIT 1`,
-              a.studentId,
-            ).catch(() => [] as Array<{ id: string }>);
-            if (alreadyNotified.length > 0) continue;
-
-            const student = await loadStudentForNotify(a.studentId);
-            if (!student) continue;
-
-            const result = await notifyGuardians('NO_SHOW', student, {
-              stopName: a.stopName,
-              whenLabel: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-            });
-            if (result.ok) notified += 1;
-          } catch (err) {
-            errors += 1;
-            captureException(err, { context: 'school-bus.sweep-no-show.apply', tags: { studentId: a.studentId } });
-          }
-        }
-
-        if (notified > 0) {
-          void logAudit({
-            userId: req.headers.get('x-user-id') ?? 'system:cron',
-            userRole: 'SYSTEM',
-            entityType: 'SchoolBusAttendance',
-            action: 'UPDATE',
-            details: `No-show sweep: ${trips.length} trips scanned, ${assessments.length} candidates, ${notified} guardians notified, ${errors} errors.`,
-          });
-        }
-
-        return NextResponse.json({
-          dryRun: false, runAt: new Date().toISOString(),
-          tripsScanned: trips.length,
-          candidates: assessments.length,
-          notified, errors,
-          assessments,
-        });
+          if (result.ok) notified += 1;
         } catch (err) {
-        captureException(err, { context: 'school-bus.sweep-no-show' });
-        return NextResponse.json({ error: 'Sweep failed' }, { status: 500 });
+          errors += 1;
+          captureException(err, { context: 'school-bus.sweep-no-show.apply', tags: { studentId: a.studentId, tenantId } });
+        }
       }
-  });
+
+      return { tripsScanned: trips.length, candidates: assessments.length, notified, errors, assessments };
+    }, { tenantHeader: tenantHeader ?? undefined });
+
+    const totals = perTenant.reduce(
+      (acc, r) => {
+        acc.tripsScanned += r.result.tripsScanned;
+        acc.candidates    += r.result.candidates;
+        acc.notified       += r.result.notified;
+        acc.errors         += r.result.errors;
+        return acc;
+      },
+      { tripsScanned: 0, candidates: 0, notified: 0, errors: 0 },
+    );
+
+    if (!dryRun && totals.notified > 0) {
+      void logAudit({
+        userId: req.headers.get('x-user-id') ?? 'system:cron',
+        userRole: 'SYSTEM',
+        entityType: 'SchoolBusAttendance',
+        action: 'UPDATE',
+        details: `No-show sweep: ${totals.tripsScanned} trips scanned across ${perTenant.length} tenant(s), ${totals.candidates} candidates, ${totals.notified} guardians notified, ${totals.errors} errors.`,
+      });
+    }
+
+    return NextResponse.json({
+      dryRun,
+      runAt: new Date().toISOString(),
+      tenantsScanned: perTenant.length,
+      ...totals,
+      assessments: perTenant.flatMap(r => r.result.assessments),
+    });
+  } catch (err) {
+    captureException(err, { context: 'school-bus.sweep-no-show' });
+    return NextResponse.json({ error: 'Sweep failed' }, { status: 500 });
+  }
 }
 

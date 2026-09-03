@@ -29,24 +29,22 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
-  }
-  const { tenantId } = authz;
-
-  // Optional shared-secret auth for cron triggers.
-  const cronSecret = process.env.CRON_SECRET;
   const tenantHeader = req.headers.get('x-tenant-id');
-  if (cronSecret) {
-    const auth = req.headers.get('authorization');
-    if (auth !== `Bearer ${cronSecret}`) {
-      // Fall through if user is authenticated via session — middleware
-      // already handled that. We only enforce CRON_SECRET when the request
-      // doesn't have a tenant header (i.e. unauthenticated cron pings).
-      if (!tenantHeader) {
-        return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
-      }
+  const cronSecret = process.env.CRON_SECRET;
+
+  // A cron-triggered, all-tenants call has no tenant header at all.
+  // requireAuthorizedTenant unconditionally 401s when there's neither a
+  // tenant nor a user header, so it must never run for that case — it was
+  // called first, unconditionally, which made the CRON_SECRET check below
+  // unreachable dead code for every genuine cron invocation.
+  if (!tenantHeader) {
+    if (!cronSecret || req.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
+    }
+  } else {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
   }
 

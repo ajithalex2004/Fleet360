@@ -27,18 +27,22 @@ import { sendEmail } from '@/services/email/emailService';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
-  }
-  const { tenantId } = authz;
-
   const tenantHeader = req.headers.get('x-tenant-id');
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && !tenantHeader) {
-    const auth = req.headers.get('authorization');
-    if (auth !== `Bearer ${cronSecret}`) {
+
+  // A cron-triggered, all-tenants call has no tenant header at all.
+  // requireAuthorizedTenant unconditionally 401s when there's neither a
+  // tenant nor a user header, so it must never run for that case — it was
+  // called first, unconditionally, which made the CRON_SECRET check below
+  // unreachable dead code for every genuine cron invocation.
+  if (!tenantHeader) {
+    if (!cronSecret || req.headers.get('authorization') !== `Bearer ${cronSecret}`) {
       return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
+    }
+  } else {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
   }
 
