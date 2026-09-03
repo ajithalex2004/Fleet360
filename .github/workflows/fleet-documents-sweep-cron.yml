@@ -1,0 +1,35 @@
+name: Fleet documents sweep (cron)
+
+# Triggers the fleet document-expiry / auto-grounding sweep on a schedule.
+#
+# This app deploys on Railway, which does not read vercel.json's `crons`
+# entries (that config is dead weight here) — GitHub Actions is the actual
+# scheduler. CRON_SECRET must match the value configured on the Railway
+# service (mirrored into this repo's Actions secrets).
+#
+# The job itself iterates every active tenant server-side (see
+# src/lib/jobs/fleet-documents-sweep.ts) — this workflow just needs to
+# call the dispatcher once.
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # 03:00 UTC daily
+  workflow_dispatch: {}   # manual trigger for testing
+
+concurrency:
+  group: fleet-documents-sweep-cron
+  cancel-in-progress: false
+
+jobs:
+  run-sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger fleet-documents-sweep
+        run: |
+          curl -sf -X POST \
+            "https://fleet360-app-production.up.railway.app/api/jobs/run?job=fleet-documents-sweep" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --data '{}' \
+            --max-time 240

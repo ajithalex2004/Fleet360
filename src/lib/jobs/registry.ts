@@ -56,6 +56,7 @@ export interface JobDef {
 
 import { runAutoCloseTrips }         from '@/lib/jobs/auto-close-trips';
 import { runDunningSweep }           from '@/lib/jobs/dunning-sweep';
+import { runFleetDocumentsSweep }    from '@/lib/jobs/fleet-documents-sweep';
 import { runOutboxPublisher }        from '@/lib/jobs/outbox-publisher';
 import { runBusOpsGenerateScheduleTemplates } from '@/lib/jobs/bus-ops-generate-schedule-templates';
 import { runAlertTripOverdue }       from '@/lib/jobs/alert-trip-overdue';
@@ -115,6 +116,12 @@ export const JOB_REGISTRY: JobDef[] = [
     description:    'Daily sweep for expiring vehicle insurance policies',
     handler:        runInsuranceExpirySweep,
     maxDurationSec: 60,
+  },
+  {
+    name:           'fleet-documents-sweep',
+    description:    'Daily fleet document-expiry sweep — auto-grounds/restores vehicles and notifies staff',
+    handler:        runFleetDocumentsSweep,
+    maxDurationSec: 120,
   },
   {
     name:           'mileage-sweep-stale',
