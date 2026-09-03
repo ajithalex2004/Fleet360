@@ -22,6 +22,7 @@ import { captureException } from '@/lib/sentry';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { runSweep } from '@/lib/prisma-sweep';
+import { sendEmail } from '@/services/email/emailService';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
@@ -57,6 +58,7 @@ export async function POST(req: NextRequest) {
       daysSince: number;
       title: string;
       message: string;
+      alertCreated?: boolean;
     }
     interface PerTenantResult {
       scanned: number;
@@ -127,6 +129,7 @@ export async function POST(req: NextRequest) {
               },
             });
             alertsCreated += 1;
+            a.alertCreated = true;
           } catch (err) {
             errors += 1;
             captureException(err, {

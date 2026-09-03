@@ -23,6 +23,7 @@ import { captureException } from '@/lib/sentry';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { runSweep } from '@/lib/prisma-sweep';
+import { sendEmail } from '@/services/email/emailService';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
@@ -57,6 +58,7 @@ export async function POST(req: NextRequest) {
       title: string;
       message: string;
       severity: 'WARNING' | 'ERROR';
+      alertCreated?: boolean;
     }
     interface PerTenantResult {
       scanned: number;
@@ -143,6 +145,7 @@ export async function POST(req: NextRequest) {
                 },
               });
               alertsCreated += 1;
+              a.alertCreated = true;
             }
             const currentPolicy = policies.find(p => p.id === a.policyId);
             if (
@@ -172,7 +175,7 @@ export async function POST(req: NextRequest) {
     );
 
     let totalScanned = 0;
-    const counts = { alertsCreated: 0, alertsSkipped: 0, statusUpdated: 0, errors: 0 };
+    const counts = { alertsCreated: 0, alertsSkipped: 0, statusUpdated: 0, errors: 0, emailsSent: 0 };
     const allAssessments: Assessment[] = [];
     for (const r of perTenant) {
       totalScanned += r.result.scanned;
@@ -183,6 +186,37 @@ export async function POST(req: NextRequest) {
       allAssessments.push(...r.result.assessments);
     }
 
+    // Staff-facing digest — one email per tenant listing everything newly
+    // alerted this run, sent to the tenant's own contact address (insurance
+    // is company-arranged, not something the lessee can action).
+    if (!dryRun) {
+      for (const r of perTenant) {
+        const newHits = r.result.assessments.filter(a => a.alertCreated);
+        if (newHits.length === 0) continue;
+        try {
+          const tenant = await prisma.tenant.findUnique({
+            where: { id: r.tenantId },
+            select: { contactEmail: true, contactName: true, name: true },
+          });
+          if (!tenant?.contactEmail) continue;
+          const rows = newHits.map(h =>
+            `<li>${h.severity === 'ERROR' ? '<strong style="color:#dc2626">EXPIRED</strong>' : 'Expiring soon'} — ${h.insurer} policy ${h.policyNo ?? h.policyId.slice(0, 8)}: ${h.message}</li>`,
+          ).join('');
+          const result = await sendEmail({
+            to: [{ email: tenant.contactEmail, name: tenant.contactName ?? tenant.name }],
+            subject: `Insurance renewal alert${newHits.length > 1 ? 's' : ''} — ${newHits.length} polic${newHits.length === 1 ? 'y' : 'ies'} need attention`,
+            htmlBody: `<p>Dear ${tenant.contactName ?? tenant.name},</p>
+              <p>The following vehicle insurance polic${newHits.length === 1 ? 'y needs' : 'ies need'} attention:</p>
+              <ul>${rows}</ul>
+              <p>Best regards,<br/>Fleet360</p>`,
+          });
+          if (result.sent) counts.emailsSent += 1;
+        } catch (emailErr) {
+          captureException(emailErr, { context: 'leasing.insurance.sweep-expiry.email', tags: { tenantId: r.tenantId } });
+        }
+      }
+    }
+
     if (!dryRun && (counts.alertsCreated + counts.statusUpdated > 0)) {
       void logAudit({
         tenantId: req.headers.get('x-tenant-id') ?? undefined,
@@ -190,7 +224,7 @@ export async function POST(req: NextRequest) {
         userRole: 'SYSTEM',
         entityType: 'LeaseInsurancePolicy',
         action: 'UPDATE',
-        details: `Insurance expiry sweep: scanned ${totalScanned} across ${perTenant.length} tenant(s), ${counts.alertsCreated} alerts emitted, ${counts.statusUpdated} status flips, ${counts.alertsSkipped} skipped (already today), ${counts.errors} errors.`,
+        details: `Insurance expiry sweep: scanned ${totalScanned} across ${perTenant.length} tenant(s), ${counts.alertsCreated} alerts emitted, ${counts.statusUpdated} status flips, ${counts.alertsSkipped} skipped (already today), ${counts.emailsSent} digest emails sent, ${counts.errors} errors.`,
       });
     }
 

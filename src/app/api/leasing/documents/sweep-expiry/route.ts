@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
         userRole: req.headers.get('x-user-role') ?? 'SYSTEM',
         entityType: 'LeaseDocument',
         action: 'UPDATE',
-        details: `Expiry sweep: scanned ${result.scanned}, ${result.hits.length} hits, ${result.alertsCreated} new alerts, ${result.statusUpdates} status updates.`,
+        details: `Expiry sweep: scanned ${result.scanned}, ${result.hits.length} hits, ${result.alertsCreated} new alerts, ${result.statusUpdates} status updates, ${result.emailsSent} emails sent.`,
       });
     }
 
