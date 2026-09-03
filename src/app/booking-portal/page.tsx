@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Smartphone, Plus } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
+import { usePermissions } from '@/contexts/PermissionContext';
 
 interface Booking {
   id: string;
@@ -50,6 +51,15 @@ function statusStyle(s: string | null) {
 }
 
 // ── Service cards ─────────────────────────────────────────────────────────────
+
+export const SERVICE_MODULE_MAP: Record<string, string> = {
+  RENTAL:          'rental',
+  LEASING:         'leasing',
+  STAFF_TRANSPORT: 'bus-ops',
+  EXECUTIVE:       'dispatch',
+  LOGISTICS:       'logistics',
+  SCHOOL_BUS:      'school-bus',
+};
 
 const SERVICE_CARDS = [
   {
@@ -119,11 +129,28 @@ const ALL_TYPES = ['ALL', 'RENTAL', 'LEASING', 'STAFF_TRANSPORT', 'EXECUTIVE', '
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function BookingPortal() {
+  const { hasModule, tenant } = usePermissions();
   const [bookings,    setBookings]    = useState<Booking[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState('');
   const [typeFilter,  setTypeFilter]  = useState('ALL');
   const [search,      setSearch]      = useState('');
+
+  // Dynamically filter service cards based on tenant's enabled modules
+  const visibleCards = React.useMemo(() => {
+    if (!tenant || !tenant.enabledModules || tenant.enabledModules.length === 0) {
+      return SERVICE_CARDS;
+    }
+    return SERVICE_CARDS.filter((card) => {
+      const requiredModule = SERVICE_MODULE_MAP[card.type];
+      return !requiredModule || hasModule(requiredModule);
+    });
+  }, [hasModule, tenant]);
+
+  const activeTypes = React.useMemo(() => {
+    const cardTypes = visibleCards.map((c) => c.type);
+    return ['ALL', ...cardTypes];
+  }, [visibleCards]);
 
   const load = useCallback(async () => {
     try {
@@ -150,7 +177,7 @@ export default function BookingPortal() {
     return matchType && matchSearch;
   });
 
-  const counts = ALL_TYPES.reduce((acc, t) => ({
+  const counts = activeTypes.reduce((acc, t) => ({
     ...acc,
     [t]: t === 'ALL' ? bookings.length : bookings.filter(b => b.serviceType === t).length,
   }), {} as Record<string, number>);
@@ -195,7 +222,7 @@ export default function BookingPortal() {
       <div>
         <h2 className="text-xl font-bold text-white mb-4">Book a Service</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {SERVICE_CARDS.map(card => (
+          {visibleCards.map(card => (
             <Link key={card.type} href={card.href}>
               <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 hover:border-white/30 hover:bg-slate-800/80 transition-all cursor-pointer group h-full">
                 <div className="flex items-start justify-between mb-4">
@@ -230,7 +257,7 @@ export default function BookingPortal() {
 
         {/* Type filter tabs */}
         <div className="px-6 py-3 border-b border-white/10 flex gap-2 overflow-x-auto">
-          {ALL_TYPES.map(t => (
+          {activeTypes.map(t => (
             <button key={t} onClick={() => setTypeFilter(t)}
               className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                 typeFilter === t
@@ -238,7 +265,7 @@ export default function BookingPortal() {
                   : 'text-slate-400 border-white/10 hover:text-white hover:border-white/20'
               }`}>
               {SERVICE_STYLE[t]?.icon} {t === 'ALL' ? 'All' : SERVICE_STYLE[t]?.label ?? t}
-              <span className="ml-1 opacity-60">({counts[t]})</span>
+              <span className="ml-1 opacity-60">({counts[t] ?? 0})</span>
             </button>
           ))}
         </div>

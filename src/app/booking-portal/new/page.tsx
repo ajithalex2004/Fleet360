@@ -1,11 +1,21 @@
 'use client';
 export const dynamic = 'force-dynamic';
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { usePermissions } from '@/contexts/PermissionContext';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service type card definitions (Step 1)
 // ─────────────────────────────────────────────────────────────────────────────
+
+export const SERVICE_MODULE_MAP: Record<string, string> = {
+  RENTAL:          'rental',
+  LEASING:         'leasing',
+  STAFF_TRANSPORT: 'bus-ops',
+  EXECUTIVE:       'dispatch',
+  LOGISTICS:       'logistics',
+  SCHOOL_BUS:      'school-bus',
+};
 
 const SERVICE_CARDS = [
   {
@@ -775,8 +785,20 @@ const SERVICE_META: Record<ServiceType, { title: string; icon: string; gradient:
 // ─────────────────────────────────────────────────────────────────────────────
 
 function NewBookingInner() {
+  const { hasModule, tenant } = usePermissions();
   const searchParams = useSearchParams() ?? new URLSearchParams();
   const router       = useRouter();
+
+  // Dynamically filter service cards based on tenant's enabled modules
+  const visibleCards = useMemo(() => {
+    if (!tenant || !tenant.enabledModules || tenant.enabledModules.length === 0) {
+      return SERVICE_CARDS;
+    }
+    return SERVICE_CARDS.filter((c) => {
+      const requiredModule = SERVICE_MODULE_MAP[c.type];
+      return !requiredModule || hasModule(requiredModule);
+    });
+  }, [hasModule, tenant]);
 
   const initialType = (searchParams.get('type') ?? '') as ServiceType | '';
   const [step,        setStep]        = useState<1 | 2 | 3>(initialType ? 2 : 1);
@@ -787,13 +809,24 @@ function NewBookingInner() {
   const [error,       setError]       = useState('');
 
   useEffect(() => {
-    if (initialType) { setServiceType(initialType as ServiceType); setStep(2); }
-  }, [initialType]);
+    if (visibleCards.length === 0) return;
+    if (initialType && visibleCards.some(c => c.type === initialType)) {
+      setServiceType(initialType as ServiceType);
+      setStep(2);
+    } else if (visibleCards.length === 1) {
+      // Single-domain tenant: auto-advance to details form for the only subscribed service!
+      setServiceType(visibleCards[0].type);
+      setStep(2);
+    } else if (initialType && !visibleCards.some(c => c.type === initialType)) {
+      setServiceType('');
+      setStep(1);
+    }
+  }, [initialType, visibleCards]);
 
   const onChange = (k: string, v: string | boolean | number) =>
     setForm(prev => ({ ...prev, [k]: v }));
 
-  const card = SERVICE_CARDS.find(c => c.type === serviceType);
+  const card = visibleCards.find(c => c.type === serviceType) || SERVICE_CARDS.find(c => c.type === serviceType);
   const schema: SectionDef[] = serviceType ? SCHEMAS[serviceType as ServiceType] : [];
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -879,7 +912,7 @@ function NewBookingInner() {
         <div className="space-y-5">
           <h2 className="text-xl font-bold text-white">Select Service Type</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {SERVICE_CARDS.map(opt => (
+            {visibleCards.map(opt => (
               <button
                 key={opt.type}
                 onClick={() => { setServiceType(opt.type as ServiceType); setStep(2); }}
