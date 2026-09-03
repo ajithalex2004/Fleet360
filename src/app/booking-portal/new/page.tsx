@@ -1064,6 +1064,7 @@ function NewBookingInner() {
                     section={section}
                     form={form}
                     onChange={onChange}
+                    serviceType={serviceType as string}
                   />
                 ))}
 
@@ -1151,6 +1152,26 @@ function NewBookingInner() {
                     onChange('recurringTotalTrips', trips.length);
                     onChange('recurringDiscountPercent', pricing.discountPercent);
                     onChange('recurringTotalContractAed', pricing.totalWithVatAed);
+                  }}
+                />
+
+                {/* Instant Pricing & Corporate Cost Center Allocation */}
+                <InstantPricingCostCenter
+                  serviceType={serviceType as string}
+                  vehicleCategory={(form.vehicleCategory as string) || ''}
+                  distanceKm={Number(form.distanceKm) || 0}
+                  salikTollsAed={Number(form.salikTollsAed) || 0}
+                  costCenter={(form.costCenter as string) || 'CC-OPS-3003'}
+                  projectCode={(form.projectCode as string) || ''}
+                  billingMethod={(form.billingMethod as string) || 'CORPORATE_ACCOUNT'}
+                  onChange={(pricing) => {
+                    onChange('fareSubtotal', pricing.fareSubtotal);
+                    onChange('vatAmount', pricing.vatAmount);
+                    onChange('totalFareAed', pricing.totalFareAed);
+                    onChange('costCenter', pricing.costCenter);
+                    onChange('projectCode', pricing.projectCode);
+                    onChange('billingMethod', pricing.billingMethod);
+                    onChange('budgetStatus', pricing.budgetStatus);
                   }}
                 />
 
