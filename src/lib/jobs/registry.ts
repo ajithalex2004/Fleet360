@@ -121,7 +121,10 @@ export const JOB_REGISTRY: JobDef[] = [
     name:           'fleet-documents-sweep',
     description:    'Daily fleet document-expiry sweep — auto-grounds/restores vehicles and notifies staff',
     handler:        runFleetDocumentsSweep,
-    maxDurationSec: 120,
+    // Iterates every active tenant (164 at last count) serially against the
+    // pooled Neon endpoint — measured elsewhere in this codebase at
+    // ~700ms/tenant of transaction overhead alone, before per-vehicle work.
+    maxDurationSec: 600,
   },
   {
     name:           'mileage-sweep-stale',

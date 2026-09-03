@@ -23,7 +23,13 @@ concurrency:
 jobs:
   run-sweep:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # runSweep iterates every active tenant (164 at last count) in its own
+    # transaction. Measured elsewhere in this codebase at ~700ms/tenant
+    # serially against the pooled Neon endpoint (this app's DATABASE_URL),
+    # which is what this app uses -- so a full run is minutes, not seconds.
+    # Generous timeout to avoid a false failure while the server is still
+    # legitimately working through the list.
+    timeout-minutes: 15
     steps:
       - name: Trigger fleet-documents-sweep
         run: |
@@ -32,4 +38,4 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
             --data '{}' \
-            --max-time 240
+            --max-time 840
