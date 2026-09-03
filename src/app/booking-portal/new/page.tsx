@@ -33,7 +33,7 @@ import { DriverHandoverEpod } from '@/components/booking/DriverHandoverEpod';
 import { ColdChainTelemetryGraph } from '@/components/booking/ColdChainTelemetryGraph';
 import { BulkConsignmentUploader } from '@/components/booking/BulkConsignmentUploader';
 
-export function getServiceVectorIcon(type: string, className = 'w-5 h-5 text-amber-300') {
+export function getServiceVectorIcon(type: string, className = 'w-5 h-5 text-cyan-400') {
   switch (type) {
     case 'RENTAL':
       return <CarFront className={className} />;
@@ -52,7 +52,7 @@ export function getServiceVectorIcon(type: string, className = 'w-5 h-5 text-amb
   }
 }
 
-export function getSectionVectorIcon(title: string, className = 'w-4 h-4 text-amber-300') {
+export function getSectionVectorIcon(title: string, className = 'w-4 h-4 text-cyan-400') {
   const t = title.toLowerCase();
   if (t.includes('requestor') || t.includes('client') || t.includes('passenger')) {
     return <UserCheck className={className} />;

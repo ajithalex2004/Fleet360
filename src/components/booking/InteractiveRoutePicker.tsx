@@ -252,15 +252,15 @@ export function InteractiveRoutePicker({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Origin */}
         <div className="relative">
-          <label className="block text-xs font-bold text-amber-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+          <label className="block text-xs font-bold text-cyan-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
             <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-amber-400 inline-block animate-pulse" />
-              {originLabel} <span className="text-amber-400">*</span>
+              <span className="w-2 h-2 rounded-full bg-cyan-400 inline-block animate-pulse" />
+              {originLabel} <span className="text-cyan-400">*</span>
             </span>
-            {originCoords && <span className="text-[10px] text-amber-300 font-mono">📍 GPS Synced</span>}
+            {originCoords && <span className="text-[10px] text-cyan-300 font-mono">📍 GPS Synced</span>}
           </label>
           <div className="relative">
-            <MapPin className="w-4 h-4 text-amber-400 absolute left-3.5 top-3.5" />
+            <MapPin className="w-4 h-4 text-cyan-400 absolute left-3.5 top-3.5" />
             <input
               ref={originInputRef}
               type="text"
@@ -268,24 +268,24 @@ export function InteractiveRoutePicker({
               onChange={(e) => handleOriginType(e.target.value)}
               placeholder={originPlaceholder}
               required
-              className="w-full bg-[#181920] border border-amber-500/30 rounded-xl pl-10 pr-4 py-3 text-white text-sm placeholder-zinc-400 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40 transition-all shadow-inner shadow-black/40"
+              className="w-full bg-slate-950/80 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white text-sm placeholder-slate-400 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all shadow-inner shadow-black/40"
             />
           </div>
 
           {/* Fallback Autocomplete Suggestions */}
           {originSuggestions.length > 0 && (
-            <div className="absolute z-30 left-0 right-0 mt-1 bg-[#121318] border border-amber-500/30 rounded-xl shadow-2xl overflow-hidden divide-y divide-white/5">
+            <div className="absolute z-30 left-0 right-0 mt-1 bg-slate-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden divide-y divide-white/5">
               {originSuggestions.map((item) => (
                 <button
                   key={item.name}
                   type="button"
                   onClick={() => selectOriginLandmark(item)}
-                  className="w-full text-left px-4 py-2.5 hover:bg-amber-500/15 transition-colors flex items-start gap-2.5 group"
+                  className="w-full text-left px-4 py-2.5 hover:bg-cyan-500/15 transition-colors flex items-start gap-2.5 group"
                 >
-                  <MapPin className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
+                  <MapPin className="w-3.5 h-3.5 text-cyan-400 mt-0.5 flex-shrink-0" />
                   <div>
-                    <p className="text-xs font-bold text-white group-hover:text-amber-300">{item.name}</p>
-                    <p className="text-[11px] text-zinc-400">{item.area}</p>
+                    <p className="text-xs font-bold text-white group-hover:text-cyan-300">{item.name}</p>
+                    <p className="text-[11px] text-slate-400">{item.area}</p>
                   </div>
                 </button>
               ))}
@@ -295,15 +295,15 @@ export function InteractiveRoutePicker({
 
         {/* Destination */}
         <div className="relative">
-          <label className="block text-xs font-bold text-amber-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+          <label className="block text-xs font-bold text-cyan-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
             <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-yellow-500 inline-block" />
-              {destinationLabel} <span className="text-amber-400">*</span>
+              <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
+              {destinationLabel} <span className="text-cyan-400">*</span>
             </span>
-            {destCoords && <span className="text-[10px] text-amber-300 font-mono">🎯 GPS Synced</span>}
+            {destCoords && <span className="text-[10px] text-cyan-300 font-mono">🎯 GPS Synced</span>}
           </label>
           <div className="relative">
-            <Navigation className="w-4 h-4 text-amber-400 absolute left-3.5 top-3.5" />
+            <Navigation className="w-4 h-4 text-cyan-400 absolute left-3.5 top-3.5" />
             <input
               ref={destInputRef}
               type="text"
@@ -311,24 +311,24 @@ export function InteractiveRoutePicker({
               onChange={(e) => handleDestType(e.target.value)}
               placeholder={destinationPlaceholder}
               required
-              className="w-full bg-[#181920] border border-amber-500/30 rounded-xl pl-10 pr-4 py-3 text-white text-sm placeholder-zinc-400 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40 transition-all shadow-inner shadow-black/40"
+              className="w-full bg-slate-950/80 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white text-sm placeholder-slate-400 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 transition-all shadow-inner shadow-black/40"
             />
           </div>
 
           {/* Fallback Autocomplete Suggestions */}
           {destSuggestions.length > 0 && (
-            <div className="absolute z-30 left-0 right-0 mt-1 bg-[#121318] border border-amber-500/30 rounded-xl shadow-2xl overflow-hidden divide-y divide-white/5">
+            <div className="absolute z-30 left-0 right-0 mt-1 bg-slate-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden divide-y divide-white/5">
               {destSuggestions.map((item) => (
                 <button
                   key={item.name}
                   type="button"
                   onClick={() => selectDestLandmark(item)}
-                  className="w-full text-left px-4 py-2.5 hover:bg-amber-500/15 transition-colors flex items-start gap-2.5 group"
+                  className="w-full text-left px-4 py-2.5 hover:bg-cyan-500/15 transition-colors flex items-start gap-2.5 group"
                 >
-                  <Navigation className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
+                  <Navigation className="w-3.5 h-3.5 text-cyan-400 mt-0.5 flex-shrink-0" />
                   <div>
-                    <p className="text-xs font-bold text-white group-hover:text-amber-300">{item.name}</p>
-                    <p className="text-[11px] text-zinc-400">{item.area}</p>
+                    <p className="text-xs font-bold text-white group-hover:text-cyan-300">{item.name}</p>
+                    <p className="text-[11px] text-slate-400">{item.area}</p>
                   </div>
                 </button>
               ))}
@@ -339,44 +339,41 @@ export function InteractiveRoutePicker({
 
       {/* ── Real-time Route Calculation Widget ── */}
       {stats && (
-        <div className="bg-[#121318] border border-amber-500/30 rounded-2xl p-4 shadow-2xl shadow-black/60">
-          <div className="flex items-center justify-between mb-3 border-b border-amber-500/20 pb-2">
+        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl shadow-black/80">
+          <div className="flex items-center justify-between mb-3 border-b border-white/10 pb-2">
             <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+              <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
               <span className="text-xs font-bold text-white uppercase tracking-wider">
                 Geospatial Route Intelligence
               </span>
             </div>
-            <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-mono font-bold">
-              Optimal Corridor
+            <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-mono font-bold">
+              ✓ Route Calculated
             </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-3 text-center">
-            {/* Distance */}
-            <div className="bg-[#181920] rounded-xl p-3 border border-amber-500/20">
-              <div className="text-[10px] text-amber-400 uppercase font-bold tracking-wider">Driving Distance</div>
-              <div className="text-lg font-extrabold text-white mt-0.5 font-mono">{stats.distanceKm} km</div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+            <div className="bg-slate-950/80 border border-white/10 rounded-xl p-2.5">
+              <p className="text-[11px] text-slate-400 uppercase font-semibold">Distance</p>
+              <p className="text-base font-extrabold text-cyan-400 font-mono">{stats.distanceKm} km</p>
             </div>
-
-            {/* Travel Duration */}
-            <div className="bg-[#181920] rounded-xl p-3 border border-amber-500/20">
-              <div className="text-[10px] text-amber-400 uppercase font-bold tracking-wider">Estimated Time</div>
-              <div className="text-lg font-extrabold text-amber-300 mt-0.5 font-mono">
+            <div className="bg-slate-950/80 border border-white/10 rounded-xl p-2.5">
+              <p className="text-[11px] text-slate-400 uppercase font-semibold">Est. Duration</p>
+              <p className="text-base font-extrabold text-white font-mono">
                 {stats.durationMins >= 60
                   ? `${Math.floor(stats.durationMins / 60)}h ${stats.durationMins % 60}m`
                   : `${stats.durationMins} mins`}
-              </div>
+              </p>
             </div>
-
-            {/* UAE Salik / Darb Tolls */}
-            <div className="bg-[#181920] rounded-xl p-3 border border-amber-500/20">
-              <div className="text-[10px] text-amber-400 uppercase font-bold tracking-wider">UAE Tolls (Salik)</div>
-              <div className="text-lg font-extrabold text-amber-400 mt-0.5 font-mono">
-                {stats.salikTollsCount > 0
-                  ? `${stats.salikTollsCount} Gates (AED ${stats.salikTollsAed})`
-                  : '0 Tolls (Free)'}
-              </div>
+            <div className="bg-slate-950/80 border border-white/10 rounded-xl p-2.5">
+              <p className="text-[11px] text-slate-400 uppercase font-semibold">Salik Gates</p>
+              <p className="text-base font-extrabold text-emerald-400 font-mono">
+                {stats.salikTollsCount > 0 ? `${stats.salikTollsCount} Gates` : '0 Gates'}
+              </p>
+            </div>
+            <div className="bg-slate-950/80 border border-white/10 rounded-xl p-2.5">
+              <p className="text-[11px] text-slate-400 uppercase font-semibold">Toll Surcharges</p>
+              <p className="text-base font-extrabold text-cyan-400 font-mono">AED {stats.salikTollsAed}</p>
             </div>
           </div>
         </div>
