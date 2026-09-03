@@ -1,21 +1,32 @@
 'use client';
+
 import React, { useState, useEffect, useCallback } from 'react';
+import {
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Clock,
+  Building2,
+  UserCheck,
+  Truck,
+  DollarSign,
+  ShieldAlert,
+  ChevronRight,
+  Filter,
+  Sparkles,
+} from 'lucide-react';
+import { PolicyEvaluationResult } from '@/lib/booking-approval-policy';
 
 const SERVICE_STYLE: Record<string, { label: string; icon: string; color: string }> = {
-  RENTAL:         { label: 'Rent-a-Car',     icon: '🚗', color: 'text-emerald-400' },
-  LEASING:        { label: 'Leasing',         icon: '📋', color: 'text-blue-400'   },
-  STAFF_TRANSPORT:{ label: 'Staff Transport', icon: '🚌', color: 'text-purple-400' },
-  EXECUTIVE:      { label: 'Executive',       icon: '⭐', color: 'text-amber-400'  },
-  LOGISTICS:      { label: 'Logistics',       icon: '🚛', color: 'text-orange-400' },
-  SCHOOL_BUS:     { label: 'School Bus',      icon: '🏫', color: 'text-yellow-400' },
+  RENTAL:          { label: 'Rent-a-Car',     icon: '🚗', color: 'text-emerald-400' },
+  LEASING:         { label: 'Leasing',         icon: '📋', color: 'text-blue-400'   },
+  STAFF_TRANSPORT: { label: 'Staff Transport', icon: '🚌', color: 'text-purple-400' },
+  EXECUTIVE:       { label: 'Executive',       icon: '⭐', color: 'text-amber-400'  },
+  LOGISTICS:       { label: 'Logistics',       icon: '🚛', color: 'text-orange-400' },
+  SCHOOL_BUS:      { label: 'School Bus',      icon: '🏫', color: 'text-yellow-400' },
 };
 
-function parseNotes(notes: string | null): Record<string, string> {
-  if (!notes) return {};
-  try { return JSON.parse(notes); } catch { return {}; }
-}
-
-interface Booking {
+interface ApprovalBooking {
   id: string;
   bookingRef: string | null;
   requestorName: string | null;
@@ -24,207 +35,435 @@ interface Booking {
   vehicleCategory: string | null;
   startDate: string | null;
   endDate: string | null;
-  notes: string | null;
   status: string | null;
   createdAt: string | null;
+  financials: {
+    totalFareAed: number;
+    fareSubtotal: number;
+    vatAmount: number;
+    costCenter: string;
+    projectCode: string;
+    billingMethod: string;
+    budgetStatus: string;
+    distanceKm: number;
+    salikTollsAed: number;
+    depotId: string;
+    sampleModels: string;
+  };
+  policyEvaluation: PolicyEvaluationResult;
+  approvalHistory: Array<{
+    tier: number;
+    tierName: string;
+    approverName: string;
+    approverRole: string;
+    action: string;
+    timestamp: string;
+    remarks?: string;
+  }>;
 }
 
-export default function PendingApprovals() {
-  const [bookings,      setBookings]     = useState<Booking[]>([]);
-  const [loading,       setLoading]      = useState(true);
-  const [error,         setError]        = useState('');
-  const [processingId,  setProcessingId] = useState('');
-  const [lastAction,    setLastAction]   = useState<{ ref: string; action: 'APPROVED' | 'REJECTED' } | null>(null);
+export default function MultiLevelApprovalsPage() {
+  const [bookings, setBookings] = useState<ApprovalBooking[]>([]);
+  const [stats, setStats] = useState({
+    totalPending: 0,
+    tier1Count: 0,
+    tier2Count: 0,
+    tier3Count: 0,
+    autoApprovedCount: 0,
+  });
+  const [activeTab, setActiveTab] = useState<'ALL' | 'TIER_1' | 'TIER_2' | 'TIER_3' | 'RESOLVED'>('ALL');
+  const [loading, setLoading] = useState(true);
+  const [processingId, setProcessingId] = useState('');
+  const [actionFeedback, setActionFeedback] = useState<{ ref: string; message: string } | null>(null);
 
-  const load = useCallback(async () => {
+  const loadApprovals = useCallback(async () => {
     try {
       setLoading(true);
-      setError('');
-      const res  = await fetch('/api/bookings?status=PENDING&limit=100');
-      if (!res.ok) throw new Error(`Server error ${res.status}`);
-      const data = await res.json();
-      setBookings(Array.isArray(data) ? data : data.data ?? []);
+      const res = await fetch('/api/booking-portal/approvals');
+      if (res.ok) {
+        const data = await res.json();
+        setBookings(data.bookings || []);
+        if (data.stats) setStats(data.stats);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load pending bookings');
+      console.error('Failed to load approvals:', err);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    loadApprovals();
+  }, [loadApprovals]);
 
-  const handleAction = async (booking: Booking, action: 'CONFIRMED' | 'CANCELLED') => {
+  const handleAction = async (
+    bookingId: string,
+    action: 'APPROVE_TIER_1' | 'APPROVE_TIER_2' | 'APPROVE_TIER_3' | 'REJECT',
+    ref: string
+  ) => {
     try {
-      setProcessingId(booking.id);
-      const res = await fetch(`/api/bookings/${booking.id}`, {
-        method:  'PATCH',
+      setProcessingId(bookingId);
+      const res = await fetch('/api/booking-portal/approvals', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ status: action }),
+        body: JSON.stringify({
+          bookingId,
+          action,
+          approverName: 'Corporate Manager',
+          approverRole:
+            action === 'APPROVE_TIER_1'
+              ? 'Line Manager'
+              : action === 'APPROVE_TIER_2'
+              ? 'Department Head'
+              : 'Fleet Operations Lead',
+        }),
       });
-      if (!res.ok) throw new Error(await res.text());
-      const label = action === 'CONFIRMED' ? 'APPROVED' : 'REJECTED';
-      setLastAction({ ref: booking.bookingRef ?? booking.id.slice(0, 8), action: label as any });
-      setTimeout(() => setLastAction(null), 4000);
-      await load();
+
+      if (res.ok) {
+        setActionFeedback({
+          ref,
+          message:
+            action === 'REJECT'
+              ? 'Request rejected'
+              : action === 'APPROVE_TIER_3'
+              ? 'Final Dispatch Confirmed'
+              : 'Approved and escalated to next tier',
+        });
+        setTimeout(() => setActionFeedback(null), 4000);
+        await loadApprovals();
+      }
     } catch (err) {
-      alert(err instanceof Error ? err.message : `Failed to ${action.toLowerCase()} booking`);
+      console.error('Approval action error:', err);
     } finally {
       setProcessingId('');
     }
   };
 
+  const filteredBookings = bookings.filter((b) => {
+    if (activeTab === 'ALL') return b.status === 'PENDING';
+    if (activeTab === 'TIER_1') return b.status === 'PENDING' && b.policyEvaluation.currentTier === 'TIER_1_PENDING';
+    if (activeTab === 'TIER_2') return b.status === 'PENDING' && b.policyEvaluation.currentTier === 'TIER_2_PENDING';
+    if (activeTab === 'TIER_3') return b.status === 'PENDING' && b.policyEvaluation.currentTier === 'TIER_3_PENDING';
+    if (activeTab === 'RESOLVED') return b.status !== 'PENDING';
+    return true;
+  });
+
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* ── Page Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">Pending Approvals</h1>
-          <p className="text-slate-400 mt-1">Review and approve pending booking requests</p>
+          <h1 className="text-3xl font-bold text-white tracking-tight">Corporate Travel Approvals</h1>
+          <p className="text-slate-400 mt-1 text-sm">
+            Multi-tier hierarchical escalation & corporate travel policy compliance engine
+          </p>
         </div>
-        <button onClick={load}
-          className="text-xs text-slate-400 hover:text-white border border-white/10 rounded-lg px-3 py-1.5 transition-colors">
-          ↻ Refresh
+        <button
+          onClick={loadApprovals}
+          className="self-start sm:self-auto text-xs text-slate-400 hover:text-white border border-white/10 rounded-xl px-4 py-2 hover:bg-white/5 transition-colors"
+        >
+          ↻ Refresh Queues
         </button>
       </div>
 
-      {/* Action feedback */}
-      {lastAction && (
-        <div className={`rounded-xl px-4 py-3 flex items-center gap-3 border ${
-          lastAction.action === 'APPROVED'
-            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-            : 'bg-red-500/10 border-red-500/30 text-red-300'
-        }`}>
-          <span>{lastAction.action === 'APPROVED' ? '✅' : '❌'}</span>
-          <span className="text-sm font-medium">
-            Booking <span className="font-mono">{lastAction.ref}</span> has been {lastAction.action.toLowerCase()}
+      {/* ── Action Feedback Toast ── */}
+      {actionFeedback && (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4 flex items-center gap-3 text-emerald-300 text-sm">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+          <span>
+            Booking <strong className="font-mono text-white">{actionFeedback.ref}</strong>: {actionFeedback.message}
           </span>
         </div>
       )}
 
-      {/* Summary KPI */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-slate-400 text-sm font-medium mb-1">Awaiting Review</p>
-            <p className="text-4xl font-bold text-amber-400">{bookings.length}</p>
-            <p className="text-slate-500 text-xs mt-1">Pending booking requests</p>
-          </div>
-          <span className="text-5xl">⏳</span>
+      {/* ── KPI Metrics Ribbon ── */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4">
+          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Total Pending</p>
+          <p className="text-2xl font-bold font-mono text-white">{stats.totalPending}</p>
+        </div>
+
+        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4">
+          <p className="text-[11px] font-semibold text-purple-400 uppercase tracking-wider mb-1">Tier 1: Line Manager</p>
+          <p className="text-2xl font-bold font-mono text-purple-300">{stats.tier1Count}</p>
+        </div>
+
+        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4">
+          <p className="text-[11px] font-semibold text-amber-400 uppercase tracking-wider mb-1">Tier 2: Dept Head (&gt;1k)</p>
+          <p className="text-2xl font-bold font-mono text-amber-300">{stats.tier2Count}</p>
+        </div>
+
+        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4">
+          <p className="text-[11px] font-semibold text-blue-400 uppercase tracking-wider mb-1">Tier 3: Fleet Ops</p>
+          <p className="text-2xl font-bold font-mono text-blue-300">{stats.tier3Count}</p>
+        </div>
+
+        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4">
+          <p className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1">⚡ Auto-Approved</p>
+          <p className="text-2xl font-bold font-mono text-emerald-300">{stats.autoApprovedCount}</p>
         </div>
       </div>
 
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-2xl px-5 py-4 text-red-400 text-sm">
-          ⚠️ {error}
-        </div>
-      )}
+      {/* ── Filter Tabs ── */}
+      <div className="flex flex-wrap gap-2 border-b border-white/10 pb-3">
+        <button
+          onClick={() => setActiveTab('ALL')}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+            activeTab === 'ALL'
+              ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/25'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          All Pending ({stats.totalPending})
+        </button>
 
-      {/* Bookings list */}
+        <button
+          onClick={() => setActiveTab('TIER_1')}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+            activeTab === 'TIER_1'
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/25'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          Tier 1: Line Manager ({stats.tier1Count})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('TIER_2')}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+            activeTab === 'TIER_2'
+              ? 'bg-amber-600 text-white shadow-lg shadow-amber-500/25'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          Tier 2: Dept Head &gt;AED 1k ({stats.tier2Count})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('TIER_3')}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+            activeTab === 'TIER_3'
+              ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          Tier 3: Fleet Dispatch ({stats.tier3Count})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('RESOLVED')}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+            activeTab === 'RESOLVED'
+              ? 'bg-slate-700 text-white'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          Completed / History
+        </button>
+      </div>
+
+      {/* ── Bookings List ── */}
       {loading ? (
-        <div className="space-y-3">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-24 bg-slate-800/60 rounded-2xl animate-pulse" />
-          ))}
+        <div className="py-20 text-center">
+          <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-slate-400 text-sm">Evaluating policy compliance & loading approval queues…</p>
         </div>
-      ) : bookings.length === 0 ? (
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-16 text-center">
-          <div className="text-5xl mb-3">✅</div>
-          <p className="text-slate-300 font-medium">All clear — no pending approvals</p>
-          <p className="text-slate-500 text-sm mt-1">All booking requests have been processed</p>
+      ) : filteredBookings.length === 0 ? (
+        <div className="bg-slate-900/40 border border-white/8 rounded-2xl p-12 text-center">
+          <p className="text-3xl mb-2">🎉</p>
+          <p className="text-white font-semibold">No Pending Requests in this Queue</p>
+          <p className="text-slate-500 text-xs mt-1">All bookings in this tier have been processed</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {bookings.map(booking => {
-            const svc    = SERVICE_STYLE[booking.serviceType] ?? { label: booking.serviceType, icon: '📋', color: 'text-slate-400' };
-            const parsed = parseNotes(booking.notes);
-            const route  = parsed.origin && parsed.destination
-              ? `${parsed.origin} → ${parsed.destination}`
-              : parsed.origin ?? parsed.destination ?? booking.vehicleCategory ?? null;
+        <div className="space-y-4">
+          {filteredBookings.map((b) => {
+            const svc = SERVICE_STYLE[b.serviceType] || { label: b.serviceType, icon: '🚗', color: 'text-white' };
+            const isProcessing = processingId === b.id;
+            const currentTier = b.policyEvaluation.currentTier;
 
             return (
-              <div key={booking.id}
-                className="bg-slate-800/50 border border-white/10 hover:border-white/20 rounded-2xl p-5 transition-all">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0 space-y-2">
-                    {/* Top row */}
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <span className="font-mono text-white text-sm font-bold">
-                        {booking.bookingRef ?? booking.id.slice(0, 10)}
-                      </span>
-                      <span className={`flex items-center gap-1 text-xs font-medium ${svc.color}`}>
-                        {svc.icon} {svc.label}
-                      </span>
-                      <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full text-xs font-medium">
-                        PENDING
-                      </span>
-                    </div>
-
-                    {/* Requestor */}
-                    <div className="flex items-center gap-4 text-xs text-slate-400">
-                      <span>👤 {booking.requestorName ?? 'Unknown'}</span>
-                      {booking.requestorEmail && <span>📧 {booking.requestorEmail}</span>}
-                    </div>
-
-                    {/* Route / Category */}
-                    {route && (
-                      <p className="text-slate-300 text-xs">📍 {route}</p>
-                    )}
-
-                    {/* Dates */}
-                    <div className="flex items-center gap-4 text-xs text-slate-500">
-                      {booking.startDate && (
-                        <span>Start: {new Date(booking.startDate).toLocaleDateString('en-AE', { day:'2-digit', month:'short', year:'numeric' })}</span>
-                      )}
-                      {booking.endDate && (
-                        <span>End: {new Date(booking.endDate).toLocaleDateString('en-AE', { day:'2-digit', month:'short', year:'numeric' })}</span>
-                      )}
-                      {booking.createdAt && (
-                        <span>Submitted: {new Date(booking.createdAt).toLocaleDateString('en-AE')}</span>
-                      )}
+              <div
+                key={b.id}
+                className="bg-slate-900/70 border border-white/10 rounded-2xl p-5 hover:border-white/20 transition-all space-y-4"
+              >
+                {/* Header & Core Metadata */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/5 pb-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{svc.icon}</span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-white text-base">
+                          {b.bookingRef || b.id.slice(0, 8)}
+                        </span>
+                        <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-800 ${svc.color}`}>
+                          {svc.label}
+                        </span>
+                        {b.policyEvaluation.isAutoApproved && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                            <Sparkles className="w-3 h-3" /> Auto-Approved Commute
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Requested by <strong className="text-slate-300">{b.requestorName || 'Employee'}</strong> (
+                        {b.requestorEmail || 'N/A'})
+                      </p>
                     </div>
                   </div>
 
-                  {/* Action buttons */}
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <button
-                      onClick={() => handleAction(booking, 'CONFIRMED')}
-                      disabled={processingId === booking.id}
-                      className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 text-xs font-semibold px-4 py-2 rounded-xl transition-all disabled:opacity-40">
-                      {processingId === booking.id ? '…' : '✓ Approve'}
-                    </button>
-                    <button
-                      onClick={() => handleAction(booking, 'CANCELLED')}
-                      disabled={processingId === booking.id}
-                      className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 text-xs font-semibold px-4 py-2 rounded-xl transition-all disabled:opacity-40">
-                      {processingId === booking.id ? '…' : '✕ Reject'}
-                    </button>
+                  {/* Fare & Cost Center Pill */}
+                  <div className="text-left sm:text-right">
+                    <div className="text-lg font-bold font-mono text-emerald-400">
+                      AED {Number(b.financials.totalFareAed || 0).toFixed(2)}
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Cost Center: <strong className="text-slate-300">{b.financials.costCenter}</strong>
+                    </p>
                   </div>
                 </div>
+
+                {/* Multi-Tier Approval Stepper */}
+                <div className="bg-slate-950/40 border border-white/5 rounded-xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  {/* Step 1: Line Manager */}
+                  <div className="flex items-center gap-2 text-xs">
+                    <div
+                      className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] ${
+                        b.approvalHistory.some((h) => h.tier === 1) || b.policyEvaluation.isAutoApproved
+                          ? 'bg-emerald-500 text-white'
+                          : currentTier === 'TIER_1_PENDING'
+                          ? 'bg-purple-600 text-white animate-pulse'
+                          : 'bg-slate-800 text-slate-500'
+                      }`}
+                    >
+                      1
+                    </div>
+                    <div>
+                      <p className="font-semibold text-white">Tier 1: Line Manager</p>
+                      <p className="text-[10px] text-slate-400">
+                        {b.policyEvaluation.isAutoApproved
+                          ? 'Auto-Approved Policy'
+                          : b.approvalHistory.some((h) => h.tier === 1)
+                          ? 'Approved ✅'
+                          : 'Pending Sign-Off ⏳'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <ChevronRight className="hidden md:block w-4 h-4 text-slate-600" />
+
+                  {/* Step 2: Department Head */}
+                  <div className="flex items-center gap-2 text-xs">
+                    <div
+                      className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] ${
+                        b.approvalHistory.some((h) => h.tier === 2)
+                          ? 'bg-emerald-500 text-white'
+                          : currentTier === 'TIER_2_PENDING'
+                          ? 'bg-amber-600 text-white animate-pulse'
+                          : !b.policyEvaluation.requiresTier2
+                          ? 'bg-slate-800 text-slate-600'
+                          : 'bg-slate-800 text-slate-500'
+                      }`}
+                    >
+                      2
+                    </div>
+                    <div>
+                      <p className="font-semibold text-white">Tier 2: Dept Head (&gt;AED 1k)</p>
+                      <p className="text-[10px] text-slate-400">
+                        {!b.policyEvaluation.requiresTier2
+                          ? 'Policy Exempt (≤1k)'
+                          : b.approvalHistory.some((h) => h.tier === 2)
+                          ? 'Escalation Approved ✅'
+                          : 'Pending VP Sign-Off ⏳'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <ChevronRight className="hidden md:block w-4 h-4 text-slate-600" />
+
+                  {/* Step 3: Fleet Operations */}
+                  <div className="flex items-center gap-2 text-xs">
+                    <div
+                      className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] ${
+                        b.status === 'CONFIRMED'
+                          ? 'bg-emerald-500 text-white'
+                          : currentTier === 'TIER_3_PENDING'
+                          ? 'bg-blue-600 text-white animate-pulse'
+                          : 'bg-slate-800 text-slate-500'
+                      }`}
+                    >
+                      3
+                    </div>
+                    <div>
+                      <p className="font-semibold text-white">Tier 3: Fleet Dispatch</p>
+                      <p className="text-[10px] text-slate-400">
+                        {b.status === 'CONFIRMED' ? 'Dispatched ✅' : 'Vehicle Assignment ⏳'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Policy Violations & Warning Badges */}
+                {b.policyEvaluation.policyViolations.length > 0 && (
+                  <div className="space-y-1.5">
+                    {b.policyEvaluation.policyViolations.map((v, i) => (
+                      <div
+                        key={i}
+                        className="bg-amber-500/10 border border-amber-500/25 rounded-xl px-3.5 py-2 flex items-center gap-2 text-amber-300 text-xs"
+                      >
+                        <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                        <span>{v.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Action Toolbar */}
+                {b.status === 'PENDING' && (
+                  <div className="flex flex-wrap items-center justify-end gap-2.5 pt-2 border-t border-white/5">
+                    <button
+                      onClick={() => handleAction(b.id, 'REJECT', b.bookingRef || b.id.slice(0, 8))}
+                      disabled={isProcessing}
+                      className="px-4 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-semibold border border-red-500/30 transition-colors disabled:opacity-40"
+                    >
+                      Reject Request
+                    </button>
+
+                    {currentTier === 'TIER_1_PENDING' && (
+                      <button
+                        onClick={() => handleAction(b.id, 'APPROVE_TIER_1', b.bookingRef || b.id.slice(0, 8))}
+                        disabled={isProcessing}
+                        className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-lg shadow-purple-500/20 transition-all disabled:opacity-40"
+                      >
+                        {isProcessing ? 'Processing…' : 'Approve (Tier 1 Line Manager) →'}
+                      </button>
+                    )}
+
+                    {currentTier === 'TIER_2_PENDING' && (
+                      <button
+                        onClick={() => handleAction(b.id, 'APPROVE_TIER_2', b.bookingRef || b.id.slice(0, 8))}
+                        disabled={isProcessing}
+                        className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-lg shadow-amber-500/20 transition-all disabled:opacity-40"
+                      >
+                        {isProcessing ? 'Processing…' : 'Approve Financial Escalation (Tier 2) →'}
+                      </button>
+                    )}
+
+                    {currentTier === 'TIER_3_PENDING' && (
+                      <button
+                        onClick={() => handleAction(b.id, 'APPROVE_TIER_3', b.bookingRef || b.id.slice(0, 8))}
+                        disabled={isProcessing}
+                        className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-40"
+                      >
+                        {isProcessing ? 'Processing…' : 'Confirm Vehicle Dispatch (Tier 3) ✅'}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       )}
-
-      {/* Guidelines */}
-      <div className="bg-violet-500/10 border border-violet-500/30 rounded-2xl p-6">
-        <h2 className="text-sm font-bold text-violet-300 mb-3">Approval Guidelines</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-400">
-          {[
-            'Verify requestor details match company records',
-            'Check vehicle availability for requested dates',
-            'Ensure budget compliance and authorization level',
-            'Review any special requirements or notes',
-            'Logistics trips: assign vehicle + driver in Dispatch Board after approval',
-            'Approvals automatically notify the requestor by email',
-          ].map(g => (
-            <div key={g} className="flex items-start gap-2">
-              <span className="text-violet-500 flex-shrink-0">•</span>
-              <span>{g}</span>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
