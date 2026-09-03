@@ -1022,13 +1022,13 @@ function NewBookingInner() {
       )}
 
       {/* ══════════════════════════════════════════════════════════════
-          Step 2 — Dynamic Form (2-Column Split Layout)
+          Step 2 — Dynamic Form (Pixel-Perfect Gold & Onyx Layout)
       ══════════════════════════════════════════════════════════════ */}
       {step === 2 && card && (
-        <div className="space-y-6">
-          {/* Top Segmented Service Selector Pills */}
-          <div className="bg-zinc-950/80 border border-amber-500/20 rounded-2xl p-2 backdrop-blur-xl shadow-xl shadow-amber-500/5">
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+        <div className="space-y-8">
+          {/* Top Centered Gold Capsule Navigation Pills */}
+          <div className="flex justify-center">
+            <div className="inline-flex items-center gap-2 p-1.5 rounded-full bg-[#121318] border border-amber-500/30 shadow-2xl shadow-black/80 overflow-x-auto max-w-full">
               {visibleCards.map((opt) => {
                 const isActive = serviceType === opt.type;
                 return (
@@ -1039,14 +1039,13 @@ function NewBookingInner() {
                       setServiceType(opt.type as ServiceType);
                       setForm(EMPTY_FORM);
                     }}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                    className={`px-6 py-2.5 rounded-full text-xs font-bold transition-all duration-200 whitespace-nowrap ${
                       isActive
-                        ? 'bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-black shadow-lg shadow-amber-500/25 scale-[1.02]'
-                        : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+                        ? 'bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-500 text-black shadow-lg shadow-amber-500/30 scale-100'
+                        : 'text-zinc-400 hover:text-amber-200 hover:bg-zinc-900/60'
                     }`}
                   >
-                    <span>{opt.icon}</span>
-                    <span>{opt.title}</span>
+                    {opt.title}
                   </button>
                 );
               })}
@@ -1055,9 +1054,164 @@ function NewBookingInner() {
 
           <form onSubmit={handleSubmit}>
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-              {/* ── LEFT COLUMN (Inputs & Specialized Widgets) ── */}
+              {/* ── LEFT COLUMN (Inputs & Vehicle Selection Grid) ── */}
               <div className="lg:col-span-8 space-y-6">
-                {/* Form Schema Sections */}
+                {/* 1. Pickup Origin & Destination Card */}
+                <div className="bg-[#121318] border border-amber-500/30 rounded-2xl p-6 space-y-4 shadow-2xl shadow-black/60">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-white tracking-wide">Pickup & Destination</h3>
+                    <span className="text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 rounded-full">
+                      STEP 1
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="relative flex items-center">
+                      <div className="flex-1">
+                        <label className="block text-[10px] font-bold text-amber-300/80 uppercase tracking-wider mb-1">
+                          Pickup Origin
+                        </label>
+                        <input
+                          type="text"
+                          value={(form.origin as string) || ''}
+                          onChange={(e) => onChange('origin', e.target.value)}
+                          placeholder="Enter pickup address (e.g. Dubai Airport Terminal 3)"
+                          className="w-full bg-[#181920] border border-amber-500/30 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40 transition-all"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const orig = form.origin;
+                          const dest = form.destination;
+                          onChange('origin', dest || '');
+                          onChange('destination', orig || '');
+                        }}
+                        className="ml-3 mt-4 w-10 h-10 rounded-xl bg-zinc-900 border border-amber-500/30 hover:border-amber-400 text-amber-300 flex items-center justify-center text-sm transition-all hover:scale-105"
+                        title="Swap Origin and Destination"
+                      >
+                        ⇅
+                      </button>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-amber-300/80 uppercase tracking-wider mb-1">
+                        Destination
+                      </label>
+                      <input
+                        type="text"
+                        value={(form.destination as string) || ''}
+                        onChange={(e) => onChange('destination', e.target.value)}
+                        placeholder="Enter destination address (e.g. Burj Al Arab, Jumeirah)"
+                        className="w-full bg-[#181920] border border-amber-500/30 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40 transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Flight Tracking / Consignment Manifest Ref Card */}
+                <div className="bg-[#121318] border border-amber-500/30 rounded-2xl p-6 space-y-3 shadow-2xl shadow-black/60">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-white tracking-wide">
+                      {serviceType === 'EXECUTIVE'
+                        ? 'Flight Tracking & Meet & Greet'
+                        : serviceType === 'LOGISTICS'
+                        ? 'B2B Consignment & Customs Reference'
+                        : 'Schedule Reference'}
+                    </h3>
+                    <span className="text-[10px] font-mono text-zinc-400">OPTIONAL</span>
+                  </div>
+
+                  <div>
+                    <input
+                      type="text"
+                      value={(form.flightNumber as string) || (form.notes as string) || ''}
+                      onChange={(e) => onChange(serviceType === 'EXECUTIVE' ? 'flightNumber' : 'notes', e.target.value)}
+                      placeholder={
+                        serviceType === 'EXECUTIVE'
+                          ? 'Enter Flight Number (e.g. EK202 from JFK) for automatic delay tracking'
+                          : 'Enter Manifest or Reference Number (e.g. MAN-2026-DXB)'
+                      }
+                      className="w-full bg-[#181920] border border-amber-500/30 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40 transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* 3. Luxury Vehicle Selection Grid */}
+                <div className="bg-[#121318] border border-amber-500/30 rounded-2xl p-6 space-y-4 shadow-2xl shadow-black/60">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-white tracking-wide">Luxury Vehicle Selection</h3>
+                      <p className="text-xs text-zinc-400 mt-0.5">Select your preferred model class and asset tier</p>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 rounded-full">
+                      STEP 2
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {[
+                      {
+                        category: 'MERCEDES_S_CLASS',
+                        name: 'Mercedes S-Class',
+                        desc: 'Executive VIP Luxury Saloon',
+                        badge: 'VIP EXECUTIVE',
+                        icon: '⭐',
+                        fare: 450,
+                      },
+                      {
+                        category: 'BMW_I7',
+                        name: 'BMW i7 Electric',
+                        desc: 'Sustainable Green Luxury',
+                        badge: 'ZERO EMISSION',
+                        icon: '⚡',
+                        fare: 480,
+                      },
+                      {
+                        category: 'EXECUTIVE_VAN',
+                        name: 'Executive V-Class',
+                        desc: '7-Passenger Chauffeur Van',
+                        badge: 'GROUP TRAVEL',
+                        icon: '🚐',
+                        fare: 550,
+                      },
+                    ].map((veh) => {
+                      const isSelected = form.vehicleCategory === veh.category || (!form.vehicleCategory && veh.category === 'MERCEDES_S_CLASS');
+                      return (
+                        <button
+                          key={veh.category}
+                          type="button"
+                          onClick={() => {
+                            onChange('vehicleCategory', veh.category);
+                            onChange('fareSubtotal', veh.fare);
+                          }}
+                          className={`p-4 rounded-xl text-left border transition-all flex flex-col justify-between space-y-3 ${
+                            isSelected
+                              ? 'bg-amber-500/15 border-amber-400 shadow-lg shadow-amber-500/20 scale-[1.02]'
+                              : 'bg-[#181920] border-zinc-800 hover:border-amber-500/40 text-zinc-400'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <span className="text-2xl p-2 bg-black/40 rounded-lg border border-amber-500/20">{veh.icon}</span>
+                            <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                              {veh.badge}
+                            </span>
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-bold text-white">{veh.name}</h4>
+                            <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug">{veh.desc}</p>
+                          </div>
+                          <div className="pt-2 border-t border-white/5 flex justify-between items-center text-xs font-mono">
+                            <span className="text-zinc-500">From</span>
+                            <span className="text-amber-400 font-bold">AED {veh.fare}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 4. Dynamic Domain-Specific Form Sections */}
                 {schema.map((section) => (
                   <FormSection
                     key={section.title}
@@ -1213,112 +1367,81 @@ function NewBookingInner() {
                 )}
               </div>
 
-              {/* ── RIGHT COLUMN (Sticky Floating Luxury Order Summary) ── */}
+              {/* ── RIGHT COLUMN (Pixel-Perfect Luxury Order Summary Card) ── */}
               <div className="lg:col-span-4 sticky top-20 space-y-4">
-                <div className="bg-zinc-950/95 border border-amber-500/30 rounded-2xl p-6 shadow-2xl shadow-amber-500/10 space-y-5 backdrop-blur-xl">
+                <div className="bg-[#121318] border border-amber-500/30 rounded-2xl p-6 shadow-2xl shadow-black/80 space-y-5">
                   {/* Summary Header */}
-                  <div className="flex items-center justify-between border-b border-amber-500/20 pb-3.5">
-                    <div>
-                      <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-widest block">
-                        EXECUTIVE SUMMARY
-                      </span>
-                      <h3 className="text-base font-bold text-white mt-0.5">Booking Fare & Dispatch</h3>
-                    </div>
-                    <span className="text-2xl">{card.icon}</span>
+                  <div className="border-b border-amber-500/20 pb-3">
+                    <h3 className="text-base font-bold text-white">Luxury Order Summary</h3>
                   </div>
 
-                  {/* Trip Details Preview */}
-                  <div className="space-y-2 text-xs">
+                  {/* Summary Details */}
+                  <div className="space-y-3 text-xs">
                     <div className="flex justify-between text-zinc-400">
-                      <span>Service:</span>
-                      <strong className="text-white">{card.title}</strong>
+                      <span>Trip Details</span>
+                      <strong className="text-white font-mono">13:00 – 17:30</strong>
                     </div>
-                    {form.origin && (
-                      <div className="flex justify-between text-zinc-400">
-                        <span>Pickup:</span>
-                        <strong className="text-white truncate max-w-[150px]">{form.origin as string}</strong>
-                      </div>
-                    )}
                     {form.destination && (
                       <div className="flex justify-between text-zinc-400">
-                        <span>Destination:</span>
-                        <strong className="text-white truncate max-w-[150px]">{form.destination as string}</strong>
+                        <span>Destination</span>
+                        <strong className="text-white truncate max-w-[160px]">{form.destination as string}</strong>
                       </div>
                     )}
-                    {form.vehicleCategory && (
-                      <div className="flex justify-between text-zinc-400">
-                        <span>Vehicle Class:</span>
-                        <strong className="text-amber-300">{form.vehicleCategory as string}</strong>
-                      </div>
-                    )}
-                    {form.distanceKm ? (
-                      <div className="flex justify-between text-zinc-400">
-                        <span>Distance / ETA:</span>
-                        <span className="font-mono text-white">
-                          {form.distanceKm} km · {form.durationMins || 45} mins
-                        </span>
-                      </div>
-                    ) : null}
+                    <div className="flex justify-between text-zinc-400">
+                      <span>Pickup Summary</span>
+                      <span className="text-white">Confirmed VIP</span>
+                    </div>
                   </div>
 
-                  {/* Pricing Breakdown */}
-                  <div className="bg-zinc-900/80 border border-amber-500/20 rounded-xl p-3.5 space-y-2 text-xs font-mono">
-                    <div className="flex justify-between text-zinc-400 font-sans">
-                      <span>Base Fare:</span>
-                      <span className="text-white">AED {Number(form.fareSubtotal) || 550}</span>
+                  {/* Itemized Pricing */}
+                  <div className="border-t border-b border-amber-500/20 py-3 space-y-2 text-xs font-mono">
+                    <div className="flex justify-between text-zinc-400">
+                      <span>Base Fare</span>
+                      <span className="text-white font-bold">AED {Number(form.fareSubtotal) || 450}</span>
                     </div>
                     {Number(form.salikTollsAed) > 0 && (
-                      <div className="flex justify-between text-zinc-400 font-sans">
-                        <span>Salik Tolls:</span>
-                        <span className="text-white">AED {Number(form.salikTollsAed)}</span>
+                      <div className="flex justify-between text-zinc-400">
+                        <span>Surcharges (Toll/Salik)</span>
+                        <span className="text-white font-bold">AED {Number(form.salikTollsAed)}</span>
                       </div>
                     )}
-                    <div className="flex justify-between text-zinc-400 font-sans">
-                      <span>UAE VAT (5%):</span>
-                      <span className="text-white">
-                        AED {Number(form.vatAmount) || Math.round((Number(form.fareSubtotal) || 550) * 0.05)}
+                    <div className="flex justify-between text-zinc-400">
+                      <span>5% UAE VAT</span>
+                      <span className="text-white font-bold">
+                        AED {Number(form.vatAmount) || Math.round((Number(form.fareSubtotal) || 450) * 0.05)}
                       </span>
                     </div>
-                    <div className="border-t border-amber-500/20 pt-2 flex justify-between items-baseline font-sans">
-                      <span className="text-sm font-bold text-white">Total Amount:</span>
-                      <span className="text-xl font-bold font-mono text-amber-400">
+                    <div className="pt-2 flex justify-between items-baseline">
+                      <span className="text-sm font-bold text-white">Total (Incl. VAT)</span>
+                      <span className="text-2xl font-extrabold text-amber-400">
                         AED{' '}
                         {Number(form.totalFareAed) ||
-                          Math.round((Number(form.fareSubtotal) || 550) * 1.05 + (Number(form.salikTollsAed) || 0))}
+                          Math.round((Number(form.fareSubtotal) || 450) * 1.05 + (Number(form.salikTollsAed) || 0))}
                       </span>
                     </div>
                   </div>
 
-                  {/* Corporate Cost Center & Approval status */}
-                  <div className="space-y-2 text-xs">
-                    <div className="bg-zinc-900/50 rounded-lg p-2.5 flex items-center justify-between">
-                      <span className="text-zinc-400">Cost Center:</span>
-                      <span className="text-[11px] font-mono text-amber-300 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                        {(form.costCenter as string) || 'CC-EIN360-LOGISTICS'}
-                      </span>
-                    </div>
-                    <div className="bg-zinc-900/50 rounded-lg p-2.5 flex items-center justify-between">
-                      <span className="text-zinc-400">Workflow:</span>
-                      <span className="text-[11px] text-emerald-400 font-bold">
-                        ✓ 3-Tier Line Manager Flow
-                      </span>
-                    </div>
+                  {/* Corporate Cost Center Pill */}
+                  <div className="flex items-center justify-center">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] font-mono font-bold">
+                      ✓ Corporate Cost Center ({(form.costCenter as string) || 'CC-EXEC-1001'})
+                    </span>
                   </div>
 
-                  {/* Action Buttons */}
-                  <div className="space-y-2 pt-1">
+                  {/* Full-Width Rounded Capsule Golden Action Button */}
+                  <div className="pt-2">
                     <button
                       type="submit"
                       disabled={loading}
-                      className="w-full py-4 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-500 text-black text-sm font-bold shadow-lg shadow-amber-500/25 transition-all flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-100 disabled:opacity-50"
+                      className="w-full py-4 rounded-full bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black text-sm font-extrabold shadow-xl shadow-amber-500/30 transition-all flex items-center justify-center gap-2 hover:brightness-110 active:scale-[0.99] disabled:opacity-50"
                     >
                       {loading ? (
                         <span className="flex items-center gap-2">
                           <span className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                          Processing Dispatch…
+                          Processing…
                         </span>
                       ) : (
-                        'Confirm & Dispatch Booking →'
+                        'Confirm Booking'
                       )}
                     </button>
 
@@ -1326,9 +1449,9 @@ function NewBookingInner() {
                       <button
                         type="button"
                         onClick={resetForm}
-                        className="w-full py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-xs font-semibold border border-white/10 transition-colors"
+                        className="w-full mt-3 py-2 text-center text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
                       >
-                        ← Back to Service Selection
+                        ← Back to Categories
                       </button>
                     )}
                   </div>
