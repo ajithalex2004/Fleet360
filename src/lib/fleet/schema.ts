@@ -18,7 +18,16 @@ function isInsufficientPrivilege(e: unknown): boolean {
 export function ensureFleetSchema(): Promise<void> {
   if (_g._fleetSchemaInit) return _g._fleetSchemaInit;
   _g._fleetSchemaInit = _doInit()
-    .then(async () => {
+    .then(async (skippedDdl) => {
+      // If DDL was skipped because the runtime role lacks CREATE privilege,
+      // we're on the assumption above that the tables already exist -- do not
+      // verify. A caller that reached ensureFleetSchema() from inside a
+      // withTenantRls/withPlatformAdmin transaction shares that transaction's
+      // connection, and the 42501 we just swallowed leaves it aborted: any
+      // further statement on it fails with 25P02 regardless of whether
+      // vehicle_types actually exists, which previously misreported as
+      // "schema init incomplete" and 500'd the whole request.
+      if (skippedDdl) return;
       // Verify the primary table was actually created (Neon cold-start can silently
       // swallow CREATE TABLE errors via exec(), leaving the singleton resolved but
       // tables absent). Reset the singleton so the next request retries.
@@ -36,13 +45,15 @@ export function ensureFleetSchema(): Promise<void> {
   return _g._fleetSchemaInit;
 }
 
-async function _doInit(): Promise<void> {
+/** Returns true if DDL was skipped because the runtime role lacks CREATE privilege. */
+async function _doInit(): Promise<boolean> {
   try {
     await _runDdl();
+    return false;
   } catch (e) {
     if (isInsufficientPrivilege(e)) {
       console.warn('[ensureFleetSchema] DDL skipped: runtime role lacks CREATE privilege on public schema (assuming tables already exist)');
-      return;
+      return true;
     }
     throw e;
   }
