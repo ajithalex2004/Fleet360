@@ -1,7 +1,19 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Smartphone, Plus, MessageSquare } from 'lucide-react';
+import {
+  Smartphone,
+  Plus,
+  MessageSquare,
+  CalendarCheck,
+  Clock,
+  CheckCircle2,
+  FileCheck,
+  CarFront,
+  Sparkles,
+  Truck,
+  ShieldCheck,
+} from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { PassengerDriverChat } from '@/components/booking/PassengerDriverChat';
@@ -223,34 +235,46 @@ export default function BookingPortal() {
       {/* ── Summary tiles ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total Bookings', value: bookings.length, color: 'text-white',         icon: '📋' },
-          { label: 'Pending Approval', value: pending,       color: 'text-amber-400',      icon: '⏳' },
-          { label: 'Active Trips',   value: active,          color: 'text-emerald-400',    icon: '🟢' },
-          { label: 'Completed',      value: completed,       color: 'text-zinc-400',       icon: '✅' },
-        ].map(t => (
-          <div key={t.label} className="bg-zinc-950/80 border border-amber-500/20 rounded-2xl p-5 shadow-xl shadow-amber-500/5 backdrop-blur-xl">
-            <div className="text-2xl mb-2">{t.icon}</div>
-            <div className={`text-2xl font-bold font-mono ${t.color}`}>{t.value}</div>
-            <div className="text-xs text-amber-200/60 mt-1 uppercase font-semibold tracking-wider">{t.label}</div>
-          </div>
-        ))}
+          { label: 'Total Bookings', value: bookings.length, color: 'text-white', icon: CalendarCheck, iconColor: 'text-amber-300' },
+          { label: 'Pending Approval', value: pending, color: 'text-amber-400', icon: Clock, iconColor: 'text-amber-400' },
+          { label: 'Active Trips', value: active, color: 'text-emerald-400', icon: CheckCircle2, iconColor: 'text-emerald-400' },
+          { label: 'Completed', value: completed, color: 'text-zinc-400', icon: FileCheck, iconColor: 'text-zinc-400' },
+        ].map(t => {
+          const Icon = t.icon;
+          return (
+            <div key={t.label} className="bg-[#121318] border border-amber-500/30 rounded-2xl p-5 shadow-2xl shadow-black/60">
+              <div className="w-10 h-10 rounded-xl bg-[#181920] border border-amber-500/20 flex items-center justify-center mb-3">
+                <Icon className={`w-5 h-5 ${t.iconColor}`} />
+              </div>
+              <div className={`text-2xl font-extrabold font-mono ${t.color}`}>{t.value}</div>
+              <div className="text-xs text-amber-400 mt-1 uppercase font-bold tracking-wider">{t.label}</div>
+            </div>
+          );
+        })}
       </div>
 
       {/* ── Service cards ── */}
       <div>
-        <h2 className="text-lg font-bold text-white mb-4">Book by Service Category</h2>
+        <h2 className="text-lg font-extrabold text-white mb-4">Book by Service Category</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {visibleCards.map(card => (
             <Link key={card.type} href={card.href}>
-              <div className="bg-zinc-950/80 border border-amber-500/20 hover:border-amber-400/60 rounded-2xl p-6 transition-all duration-200 hover:scale-[1.02] active:scale-100 flex flex-col justify-between space-y-4 backdrop-blur-xl group cursor-pointer h-full shadow-lg shadow-amber-500/5">
+              <div className="bg-[#121318] border border-amber-500/30 hover:border-amber-400 rounded-2xl p-6 transition-all duration-200 hover:scale-[1.02] active:scale-100 flex flex-col justify-between space-y-4 shadow-xl shadow-black/60 group cursor-pointer h-full">
                 <div>
                   <div className="flex items-start justify-between mb-4">
-                    <span className="text-3xl p-3 bg-zinc-900 border border-amber-500/20 rounded-2xl group-hover:scale-110 transition-transform">{card.icon}</span>
-                    <span className="text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg tracking-wider">
+                    <div className="w-12 h-12 rounded-2xl bg-[#181920] border border-amber-500/30 flex items-center justify-center text-amber-300 group-hover:scale-110 group-hover:border-amber-400 shadow-lg shadow-amber-500/10 transition-all">
+                      {card.type === 'RENTAL' && <CarFront className="w-6 h-6 text-amber-300" />}
+                      {card.type === 'LEASING' && <FileCheck className="w-6 h-6 text-amber-300" />}
+                      {card.type === 'STAFF_TRANSPORT' && <CarFront className="w-6 h-6 text-amber-300" />}
+                      {card.type === 'EXECUTIVE' && <Sparkles className="w-6 h-6 text-amber-300" />}
+                      {card.type === 'LOGISTICS' && <Truck className="w-6 h-6 text-amber-300" />}
+                      {card.type === 'SCHOOL_BUS' && <ShieldCheck className="w-6 h-6 text-amber-300" />}
+                    </div>
+                    <span className="text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-full tracking-wider">
                       {card.badge}
                     </span>
                   </div>
-                  <h3 className="text-base font-bold text-white mb-1 group-hover:text-amber-300 transition-colors">
+                  <h3 className="text-base font-extrabold text-white mb-1 group-hover:text-amber-300 transition-colors">
                     {card.title}
                   </h3>
                   <p className="text-zinc-400 text-xs leading-relaxed">{card.desc}</p>

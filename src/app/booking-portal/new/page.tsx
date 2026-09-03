@@ -2,6 +2,24 @@
 export const dynamic = 'force-dynamic';
 import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import {
+  UserCheck,
+  CarFront,
+  Truck,
+  MapPin,
+  Plane,
+  ShieldCheck,
+  FileCheck,
+  Calendar,
+  Clock,
+  Sparkles,
+  Navigation,
+  Gauge,
+  DollarSign,
+  CheckCircle2,
+  ArrowRightLeft,
+  Layers,
+} from 'lucide-react';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { InteractiveRoutePicker } from '@/components/booking/InteractiveRoutePicker';
 import { AssetAvailabilitySelector } from '@/components/booking/AssetAvailabilitySelector';
@@ -14,6 +32,54 @@ import { RecurringSchedulePicker } from '@/components/booking/RecurringScheduleP
 import { DriverHandoverEpod } from '@/components/booking/DriverHandoverEpod';
 import { ColdChainTelemetryGraph } from '@/components/booking/ColdChainTelemetryGraph';
 import { BulkConsignmentUploader } from '@/components/booking/BulkConsignmentUploader';
+
+export function getServiceVectorIcon(type: string, className = 'w-5 h-5 text-amber-300') {
+  switch (type) {
+    case 'RENTAL':
+      return <CarFront className={className} />;
+    case 'LEASING':
+      return <FileCheck className={className} />;
+    case 'STAFF_TRANSPORT':
+      return <CarFront className={className} />;
+    case 'EXECUTIVE':
+      return <Sparkles className={className} />;
+    case 'LOGISTICS':
+      return <Truck className={className} />;
+    case 'SCHOOL_BUS':
+      return <ShieldCheck className={className} />;
+    default:
+      return <Sparkles className={className} />;
+  }
+}
+
+export function getSectionVectorIcon(title: string, className = 'w-4 h-4 text-amber-300') {
+  const t = title.toLowerCase();
+  if (t.includes('requestor') || t.includes('client') || t.includes('passenger')) {
+    return <UserCheck className={className} />;
+  }
+  if (t.includes('vehicle') || t.includes('car') || t.includes('model')) {
+    return <CarFront className={className} />;
+  }
+  if (t.includes('schedule') || t.includes('time') || t.includes('shift') || t.includes('duration')) {
+    return <Clock className={className} />;
+  }
+  if (t.includes('location') || t.includes('route') || t.includes('stop') || t.includes('destination')) {
+    return <MapPin className={className} />;
+  }
+  if (t.includes('cargo') || t.includes('freight') || t.includes('consignment')) {
+    return <Truck className={className} />;
+  }
+  if (t.includes('flight') || t.includes('meet')) {
+    return <Plane className={className} />;
+  }
+  if (t.includes('student') || t.includes('school') || t.includes('security') || t.includes('insurance')) {
+    return <ShieldCheck className={className} />;
+  }
+  if (t.includes('lease') || t.includes('contract') || t.includes('terms')) {
+    return <FileCheck className={className} />;
+  }
+  return <Sparkles className={className} />;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service type card definitions (Step 1)
@@ -620,11 +686,11 @@ function buildPayload(serviceType: ServiceType, form: FormData) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const inputCls =
-  'w-full bg-zinc-900/90 border border-amber-500/25 rounded-xl px-4 py-2.5 text-white text-sm ' +
-  'placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-400 ' +
-  'transition-all shadow-inner';
+  'w-full bg-[#181920] border border-amber-500/30 rounded-xl px-4 py-3 text-white text-sm ' +
+  'placeholder-zinc-400 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40 ' +
+  'transition-all shadow-inner shadow-black/40';
 
-const labelCls = 'block text-xs font-semibold text-amber-300/80 uppercase tracking-wider mb-1.5';
+const labelCls = 'block text-xs font-bold text-amber-400 uppercase tracking-wider mb-1.5';
 
 function FieldRenderer({
   field,
@@ -637,21 +703,21 @@ function FieldRenderer({
 }) {
   if (field.type === 'toggle') {
     return (
-      <div className="flex items-start gap-3 bg-zinc-900/50 border border-amber-500/20 rounded-xl px-4 py-3">
+      <div className="flex items-start gap-3 bg-[#181920] border border-amber-500/30 rounded-xl px-4 py-3 shadow-md">
         <button
           type="button"
           role="switch"
           aria-checked={!!value}
           onClick={() => onChange(field.key, !value)}
           className={`relative mt-0.5 flex-shrink-0 w-10 h-6 rounded-full transition-colors ${
-            value ? 'bg-amber-500' : 'bg-zinc-800'
+            value ? 'bg-gradient-to-r from-amber-400 to-yellow-500 shadow-md shadow-amber-500/30' : 'bg-zinc-800'
           }`}
         >
           <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-black shadow transition-transform ${value ? 'translate-x-4' : 'translate-x-0'}`} />
         </button>
         <div>
-          <p className="text-sm font-medium text-white">{field.label}</p>
-          {field.hint && <p className="text-xs text-amber-200/50 mt-0.5">{field.hint}</p>}
+          <p className="text-sm font-bold text-white">{field.label}</p>
+          {field.hint && <p className="text-xs text-amber-200/70 mt-0.5">{field.hint}</p>}
         </div>
       </div>
     );
@@ -667,10 +733,10 @@ function FieldRenderer({
           required={field.required}
           className={inputCls}
         >
-          <option value="" className="bg-zinc-950 text-slate-400">— Select —</option>
-          {field.options?.map(o => <option key={o} value={o} className="bg-zinc-950 text-white">{o}</option>)}
+          <option value="" className="bg-[#121318] text-zinc-400">— Select —</option>
+          {field.options?.map(o => <option key={o} value={o} className="bg-[#121318] text-white">{o}</option>)}
         </select>
-        {field.hint && <p className="text-xs text-amber-200/50 mt-1">{field.hint}</p>}
+        {field.hint && <p className="text-xs text-amber-200/70 mt-1">{field.hint}</p>}
       </div>
     );
   }
@@ -686,7 +752,7 @@ function FieldRenderer({
           rows={3}
           className={`${inputCls} resize-none`}
         />
-        {field.hint && <p className="text-xs text-amber-200/50 mt-1">{field.hint}</p>}
+        {field.hint && <p className="text-xs text-amber-200/70 mt-1">{field.hint}</p>}
       </div>
     );
   }
@@ -753,14 +819,16 @@ function FormSection({
   }
 
   return (
-    <div className="bg-zinc-950/80 border border-amber-500/20 hover:border-amber-500/40 rounded-2xl overflow-hidden backdrop-blur-xl shadow-xl shadow-amber-500/5 transition-all">
+    <div className="bg-[#121318] border border-amber-500/30 hover:border-amber-500/50 rounded-2xl overflow-hidden shadow-2xl shadow-black/60 transition-all">
       {/* Section header */}
-      <div className="px-5 py-3.5 border-b border-amber-500/20 bg-gradient-to-r from-amber-950/40 via-zinc-900/40 to-transparent flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <span className="text-lg">{section.icon}</span>
-          <h3 className="text-sm font-bold text-white tracking-wide">{section.title}</h3>
+      <div className="px-5 py-4 border-b border-amber-500/20 bg-gradient-to-r from-amber-950/40 via-zinc-900/40 to-transparent flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500/20 via-yellow-500/10 to-amber-500/5 border border-amber-500/30 flex items-center justify-center text-amber-300 shadow-md shadow-amber-500/10">
+            {getSectionVectorIcon(section.title)}
+          </div>
+          <h3 className="text-sm font-extrabold text-white tracking-wide">{section.title}</h3>
         </div>
-        <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+        <span className="text-[10px] font-mono font-bold text-amber-300 bg-amber-500/15 px-2.5 py-1 rounded-full border border-amber-500/30">
           REQUIRED
         </span>
       </div>
@@ -993,18 +1061,18 @@ function NewBookingInner() {
               <button
                 key={opt.type}
                 onClick={() => { setServiceType(opt.type as ServiceType); setStep(2); }}
-                className="group relative bg-zinc-950/80 border border-amber-500/20 hover:border-amber-400/60 rounded-2xl p-6 text-left hover:shadow-2xl hover:shadow-amber-500/10 transition-all duration-200 hover:scale-[1.02] active:scale-100 flex flex-col justify-between space-y-4 backdrop-blur-xl"
+                className="group relative bg-[#121318] border border-amber-500/30 hover:border-amber-400 rounded-2xl p-6 text-left hover:shadow-2xl hover:shadow-amber-500/15 transition-all duration-200 hover:scale-[1.02] active:scale-100 flex flex-col justify-between space-y-4 shadow-xl shadow-black/60"
               >
                 <div>
                   <div className="flex items-start justify-between mb-3">
-                    <span className="text-3xl p-3 bg-zinc-900 border border-amber-500/20 rounded-2xl group-hover:scale-110 transition-transform">
-                      {opt.icon}
-                    </span>
-                    <span className="text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg tracking-wider">
+                    <div className="w-12 h-12 rounded-2xl bg-[#181920] border border-amber-500/30 flex items-center justify-center text-amber-300 group-hover:scale-110 group-hover:border-amber-400 shadow-lg shadow-amber-500/10 transition-all">
+                      {getServiceVectorIcon(opt.type, 'w-6 h-6 text-amber-300')}
+                    </div>
+                    <span className="text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-full tracking-wider">
                       {opt.badge}
                     </span>
                   </div>
-                  <h3 className="text-base font-bold text-white group-hover:text-amber-300 transition-colors">
+                  <h3 className="text-base font-extrabold text-white group-hover:text-amber-300 transition-colors">
                     {opt.title}
                   </h3>
                   <p className="text-zinc-400 text-xs mt-1.5 leading-relaxed">
