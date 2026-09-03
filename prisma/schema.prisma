@@ -1213,9 +1213,11 @@ model Lessee {
   directDebits      LeaseDirectDebit[]
   // --- Layer 2.7 (2026-06-29) — restore relation links that Layer 2.6 ---
   // The V1 → V2 cleanup accidentally dropped the @relation directives that
-  // bound LeaseContract2.lesseeId back to Lessee. The column is still there
-  // (and pointing at valid ids), so this is metadata-only on the SQL side —
-  // a follow-up migration adds the FK constraint.
+  // bound LeaseContract2.lesseeId back to Lessee. G14 (audit doc) flagged
+  // the DB-side FK as still missing; re-verified 2026-09-03 via direct
+  // production introspection and found fk_lease_contracts_v2_tenant is
+  // already live — a later migration added it and this comment was never
+  // updated. No FK gap remains.
   leaseContracts2   LeaseContract2[]
 
   @@index([tenantId], map: "idx_lessees_tenant_id")
@@ -3176,10 +3178,13 @@ model LeaseBranch {
   // --- Layer 2.7 (2026-06-29) — restore relation links that Layer 2.6 ---
   // The V1 → V2 cleanup dropped the @relation directives that bound
   // LeaseContract2.openingBranchId / closingBranchId back to LeaseBranch.
-  // The columns are still present and pointing at valid ids, so this is
-  // metadata-only on the SQL side — a follow-up migration adds the FK
-  // constraints. We use named relations ("OpeningBranch" / "ClosingBranch")
-  // because Prisma disambiguates two relations to the same model by name.
+  // G14 (audit doc) flagged the DB-side FK as still missing; re-verified
+  // 2026-09-03 via direct production introspection and found
+  // fk_lease_contracts_v2_opening_branch / _closing_branch are already
+  // live — a later migration added them and this comment was never
+  // updated. No FK gap remains. We use named relations ("OpeningBranch" /
+  // "ClosingBranch") because Prisma disambiguates two relations to the
+  // same model by name.
   openingContracts LeaseContract2[] @relation("OpeningBranch")
   closingContracts LeaseContract2[] @relation("ClosingBranch")
 
