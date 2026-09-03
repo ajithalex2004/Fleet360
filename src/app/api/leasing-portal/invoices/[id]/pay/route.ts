@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireLeasingPortal } from '@/lib/leasing-portal/auth';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { getPaymentProvider } from '@/lib/leasing/payment-provider';
 import { createPaymentIntent, listPaymentIntentsForInvoice } from '@/lib/leasing/payment-intents-store';
 
@@ -22,9 +23,16 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   if (ctx instanceof NextResponse) return ctx;
 
   try {
-    const invoice = await prisma.leaseInvoice.findFirst({
-      where: { id: params.id, tenantId: ctx.tenantId, lesseeId: ctx.lesseeId },
-    });
+    // A bare prisma call here never sets app.tenant_id, so RLS on
+    // lease_invoices silently returned no row for an invoice that
+    // genuinely belongs to this lessee -- "Pay now" 404'd on every real
+    // invoice. Same bug found across every other leasing-portal route
+    // that used a bare `prisma.X` call instead of withTenantRls.
+    const invoice = await withTenantRls(prisma, ctx.tenantId, (tx) =>
+      tx.leaseInvoice.findFirst({
+        where: { id: params.id, tenantId: ctx.tenantId, lesseeId: ctx.lesseeId },
+      }),
+    );
     if (!invoice) {
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
     }

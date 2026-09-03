@@ -24,21 +24,29 @@ export async function GET(req: NextRequest) {
   const ctx = await requireLeasingPortal(req);
   if (ctx instanceof NextResponse) return ctx;
 
-  const contracts = await prisma.leaseContract2.findMany({
-    where: { tenantId: ctx.tenantId, lesseeId: ctx.lesseeId },
-    select: { id: true },
-  });
-  const contractIds = contracts.map(c => c.id);
+  // Bare prisma calls here never set app.tenant_id, so RLS on
+  // lease_contracts_v2 / lease_documents silently returned zero rows
+  // regardless of real data. Same bug found across every other
+  // leasing-portal route that used a bare `prisma.X` call instead of
+  // withTenantRls.
+  const { documents } = await withTenantRls(prisma, ctx.tenantId, async (tx) => {
+    const contracts = await tx.leaseContract2.findMany({
+      where: { tenantId: ctx.tenantId, lesseeId: ctx.lesseeId },
+      select: { id: true },
+    });
+    const contractIds = contracts.map(c => c.id);
 
-  const documents = await prisma.leaseDocument.findMany({
-    where: {
-      tenantId: ctx.tenantId,
-      OR: [
-        { entityType: 'LESSEE', entityId: ctx.lesseeId },
-        ...(contractIds.length > 0 ? [{ entityType: 'CONTRACT', entityId: { in: contractIds } }] : []),
-      ],
-    },
-    orderBy: { createdAt: 'desc' },
+    const documents = await tx.leaseDocument.findMany({
+      where: {
+        tenantId: ctx.tenantId,
+        OR: [
+          { entityType: 'LESSEE', entityId: ctx.lesseeId },
+          ...(contractIds.length > 0 ? [{ entityType: 'CONTRACT', entityId: { in: contractIds } }] : []),
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return { contractIds, documents };
   });
 
   return NextResponse.json(documents);
@@ -96,10 +104,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Not your lessee record' }, { status: 403 });
       }
     } else {
-      const owned = await prisma.leaseContract2.findFirst({
+      // Bare prisma call here never sets app.tenant_id, so RLS silently
+      // returned no row for a contract that genuinely belongs to this
+      // lessee -- every contract-scoped upload 403'd.
+      const owned = await withTenantRls(prisma, ctx.tenantId, (tx) =>
+        tx.leaseContract2.findFirst({
         where: { id: parsed.data.entityId, tenantId: ctx.tenantId, lesseeId: ctx.lesseeId },
         select: { id: true },
-      });
+        }),
+      );
       if (!owned) {
         return NextResponse.json({ error: 'Not your contract' }, { status: 403 });
       }

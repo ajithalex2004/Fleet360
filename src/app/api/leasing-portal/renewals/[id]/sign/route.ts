@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireLeasingPortal } from '@/lib/leasing-portal/auth';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { createSignature } from '@/lib/leasing/esignature-store';
 import { acceptRenewal } from '@/lib/leasing/renewal-acceptance';
 
@@ -23,9 +24,16 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   if (ctx instanceof NextResponse) return ctx;
 
   try {
-    const renewal = await prisma.leaseRenewal.findFirst({
-      where: { id: params.id, tenantId: ctx.tenantId, originalContract: { lesseeId: ctx.lesseeId } },
-    });
+    // A bare prisma call here never sets app.tenant_id, so RLS on
+    // lease_renewals silently returned no row for a renewal that
+    // genuinely belongs to this lessee -- e-signing 404'd on every real
+    // renewal. Same bug found across every other leasing-portal route
+    // that used a bare `prisma.X` call instead of withTenantRls.
+    const renewal = await withTenantRls(prisma, ctx.tenantId, (tx) =>
+      tx.leaseRenewal.findFirst({
+        where: { id: params.id, tenantId: ctx.tenantId, originalContract: { lesseeId: ctx.lesseeId } },
+      }),
+    );
     if (!renewal) {
       return NextResponse.json({ error: 'Renewal not found' }, { status: 404 });
     }

@@ -41,10 +41,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'contractId and description are required' }, { status: 400 });
     }
 
-    const contract = await prisma.leaseContract2.findFirst({
-      where: { id: contractId, tenantId: ctx.tenantId, lesseeId: ctx.lesseeId },
-      select: { id: true, contractNumber: true },
-    });
+    // A bare prisma call here never sets app.tenant_id, so RLS on
+    // lease_contracts_v2 silently returned no row for a contract that
+    // genuinely belongs to this lessee -- every damage report 403'd.
+    const contract = await withTenantRls(prisma, ctx.tenantId, (tx) =>
+      tx.leaseContract2.findFirst({
+        where: { id: contractId, tenantId: ctx.tenantId, lesseeId: ctx.lesseeId },
+        select: { id: true, contractNumber: true },
+      }),
+    );
     if (!contract) {
       return NextResponse.json({ error: 'Not your contract' }, { status: 403 });
     }
