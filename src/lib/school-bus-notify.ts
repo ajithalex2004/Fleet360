@@ -14,10 +14,25 @@
  *                NO_PICKUP, INCIDENT, CUSTOM.
  */
 
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { sendWhatsApp } from '@/lib/whatsapp';
 import { sendEmail } from '@/lib/email';
 import { captureException } from '@/lib/sentry';
+
+// The production runtime role has no CREATE privilege on the public schema,
+// so this DDL always fails with 42501 there — the table already exists in
+// every live environment. Same pattern as src/lib/fleet/schema.ts and
+// src/lib/branding.ts. Without this, calling ensureGuardianNotificationsTable()
+// from inside an ambient withTenantRls transaction (as the sweep-no-show
+// route's runSweep callback does) throws 42501 and can poison that
+// transaction for every statement after it in the same callback.
+function isInsufficientPrivilege(e: unknown): boolean {
+  return (
+    e instanceof Prisma.PrismaClientKnownRequestError &&
+    (e.meta as { code?: string } | undefined)?.code === '42501'
+  );
+}
 
 export type GuardianNotificationKind =
   | 'DEPARTURE'
@@ -187,23 +202,32 @@ export async function notifyGuardians(
 /* ── Lazy table for the notification log ─────────────────────────── */
 
 export async function ensureGuardianNotificationsTable(): Promise<void> {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS school_bus_guardian_notifications (
-      id                 UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-      student_id         UUID         NOT NULL,
-      kind               TEXT         NOT NULL,
-      subject            TEXT,
-      body               TEXT,
-      reached_guardian1  BOOLEAN      NOT NULL DEFAULT FALSE,
-      reached_guardian2  BOOLEAN      NOT NULL DEFAULT FALSE,
-      attempts_json      JSONB,
-      sent_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-    )
-  `);
-  await prisma.$executeRawUnsafe(
-    `CREATE INDEX IF NOT EXISTS idx_school_bus_guardian_notif_student
-     ON school_bus_guardian_notifications (student_id, sent_at DESC)`,
-  );
+  try {
+    // Single DO block — one statement, so a 42501 partway through can't
+    // leave the table created but the index missing (or vice versa).
+    await prisma.$executeRawUnsafe(`
+      DO $DDL$
+      BEGIN
+        CREATE TABLE IF NOT EXISTS school_bus_guardian_notifications (
+          id                 UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+          student_id         UUID         NOT NULL,
+          kind               TEXT         NOT NULL,
+          subject            TEXT,
+          body               TEXT,
+          reached_guardian1  BOOLEAN      NOT NULL DEFAULT FALSE,
+          reached_guardian2  BOOLEAN      NOT NULL DEFAULT FALSE,
+          attempts_json      JSONB,
+          sent_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_school_bus_guardian_notif_student
+          ON school_bus_guardian_notifications (student_id, sent_at DESC);
+      END
+      $DDL$
+    `);
+  } catch (e) {
+    if (!isInsufficientPrivilege(e)) throw e;
+    console.warn('[ensureGuardianNotificationsTable] DDL skipped: runtime role lacks CREATE privilege on public schema (assuming table already exists)');
+  }
 }
 
 /* ── Hydrate student from DB by studentId ─────────────────────────── */
