@@ -31,6 +31,7 @@ import { AssetAvailabilitySelector } from '@/components/booking/AssetAvailabilit
 import { InstantPricingCostCenter } from '@/components/booking/InstantPricingCostCenter';
 import { OmnichannelNotificationPreferences } from '@/components/booking/OmnichannelNotificationPreferences';
 import { DigitalKycUaePass } from '@/components/booking/DigitalKycUaePass';
+import { DigitalEbolScanner } from '@/components/booking/DigitalEbolScanner';
 
 type AuthStep =
   | 'IDENTIFIER_INPUT' // Email or Mobile input
@@ -758,6 +759,22 @@ export function UniversalMobileBookingApp() {
                     uaePassVerified: kyc.uaePassVerified,
                     emiratesId: kyc.emiratesId,
                     signatureHash: kyc.signatureHash,
+                  }))
+                }
+              />
+
+              {/* Digital Bill of Lading (e-BOL) & Barcode Scanner */}
+              <DigitalEbolScanner
+                bookingRef="EXL-FRT-EIN360"
+                shipperName={form.requestorName}
+                shipperAddress={form.origin}
+                consigneeName="Dubai Mall Retail Base"
+                consigneeAddress={form.destination}
+                onEbolGenerated={(ebol) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    ebolNumber: ebol.ebolNumber,
+                    uaeCustomsDeclarationNo: ebol.uaeCustomsDeclarationNo,
                   }))
                 }
               />
