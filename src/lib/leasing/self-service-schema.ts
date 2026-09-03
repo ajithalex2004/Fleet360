@@ -71,7 +71,7 @@ async function ensureSelfServiceTablesInner(): Promise<void> {
       id             UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
       tenant_id      TEXT         NOT NULL,
       lessee_id      TEXT         NOT NULL,
-      entity_type    TEXT         NOT NULL, -- RENEWAL
+      entity_type    TEXT         NOT NULL, -- RENEWAL | CONTRACT
       entity_id      TEXT         NOT NULL,
       signer_name    TEXT         NOT NULL,
       signer_email   TEXT         NOT NULL,
