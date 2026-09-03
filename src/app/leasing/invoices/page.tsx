@@ -77,7 +77,27 @@ export default function InvoicesPage() {
       const response = await fetch('/api/leasing/invoices');
       if (!response.ok) throw new Error('Failed to fetch invoices');
       const data = await response.json();
-      setInvoices(data);
+      // The API returns Prisma's real field names (subTotal/vatAmount/
+      // totalAmount, each serialized as a Decimal string) — this page's own
+      // Invoice type expects subtotal/vat/total as numbers. Reading the
+      // wrong names meant every `.toFixed()` below threw on the very first
+      // real invoice, crashing this entire page to a white screen for any
+      // tenant that had ever created one (an empty list never hit the
+      // crash, which is why it looked fine with zero invoices).
+      setInvoices(
+        (Array.isArray(data) ? data : []).map((inv: any) => ({
+          ...inv,
+          subtotal: Number(inv.subTotal ?? 0),
+          vat: Number(inv.vatAmount ?? 0),
+          total: Number(inv.totalAmount ?? 0),
+          lines: (inv.lines ?? []).map((l: any) => ({
+            ...l,
+            quantity: Number(l.quantity ?? 0),
+            unitAmount: Number(l.unitAmount ?? 0),
+            totalAmount: l.totalAmount != null ? Number(l.totalAmount) : undefined,
+          })),
+        })),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error fetching invoices');
     } finally {
