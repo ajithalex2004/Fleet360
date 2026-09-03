@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { TenantMobileConfig } from '@/app/api/tenant/mobile-config/route';
 import { InteractiveRoutePicker } from '@/components/booking/InteractiveRoutePicker';
+import { MultiStopRoutePicker } from '@/components/booking/MultiStopRoutePicker';
 import { AssetAvailabilitySelector } from '@/components/booking/AssetAvailabilitySelector';
 import { InstantPricingCostCenter } from '@/components/booking/InstantPricingCostCenter';
 import { OmnichannelNotificationPreferences } from '@/components/booking/OmnichannelNotificationPreferences';
@@ -692,26 +693,22 @@ export function UniversalMobileBookingApp() {
                 </div>
               </div>
 
-              {/* Interactive Route & Toll Picker */}
-              <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4 space-y-3">
-                <label className="block text-xs font-bold text-white uppercase tracking-wider">
-                  2. Warehouse Route & UAE Tolls
-                </label>
-                <InteractiveRoutePicker
-                  origin={form.origin}
-                  destination={form.destination}
-                  onOriginChange={(addr, coords) => setForm((prev) => ({ ...prev, origin: addr }))}
-                  onDestinationChange={(addr, coords) => setForm((prev) => ({ ...prev, destination: addr }))}
-                  onRouteChange={(stats) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      distanceKm: stats.distanceKm,
-                      durationMins: stats.durationMins,
-                      salikTollsAed: stats.salikTollsAed,
-                    }))
-                  }
-                />
-              </div>
+              {/* Multi-Stop Warehouse Route & LTL Consolidation Optimizer */}
+              <MultiStopRoutePicker
+                initialOrigin={form.origin}
+                initialDestination={form.destination}
+                baseFareAed={form.fareSubtotal || 550}
+                onRouteChange={(res) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    distanceKm: res.totalDistanceKm,
+                    durationMins: res.totalDurationMins,
+                    salikTollsAed: res.totalSalikTollsAed,
+                    palletCount: String(res.totalPallets || prev.palletCount),
+                    weightTons: String(res.totalWeightTons || prev.weightTons),
+                  }))
+                }
+              />
 
               {/* Live Pricing & Cost Center */}
               <InstantPricingCostCenter

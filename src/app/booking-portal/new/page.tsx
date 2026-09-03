@@ -8,6 +8,7 @@ import { AssetAvailabilitySelector } from '@/components/booking/AssetAvailabilit
 import { InstantPricingCostCenter } from '@/components/booking/InstantPricingCostCenter';
 import { OmnichannelNotificationPreferences } from '@/components/booking/OmnichannelNotificationPreferences';
 import { DigitalKycUaePass } from '@/components/booking/DigitalKycUaePass';
+import { MultiStopRoutePicker } from '@/components/booking/MultiStopRoutePicker';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service type card definitions (Step 1)
@@ -1017,9 +1018,25 @@ function NewBookingInner() {
                 section={section}
                 form={form}
                 onChange={onChange}
-                serviceType={serviceType as string}
+            {/* Multi-Stop Waypoints & LTL Route Optimizer for Freight/Logistics */}
+            {serviceType === 'LOGISTICS' && (
+              <MultiStopRoutePicker
+                initialOrigin={(form.origin as string) || 'Jebel Ali (JAFZA) Base Gate 4'}
+                initialDestination={(form.destination as string) || 'Abu Dhabi Kizad Dock 2'}
+                baseFareAed={Number(form.fareSubtotal) || 550}
+                onRouteChange={(routeRes) => {
+                  onChange('distanceKm', routeRes.totalDistanceKm);
+                  onChange('durationMins', routeRes.totalDurationMins);
+                  onChange('salikTollsAed', routeRes.totalSalikTollsAed);
+                  onChange('multiStopWaypoints', JSON.stringify(routeRes.optimizedWaypoints));
+                  onChange('co2EmissionsKg', routeRes.co2EmissionsKg);
+                  if (routeRes.ltlConsolidation.isEligible) {
+                    onChange('ltlConsolidationEligible', true);
+                    onChange('ltlDiscountAed', routeRes.ltlConsolidation.discountAmountAed);
+                  }
+                }}
               />
-            ))}
+            )}
 
             {/* Instant Pricing & Corporate Cost Center Allocation */}
             <InstantPricingCostCenter
