@@ -58,83 +58,86 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     const monthlyRate = Number(quotation.totalMonthlyRate ?? 0);
     const totalContractValue = monthlyRate * durationMonths;
 
-    // Create the contract — stamped with the caller's tenant id so the row
-    // satisfies the NOT NULL constraint added by the Layer 2.5 migration.
-    const contract = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.leaseContract2.create({
-      data: {
-        contractNumber,
-        agreementType: agreementType ?? 'INDIVIDUAL',
-        status: 'ACTIVE',
-        lesseeId: lesseeId ?? quotation.lesseeId ?? '',
-        quotationId: quotation.id,
-        openingBranchId: openingBranchId ?? null,
-        closingBranchId: closingBranchId ?? null,
-        startDate: start,
-        endDate: end,
-        monthlyRate,
-        totalContractValue,
-        securityDeposit: Number(quotation.securityDeposit ?? 0),
-        currency: quotation.currency ?? 'AED',
-        leaseType: quotation.leaseType,
-        insuranceIncluded: quotation.insuranceIncluded ?? false,
-        maintenanceIncluded: quotation.maintenanceIncluded ?? false,
-        driverIncluded: quotation.driverIncluded ?? false,
-        tenantId,
-      },
-    }),
-    );
-
-    // Create contract vehicles from quotation vehicles.
-    // Note: LeaseContractVehicle has no tenant_id column — tenant scope
-    // travels via the parent LeaseContract2 row.
-    for (const qv of quotation.vehicles) {
-      await withTenantRls(prisma, tenantId, async (tx) =>
-        tx.leaseContractVehicle.create({
+    // Everything below used to run as 4 separate withTenantRls calls (no
+    // transaction) — a failure partway through left an orphaned,
+    // half-created contract with no cleanup. One transaction now.
+    const { contract, payments } = await withTenantRls(prisma, tenantId, async (tx) => {
+      const contract = await tx.leaseContract2.create({
         data: {
-          contractId: contract.id,
-          vehicleId: qv.vehicleId ?? null,
-          vehicleType: qv.vehicleType,
-          make: qv.make ?? '',
-          model: qv.model ?? '',
-          year: qv.year ?? new Date().getFullYear(),
-          monthlyRate: Number(qv.monthlyRate ?? monthlyRate),
+          contractNumber,
+          agreementType: agreementType ?? 'INDIVIDUAL',
           status: 'ACTIVE',
+          lesseeId: lesseeId ?? quotation.lesseeId ?? '',
+          quotationId: quotation.id,
+          openingBranchId: openingBranchId ?? null,
+          closingBranchId: closingBranchId ?? null,
+          startDate: start,
+          endDate: end,
+          monthlyRate,
+          totalContractValue,
+          securityDeposit: Number(quotation.securityDeposit ?? 0),
+          currency: quotation.currency ?? 'AED',
+          leaseType: quotation.leaseType,
+          insuranceIncluded: quotation.insuranceIncluded ?? false,
+          maintenanceIncluded: quotation.maintenanceIncluded ?? false,
+          driverIncluded: quotation.driverIncluded ?? false,
+          tenantId,
         },
-      }),
-      );
-    }
-
-    // Generate payment schedule.
-    const payments = [];
-    for (let i = 0; i < durationMonths; i++) {
-      const dueDate = new Date(start);
-      dueDate.setMonth(dueDate.getMonth() + i);
-      const vatAmount = monthlyRate * 0.05;
-      payments.push({
-        contractId: contract.id,
-        dueDate,
-        amount: monthlyRate,
-        vatAmount,
-        totalAmount: monthlyRate + vatAmount,
-        status: 'PENDING',
-        periodMonth: dueDate.getMonth() + 1,
-        periodYear: dueDate.getFullYear(),
-        currency: quotation.currency ?? 'AED',
-        tenantId,
       });
-    }
-    await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.leasePayment2.createMany({ data: payments }),
-    );
 
-    // Scoped quotation update — refuse to touch quotations from another tenant.
-    await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.leaseQuotation.update({
-      where: { id: params.id },
-      data: { status: 'DELIVERED', updatedAt: new Date() },
-    }),
-    );
+      // Create contract vehicles from quotation vehicles. LeaseContractVehicle
+      // has a required tenantId column (Layer 2.5 migration) — this was
+      // previously omitted here (a stale comment claimed no such column
+      // exists) and would have thrown "Argument tenant is missing" on every
+      // conversion. Never caught because quotation creation was itself
+      // broken (see the quotations POST route fix) until now, so nothing
+      // ever reached a convertible status in production.
+      if (quotation.vehicles.length > 0) {
+        await tx.leaseContractVehicle.createMany({
+          data: quotation.vehicles.map(qv => ({
+            contractId: contract.id,
+            vehicleId: qv.vehicleId ?? null,
+            vehicleType: qv.vehicleType,
+            make: qv.make ?? '',
+            model: qv.model ?? '',
+            year: qv.year ?? new Date().getFullYear(),
+            monthlyRate: Number(qv.monthlyRate ?? monthlyRate),
+            status: 'ACTIVE',
+            tenantId,
+          })),
+        });
+      }
+
+      // Generate payment schedule.
+      const payments = [];
+      for (let i = 0; i < durationMonths; i++) {
+        const dueDate = new Date(start);
+        dueDate.setMonth(dueDate.getMonth() + i);
+        const vatAmount = monthlyRate * 0.05;
+        payments.push({
+          contractId: contract.id,
+          dueDate,
+          amount: monthlyRate,
+          vatAmount,
+          totalAmount: monthlyRate + vatAmount,
+          status: 'PENDING',
+          periodMonth: dueDate.getMonth() + 1,
+          periodYear: dueDate.getFullYear(),
+          currency: quotation.currency ?? 'AED',
+          tenantId,
+        });
+      }
+      if (payments.length > 0) {
+        await tx.leasePayment2.createMany({ data: payments });
+      }
+
+      await tx.leaseQuotation.update({
+        where: { id: params.id },
+        data: { status: 'DELIVERED', updatedAt: new Date() },
+      });
+
+      return { contract, payments };
+    });
 
     return NextResponse.json({ contract, paymentsCreated: payments.length });
     } catch (e) {

@@ -66,6 +66,32 @@ export async function POST(request: NextRequest) {
       approvalSteps, contracts, ...quotationData
     } = body;
 
+    // No UI today submits itemized lineItems directly — it collects one
+    // aggregate cost per category instead (accessoriesCost, servicesCost,
+    // etc., which map straight to LeaseQuotation's own columns). When the
+    // caller doesn't supply explicit lineItems, derive one LeaseQuotationItem
+    // per non-zero category from those aggregates so the itemized breakdown
+    // the schema was built for is actually populated with real data, rather
+    // than staying permanently empty. Explicit lineItems (if a future caller
+    // sends granular entries) always take precedence.
+    const autoLineItems: Array<{ itemType: string; description: string; amount: number }> = [];
+    if (Number(quotationData.accessoriesCost) > 0) {
+      autoLineItems.push({ itemType: 'ACCESSORY', description: 'Accessories', amount: Number(quotationData.accessoriesCost) });
+    }
+    if (Number(quotationData.servicesCost) > 0) {
+      autoLineItems.push({ itemType: 'SERVICE', description: 'Additional services', amount: Number(quotationData.servicesCost) });
+    }
+    if (quotationData.insuranceIncluded && Number(quotationData.insuranceCost) > 0) {
+      autoLineItems.push({ itemType: 'INSURANCE', description: 'Insurance', amount: Number(quotationData.insuranceCost) });
+    }
+    if (quotationData.maintenanceIncluded && Number(quotationData.maintenanceCost) > 0) {
+      autoLineItems.push({ itemType: 'MAINTENANCE', description: 'Maintenance', amount: Number(quotationData.maintenanceCost) });
+    }
+    if (quotationData.driverIncluded && Number(quotationData.driverCost) > 0) {
+      autoLineItems.push({ itemType: 'DRIVER', description: 'Driver services', amount: Number(quotationData.driverCost) });
+    }
+    const durationMonths = Number(quotationData.durationMonths) || null;
+
     const quotation = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.leaseQuotation.create({
       data: {
@@ -82,6 +108,34 @@ export async function POST(request: NextRequest) {
               year:        v.year        ?? new Date().getFullYear(),
               quantity:    Number(v.quantity)    || 1,
               monthlyRate: Number(v.monthlyRate) || 0,
+              tenantId,
+            })),
+          },
+        } : {}),
+        ...(Array.isArray(lineItems) && lineItems.length > 0 ? {
+          lineItems: {
+            create: lineItems.map((li: any) => ({
+              itemType:      li.itemType ?? 'OTHER',
+              description:   li.description || li.itemType || 'Item',
+              quantity:      Number(li.quantity) || 1,
+              unitRate:      li.unitRate      != null ? Number(li.unitRate)      : null,
+              monthlyAmount: li.monthlyAmount != null ? Number(li.monthlyAmount) : null,
+              totalAmount:   li.totalAmount   != null ? Number(li.totalAmount)   : null,
+              currency:      li.currency ?? quotationData.currency ?? 'AED',
+              notes:         li.notes ?? null,
+              tenantId,
+            })),
+          },
+        } : autoLineItems.length > 0 ? {
+          lineItems: {
+            create: autoLineItems.map(it => ({
+              itemType:      it.itemType,
+              description:   it.description,
+              quantity:      1,
+              unitRate:      it.amount,
+              monthlyAmount: it.amount,
+              totalAmount:   durationMonths ? it.amount * durationMonths : null,
+              currency:      quotationData.currency ?? 'AED',
               tenantId,
             })),
           },
