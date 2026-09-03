@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { InteractiveRoutePicker } from '@/components/booking/InteractiveRoutePicker';
 import { AssetAvailabilitySelector } from '@/components/booking/AssetAvailabilitySelector';
+import { InstantPricingCostCenter } from '@/components/booking/InstantPricingCostCenter';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service type card definitions (Step 1)
@@ -1018,6 +1019,26 @@ function NewBookingInner() {
               />
             ))}
 
+            {/* Instant Pricing & Corporate Cost Center Allocation */}
+            <InstantPricingCostCenter
+              serviceType={serviceType as string}
+              vehicleCategory={(form.vehicleCategory as string) || ''}
+              distanceKm={Number(form.distanceKm) || 0}
+              salikTollsAed={Number(form.salikTollsAed) || 0}
+              costCenter={(form.costCenter as string) || 'CC-OPS-3003'}
+              projectCode={(form.projectCode as string) || ''}
+              billingMethod={(form.billingMethod as string) || 'CORPORATE_ACCOUNT'}
+              onChange={(pricing) => {
+                onChange('fareSubtotal', pricing.fareSubtotal);
+                onChange('vatAmount', pricing.vatAmount);
+                onChange('totalFareAed', pricing.totalFareAed);
+                onChange('costCenter', pricing.costCenter);
+                onChange('projectCode', pricing.projectCode);
+                onChange('billingMethod', pricing.billingMethod);
+                onChange('budgetStatus', pricing.budgetStatus);
+              }}
+            />
+
             {error && (
               <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 text-sm flex items-start gap-2">
                 <span className="flex-shrink-0">⚠️</span>
@@ -1098,6 +1119,22 @@ function NewBookingInner() {
               {form.salikTollsAed !== undefined && Number(form.salikTollsAed) > 0 ? (
                 <ConfirmationDetail label="Estimated UAE Tolls (Salik)" value={`AED ${form.salikTollsAed}`} />
               ) : null}
+              {form.totalFareAed ? (
+                <ConfirmationDetail
+                  label="Estimated Fare (incl. 5% VAT)"
+                  value={`AED ${Number(form.totalFareAed).toFixed(2)}`}
+                />
+              ) : null}
+              {form.costCenter && <ConfirmationDetail label="Cost Center" value={form.costCenter as string} />}
+              {form.billingMethod && (
+                <ConfirmationDetail label="Billing Method" value={form.billingMethod as string} />
+              )}
+              {form.budgetStatus && (
+                <ConfirmationDetail
+                  label="Budget Policy Status"
+                  value={form.budgetStatus === 'WITHIN_POLICY' ? '✅ Within Policy (Pre-Approved)' : '⚠️ Exceeds Cap (Level 2 Escalation)'}
+                />
+              )}
               {form.studentName && <ConfirmationDetail label="Student" value={form.studentName as string} />}
               {form.companyName && <ConfirmationDetail label="Company" value={form.companyName as string} />}
               {form.leaseDuration && <ConfirmationDetail label="Lease Duration" value={form.leaseDuration as string} />}
