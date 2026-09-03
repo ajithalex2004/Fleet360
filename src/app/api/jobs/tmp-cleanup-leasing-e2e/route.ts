@@ -37,10 +37,10 @@ export async function GET(req: NextRequest) {
       `DELETE FROM lease_payment_intents WHERE lessee_id = $1`, LESSEE_ID,
     );
     results.portalInvitations = await prisma.$executeRawUnsafe(
-      `DELETE FROM lessee_portal_invitations WHERE portal_user_id = $1`, PORTAL_USER_ID,
+      `DELETE FROM lessee_portal_invitations WHERE portal_user_id = $1::uuid`, PORTAL_USER_ID,
     );
     results.portalUsers = await prisma.$executeRawUnsafe(
-      `DELETE FROM lessee_portal_users WHERE id = $1`, PORTAL_USER_ID,
+      `DELETE FROM lessee_portal_users WHERE id = $1::uuid`, PORTAL_USER_ID,
     );
 
     results.alerts = await prisma.leaseAlert.deleteMany({ where: { contractId: { in: CONTRACT_IDS } } });
