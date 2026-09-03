@@ -19,10 +19,10 @@ export async function GET(req: NextRequest) {
           where: { tenantId },
           orderBy: { createdAt: 'desc' },
         });
-        return NextResponse.json(documents);
+        return NextResponse.json({ documents, count: documents.length });
       } catch (e) {
         console.error('Error fetching documents:', e);
-        return NextResponse.json({ error: 'Failed to fetch documents' }, { status: 500 });
+        return NextResponse.json({ error: 'Failed to fetch documents', documents: [] }, { status: 500 });
       }
   });
 }
