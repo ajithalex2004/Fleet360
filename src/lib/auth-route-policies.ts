@@ -64,6 +64,14 @@ export const PUBLIC_PREFIXES: readonly string[] = [
   // the middleware just lets traffic through so it can reach them.
   '/shipper-portal',
   '/api/shipper-portal/',
+  // Leasing portal — same pattern, separate auth domain
+  // (leasing-portal-session cookie). The portal's own
+  // requireLeasingPortal() guards every protected endpoint; the
+  // middleware just lets traffic through so it can reach them. Without
+  // this a lessee with no staff session would be redirected to /login
+  // before ever seeing the portal's own login page.
+  '/leasing-portal',
+  '/api/leasing-portal/',
   // Carrier portal — token-authed (invite link), no operator session.
   '/carrier-portal/',
   '/api/carrier-portal/',

@@ -72,7 +72,11 @@ export const POST = withAudit(
           subTotal,
           vatAmount,
           totalAmount,
-          lines: { create: lines },
+          // LeaseInvoiceLine.tenantId is required — omitting it throws
+          // "Argument tenant is missing" (same bug class as the
+          // quotation-vehicles and contract-vehicles nested creates
+          // fixed earlier; this one was still live).
+          lines: { create: lines.map((l: any) => ({ ...l, tenantId })) },
         },
         include: { lines: true, lessee: { select: { name: true } } },
       }),

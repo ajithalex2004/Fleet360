@@ -23,6 +23,8 @@ export default function LesseesPage() {
   const [loading, setLoading]         = useState(true);
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState('');
+  const [inviteMsg, setInviteMsg]     = useState('');
+  const [invitingId, setInvitingId]   = useState<string | null>(null);
 
   const emptyForm = { name:'', type:'corporate', licenseNo:'', tradeLicense:'', contactPerson:'', email:'', phone:'', address:'', nationality:'', emiratesId:'' };
   const [form, setForm] = useState(emptyForm);
@@ -61,6 +63,22 @@ export default function LesseesPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const invitePortal = async (l: Lessee) => {
+    if (!l.email) { setInviteMsg(`${l.name} has no email on file — add one before inviting.`); return; }
+    setInvitingId(l.id);
+    setInviteMsg('');
+    try {
+      const res = await fetch(`/api/leasing/lessees/${l.id}/portal-invite`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const data = await res.json();
+      if (!res.ok) { setInviteMsg(data.error ?? 'Failed to send invitation'); return; }
+      setInviteMsg(data.emailSent
+        ? `Portal invitation sent to ${data.email}.`
+        : `Invitation created for ${data.email}, but email couldn't be sent (${data.emailReason ?? 'no transport configured'}). Setup link: ${data.setupUrl}`);
+    } finally {
+      setInvitingId(null);
+    }
+  };
 
   const openNew = () => { setEditLessee(null); setForm(emptyForm); setShowModal(true); };
   const openEdit = (l: Lessee) => {
@@ -167,6 +185,7 @@ export default function LesseesPage() {
         </div>
       </div>
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
+      {inviteMsg && <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl px-4 py-3 text-cyan-300 text-sm break-all">{inviteMsg}</div>}
       <div className="flex gap-4 flex-wrap">
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, email, trade license..."
           className="flex-1 min-w-48 max-w-sm px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"/>
@@ -224,6 +243,9 @@ export default function LesseesPage() {
                         <a href={`/leasing/documents?entityType=LESSEE&entityId=${l.id}`} className="text-xs px-2 py-1 rounded bg-slate-700 text-white border border-white/10 hover:bg-slate-600">Docs</a>
                         <a href={`/api/leasing/lessees/${l.id}/statement?lang=en&download=1`} className="text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30" title="Account statement (last 90 days, EN)">Stmt·EN</a>
                         <a href={`/api/leasing/lessees/${l.id}/statement?lang=ar&download=1`} className="text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30" title="كشف حساب آخر 90 يوماً (AR)">Stmt·AR</a>
+                        <button onClick={()=>invitePortal(l)} disabled={invitingId===l.id} className="text-xs px-2 py-1 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 disabled:opacity-50" title="Invite this lessee to the self-service portal">
+                          {invitingId===l.id ? 'Inviting…' : 'Invite to Portal'}
+                        </button>
                       </div>
                     </td>
                   </tr>
