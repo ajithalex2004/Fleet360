@@ -27,6 +27,9 @@ import {
   Cpu,
   Briefcase,
   Globe,
+  BusFront,
+  UserCheck,
+  FileCheck,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -432,7 +435,22 @@ export const MODULES: ModuleDef[] = [
       { label: 'Salik',     href: '/compliance/salik',     icon: CreditCard },
     ],
   },
-  { id: 'mobile-apps',  label: 'Mobile apps',   href: '/mobile-apps',   icon: AppWindow },
+  {
+    id: 'mobile-apps',
+    label: 'Mobile apps',
+    href: '/mobile-apps',
+    icon: AppWindow,
+    subPages: [
+      { label: 'Booking App', href: '/m', icon: Smartphone },
+      { label: 'PWA Gallery', href: '/mobile-apps', icon: AppWindow },
+      { label: 'STS Driver', href: '/bus-ops/driver', icon: BusFront },
+      { label: 'STS Passenger', href: '/bus-ops/passenger', icon: UserCheck },
+      { label: 'RAC Counter', href: '/rental/counter', icon: FileCheck },
+      { label: 'Leasing Field', href: '/leasing/field', icon: Wrench },
+      { label: 'SchoolBus Parent', href: '/school-bus/parent', icon: Users },
+      { label: 'SchoolBus Driver', href: '/school-bus/driver', icon: BusFront },
+    ],
+  },
   {
     id: 'reports', label: 'Reports', href: '/reports', icon: BarChart3,
     subPages: [

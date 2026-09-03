@@ -11,6 +11,8 @@ import {
   Smartphone,
   ArrowRight,
   Apple,
+  Download,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -20,6 +22,7 @@ interface MobileApp {
   audience: string;
   description: string;
   href: string;
+  apkHref?: string;
   icon: LucideIcon;
   gradient: string;
   ring: string;
@@ -29,6 +32,27 @@ interface MobileApp {
 }
 
 const APPS: MobileApp[] = [
+  {
+    id: 'fleet360-booking-app',
+    name: 'Fleet360 Booking App',
+    audience: 'Corporate Clients, Freight Shippers & Guests',
+    description: 'Universal mobile booking app for all mobility domains (Freight & Logistics, Chauffeur, School Bus, Staff Transport, Car Rental). Features 1-Touch Biometrics, Dual-Channel OTP, Multi-Stop Routing, GS1 Barcode Scanning, Live IoT Reefer Temp, e-BOL & e-POD with Photo.',
+    href: '/m',
+    apkHref: '/api/mobile/download-apk',
+    icon: Smartphone,
+    gradient: 'from-orange-600 via-amber-600 to-yellow-600',
+    ring: 'ring-orange-500/50',
+    tag: 'Universal Mobility',
+    module: 'booking',
+    capabilities: [
+      'Dual-Channel OTP',
+      '1-Touch Biometrics',
+      'Multi-Stop TSP',
+      'Cold-Chain IoT',
+      'e-BOL & e-POD',
+      'Native Android APK',
+    ],
+  },
   {
     id: 'sts-driver',
     name: 'Fleet360 STS Driver',
@@ -168,13 +192,23 @@ export default function MobileAppsPage() {
                     ))}
                   </div>
 
-                  <div className="flex items-center gap-2 pt-2 border-t border-white/5">
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/5">
                     <Link
                       href={app.href}
-                      className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r ${app.gradient} text-white text-sm font-semibold hover:opacity-90 transition-opacity`}
+                      className={`flex-1 min-w-[140px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r ${app.gradient} text-white text-xs sm:text-sm font-semibold hover:opacity-90 transition-opacity`}
                     >
-                      Open app <ArrowRight className="w-4 h-4" />
+                      Open Web App <ArrowRight className="w-4 h-4" />
                     </Link>
+                    {app.apkHref && (
+                      <a
+                        href={app.apkHref}
+                        download="Fleet360 Booking App.apk"
+                        className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs sm:text-sm font-semibold border border-emerald-500/30 transition-all shadow-md"
+                      >
+                        <Download className="w-4 h-4 text-emerald-400" />
+                        Download APK
+                      </a>
+                    )}
                   </div>
                 </div>
               </div>
