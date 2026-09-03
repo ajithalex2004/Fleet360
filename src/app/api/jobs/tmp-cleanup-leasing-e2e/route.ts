@@ -12,7 +12,9 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
+const TENANT_ID = '4040f989-33ad-45a9-9239-be73786c840f';
 const LESSEE_ID = 'fd30aafe-da42-47d4-a12e-8c886a92f638';
 const CONTRACT_IDS = ['9239b72e-b8b1-4fd8-8aac-afbf006774fb', 'a71d05c6-bd68-4e66-b386-73386c328efd'];
 const QUOTATION_ID = '3221803d-f4d2-488c-81ae-2d84a85de0b2';
@@ -43,18 +45,23 @@ export async function GET(req: NextRequest) {
       `DELETE FROM lessee_portal_users WHERE id = $1::uuid`, PORTAL_USER_ID,
     );
 
-    results.alerts = await prisma.leaseAlert.deleteMany({ where: { contractId: { in: CONTRACT_IDS } } });
-    results.invoiceLines = await prisma.leaseInvoiceLine.deleteMany({ where: { invoice: { lesseeId: LESSEE_ID } } });
-    results.invoices = await prisma.leaseInvoice.deleteMany({ where: { lesseeId: LESSEE_ID } });
-    results.payments = await prisma.leasePayment2.deleteMany({ where: { contractId: { in: CONTRACT_IDS } } });
-    results.contractVehicles = await prisma.leaseContractVehicle.deleteMany({ where: { contractId: { in: CONTRACT_IDS } } });
-    results.renewals = await prisma.leaseRenewal.deleteMany({ where: { originalContractId: { in: CONTRACT_IDS } } });
-    results.contracts = await prisma.leaseContract2.deleteMany({ where: { id: { in: CONTRACT_IDS } } });
-    results.quotationVehicles = await prisma.leaseQuotationVehicle.deleteMany({ where: { quotationId: QUOTATION_ID } });
-    results.quotationItems = await prisma.leaseQuotationItem.deleteMany({ where: { quotationId: QUOTATION_ID } });
-    results.quotations = await prisma.leaseQuotation.deleteMany({ where: { id: QUOTATION_ID } });
-    results.inquiries = await prisma.leaseInquiry.deleteMany({ where: { customerEmail: 'e2e-inquiry@fleet360.invalid' } });
-    results.lessee = await prisma.lessee.deleteMany({ where: { id: LESSEE_ID } });
+    // Real Prisma-migrated tables have RLS enabled, so a bare prisma.X
+    // call here would silently delete zero rows (confirmed: this exact
+    // bug is what the whole leasing-portal fix in this pass was about).
+    await withTenantRls(prisma, TENANT_ID, async (tx) => {
+      results.alerts = await tx.leaseAlert.deleteMany({ where: { contractId: { in: CONTRACT_IDS } } });
+      results.invoiceLines = await tx.leaseInvoiceLine.deleteMany({ where: { invoice: { lesseeId: LESSEE_ID } } });
+      results.invoices = await tx.leaseInvoice.deleteMany({ where: { lesseeId: LESSEE_ID } });
+      results.payments = await tx.leasePayment2.deleteMany({ where: { contractId: { in: CONTRACT_IDS } } });
+      results.contractVehicles = await tx.leaseContractVehicle.deleteMany({ where: { contractId: { in: CONTRACT_IDS } } });
+      results.renewals = await tx.leaseRenewal.deleteMany({ where: { originalContractId: { in: CONTRACT_IDS } } });
+      results.contracts = await tx.leaseContract2.deleteMany({ where: { id: { in: CONTRACT_IDS } } });
+      results.quotationVehicles = await tx.leaseQuotationVehicle.deleteMany({ where: { quotationId: QUOTATION_ID } });
+      results.quotationItems = await tx.leaseQuotationItem.deleteMany({ where: { quotationId: QUOTATION_ID } });
+      results.quotations = await tx.leaseQuotation.deleteMany({ where: { id: QUOTATION_ID } });
+      results.inquiries = await tx.leaseInquiry.deleteMany({ where: { customerEmail: 'e2e-inquiry@fleet360.invalid' } });
+      results.lessee = await tx.lessee.deleteMany({ where: { id: LESSEE_ID } });
+    });
 
     return NextResponse.json({ ok: true, results });
   } catch (e) {
