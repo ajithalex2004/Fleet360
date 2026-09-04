@@ -175,29 +175,87 @@ export interface RouteOptimiserOutput {
   singleRouteResults: unknown[];
 }
 
-// ── Finance Anomaly Output ─────────────────────────────────────────────────────
+// ── Finance Anomaly Output (8 Comprehensive Streams) ───────────────────────────
+export type FinanceStreamType =
+  | 'MAINTENANCE'
+  | 'FUEL'
+  | 'VENDOR_INVOICE'
+  | 'PARTNER_SETTLEMENT'
+  | 'DRIVER_EXPENSE'
+  | 'TRIP_COST'
+  | 'CONTRACT'
+  | 'PROCUREMENT';
+
 export type AnomalyDetectorId =
   | 'duplicate-invoice'
   | 'amount-outlier'
   | 'round-number'
   | 'velocity-spike'
-  | 'category-mismatch';
+  | 'category-mismatch'
+  | 'fuel-tank-overfill'
+  | 'fuel-gps-mismatch'
+  | 'fuel-rapid-consecutive'
+  | 'fuel-consumption-spike'
+  | 'maintenance-parts-inflation'
+  | 'maintenance-repeat-repair-warranty'
+  | 'maintenance-labor-srt-overrun'
+  | 'vendor-rate-card-breach'
+  | 'vendor-vat-compliance'
+  | 'partner-quote-divergence'
+  | 'partner-ghost-trip'
+  | 'driver-mileage-inflated'
+  | 'trip-unbilled-salik-tolls'
+  | 'trip-deadhead-surge'
+  | 'contract-off-contract-mileage'
+  | 'contract-unbilled-excess-mileage'
+  | 'contract-unbilled-damage'
+  | 'procurement-po-variance';
 
 export type AnomalyEntityType =
   | 'INVOICE'
   | 'EXPENSE'
   | 'FUEL_LOG'
+  | 'WORK_ORDER'
+  | 'RENTAL_AGREEMENT'
+  | 'EXCHANGE_QUOTATION'
+  | 'DRIVER_SETTLEMENT'
+  | 'SALIK_TOLL'
+  | 'PURCHASE_ORDER'
+  | 'TELEMATICS_TRIP'
   | 'JOURNAL_ENTRY';
 
+export interface AnomalyActionRecommendation {
+  actionType:
+    | 'HOLD_PAYMENT'
+    | 'CLAIM_WARRANTY'
+    | 'AUTO_DEDUCT_DRIVER'
+    | 'INVOICE_CUSTOMER'
+    | 'REVISE_PO'
+    | 'FLAG_DISPUTE'
+    | 'DISMISS';
+  title: string;
+  description: string;
+  financialRecoveryAed?: number;
+  payload?: Record<string, unknown>;
+}
+
 export interface AnomalyFlag {
+  id?: string;
   detectorId: AnomalyDetectorId;
   entityType: AnomalyEntityType;
   entityId: string;
+  streamType?: FinanceStreamType;
   severity: AnomalySeverity;
   confidence: number;
   explanation: string;
   amount?: number;
   currency?: string;
+  expectedValue?: string | number;
+  actualValue?: string | number;
+  variancePercentage?: number;
+  likelyCause?: string;
+  financialExposureAed?: number;
+  recommendedAction?: AnomalyActionRecommendation;
   metadata?: Record<string, unknown>;
 }
 

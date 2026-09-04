@@ -1,10 +1,10 @@
 /**
  * Agent Infrastructure Schema
  * ----------------------------
- * Three tables that back the entire agent system:
+ * Tables that back the entire agent system:
  *   agent_runs           — immutable audit log of every agent execution
  *   fleet_risk_scores    — latest risk score per vehicle (upserted on each run)
- *   agent_anomaly_flags  — flagged financial records awaiting review
+ *   agent_anomaly_flags  — flagged financial records awaiting review / 1-click action
  */
 import { prisma } from '@/lib/prisma';
 
@@ -88,10 +88,26 @@ async function _doInit(): Promise<void> {
         created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
+      -- Column migrations for Finance Anomaly AI Control Layer
+      ALTER TABLE ai.agent_anomaly_flags ADD COLUMN IF NOT EXISTS tenant_id TEXT DEFAULT 'default';
+      ALTER TABLE ai.agent_anomaly_flags ADD COLUMN IF NOT EXISTS stream_type TEXT;
+      ALTER TABLE ai.agent_anomaly_flags ADD COLUMN IF NOT EXISTS expected_value TEXT;
+      ALTER TABLE ai.agent_anomaly_flags ADD COLUMN IF NOT EXISTS actual_value TEXT;
+      ALTER TABLE ai.agent_anomaly_flags ADD COLUMN IF NOT EXISTS variance_pct NUMERIC(8,2);
+      ALTER TABLE ai.agent_anomaly_flags ADD COLUMN IF NOT EXISTS likely_cause TEXT;
+      ALTER TABLE ai.agent_anomaly_flags ADD COLUMN IF NOT EXISTS financial_exposure_aed NUMERIC(14,2);
+      ALTER TABLE ai.agent_anomaly_flags ADD COLUMN IF NOT EXISTS recommended_action JSONB;
+      ALTER TABLE ai.agent_anomaly_flags ADD COLUMN IF NOT EXISTS action_taken TEXT;
+      ALTER TABLE ai.agent_anomaly_flags ADD COLUMN IF NOT EXISTS action_taken_at TIMESTAMPTZ;
+      ALTER TABLE ai.agent_anomaly_flags ADD COLUMN IF NOT EXISTS action_taken_by TEXT;
+
       CREATE INDEX IF NOT EXISTS idx_anomaly_flags_severity    ON ai.agent_anomaly_flags(severity);
       CREATE INDEX IF NOT EXISTS idx_anomaly_flags_status      ON ai.agent_anomaly_flags(status);
       CREATE INDEX IF NOT EXISTS idx_anomaly_flags_entity_type ON ai.agent_anomaly_flags(entity_type);
+      CREATE INDEX IF NOT EXISTS idx_anomaly_flags_tenant_id   ON ai.agent_anomaly_flags(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_anomaly_flags_stream      ON ai.agent_anomaly_flags(stream_type);
       CREATE INDEX IF NOT EXISTS idx_anomaly_flags_created_at  ON ai.agent_anomaly_flags(created_at DESC);
+      
       -- Prevent duplicate flags for same entity + detector combo while OPEN
       CREATE UNIQUE INDEX IF NOT EXISTS idx_anomaly_flags_open_dedup
         ON ai.agent_anomaly_flags(entity_id, detector_id)
