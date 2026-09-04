@@ -13,7 +13,6 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { ensureServiceTicketsTable } from './schema';
 
 export interface RecoveryVendorOption {
   id: string;
@@ -132,8 +131,6 @@ export async function getRecoveryAndReplacementOptions(
   ticketId: string,
   tenantId: string
 ): Promise<RecoveryOptionsData | null> {
-  await ensureServiceTicketsTable();
-
   // 1. Fetch Ticket
   const [ticket] = await prisma.$queryRawUnsafe<
     Array<{
@@ -225,8 +222,6 @@ export async function getRecoveryAndReplacementOptions(
 export async function dispatchTowingVendor(
   params: TowingDispatchParams
 ): Promise<{ ok: boolean; etaMinutes: number; dispatchMessage: string }> {
-  await ensureServiceTicketsTable();
-
   const etaMinutes = calculateRecoveryEta('Dubai', true);
   const now = new Date();
 
@@ -272,8 +267,6 @@ export async function dispatchTowingVendor(
 export async function provisionReplacementVehicle(
   params: ProvisionReplacementParams
 ): Promise<{ ok: boolean; message: string; replacementPlate: string | null }> {
-  await ensureServiceTicketsTable();
-
   const now = new Date();
 
   // 1. Fetch Replacement Vehicle

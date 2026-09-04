@@ -16,7 +16,6 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
-import { ensureShipperPortalTables } from '@/lib/shipper-portal/schema';
 import { DEFAULT_TRACKING_LEVEL } from '@/lib/shipper-portal/visibility';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -45,8 +44,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   try {
-    await ensureShipperPortalTables();
-
     // One query, LEFT JOINs to the portal-user and invitation tables.
     // Aggregates keep the result one row per customer.
     // customer / customer_portal_users / customer_portal_invitations all

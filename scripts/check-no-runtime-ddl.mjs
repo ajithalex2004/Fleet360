@@ -55,33 +55,25 @@ import { exit } from 'node:process';
 // tenant_isolation RLS policy. See those migration files for the full
 // rationale, including how the school_bus_trips / school_bus_students /
 // sustainability_settings schema-race conflicts were resolved.
+//
 // Discovered 2026-09-04 when the regex below was broadened to close the
-// ensureTripTables gap (see WHAT IT DETECTS above): all 22 of these use
-// some ensureXxxTable(s)-style name the old exact-match regex couldn't see.
-// None of these were touched by that day's 35-file migration — they are
-// newly-visible pre-existing debt, not new violations, and are listed here
-// under the same ratchet the original 35 used. Not yet migrated.
+// ensureTripTables gap: 22 more files used some ensureXxxTable(s)-style
+// name the old exact-match regex couldn't see. 16 of those 22 (isolated,
+// single-purpose tables) were migrated the same day into
+// prisma/migrations/20260910000023 through .../20260910000030.
+//
+// The remaining 6 are deliberately NOT migrated yet — each is either
+// security-critical (sso.ts holds encrypted OIDC client secrets), a large
+// interdependent engine (workflow-db.ts's approval engine; the 3-file
+// service-config engine with versioned, scope-inherited rules), or a
+// large foundational schema (logistics/domain.ts, which also contains a
+// second, unrelated ensureFinanceJournalPostingTables DDL function).
+// Left for a dedicated, more carefully-reviewed pass.
 const KNOWN_VIOLATIONS = new Set([
-  'src/app/api/agents/ecosystem/route.ts',
-  'src/app/api/auth/forgot-password/route.ts',
-  'src/app/api/bus-ops/route-types/route.ts',
-  'src/app/api/finance/invoices/[id]/route.ts',
-  'src/app/api/school-bus/capacity-check/route.ts',
-  'src/lib/api-keys.ts',
-  'src/lib/audit.ts',
-  'src/lib/bus-ops/telemetry-settings.ts',
-  'src/lib/invitations.ts',
-  'src/lib/leasing/payment-schema.ts',
-  'src/lib/leasing/self-service-schema.ts',
-  'src/lib/leasing-portal/schema.ts',
   'src/lib/logistics/domain.ts',
-  'src/lib/school-bus-notify.ts',
   'src/lib/service-config/rules-schema.ts',
   'src/lib/service-config/schema.ts',
   'src/lib/service-config/scopes-schema.ts',
-  'src/lib/service-tickets/access.ts',
-  'src/lib/service-tickets/schema.ts',
-  'src/lib/shipper-portal/schema.ts',
   'src/lib/sso.ts',
   'src/lib/workflow-db.ts',
 ]);

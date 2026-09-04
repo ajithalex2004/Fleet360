@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
-import { ensureInvitationTable, hashInvitationToken } from '@/lib/invitations';
+import { hashInvitationToken } from '@/lib/invitations';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
@@ -24,7 +24,6 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ ok: false, error: 'Invalid invitation link.' }, { status: 400 });
   }
 
-  await ensureInvitationTable();
   const tokenHash = hashInvitationToken(token);
 
   // withPlatformAdmin: an invitation is resolved BY ITS TOKEN, before the

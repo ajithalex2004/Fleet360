@@ -23,7 +23,6 @@ import { withTenantRls } from '@/lib/rls';
 import { randomUUID } from 'crypto';
 import { createPortalUser } from '@/lib/shipper-portal/portal-users-store';
 import { createInvitation } from '@/lib/shipper-portal/invitations';
-import { ensureShipperPortalTables } from '@/lib/shipper-portal/schema';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
@@ -47,8 +46,6 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await ensureShipperPortalTables();
-
     const stamp = new Date().toISOString().slice(0, 10);
     const customerId = randomUUID();
     const demoEmail = `demo.shipper+${Date.now()}@example.com`;

@@ -12,7 +12,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { ensureServiceTicketsTable, nextReadableId } from './schema';
+import { nextReadableId } from './schema';
 import type { TicketType, TicketPriority } from '@/types/service-tickets';
 
 export interface InboundMessageParams {
@@ -432,8 +432,6 @@ export async function createTicketFromParsedIntent(
   rawParams: InboundMessageParams,
   tenantId: string
 ): Promise<{ ticketId: string; readableId: string; autoReply: string }> {
-  await ensureServiceTicketsTable();
-
   const typePrefix =
     intent.ticketType === 'MAINTENANCE'
       ? 'MNT'

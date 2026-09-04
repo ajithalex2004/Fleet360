@@ -20,7 +20,6 @@ import {
   isTrackingLevel,
   DEFAULT_TRACKING_LEVEL,
 } from '@/lib/shipper-portal/visibility';
-import { ensureShipperPortalTables } from '@/lib/shipper-portal/schema';
 import { logAudit } from '@/lib/audit';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -37,7 +36,6 @@ export async function GET(req: NextRequest) {
 
   const { tenantId } = authz;
   try {
-    await ensureShipperPortalTables();
     // tenant_settings has tenant_id with RLS.
     const rows = await withTenantRls(prisma, tenantId, (tx) =>
       tx.$queryRawUnsafe<Array<{ level: string | null }>>(
@@ -81,7 +79,6 @@ export async function PUT(req: NextRequest) {
     // closure (and the runtime value can't change between checks).
     const newLevel = body.level;
 
-    await ensureShipperPortalTables();
     // Built inside the transaction, written after it commits. Auditing from
     // inside an interactive transaction loses the entry: a fire-and-forget
     // promise is abandoned when the callback returns, and awaiting it holds

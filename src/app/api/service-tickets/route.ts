@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-import { ensureServiceTicketsTable, nextReadableId } from '@/lib/service-tickets/schema';
+import { nextReadableId } from '@/lib/service-tickets/schema';
 import { TICKET_TYPES_ORDER, type TicketType, type TicketPriority } from '@/types/service-tickets';
 import { getTenantEnabledTypes } from '@/lib/service-tickets/access';
 import { loadServiceConfig } from '@/lib/service-config/load';
@@ -105,8 +105,6 @@ export async function GET(req: NextRequest) {
       const to     = sp.get('to');
       const limit  = Math.min(parseInt(sp.get('limit') ?? '500', 10), 1000);
       const offset = Math.max(parseInt(sp.get('offset') ?? '0', 10), 0);
-
-      await ensureServiceTicketsTable();
 
       const conditions = ['tenant_id = $1', 'deleted_at IS NULL'];
       const params: unknown[] = [tenantId];
@@ -224,7 +222,6 @@ export async function POST(req: NextRequest) {
         await resolveTicketInitialStatus(tenantId, ticketType, priority as TicketPriority);
 
       try {
-        await ensureServiceTicketsTable();
         // Prefix lives on the resolved ticketing rules.
         const resolvedPrefix = (cfg.rules.ticketing.ticketPrefix?.trim()) || 'GEN';
         const readableId = await nextReadableId(tenantId, ticketType, resolvedPrefix);

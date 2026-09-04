@@ -14,7 +14,6 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-import { ensureGuardianNotificationsTable } from '@/lib/school-bus-notify';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
@@ -53,8 +52,6 @@ export async function GET(req: NextRequest) {
       const normalised = phone.startsWith('+')
         ? '+' + phone.slice(1).replace(/\D/g, '')
         : phone.replace(/\D/g, '');
-
-      await ensureGuardianNotificationsTable();
 
       const students = await tx.$queryRawUnsafe<StudentRow[]>(
         `SELECT id, student_code, first_name, last_name, grade, section,

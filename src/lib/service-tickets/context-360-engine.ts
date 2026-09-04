@@ -9,7 +9,6 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { ensureServiceTicketsTable } from './schema';
 
 export interface ChronicRiskEvaluation {
   isChronicRisk: boolean;
@@ -140,8 +139,6 @@ export async function fetchTicketContext360(
   ticketId: string,
   tenantId: string
 ): Promise<TicketContext360Data | null> {
-  await ensureServiceTicketsTable();
-
   // 1. Fetch Ticket
   const [ticketRow] = await prisma.$queryRawUnsafe<
     Array<{

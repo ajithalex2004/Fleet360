@@ -1,5 +1,4 @@
 import { prisma } from '@/lib/prisma';
-import { ensureSelfServiceTables } from './self-service-schema';
 
 export interface DamageReport {
   id: string;
@@ -61,7 +60,6 @@ export async function createDamageReport(args: {
   photoUrls: string[];
   reportedBy: string;
 }): Promise<DamageReport> {
-  await ensureSelfServiceTables();
   const rows = await prisma.$queryRawUnsafe<Row[]>(
     `INSERT INTO lease_damage_reports
        (tenant_id, lessee_id, contract_id, vehicle_ref, severity, description, photo_urls, reported_by)
@@ -75,7 +73,6 @@ export async function createDamageReport(args: {
 }
 
 export async function listDamageReportsForLessee(tenantId: string, lesseeId: string): Promise<DamageReport[]> {
-  await ensureSelfServiceTables();
   const rows = await prisma.$queryRawUnsafe<Row[]>(
     `SELECT ${SELECT} FROM lease_damage_reports
       WHERE tenant_id = $1 AND lessee_id = $2
@@ -86,7 +83,6 @@ export async function listDamageReportsForLessee(tenantId: string, lesseeId: str
 }
 
 export async function listDamageReportsForTenant(tenantId: string, status?: string): Promise<DamageReport[]> {
-  await ensureSelfServiceTables();
   const rows = await prisma.$queryRawUnsafe<Row[]>(
     `SELECT ${SELECT} FROM lease_damage_reports
       WHERE tenant_id = $1 ${status ? 'AND status = $2' : ''}

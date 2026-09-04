@@ -11,34 +11,11 @@ import { prisma } from '@/lib/prisma';
 import type { TenantTicketTypeAccess, TicketType } from '@/types/service-tickets';
 import { TICKET_TYPES_ORDER } from '@/types/service-tickets';
 
-let _ensured = false;
-
-export async function ensureTicketTypeAccessTable(): Promise<void> {
-  if (_ensured) return;
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS tenant_ticket_types (
-      tenant_id           TEXT         NOT NULL,
-      ticket_type         TEXT         NOT NULL,
-      enabled             BOOLEAN      NOT NULL DEFAULT TRUE,
-      sla_override_hours  INTEGER,
-      updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      updated_by_user_id  TEXT,
-      PRIMARY KEY (tenant_id, ticket_type)
-    )
-  `);
-  await prisma.$executeRawUnsafe(
-    `CREATE INDEX IF NOT EXISTS idx_tenant_ticket_types_tenant ON tenant_ticket_types (tenant_id)`,
-  );
-  _ensured = true;
-}
-
 /**
  * Returns the full access matrix for a tenant — one row per type, with
  * defaults filled in for any type the tenant hasn't explicitly configured.
  */
 export async function getTenantAccessMatrix(tenantId: string): Promise<TenantTicketTypeAccess[]> {
-  await ensureTicketTypeAccessTable();
-
   const rows = await prisma.$queryRawUnsafe<Array<{
     ticket_type: string;
     enabled: boolean;
@@ -84,7 +61,6 @@ export async function setTenantTypeAccess(
   slaOverrideHours: number | null,
   updatedByUserId: string | null,
 ): Promise<void> {
-  await ensureTicketTypeAccessTable();
   await prisma.$executeRawUnsafe(
     `INSERT INTO tenant_ticket_types (tenant_id, ticket_type, enabled, sla_override_hours, updated_at, updated_by_user_id)
      VALUES ($1, $2, $3, $4, NOW(), $5)
@@ -104,7 +80,6 @@ export async function replaceTenantAccessMatrix(
   rows: Array<{ ticketType: TicketType; enabled: boolean; slaOverrideHours: number | null }>,
   updatedByUserId: string | null,
 ): Promise<void> {
-  await ensureTicketTypeAccessTable();
   await Promise.all(rows.map(r =>
     setTenantTypeAccess(tenantId, r.ticketType, r.enabled, r.slaOverrideHours, updatedByUserId),
   ));

@@ -18,32 +18,6 @@ import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
-async function ensureRoutesTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS school_bus_routes (
-      id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id           TEXT        NOT NULL DEFAULT 'default',
-      route_name          TEXT        NOT NULL,
-      route_code          TEXT,
-      direction           TEXT        NOT NULL DEFAULT 'PICKUP',
-      session             TEXT        NOT NULL DEFAULT 'MORNING',
-      route_type          TEXT        NOT NULL DEFAULT 'STUDENT',
-      departure_time      TIME        NOT NULL,
-      arrival_time        TIME,
-      assigned_vehicle_id TEXT,
-      assigned_driver_id  TEXT,
-      assigned_attendant_id TEXT,
-      seat_capacity       INT         NOT NULL DEFAULT 40,
-      student_count       INT         NOT NULL DEFAULT 0,
-      waypoints           JSONB       NOT NULL DEFAULT '[]',
-      stop_sequence       JSONB       NOT NULL DEFAULT '[]',
-      status              TEXT        NOT NULL DEFAULT 'ACTIVE',
-      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `).catch(() => {});
-}
-
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -54,8 +28,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureRoutesTable();
-
         const sp       = new URL(req.url).searchParams;
         const tenantId = sp.get('tenantId') ?? 'default';
 

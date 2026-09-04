@@ -15,7 +15,6 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-import { ensureServiceTicketsTable } from '@/lib/service-tickets/schema';
 import type { TicketType, TicketPriority } from '@/types/service-tickets';
 import { loadServiceConfig } from '@/lib/service-config/load';
 import {
@@ -70,7 +69,6 @@ const SELECT_COLS = `id::text, tenant_id, ticket_type, readable_id, requestor_id
   created_at::text, updated_at::text`;
 
 async function loadTicket(tenantId: string, id: string): Promise<Row | null> {
-  await ensureServiceTicketsTable();
   const rows = await prisma.$queryRawUnsafe<Row[]>(
     `SELECT ${SELECT_COLS}
      FROM service_tickets
@@ -203,7 +201,6 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     const { id } = await params;
 
-      await ensureServiceTicketsTable();
       const result = await tx.$executeRawUnsafe(
         `UPDATE service_tickets SET deleted_at = NOW() WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
         id, tenantId,

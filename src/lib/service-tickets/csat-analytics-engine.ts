@@ -12,7 +12,6 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { ensureServiceTicketsTable } from './schema';
 
 export type TrackingStage = 1 | 2 | 3 | 4 | 5;
 
@@ -113,8 +112,6 @@ export function classifyNps(rating: number): 'PROMOTER' | 'PASSIVE' | 'DETRACTOR
 export async function getPublicTicketTrackingData(
   tokenOrReadableId: string
 ): Promise<PublicTicketTrackingData | null> {
-  await ensureServiceTicketsTable();
-
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     tokenOrReadableId
   );
@@ -186,8 +183,6 @@ export async function submitTicketCsatFeedback(
   rating: number,
   comment?: string
 ): Promise<{ ok: boolean; message: string; npsCategory: string }> {
-  await ensureServiceTicketsTable();
-
   if (rating < 1 || rating > 5) {
     throw new Error('Rating must be between 1 and 5 stars');
   }
@@ -231,8 +226,6 @@ export async function submitTicketCsatFeedback(
  * Computes CSAT and First-Contact Resolution (FCR) Analytics
  */
 export async function getCsatAndFcrAnalytics(tenantId: string): Promise<CsatAnalyticsSummary> {
-  await ensureServiceTicketsTable();
-
   const rows = await prisma.$queryRawUnsafe<
     Array<{
       id: string;

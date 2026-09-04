@@ -8,7 +8,6 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { ensureLeasingPortalTables } from './schema';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -75,7 +74,6 @@ export async function createPortalUser(args: {
   phone?: string | null;
   role?: PortalRole;
 }): Promise<PortalUser> {
-  await ensureLeasingPortalTables();
   const rows = await prisma.$queryRawUnsafe<Row[]>(
     `INSERT INTO lessee_portal_users
        (tenant_id, lessee_id, email, full_name, phone, role)
@@ -93,7 +91,6 @@ export async function createPortalUser(args: {
 }
 
 export async function getPortalUserById(tenantId: string, id: string): Promise<PortalUser | null> {
-  await ensureLeasingPortalTables();
   const rows = await prisma.$queryRawUnsafe<Row[]>(
     `SELECT ${SELECT} FROM lessee_portal_users
       WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL
@@ -107,7 +104,6 @@ export async function getPortalUserById(tenantId: string, id: string): Promise<P
  *  login when we don't yet know the tenant — the returned row already
  *  carries its own tenantId, which the caller stamps into the session. */
 export async function findPortalUserByEmail(email: string): Promise<PortalUser | null> {
-  await ensureLeasingPortalTables();
   const rows = await prisma.$queryRawUnsafe<Row[]>(
     `SELECT ${SELECT} FROM lessee_portal_users
       WHERE lower(email) = lower($1) AND deleted_at IS NULL
@@ -121,7 +117,6 @@ export async function findPortalUserByEmail(email: string): Promise<PortalUser |
 /** Returns the row INCLUDING the password hash. Internal only — never
  *  return the hash via API. */
 export async function _findUserWithHashByEmail(email: string): Promise<(PortalUser & { passwordHash: string | null }) | null> {
-  await ensureLeasingPortalTables();
   const rows = await prisma.$queryRawUnsafe<Row[]>(
     `SELECT ${SELECT} FROM lessee_portal_users
       WHERE lower(email) = lower($1) AND deleted_at IS NULL
@@ -137,7 +132,6 @@ export async function listPortalUsersByLessee(
   tenantId: string,
   lesseeId: string,
 ): Promise<PortalUser[]> {
-  await ensureLeasingPortalTables();
   const rows = await prisma.$queryRawUnsafe<Row[]>(
     `SELECT ${SELECT} FROM lessee_portal_users
       WHERE tenant_id = $1 AND lessee_id = $2 AND deleted_at IS NULL
@@ -151,7 +145,6 @@ export async function setPortalUserPassword(
   userId: string,
   passwordHash: string,
 ): Promise<void> {
-  await ensureLeasingPortalTables();
   await prisma.$executeRawUnsafe(
     `UPDATE lessee_portal_users
         SET password_hash = $1, updated_at = NOW()
@@ -174,7 +167,6 @@ export async function setPortalUserActive(
   userId: string,
   isActive: boolean,
 ): Promise<boolean> {
-  await ensureLeasingPortalTables();
   const result = await prisma.$executeRawUnsafe(
     `UPDATE lessee_portal_users
         SET is_active = $1, updated_at = NOW()
@@ -189,7 +181,6 @@ export async function deletePortalUser(
   tenantId: string,
   userId: string,
 ): Promise<boolean> {
-  await ensureLeasingPortalTables();
   const result = await prisma.$executeRawUnsafe(
     `UPDATE lessee_portal_users
         SET deleted_at = NOW(), updated_at = NOW(), is_active = FALSE

@@ -13,21 +13,6 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 
 const VALID_STATUSES = ['DRAFT', 'SENT', 'PARTIAL', 'PAID', 'OVERDUE', 'CANCELLED'];
 
-async function ensurePaymentsTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS finance_payments (
-      id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      invoice_id     UUID NOT NULL,
-      amount         NUMERIC(14,2) NOT NULL,
-      payment_date   DATE NOT NULL DEFAULT CURRENT_DATE,
-      payment_method TEXT NOT NULL DEFAULT 'BANK_TRANSFER',
-      reference      TEXT,
-      notes          TEXT,
-      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `).catch(() => {});
-}
-
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
 
@@ -38,8 +23,6 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensurePaymentsTable();
-
       // Enforce tenant isolation using the authorized tenantId
       const queryValues: unknown[] = [params.id];
       let tenantClause = '';
@@ -101,8 +84,6 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
         // ── Record a payment ──────────────────────────────────────────────────
         if (action === 'record_payment') {
-          await ensurePaymentsTable();
-
           const { amount, paymentDate, paymentMethod = 'BANK_TRANSFER', reference, notes } = body;
           if (!amount || Number(amount) <= 0) return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
 
@@ -118,9 +99,9 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           const newStatus = newPaid >= Number(inv.total_amount) ? 'PAID' : 'PARTIAL';
 
           await tx.$executeRawUnsafe(
-            `INSERT INTO finance_payments (invoice_id, amount, payment_date, payment_method, reference, notes)
-             VALUES ($1, $2, $3::date, $4, $5, $6)`,
-            params.id, Number(amount),
+            `INSERT INTO finance_payments (tenant_id, invoice_id, amount, payment_date, payment_method, reference, notes)
+             VALUES ($1, $2, $3, $4::date, $5, $6, $7)`,
+            tenantId, params.id, Number(amount),
             paymentDate ?? new Date().toISOString().split('T')[0],
             paymentMethod, reference ?? null, notes ?? null
           );

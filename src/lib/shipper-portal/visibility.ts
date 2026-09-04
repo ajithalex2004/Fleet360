@@ -25,7 +25,6 @@
 
 import 'server-only';
 import { prisma } from '@/lib/prisma';
-import { ensureShipperPortalTables } from './schema';
 import {
   TRACKING_LEVELS,
   type TrackingLevel,
@@ -49,7 +48,6 @@ export async function resolveTrackingLevel(
   customerId: string | null,
   shipmentId?: string | null,
 ): Promise<TrackingLevel> {
-  await ensureShipperPortalTables();
 
   // 1. Shipment override
   if (shipmentId) {
@@ -244,7 +242,6 @@ export async function setShipmentTrackingOverride(args: {
   level: TrackingLevel | null;       // null clears the override → revert to customer default
   reason: string | null;
 }): Promise<boolean> {
-  await ensureShipperPortalTables();
   const result = await prisma.$executeRawUnsafe(
     `UPDATE logistics_shipment_orders
         SET portal_tracking_level = $1,
@@ -262,7 +259,6 @@ export async function setCustomerTrackingDefault(args: {
   customerId: string;
   level: TrackingLevel;
 }): Promise<boolean> {
-  await ensureShipperPortalTables();
   const result = await prisma.$executeRawUnsafe(
     `UPDATE customers
         SET portal_tracking_level = $1, updated_at = NOW()
@@ -277,7 +273,6 @@ export async function setTenantTrackingDefault(args: {
   tenantId: string;
   level: TrackingLevel;
 }): Promise<void> {
-  await ensureShipperPortalTables();
   await prisma.$executeRawUnsafe(
     `INSERT INTO tenant_settings (tenant_id, default_portal_tracking_level, updated_at)
      VALUES ($1, $2, NOW())

@@ -16,7 +16,6 @@
 
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
-import { ensureLeasingPortalTables } from './schema';
 import { setPortalUserPassword } from './portal-users-store';
 import { sendEmail } from '@/lib/email';
 
@@ -45,7 +44,6 @@ export async function createInvitation(args: {
   portalUserId: string;
   invitedByUserId: string;
 }): Promise<CreatedInvitation> {
-  await ensureLeasingPortalTables();
   const rawToken = generateRawToken();
   const tokenHash = hashToken(rawToken);
   const expiresAt = new Date(Date.now() + INVITATION_TTL_DAYS * 86_400_000).toISOString();
@@ -72,7 +70,6 @@ interface InvitationRow {
 }
 
 export async function resolveInvitation(rawToken: string): Promise<InvitationRow | null> {
-  await ensureLeasingPortalTables();
   const tokenHash = hashToken(rawToken);
   const rows = await prisma.$queryRawUnsafe<InvitationRow[]>(
     `SELECT id::text, tenant_id, portal_user_id::text, expires_at::text, accepted_at::text
@@ -99,7 +96,6 @@ export async function acceptInvitation(
   rawToken: string,
   passwordHash: string,
 ): Promise<{ portalUserId: string; tenantId: string } | null> {
-  await ensureLeasingPortalTables();
   const tokenHash = hashToken(rawToken);
 
   const claimRows = await prisma.$queryRawUnsafe<Array<{ portal_user_id: string; tenant_id: string }>>(

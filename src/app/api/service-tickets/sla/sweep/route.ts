@@ -9,7 +9,6 @@ import {
   calculateTicketSlaStatus,
   type SlaTicketInput,
 } from '@/lib/service-tickets/active-sla-engine';
-import { ensureServiceTicketsTable } from '@/lib/service-tickets/schema';
 import type { TicketType, TicketPriority, TicketStatus } from '@/types/service-tickets';
 
 export const runtime = 'nodejs';
@@ -27,8 +26,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async () => {
     try {
-      await ensureServiceTicketsTable();
-
       const rows = await prisma.$queryRawUnsafe<
         Array<{
           id: string;

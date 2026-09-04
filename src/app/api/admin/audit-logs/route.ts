@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
-import { ensureAuditTable, logAudit, AuditPayload } from '@/lib/audit';
+import { logAudit, AuditPayload } from '@/lib/audit';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // ---------------------------------------------------------------------------
@@ -27,8 +27,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   try {
-    await ensureAuditTable();
-
     return await withPlatformAdmin(prisma, async (tx) => {
       const sp        = new URL(req.url).searchParams;
       const tenantId  = sp.get('tenantId')  ?? '';

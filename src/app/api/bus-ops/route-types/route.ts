@@ -25,25 +25,6 @@ export const runtime = 'nodejs';
 
 const SYSTEM_TYPES = ['STAFF', 'SCHOOL', 'BOTH'] as const;
 
-let ensured = false;
-
-async function ensureRouteTypesTable(): Promise<void> {
-  if (ensured) return;
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS bus_route_types (
-      id         TEXT PRIMARY KEY,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      tenant_id  TEXT,
-      name       TEXT NOT NULL,
-      is_system  BOOLEAN DEFAULT FALSE
-    )
-  `);
-  await prisma.$executeRawUnsafe(
-    `CREATE UNIQUE INDEX IF NOT EXISTS uniq_bus_route_types_tenant_name ON bus_route_types (tenant_id, name)`,
-  );
-  ensured = true;
-}
-
 async function seedSystemDefaults(tenantId: string): Promise<void> {
   for (const name of SYSTEM_TYPES) {
     await prisma.$executeRawUnsafe(
@@ -72,7 +53,6 @@ export async function GET(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
 
       try {
-        await ensureRouteTypesTable();
         await seedSystemDefaults(tenantId);
 
         const rows = await tx.$queryRawUnsafe<TypeRow[]>(
@@ -119,7 +99,6 @@ export async function POST(req: NextRequest) {
       const name = raw.toUpperCase().replace(/\s+/g, '_');
 
       try {
-        await ensureRouteTypesTable();
         const id = randomUUID();
         // ON CONFLICT so re-adding an existing name is a no-op and returns the
         // existing row — idempotent from the caller's perspective.

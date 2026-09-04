@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
-import { ensureApiKeyTable, generateApiKey } from '@/lib/api-keys';
+import { generateApiKey } from '@/lib/api-keys';
 import { requirePlan } from '@/lib/plan-limits';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -45,7 +45,6 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;
 
-  await ensureApiKeyTable();
   // tenant_api_keys has a tenant_id column with RLS. Use withTenantRls so
   // the RLS-using tenant_api_keys rows are visible AND defense-in-depth
   // (the WHERE clause already filters by tenant_id, so this is belt +
@@ -130,8 +129,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     }
 
     try {
-      await ensureApiKeyTable();
-      const { plaintext, prefix, hash } = generateApiKey();
+          const { plaintext, prefix, hash } = generateApiKey();
 
       const inserted = await tx.$queryRawUnsafe<{ id: string }[]>(
         `INSERT INTO tenant_api_keys (tenant_id, name, prefix, key_hash, scopes, created_by_user_id)

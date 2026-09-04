@@ -8,7 +8,6 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
-import { ensureApiKeyTable } from '@/lib/api-keys';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -33,7 +32,6 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   }
 
   try {
-    await ensureApiKeyTable();
     const result = await withTenantRls(prisma, tenantId, (tx) =>
       tx.$executeRawUnsafe(
         `UPDATE tenant_api_keys

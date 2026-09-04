@@ -1,6 +1,5 @@
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
-import { ensureSelfServiceTables } from './self-service-schema';
 
 export interface ESignature {
   id: string;
@@ -59,7 +58,6 @@ function sealSignature(signerName: string, acceptedText: string, entityId: strin
 }
 
 export async function getSignature(tenantId: string, entityType: string, entityId: string): Promise<ESignature | null> {
-  await ensureSelfServiceTables();
   const rows = await prisma.$queryRawUnsafe<Row[]>(
     `SELECT ${SELECT} FROM lease_esignatures
       WHERE tenant_id = $1 AND entity_type = $2 AND entity_id = $3
@@ -82,7 +80,6 @@ export async function createSignature(args: {
   userAgent: string | null;
   acceptedText: string;
 }): Promise<ESignature | null> {
-  await ensureSelfServiceTables();
   const contentHash = sealSignature(args.signerName, args.acceptedText, args.entityId);
   try {
     const rows = await prisma.$queryRawUnsafe<Row[]>(

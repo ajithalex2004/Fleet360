@@ -14,7 +14,6 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { ensureServiceTicketsTable } from './schema';
 import type { TicketType, TicketPriority, TicketStatus } from '@/types/service-tickets';
 
 export type SlaClockType = 'EMERGENCY_24_7' | 'BUSINESS_HOURS';
@@ -239,8 +238,6 @@ export async function runSlaEscalationSweep(
   tenantId: string,
   now: Date = new Date()
 ): Promise<SlaSweepResult> {
-  await ensureServiceTicketsTable();
-
   // Fetch all open tickets
   const rows = await prisma.$queryRawUnsafe<
     Array<{

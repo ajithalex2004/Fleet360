@@ -15,7 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import {
-  ensureInvitationTable, generateInvitationToken, INVITATION_TTL_DAYS,
+  generateInvitationToken, INVITATION_TTL_DAYS,
 } from '@/lib/invitations';
 import { requireUnderQuota } from '@/lib/plan-limits';
 import type { PlanCode } from '@/lib/billing';
@@ -50,7 +50,6 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;
 
-  await ensureInvitationTable();
 
   // tenant_invitations has tenant_id with RLS. Join to roles (also RLS)
   // and User (global) — wrap with withTenantRls so the join sees the
@@ -159,8 +158,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     if (quotaGate) return quotaGate;
 
     try {
-      await ensureInvitationTable();
-
+    
       // Single active invitation per email × tenant — revoke any prior live one.
       await tx.$executeRawUnsafe(
         `UPDATE tenant_invitations

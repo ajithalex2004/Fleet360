@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
-import { ensureInvitationTable, hashInvitationToken } from '@/lib/invitations';
+import { hashInvitationToken } from '@/lib/invitations';
 import {
   hashPassword, verifyPassword, validatePassword, DEFAULT_PASSWORD_POLICY,
 } from '@/lib/password-policy';
@@ -43,7 +43,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Password is required.' }, { status: 400 });
   }
 
-  await ensureInvitationTable();
   const tokenHash = hashInvitationToken(token);
 
   // Resolved BY TOKEN, before the recipient has any tenant context — the

@@ -43,8 +43,6 @@ export async function POST(req: NextRequest) {
   });
 
   try {
-    await ensurePasswordResetTable();
-
     const userRows = await prisma.$queryRawUnsafe<Array<{ id: string; username: string }>>(
       `SELECT id, username FROM "User" WHERE LOWER(email) = $1 AND COALESCE(is_active, TRUE) = TRUE LIMIT 1`,
       email,
@@ -111,28 +109,6 @@ export async function POST(req: NextRequest) {
     captureException(err, { context: 'auth.forgot-password' });
     return generic(); // still generic — never leak existence
   }
-}
-
-async function ensurePasswordResetTable(): Promise<void> {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS password_reset_tokens (
-      id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id     TEXT         NOT NULL,
-      token_hash  TEXT         NOT NULL,
-      created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      expires_at  TIMESTAMPTZ  NOT NULL,
-      used_at     TIMESTAMPTZ,
-      revoked     BOOLEAN      NOT NULL DEFAULT FALSE,
-      ip_address  TEXT,
-      user_agent  TEXT
-    )
-  `);
-  await prisma.$executeRawUnsafe(
-    `CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_hash ON password_reset_tokens (token_hash)`,
-  );
-  await prisma.$executeRawUnsafe(
-    `CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens (user_id, expires_at)`,
-  );
 }
 
 function escapeHtml(s: string): string {

@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { loadStudentForNotify, notifyGuardians, ensureGuardianNotificationsTable } from '@/lib/school-bus-notify';
+import { loadStudentForNotify, notifyGuardians } from '@/lib/school-bus-notify';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 import { runSweep } from '@/lib/prisma-sweep';
@@ -77,8 +77,6 @@ export async function POST(req: NextRequest) {
 
   try {
     const perTenant = await runSweep(async ({ tx, tenantId }) => {
-      await ensureGuardianNotificationsTable();
-
       // 1. Find IN_PROGRESS morning trips where we're past the threshold.
       const trips = await tx.$queryRawUnsafe<TripRow[]>(
         `SELECT id::text, route_id::text, scheduled_departure::text,

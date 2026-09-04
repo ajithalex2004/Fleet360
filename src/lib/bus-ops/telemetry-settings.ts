@@ -35,29 +35,6 @@ export const TELEMETRY_SETTINGS_DEFAULTS: TelemetrySettingsDTO = {
   updatedBy: null,
 };
 
-let ensured = false;
-
-export async function ensureTelemetrySettingsTable(db: PrismaClient): Promise<void> {
-  if (ensured) return;
-  await db.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS bus_ops_telemetry_settings (
-      tenant_id           TEXT PRIMARY KEY,
-      mode                TEXT NOT NULL DEFAULT 'shadow',
-      use_formulas        BOOLEAN NOT NULL DEFAULT TRUE,
-      hysteresis_m        DOUBLE PRECISION NULL,
-      start_dwell_ms      INTEGER NULL,
-      complete_dwell_ms   INTEGER NULL,
-      start_speed_kmh     DOUBLE PRECISION NULL,
-      complete_speed_kmh  DOUBLE PRECISION NULL,
-      max_accuracy_m      DOUBLE PRECISION NULL,
-      start_window_min    INTEGER NULL,
-      updated_at          TIMESTAMPTZ NULL DEFAULT NOW(),
-      updated_by          TEXT NULL
-    )
-  `);
-  ensured = true;
-}
-
 type Row = {
   tenant_id: string;
   mode: string;
@@ -95,7 +72,6 @@ export async function getTelemetrySettings(
   db: PrismaClient,
   tenantId: string,
 ): Promise<TelemetrySettingsDTO> {
-  await ensureTelemetrySettingsTable(db);
   const rows = await db.$queryRawUnsafe<Row[]>(
     `SELECT * FROM bus_ops_telemetry_settings WHERE tenant_id = $1 LIMIT 1`,
     tenantId,
@@ -154,7 +130,6 @@ export async function upsertTelemetrySettings(
   patch: Partial<TelemetrySettingsDTO>,
   updatedBy?: string | null,
 ): Promise<TelemetrySettingsDTO> {
-  await ensureTelemetrySettingsTable(db);
   const current = await getTelemetrySettings(db, tenantId);
   const next: TelemetrySettingsDTO = {
     ...current,

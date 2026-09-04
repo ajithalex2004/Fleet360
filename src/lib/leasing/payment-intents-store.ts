@@ -1,12 +1,11 @@
 /**
- * Leasing payment intents — CRUD over the lazy-init lease_payment_intents
- * table (see payment-schema.ts). Raw SQL, same tradeoff as leasing-portal
- * and shipper-portal.
+ * Leasing payment intents — CRUD over the lease_payment_intents table
+ * (schema in prisma/migrations/20260910000028_leasing_portal_and_selfservice_tables_and_rls).
+ * Raw SQL, same tradeoff as leasing-portal and shipper-portal.
  */
 
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
-import { ensurePaymentIntentTables } from './payment-schema';
 
 export type PaymentIntentStatus = 'PENDING' | 'RECEIVED' | 'CANCELLED';
 
@@ -97,7 +96,6 @@ export async function createPaymentIntent(args: {
   referenceCode: string;
   notes?: string | null;
 }): Promise<PaymentIntent> {
-  await ensurePaymentIntentTables();
   const rows = await prisma.$queryRawUnsafe<Row[]>(
     `INSERT INTO lease_payment_intents
        (tenant_id, invoice_id, lessee_id, amount, currency, provider, provider_ref,
@@ -113,7 +111,6 @@ export async function createPaymentIntent(args: {
 }
 
 export async function listPaymentIntentsForInvoice(tenantId: string, invoiceId: string): Promise<PaymentIntent[]> {
-  await ensurePaymentIntentTables();
   const rows = await prisma.$queryRawUnsafe<Row[]>(
     `SELECT ${SELECT} FROM lease_payment_intents
       WHERE tenant_id = $1 AND invoice_id = $2
@@ -124,7 +121,6 @@ export async function listPaymentIntentsForInvoice(tenantId: string, invoiceId: 
 }
 
 export async function listPaymentIntentsForLessee(tenantId: string, lesseeId: string): Promise<PaymentIntent[]> {
-  await ensurePaymentIntentTables();
   const rows = await prisma.$queryRawUnsafe<Row[]>(
     `SELECT ${SELECT} FROM lease_payment_intents
       WHERE tenant_id = $1 AND lessee_id = $2
@@ -148,7 +144,6 @@ export async function confirmPaymentIntent(args: {
   paymentMethod?: string;
   bankRef?: string | null;
 }): Promise<{ intent: PaymentIntent; receiptId: string } | null> {
-  await ensurePaymentIntentTables();
 
   return withTenantRls(prisma, args.tenantId, async (tx) => {
     const existingRows = await tx.$queryRawUnsafe<Row[]>(
@@ -213,7 +208,6 @@ export async function confirmPaymentIntent(args: {
 }
 
 export async function cancelPaymentIntent(tenantId: string, intentId: string): Promise<boolean> {
-  await ensurePaymentIntentTables();
   const result = await prisma.$executeRawUnsafe(
     `UPDATE lease_payment_intents
         SET status = 'CANCELLED', updated_at = NOW()
