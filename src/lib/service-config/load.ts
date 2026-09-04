@@ -23,8 +23,8 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { ensureServiceConfigTables, ensureSeededForTenant } from './schema';
-import { ensureServiceRulesTable, loadRulesForChain } from './rules-schema';
+import { ensureSeededForTenant } from './schema';
+import { loadRulesForChain } from './rules-schema';
 import { ensureRootScope, loadScopeChain } from './scopes-schema';
 import {
   RULE_CATEGORIES, RULE_DEFAULTS,
@@ -96,8 +96,6 @@ export async function loadServiceConfig(
   serviceTypeKey: string,
   scopeId?: string,
 ): Promise<ResolvedServiceConfig | null> {
-  await ensureServiceConfigTables();
-  await ensureServiceRulesTable();
   // Auto-seed the tenant on first call. ensureSeededForTenant also creates
   // the root scope and backfills any pre-2E rules to it.
   await ensureSeededForTenant(tenantId);

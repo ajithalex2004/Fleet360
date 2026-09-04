@@ -16,7 +16,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth';
-import { ensureServiceConfigTables } from '@/lib/service-config/schema';
 import { LINKED_MODULES, type LinkedModule } from '@/types/service-config';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -54,7 +53,6 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const auth = authorizeServiceConfig(req);
   if (!auth.ok) return auth.res;
   const { id } = await params;
-  await ensureServiceConfigTables();
   if (!await ownsType(auth.tenantId, id)) {
     return NextResponse.json({ ok: false, error: 'Service type not found' }, { status: 404 });
   }
@@ -117,7 +115,6 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   if (!adminCheck.ok) return adminCheck.res;
 
   const { id } = await params;
-  await ensureServiceConfigTables();
   if (!await ownsType(auth.tenantId, id)) {
     return NextResponse.json({ ok: false, error: 'Service type not found' }, { status: 404 });
   }

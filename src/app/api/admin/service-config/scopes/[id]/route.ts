@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth';
-import { ensureScopesTable, getScope, updateScope, deleteScope } from '@/lib/service-config/scopes-schema';
+import { getScope, updateScope, deleteScope } from '@/lib/service-config/scopes-schema';
 import { SCOPE_LEVELS, type ScopeLevel } from '@/types/service-config';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -34,7 +34,6 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   if (!adminCheck.ok) return adminCheck.res;
   const { id } = await params;
 
-  await ensureScopesTable();
   const target = await getScope(auth.tenantId, id);
   if (!target) return NextResponse.json({ ok: false, error: 'Scope not found' }, { status: 404 });
   if (target.isRoot) {

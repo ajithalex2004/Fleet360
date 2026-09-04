@@ -10,7 +10,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth';
-import { ensureServiceConfigTables } from '@/lib/service-config/schema';
 import { SERVICE_TONES } from '@/types/service-config';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -39,7 +38,6 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   if (!adminCheck.ok) return adminCheck.res;
 
   const { id } = await params;
-  await ensureServiceConfigTables();
 
   let body: Record<string, unknown>;
   try { const bodyRaw = await req.json(); body = stripTenantOwnershipFields(bodyRaw); } catch { return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 400 }); }
@@ -106,7 +104,6 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   if (!adminCheck.ok) return adminCheck.res;
 
   const { id } = await params;
-  await ensureServiceConfigTables();
 
   // Block delete of system rows or rows with non-deleted child types.
   const rows = await withTenantRls(prisma, auth.tenantId, (tx) =>

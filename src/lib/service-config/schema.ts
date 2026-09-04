@@ -14,8 +14,8 @@
 
 import { prisma } from '@/lib/prisma';
 import type { LinkedModule } from '@/types/service-config';
-import { ensureServiceRulesTable, seedRulesIfAbsent, backfillRulesToScope } from './rules-schema';
-import { ensureScopesTable, ensureRootScope } from './scopes-schema';
+import { seedRulesIfAbsent, backfillRulesToScope } from './rules-schema';
+import { ensureRootScope } from './scopes-schema';
 import { SYSTEM_TICKET_TYPES } from './system-types-seed';
 import {
   DEFAULT_APPROVAL_RULES, DEFAULT_TICKETING_RULES, DEFAULT_FORM_FIELDS_RULES,
@@ -25,80 +25,12 @@ import {
 } from '@/types/service-rules';
 import type { TicketType } from '@/types/service-tickets';
 
-let _ensured = false;
-
-export async function ensureServiceConfigTables(): Promise<void> {
-  if (_ensured) return;
-
-  // Categories — L1
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS service_categories (
-      id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id    TEXT         NOT NULL,
-      key          TEXT         NOT NULL,
-      name         TEXT         NOT NULL,
-      description  TEXT,
-      icon         TEXT,
-      tone         TEXT         NOT NULL DEFAULT 'violet',
-      sort_order   INTEGER      NOT NULL DEFAULT 0,
-      is_system    BOOLEAN      NOT NULL DEFAULT FALSE,
-      created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      deleted_at   TIMESTAMPTZ,
-      UNIQUE (tenant_id, key)
-    )
-  `);
-  await prisma.$executeRawUnsafe(
-    `CREATE INDEX IF NOT EXISTS idx_service_categories_tenant
-     ON service_categories (tenant_id) WHERE deleted_at IS NULL`,
-  );
-
-  // Types — L2
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS service_types (
-      id                UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id         TEXT         NOT NULL,
-      category_id       UUID         NOT NULL,
-      key               TEXT         NOT NULL,
-      name              TEXT         NOT NULL,
-      description       TEXT,
-      icon              TEXT,
-      tone              TEXT         NOT NULL DEFAULT 'violet',
-      default_priority  TEXT         NOT NULL DEFAULT 'Medium',
-      sort_order        INTEGER      NOT NULL DEFAULT 0,
-      is_system         BOOLEAN      NOT NULL DEFAULT FALSE,
-      created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      deleted_at        TIMESTAMPTZ,
-      UNIQUE (tenant_id, key)
-    )
-  `);
-  await prisma.$executeRawUnsafe(
-    `CREATE INDEX IF NOT EXISTS idx_service_types_tenant_category
-     ON service_types (tenant_id, category_id) WHERE deleted_at IS NULL`,
-  );
-  await prisma.$executeRawUnsafe(
-    `CREATE INDEX IF NOT EXISTS idx_service_types_tenant
-     ON service_types (tenant_id) WHERE deleted_at IS NULL`,
-  );
-
-  // Module mapping — one row per service type
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS service_module_mapping (
-      service_type_id              UUID         PRIMARY KEY,
-      linked_module                TEXT         NOT NULL,
-      sub_module                   TEXT,
-      workflow_engine_enabled      BOOLEAN      NOT NULL DEFAULT FALSE,
-      notification_engine_enabled  BOOLEAN      NOT NULL DEFAULT TRUE,
-      approval_engine_enabled      BOOLEAN      NOT NULL DEFAULT FALSE,
-      finance_engine_enabled       BOOLEAN      NOT NULL DEFAULT FALSE,
-      dispatch_engine_enabled      BOOLEAN      NOT NULL DEFAULT FALSE,
-      updated_at                   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  _ensured = true;
-}
+/**
+ * service_categories / service_types / service_module_mapping schema now
+ * lives in prisma/migrations/20260910000033_service_config_engine_tables.
+ * ensureServiceConfigTables() used to lazily CREATE them here; callers
+ * no longer call it.
+ */
 
 /**
  * Platform-default catalogue. The 7 ticket types from Phase 1A appear under
@@ -224,8 +156,6 @@ const SEED: SeedCategory[] = [
  * repeatedly; tenant edits to seeded rows are NOT overwritten.
  */
 export async function seedServiceConfigForTenant(tenantId: string): Promise<void> {
-  await ensureServiceConfigTables();
-  await ensureScopesTable();
   // Phase 2E — make sure the tenant has its root scope before any
   // service_rules are seeded. Backfill any existing pre-2E rules onto it.
   const rootScopeId = await ensureRootScope(tenantId);
@@ -301,7 +231,6 @@ async function seedRulesFromTicketingConfig(
   ticketType: TicketType,
   scopeId: string,
 ): Promise<void> {
-  await ensureServiceRulesTable();
   const cfg = SYSTEM_TICKET_TYPES[ticketType];
   if (!cfg) return;
 
@@ -363,7 +292,6 @@ const _seededTenants = new Set<string>();
  */
 export async function ensureSeededForTenant(tenantId: string): Promise<void> {
   if (_seededTenants.has(tenantId)) return;
-  await ensureServiceConfigTables();
   const rows = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
     `SELECT COUNT(*)::bigint AS count FROM service_categories WHERE tenant_id = $1`,
     tenantId,

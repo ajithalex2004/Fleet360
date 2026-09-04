@@ -9,38 +9,12 @@
 import { prisma } from '@/lib/prisma';
 import type { ServiceScope, ScopeLevel } from '@/types/service-config';
 
-let _ensured = false;
-
-export async function ensureScopesTable(): Promise<void> {
-  if (_ensured) return;
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS service_scopes (
-      id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id       TEXT         NOT NULL,
-      parent_scope_id UUID,
-      level           TEXT         NOT NULL DEFAULT 'COMPANY',
-      key             TEXT         NOT NULL,
-      name            TEXT         NOT NULL,
-      description     TEXT,
-      sort_order      INTEGER      NOT NULL DEFAULT 0,
-      is_root         BOOLEAN      NOT NULL DEFAULT FALSE,
-      created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      deleted_at      TIMESTAMPTZ,
-      UNIQUE (tenant_id, key)
-    )
-  `);
-  await prisma.$executeRawUnsafe(
-    `CREATE INDEX IF NOT EXISTS idx_service_scopes_tenant
-     ON service_scopes (tenant_id) WHERE deleted_at IS NULL`,
-  );
-  // Only one root per tenant — partial unique index.
-  await prisma.$executeRawUnsafe(
-    `CREATE UNIQUE INDEX IF NOT EXISTS uq_service_scopes_root
-     ON service_scopes (tenant_id) WHERE is_root = TRUE AND deleted_at IS NULL`,
-  );
-  _ensured = true;
-}
+/**
+ * service_scopes' schema now lives in
+ * prisma/migrations/20260910000033_service_config_engine_tables.
+ * ensureScopesTable() used to lazily CREATE it here; callers no longer
+ * call it.
+ */
 
 interface ScopeRow {
   id: string; tenant_id: string; parent_scope_id: string | null;
@@ -67,7 +41,6 @@ const SELECT = `id::text, tenant_id, parent_scope_id::text, level, key, name,
  * scope's id. Idempotent; safe to call repeatedly.
  */
 export async function ensureRootScope(tenantId: string): Promise<string> {
-  await ensureScopesTable();
 
   // Already exists?
   const existing = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
@@ -100,7 +73,6 @@ export async function ensureRootScope(tenantId: string): Promise<string> {
 
 /** List every (non-deleted) scope for a tenant, ordered for UI rendering. */
 export async function listScopes(tenantId: string): Promise<ServiceScope[]> {
-  await ensureScopesTable();
   const rows = await prisma.$queryRawUnsafe<ScopeRow[]>(
     `SELECT ${SELECT}
      FROM service_scopes
@@ -120,7 +92,6 @@ export async function loadScopeChain(
   tenantId: string,
   scopeId: string,
 ): Promise<ServiceScope[]> {
-  await ensureScopesTable();
   // Recursive CTE — Postgres-native parent walk.
   const rows = await prisma.$queryRawUnsafe<ScopeRow[]>(
     `WITH RECURSIVE chain AS (
@@ -147,7 +118,6 @@ export async function getScope(
   tenantId: string,
   scopeId: string,
 ): Promise<ServiceScope | null> {
-  await ensureScopesTable();
   const rows = await prisma.$queryRawUnsafe<ScopeRow[]>(
     `SELECT ${SELECT} FROM service_scopes
      WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL
@@ -168,7 +138,6 @@ export async function createScope(
     sortOrder?: number;
   },
 ): Promise<ServiceScope> {
-  await ensureScopesTable();
   const rows = await prisma.$queryRawUnsafe<ScopeRow[]>(
     `INSERT INTO service_scopes
        (tenant_id, parent_scope_id, level, key, name, description, sort_order, is_root)
@@ -192,7 +161,6 @@ export async function updateScope(
     sortOrder: number;
   }>,
 ): Promise<ServiceScope | null> {
-  await ensureScopesTable();
   const sets: string[] = [];
   const args: unknown[] = [];
   let p = 1;
@@ -222,7 +190,6 @@ export async function deleteScope(
   tenantId: string,
   scopeId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await ensureScopesTable();
   const target = await getScope(tenantId, scopeId);
   if (!target) return { ok: false, error: 'Scope not found' };
   if (target.isRoot) return { ok: false, error: 'Cannot delete the tenant root scope.' };

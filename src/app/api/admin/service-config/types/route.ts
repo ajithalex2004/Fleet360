@@ -12,7 +12,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { authorizeServiceConfig, requireAdmin } from '@/lib/service-config/auth';
-import { ensureServiceConfigTables } from '@/lib/service-config/schema';
 import { SERVICE_TONES } from '@/types/service-config';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -55,8 +54,6 @@ export async function POST(req: NextRequest) {
   const tone = (SERVICE_TONES as readonly string[]).includes(body.tone ?? '') ? body.tone! : 'violet';
   const priority = ['Low', 'Medium', 'High'].includes(body.defaultPriority ?? '') ? body.defaultPriority! : 'Medium';
   const sortOrder = Number.isFinite(body.sortOrder) ? Number(body.sortOrder) : 100;
-
-  await ensureServiceConfigTables();
 
   // Verify the category belongs to this tenant.
   const cat = await withTenantRls(prisma, auth.tenantId, (tx) =>

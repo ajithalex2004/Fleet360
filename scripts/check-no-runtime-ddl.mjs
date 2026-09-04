@@ -75,18 +75,28 @@ import { exit } from 'node:process';
 // tenantId filter is passed) is deliberately NOT fixed here — flagged as
 // its own planned effort, starting with a full caller inventory across
 // workflow-db.ts's ~19 exported functions before any signature changes.
+// One confirmed-exploitable finding from that inventory WAS fixed
+// immediately: admin/workflow-instances/route.ts called
+// getAllWorkflowInstances()/getAllPendingStepInstances() with no tenant
+// filter at all, so any authenticated user of any tenant could read
+// every tenant's pending approvals. Both now require a tenantId.
 //
-// The remaining 4 are deliberately NOT migrated yet — each is either a
-// large interdependent engine (the 3-file service-config engine with
-// versioned, scope-inherited rules) or a large foundational schema
-// (logistics/domain.ts, which also contains a second, unrelated
-// ensureFinanceJournalPostingTables DDL function). Left for a dedicated,
-// more carefully-reviewed pass.
+// The 3-file service-config engine (schema.ts, rules-schema.ts,
+// scopes-schema.ts) was migrated 2026-09-04 into
+// prisma/migrations/20260910000033. DDL-only, same reasoning as
+// workflow-db.ts: every query across all three files uses the bare
+// prisma client, never a tenant-scoped transaction, so RLS would break
+// the whole engine. Checked for a workflow-instances-style confirmed
+// leak before migrating — found none: the one route exercising this
+// path (types/[id]/rules/[category]/route.ts) already validates tenant
+// ownership via ownsType()/getScope() before touching rules data.
+//
+// The remaining 1 is deliberately NOT migrated yet — a large
+// foundational schema (logistics/domain.ts, which also contains a
+// second, unrelated ensureFinanceJournalPostingTables DDL function).
+// Left for a dedicated, more carefully-reviewed pass.
 const KNOWN_VIOLATIONS = new Set([
   'src/lib/logistics/domain.ts',
-  'src/lib/service-config/rules-schema.ts',
-  'src/lib/service-config/schema.ts',
-  'src/lib/service-config/scopes-schema.ts',
 ]);
 
 // ── Detection patterns ────────────────────────────────────────────────────────
