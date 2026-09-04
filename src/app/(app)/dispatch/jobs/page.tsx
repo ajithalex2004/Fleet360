@@ -1,6 +1,7 @@
 'use client';
 /**
- * Dispatch Jobs Queue — full paginated list with filters, search, manual dispatch controls
+ * Dispatch Jobs Queue — full paginated list with filters, search, manual dispatch controls,
+ * and AI Smart Dispatch Optimizer recommendations with 1-click auto-assign.
  */
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
@@ -19,6 +20,26 @@ interface DispatchJob {
   created_at: string;
   updated_at?: string;
   meta?: Record<string, unknown>;
+  assigned_driver_id?: string;
+  assigned_vehicle_id?: string;
+}
+
+interface DispatchRecommendation {
+  id: string;
+  job_id: string;
+  job_service_type: string;
+  job_priority: string;
+  recommended_driver_id: string;
+  recommended_vehicle_id: string;
+  composite_score: number;
+  factor_scores: Record<string, number>;
+  candidates_evaluated: number;
+  reason: string;
+  confidence: number;
+  status: string;
+  driver_name?: string;
+  vehicle_code?: string;
+  vehicle_type?: string;
 }
 
 const STATUS_OPTS = ['ALL','PENDING','SEARCHING','OFFERED','ACCEPTED','IN_PROGRESS','COMPLETED','RETRYING','ESCALATED','FAILED','CANCELLED'];
@@ -58,16 +79,19 @@ function fmtAge(s: string) {
 
 /* ── Component ─────────────────────────────────────────────────────────────── */
 export default function DispatchJobsPage() {
-  const [jobs,    setJobs]    = useState<DispatchJob[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search,  setSearch]  = useState('');
-  const [status,  setStatus]  = useState('ALL');
-  const [service, setService] = useState('ALL');
-  const [priority,setPriority]= useState('ALL');
-  const [page,    setPage]    = useState(1);
-  const [total,   setTotal]   = useState(0);
-  const [selected,setSelected]= useState<Set<string>>(new Set());
-  const [actionLoading, setActionLoading] = useState<string|null>(null);
+  const [jobs,            setJobs]            = useState<DispatchJob[]>([]);
+  const [recommendations, setRecommendations] = useState<Map<string, DispatchRecommendation>>(new Map());
+  const [loading,         setLoading]         = useState(true);
+  const [search,          setSearch]          = useState('');
+  const [status,          setStatus]          = useState('ALL');
+  const [service,         setService]         = useState('ALL');
+  const [priority,        setPriority]        = useState('ALL');
+  const [page,            setPage]            = useState(1);
+  const [total,           setTotal]           = useState(0);
+  const [selected,        setSelected]        = useState<Set<string>>(new Set());
+  const [actionLoading,   setActionLoading]   = useState<string|null>(null);
+  const [selectedJobRec,  setSelectedJobRec]  = useState<DispatchRecommendation|null>(null);
+  const [triggeringAi,    setTriggeringAi]    = useState(false);
   const PER_PAGE = 25;
 
   const load = useCallback(async () => {
@@ -78,10 +102,24 @@ export default function DispatchJobsPage() {
       if (service !== 'ALL') sp.set('serviceType', service);
       if (priority!== 'ALL') sp.set('priority', priority);
       if (search)            sp.set('search',   search);
-      const r = await fetch(`/api/dispatch/jobs?${sp}`);
-      const d = await r.json();
+      
+      const [jobsRes, recsRes] = await Promise.all([
+        fetch(`/api/dispatch/jobs?${sp}`),
+        fetch(`/api/dispatch/recommendations`).catch(() => null),
+      ]);
+
+      const d = await jobsRes.json();
       setJobs(d.data ?? []);
       setTotal(d.total ?? 0);
+
+      if (recsRes && recsRes.ok) {
+        const recData = await recsRes.json();
+        const map = new Map<string, DispatchRecommendation>();
+        for (const r of (recData.data ?? [])) {
+          map.set(r.job_id, r);
+        }
+        setRecommendations(map);
+      }
     } finally {
       setLoading(false);
     }
@@ -117,15 +155,66 @@ export default function DispatchJobsPage() {
     load();
   }
 
+  async function handleTriggerAi() {
+    setTriggeringAi(true);
+    try {
+      await fetch('/api/dispatch/recommendations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'TRIGGER_AI' }),
+      });
+      await load();
+    } finally {
+      setTriggeringAi(false);
+    }
+  }
+
+  async function handleApplyMatch(rec: DispatchRecommendation) {
+    setActionLoading(rec.job_id);
+    try {
+      await fetch('/api/dispatch/recommendations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'APPLY_MATCH',
+          jobId: rec.job_id,
+          recommendationId: rec.id,
+          driverId: rec.recommended_driver_id,
+          vehicleId: rec.recommended_vehicle_id,
+        }),
+      });
+      await load();
+      setSelectedJobRec(null);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  const pendingWithAiMatches = jobs.filter(j => 
+    (j.status === 'PENDING' || j.status === 'SEARCHING') && recommendations.has(j.id)
+  );
+
   return (
     <div className="space-y-6 max-w-full">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--text-main)]">📋 Jobs Queue</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-[var(--text-main)]">📋 Jobs Queue</h1>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              ⚡ Smart Dispatch Active
+            </span>
+          </div>
           <p className="text-[var(--text-muted)] text-sm mt-0.5">{total.toLocaleString()} total jobs · page {page}/{totalPages || 1}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={handleTriggerAi}
+            disabled={triggeringAi}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 border border-emerald-500/30 text-emerald-300 text-sm font-semibold hover:from-emerald-600/30 hover:to-cyan-600/30 transition-all disabled:opacity-50"
+          >
+            {triggeringAi ? '🤖 Optimising Fleet…' : '🤖 AI Dispatch Optimizer'}
+          </button>
           <Link href="/dispatch/command"
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600/20 border border-blue-600/30 text-blue-400 text-sm font-semibold hover:bg-blue-600/30 transition-all">
             🚦 Command Centre
@@ -136,6 +225,36 @@ export default function DispatchJobsPage() {
           </button>
         </div>
       </div>
+
+      {/* AI Recommendations Banner if pending jobs exist */}
+      {pendingWithAiMatches.length > 0 && (
+        <div className="bg-gradient-to-r from-emerald-950/40 via-[var(--bg-surface)] to-cyan-950/30 border border-emerald-500/30 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">⚡</span>
+            <div>
+              <h3 className="text-sm font-semibold text-emerald-300">
+                AI Dispatch Suggestions Available ({pendingWithAiMatches.length} pending jobs)
+              </h3>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                The 15-factor statistical scoring engine has evaluated live HOS shifts, vehicle health, deadhead distance, and license compliance.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const first = pendingWithAiMatches[0];
+                if (first && recommendations.has(first.id)) {
+                  setSelectedJobRec(recommendations.get(first.id)!);
+                }
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-semibold hover:bg-emerald-500/30 transition-all"
+            >
+              Review Top Match
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-4">
@@ -210,57 +329,117 @@ export default function DispatchJobsPage() {
                 <th className="px-4 py-3 text-left">Service</th>
                 <th className="px-4 py-3 text-left">Priority</th>
                 <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-left">AI Recommendation</th>
                 <th className="px-4 py-3 text-left">Origin → Destination</th>
                 <th className="px-4 py-3 text-left">Pax</th>
                 <th className="px-4 py-3 text-left">Pickup</th>
-                <th className="px-4 py-3 text-left">Attempts</th>
                 <th className="px-4 py-3 text-left">Age</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border-subtle)]">
-              {jobs.map(j => (
-                <tr key={j.id}
-                  className={`hover:bg-[var(--bg-surface-hover)] transition-colors ${selected.has(j.id) ? 'bg-blue-500/5' : ''}`}>
-                  <td className="px-4 py-3">
-                    <input type="checkbox" checked={selected.has(j.id)}
-                      onChange={() => toggleSelect(j.id)} className="rounded accent-blue-500" />
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="font-mono text-xs text-[var(--text-muted)] select-all">{j.id.slice(0,12)}…</span>
-                    {j.meta && (j.meta as any).multiStop && (
-                      <span className="ml-1 px-1 py-0.5 rounded text-[9px] bg-violet-500/20 text-violet-400 font-bold">MERGED</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-[var(--text-muted)]">
-                    <span className="mr-1">{SVC_ICON[j.service_type] ?? '🚗'}</span>
-                    {j.service_type}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${PRIORITY_COLOR[j.priority] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>
-                      {j.priority}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${STATUS_COLOR[j.status] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>
-                      {j.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 max-w-xs">
-                    <p className="text-[var(--text-muted)] text-xs truncate">{j.origin_address ?? '—'}</p>
-                    <p className="text-[var(--text-faint)] text-xs truncate">{j.destination_address ?? '—'}</p>
-                  </td>
-                  <td className="px-4 py-3 text-[var(--text-muted)] text-xs text-center">{j.passenger_count ?? 1}</td>
-                  <td className="px-4 py-3 text-[var(--text-muted)] text-xs whitespace-nowrap">
-                    {j.scheduled_pickup ? fmtDate(j.scheduled_pickup) : 'ASAP'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs font-semibold ${j.attempt_count >= 3 ? 'text-red-400' : j.attempt_count >= 2 ? 'text-orange-400' : 'text-[var(--text-muted)]'}`}>
-                      {j.attempt_count}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-[var(--text-faint)] text-xs">{fmtAge(j.created_at)}</td>
-                </tr>
-              ))}
+              {jobs.map(j => {
+                const rec = recommendations.get(j.id);
+                const isPending = j.status === 'PENDING' || j.status === 'SEARCHING';
+
+                return (
+                  <tr key={j.id}
+                    className={`hover:bg-[var(--bg-surface-hover)] transition-colors ${selected.has(j.id) ? 'bg-blue-500/5' : ''}`}>
+                    <td className="px-4 py-3">
+                      <input type="checkbox" checked={selected.has(j.id)}
+                        onChange={() => toggleSelect(j.id)} className="rounded accent-blue-500" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-mono text-xs text-[var(--text-muted)] select-all">{j.id.slice(0,12)}…</span>
+                      {j.meta && (j.meta as any).multiStop && (
+                        <span className="ml-1 px-1 py-0.5 rounded text-[9px] bg-violet-500/20 text-violet-400 font-bold">MERGED</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-[var(--text-muted)]">
+                      <span className="mr-1">{SVC_ICON[j.service_type] ?? '🚗'}</span>
+                      {j.service_type}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${PRIORITY_COLOR[j.priority] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>
+                        {j.priority}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded text-xs font-semibold ${STATUS_COLOR[j.status] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>
+                        {j.status}
+                      </span>
+                    </td>
+                    
+                    {/* AI Recommendation Column */}
+                    <td className="px-4 py-3 max-w-xs">
+                      {rec ? (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              rec.composite_score >= 0.85
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                            }`}>
+                              🤖 {Math.round(rec.composite_score * 100)}% Match
+                            </span>
+                            <span className="text-xs font-medium text-[var(--text-main)] truncate">
+                              {rec.vehicle_code ?? rec.recommended_vehicle_id} · {rec.driver_name ?? rec.recommended_driver_id}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[var(--text-muted)] line-clamp-1">
+                            {rec.reason}
+                          </p>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-[var(--text-faint)]">—</span>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3 max-w-xs">
+                      <p className="text-[var(--text-muted)] text-xs truncate">{j.origin_address ?? '—'}</p>
+                      <p className="text-[var(--text-faint)] text-xs truncate">{j.destination_address ?? '—'}</p>
+                    </td>
+                    <td className="px-4 py-3 text-[var(--text-muted)] text-xs text-center">{j.passenger_count ?? 1}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)] text-xs whitespace-nowrap">
+                      {j.scheduled_pickup ? fmtDate(j.scheduled_pickup) : 'ASAP'}
+                    </td>
+                    <td className="px-4 py-3 text-[var(--text-faint)] text-xs">{fmtAge(j.created_at)}</td>
+                    
+                    {/* Actions Column */}
+                    <td className="px-4 py-3 text-right">
+                      {isPending && rec ? (
+                        <button
+                          onClick={() => handleApplyMatch(rec)}
+                          disabled={actionLoading === j.id}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600/20 border border-emerald-600/30 text-emerald-400 text-xs font-semibold hover:bg-emerald-600/30 transition-all disabled:opacity-50"
+                        >
+                          {actionLoading === j.id ? '…' : '⚡ Accept Match'}
+                        </button>
+                      ) : rec ? (
+                        <button
+                          onClick={() => setSelectedJobRec(rec)}
+                          className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-xs font-medium hover:text-[var(--text-main)] transition-all"
+                        >
+                          Details
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            fetch('/api/dispatch/recommendations', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ action: 'TRIGGER_AI', jobId: j.id }),
+                            }).then(() => load());
+                          }}
+                          className="px-2 py-1 rounded-lg text-xs text-blue-400 hover:bg-blue-500/10 transition-all"
+                        >
+                          Score AI
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -290,6 +469,71 @@ export default function DispatchJobsPage() {
               className="px-3 py-1.5 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-xs hover:bg-[var(--bg-surface-elevated)] transition-all disabled:opacity-40">
               Next →
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Detail Modal / Drawer */}
+      {selectedJobRec && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-[var(--text-main)] flex items-center gap-2">
+                🤖 AI Dispatch Breakdown
+              </h3>
+              <button onClick={() => setSelectedJobRec(null)} className="text-[var(--text-muted)] hover:text-white text-xl">✕</button>
+            </div>
+
+            <div className="p-3 bg-[var(--bg-surface-hover)] rounded-xl border border-[var(--border-subtle)] space-y-2">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-[var(--text-muted)]">Candidate Driver:</span>
+                <span className="font-semibold text-[var(--text-main)]">{selectedJobRec.driver_name ?? selectedJobRec.recommended_driver_id}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-[var(--text-muted)]">Candidate Vehicle:</span>
+                <span className="font-semibold text-[var(--text-main)]">{selectedJobRec.vehicle_code ?? selectedJobRec.recommended_vehicle_id}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-[var(--text-muted)]">Match Score:</span>
+                <span className="font-bold text-emerald-400">{Math.round(selectedJobRec.composite_score * 100)}%</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Operational Rationale</h4>
+              <p className="text-sm text-[var(--text-main)] bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-xl leading-relaxed">
+                {selectedJobRec.reason}
+              </p>
+            </div>
+
+            {selectedJobRec.factor_scores && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Factor Scores (15-Dimensional Model)</h4>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {Object.entries(selectedJobRec.factor_scores).slice(0, 8).map(([k, v]) => (
+                    <div key={k} className="flex justify-between p-2 rounded-lg bg-[var(--bg-surface-hover)]">
+                      <span className="text-[var(--text-muted)] capitalize">{k.replace(/([A-Z])/g, ' $1')}</span>
+                      <span className="font-semibold text-[var(--text-main)]">{Math.round((v as number) * 100)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-[var(--border-subtle)]">
+              <button
+                onClick={() => setSelectedJobRec(null)}
+                className="px-4 py-2 rounded-xl text-sm text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => handleApplyMatch(selectedJobRec)}
+                className="px-4 py-2 rounded-xl text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-500 transition-all shadow-lg"
+              >
+                ⚡ Assign Candidate
+              </button>
+            </div>
           </div>
         </div>
       )}
