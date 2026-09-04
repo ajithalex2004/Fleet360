@@ -81,20 +81,59 @@ export type MaintenanceAction =
   | 'URGENT_SERVICE'
   | 'GROUND_VEHICLE';
 
-// ── Predictive Maintenance Output ──────────────────────────────────────────────
+// ── Predictive Maintenance Output (9 Comprehensive Failure Signals) ───────────
 export interface MaintenanceRiskFactors {
+  // Dimension 1: Service Overdue
   serviceOverdue: number;         // 0–1 score
-  fuelAnomalyScore: number;       // 0–1 score
-  workOrderFrequency: number;     // 0–1 score
-  vehicleAgeFactor: number;       // 0–1 score
-  odometerFactor: number;         // 0–1 score
   serviceOverdueDays: number;     // actual days since last service
   serviceOverdueKm: number;       // actual km since last service
+  
+  // Dimension 2: Fuel Anomaly
+  fuelAnomalyScore: number;       // 0–1 score
   fuelConsumptionBaseline: number;// L/100km baseline avg
   fuelConsumptionRecent: number;  // L/100km last 30 days
+  
+  // Dimension 3: Work Order History
+  workOrderFrequency: number;     // 0–1 score
   openWorkOrders: number;
-  vehicleAgeYears: number;
+  workOrdersLast90Days: number;
+  
+  // Dimension 4: Cumulative Mileage
+  odometerFactor: number;         // 0–1 score
   odometerKm: number;
+  
+  // Dimension 5: Vehicle Age
+  vehicleAgeFactor: number;       // 0–1 score
+  vehicleAgeYears: number;
+  
+  // Dimension 6: CAN-bus DTC Faults
+  dtcFaultScore: number;          // 0–1 score
+  activeDtcCodes: string[];       // e.g. ['P0300', 'P0128', 'P0562']
+  dtcSeveritySummary?: string;    // e.g. '1 Critical, 1 Major Faults'
+  
+  // Dimension 7: Telematics Sensor Values & Thermal Stress
+  sensorAnomalyScore: number;     // 0–1 score
+  coolantTempC?: number;          // e.g. 106°C
+  oilPressureKpa?: number;        // e.g. 110 kPa
+  batteryVoltage?: number;        // e.g. 11.9V
+  transmissionTempC?: number;     // e.g. 112°C
+  sensorWarningList: string[];    // ['COOLANT_OVERHEAT_WARNING', 'LOW_BATTERY_VOLTAGE']
+  
+  // Dimension 8: Operating Hours & High-Idle Stress
+  operatingHoursFactor: number;   // 0–1 score
+  engineOperatingHours: number;   // Total engine run hours
+  dutyCycleStressRatio: number;   // Hours / Km stress factor
+  
+  // Dimension 9: Repeat Failures & Component RUL (Remaining Useful Life)
+  repeatFailureScore: number;     // 0–1 score
+  repeatFailureCount: number;     // Number of recurring subsystem repairs within 90d
+  repeatSubsystems: string[];     // ['BRAKES', 'ELECTRICAL']
+  subsystemRUL: {
+    powertrainPct: number;        // 0–100% Remaining Useful Life
+    brakeSystemPct: number;       // 0–100%
+    electricalPct: number;        // 0–100%
+    hvacPct: number;              // 0–100%
+  };
 }
 
 export interface VehicleRiskScore {
@@ -107,7 +146,8 @@ export interface VehicleRiskScore {
   riskLevel: RiskLevel;
   factors: MaintenanceRiskFactors;
   recommendedAction: MaintenanceAction;
-  predictedFailureWindow: string; // '7–14 days', '30–60 days', etc.
+  predictedFailureWindow: string; // '0–7 days', '7–14 days', '14–30 days', etc.
+  primaryFailureReason?: string;  // e.g. 'Engine Misfire DTC P0300 & Thermal Overheat (106°C)'
   autoWorkOrderId?: string;       // set if WO was auto-created
   scoredAt: string;
 }
