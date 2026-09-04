@@ -17,7 +17,6 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-import { ensureTripTables } from '../route';
 import { ensureDispatchSchema } from '@/lib/dispatch/schema';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -33,7 +32,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   try {
-    await ensureTripTables();
     await ensureDispatchSchema();
 
     const body     = await req.json().catch(() => ({}));

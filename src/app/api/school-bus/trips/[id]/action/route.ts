@@ -18,7 +18,6 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-import { ensureTripTables } from '../../route';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
@@ -58,7 +57,6 @@ export async function POST(
   const { tenantId } = authz;
 
   try {
-    await ensureTripTables();
     const { id: tripId } = await params;
     const body = await req.json().catch(() => ({}));
     const {

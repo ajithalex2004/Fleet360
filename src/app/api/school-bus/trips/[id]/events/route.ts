@@ -24,7 +24,6 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-import { ensureTripTables } from '../../route';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
@@ -48,7 +47,6 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTripTables();
         const { id } = await params;
 
         const events = await tx.$queryRawUnsafe<Row[]>(
@@ -72,7 +70,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTripTables();
         const { id: tripId } = await params;
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);

@@ -17,84 +17,6 @@ import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
-export async function ensureTripTables() {
-  const exec = (sql: string) => prisma.$executeRawUnsafe(sql).catch(() => {});
-
-  // Trips table
-  await exec(`
-    CREATE TABLE IF NOT EXISTS school_bus_trips (
-      id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id        TEXT        NOT NULL DEFAULT 'default',
-      trip_code        TEXT,
-      route_id         UUID,
-      route_name       TEXT,
-      route_code       TEXT,
-      vehicle_id       TEXT,
-      vehicle_plate    TEXT,
-      driver_id        TEXT,
-      driver_name      TEXT,
-      attendant_id     UUID,
-      attendant_name   TEXT,
-      direction        TEXT        NOT NULL DEFAULT 'PICKUP',
-      session          TEXT        NOT NULL DEFAULT 'MORNING',
-      scheduled_date   DATE        NOT NULL DEFAULT CURRENT_DATE,
-      scheduled_start  TIME,
-      actual_start     TIMESTAMPTZ,
-      actual_end       TIMESTAMPTZ,
-      status           TEXT        NOT NULL DEFAULT 'SCHEDULED',
-      -- SCHEDULED | IN_PROGRESS | COMPLETED | CANCELLED | BREAKDOWN
-      students_total   INT         NOT NULL DEFAULT 0,
-      students_boarded INT         NOT NULL DEFAULT 0,
-      students_dropped INT         NOT NULL DEFAULT 0,
-      stops_total      INT         NOT NULL DEFAULT 0,
-      stops_completed  INT         NOT NULL DEFAULT 0,
-      distance_km      DOUBLE PRECISION,
-      duration_min     INT,
-      avg_speed_kmh    DOUBLE PRECISION,
-      max_speed_kmh    DOUBLE PRECISION,
-      -- Safety flags
-      speeding_events  INT         NOT NULL DEFAULT 0,
-      harsh_braking    INT         NOT NULL DEFAULT 0,
-      geofence_exits   INT         NOT NULL DEFAULT 0,
-      notes            TEXT,
-      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sbt2_tenant ON school_bus_trips(tenant_id, status)`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sbt2_date   ON school_bus_trips(scheduled_date)`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sbt2_route  ON school_bus_trips(route_id)`);
-  await exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sbt2_code ON school_bus_trips(trip_code, tenant_id) WHERE trip_code IS NOT NULL`);
-
-  // Trip events (telemetry log)
-  await exec(`
-    CREATE TABLE IF NOT EXISTS school_bus_trip_events (
-      id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id     TEXT        NOT NULL DEFAULT 'default',
-      trip_id       UUID        NOT NULL,
-      event_type    TEXT        NOT NULL,
-      -- DEPARTURE | STOP_ARRIVAL | STOP_DEPARTURE | BOARDING | ALIGHTING
-      -- GEOFENCE_EXIT | SPEEDING | HARSH_BRAKING | INCIDENT | ARRIVAL | BREAKDOWN
-      event_time    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      lat           DOUBLE PRECISION,
-      lng           DOUBLE PRECISION,
-      speed_kmh     DOUBLE PRECISION,
-      stop_id       UUID,
-      stop_name     TEXT,
-      student_id    UUID,
-      student_name  TEXT,
-      students_count INT,
-      -- snapshot count at event time
-      description   TEXT,
-      metadata      JSONB       NOT NULL DEFAULT '{}',
-      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sbte_trip   ON school_bus_trip_events(trip_id, event_time)`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sbte_tenant ON school_bus_trip_events(tenant_id, event_time)`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sbte_type   ON school_bus_trip_events(event_type)`);
-}
-
 function serialize(rows: Row[]): Row[] {
   return rows.map(r => {
     const out: Row = {};
@@ -115,8 +37,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTripTables();
-
         const sp       = new URL(req.url).searchParams;
         const tenantId = sp.get('tenantId') ?? 'default';
         const date     = sp.get('date')     ?? new Date().toISOString().slice(0, 10);
@@ -176,8 +96,6 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTripTables();
-
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {
