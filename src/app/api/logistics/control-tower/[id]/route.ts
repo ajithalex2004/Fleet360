@@ -13,7 +13,6 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-import { ensureLogisticsDomainTables } from '@/lib/logistics/domain';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
@@ -41,10 +40,6 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   return withTenantRls(prisma, tenantId, async (tx) => {
 
       try {
-        // ensureLogisticsDomainTables is memoised — after the first call it is a
-        // no-op boolean check (no DB round-trip), so this stays cheap on warm hits.
-        await ensureLogisticsDomainTables();
-
         // Single parallel batch: shipment header (with the carrier name folded in
         // via LEFT JOIN) alongside stops, events and PODs. One DB round-trip total
         // instead of fetch-shipment-then-fetch-children (was two), and one fewer

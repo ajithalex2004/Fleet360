@@ -91,13 +91,24 @@ import { exit } from 'node:process';
 // path (types/[id]/rules/[category]/route.ts) already validates tenant
 // ownership via ownsType()/getScope() before touching rules data.
 //
-// The remaining 1 is deliberately NOT migrated yet — a large
-// foundational schema (logistics/domain.ts, which also contains a
-// second, unrelated ensureFinanceJournalPostingTables DDL function).
-// Left for a dedicated, more carefully-reviewed pass.
-const KNOWN_VIOLATIONS = new Set([
-  'src/lib/logistics/domain.ts',
-]);
+// The last entry, logistics/domain.ts, was migrated 2026-09-04 into
+// prisma/migrations/20260910000034 — 27 tables + 2 columns + ~40 indexes,
+// all already carrying tenant_id at creation time. DDL-only, no RLS: 0
+// uses of withTenantRls/withPlatformAdmin across the file's 216 raw SQL
+// calls (same bare-prisma-client reasoning as workflow-db.ts and the
+// service-config engine). Its second, unrelated DDL function,
+// ensureFinanceJournalPostingTables, was already a no-op stub — those
+// tables were migrated separately in 20260809000000 — so it was deleted
+// outright. Spot-checked several exported functions with an optional/
+// nullable tenantId parameter (fetchShipmentById, listShipmentOrders) for
+// a workflow-instances-style confirmed leak; found none — every current
+// caller supplies a concrete tenantId. A full caller audit of all ~60
+// exported functions was not attempted and would be its own effort if
+// ever needed.
+//
+// The allowlist is now empty — every file that once ran DDL at request
+// time has been migrated.
+const KNOWN_VIOLATIONS = new Set([]);
 
 // ── Detection patterns ────────────────────────────────────────────────────────
 // Matches lines declaring runtime-DDL functions anywhere in src/.

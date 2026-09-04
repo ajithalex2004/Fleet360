@@ -61,8 +61,9 @@ export async function GET(req: NextRequest) {
     if (shipmentIds.length > 0) {
       const ph = shipmentIds.map((_, i) => `$${i + 2}`).join(',');
       // Only this query is wrapped, not the listFreightRfqs call above it:
-      // that helper starts with ensureLogisticsDomainTables(), and running DDL
-      // inside a tenant transaction is not something to do casually.
+      // that helper (like the rest of logistics/domain.ts) queries through the
+      // bare prisma client with tenant_id filtered at the app layer, not a
+      // tenant-scoped RLS transaction, so it isn't safe to fold into this tx.
       //
       // The .catch stays outside the wrapper on purpose. A rejection now rolls
       // the transaction back first and the fallback is applied after, which is

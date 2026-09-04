@@ -795,668 +795,6 @@ interface LegacyBookingRaw {
   status: string | null;
 }
 
-let ensurePromise: Promise<void> | null = null;
-let ensured = false;
-
-export async function ensureLogisticsDomainTables() {
-  if (ensured) return;
-  if (ensurePromise) return ensurePromise;
-  ensurePromise = (async () => {
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_carriers (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        deleted_at TIMESTAMPTZ,
-        tenant_id TEXT NOT NULL,
-        carrier_code TEXT,
-        carrier_type TEXT NOT NULL DEFAULT 'TRANSPORT_COMPANY',
-        name TEXT NOT NULL,
-        trade_license TEXT,
-        contact_name TEXT,
-        contact_email TEXT,
-        contact_phone TEXT,
-        status TEXT NOT NULL DEFAULT 'ACTIVE',
-        onboarding_status TEXT NOT NULL DEFAULT 'DRAFT',
-        compliance_status TEXT NOT NULL DEFAULT 'PENDING',
-        service_regions JSONB,
-        capacity_profile JSONB,
-        commission_model TEXT,
-        commission_rate NUMERIC(10,2),
-        margin_rule_json JSONB,
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_carrier_documents (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        deleted_at TIMESTAMPTZ,
-        tenant_id TEXT NOT NULL,
-        carrier_id TEXT NOT NULL,
-        document_type TEXT NOT NULL,
-        document_name TEXT NOT NULL,
-        document_url TEXT NOT NULL,
-        storage_key TEXT,
-        file_name TEXT,
-        mime_type TEXT,
-        file_size NUMERIC(14,0),
-        status TEXT NOT NULL DEFAULT 'PENDING_REVIEW',
-        issue_date DATE,
-        expiry_date DATE,
-        verified_by TEXT,
-        verified_at TIMESTAMPTZ,
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_carrier_vehicles (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        deleted_at TIMESTAMPTZ,
-        tenant_id TEXT NOT NULL,
-        carrier_id TEXT NOT NULL,
-        owner_driver_id TEXT,
-        vehicle_code TEXT,
-        plate_no TEXT NOT NULL,
-        registration_no TEXT,
-        vehicle_type TEXT NOT NULL,
-        make TEXT,
-        model TEXT,
-        year INT,
-        color TEXT,
-        capacity_tons NUMERIC(12,3),
-        volume_cbm NUMERIC(12,3),
-        pallet_capacity INT,
-        axle_count INT,
-        gps_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-        gps_provider TEXT,
-        home_region TEXT,
-        current_region TEXT,
-        availability_status TEXT NOT NULL DEFAULT 'AVAILABLE',
-        compliance_status TEXT NOT NULL DEFAULT 'PENDING_REVIEW',
-        status TEXT NOT NULL DEFAULT 'ACTIVE',
-        registration_expiry DATE,
-        insurance_expiry DATE,
-        permit_expiry DATE,
-        inspection_expiry DATE,
-        verified_by TEXT,
-        verified_at TIMESTAMPTZ,
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_shipment_orders (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        deleted_at TIMESTAMPTZ,
-        tenant_id TEXT NOT NULL,
-        shipment_no TEXT NOT NULL,
-        legacy_booking_id TEXT UNIQUE,
-        cargo_owner_customer_id TEXT,
-        cargo_owner_name TEXT,
-        cargo_owner_email TEXT,
-        cargo_owner_phone TEXT,
-        shipment_type TEXT,
-        booking_mode TEXT NOT NULL DEFAULT 'SPOT',
-        marketplace_status TEXT NOT NULL DEFAULT 'PRIVATE',
-        status TEXT NOT NULL DEFAULT 'DRAFT',
-        priority TEXT NOT NULL DEFAULT 'NORMAL',
-        origin_name TEXT,
-        origin_address TEXT,
-        destination_name TEXT,
-        destination_address TEXT,
-        pickup_window_from TIMESTAMPTZ,
-        pickup_window_to TIMESTAMPTZ,
-        delivery_window_from TIMESTAMPTZ,
-        delivery_window_to TIMESTAMPTZ,
-        requested_vehicle_type TEXT,
-        total_weight_kg NUMERIC(14,3),
-        total_volume_cbm NUMERIC(14,3),
-        cargo_value_amount NUMERIC(15,2),
-        currency TEXT NOT NULL DEFAULT 'AED',
-        customer_rate_amount NUMERIC(15,2),
-        carrier_cost_amount NUMERIC(15,2),
-        platform_commission_amount NUMERIC(15,2),
-        margin_amount NUMERIC(15,2),
-        assigned_carrier_id TEXT,
-        assigned_driver_id TEXT,
-        assigned_vehicle_id TEXT,
-        source_channel TEXT,
-        notes TEXT,
-        metadata JSONB,
-        created_by TEXT,
-        updated_by TEXT
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_customer_marketplace_settings (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        customer_id TEXT NOT NULL,
-        customer_name TEXT,
-        rfq_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-        bid_submission_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-        direct_assignment_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-        default_procurement_mode TEXT NOT NULL DEFAULT 'RFQ_BIDDING',
-        require_rfq_before_award BOOLEAN NOT NULL DEFAULT FALSE,
-        notes TEXT,
-        metadata JSONB,
-        updated_by TEXT
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_consignments (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        shipment_order_id TEXT NOT NULL,
-        consignment_no TEXT,
-        shipper_name TEXT,
-        consignee_name TEXT,
-        cargo_summary TEXT,
-        handling_notes TEXT,
-        status TEXT NOT NULL DEFAULT 'PLANNED',
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_cargo_lines (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        shipment_order_id TEXT NOT NULL,
-        consignment_id TEXT,
-        description TEXT NOT NULL,
-        commodity_code TEXT,
-        quantity NUMERIC(14,3),
-        package_type TEXT,
-        weight_kg NUMERIC(14,3),
-        volume_cbm NUMERIC(14,3),
-        is_hazmat BOOLEAN NOT NULL DEFAULT FALSE,
-        temp_min_c NUMERIC(8,2),
-        temp_max_c NUMERIC(8,2),
-        cargo_value_amount NUMERIC(15,2),
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_shipment_stops (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        shipment_order_id TEXT NOT NULL,
-        sequence_no INT NOT NULL,
-        stop_type TEXT NOT NULL,
-        location_name TEXT,
-        address TEXT,
-        contact_name TEXT,
-        contact_phone TEXT,
-        latitude NUMERIC(10,7),
-        longitude NUMERIC(10,7),
-        planned_arrival_at TIMESTAMPTZ,
-        planned_depart_at TIMESTAMPTZ,
-        actual_arrival_at TIMESTAMPTZ,
-        actual_depart_at TIMESTAMPTZ,
-        status TEXT NOT NULL DEFAULT 'PLANNED',
-        instructions TEXT,
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_route_legs (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        shipment_order_id TEXT NOT NULL,
-        sequence_no INT NOT NULL,
-        from_stop_id TEXT,
-        to_stop_id TEXT,
-        planned_distance_km NUMERIC(12,3),
-        planned_duration_min INT,
-        actual_distance_km NUMERIC(12,3),
-        actual_duration_min INT,
-        toll_amount NUMERIC(15,2),
-        status TEXT NOT NULL DEFAULT 'PLANNED',
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_freight_rfqs (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        shipment_order_id TEXT NOT NULL,
-        rfq_no TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'DRAFT',
-        invite_scope TEXT NOT NULL DEFAULT 'SELECTED_CARRIERS',
-        bid_deadline_at TIMESTAMPTZ,
-        negotiation_round INT NOT NULL DEFAULT 1,
-        awarded_bid_id TEXT,
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_carrier_portal_invites (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        rfq_id TEXT NOT NULL,
-        shipment_order_id TEXT NOT NULL,
-        carrier_id TEXT NOT NULL,
-        token_hash TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'ACTIVE',
-        expires_at TIMESTAMPTZ,
-        last_accessed_at TIMESTAMPTZ,
-        created_by TEXT,
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_carrier_bids (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        shipment_order_id TEXT NOT NULL,
-        rfq_id TEXT,
-        carrier_id TEXT NOT NULL,
-        bid_no TEXT,
-        amount NUMERIC(15,2) NOT NULL,
-        currency TEXT NOT NULL DEFAULT 'AED',
-        transit_time_hours INT,
-        validity_until TIMESTAMPTZ,
-        status TEXT NOT NULL DEFAULT 'SUBMITTED',
-        charge_breakdown JSONB,
-        notes TEXT
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_assignments (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        shipment_order_id TEXT NOT NULL,
-        carrier_id TEXT,
-        driver_id TEXT,
-        vehicle_id TEXT,
-        assignment_type TEXT NOT NULL DEFAULT 'CARRIER',
-        status TEXT NOT NULL DEFAULT 'ASSIGNED',
-        cost_amount NUMERIC(15,2),
-        currency TEXT NOT NULL DEFAULT 'AED',
-        accepted_at TIMESTAMPTZ,
-        dispatched_at TIMESTAMPTZ,
-        completed_at TIMESTAMPTZ,
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_tracking_events (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        shipment_order_id TEXT NOT NULL,
-        assignment_id TEXT,
-        event_type TEXT NOT NULL,
-        status TEXT,
-        latitude NUMERIC(10,7),
-        longitude NUMERIC(10,7),
-        source TEXT NOT NULL DEFAULT 'SYSTEM',
-        occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        notes TEXT,
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_pod_events (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        shipment_order_id TEXT NOT NULL,
-        assignment_id TEXT,
-        delivered_at TIMESTAMPTZ,
-        recipient_name TEXT,
-        signature_url TEXT,
-        photo_urls JSONB,
-        document_urls JSONB,
-        gps JSONB,
-        status TEXT NOT NULL DEFAULT 'SUBMITTED',
-        created_by TEXT,
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_freight_charges (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        shipment_order_id TEXT NOT NULL,
-        charge_side TEXT NOT NULL,
-        charge_type TEXT NOT NULL,
-        description TEXT,
-        quantity NUMERIC(14,3) NOT NULL DEFAULT 1,
-        unit_rate NUMERIC(15,2) NOT NULL DEFAULT 0,
-        amount NUMERIC(15,2) NOT NULL DEFAULT 0,
-        tax_amount NUMERIC(15,2) NOT NULL DEFAULT 0,
-        total_amount NUMERIC(15,2) NOT NULL DEFAULT 0,
-        currency TEXT NOT NULL DEFAULT 'AED',
-        billing_status TEXT NOT NULL DEFAULT 'DRAFT',
-        invoice_id TEXT,
-        settlement_id TEXT,
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_carrier_settlements (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        carrier_id TEXT NOT NULL,
-        settlement_no TEXT NOT NULL,
-        period_start DATE,
-        period_end DATE,
-        gross_amount NUMERIC(15,2) NOT NULL DEFAULT 0,
-        deductions_amount NUMERIC(15,2) NOT NULL DEFAULT 0,
-        commission_amount NUMERIC(15,2) NOT NULL DEFAULT 0,
-        net_payable_amount NUMERIC(15,2) NOT NULL DEFAULT 0,
-        currency TEXT NOT NULL DEFAULT 'AED',
-        status TEXT NOT NULL DEFAULT 'DRAFT',
-        payment_id TEXT,
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_driver_payouts (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        shipment_order_id TEXT NOT NULL,
-        assignment_id TEXT,
-        driver_id TEXT,
-        payout_no TEXT NOT NULL,
-        gross_amount NUMERIC(15,2) NOT NULL DEFAULT 0,
-        deductions_amount NUMERIC(15,2) NOT NULL DEFAULT 0,
-        net_payable_amount NUMERIC(15,2) NOT NULL DEFAULT 0,
-        currency TEXT NOT NULL DEFAULT 'AED',
-        status TEXT NOT NULL DEFAULT 'DRAFT',
-        payment_id TEXT,
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_finance_postings (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        shipment_order_id TEXT NOT NULL,
-        posting_type TEXT NOT NULL,
-        source_record_id TEXT NOT NULL DEFAULT '',
-        finance_invoice_id TEXT,
-        finance_journal_entry_id TEXT,
-        amount NUMERIC(15,2) NOT NULL DEFAULT 0,
-        currency TEXT NOT NULL DEFAULT 'AED',
-        status TEXT NOT NULL DEFAULT 'POSTED',
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_shipment_exceptions (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        shipment_order_id TEXT NOT NULL,
-        assignment_id TEXT,
-        exception_type TEXT NOT NULL,
-        severity TEXT NOT NULL DEFAULT 'MEDIUM',
-        status TEXT NOT NULL DEFAULT 'OPEN',
-        title TEXT NOT NULL,
-        description TEXT,
-        raised_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        assigned_to TEXT,
-        acknowledged_at TIMESTAMPTZ,
-        acknowledged_by TEXT,
-        escalated_at TIMESTAMPTZ,
-        escalated_by TEXT,
-        sla_due_at TIMESTAMPTZ,
-        sla_breached_at TIMESTAMPTZ,
-        resolved_at TIMESTAMPTZ,
-        resolution_note TEXT,
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_rate_contracts (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        deleted_at TIMESTAMPTZ,
-        tenant_id TEXT NOT NULL,
-        customer_id TEXT,
-        customer_name TEXT,
-        carrier_id TEXT,
-        contract_no TEXT NOT NULL,
-        lane_origin TEXT NOT NULL,
-        lane_destination TEXT NOT NULL,
-        vehicle_type TEXT,
-        service_level TEXT,
-        currency TEXT NOT NULL DEFAULT 'AED',
-        base_rate NUMERIC(15,2) NOT NULL DEFAULT 0,
-        min_charge NUMERIC(15,2),
-        fuel_surcharge_pct NUMERIC(8,2),
-        accessorial_rules JSONB,
-        effective_from DATE,
-        effective_to DATE,
-        status TEXT NOT NULL DEFAULT 'ACTIVE',
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_carrier_scorecards (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        carrier_id TEXT NOT NULL,
-        period_start DATE,
-        period_end DATE,
-        on_time_rate NUMERIC(6,2),
-        acceptance_rate NUMERIC(6,2),
-        cancellation_rate NUMERIC(6,2),
-        claim_rate NUMERIC(6,2),
-        compliance_score NUMERIC(6,2),
-        average_rating NUMERIC(4,2),
-        shipments_completed INT NOT NULL DEFAULT 0,
-        preferred BOOLEAN NOT NULL DEFAULT FALSE,
-        blacklisted BOOLEAN NOT NULL DEFAULT FALSE,
-        blacklist_reason TEXT,
-        status TEXT NOT NULL DEFAULT 'ACTIVE',
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_telematics_events (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        shipment_order_id TEXT NOT NULL,
-        assignment_id TEXT,
-        vehicle_id TEXT,
-        provider TEXT,
-        device_id TEXT,
-        latitude NUMERIC(10,7),
-        longitude NUMERIC(10,7),
-        speed_kph NUMERIC(10,2),
-        heading NUMERIC(7,2),
-        odometer_km NUMERIC(14,2),
-        event_time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        eta_at TIMESTAMPTZ,
-        eta_confidence NUMERIC(5,2),
-        raw_payload JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_accessorial_catalog (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        deleted_at TIMESTAMPTZ,
-        tenant_id TEXT NOT NULL,
-        code TEXT NOT NULL,
-        name TEXT NOT NULL,
-        charge_type TEXT NOT NULL DEFAULT 'ACCESSORIAL',
-        default_amount NUMERIC(15,2),
-        currency TEXT NOT NULL DEFAULT 'AED',
-        taxable BOOLEAN NOT NULL DEFAULT TRUE,
-        auto_apply_rule JSONB,
-        status TEXT NOT NULL DEFAULT 'ACTIVE',
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_master_data (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        deleted_at TIMESTAMPTZ,
-        tenant_id TEXT NOT NULL,
-        type TEXT NOT NULL,
-        code TEXT NOT NULL,
-        label TEXT NOT NULL,
-        description TEXT,
-        status TEXT NOT NULL DEFAULT 'ACTIVE',
-        sort_order INT NOT NULL DEFAULT 0,
-        metadata JSONB,
-        created_by TEXT,
-        updated_by TEXT
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_shift_handovers (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        shift_date DATE NOT NULL,
-        shift_code TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'DRAFT',
-        outgoing_user_id TEXT,
-        incoming_user_id TEXT,
-        summary_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-        notes TEXT,
-        created_by TEXT,
-        accepted_by TEXT,
-        accepted_at TIMESTAMPTZ,
-        metadata JSONB
-      )
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS logistics_change_history (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        tenant_id TEXT NOT NULL,
-        entity_type TEXT NOT NULL,
-        entity_id TEXT,
-        action TEXT NOT NULL,
-        actor_user_id TEXT,
-        before_json JSONB,
-        after_json JSONB,
-        summary TEXT,
-        metadata JSONB
-      )
-    `);
-    await Promise.all([
-      prisma.$executeRawUnsafe(`ALTER TABLE logistics_shipment_exceptions ADD COLUMN IF NOT EXISTS assigned_to TEXT`),
-      prisma.$executeRawUnsafe(`ALTER TABLE logistics_shipment_exceptions ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMPTZ`),
-      prisma.$executeRawUnsafe(`ALTER TABLE logistics_shipment_exceptions ADD COLUMN IF NOT EXISTS acknowledged_by TEXT`),
-      prisma.$executeRawUnsafe(`ALTER TABLE logistics_shipment_exceptions ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMPTZ`),
-      prisma.$executeRawUnsafe(`ALTER TABLE logistics_shipment_exceptions ADD COLUMN IF NOT EXISTS escalated_by TEXT`),
-      prisma.$executeRawUnsafe(`ALTER TABLE logistics_shipment_exceptions ADD COLUMN IF NOT EXISTS sla_due_at TIMESTAMPTZ`),
-      prisma.$executeRawUnsafe(`ALTER TABLE logistics_shipment_exceptions ADD COLUMN IF NOT EXISTS sla_breached_at TIMESTAMPTZ`),
-      prisma.$executeRawUnsafe(`ALTER TABLE logistics_shipment_exceptions ADD COLUMN IF NOT EXISTS resolution_note TEXT`),
-      // Day 4 of the rate-matrix gap-closure: store the contract id that
-      // priced the shipment so dispatch can group "shipments under contract
-      // RC-123" without parsing metadata.rateQuote out of JSONB. Nullable on
-      // purpose — spot/marketplace shipments and quote-misses both leave
-      // it null and that's the signal "this needs manual pricing review".
-      prisma.$executeRawUnsafe(`ALTER TABLE logistics_shipment_orders ADD COLUMN IF NOT EXISTS quoted_contract_id TEXT`),
-    ]);
-
-    await Promise.all([
-      prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS logistics_carriers_tenant_code_key ON logistics_carriers (tenant_id, carrier_code)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_carriers_tenant_status ON logistics_carriers (tenant_id, status)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_carrier_documents_carrier ON logistics_carrier_documents (tenant_id, carrier_id, status) WHERE deleted_at IS NULL`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_carrier_documents_expiry ON logistics_carrier_documents (tenant_id, expiry_date) WHERE deleted_at IS NULL`),
-      prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS logistics_carrier_vehicles_plate_key ON logistics_carrier_vehicles (tenant_id, carrier_id, plate_no) WHERE deleted_at IS NULL`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_carrier_vehicles_carrier ON logistics_carrier_vehicles (tenant_id, carrier_id, status, availability_status) WHERE deleted_at IS NULL`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_carrier_vehicles_compliance ON logistics_carrier_vehicles (tenant_id, compliance_status) WHERE deleted_at IS NULL`),
-      prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS logistics_shipment_orders_tenant_no_key ON logistics_shipment_orders (tenant_id, shipment_no)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_shipment_orders_tenant_status ON logistics_shipment_orders (tenant_id, status)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_shipment_orders_tenant_customer ON logistics_shipment_orders (tenant_id, cargo_owner_customer_id)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_shipment_orders_marketplace ON logistics_shipment_orders (tenant_id, marketplace_status)`),
-      prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS logistics_customer_marketplace_settings_customer_key ON logistics_customer_marketplace_settings (tenant_id, customer_id)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_customer_marketplace_settings_policy ON logistics_customer_marketplace_settings (tenant_id, rfq_enabled, bid_submission_enabled)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_consignments_shipment ON logistics_consignments (tenant_id, shipment_order_id)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_cargo_lines_shipment ON logistics_cargo_lines (tenant_id, shipment_order_id)`),
-      prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS logistics_shipment_stops_order_sequence_key ON logistics_shipment_stops (shipment_order_id, sequence_no)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_shipment_stops_shipment ON logistics_shipment_stops (tenant_id, shipment_order_id)`),
-      prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS logistics_route_legs_order_sequence_key ON logistics_route_legs (shipment_order_id, sequence_no)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_route_legs_shipment ON logistics_route_legs (tenant_id, shipment_order_id)`),
-      prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS logistics_freight_rfqs_tenant_no_key ON logistics_freight_rfqs (tenant_id, rfq_no)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_freight_rfqs_shipment ON logistics_freight_rfqs (tenant_id, shipment_order_id)`),
-      prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS logistics_carrier_portal_invites_token_key ON logistics_carrier_portal_invites (token_hash)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_carrier_portal_invites_scope ON logistics_carrier_portal_invites (tenant_id, rfq_id, carrier_id, status)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_carrier_bids_shipment ON logistics_carrier_bids (tenant_id, shipment_order_id)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_carrier_bids_carrier ON logistics_carrier_bids (tenant_id, carrier_id)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_assignments_shipment ON logistics_assignments (tenant_id, shipment_order_id)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_tracking_events_shipment_time ON logistics_tracking_events (tenant_id, shipment_order_id, occurred_at DESC)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_pod_events_shipment ON logistics_pod_events (tenant_id, shipment_order_id)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_freight_charges_shipment ON logistics_freight_charges (tenant_id, shipment_order_id)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_carrier_settlements_carrier ON logistics_carrier_settlements (tenant_id, carrier_id)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_driver_payouts_shipment ON logistics_driver_payouts (tenant_id, shipment_order_id)`),
-      prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS logistics_finance_postings_unique_source ON logistics_finance_postings (tenant_id, shipment_order_id, posting_type, source_record_id)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_finance_postings_shipment ON logistics_finance_postings (tenant_id, shipment_order_id, status)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_shipment_exceptions_status ON logistics_shipment_exceptions (tenant_id, status)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_shipment_exceptions_shipment_status ON logistics_shipment_exceptions (tenant_id, shipment_order_id, status)`),
-      prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS logistics_rate_contracts_tenant_no_key ON logistics_rate_contracts (tenant_id, contract_no) WHERE deleted_at IS NULL`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_rate_contracts_lane ON logistics_rate_contracts (tenant_id, lane_origin, lane_destination, status) WHERE deleted_at IS NULL`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_rate_contracts_carrier_customer ON logistics_rate_contracts (tenant_id, carrier_id, customer_id, status) WHERE deleted_at IS NULL`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_carrier_scorecards_carrier ON logistics_carrier_scorecards (tenant_id, carrier_id, period_end DESC)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_carrier_scorecards_rules ON logistics_carrier_scorecards (tenant_id, preferred, blacklisted, status)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_telematics_shipment_time ON logistics_telematics_events (tenant_id, shipment_order_id, event_time DESC)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_telematics_vehicle_time ON logistics_telematics_events (tenant_id, vehicle_id, event_time DESC)`),
-      prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS logistics_accessorial_catalog_code_key ON logistics_accessorial_catalog (tenant_id, code) WHERE deleted_at IS NULL`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_accessorial_catalog_status ON logistics_accessorial_catalog (tenant_id, status) WHERE deleted_at IS NULL`),
-      prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS logistics_master_data_code_key ON logistics_master_data (tenant_id, type, code) WHERE deleted_at IS NULL`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_master_data_type_status ON logistics_master_data (tenant_id, type, status) WHERE deleted_at IS NULL`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_shift_handovers_scope ON logistics_shift_handovers (tenant_id, shift_date DESC, shift_code)`),
-      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_logistics_change_history_scope ON logistics_change_history (tenant_id, entity_type, entity_id, created_at DESC)`),
-    ]);
-    ensured = true;
-  })();
-
-  try {
-    await ensurePromise;
-  } finally {
-    ensurePromise = null;
-  }
-}
-
 function parseJsonRecord(value: string | null | undefined): JsonRecord {
   if (!value) return {};
   try {
@@ -1708,7 +1046,6 @@ async function logLogisticsAudit(args: {
   after?: unknown;
   metadata?: JsonRecord | null;
 }) {
-  await ensureLogisticsDomainTables();
   await Promise.allSettled([
     logAudit({
       tenantId: args.tenantId,
@@ -1833,7 +1170,6 @@ export async function getCustomerMarketplacePolicy(args: {
   customerId?: string | null;
   customerName?: string | null;
 }) {
-  await ensureLogisticsDomainTables();
   if (!args.customerId) return defaultCustomerMarketplacePolicy(args);
 
   const rows = await prisma.$queryRawUnsafe<LogisticsCustomerMarketplaceSettingsRow[]>(
@@ -1856,7 +1192,6 @@ export async function listCustomerMarketplaceSettings(args: {
   search?: string | null;
   limit?: number;
 }) {
-  await ensureLogisticsDomainTables();
   const rawLimit = Number(args.limit ?? 100);
   const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 500) : 100;
   const rows = await prisma.$queryRawUnsafe<LogisticsCustomerMarketplaceSettingsRow[]>(
@@ -1878,7 +1213,6 @@ export async function listCustomerMarketplaceSettings(args: {
 }
 
 export async function upsertCustomerMarketplaceSettings(input: LogisticsCustomerMarketplaceSettingsInput) {
-  await ensureLogisticsDomainTables();
   const existing = await getCustomerMarketplacePolicy({
     tenantId: input.tenantId,
     customerId: input.customerId,
@@ -1996,7 +1330,6 @@ function defaultShipmentNoPrefix(date = new Date()) {
 }
 
 export async function nextShipmentNo(tenantId: string) {
-  await ensureLogisticsDomainTables();
   const prefix = defaultShipmentNoPrefix();
   const rows = await prisma.$queryRawUnsafe<Array<{ count: bigint | number | string }>>(
     `SELECT COUNT(*) AS count
@@ -2154,7 +1487,6 @@ export async function backfillLegacyLogisticsBookings(args: {
   limit?: number;
   dryRun?: boolean;
 }) {
-  await ensureLogisticsDomainTables();
   const limit = Math.min(Math.max(args.limit ?? 250, 1), 1000);
   const rows = await prisma.$queryRawUnsafe<LegacyBookingRaw[]>(
     `SELECT b.id,
@@ -2224,7 +1556,6 @@ export async function backfillLegacyLogisticsBookings(args: {
 }
 
 export async function fetchShipmentById(id: string, tenantId?: string | null) {
-  await ensureLogisticsDomainTables();
   const rows = await prisma.$queryRawUnsafe<LogisticsShipmentRow[]>(
     `SELECT * FROM logistics_shipment_orders
       WHERE id = $1
@@ -2243,7 +1574,6 @@ export async function listShipmentOrders(args: {
   search?: string | null;
   limit?: number;
 }) {
-  await ensureLogisticsDomainTables();
   const limit = Math.min(Math.max(args.limit ?? 100, 1), 500);
   const rows = await prisma.$queryRawUnsafe<Array<LogisticsShipmentRow & {
     stop_count: bigint | number | string;
@@ -2358,7 +1688,6 @@ export async function listShipmentOrders(args: {
 }
 
 export async function createShipmentOrder(input: LogisticsShipmentCreateInput) {
-  await ensureLogisticsDomainTables();
   await assertShipmentMasterDataGovernance(input);
   const validation = assertShipmentTimelineValid(input);
   const shipmentNo = input.shipmentNo || await nextShipmentNo(input.tenantId);
@@ -2470,7 +1799,6 @@ export async function createShipmentOrder(input: LogisticsShipmentCreateInput) {
 }
 
 export async function updateShipmentOrder(input: LogisticsShipmentUpdateInput) {
-  await ensureLogisticsDomainTables();
   const before = await fetchShipmentById(input.shipmentOrderId, input.tenantId);
   if (!before) throw new LogisticsValidationError(['Shipment was not found for this tenant.']);
   await assertShipmentMasterDataGovernance({
@@ -2796,7 +2124,6 @@ export async function ensureShipmentForLegacyBooking(args: {
   bookingId: string;
   actorUserId?: string | null;
 }) {
-  await ensureLogisticsDomainTables();
   const existing = await prisma.$queryRawUnsafe<LogisticsShipmentRow[]>(
     `SELECT * FROM logistics_shipment_orders
       WHERE legacy_booking_id = $1
@@ -2896,7 +2223,6 @@ export async function addTrackingEvent(args: {
   notes?: string | null;
   metadata?: JsonRecord | null;
 }) {
-  await ensureLogisticsDomainTables();
   const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
     `INSERT INTO logistics_tracking_events
        (tenant_id, shipment_order_id, assignment_id, event_type, status,
@@ -2986,7 +2312,6 @@ export async function listCarriers(args: {
   search?: string | null;
   limit?: number;
 }) {
-  await ensureLogisticsDomainTables();
   const limit = Math.min(Math.max(args.limit ?? 100, 1), 500);
   const rows = await prisma.$queryRawUnsafe<LogisticsCarrierRow[]>(
     `SELECT *
@@ -3034,7 +2359,6 @@ export async function listCarriers(args: {
 }
 
 export async function createCarrier(input: LogisticsCarrierInput) {
-  await ensureLogisticsDomainTables();
   const rows = await prisma.$queryRawUnsafe<LogisticsCarrierRow[]>(
     `INSERT INTO logistics_carriers (
        tenant_id, carrier_code, carrier_type, name, trade_license,
@@ -3098,7 +2422,6 @@ export async function updateCarrierCompliance(args: {
   notes?: string | null;
   actorUserId?: string | null;
 }) {
-  await ensureLogisticsDomainTables();
   const existing = await prisma.$queryRawUnsafe<LogisticsCarrierRow[]>(
     `SELECT *
        FROM logistics_carriers
@@ -3249,7 +2572,6 @@ export async function listCarrierDocuments(args: {
   carrierId: string;
   status?: string | null;
 }) {
-  await ensureLogisticsDomainTables();
   const rows = await prisma.$queryRawUnsafe<LogisticsCarrierDocumentRow[]>(
     `SELECT *
        FROM logistics_carrier_documents
@@ -3269,7 +2591,6 @@ export async function listCarrierDocuments(args: {
 }
 
 export async function upsertCarrierDocument(input: LogisticsCarrierDocumentInput) {
-  await ensureLogisticsDomainTables();
   assertCarrierDocumentDates(input.issueDate, input.expiryDate);
   const carrierRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
     `SELECT id
@@ -3326,7 +2647,6 @@ export async function updateCarrierDocumentStatus(args: {
   metadata?: JsonRecord | null;
   actorUserId?: string | null;
 }) {
-  await ensureLogisticsDomainTables();
   assertCarrierDocumentDates(args.issueDate, args.expiryDate);
   const rows = await prisma.$queryRawUnsafe<LogisticsCarrierDocumentRow[]>(
     `UPDATE logistics_carrier_documents
@@ -3402,7 +2722,6 @@ export async function archiveCarrierDocument(args: {
   documentId: string;
   actorUserId?: string | null;
 }) {
-  await ensureLogisticsDomainTables();
   const rows = await prisma.$queryRawUnsafe<LogisticsCarrierDocumentRow[]>(
     `UPDATE logistics_carrier_documents
         SET deleted_at = NOW(),
@@ -3571,7 +2890,6 @@ export async function listCarrierVehicles(args: {
   availabilityStatus?: string | null;
   complianceStatus?: string | null;
 }) {
-  await ensureLogisticsDomainTables();
   const rows = await prisma.$queryRawUnsafe<LogisticsCarrierVehicleRow[]>(
     `SELECT *
        FROM logistics_carrier_vehicles
@@ -3594,7 +2912,6 @@ export async function listCarrierVehicles(args: {
 }
 
 export async function upsertCarrierVehicle(input: LogisticsCarrierVehicleInput) {
-  await ensureLogisticsDomainTables();
   await assertCarrierForTenant(input.tenantId, input.carrierId);
   const complianceStatus = input.complianceStatus ?? deriveCarrierVehicleCompliance(input);
   const rows = await prisma.$queryRawUnsafe<LogisticsCarrierVehicleRow[]>(
@@ -3688,7 +3005,6 @@ export async function updateCarrierVehicle(args: {
   patch: Partial<Omit<LogisticsCarrierVehicleInput, 'tenantId' | 'carrierId'>>;
   actorUserId?: string | null;
 }) {
-  await ensureLogisticsDomainTables();
   const patch = args.patch;
   const hasExpiryPatch = ['registrationExpiry', 'insuranceExpiry', 'permitExpiry', 'inspectionExpiry']
     .some(key => Object.prototype.hasOwnProperty.call(patch, key));
@@ -3773,7 +3089,6 @@ export async function archiveCarrierVehicle(args: {
   vehicleId: string;
   actorUserId?: string | null;
 }) {
-  await ensureLogisticsDomainTables();
   const rows = await prisma.$queryRawUnsafe<LogisticsCarrierVehicleRow[]>(
     `UPDATE logistics_carrier_vehicles
         SET deleted_at = NOW(),
@@ -3903,7 +3218,6 @@ export async function getCarrierAwardComplianceBlockers(args: {
   driverId?: string | null;
   requireVehicle?: boolean;
 }) {
-  await ensureLogisticsDomainTables();
   const blockers: LogisticsComplianceBlocker[] = [];
   const [carrier] = await prisma.$queryRawUnsafe<LogisticsCarrierRow[]>(
     `SELECT *
@@ -4102,7 +3416,6 @@ async function nextMarketplaceNo(args: {
   columnName: 'rfq_no' | 'bid_no' | 'settlement_no' | 'payout_no';
   prefix: string;
 }) {
-  await ensureLogisticsDomainTables();
   const rows = await prisma.$queryRawUnsafe<Array<{ count: bigint | number | string }>>(
     `SELECT COUNT(*) AS count
        FROM ${args.tableName}
@@ -4201,7 +3514,6 @@ export async function listFreightRfqs(args: {
   search?: string | null;
   limit?: number;
 }) {
-  await ensureLogisticsDomainTables();
   const limit = Math.min(Math.max(args.limit ?? 100, 1), 500);
   const rows = await prisma.$queryRawUnsafe<LogisticsFreightRfqWithPolicyRow[]>(
     `SELECT rfq.*,
@@ -4256,7 +3568,6 @@ export async function listFreightRfqs(args: {
 }
 
 export async function fetchFreightRfqById(id: string, tenantId: string) {
-  await ensureLogisticsDomainTables();
   const rows = await prisma.$queryRawUnsafe<LogisticsFreightRfqWithPolicyRow[]>(
     `SELECT rfq.*,
             COUNT(b.id) AS bid_count,
@@ -4304,7 +3615,6 @@ export async function fetchFreightRfqById(id: string, tenantId: string) {
 }
 
 export async function createCarrierPortalInvite(input: LogisticsCarrierPortalInviteInput) {
-  await ensureLogisticsDomainTables();
   const rfq = await fetchFreightRfqById(input.rfqId, input.tenantId);
   if (!rfq) throw new Error('RFQ not found for this tenant');
   await assertGovernedShipmentWrite({
@@ -4413,7 +3723,6 @@ export async function listCarrierPortalInvites(args: {
   carrierId?: string | null;
   includeExpired?: boolean;
 }) {
-  await ensureLogisticsDomainTables();
   const rows = await prisma.$queryRawUnsafe<Array<LogisticsCarrierInviteRow & {
     carrier_name: string | null;
     carrier_code: string | null;
@@ -4474,7 +3783,6 @@ export async function revokeCarrierPortalInvite(args: {
   actorUserId?: string | null;
   reason?: string | null;
 }) {
-  await ensureLogisticsDomainTables();
   const existingRows = await prisma.$queryRawUnsafe<LogisticsCarrierInviteRow[]>(
     `SELECT *
        FROM logistics_carrier_portal_invites
@@ -4539,7 +3847,6 @@ export async function revokeCarrierPortalInvite(args: {
 }
 
 export async function resolveCarrierPortalInvite(token: string) {
-  await ensureLogisticsDomainTables();
   const tokenHash = hashPortalToken(token);
   const rows = await prisma.$queryRawUnsafe<Array<LogisticsCarrierInviteRow & {
     carrier_name: string;
@@ -4636,7 +3943,6 @@ export async function resolveCarrierPortalInvite(token: string) {
 }
 
 export async function listCarrierPortalRfqs(args: LogisticsCarrierPortalRfqFilter) {
-  await ensureLogisticsDomainTables();
   const limit = Math.min(Math.max(args.limit ?? 100, 1), 300);
   const rows = await prisma.$queryRawUnsafe<Array<LogisticsFreightRfqRow & {
     bid_count: bigint | number | string;
@@ -4822,7 +4128,6 @@ export async function listCarrierPortalRfqs(args: LogisticsCarrierPortalRfqFilte
 }
 
 export async function createFreightRfq(input: LogisticsFreightRfqInput) {
-  await ensureLogisticsDomainTables();
   await assertGovernedShipmentWrite({
     tenantId: input.tenantId,
     shipmentOrderId: input.shipmentOrderId,
@@ -4909,7 +4214,6 @@ export async function listCarrierBids(args: {
   status?: string | null;
   limit?: number;
 }) {
-  await ensureLogisticsDomainTables();
   const limit = Math.min(Math.max(args.limit ?? 100, 1), 500);
   const rows = await prisma.$queryRawUnsafe<Array<LogisticsCarrierBidRow & { carrier_name: string | null }>>(
     `SELECT b.*, c.name AS carrier_name
@@ -4935,7 +4239,6 @@ export async function listCarrierBids(args: {
 }
 
 export async function submitCarrierBid(input: LogisticsCarrierBidInput) {
-  await ensureLogisticsDomainTables();
   await assertGovernedShipmentWrite({
     tenantId: input.tenantId,
     shipmentOrderId: input.shipmentOrderId,
@@ -5025,7 +4328,6 @@ export async function listShipmentAssignments(args: {
   shipmentOrderId: string;
   status?: string | null;
 }) {
-  await ensureLogisticsDomainTables();
   const rows = await prisma.$queryRawUnsafe<Array<LogisticsAssignmentRow & { carrier_name: string | null }>>(
     `SELECT a.*, c.name AS carrier_name
        FROM logistics_assignments a
@@ -5044,7 +4346,6 @@ export async function listShipmentAssignments(args: {
 }
 
 export async function createShipmentAssignment(input: LogisticsAssignmentInput) {
-  await ensureLogisticsDomainTables();
   const { shipment } = await assertGovernedShipmentWrite({
     tenantId: input.tenantId,
     shipmentOrderId: input.shipmentOrderId,
@@ -5163,7 +4464,6 @@ export async function prepareFreightFinancialSettlement(args: {
   currency?: string | null;
   actorUserId?: string | null;
 }) {
-  await ensureLogisticsDomainTables();
   const shipment = await fetchShipmentById(args.shipmentOrderId, args.tenantId);
   if (!shipment) throw new Error('Shipment not found for settlement');
 
@@ -5397,15 +4697,6 @@ export async function prepareFreightFinancialSettlement(args: {
   };
 }
 
-/**
- * @deprecated No-op. finance_journal_entries and finance_journal_lines are now
- * managed by Prisma migration 20260809000000_adopt_finance_tables_with_rls.
- * The tables exist and have RLS applied before the application starts.
- */
-async function ensureFinanceJournalPostingTables() {
-  // Tables are migration-managed. Nothing to do at runtime.
-}
-
 async function nextFinanceInvoiceNo(tenantId: string, date = new Date()) {
   const yy = String(date.getFullYear()).slice(-2);
   const prefix = `INV-LOG-${yy}`;
@@ -5512,7 +4803,6 @@ export async function listLogisticsFinancePostings(args: {
   tenantId: string;
   shipmentOrderId: string;
 }) {
-  await ensureLogisticsDomainTables();
   const rows = await prisma.$queryRawUnsafe<LogisticsFinancePostingRow[]>(
     `SELECT *
        FROM logistics_finance_postings
@@ -5532,7 +4822,6 @@ export async function reverseLogisticsFinancePosting(args: {
   actorUserId?: string | null;
   reason?: string | null;
 }) {
-  await ensureLogisticsDomainTables();
   if (!String(args.reason ?? '').trim()) {
     throw new LogisticsValidationError(['Reversal reason is required for Logistics Finance postings.']);
   }
@@ -5679,7 +4968,6 @@ export async function getShipmentFinanceSummary(args: {
   tenantId: string;
   limit: number;
 }): Promise<{ summaries: ShipmentFinanceSummaryRow[] }> {
-  await ensureLogisticsDomainTables();
   const limit = Math.max(1, Math.min(500, Math.floor(args.limit)));
   const rows = await prisma.$queryRawUnsafe<
     Array<{
@@ -5730,8 +5018,6 @@ export async function postFreightSettlementToFinance(args: {
   shipmentOrderId: string;
   actorUserId?: string | null;
 }) {
-  await ensureLogisticsDomainTables();
-  await ensureFinanceJournalPostingTables();
 
   const { shipment } = await assertGovernedShipmentWrite({
     tenantId: args.tenantId,
@@ -6125,7 +5411,6 @@ export async function listShipmentExecutionTimeline(args: {
   tenantId: string;
   shipmentOrderId: string;
 }) {
-  await ensureLogisticsDomainTables();
   const shipment = await fetchShipmentById(args.shipmentOrderId, args.tenantId);
   if (!shipment) return null;
 
@@ -6380,7 +5665,6 @@ export async function listRateContracts(args: {
   search?: string | null;
   limit?: number;
 }) {
-  await ensureLogisticsDomainTables();
   const limit = Math.min(Math.max(args.limit ?? 100, 1), 500);
   const rows = await prisma.$queryRawUnsafe<Array<LogisticsRateContractRow & { carrier_name?: string | null }>>(
     `SELECT rc.*, c.name AS carrier_name
@@ -6418,7 +5702,6 @@ export async function listRateContracts(args: {
 }
 
 export async function upsertRateContract(input: LogisticsRateContractInput) {
-  await ensureLogisticsDomainTables();
   if (!input.laneOrigin?.trim() || !input.laneDestination?.trim()) {
     throw new Error('Lane origin and destination are required');
   }
@@ -6510,7 +5793,6 @@ export async function listCarrierScorecards(args: {
   search?: string | null;
   limit?: number;
 }) {
-  await ensureLogisticsDomainTables();
   const limit = Math.min(Math.max(args.limit ?? 100, 1), 500);
   const rows = await prisma.$queryRawUnsafe<Array<LogisticsCarrierScorecardRow & { carrier_name?: string | null }>>(
     `SELECT sc.*, c.name AS carrier_name
@@ -6542,7 +5824,6 @@ export async function listCarrierScorecards(args: {
 }
 
 export async function upsertCarrierScorecard(input: LogisticsCarrierScorecardInput) {
-  await ensureLogisticsDomainTables();
   const existing = await prisma.$queryRawUnsafe<LogisticsCarrierScorecardRow[]>(
     `SELECT *
        FROM logistics_carrier_scorecards
@@ -6663,7 +5944,6 @@ export async function setCarrierPreference(args: {
 }
 
 export async function recordTelematicsEvent(input: LogisticsTelematicsEventInput) {
-  await ensureLogisticsDomainTables();
   const { shipment } = await assertGovernedShipmentWrite({
     tenantId: input.tenantId,
     shipmentOrderId: input.shipmentOrderId,
@@ -6740,7 +6020,6 @@ export async function listTelematicsEvents(args: {
   vehicleId?: string | null;
   limit?: number;
 }) {
-  await ensureLogisticsDomainTables();
   const limit = Math.min(Math.max(args.limit ?? 100, 1), 500);
   const rows = await prisma.$queryRawUnsafe<LogisticsTelematicsEventRow[]>(
     `SELECT *
@@ -6764,7 +6043,6 @@ export async function listAccessorialCatalog(args: {
   search?: string | null;
   limit?: number;
 }) {
-  await ensureLogisticsDomainTables();
   const limit = Math.min(Math.max(args.limit ?? 100, 1), 500);
   const rows = await prisma.$queryRawUnsafe<LogisticsAccessorialCatalogRow[]>(
     `SELECT *
@@ -6789,7 +6067,6 @@ export async function listAccessorialCatalog(args: {
 }
 
 export async function upsertAccessorialCatalog(input: LogisticsAccessorialCatalogInput) {
-  await ensureLogisticsDomainTables();
   if (!input.code?.trim() || !input.name?.trim()) {
     throw new Error('Accessorial code and name are required');
   }
@@ -6825,7 +6102,6 @@ export async function upsertAccessorialCatalog(input: LogisticsAccessorialCatalo
 }
 
 export async function addShipmentAccessorialCharge(input: LogisticsShipmentAccessorialInput) {
-  await ensureLogisticsDomainTables();
   const { shipment } = await assertGovernedShipmentWrite({
     tenantId: input.tenantId,
     shipmentOrderId: input.shipmentOrderId,
@@ -6963,7 +6239,6 @@ function normalizeMasterCode(value: string) {
 }
 
 export async function seedDefaultLogisticsMasterData(tenantId: string, actorUserId?: string | null) {
-  await ensureLogisticsDomainTables();
   for (const item of DEFAULT_LOGISTICS_MASTER_DATA) {
     await prisma.$executeRawUnsafe(
       `INSERT INTO logistics_master_data
@@ -6990,7 +6265,6 @@ export async function listLogisticsMasterData(args: {
   search?: string | null;
   includeSeed?: boolean;
 }) {
-  await ensureLogisticsDomainTables();
   if (args.includeSeed !== false) {
     await seedDefaultLogisticsMasterData(args.tenantId);
   }
@@ -7039,7 +6313,6 @@ export async function listLogisticsMasterData(args: {
 }
 
 export async function upsertLogisticsMasterData(input: LogisticsMasterDataInput) {
-  await ensureLogisticsDomainTables();
   const type = input.type.trim().toUpperCase();
   const code = normalizeMasterCode(input.code);
   if (!type) throw new LogisticsValidationError(['Master data type is required.']);
@@ -7120,7 +6393,6 @@ export async function deleteLogisticsMasterData(args: {
   id: string;
   actorUserId?: string | null;
 }) {
-  await ensureLogisticsDomainTables();
   const before = await prisma.$queryRawUnsafe<Array<{ id: string; type: string; code: string; label: string; status: string }>>(
     `SELECT id, type, code, label, status
        FROM logistics_master_data
@@ -7160,7 +6432,6 @@ export async function listLogisticsChangeHistory(args: {
   entityId?: string | null;
   limit?: number;
 }) {
-  await ensureLogisticsDomainTables();
   const limit = Math.min(Math.max(args.limit ?? 100, 1), 500);
   const rows = await prisma.$queryRawUnsafe<Array<{
     id: string;
@@ -7234,7 +6505,6 @@ export async function listLogisticsShiftHandovers(args: {
   tenantId: string;
   limit?: number;
 }) {
-  await ensureLogisticsDomainTables();
   const limit = Math.min(Math.max(args.limit ?? 50, 1), 200);
   const rows = await prisma.$queryRawUnsafe<Array<{
     id: string;
@@ -7278,7 +6548,6 @@ export async function listLogisticsShiftHandovers(args: {
 }
 
 export async function createLogisticsShiftHandover(input: LogisticsShiftHandoverInput) {
-  await ensureLogisticsDomainTables();
   const summary = await getLogisticsShiftHandoverSummary({ tenantId: input.tenantId });
   const shiftDate = dateOnly(input.shiftDate ?? new Date()) ?? new Date().toISOString().slice(0, 10);
   const rows = await prisma.$queryRawUnsafe<Array<{
@@ -7345,7 +6614,6 @@ export async function acceptLogisticsShiftHandover(args: {
   id: string;
   actorUserId?: string | null;
 }) {
-  await ensureLogisticsDomainTables();
   const before = await prisma.$queryRawUnsafe<Array<{ id: string; status: string; shift_code: string; shift_date: Date }>>(
     `SELECT id, status, shift_code, shift_date
        FROM logistics_shift_handovers
@@ -7407,7 +6675,6 @@ export async function listLogisticsFieldOpsWorklist(args: {
 }
 
 export async function recordLogisticsFieldOpsEvent(input: LogisticsFieldOpsEventInput) {
-  await ensureLogisticsDomainTables();
   const { shipment } = await assertGovernedShipmentWrite({
     tenantId: input.tenantId,
     shipmentOrderId: input.shipmentOrderId,
@@ -7578,7 +6845,6 @@ export async function listShipmentExceptions(args: {
   includeResolved?: boolean;
   limit?: number;
 }) {
-  await ensureLogisticsDomainTables();
   const limit = Math.min(Math.max(args.limit ?? 100, 1), 500);
   const rows = await prisma.$queryRawUnsafe<LogisticsShipmentExceptionRow[]>(
     `SELECT *
@@ -7616,7 +6882,6 @@ export async function updateShipmentExceptionLifecycle(args: {
   note?: string | null;
   actorUserId?: string | null;
 }) {
-  await ensureLogisticsDomainTables();
   const beforeRows = await prisma.$queryRawUnsafe<LogisticsShipmentExceptionRow[]>(
     `SELECT *
        FROM logistics_shipment_exceptions
@@ -7775,7 +7040,6 @@ export async function updateShipmentExceptionLifecycle(args: {
 export async function getLogisticsOperationsPulse(args: {
   tenantId: string;
 }) {
-  await ensureLogisticsDomainTables();
   const [controlTower, latestEvents, changeCount] = await Promise.all([
     getShipmentControlTower({ tenantId: args.tenantId, limit: 100 }),
     prisma.$queryRawUnsafe<Array<{ latest_event_at: Date | null; event_count: bigint | number | string }>>(
@@ -7808,7 +7072,6 @@ export async function getShipmentControlTower(args: {
   tenantId: string;
   limit?: number;
 }) {
-  await ensureLogisticsDomainTables();
   const limit = Math.min(Math.max(args.limit ?? 100, 1), 500);
   const rows = await prisma.$queryRawUnsafe<Array<LogisticsShipmentRow & {
     carrier_name: string | null;
@@ -7940,7 +7203,6 @@ export async function getCustomerShipmentPortal(args: {
   trackingToken?: string | null;
   limit?: number;
 }) {
-  await ensureLogisticsDomainTables();
   const limit = Math.min(Math.max(args.limit ?? 50, 1), 200);
   const rows = await prisma.$queryRawUnsafe<Array<LogisticsShipmentRow & {
     latest_event_type: string | null;
@@ -8017,7 +7279,6 @@ export async function getLogisticsFinanceReconciliation(args: {
   tenantId: string;
   limit?: number;
 }) {
-  await ensureLogisticsDomainTables();
   const limit = Math.min(Math.max(args.limit ?? 100, 1), 500);
   const rows = await prisma.$queryRawUnsafe<Array<{
     shipment_order_id: string;
@@ -8115,7 +7376,6 @@ export async function awardCarrierBid(args: {
   notes?: string | null;
   dryRun?: boolean;
 }) {
-  await ensureLogisticsDomainTables();
   const bidRows = await prisma.$queryRawUnsafe<LogisticsCarrierBidRow[]>(
     `SELECT b.*
        FROM logistics_carrier_bids b
