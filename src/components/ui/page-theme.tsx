@@ -74,19 +74,19 @@ interface PageHeaderProps {
 export function PageHeader({ title, subtitle, icon: Icon, accent = 'default', actions }: PageHeaderProps) {
   const a = ACCENTS[accent] ?? ACCENTS.default;
   return (
-    <div className="flex items-start justify-between flex-wrap gap-4 pb-5 border-b border-white/10 dark:border-white/10 border-slate-200/90">
-      <div className="flex items-start gap-4 min-w-0">
+    <div className="flex items-start justify-between flex-wrap gap-4 pb-5 border-b border-black/10 dark:border-white/10">
+      <div className="flex items-start gap-3.5 min-w-0">
         {Icon && (
-          <div className={`shrink-0 w-12 h-12 rounded-2xl bg-gradient-to-br ${a.gradient} flex items-center justify-center shadow-lg shadow-cyan-500/20`}>
-            <Icon className="w-6 h-6 text-white" strokeWidth={2} />
+          <div className={`shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br ${a.gradient} flex items-center justify-center shadow-md shadow-blue-500/15`}>
+            <Icon className="w-5 h-5 text-white" strokeWidth={2} />
           </div>
         )}
         <div className="min-w-0">
-          <h1 className="text-3xl font-extrabold text-white dark:text-white text-slate-900 tracking-tight">{title}</h1>
-          {subtitle && <p className="text-sm text-slate-400 dark:text-slate-400 text-slate-600 mt-1 max-w-3xl leading-relaxed">{subtitle}</p>}
+          <h1 className="text-2xl font-bold text-zinc-950 dark:text-zinc-50 tracking-tight">{title}</h1>
+          {subtitle && <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-3xl leading-relaxed">{subtitle}</p>}
         </div>
       </div>
-      {actions && <div className="flex items-center gap-2.5 shrink-0">{actions}</div>}
+      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
     </div>
   );
 }
@@ -104,17 +104,17 @@ interface KpiCardProps {
 export function KpiCard({ label, value, sub, icon: Icon, accent = 'default' }: KpiCardProps) {
   const a = ACCENTS[accent] ?? ACCENTS.default;
   return (
-    <div className="rounded-2xl bg-slate-900/60 dark:bg-slate-900/60 bg-white border border-white/10 dark:border-white/10 border-slate-200/90 p-5 hover:border-cyan-400/50 dark:hover:border-cyan-400/50 hover:border-blue-500/50 shadow-xl backdrop-blur-xl transition-all duration-200 hover:scale-[1.01]">
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <span className="text-[11px] uppercase tracking-wider text-cyan-400 dark:text-cyan-400 text-blue-700 font-extrabold">{label}</span>
+    <div className="rounded-xl bg-white dark:bg-zinc-900 border border-black/10 dark:border-white/10 p-4 shadow-sm hover:border-black/20 dark:hover:border-white/20 transition-all duration-150">
+      <div className="flex items-start justify-between gap-2 mb-2.5">
+        <span className="text-[11px] uppercase tracking-wider text-zinc-500 dark:text-zinc-400 font-semibold">{label}</span>
         {Icon && (
-          <div className={`w-8 h-8 rounded-xl ${a.bg} border border-white/10 flex items-center justify-center shadow-sm`}>
-            <Icon className={`w-4 h-4 ${a.text}`} strokeWidth={2} />
+          <div className={`w-7 h-7 rounded-lg ${a.bg} flex items-center justify-center`}>
+            <Icon className={`w-3.5 h-3.5 ${a.text}`} strokeWidth={2} />
           </div>
         )}
       </div>
-      <div className="text-3xl font-extrabold font-mono text-white dark:text-white text-slate-900 tracking-tight">{value}</div>
-      {sub && <div className="text-xs text-slate-400 dark:text-slate-400 text-slate-500 mt-1.5 font-medium">{sub}</div>}
+      <div className="text-2xl font-bold font-mono text-zinc-950 dark:text-zinc-50 tracking-tight">{value}</div>
+      {sub && <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 font-medium">{sub}</div>}
     </div>
   );
 }
@@ -134,21 +134,21 @@ interface PanelProps {
 export function Panel({ title, subtitle, icon: Icon, accent = 'default', actions, children, className = '' }: PanelProps) {
   const a = ACCENTS[accent] ?? ACCENTS.default;
   return (
-    <section className={`rounded-2xl bg-slate-900/60 dark:bg-slate-900/60 bg-white border border-white/10 dark:border-white/10 border-slate-200/90 shadow-2xl backdrop-blur-xl overflow-hidden ${className}`}>
+    <section className={`rounded-xl bg-white dark:bg-zinc-900 border border-black/10 dark:border-white/10 shadow-sm overflow-hidden ${className}`}>
       {(title || actions) && (
-        <header className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b border-white/10 dark:border-white/10 border-slate-200/80 bg-gradient-to-r from-cyan-950/20 via-slate-900/20 to-transparent dark:from-cyan-950/20 dark:via-slate-900/20 dark:to-transparent bg-slate-50/50">
+        <header className="flex items-start justify-between gap-3 px-5 py-3.5 border-b border-black/5 dark:border-white/5 bg-zinc-50/50 dark:bg-zinc-900/50">
           <div className="flex items-start gap-3 min-w-0">
             {Icon && (
-              <div className={`shrink-0 w-9 h-9 rounded-xl ${a.bg} border border-white/10 flex items-center justify-center shadow-md shadow-cyan-500/10`}>
+              <div className={`shrink-0 w-8 h-8 rounded-lg ${a.bg} flex items-center justify-center`}>
                 <Icon className={`w-4 h-4 ${a.text}`} strokeWidth={2} />
               </div>
             )}
             <div className="min-w-0">
-              {title && <h3 className="text-sm font-extrabold text-white dark:text-white text-slate-900 tracking-wide">{title}</h3>}
-              {subtitle && <p className="text-xs text-slate-400 dark:text-slate-400 text-slate-500 mt-0.5">{subtitle}</p>}
+              {title && <h3 className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{title}</h3>}
+              {subtitle && <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">{subtitle}</p>}
             </div>
           </div>
-          {actions && <div className="flex items-center gap-2.5 shrink-0">{actions}</div>}
+          {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
         </header>
       )}
       <div className="p-5">{children}</div>

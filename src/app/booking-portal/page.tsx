@@ -210,22 +210,22 @@ export default function BookingPortal() {
   const completed = bookings.filter(b => b.status === 'COMPLETED').length;
 
   return (
-    <div className="obsidian-glass dark [color-scheme:dark] space-y-6 text-white bg-[#0b0d14]">
+    <div className="space-y-6 text-[var(--text-main)] transition-colors duration-150">
       {/* ── Executive Header ── */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-black/10 dark:border-white/10 pb-5">
         <div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight">
-            Fleet360 <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent">Booking Portal</span>
+          <h1 className="text-2xl font-bold text-zinc-950 dark:text-zinc-50 tracking-tight">
+            Booking & Dispatch Portal
           </h1>
-          <p className="text-slate-400 text-sm mt-1">Multi-modal booking & freight dispatch console across all transport domains</p>
+          <p className="text-zinc-500 dark:text-zinc-400 text-xs mt-1">Multi-modal booking & freight dispatch console across all transport domains</p>
         </div>
 
         <div className="flex items-center gap-3">
           <Link
             href="/booking-portal/new"
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-cyan-500/25 hover:scale-[1.02] hover:brightness-110 transition-all"
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all"
           >
-            <Plus className="w-4 h-4 text-white font-bold" /> New Booking Request
+            <Plus className="w-3.5 h-3.5" /> New Booking Request
           </Link>
         </div>
       </div>
@@ -233,19 +233,19 @@ export default function BookingPortal() {
       {/* ── Summary tiles ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total Bookings', value: bookings.length, color: 'text-white', icon: CalendarCheck, iconColor: 'text-cyan-400' },
-          { label: 'Pending Approval', value: pending, color: 'text-cyan-400', icon: Clock, iconColor: 'text-cyan-400' },
-          { label: 'Active Trips', value: active, color: 'text-emerald-400', icon: CheckCircle2, iconColor: 'text-emerald-400' },
-          { label: 'Completed', value: completed, color: 'text-slate-400', icon: FileCheck, iconColor: 'text-slate-400' },
+          { label: 'Total Bookings', value: bookings.length, color: 'text-zinc-950 dark:text-zinc-50', icon: CalendarCheck, iconColor: 'text-blue-500' },
+          { label: 'Pending Approval', value: pending, color: 'text-amber-500', icon: Clock, iconColor: 'text-amber-500' },
+          { label: 'Active Trips', value: active, color: 'text-emerald-500', icon: CheckCircle2, iconColor: 'text-emerald-500' },
+          { label: 'Completed', value: completed, color: 'text-zinc-500', icon: FileCheck, iconColor: 'text-zinc-400' },
         ].map(t => {
           const Icon = t.icon;
           return (
-            <div key={t.label} className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl shadow-black/80">
-              <div className="w-10 h-10 rounded-xl bg-slate-950/80 border border-white/10 flex items-center justify-center mb-3">
-                <Icon className={`w-5 h-5 ${t.iconColor}`} />
+            <div key={t.label} className="bg-white dark:bg-zinc-900 border border-black/10 dark:border-white/10 rounded-xl p-4 shadow-sm">
+              <div className="w-8 h-8 rounded-lg bg-black/5 dark:bg-white/5 flex items-center justify-center mb-2.5">
+                <Icon className={`w-4 h-4 ${t.iconColor}`} />
               </div>
-              <div className={`text-2xl font-extrabold font-mono ${t.color}`}>{t.value}</div>
-              <div className="text-xs text-cyan-400 mt-1 uppercase font-bold tracking-wider">{t.label}</div>
+              <div className={`text-2xl font-bold font-mono ${t.color}`}>{t.value}</div>
+              <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 uppercase font-semibold tracking-wider">{t.label}</div>
             </div>
           );
         })}
@@ -254,65 +254,65 @@ export default function BookingPortal() {
       {/* ── Flagship Mobile & B2B Booking Consoles ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Card 1: Universal Mobile Booking App */}
-        <div className="bg-gradient-to-br from-cyan-950/40 via-slate-900/70 to-slate-950/80 border border-cyan-500/30 rounded-2xl p-6 shadow-2xl backdrop-blur-xl flex flex-col justify-between space-y-4">
+        <div className="bg-white dark:bg-zinc-900 border border-black/10 dark:border-white/10 rounded-xl p-5 shadow-sm flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 px-2.5 py-0.5 rounded-full border border-cyan-500/30">
+              <span className="text-[10px] font-mono font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full border border-blue-500/20">
                 MOBILE APP & APK
               </span>
-              <span className="text-xs text-slate-400 font-mono">v2.4 Live</span>
+              <span className="text-xs text-zinc-400 font-mono">v2.4 Live</span>
             </div>
-            <h3 className="text-base font-bold text-white mt-2 flex items-center gap-2">
-              <Smartphone className="w-4 h-4 text-cyan-400" /> Fleet360 Mobile Booking App
+            <h3 className="text-base font-bold text-zinc-950 dark:text-zinc-50 mt-2 flex items-center gap-2">
+              <Smartphone className="w-4 h-4 text-blue-500" /> Fleet360 Mobile Booking App
             </h3>
-            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
               Universal mobile booking for Freight, Chauffeur, Bus & Rental. Biometrics, OTP, e-BOL & Cold-Chain IoT.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <Link
               href="/m"
-              className="flex-1 min-w-[130px] text-center px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600 hover:from-cyan-400 hover:to-blue-500 text-white text-xs font-bold transition-all shadow-md shadow-cyan-500/20"
+              className="flex-1 min-w-[130px] text-center px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-all shadow-sm"
             >
               Open Web App (/m) →
             </Link>
             <a
               href="/api/mobile/download-apk"
               download="Fleet360 Booking App.apk"
-              className="px-4 py-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 text-emerald-400 text-xs font-semibold border border-emerald-500/30 transition-all flex items-center gap-1.5"
+              className="px-4 py-2 rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-300 text-xs font-medium border border-black/10 dark:border-white/10 transition-all flex items-center gap-1.5"
             >
-              <Download className="w-3.5 h-3.5 text-emerald-400" />
+              <Download className="w-3.5 h-3.5 text-zinc-500" />
               Download APK
             </a>
           </div>
         </div>
 
         {/* Card 2: Enterprise Booking Portal */}
-        <div className="bg-gradient-to-br from-blue-950/40 via-slate-900/70 to-slate-950/80 border border-blue-500/30 rounded-2xl p-6 shadow-2xl backdrop-blur-xl flex flex-col justify-between space-y-4">
+        <div className="bg-white dark:bg-zinc-900 border border-black/10 dark:border-white/10 rounded-xl p-5 shadow-sm flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono font-bold bg-blue-500/20 text-blue-300 px-2.5 py-0.5 rounded-full border border-blue-500/30">
+              <span className="text-[10px] font-mono font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full border border-indigo-500/20">
                 B2B BOOKING PORTAL
               </span>
-              <span className="text-xs text-slate-400 font-mono">All Domains</span>
+              <span className="text-xs text-zinc-400 font-mono">All Domains</span>
             </div>
-            <h3 className="text-base font-bold text-white mt-2 flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-blue-400" /> Booking Intake & Approvals
+            <h3 className="text-base font-bold text-zinc-950 dark:text-zinc-50 mt-2 flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-indigo-500" /> Booking Intake & Approvals
             </h3>
-            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
               Bulk CSV uploader, 3-tier corporate approval hierarchy, multi-stop routing & UAE customs e-BOL manifests.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <Link
               href="/booking-portal/new"
-              className="flex-1 min-w-[130px] text-center px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md shadow-blue-500/20"
+              className="flex-1 min-w-[130px] text-center px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-all shadow-sm"
             >
               New Booking Intake →
             </Link>
             <Link
               href="/admin/corporate-clients"
-              className="px-4 py-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 text-slate-300 text-xs font-semibold border border-white/10 transition-all"
+              className="px-4 py-2 rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-300 text-xs font-medium border border-black/10 dark:border-white/10 transition-all"
             >
               Corporate Hub
             </Link>

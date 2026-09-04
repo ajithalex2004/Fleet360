@@ -198,23 +198,23 @@ export default function PlatformPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#080b11] dark:bg-[#080b11] bg-slate-50 text-white dark:text-white text-slate-900 transition-colors">
+    <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-main)] transition-colors duration-150">
       {/* Top nav */}
-      <nav className="border-b border-white/10 dark:border-white/10 border-slate-200/90 bg-slate-950/85 dark:bg-slate-950/85 bg-white/90 backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+      <nav className="border-b border-black/10 dark:border-white/10 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 via-blue-500 to-indigo-600 flex items-center justify-center font-extrabold text-white text-base shadow-lg shadow-cyan-500/25">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-white text-sm shadow-md shadow-blue-500/20">
               F360
             </div>
             <div>
-              <span className="text-white dark:text-white text-slate-900 font-extrabold text-lg tracking-tight">Fleet360</span>
-              <span className="hidden sm:inline-block ml-2 text-[10px] font-mono font-bold bg-cyan-500/15 text-cyan-300 dark:text-cyan-300 text-blue-700 px-2 py-0.5 rounded-full border border-cyan-500/30">ENTERPRISE</span>
+              <span className="text-zinc-950 dark:text-zinc-50 font-bold text-base tracking-tight">Fleet360</span>
+              <span className="hidden sm:inline-block ml-2 text-[10px] font-mono font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full border border-blue-500/20">ENTERPRISE</span>
             </div>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-2.5">
             <ThemeToggle />
-            <Link href="/approvals" className="rounded-xl bg-violet-600/20 border border-violet-500/30 px-4 py-1.5 text-xs font-bold text-violet-400 hover:bg-violet-600/30 transition-all shadow-sm">Approvals</Link>
-            <Link href="/admin" className="rounded-xl bg-red-600/20 border border-red-500/30 px-4 py-1.5 text-xs font-bold text-red-400 hover:bg-red-600/30 transition-all shadow-sm">Admin</Link>
+            <Link href="/approvals" className="rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 px-3.5 py-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-black/10 dark:hover:bg-white/10 transition-all">Approvals</Link>
+            <Link href="/admin" className="rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 px-3.5 py-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-black/10 dark:hover:bg-white/10 transition-all">Admin</Link>
             <PlatformSessionSlot />
           </div>
         </div>
@@ -223,67 +223,67 @@ export default function PlatformPage() {
       <div className="max-w-7xl mx-auto px-6 py-10 space-y-10">
         {/* Hero */}
         <div className="text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-1.5 mb-6 shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-cyan-300 dark:text-cyan-300 text-blue-700 text-xs font-bold tracking-wider">UNIFIED TRANSPORT ECOSYSTEM</span>
+          <div className="inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 px-3.5 py-1 mb-5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-zinc-600 dark:text-zinc-400 text-xs font-semibold tracking-wide">UNIFIED TRANSPORT SYSTEM</span>
           </div>
-          <h1 className="text-5xl font-black text-white dark:text-white text-slate-900 mb-4 tracking-tight">
-            <span className="bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 bg-clip-text text-transparent">Fleet360 Platform</span>
+          <h1 className="text-4xl sm:text-5xl font-extrabold text-zinc-950 dark:text-zinc-50 mb-3 tracking-tight">
+            Fleet360 Platform
           </h1>
-          <p className="text-slate-400 dark:text-slate-400 text-slate-600 text-base max-w-2xl mx-auto leading-relaxed">
-            Autonomous fleet intelligence, multi-modal transport bookings, maintenance lifecycle, staff dispatch, and ESG sustainability in one high-performance system.
+          <p className="text-zinc-600 dark:text-zinc-400 text-base max-w-2xl mx-auto leading-relaxed">
+            Multi-modal transport operations, maintenance lifecycle, staff dispatch, and ESG fleet intelligence in one unified system.
           </p>
-          <div className="mt-8 max-w-md mx-auto relative">
-            <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+          <div className="mt-7 max-w-md mx-auto relative">
+            <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
             </svg>
             <input type="text" placeholder="Module search is available inside each module" readOnly
-              className="w-full bg-slate-900/80 dark:bg-slate-900/80 bg-white border border-white/10 dark:border-white/10 border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-white dark:text-white text-slate-900 placeholder-slate-400 text-sm focus:outline-none focus:border-cyan-400 transition-colors shadow-inner" />
+              className="w-full bg-white dark:bg-zinc-900 border border-black/10 dark:border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-zinc-950 dark:text-zinc-50 placeholder-zinc-400 text-sm focus:outline-none focus:border-blue-500 transition-colors shadow-sm" />
           </div>
         </div>
 
         {/* Module grid */}
         <div>
           <div className="flex items-center justify-between mb-5">
-            <h2 className="text-white dark:text-white text-slate-900 font-extrabold text-lg tracking-tight">Enterprise Modules</h2>
-            <div className="flex items-center gap-3 text-xs text-slate-500">
-              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400" /> {activeModuleCount} Active</span>
+            <h2 className="text-zinc-950 dark:text-zinc-50 font-bold text-lg tracking-tight">Enterprise Modules</h2>
+            <div className="flex items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500" /> {activeModuleCount} Active</span>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {modules.map(mod => {
               const stats  = moduleStats[mod.id] ?? mod.tags.slice(0, 2).map(t => ({ label: t, value: '—' }));
 
               return (
                 <Link key={mod.id} href={mod.href}
-                  className="group relative bg-slate-900/60 dark:bg-slate-900/60 bg-white border border-white/10 dark:border-white/10 border-slate-200/90 rounded-2xl p-6 hover:border-cyan-400/60 dark:hover:border-cyan-400/60 hover:border-blue-500/60 transition-all duration-200 hover:shadow-2xl hover:shadow-cyan-500/10 hover:scale-[1.01] cursor-pointer block backdrop-blur-xl shadow-lg">
+                  className="group relative bg-white dark:bg-zinc-900 border border-black/10 dark:border-white/10 rounded-xl p-5 hover:border-black/20 dark:hover:border-white/20 transition-all duration-150 shadow-sm hover:shadow-md block">
                   <div className="absolute top-4 right-4 flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    <span className="text-emerald-400 text-[10px] font-bold">LIVE</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <span className="text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">LIVE</span>
                   </div>
-                  <div className="flex items-start gap-4 mb-4">
-                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${mod.gradient} flex items-center justify-center flex-shrink-0 shadow-lg`}>
-                      <span className="text-white text-sm font-black tracking-tight">{mod.icon}</span>
+                  <div className="flex items-start gap-3.5 mb-4">
+                    <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${mod.gradient} flex items-center justify-center flex-shrink-0 shadow-md`}>
+                      <span className="text-white text-sm font-bold tracking-tight">{mod.icon}</span>
                     </div>
                     <div>
-                      <h3 className="text-white dark:text-white text-slate-900 font-extrabold text-base group-hover:text-cyan-400 dark:group-hover:text-cyan-400 group-hover:text-blue-600 transition-colors">{mod.title}</h3>
-                      <p className="text-slate-400 dark:text-slate-400 text-slate-600 text-xs mt-1 leading-relaxed line-clamp-2">{mod.description}</p>
+                      <h3 className="text-zinc-950 dark:text-zinc-50 font-bold text-base group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{mod.title}</h3>
+                      <p className="text-zinc-500 dark:text-zinc-400 text-xs mt-1 leading-relaxed line-clamp-2">{mod.description}</p>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1.5 mb-4">
                     {mod.tags.map(tag => (
-                      <span key={tag} className="text-[10px] font-medium bg-white/5 dark:bg-white/5 bg-slate-100 border border-white/10 dark:border-white/10 border-slate-200 rounded-full px-2 py-0.5 text-slate-400 dark:text-slate-400 text-slate-600">{tag}</span>
+                      <span key={tag} className="text-[10px] font-medium bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-md px-2 py-0.5 text-zinc-600 dark:text-zinc-400">{tag}</span>
                     ))}
                   </div>
-                  <div className="grid grid-cols-2 gap-3 border-t border-white/5 dark:border-white/5 border-slate-100 pt-4">
+                  <div className="grid grid-cols-2 gap-3 border-t border-black/5 dark:border-white/5 pt-3.5">
                     {stats.map(s => (
                       <div key={s.label}>
-                        <p className="text-slate-500 dark:text-slate-500 text-slate-400 text-[10px] uppercase font-semibold">{s.label}</p>
-                        <p className="text-white dark:text-white text-slate-900 text-sm font-bold font-mono">{s.value}</p>
+                        <p className="text-zinc-400 dark:text-zinc-500 text-[10px] uppercase font-semibold">{s.label}</p>
+                        <p className="text-zinc-900 dark:text-zinc-100 text-sm font-bold font-mono">{s.value}</p>
                       </div>
                     ))}
                   </div>
-                  <div className="absolute bottom-5 right-5 text-slate-600 dark:text-slate-600 text-slate-400 group-hover:text-cyan-400 dark:group-hover:text-cyan-400 group-hover:text-blue-600 transition-colors">
+                  <div className="absolute bottom-4 right-4 text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-200 transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
                     </svg>

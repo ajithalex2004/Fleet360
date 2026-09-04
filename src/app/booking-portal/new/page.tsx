@@ -1002,38 +1002,38 @@ function NewBookingInner() {
   const meta = serviceType ? SERVICE_META[serviceType as ServiceType] : null;
 
   return (
-    <div className="obsidian-glass dark [color-scheme:dark] max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8 min-h-screen text-white bg-[#0b0d14]">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8 min-h-screen text-[var(--text-main)] transition-colors duration-150">
 
       {/* ── Page header ── */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-black/10 dark:border-white/10 pb-5">
         <div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight">
-            Fleet360 <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent">Booking Portal</span>
+          <h1 className="text-2xl font-bold text-zinc-950 dark:text-zinc-50 tracking-tight">
+            New Booking Intake
           </h1>
-          <p className="text-slate-400 text-sm mt-1">Multi-modal booking & freight dispatch console across all transport domains</p>
+          <p className="text-zinc-500 dark:text-zinc-400 text-xs mt-1">Multi-modal booking & freight dispatch console across all transport domains</p>
         </div>
 
         {/* ── Progress stepper ── */}
-        <div className="flex items-center gap-3 bg-slate-900/60 border border-white/10 rounded-2xl px-5 py-3 backdrop-blur-xl">
+        <div className="flex items-center gap-3 bg-white dark:bg-zinc-900 border border-black/10 dark:border-white/10 rounded-xl px-4 py-2.5 shadow-sm">
           {(['Select Service', 'Booking Details', 'Confirmation'] as const).map((label, i) => {
             const n = (i + 1) as 1 | 2 | 3;
             return (
               <React.Fragment key={label}>
                 <div className="flex items-center gap-2">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                    step > n  ? 'bg-emerald-500 text-black font-bold' :
-                    step === n ? 'bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600 text-white font-bold shadow-md shadow-cyan-500/30' :
-                    'bg-slate-800 text-slate-500'
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                    step > n  ? 'bg-emerald-500 text-white font-bold' :
+                    step === n ? 'bg-blue-600 text-white font-bold shadow-sm' :
+                    'bg-black/5 dark:bg-white/5 text-zinc-400'
                   }`}>
                     {step > n ? '✓' : n}
                   </div>
                   <span className={`text-xs hidden md:block font-medium transition-colors ${
-                    step >= n ? 'text-cyan-200' : 'text-slate-500'
+                    step >= n ? 'text-zinc-900 dark:text-zinc-100 font-semibold' : 'text-zinc-400'
                   }`}>{label}</span>
                 </div>
                 {i < 2 && (
-                  <div className={`w-8 h-0.5 rounded-full transition-all ${
-                    step > n ? 'bg-emerald-500' : 'bg-slate-800'
+                  <div className={`w-6 h-0.5 rounded-full transition-all ${
+                    step > n ? 'bg-emerald-500' : 'bg-black/10 dark:bg-white/10'
                   }`} />
                 )}
               </React.Fragment>

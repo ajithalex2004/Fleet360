@@ -1,20 +1,21 @@
 'use client';
 /**
- * ThemeToggle — a compact Light / Dark / Auto segmented control for the top bar.
+ * ThemeToggle — sleek Linear/Vercel style segmented theme control.
  */
+import { Sun, Moon, Monitor } from 'lucide-react';
 import { useTheme, type ThemeChoice } from './ThemeProvider';
 
-const OPTIONS: Array<{ key: ThemeChoice; label: string; mark: string }> = [
-  { key: 'light', label: 'Light', mark: 'L' },
-  { key: 'dark', label: 'Dark', mark: 'D' },
-  { key: 'auto', label: 'Auto', mark: 'A' },
+const OPTIONS: Array<{ key: ThemeChoice; label: string; icon: typeof Sun }> = [
+  { key: 'light', label: 'Light', icon: Sun },
+  { key: 'dark', label: 'Dark', icon: Moon },
+  { key: 'auto', label: 'System', icon: Monitor },
 ];
 
 export default function ThemeToggle() {
   const { choice, setChoice } = useTheme();
   return (
-    <div className="inline-flex items-center rounded-xl border border-white/10 dark:border-white/10 border-slate-200/90 bg-slate-900/60 dark:bg-slate-900/60 bg-slate-100 p-1 shadow-inner" role="group" aria-label="Theme">
-      {OPTIONS.map(({ key, label, mark }) => {
+    <div className="inline-flex items-center rounded-lg border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-0.5" role="group" aria-label="Theme">
+      {OPTIONS.map(({ key, label, icon: Icon }) => {
         const active = choice === key;
         return (
           <button
@@ -24,15 +25,13 @@ export default function ThemeToggle() {
             title={`${label} theme`}
             aria-label={`${label} theme`}
             aria-pressed={active}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+            className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-all ${
               active
-                ? 'bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600 text-white shadow-md shadow-cyan-500/25 scale-[1.02]'
-                : 'text-slate-400 dark:text-slate-400 text-slate-600 hover:text-white dark:hover:text-white hover:text-slate-950'
+                ? 'bg-white dark:bg-zinc-800 text-zinc-950 dark:text-white shadow-sm border border-black/5 dark:border-white/10 font-semibold'
+                : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
             }`}
           >
-            <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-[10px] font-black leading-none">
-              {mark}
-            </span>
+            <Icon className="h-3.5 w-3.5" />
             <span className="hidden xl:inline">{label}</span>
           </button>
         );

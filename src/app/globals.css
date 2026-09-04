@@ -1,57 +1,114 @@
 @import "tailwindcss";
 
-:root {
-  /* Base Colors — Royal / Maritime Brand */
-  --bg-primary: #0c1a3e;
-  /* Deep navy — brand base */
-  --bg-secondary: #102450;
-  /* Slightly lighter navy for radial gradient stop */
-  --accent-primary: #D4AF37;
-  /* Champagne gold — primary brand accent */
-  --accent-glow: rgba(212, 175, 55, 0.5);
+/* ════════════════════════════════════════════════════════════════════════════
+   LINEAR / VERCEL MODERN ENTERPRISE DESIGN SYSTEM
+   ════════════════════════════════════════════════════════════════════════════ */
 
-  /* Brand tokens — read by BrandingProvider for tenant white-label override */
-  --brand-navy: #0c1a3e;
-  --brand-navy-light: #102450;
-  --brand-gold: #D4AF37;
-  --brand-gold-bright: #E8C547;
-  --brand-gold-deep: #B8860B;
+:root {
+  /* Default: Dark Mode (Linear / Vercel style) */
+  --bg-canvas: #09090b;
+  --bg-surface: #121215;
+  --bg-surface-elevated: #18181b;
+  --bg-surface-hover: #27272a;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-active: #3b82f6;
+  --text-main: #f4f4f5;
+  --text-muted: #a1a1aa;
+  --text-faint: #71717a;
+  --accent-primary: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-cyan: #06b6d4;
+  --accent-emerald: #10b981;
+  --shadow-card: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  --input-bg: #121215;
+  --input-text: #f4f4f5;
+  --input-border: rgba(255, 255, 255, 0.12);
+
+  /* Legacy brand token bridges */
+  --brand-navy: #09090b;
+  --brand-navy-light: #18181b;
+  --brand-gold: #3b82f6;
+  --brand-gold-bright: #60a5fa;
   --brand-blue: #3b82f6;
   --brand-blue-bright: #60a5fa;
-
-  /* Text Colors */
-  --text-primary: #f8fafc;
-  /* Slate 50 */
-  --text-secondary: #94a3b8;
-  /* Slate 400 */
-
-  /* Glassmorphism Variables */
-  --glass-bg: rgba(15, 36, 80, 0.7);
-  /* Navy with opacity */
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --canvas-bg: #09090b;
+  --surface-card: #121215;
 }
 
-@theme inline {
-  --color-background: var(--bg-primary);
-  --color-foreground: var(--text-primary);
+html.light {
+  /* Light Mode (Vercel / Swiss Enterprise style) */
+  --bg-canvas: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #ffffff;
+  --bg-surface-hover: #f1f5f9;
+  --border-subtle: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --border-active: #2563eb;
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --text-faint: #64748b;
+  --accent-primary: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-cyan: #0284c7;
+  --accent-emerald: #059669;
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+  --input-bg: #ffffff;
+  --input-text: #0f172a;
+  --input-border: #cbd5e1;
+
+  /* Legacy brand token bridges */
+  --brand-navy: #f8fafc;
+  --brand-navy-light: #ffffff;
+  --brand-gold: #2563eb;
+  --brand-gold-bright: #3b82f6;
+  --brand-blue: #2563eb;
+  --brand-blue-bright: #3b82f6;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --canvas-bg: #f8fafc;
+  --surface-card: #ffffff;
+}
+
+html.dark {
+  --bg-canvas: #09090b;
+  --bg-surface: #121215;
+  --bg-surface-elevated: #18181b;
+  --bg-surface-hover: #27272a;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-active: #3b82f6;
+  --text-main: #f4f4f5;
+  --text-muted: #a1a1aa;
+  --text-faint: #71717a;
+  --accent-primary: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-cyan: #06b6d4;
+  --accent-emerald: #10b981;
+  --shadow-card: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  --input-bg: #121215;
+  --input-text: #f4f4f5;
+  --input-border: rgba(255, 255, 255, 0.12);
+
+  --canvas-bg: #09090b;
+  --surface-card: #121215;
 }
 
 body {
-  background: radial-gradient(circle at top right, #102450, #0c1a3e);
-  color: var(--text-primary);
-  font-family: var(--font-sans), system-ui, sans-serif;
+  background-color: var(--bg-canvas) !important;
+  color: var(--text-main) !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   min-height: 100vh;
+  margin: 0;
+  padding: 0;
 }
 
-/* Custom Scrollbar */
-/* Bumped from 8px → 10px and darkened the thumb so the scrollbar reads as
-   a real affordance ("there's more content below") instead of blending into
-   the dark navy track. slate-600 in dark mode, slate-500 in light mode,
-   both high-contrast against their respective backgrounds. */
+/* ── Scrollbars ── */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -59,318 +116,97 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #475569; /* slate-600 — visible against slate-950/900 */
-  border-radius: 5px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
+  background: #52525b;
+  border-radius: 4px;
+}
+
+html.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #64748b; /* slate-500 — lighter on hover for affordance */
+  background: #71717a;
 }
 
-::-webkit-scrollbar-corner {
-  background: transparent;
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
-/* ── C1Chat / TheSys embedded chat overrides ────────────────────────────── */
-/* Force the chat widget to fill its container as a full embedded panel      */
-/* and hide the floating launcher icon (we embed it directly in the layout)  */
-
-/* Root wrapper TheSys injects — make it fill parent */
-[class*="c1-"], [class*="C1"], [data-c1], #c1-chat-root,
-div[class^="crayon"], div[class*=" crayon"] {
-  height: 100% !important;
-  max-height: 100% !important;
-  width: 100% !important;
+/* ── Universal Form Inputs ── */
+input, select, textarea {
+  background-color: var(--input-bg);
+  color: var(--input-text) !important;
+  border: 1px solid var(--input-border);
+  transition: all 0.15s ease-in-out;
 }
 
-/* Hide the floating launcher bubble/icon entirely */
-[class*="launcher"], [class*="Launcher"],
-[class*="chat-button"], [class*="ChatButton"],
-[class*="toggle-button"], [class*="fab"],
-button[aria-label*="chat" i], button[aria-label*="Chat" i] {
-  display: none !important;
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--border-active);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
-/* Ensure the inner chat panel is always visible (not hidden behind widget) */
-[class*="panel"], [class*="Panel"],
-[class*="chat-window"], [class*="chatWindow"] {
-  position: relative !important;
-  inset: auto !important;
-  transform: none !important;
-  opacity: 1 !important;
-  visibility: visible !important;
-  display: flex !important;
-  flex-direction: column !important;
-  height: 100% !important;
-  width: 100% !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
+input::placeholder, textarea::placeholder {
+  color: var(--text-faint);
 }
 
-/* Glassmorphism Utilities */
-.glass-panel {
-  background: var(--glass-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
-}
-
-.glass-card {
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  transition: all 0.3s ease;
-}
-
-.glass-card:hover {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(255, 255, 255, 0.1);
-  transform: translateY(-2px);
-  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
-}
-
-/* Neon Glow Utilities */
-.text-glow {
-  text-shadow: 0 0 10px var(--accent-glow);
-}
-
-
-.border-glow {
-  box-shadow: 0 0 15px -3px var(--accent-glow);
-}
-
-/* Global Input & Select Override */
-input,
-select,
-textarea {
-  color: #0f172a;
-  /* Slate 900 - Dark text for inputs */
-}
-
-/* Exception for inputs explicitly styled with dark backgrounds if needed later, 
-   but for now, most forms are on white/light cards so dark text is safer. */
-/* ── Fleet360: ensure input text is always white on dark backgrounds ── */
-input,
-textarea,
-select {
-  color: white !important;
-}
-
-input::placeholder,
-textarea::placeholder {
-  color: rgb(100 116 139); /* slate-500 */
-}
-
-/* Ensure select options are readable */
 select option {
-  background-color: rgb(30 41 59); /* slate-800 */
-  color: white;
+  background-color: var(--bg-surface);
+  color: var(--text-main);
 }
 
-/* ── Print styles (cargo manifest) ─────────────────────────────────────────── */
+/* ── Universal Modern Cards ── */
+.modern-card, .obsidian-glass, .glass-panel-obsidian {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 1rem;
+  color: var(--text-main);
+  box-shadow: var(--shadow-card);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html.dark .modern-card, html.dark .obsidian-glass, html.dark .glass-panel-obsidian {
+  background: rgba(18, 18, 21, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+html.light .modern-card, html.light .obsidian-glass, html.light .glass-panel-obsidian {
+  background: #ffffff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.modern-card:hover, .obsidian-glass:hover, .glass-panel-obsidian:hover {
+  border-color: var(--border-strong);
+}
+
+/* ── Modern Buttons ── */
+.btn-aura-primary, .btn-primary {
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  color: #ffffff !important;
+  font-weight: 600;
+  border-radius: 0.75rem;
+  padding: 0.625rem 1.25rem;
+  transition: all 0.15s ease-in-out;
+  box-shadow: 0 4px 14px 0 rgba(37, 99, 235, 0.3);
+}
+
+.btn-aura-primary:hover, .btn-primary:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+}
+
+.btn-aura-primary:active, .btn-primary:active {
+  transform: translateY(0);
+}
+
+/* ── Print Styles ── */
 @media print {
   body { background: white !important; color: black !important; }
   .print\:hidden { display: none !important; }
   .print\:block  { display: block !important; }
-  #print-manifest { display: block !important; }
-}
-
-/* ════════════════════════════════════════════════════════════════════════════
-   AURA STUDIO MODERN DESIGN SYSTEM — Dual Light & Dark Mode Foundations
-   ════════════════════════════════════════════════════════════════════════════ */
-
-:root {
-  --canvas-bg: #080b11;
-  --surface-card: rgba(15, 23, 42, 0.65);
-  --surface-elevated: rgba(2, 6, 23, 0.85);
-  --border-subtle: rgba(255, 255, 255, 0.10);
-  --border-hover: rgba(6, 182, 212, 0.45);
-  --text-heading: #ffffff;
-  --text-body: #94a3b8;
-  --text-caption: #64748b;
-  --accent-cyan: #06b6d4;
-  --accent-blue: #3b82f6;
-  --accent-emerald: #10b981;
-}
-
-html.light {
-  --canvas-bg: #f8fafc;
-  --surface-card: #ffffff;
-  --surface-elevated: #f1f5f9;
-  --border-subtle: rgba(226, 232, 240, 0.95);
-  --border-hover: rgba(37, 99, 235, 0.5);
-  --text-heading: #0f172a;
-  --text-body: #334155;
-  --text-caption: #64748b;
-  --accent-cyan: #0284c7;
-  --accent-blue: #2563eb;
-  --accent-emerald: #059669;
-}
-
-html.dark body {
-  background-color: #080b11;
-  color: #ffffff;
-}
-
-html.light body {
-  background-color: #f8fafc;
-  color: #0f172a;
-}
-
-/* Modern Card Component */
-.modern-card {
-  background: var(--surface-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: 1rem;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-html.dark .modern-card {
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-}
-
-html.dark .modern-card:hover {
-  border-color: var(--border-hover);
-  box-shadow: 0 20px 50px rgba(6, 182, 212, 0.15);
-}
-
-html.light .modern-card {
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
-}
-
-html.light .modern-card:hover {
-  border-color: var(--border-hover);
-  box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.1);
-}
-
-/* Modern KPI Metric Tile */
-.kpi-tile {
-  background: var(--surface-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: 1rem;
-  padding: 1.25rem;
-  transition: all 0.2s ease;
-}
-
-html.dark .kpi-tile {
-  backdrop-filter: blur(12px);
-}
-
-html.dark .kpi-tile:hover {
-  border-color: rgba(6, 182, 212, 0.4);
-}
-
-html.light .kpi-tile:hover {
-  border-color: rgba(37, 99, 235, 0.4);
-}
-
-/* Modern Primary Action Button */
-.btn-aura-primary {
-  background: linear-gradient(135deg, #06b6d4, #3b82f6 60%, #4f46e5);
-  color: #ffffff;
-  font-weight: 700;
-  border-radius: 9999px;
-  padding: 0.75rem 1.5rem;
-  transition: all 0.2s ease;
-  box-shadow: 0 10px 25px -5px rgba(6, 182, 212, 0.35);
-}
-
-.btn-aura-primary:hover {
-  filter: brightness(1.1);
-  transform: translateY(-1px);
-  box-shadow: 0 15px 30px -5px rgba(6, 182, 212, 0.45);
-}
-
-.btn-aura-primary:active {
-  transform: scale(0.98);
-}
-
-/* ════════════════════════════════════════════════════════════════════════════
-   MODERN OBSIDIAN GLASS — Scoped Utilities
-   ════════════════════════════════════════════════════════════════════════════ */
-.obsidian-glass {
-  background-color: #0b0d14;
-  color: #ffffff;
-}
-
-.obsidian-glass .text-white {
-  color: #ffffff !important;
-}
-
-.obsidian-glass .text-cyan-300 {
-  color: #67e8f9 !important;
-}
-
-.obsidian-glass .text-cyan-400 {
-  color: #22d3ee !important;
-}
-
-.obsidian-glass .text-cyan-500 {
-  color: #06b6d4 !important;
-}
-
-.obsidian-glass .text-blue-400 {
-  color: #60a5fa !important;
-}
-
-.obsidian-glass .text-slate-200 {
-  color: #e2e8f0 !important;
-}
-
-.obsidian-glass .text-slate-300 {
-  color: #cbd5e1 !important;
-}
-
-.obsidian-glass .text-slate-400 {
-  color: #94a3b8 !important;
-}
-
-.obsidian-glass .text-slate-500 {
-  color: #64748b !important;
-}
-
-/* Frosted glass card utility */
-.glass-panel-obsidian {
-  background: rgba(15, 23, 42, 0.65) !important;
-  backdrop-filter: blur(16px) !important;
-  -webkit-backdrop-filter: blur(16px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5) !important;
-}
-
-.glass-panel-obsidian:hover {
-  border-color: rgba(6, 182, 212, 0.4) !important;
-  box-shadow: 0 20px 50px rgba(6, 182, 212, 0.15) !important;
-}
-
-.obsidian-glass input,
-.obsidian-glass textarea,
-.obsidian-glass select {
-  background-color: rgba(10, 14, 26, 0.75) !important;
-  color: #ffffff !important;
-  border-color: rgba(255, 255, 255, 0.12) !important;
-}
-
-.obsidian-glass input:focus,
-.obsidian-glass textarea:focus,
-.obsidian-glass select:focus {
-  border-color: #06b6d4 !important;
-  box-shadow: 0 0 15px rgba(6, 182, 212, 0.25) !important;
-}
-
-.obsidian-glass input::placeholder,
-.obsidian-glass textarea::placeholder {
-  color: #64748b !important;
-}
-
-.obsidian-glass select option {
-  background-color: #0d111d !important;
-  color: #ffffff !important;
 }
 
 

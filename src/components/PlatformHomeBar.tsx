@@ -52,22 +52,22 @@ export default function PlatformHomeBar({
   const isAgentsPage = pathname?.startsWith('/agents');
 
   return (
-    <div className="flex items-center justify-between px-4 py-2.5 bg-slate-950/85 dark:bg-slate-950/85 bg-white/90 border-b border-white/10 dark:border-white/10 border-slate-200/80 z-50 backdrop-blur-xl flex-shrink-0 transition-colors">
+    <div className="flex items-center justify-between px-4 py-2 bg-white/80 dark:bg-zinc-950/80 border-b border-black/10 dark:border-white/10 z-50 backdrop-blur-md flex-shrink-0 transition-colors">
       {/* Left: back to platform home + AI Agents quick link */}
       <div className="flex items-center gap-2">
         <Link
           href="/platform"
-          className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 dark:bg-white/5 bg-slate-100 border border-white/10 dark:border-white/10 border-slate-200/90 text-slate-200 dark:text-slate-200 text-slate-700 hover:text-white dark:hover:text-white hover:text-slate-950 text-xs font-bold tracking-wider transition-all group min-w-0 shadow-sm"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-zinc-900 dark:text-zinc-100 hover:bg-black/10 dark:hover:bg-white/10 text-xs font-medium tracking-wide transition-all group min-w-0"
         >
           <ArrowLeft className="w-3.5 h-3.5 flex-shrink-0 group-hover:-translate-x-0.5 transition-transform" />
-          <span className="hidden lg:inline whitespace-nowrap">FLEET360 HOME</span>
+          <span className="hidden lg:inline whitespace-nowrap">FLEET360</span>
           <span className="lg:hidden">HOME</span>
         </Link>
         {/* AI Agents quick-access — visible on every module page except /agents itself */}
         {!isAgentsPage && (
           <Link
             href="/agents"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 hover:border-violet-400/50 text-violet-400 dark:text-violet-400 text-violet-600 text-xs font-semibold transition-all shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/10 hover:bg-violet-500/15 border border-violet-500/20 text-violet-700 dark:text-violet-300 text-xs font-medium transition-all"
           >
             <Bot className="w-3.5 h-3.5" />
             <span className="whitespace-nowrap">AI Agents</span>

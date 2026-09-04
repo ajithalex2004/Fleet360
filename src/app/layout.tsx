@@ -24,7 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_NO_FLASH }} />
       </head>
-      <body className="antialiased bg-slate-950 text-white">
+      <body className="antialiased min-h-screen bg-[var(--bg-canvas)] text-[var(--text-main)] transition-colors duration-150">
         <ThemeProvider>
           <ClientProviders>
             <ToastProvider>
