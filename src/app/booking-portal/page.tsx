@@ -13,6 +13,8 @@ import {
   Sparkles,
   Truck,
   ShieldCheck,
+  Download,
+  Building2,
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import { usePermissions } from '@/contexts/PermissionContext';
@@ -247,6 +249,75 @@ export default function BookingPortal() {
             </div>
           );
         })}
+      </div>
+
+      {/* ── Flagship Mobile & B2B Booking Consoles ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Card 1: Universal Mobile Booking App */}
+        <div className="bg-gradient-to-br from-cyan-950/40 via-slate-900/70 to-slate-950/80 border border-cyan-500/30 rounded-2xl p-6 shadow-2xl backdrop-blur-xl flex flex-col justify-between space-y-4">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 px-2.5 py-0.5 rounded-full border border-cyan-500/30">
+                MOBILE APP & APK
+              </span>
+              <span className="text-xs text-slate-400 font-mono">v2.4 Live</span>
+            </div>
+            <h3 className="text-base font-bold text-white mt-2 flex items-center gap-2">
+              <Smartphone className="w-4 h-4 text-cyan-400" /> Fleet360 Mobile Booking App
+            </h3>
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+              Universal mobile booking for Freight, Chauffeur, Bus & Rental. Biometrics, OTP, e-BOL & Cold-Chain IoT.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <Link
+              href="/m"
+              className="flex-1 min-w-[130px] text-center px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600 hover:from-cyan-400 hover:to-blue-500 text-white text-xs font-bold transition-all shadow-md shadow-cyan-500/20"
+            >
+              Open Web App (/m) →
+            </Link>
+            <a
+              href="/api/mobile/download-apk"
+              download="Fleet360 Booking App.apk"
+              className="px-4 py-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 text-emerald-400 text-xs font-semibold border border-emerald-500/30 transition-all flex items-center gap-1.5"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-400" />
+              Download APK
+            </a>
+          </div>
+        </div>
+
+        {/* Card 2: Enterprise Booking Portal */}
+        <div className="bg-gradient-to-br from-blue-950/40 via-slate-900/70 to-slate-950/80 border border-blue-500/30 rounded-2xl p-6 shadow-2xl backdrop-blur-xl flex flex-col justify-between space-y-4">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono font-bold bg-blue-500/20 text-blue-300 px-2.5 py-0.5 rounded-full border border-blue-500/30">
+                B2B BOOKING PORTAL
+              </span>
+              <span className="text-xs text-slate-400 font-mono">All Domains</span>
+            </div>
+            <h3 className="text-base font-bold text-white mt-2 flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-blue-400" /> Booking Intake & Approvals
+            </h3>
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+              Bulk CSV uploader, 3-tier corporate approval hierarchy, multi-stop routing & UAE customs e-BOL manifests.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <Link
+              href="/booking-portal/new"
+              className="flex-1 min-w-[130px] text-center px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md shadow-blue-500/20"
+            >
+              New Booking Intake →
+            </Link>
+            <Link
+              href="/admin/corporate-clients"
+              className="px-4 py-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 text-slate-300 text-xs font-semibold border border-white/10 transition-all"
+            >
+              Corporate Hub
+            </Link>
+          </div>
+        </div>
       </div>
 
       {/* ── Service cards ── */}
