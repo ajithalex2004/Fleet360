@@ -21,6 +21,7 @@ export type AgentEventType =
   | 'schedule.hourly'         // high-frequency polling
   | 'route.created'           // school bus / logistics route added
   | 'route.updated'           // stop sequence or timing changed
+  | 'route.consolidate_scan'  // multi-route network consolidation scan
   | 'stop.added'              // new stop added to a route
   | 'stop.removed'            // stop removed from a route
   | 'schedule.changed'        // service schedule updated
@@ -83,56 +84,39 @@ export type MaintenanceAction =
 
 // ── Predictive Maintenance Output (9 Comprehensive Failure Signals) ───────────
 export interface MaintenanceRiskFactors {
-  // Dimension 1: Service Overdue
-  serviceOverdue: number;         // 0–1 score
-  serviceOverdueDays: number;     // actual days since last service
-  serviceOverdueKm: number;       // actual km since last service
-  
-  // Dimension 2: Fuel Anomaly
-  fuelAnomalyScore: number;       // 0–1 score
-  fuelConsumptionBaseline: number;// L/100km baseline avg
-  fuelConsumptionRecent: number;  // L/100km last 30 days
-  
-  // Dimension 3: Work Order History
-  workOrderFrequency: number;     // 0–1 score
+  serviceOverdue: number;
+  serviceOverdueDays: number;
+  serviceOverdueKm: number;
+  fuelAnomalyScore: number;
+  fuelConsumptionBaseline: number;
+  fuelConsumptionRecent: number;
+  workOrderFrequency: number;
   openWorkOrders: number;
   workOrdersLast90Days: number;
-  
-  // Dimension 4: Cumulative Mileage
-  odometerFactor: number;         // 0–1 score
+  odometerFactor: number;
   odometerKm: number;
-  
-  // Dimension 5: Vehicle Age
-  vehicleAgeFactor: number;       // 0–1 score
+  vehicleAgeFactor: number;
   vehicleAgeYears: number;
-  
-  // Dimension 6: CAN-bus DTC Faults
-  dtcFaultScore: number;          // 0–1 score
-  activeDtcCodes: string[];       // e.g. ['P0300', 'P0128', 'P0562']
-  dtcSeveritySummary?: string;    // e.g. '1 Critical, 1 Major Faults'
-  
-  // Dimension 7: Telematics Sensor Values & Thermal Stress
-  sensorAnomalyScore: number;     // 0–1 score
-  coolantTempC?: number;          // e.g. 106°C
-  oilPressureKpa?: number;        // e.g. 110 kPa
-  batteryVoltage?: number;        // e.g. 11.9V
-  transmissionTempC?: number;     // e.g. 112°C
-  sensorWarningList: string[];    // ['COOLANT_OVERHEAT_WARNING', 'LOW_BATTERY_VOLTAGE']
-  
-  // Dimension 8: Operating Hours & High-Idle Stress
-  operatingHoursFactor: number;   // 0–1 score
-  engineOperatingHours: number;   // Total engine run hours
-  dutyCycleStressRatio: number;   // Hours / Km stress factor
-  
-  // Dimension 9: Repeat Failures & Component RUL (Remaining Useful Life)
-  repeatFailureScore: number;     // 0–1 score
-  repeatFailureCount: number;     // Number of recurring subsystem repairs within 90d
-  repeatSubsystems: string[];     // ['BRAKES', 'ELECTRICAL']
+  dtcFaultScore: number;
+  activeDtcCodes: string[];
+  dtcSeveritySummary?: string;
+  sensorAnomalyScore: number;
+  coolantTempC?: number;
+  oilPressureKpa?: number;
+  batteryVoltage?: number;
+  transmissionTempC?: number;
+  sensorWarningList: string[];
+  operatingHoursFactor: number;
+  engineOperatingHours: number;
+  dutyCycleStressRatio: number;
+  repeatFailureScore: number;
+  repeatFailureCount: number;
+  repeatSubsystems: string[];
   subsystemRUL: {
-    powertrainPct: number;        // 0–100% Remaining Useful Life
-    brakeSystemPct: number;       // 0–100%
-    electricalPct: number;        // 0–100%
-    hvacPct: number;              // 0–100%
+    powertrainPct: number;
+    brakeSystemPct: number;
+    electricalPct: number;
+    hvacPct: number;
   };
 }
 
@@ -142,14 +126,53 @@ export interface VehicleRiskScore {
   make: string;
   model: string;
   licensePlate: string;
-  riskScore: number;              // 0.000–1.000
+  riskScore: number;
   riskLevel: RiskLevel;
   factors: MaintenanceRiskFactors;
   recommendedAction: MaintenanceAction;
-  predictedFailureWindow: string; // '0–7 days', '7–14 days', '14–30 days', etc.
-  primaryFailureReason?: string;  // e.g. 'Engine Misfire DTC P0300 & Thermal Overheat (106°C)'
-  autoWorkOrderId?: string;       // set if WO was auto-created
+  predictedFailureWindow: string;
+  primaryFailureReason?: string;
+  autoWorkOrderId?: string;
   scoredAt: string;
+}
+
+// ── Route Optimization & Multi-Route Consolidation Contracts ──────────────────
+export interface ConsolidationRecommendationItem {
+  id: string;
+  sourceRouteIds: string[];
+  sourceRouteNames: string[];
+  sourceRouteNumbers: string[];
+  candidateType: 'SIMULTANEOUS_MERGE' | 'TURNAROUND_SEQUENTIAL';
+  direction: string;
+  shift: string;
+  combinedPassengers: number;
+  requiredCapacity: number;
+  operatorScore: number; // 0–100 ranking
+  detourMinutes: number;
+  detourKm: number;
+  dailyDistanceSavedKm: number;
+  weeklySavingsAed: number;
+  monthlySavingsAed: number;
+  vehiclesReleased: number;
+  status: 'SUGGESTED' | 'APPLIED' | 'REJECTED';
+}
+
+export interface NetworkDesignSummary {
+  currentRoutesCount: number;
+  currentVehiclesCount: number;
+  recommendedRoutesCount: number;
+  recommendedVehiclesCount: number;
+  vehiclesSaved: number;
+  dailyKmSaved: number;
+  monthlyCostSavedAed: number;
+  annualCostSavedAed: number;
+}
+
+export interface RouteOptimiserOutput {
+  summary: string;
+  networkDesign: NetworkDesignSummary;
+  consolidations: ConsolidationRecommendationItem[];
+  singleRouteResults: unknown[];
 }
 
 // ── Finance Anomaly Output ─────────────────────────────────────────────────────
@@ -171,8 +194,8 @@ export interface AnomalyFlag {
   entityType: AnomalyEntityType;
   entityId: string;
   severity: AnomalySeverity;
-  confidence: number;             // 0.000–1.000
-  explanation: string;            // plain-English, one sentence
+  confidence: number;
+  explanation: string;
   amount?: number;
   currency?: string;
   metadata?: Record<string, unknown>;
@@ -188,7 +211,7 @@ export interface AgentRunResult {
   durationMs: number;
   itemsProcessed: number;
   actionsCreated: number;
-  output: unknown;                // agent-specific payload
+  output: unknown;
   error?: string;
 }
 
@@ -198,8 +221,8 @@ export interface AgentDefinition {
   name: string;
   description: string;
   version: string;
-  agentType: AgentType;           // BATCH (scan/schedule) | CONVERSATIONAL (always-on)
+  agentType: AgentType;
   subscribedEvents: AgentEventType[];
-  supportsEntityScan: boolean;    // can scan all entities (not just one)
+  supportsEntityScan: boolean;
   run: (event: AgentEvent) => Promise<AgentRunResult>;
 }
