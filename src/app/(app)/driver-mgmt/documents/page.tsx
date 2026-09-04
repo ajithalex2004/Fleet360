@@ -206,11 +206,11 @@ export default function DriverDocuments() {
 
             <form onSubmit={handleAddDocument} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Driver</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Driver</label>
                 <select
                   value={formData.driverId}
                   onChange={(e) => setFormData({ ...formData, driverId: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   required
                 >
                   <option value="">Select Driver</option>
@@ -223,11 +223,11 @@ export default function DriverDocuments() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Document Type</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Document Type</label>
                 <select
                   value={formData.docType}
                   onChange={(e) => setFormData({ ...formData, docType: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   required
                 >
                   <option value="">Select Type</option>
@@ -240,23 +240,23 @@ export default function DriverDocuments() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Document Number</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Document Number</label>
                 <input
                   type="text"
                   value={formData.docNumber}
                   onChange={(e) => setFormData({ ...formData, docNumber: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Expiry Date</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Expiry Date</label>
                 <input
                   type="date"
                   value={formData.expiryDate}
                   onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   required
                 />
               </div>
@@ -271,7 +271,7 @@ export default function DriverDocuments() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 rounded-xl bg-slate-700 px-4 py-2 text-sm font-medium text-slate-400 hover:bg-slate-600 transition-all"
+                  className="flex-1 rounded-xl bg-[var(--bg-surface-hover)] px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-elevated)] transition-all"
                 >
                   Cancel
                 </button>

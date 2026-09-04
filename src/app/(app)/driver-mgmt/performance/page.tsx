@@ -61,7 +61,7 @@ export default function PerformanceDashboard() {
     return (
       <div className="flex gap-1">
         {[...Array(5)].map((_, i) => (
-          <span key={i} className={i < Math.round(rating) ? 'text-yellow-400 text-sm' : 'text-slate-600 text-sm'}>
+          <span key={i} className={i < Math.round(rating) ? 'text-yellow-400 text-sm' : 'text-[var(--text-faint)] text-sm'}>
             ★
           </span>
         ))}
@@ -73,7 +73,7 @@ export default function PerformanceDashboard() {
     return (
       <div className="flex items-center justify-center h-full min-h-[200px]">
         <div className="animate-spin">
-          <div className="w-12 h-12 border-4 border-slate-700 border-t-cyan-500 rounded-full"></div>
+          <div className="w-12 h-12 border-4 border-[var(--border-strong)] border-t-cyan-500 rounded-full"></div>
         </div>
       </div>
     );
@@ -92,8 +92,8 @@ export default function PerformanceDashboard() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-white">Driver Performance</h1>
-        <p className="text-slate-400 mt-1">Monitor driver metrics and KPIs</p>
+        <h1 className="text-3xl font-bold text-[var(--text-main)]">Driver Performance</h1>
+        <p className="text-[var(--text-muted)] mt-1">Monitor driver metrics and KPIs</p>
       </div>
 
       {/* Filters */}
@@ -101,7 +101,7 @@ export default function PerformanceDashboard() {
         <select
           value={filterMonth}
           onChange={(e) => setFilterMonth(e.target.value)}
-          className="bg-slate-800/50 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+          className="bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
         >
           <option value="">All Months</option>
           {months.map((month) => (
@@ -114,7 +114,7 @@ export default function PerformanceDashboard() {
         <select
           value={filterYear}
           onChange={(e) => setFilterYear(e.target.value)}
-          className="bg-slate-800/50 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+          className="bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
         >
           <option value="">All Years</option>
           {years.map((year) => (
@@ -126,43 +126,43 @@ export default function PerformanceDashboard() {
       </div>
 
       {/* Performance Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 overflow-hidden">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 overflow-hidden">
         {filteredRecords.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-4xl mb-3">⭐</div>
-            <p className="text-slate-400">No performance records found</p>
+            <p className="text-[var(--text-muted)]">No performance records found</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-slate-800/50">
-                <tr className="border-b border-white/5">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Driver</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Period</th>
-                  <th className="px-6 py-3 text-center text-xs font-semibold text-slate-400">On-Time %</th>
-                  <th className="px-6 py-3 text-center text-xs font-semibold text-slate-400">Incidents</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Rating</th>
-                  <th className="px-6 py-3 text-center text-xs font-semibold text-slate-400">Fuel Efficiency</th>
-                  <th className="px-6 py-3 text-center text-xs font-semibold text-slate-400">Trips</th>
-                  <th className="px-6 py-3 text-center text-xs font-semibold text-slate-400">KM</th>
-                  <th className="px-6 py-3 text-center text-xs font-semibold text-slate-400">Score</th>
+              <thead className="bg-[var(--bg-surface-hover)]">
+                <tr className="border-b border-[var(--border-subtle)]">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Driver</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Period</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-[var(--text-muted)]">On-Time %</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-[var(--text-muted)]">Incidents</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Rating</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-[var(--text-muted)]">Fuel Efficiency</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-[var(--text-muted)]">Trips</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-[var(--text-muted)]">KM</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-[var(--text-muted)]">Score</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredRecords.map((record) => (
-                  <tr key={record.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td className="px-6 py-4 text-sm text-white font-medium">{record.driver}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{record.period}</td>
-                    <td className="px-6 py-4 text-sm text-center text-slate-200">{record.onTimePercentage}%</td>
+                  <tr key={record.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
+                    <td className="px-6 py-4 text-sm text-[var(--text-main)] font-medium">{record.driver}</td>
+                    <td className="px-6 py-4 text-sm text-[var(--text-muted)]">{record.period}</td>
+                    <td className="px-6 py-4 text-sm text-center text-[var(--text-muted)]">{record.onTimePercentage}%</td>
                     <td className="px-6 py-4 text-sm text-center">
                       <span className={record.incidents === 0 ? 'text-emerald-400' : 'text-red-400'}>
                         {record.incidents}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm">{getRatingStars(record.customerRating)}</td>
-                    <td className="px-6 py-4 text-sm text-center text-slate-200">{record.fuelEfficiency.toFixed(2)} km/l</td>
-                    <td className="px-6 py-4 text-sm text-center text-slate-200">{record.totalTrips}</td>
-                    <td className="px-6 py-4 text-sm text-center text-slate-200">{record.totalKM.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-sm text-center text-[var(--text-muted)]">{record.fuelEfficiency.toFixed(2)} km/l</td>
+                    <td className="px-6 py-4 text-sm text-center text-[var(--text-muted)]">{record.totalTrips}</td>
+                    <td className="px-6 py-4 text-sm text-center text-[var(--text-muted)]">{record.totalKM.toLocaleString()}</td>
                     <td className="px-6 py-4 text-sm text-center">
                       <span className={`font-bold text-lg ${getScoreColor(record.score)}`}>{record.score}</span>
                     </td>
@@ -176,28 +176,28 @@ export default function PerformanceDashboard() {
 
       {/* Performance Guidelines */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold text-emerald-400">Excellent (80+)</h3>
             <span className="text-3xl">✓</span>
           </div>
-          <p className="text-sm text-slate-400">High performance with excellent metrics across all KPIs. Keep up the great work!</p>
+          <p className="text-sm text-[var(--text-muted)]">High performance with excellent metrics across all KPIs. Keep up the great work!</p>
         </div>
 
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold text-amber-400">Good (60-79)</h3>
             <span className="text-3xl">→</span>
           </div>
-          <p className="text-sm text-slate-400">Solid performance with room for improvement. Focus on identified areas to increase score.</p>
+          <p className="text-sm text-[var(--text-muted)]">Solid performance with room for improvement. Focus on identified areas to increase score.</p>
         </div>
 
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold text-red-400">Needs Improvement (&lt;60)</h3>
             <span className="text-3xl">!</span>
           </div>
-          <p className="text-sm text-slate-400">Performance below expectations. Coaching recommended to address weak areas.</p>
+          <p className="text-sm text-[var(--text-muted)]">Performance below expectations. Coaching recommended to address weak areas.</p>
         </div>
       </div>
     </div>

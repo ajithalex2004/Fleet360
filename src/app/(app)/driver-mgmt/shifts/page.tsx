@@ -100,11 +100,11 @@ export default function ShiftManagement() {
       case 'ACTIVE':
         return 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 animate-pulse';
       case 'COMPLETED':
-        return 'bg-slate-500/20 text-slate-400 border border-slate-500/30';
+        return 'bg-slate-500/20 text-[var(--text-muted)] border border-slate-500/30';
       case 'ABSENT':
         return 'bg-red-500/20 text-red-400 border border-red-500/30';
       default:
-        return 'bg-slate-500/20 text-slate-400 border border-slate-500/30';
+        return 'bg-slate-500/20 text-[var(--text-muted)] border border-slate-500/30';
     }
   };
 
@@ -115,7 +115,7 @@ export default function ShiftManagement() {
     return (
       <div className="flex items-center justify-center h-full min-h-[200px]">
         <div className="animate-spin">
-          <div className="w-12 h-12 border-4 border-slate-700 border-t-cyan-500 rounded-full"></div>
+          <div className="w-12 h-12 border-4 border-[var(--border-strong)] border-t-cyan-500 rounded-full"></div>
         </div>
       </div>
     );
@@ -135,8 +135,8 @@ export default function ShiftManagement() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">Shift Management</h1>
-          <p className="text-slate-400 mt-1">Schedule and manage driver shifts</p>
+          <h1 className="text-3xl font-bold text-[var(--text-main)]">Shift Management</h1>
+          <p className="text-[var(--text-muted)] mt-1">Schedule and manage driver shifts</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -149,56 +149,56 @@ export default function ShiftManagement() {
       {/* Date Range Filter */}
       <div className="flex gap-4">
         <div className="flex-1">
-          <label className="block text-sm font-medium text-slate-400 mb-2">Start Date</label>
+          <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Start Date</label>
           <input
             type="date"
             value={filterStartDate}
             onChange={(e) => setFilterStartDate(e.target.value)}
-            className="w-full bg-slate-800/50 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
           />
         </div>
         <div className="flex-1">
-          <label className="block text-sm font-medium text-slate-400 mb-2">End Date</label>
+          <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">End Date</label>
           <input
             type="date"
             value={filterEndDate}
             onChange={(e) => setFilterEndDate(e.target.value)}
-            className="w-full bg-slate-800/50 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
           />
         </div>
       </div>
 
       {/* Shifts Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 overflow-hidden">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 overflow-hidden">
         {filteredShifts.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-4xl mb-3">⏰</div>
-            <p className="text-slate-400">No shifts scheduled</p>
+            <p className="text-[var(--text-muted)]">No shifts scheduled</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-slate-800/50">
-                <tr className="border-b border-white/5">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Driver</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Vehicle</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Shift Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Start Time</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">End Time</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Total Hours</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Actions</th>
+              <thead className="bg-[var(--bg-surface-hover)]">
+                <tr className="border-b border-[var(--border-subtle)]">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Driver</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Vehicle</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Shift Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Start Time</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">End Time</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Total Hours</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredShifts.map((shift) => (
-                  <tr key={shift.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td className="px-6 py-4 text-sm text-white font-medium">{shift.driverId}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{shift.vehicleId ?? '—'}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{new Date(shift.shiftDate).toLocaleDateString()}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{fmtTime(shift.startTime)}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{fmtTime(shift.endTime)}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{shift.totalHours != null ? `${shift.totalHours.toFixed(1)} hrs` : '—'}</td>
+                  <tr key={shift.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
+                    <td className="px-6 py-4 text-sm text-[var(--text-main)] font-medium">{shift.driverId}</td>
+                    <td className="px-6 py-4 text-sm text-[var(--text-muted)]">{shift.vehicleId ?? '—'}</td>
+                    <td className="px-6 py-4 text-sm text-[var(--text-muted)]">{new Date(shift.shiftDate).toLocaleDateString()}</td>
+                    <td className="px-6 py-4 text-sm text-[var(--text-muted)]">{fmtTime(shift.startTime)}</td>
+                    <td className="px-6 py-4 text-sm text-[var(--text-muted)]">{fmtTime(shift.endTime)}</td>
+                    <td className="px-6 py-4 text-sm text-[var(--text-muted)]">{shift.totalHours != null ? `${shift.totalHours.toFixed(1)} hrs` : '—'}</td>
                     <td className="px-6 py-4 text-sm">
                       <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(shift.status)}`}>
                         {shift.status ?? 'UNKNOWN'}
@@ -218,72 +218,72 @@ export default function ShiftManagement() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-800 border border-white/10 rounded-2xl p-8 max-w-md w-full">
-            <h2 className="text-2xl font-bold text-white mb-6">Create New Shift</h2>
+          <div className="bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] rounded-2xl p-8 max-w-md w-full">
+            <h2 className="text-2xl font-bold text-[var(--text-main)] mb-6">Create New Shift</h2>
 
             <form onSubmit={handleAddShift} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Driver ID</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Driver ID</label>
                 <input
                   type="text"
                   value={formData.driverId}
                   onChange={(e) => setFormData({ ...formData, driverId: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Shift Date</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Shift Date</label>
                 <input
                   type="date"
                   value={formData.shiftDate}
                   onChange={(e) => setFormData({ ...formData, shiftDate: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-2">Start Time</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Start Time</label>
                   <input
                     type="time"
                     value={formData.startTime}
                     onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                    className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-2">End Time</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">End Time</label>
                   <input
                     type="time"
                     value={formData.endTime}
                     onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
-                    className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Vehicle ID (optional)</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Vehicle ID (optional)</label>
                 <input
                   type="text"
                   value={formData.vehicleId}
                   onChange={(e) => setFormData({ ...formData, vehicleId: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">Notes</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Notes</label>
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none"
+                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none"
                   rows={3}
                 />
               </div>
@@ -298,7 +298,7 @@ export default function ShiftManagement() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 rounded-xl bg-slate-700 px-4 py-2 text-sm font-medium text-slate-400 hover:bg-slate-600 transition-all"
+                  className="flex-1 rounded-xl bg-[var(--bg-surface-hover)] px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-elevated)] transition-all"
                 >
                   Cancel
                 </button>

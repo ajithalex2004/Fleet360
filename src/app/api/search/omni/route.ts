@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getTenantId } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    const tenantId = authz.tenantId;
     const q = req.nextUrl.searchParams.get('q')?.trim() ?? '';
-    const tenantId = getTenantId(req);
 
     if (!q || q.length < 2) {
       return NextResponse.json({ results: [] });
@@ -139,7 +140,10 @@ export async function GET(req: NextRequest) {
     ];
 
     return NextResponse.json({ results });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.status === 401 || error?.status === 403) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error('Omni search error:', error);
     return NextResponse.json({ results: [] });
   }

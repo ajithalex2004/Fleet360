@@ -48,7 +48,6 @@ const KNOWN_VIOLATIONS = new Set([
   'src/app/api/esign/send/route.ts',
   'src/app/api/finance/deposits/route.ts',
   'src/app/api/finance/recurring-invoices/route.ts',
-  'src/app/api/finance/reminder-schedules/route.ts',
   'src/app/api/incidents/[id]/notes/route.ts',
   'src/app/api/leasing/amendments/route.ts',
   'src/app/api/leasing/handover/route.ts',
