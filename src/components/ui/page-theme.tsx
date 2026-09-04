@@ -45,28 +45,20 @@ import type { LucideIcon } from 'lucide-react';
  * changes. Status colours (emerald / amber / rose) are preserved
  * because they carry semantic meaning.
  */
-const ACCENTS: Record<string, { text: string; ring: string; bg: string; gradient: string }> = {
-  /* Primary brand — champagne gold on navy. */
-  default: { text: 'text-[#E8C547]',   ring: 'ring-[#D4AF37]/40',  bg: 'bg-[#D4AF37]/10',  gradient: 'from-[#D4AF37] to-[#B8860B]' },
-  gold:    { text: 'text-[#E8C547]',   ring: 'ring-[#D4AF37]/40',  bg: 'bg-[#D4AF37]/10',  gradient: 'from-[#D4AF37] to-[#B8860B]' },
-  /* `violet` is now an alias for gold — keeps existing callers working. */
-  violet:  { text: 'text-[#E8C547]',   ring: 'ring-[#D4AF37]/40',  bg: 'bg-[#D4AF37]/10',  gradient: 'from-[#D4AF37] to-[#B8860B]' },
-
-  /* Partner brand — royal blue. */
-  blue:    { text: 'text-blue-300',    ring: 'ring-blue-500/40',   bg: 'bg-blue-500/10',   gradient: 'from-blue-600 to-indigo-700' },
-  /* `cyan` is now an alias for blue. */
-  cyan:    { text: 'text-blue-300',    ring: 'ring-blue-500/40',   bg: 'bg-blue-500/10',   gradient: 'from-blue-600 to-indigo-700' },
-
-  /* Semantic — preserved. */
-  emerald: { text: 'text-emerald-300', ring: 'ring-emerald-500/40',bg: 'bg-emerald-500/10',gradient: 'from-emerald-600 to-teal-600' },
-  amber:   { text: 'text-amber-300',   ring: 'ring-amber-500/40',  bg: 'bg-amber-500/10',  gradient: 'from-amber-600 to-orange-600' },
-  rose:    { text: 'text-rose-300',    ring: 'ring-rose-500/40',   bg: 'bg-rose-500/10',   gradient: 'from-rose-600 to-pink-600' },
-  slate:   { text: 'text-slate-300',   ring: 'ring-slate-500/40',  bg: 'bg-slate-500/10',  gradient: 'from-slate-600 to-slate-700' },
+export const ACCENTS: Record<string, { text: string; ring: string; bg: string; gradient: string }> = {
+  /* Primary brand — Electric Cyan to Blue */
+  default: { text: 'text-cyan-400',   ring: 'ring-cyan-500/40',    bg: 'bg-cyan-500/15',    gradient: 'from-cyan-500 via-blue-500 to-indigo-600' },
+  cyan:    { text: 'text-cyan-400',   ring: 'ring-cyan-500/40',    bg: 'bg-cyan-500/15',    gradient: 'from-cyan-500 via-blue-500 to-indigo-600' },
+  blue:    { text: 'text-blue-400',   ring: 'ring-blue-500/40',    bg: 'bg-blue-500/15',    gradient: 'from-blue-600 to-indigo-700' },
+  violet:  { text: 'text-violet-400', ring: 'ring-violet-500/40',  bg: 'bg-violet-500/15',  gradient: 'from-violet-600 to-purple-700' },
+  emerald: { text: 'text-emerald-400',ring: 'ring-emerald-500/40', bg: 'bg-emerald-500/15', gradient: 'from-emerald-500 to-teal-600' },
+  amber:   { text: 'text-amber-400',  ring: 'ring-amber-500/40',   bg: 'bg-amber-500/15',   gradient: 'from-amber-500 to-orange-600' },
+  rose:    { text: 'text-rose-400',   ring: 'ring-rose-500/40',    bg: 'bg-rose-500/15',    gradient: 'from-rose-500 to-pink-600' },
+  slate:   { text: 'text-slate-300',  ring: 'ring-slate-500/40',   bg: 'bg-slate-500/15',   gradient: 'from-slate-600 to-slate-700' },
+  gold:    { text: 'text-amber-400',  ring: 'ring-amber-500/40',   bg: 'bg-amber-500/15',   gradient: 'from-amber-400 to-yellow-600' },
 };
 
 export type PageAccent = keyof typeof ACCENTS;
-
-/** Backwards-compat alias used by existing bus-ops/theme.tsx imports. */
 export type BusOpsAccent = PageAccent;
 
 /* ── Page header ────────────────────────────────────────────────────────── */
@@ -79,22 +71,22 @@ interface PageHeaderProps {
   actions?: React.ReactNode;
 }
 
-export function PageHeader({ title, subtitle, icon: Icon, accent = 'violet', actions }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, icon: Icon, accent = 'default', actions }: PageHeaderProps) {
   const a = ACCENTS[accent] ?? ACCENTS.default;
   return (
-    <div className="flex items-start justify-between flex-wrap gap-4 pb-4 border-b border-white/5">
+    <div className="flex items-start justify-between flex-wrap gap-4 pb-5 border-b border-white/10 dark:border-white/10 border-slate-200/90">
       <div className="flex items-start gap-4 min-w-0">
         {Icon && (
-          <div className={`shrink-0 w-12 h-12 rounded-2xl bg-gradient-to-br ${a.gradient} flex items-center justify-center shadow-lg`}>
-            <Icon className="w-6 h-6 text-white" strokeWidth={1.75} />
+          <div className={`shrink-0 w-12 h-12 rounded-2xl bg-gradient-to-br ${a.gradient} flex items-center justify-center shadow-lg shadow-cyan-500/20`}>
+            <Icon className="w-6 h-6 text-white" strokeWidth={2} />
           </div>
         )}
         <div className="min-w-0">
-          <h1 className="text-3xl font-bold text-white tracking-tight">{title}</h1>
-          {subtitle && <p className="text-sm text-slate-400 mt-1 max-w-3xl">{subtitle}</p>}
+          <h1 className="text-3xl font-extrabold text-white dark:text-white text-slate-900 tracking-tight">{title}</h1>
+          {subtitle && <p className="text-sm text-slate-400 dark:text-slate-400 text-slate-600 mt-1 max-w-3xl leading-relaxed">{subtitle}</p>}
         </div>
       </div>
-      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+      {actions && <div className="flex items-center gap-2.5 shrink-0">{actions}</div>}
     </div>
   );
 }
@@ -112,17 +104,17 @@ interface KpiCardProps {
 export function KpiCard({ label, value, sub, icon: Icon, accent = 'default' }: KpiCardProps) {
   const a = ACCENTS[accent] ?? ACCENTS.default;
   return (
-    <div className="rounded-2xl bg-slate-900/60 border border-white/10 p-4 hover:border-white/20 transition-colors">
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">{label}</span>
+    <div className="rounded-2xl bg-slate-900/60 dark:bg-slate-900/60 bg-white border border-white/10 dark:border-white/10 border-slate-200/90 p-5 hover:border-cyan-400/50 dark:hover:border-cyan-400/50 hover:border-blue-500/50 shadow-xl backdrop-blur-xl transition-all duration-200 hover:scale-[1.01]">
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <span className="text-[11px] uppercase tracking-wider text-cyan-400 dark:text-cyan-400 text-blue-700 font-extrabold">{label}</span>
         {Icon && (
-          <div className={`w-7 h-7 rounded-lg ${a.bg} flex items-center justify-center`}>
-            <Icon className={`w-3.5 h-3.5 ${a.text}`} strokeWidth={2} />
+          <div className={`w-8 h-8 rounded-xl ${a.bg} border border-white/10 flex items-center justify-center shadow-sm`}>
+            <Icon className={`w-4 h-4 ${a.text}`} strokeWidth={2} />
           </div>
         )}
       </div>
-      <div className={`text-3xl font-bold ${a.text}`}>{value}</div>
-      {sub && <div className="text-xs text-slate-500 mt-1">{sub}</div>}
+      <div className="text-3xl font-extrabold font-mono text-white dark:text-white text-slate-900 tracking-tight">{value}</div>
+      {sub && <div className="text-xs text-slate-400 dark:text-slate-400 text-slate-500 mt-1.5 font-medium">{sub}</div>}
     </div>
   );
 }
@@ -139,24 +131,24 @@ interface PanelProps {
   className?: string;
 }
 
-export function Panel({ title, subtitle, icon: Icon, accent = 'violet', actions, children, className = '' }: PanelProps) {
+export function Panel({ title, subtitle, icon: Icon, accent = 'default', actions, children, className = '' }: PanelProps) {
   const a = ACCENTS[accent] ?? ACCENTS.default;
   return (
-    <section className={`rounded-2xl bg-slate-900/60 border border-white/10 ${className}`}>
+    <section className={`rounded-2xl bg-slate-900/60 dark:bg-slate-900/60 bg-white border border-white/10 dark:border-white/10 border-slate-200/90 shadow-2xl backdrop-blur-xl overflow-hidden ${className}`}>
       {(title || actions) && (
-        <header className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-white/5">
+        <header className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b border-white/10 dark:border-white/10 border-slate-200/80 bg-gradient-to-r from-cyan-950/20 via-slate-900/20 to-transparent dark:from-cyan-950/20 dark:via-slate-900/20 dark:to-transparent bg-slate-50/50">
           <div className="flex items-start gap-3 min-w-0">
             {Icon && (
-              <div className={`shrink-0 w-9 h-9 rounded-xl ${a.bg} flex items-center justify-center`}>
+              <div className={`shrink-0 w-9 h-9 rounded-xl ${a.bg} border border-white/10 flex items-center justify-center shadow-md shadow-cyan-500/10`}>
                 <Icon className={`w-4 h-4 ${a.text}`} strokeWidth={2} />
               </div>
             )}
             <div className="min-w-0">
-              {title && <h3 className="text-sm font-semibold text-white">{title}</h3>}
-              {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+              {title && <h3 className="text-sm font-extrabold text-white dark:text-white text-slate-900 tracking-wide">{title}</h3>}
+              {subtitle && <p className="text-xs text-slate-400 dark:text-slate-400 text-slate-500 mt-0.5">{subtitle}</p>}
             </div>
           </div>
-          {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+          {actions && <div className="flex items-center gap-2.5 shrink-0">{actions}</div>}
         </header>
       )}
       <div className="p-5">{children}</div>
@@ -173,7 +165,7 @@ const PILLS: Record<string, string> = {
   departed:  'bg-amber-500/20 text-amber-300 border-amber-500/40',
   in_transit:'bg-amber-500/20 text-amber-300 border-amber-500/40',
   cancelled: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
-  pending:   'bg-amber-500/20 text-amber-300 border-amber-500/40',
+  pending:   'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
   approved:  'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
   rejected:  'bg-rose-500/20 text-rose-300 border-rose-500/40',
   ok:        'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
@@ -186,7 +178,7 @@ export function StatusPill({ status, label }: { status?: string; label?: string 
   const key = (status ?? '').toLowerCase().replace(/[\s-]/g, '_');
   const cls = PILLS[key] ?? 'bg-slate-700 text-slate-300 border-slate-600';
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${cls}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono border ${cls}`}>
       {label ?? (status ?? '—').toUpperCase()}
     </span>
   );
@@ -195,11 +187,9 @@ export function StatusPill({ status, label }: { status?: string; label?: string 
 /* ── Tab strip ──────────────────────────────────────────────────────────── */
 
 export interface TabDef {
-  /** Stable id — also the ?tab= querystring value, so keep it URL-safe. */
   id: string;
   label: string;
   icon?: LucideIcon;
-  /** Optional right-hand hint, e.g. a count or a "P1" badge. */
   badge?: string;
 }
 
@@ -208,27 +198,10 @@ interface TabStripProps {
   activeId: string;
   onChange: (id: string) => void;
   accent?: PageAccent;
-  /** Accessible name for the tablist, e.g. "Planning Engine sections". */
   label: string;
 }
 
-/**
- * Horizontal tab strip.
- *
- * Deliberately a plain button list rather than a headless-UI dependency —
- * nothing else in the app had tabs when this landed, and one screen isn't
- * worth a new package. Callers own the active id so it can be driven from
- * the querystring (deep-linkable) rather than local state.
- *
- * Panels are the caller's responsibility. Render exactly one at a time and
- * give it `role="tabpanel"` + `id={`panel-${activeId}`}` so the
- * aria-controls wiring below resolves.
- *
- * Keyboard: Left/Right move between tabs, Home/End jump to the ends —
- * the roving-focus behaviour the tablist role implies. Without this,
- * keyboard users would tab through every trigger one at a time.
- */
-export function TabStrip({ tabs, activeId, onChange, accent = 'violet', label }: TabStripProps) {
+export function TabStrip({ tabs, activeId, onChange, accent = 'default', label }: TabStripProps) {
   const a = ACCENTS[accent] ?? ACCENTS.default;
 
   const move = (dir: 1 | -1 | 'first' | 'last') => {
@@ -256,7 +229,7 @@ export function TabStrip({ tabs, activeId, onChange, accent = 'violet', label }:
       role="tablist"
       aria-label={label}
       onKeyDown={onKeyDown}
-      className="flex items-center gap-1 border-b border-white/5 -mb-px overflow-x-auto"
+      className="flex items-center gap-1.5 border-b border-white/10 dark:border-white/10 border-slate-200/90 -mb-px overflow-x-auto pb-1"
     >
       {tabs.map(t => {
         const isActive = t.id === activeId;
@@ -269,22 +242,21 @@ export function TabStrip({ tabs, activeId, onChange, accent = 'violet', label }:
             id={`tab-${t.id}`}
             aria-selected={isActive}
             aria-controls={`panel-${t.id}`}
-            // Roving tabindex: only the active tab is in the tab order.
             tabIndex={isActive ? 0 : -1}
             onClick={() => onChange(t.id)}
             className={[
-              'group inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium',
-              'rounded-t-lg border-b-2 whitespace-nowrap transition-colors',
+              'group inline-flex items-center gap-2 px-4 py-2 text-xs font-bold',
+              'rounded-xl border transition-all',
               'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-0',
               isActive
-                ? `${a.text} border-current ${a.bg}`
-                : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-white/5',
+                ? `bg-gradient-to-r from-cyan-500/20 via-blue-500/20 to-indigo-500/20 border-cyan-400 text-cyan-300 dark:text-cyan-300 text-blue-700 shadow-md`
+                : 'text-slate-400 border-transparent hover:text-white dark:hover:text-white hover:text-slate-950 hover:bg-white/5',
             ].join(' ')}
           >
-            {Icon && <Icon className="w-4 h-4" strokeWidth={1.75} />}
+            {Icon && <Icon className={`w-4 h-4 ${isActive ? 'text-cyan-400' : 'text-slate-400'}`} strokeWidth={2} />}
             {t.label}
             {t.badge && (
-              <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white/10 text-slate-300">
+              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
                 {t.badge}
               </span>
             )}
