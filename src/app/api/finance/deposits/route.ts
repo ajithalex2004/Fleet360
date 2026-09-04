@@ -5,49 +5,6 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-async function bootstrap() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS finance_security_deposits (
-      id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      deposit_no       TEXT UNIQUE NOT NULL,
-      contract_id      TEXT NOT NULL,
-      contract_type    TEXT NOT NULL DEFAULT 'LEASE',
-      customer_name    TEXT NOT NULL,
-      customer_trn     TEXT,
-      vehicle_no       TEXT NOT NULL,
-      vehicle_type     TEXT,
-      branch           TEXT NOT NULL DEFAULT 'Dubai',
-      collected_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
-      collection_date  DATE NOT NULL,
-      collection_method TEXT NOT NULL DEFAULT 'BANK_TRANSFER',
-      cheque_no        TEXT,
-      bank_name        TEXT,
-      status           TEXT NOT NULL DEFAULT 'HELD',
-      deductions       JSONB NOT NULL DEFAULT '[]',
-      total_deducted   NUMERIC(14,2) NOT NULL DEFAULT 0,
-      refund_amount    NUMERIC(14,2),
-      refund_date      DATE,
-      refund_method    TEXT,
-      refund_reference TEXT,
-      held_days        INTEGER GENERATED ALWAYS AS (
-        CASE WHEN refund_date IS NOT NULL
-          THEN (refund_date - collection_date)
-          ELSE (CURRENT_DATE - collection_date)
-        END
-      ) STORED,
-      forfeiture_reason TEXT,
-      notes            TEXT,
-      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_fsd_contract ON finance_security_deposits(contract_id);
-    CREATE INDEX IF NOT EXISTS idx_fsd_status   ON finance_security_deposits(status);
-    CREATE INDEX IF NOT EXISTS idx_fsd_branch   ON finance_security_deposits(branch);
-  `).catch(() => {});
-}
-
 function toStr(v: unknown) {
   if (v instanceof Buffer) return v.toString('hex');
   if (typeof v === 'string') return v;
@@ -94,7 +51,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await bootstrap();
       const p = req.nextUrl.searchParams;
       const status       = p.get('status');
       const contract_type = p.get('contract_type');
@@ -148,7 +104,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await bootstrap();
       const bRaw = await req.json();
   const b = stripTenantOwnershipFields(bRaw);
 
@@ -164,12 +119,13 @@ export async function POST(req: NextRequest) {
 
       const rows = await tx.$queryRawUnsafe(`
         INSERT INTO finance_security_deposits
-          (deposit_no, contract_id, contract_type, customer_name, customer_trn,
+          (tenant_id, deposit_no, contract_id, contract_type, customer_name, customer_trn,
            vehicle_no, vehicle_type, branch, collected_amount, collection_date,
            collection_method, cheque_no, bank_name, notes)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
         RETURNING *
       `,
+        tenantId,
         deposit_no,
         b.contract_id,
         b.contract_type ?? 'LEASE',
@@ -200,7 +156,6 @@ export async function PATCH(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await bootstrap();
       const bRaw = await req.json();
   const b = stripTenantOwnershipFields(bRaw);
       const { id, action } = b;

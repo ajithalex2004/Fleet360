@@ -5,58 +5,6 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-async function bootstrap() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS finance_recurring_schedules (
-      id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      schedule_no      TEXT UNIQUE NOT NULL,
-      contract_id      TEXT NOT NULL,
-      contract_type    TEXT NOT NULL DEFAULT 'LEASE',
-      customer_name    TEXT NOT NULL,
-      customer_trn     TEXT,
-      vehicle_no       TEXT NOT NULL,
-      branch           TEXT NOT NULL DEFAULT 'Dubai',
-      billing_cycle    TEXT NOT NULL DEFAULT 'MONTHLY',
-      amount           NUMERIC(14,2) NOT NULL,
-      vat_rate         NUMERIC(5,2)  NOT NULL DEFAULT 5,
-      vat_amount       NUMERIC(14,2) GENERATED ALWAYS AS (ROUND(amount * vat_rate / 100, 2)) STORED,
-      grand_total      NUMERIC(14,2) GENERATED ALWAYS AS (amount + ROUND(amount * vat_rate / 100, 2)) STORED,
-      start_date       DATE NOT NULL,
-      end_date         DATE,
-      next_invoice_date DATE NOT NULL,
-      last_invoice_date DATE,
-      invoices_generated INTEGER NOT NULL DEFAULT 0,
-      auto_approve     BOOLEAN NOT NULL DEFAULT FALSE,
-      status           TEXT NOT NULL DEFAULT 'ACTIVE',
-      description      TEXT,
-      notes            TEXT,
-      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS finance_recurring_log (
-      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      schedule_id     UUID NOT NULL REFERENCES finance_recurring_schedules(id) ON DELETE CASCADE,
-      invoice_id      TEXT,
-      invoice_no      TEXT,
-      period_start    DATE NOT NULL,
-      period_end      DATE NOT NULL,
-      amount          NUMERIC(14,2) NOT NULL,
-      vat_amount      NUMERIC(14,2) NOT NULL,
-      grand_total     NUMERIC(14,2) NOT NULL,
-      status          TEXT NOT NULL DEFAULT 'DRAFT',
-      triggered_by    TEXT NOT NULL DEFAULT 'MANUAL',
-      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_frs_next_date ON finance_recurring_schedules(next_invoice_date);
-    CREATE INDEX IF NOT EXISTS idx_frs_status    ON finance_recurring_schedules(status);
-    CREATE INDEX IF NOT EXISTS idx_frl_schedule  ON finance_recurring_log(schedule_id);
-  `).catch(() => {});
-}
-
 function toStr(v: unknown) {
   if (v instanceof Buffer) return v.toString('hex');
   return String(v ?? '');
@@ -129,7 +77,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await bootstrap();
       const p = req.nextUrl.searchParams;
       const status        = p.get('status');
       const billing_cycle = p.get('billing_cycle');
@@ -189,7 +136,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await bootstrap();
       const bRaw = await req.json();
   const b = stripTenantOwnershipFields(bRaw);
 
@@ -243,11 +189,11 @@ export async function POST(req: NextRequest) {
         // Log entry
         await tx.$executeRawUnsafe(`
           INSERT INTO finance_recurring_log
-            (schedule_id, invoice_id, invoice_no, period_start, period_end,
+            (tenant_id, schedule_id, invoice_id, invoice_no, period_start, period_end,
              amount, vat_amount, grand_total, status, triggered_by)
-          VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+          VALUES ($1,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10,$11)
         `,
-          id, invoice_id, invoice_no,
+          tenantId, id, invoice_id, invoice_no,
           periodStart.toISOString().split('T')[0],
           periodEnd.toISOString().split('T')[0],
           Number(sch.amount), Number(sch.vat_amount), Number(sch.grand_total),
@@ -281,12 +227,13 @@ export async function POST(req: NextRequest) {
 
       const rows = await tx.$queryRawUnsafe(`
         INSERT INTO finance_recurring_schedules
-          (schedule_no, contract_id, contract_type, customer_name, customer_trn,
+          (tenant_id, schedule_no, contract_id, contract_type, customer_name, customer_trn,
            vehicle_no, branch, billing_cycle, amount, vat_rate,
            start_date, end_date, next_invoice_date, auto_approve, description, notes)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
         RETURNING *
       `,
+        tenantId,
         schedule_no,
         b.contract_id,
         b.contract_type ?? 'LEASE',
@@ -319,7 +266,6 @@ export async function PATCH(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await bootstrap();
       const bRaw = await req.json();
   const b = stripTenantOwnershipFields(bRaw);
       const { id, action } = b;

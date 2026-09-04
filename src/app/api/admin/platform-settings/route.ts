@@ -5,16 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-/* ── Bootstrap table ─────────────────────────────────────── */
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS platform_settings (
-      key         TEXT PRIMARY KEY,
-      value       TEXT NOT NULL DEFAULT '',
-      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
+/* ── Seed defaults ────────────────────────────────────────── */
+async function seedDefaultSettings() {
   /* Seed defaults on first run */
   const defaults: Record<string, string> = {
     timezone:           'Asia/Dubai',
@@ -82,7 +74,7 @@ export async function GET(req: NextRequest) {
     // the canonical pattern for admin routes and keeps future RLS additions
     // backward-compatible.
     const settings = await withPlatformAdmin(prisma, async (tx) => {
-      await ensureTable();
+      await seedDefaultSettings();
       const rows = await tx.$queryRawUnsafe<{ key: string; value: string }[]>(
         `SELECT key, value FROM platform_settings ORDER BY key`
       );
@@ -109,7 +101,7 @@ export async function PATCH(req: NextRequest) {
     const bodyRaw = await req.json() as Record<string, string>;
   const body = stripTenantOwnershipFields(bodyRaw);
     return await withPlatformAdmin(prisma, async (tx) => {
-      await ensureTable();
+      await seedDefaultSettings();
       for (const [key, value] of Object.entries(body)) {
         await tx.$executeRawUnsafe(`
           INSERT INTO platform_settings (key, value, updated_at)

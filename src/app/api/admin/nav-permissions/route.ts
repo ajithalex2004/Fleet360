@@ -31,25 +31,6 @@ export const TOGGLEABLE_NAV_KEYS = [
 
 export type NavKey = typeof TOGGLEABLE_NAV_KEYS[number];
 
-// ── Ensure the permissions table exists ────────────────────────────────────────
-
-async function ensureTable(): Promise<void> {
-  try {
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS tenant_admin_nav_permissions (
-        id         TEXT PRIMARY KEY,
-        tenant_id  TEXT NOT NULL,
-        nav_key    TEXT NOT NULL,
-        enabled    BOOLEAN NOT NULL DEFAULT false,
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        UNIQUE (tenant_id, nav_key)
-      )
-    `);
-  } catch (e) {
-    console.warn('[nav-permissions] ensureTable skipped:', e);
-  }
-}
-
 // ── GET — fetch enabled nav keys ───────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
@@ -71,8 +52,6 @@ export async function GET(request: NextRequest) {
   if (!targetId) {
     return NextResponse.json({ error: 'tenant not resolved' }, { status: 400 });
   }
-
-  await ensureTable();
 
   type Row = { nav_key: string; enabled: boolean };
   // tenant_admin_nav_permissions has tenant_id with RLS. Wrap with
@@ -113,8 +92,6 @@ export async function PUT(request: NextRequest) {
   if (!targetTenantId || typeof permissions !== 'object') {
     return NextResponse.json({ error: 'tenantId and permissions required' }, { status: 400 });
   }
-
-  await ensureTable();
 
   // Upsert each toggleable key
   await withTenantRls(prisma, targetTenantId, async (tx) => {

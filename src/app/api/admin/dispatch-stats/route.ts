@@ -29,43 +29,6 @@ type Row = Record<string, unknown>;
 const n = (v: unknown) => parseFloat(String(v ?? 0)) || 0;
 const s = (v: unknown) => String(v ?? '');
 
-// DDL runs outside the RLS wrap — creating tables doesn't care about
-// the tenant GUC. The tables created here (dispatch_jobs,
-// driver_availability) carry a tenant_id column but no RLS policy
-// is applied. Wrap inside withPlatformAdmin once that's fixed.
-async function ensureTables() {
-  const exec = (sql: string) => prisma.$executeRawUnsafe(sql).catch(() => {});
-  await exec(`
-    CREATE TABLE IF NOT EXISTS dispatch_jobs (
-      id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL DEFAULT 'default',
-      service_type TEXT NOT NULL DEFAULT 'PASSENGER',
-      priority TEXT NOT NULL DEFAULT 'NORMAL',
-      status TEXT NOT NULL DEFAULT 'PENDING',
-      assigned_driver_id TEXT,
-      assigned_vehicle_id TEXT,
-      current_attempt INT NOT NULL DEFAULT 0,
-      max_attempts INT NOT NULL DEFAULT 5,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await exec(`
-    CREATE TABLE IF NOT EXISTS driver_availability (
-      driver_id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL DEFAULT 'default',
-      status TEXT NOT NULL DEFAULT 'AVAILABLE',
-      vehicle_id TEXT,
-      zone_id TEXT,
-      service_types JSONB NOT NULL DEFAULT '["PASSENGER"]',
-      shift_starts_at TIMESTAMPTZ,
-      shift_ends_at TIMESTAMPTZ,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-}
-
 export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -74,8 +37,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   try {
-    await ensureTables();
-
     return await withPlatformAdmin(prisma, async (tx) => {
       const sp       = new URL(req.url).searchParams;
       const filterTenantId = sp.get('tenantId') ?? '';

@@ -8,26 +8,6 @@ import { fetchShipmentById } from '@/lib/logistics/domain';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS logistics_shipment_documents (
-      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      tenant_id TEXT NOT NULL,
-      shipment_order_id TEXT NOT NULL,
-      doc_type TEXT NOT NULL,
-      doc_name TEXT NOT NULL,
-      file_url TEXT,
-      file_data TEXT,
-      mime_type TEXT,
-      file_size BIGINT,
-      uploaded_by TEXT,
-      notes TEXT,
-      metadata JSONB
-    )
-  `);
-}
-
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string; docId: string }> }) {
   const params = await props.params;
 
@@ -46,7 +26,6 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
       const shipment = await fetchShipmentById(params.id, tenantId);
       if (!shipment) return NextResponse.json({ error: 'Shipment not found' }, { status: 404 });
 
-      await ensureTable();
       const rows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
         `SELECT * FROM logistics_shipment_documents
           WHERE tenant_id = $1 AND shipment_order_id = $2 AND id = $3
@@ -85,7 +64,6 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
       const shipment = await fetchShipmentById(params.id, tenantId);
       if (!shipment) return NextResponse.json({ error: 'Shipment not found' }, { status: 404 });
 
-      await ensureTable();
       await tx.$executeRawUnsafe(
         `DELETE FROM logistics_shipment_documents
           WHERE tenant_id = $1 AND shipment_order_id = $2 AND id = $3`,

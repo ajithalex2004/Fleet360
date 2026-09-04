@@ -94,44 +94,6 @@ export function calculateFreight(params: {
   return { baseFreight, fuelSurcharge, urgencySurcharge, hazmatSurcharge, insuranceFee, customsFee, totalAED, breakdown };
 }
 
-// ── Table bootstrap ───────────────────────────────────────────────────────────
-
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS logistics_quotes (
-      id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      quote_no        TEXT NOT NULL UNIQUE,
-      customer_name   TEXT,
-      customer_email  TEXT,
-      customer_phone  TEXT,
-      origin          TEXT,
-      destination     TEXT,
-      distance_km     NUMERIC,
-      weight_tonnes   NUMERIC,
-      shipment_type   TEXT,
-      vehicle_type    TEXT,
-      cargo_desc      TEXT,
-      cargo_value_aed NUMERIC DEFAULT 0,
-      is_urgent       BOOLEAN DEFAULT FALSE,
-      is_hazmat       BOOLEAN DEFAULT FALSE,
-      requires_insurance BOOLEAN DEFAULT FALSE,
-      requires_customs   BOOLEAN DEFAULT FALSE,
-      base_freight    NUMERIC,
-      fuel_surcharge  NUMERIC,
-      urgency_surch   NUMERIC DEFAULT 0,
-      hazmat_surch    NUMERIC DEFAULT 0,
-      insurance_fee   NUMERIC DEFAULT 0,
-      customs_fee     NUMERIC DEFAULT 0,
-      total_aed       NUMERIC,
-      status          TEXT DEFAULT 'DRAFT',
-      valid_days      INT DEFAULT 7,
-      booking_id      TEXT,
-      notes           TEXT,
-      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )`).catch(() => {});
-}
-
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
@@ -144,7 +106,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const quotes = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
           `SELECT id, quote_no, customer_name, customer_email, origin, destination,
                   distance_km, weight_tonnes, shipment_type, total_aed, status,
@@ -179,7 +140,6 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const bodyRaw = await req.json() as { action?: 'calculate' | 'save'; customerName?: string;
           customerEmail?: string;
           customerPhone?: string;
@@ -223,13 +183,13 @@ export async function POST(req: NextRequest) {
 
         await tx.$executeRawUnsafe(
           `INSERT INTO logistics_quotes (
-             quote_no, customer_name, customer_email, customer_phone,
+             tenant_id, quote_no, customer_name, customer_email, customer_phone,
              origin, destination, distance_km, weight_tonnes, shipment_type, vehicle_type,
              cargo_desc, cargo_value_aed, is_urgent, is_hazmat, requires_insurance, requires_customs,
              base_freight, fuel_surcharge, urgency_surch, hazmat_surch, insurance_fee, customs_fee,
              total_aed, valid_days, notes
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)`,
-          quoteNo,
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)`,
+          tenantId, quoteNo,
           body.customerName ?? null, body.customerEmail ?? null, body.customerPhone ?? null,
           body.origin ?? null, body.destination ?? null,
           body.distanceKm, body.weightTonnes, body.shipmentType, body.vehicleType ?? null,

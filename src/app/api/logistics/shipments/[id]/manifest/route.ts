@@ -25,33 +25,6 @@ interface ManifestBody {
   order?: Array<{ stopId: string; stopNumber: number }>;
 }
 
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS logistics_shipment_manifest_stops (
-      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      tenant_id TEXT NOT NULL,
-      shipment_order_id TEXT NOT NULL,
-      stop_number INT NOT NULL DEFAULT 1,
-      stop_name TEXT,
-      stop_address TEXT,
-      recipient TEXT,
-      recipient_phone TEXT,
-      cargo_items JSONB NOT NULL DEFAULT '[]',
-      status TEXT NOT NULL DEFAULT 'PENDING',
-      delivered_at TIMESTAMPTZ,
-      delivery_note TEXT,
-      signature_b64 TEXT,
-      metadata JSONB
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_logistics_shipment_manifest_stops
-      ON logistics_shipment_manifest_stops (tenant_id, shipment_order_id, stop_number)
-  `);
-}
-
 async function loadCargo(tenantId: string, shipmentOrderId: string): Promise<CargoItem[]> {
   const rows = await prisma.$queryRawUnsafe<Array<{
     description: string;
@@ -93,7 +66,6 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
       const shipment = await fetchShipmentById(params.id, tenantId);
       if (!shipment) return NextResponse.json({ error: 'Shipment not found' }, { status: 404 });
 
-      await ensureTable();
       const manifestRows = await tx.$queryRawUnsafe<Array<{
         id: string;
         stop_number: number;
@@ -245,7 +217,6 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
       const body = stripTenantOwnershipFields(bodyRaw);
 
-      await ensureTable();
 
       if (body.action === 'add_stop') {
         const max = await tx.$queryRawUnsafe<Array<{ max: number | null }>>(
@@ -358,7 +329,6 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
       catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
 
       if (!body.stopId) return NextResponse.json({ error: 'stopId required' }, { status: 400 });
-      await ensureTable();
       await tx.$executeRawUnsafe(
         `DELETE FROM logistics_shipment_manifest_stops
           WHERE tenant_id = $1 AND shipment_order_id = $2 AND id = $3`,

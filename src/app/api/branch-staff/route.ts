@@ -6,35 +6,6 @@ import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // ─────────────────────────────────────────────────────────────────────────────
-// Ensure table exists (idempotent DDL)
-// ─────────────────────────────────────────────────────────────────────────────
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS branch_staff_assignments (
-      id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      created_at   TIMESTAMPTZ NOT NULL    DEFAULT NOW(),
-      updated_at   TIMESTAMPTZ NOT NULL    DEFAULT NOW(),
-      deleted_at   TIMESTAMPTZ,
-      staff_no     TEXT        UNIQUE NOT NULL,
-      full_name    TEXT        NOT NULL,
-      email        TEXT,
-      phone        TEXT        NOT NULL,
-      role         TEXT        NOT NULL,
-      module       TEXT        NOT NULL,
-      branch_id    TEXT,
-      branch_name  TEXT        NOT NULL,
-      emirate      TEXT,
-      start_date   DATE        NOT NULL,
-      end_date     DATE,
-      status       TEXT        NOT NULL DEFAULT 'ACTIVE',
-      employee_id  TEXT,
-      nationality  TEXT,
-      notes        TEXT
-    )
-  `);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Auto-generate staff number: STF-YYYYMM-XXXX
 // ─────────────────────────────────────────────────────────────────────────────
 async function generateStaffNo(): Promise<string> {
@@ -62,7 +33,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
 
         const sp          = new URL(req.url).searchParams;
         const module      = sp.get('module');
@@ -164,7 +134,6 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
 
@@ -182,10 +151,10 @@ export async function POST(req: NextRequest) {
 
         const rows = await tx.$queryRawUnsafe<any[]>(
           `INSERT INTO branch_staff_assignments
-             (staff_no, full_name, email, phone, role, module, branch_id, branch_name, emirate, start_date, end_date, status, employee_id, nationality, notes)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+             (tenant_id, staff_no, full_name, email, phone, role, module, branch_id, branch_name, emirate, start_date, end_date, status, employee_id, nationality, notes)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
            RETURNING *`,
-          staff_no, full_name, email || null, phone, role, module,
+          tenantId, staff_no, full_name, email || null, phone, role, module,
           branch_id || null, branch_name, emirate || null,
           start_date, end_date || null, status,
           employee_id || null, nationality || null, notes || null
@@ -213,7 +182,6 @@ export async function PATCH(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const { id, ...fields } = body;
@@ -268,7 +236,6 @@ export async function DELETE(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const id = new URL(req.url).searchParams.get('id');
         if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 

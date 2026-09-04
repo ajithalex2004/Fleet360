@@ -14,40 +14,6 @@ import { prisma } from '@/lib/prisma';
  * PATCH /api/rental/insurance — update policy fields / status
  */
 
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS rental_insurance_policies (
-      id               UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
-      created_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-      updated_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-      deleted_at       TIMESTAMPTZ,
-      policy_no        TEXT          UNIQUE NOT NULL,
-      vehicle_id       TEXT,
-      vehicle_no       TEXT          NOT NULL,
-      vehicle_name     TEXT,
-      insurer          TEXT          NOT NULL,
-      policy_type      TEXT          NOT NULL DEFAULT 'COMPREHENSIVE',
-      coverage_amount  NUMERIC(15,2),
-      excess_amount    NUMERIC(10,2) NOT NULL DEFAULT 0,
-      premium_annual   NUMERIC(10,2),
-      start_date       DATE          NOT NULL,
-      end_date         DATE          NOT NULL,
-      status           TEXT          NOT NULL DEFAULT 'ACTIVE',
-      document_url     TEXT,
-      notes            TEXT
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_rip_status ON rental_insurance_policies(status)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_rip_vehicle_no ON rental_insurance_policies(vehicle_no)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_rip_end_date ON rental_insurance_policies(end_date)
-  `);
-}
-
 function computeStatus(startDate: string, endDate: string): string {
   const now = new Date();
   const start = new Date(startDate);
@@ -69,7 +35,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const { searchParams } = new URL(req.url);
         const status  = searchParams.get('status')  ?? '';
         const search  = searchParams.get('search')  ?? '';
@@ -198,7 +163,6 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {
@@ -223,10 +187,11 @@ export async function POST(req: NextRequest) {
         type NewPolicy = { id: string; policy_no: string };
         const [policy] = await tx.$queryRawUnsafe<NewPolicy[]>(
           `INSERT INTO rental_insurance_policies
-             (policy_no, vehicle_id, vehicle_no, vehicle_name, insurer, policy_type,
+             (tenant_id, policy_no, vehicle_id, vehicle_no, vehicle_name, insurer, policy_type,
               coverage_amount, excess_amount, premium_annual, start_date, end_date, status, document_url, notes)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
            RETURNING id, policy_no`,
+          tenantId,
           policyNo,
           vehicleId || null,
           vehicleNo.trim(),
@@ -262,7 +227,6 @@ export async function PATCH(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const { id, ...fields } = body;

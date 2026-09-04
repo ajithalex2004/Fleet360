@@ -18,71 +18,6 @@ import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS leasing_vehicle_transfers (
-      id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      tenant_id        TEXT,
-      transfer_no      TEXT        UNIQUE NOT NULL,
-      vehicle_id       TEXT,
-      vehicle_no       TEXT        NOT NULL,
-      vehicle_name     TEXT,
-      vehicle_make     TEXT,
-      vehicle_model    TEXT,
-      from_branch_id   TEXT,
-      from_branch_name TEXT        NOT NULL,
-      from_emirate     TEXT,
-      to_branch_id     TEXT,
-      to_branch_name   TEXT        NOT NULL,
-      to_emirate       TEXT,
-      transfer_date    DATE        NOT NULL,
-      reason           TEXT        NOT NULL,
-      fuel_level       INT         CHECK (fuel_level BETWEEN 0 AND 8),
-      odometer_reading INT,
-      condition_notes  TEXT,
-      driver_name      TEXT,
-      driver_phone     TEXT,
-      status           TEXT        NOT NULL DEFAULT 'REQUESTED',
-      requested_by     TEXT,
-      approved_by      TEXT,
-      approved_at      TIMESTAMPTZ,
-      departed_at      TIMESTAMPTZ,
-      arrived_at       TIMESTAMPTZ,
-      cancelled_reason TEXT,
-      notes            TEXT
-    )
-  `);
-  // Backfill column on legacy installs.
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE leasing_vehicle_transfers
-      ADD COLUMN IF NOT EXISTS tenant_id TEXT
-  `);
-  // Backfill existing rows to the default active tenant so historical
-  // data is reachable.
-  await prisma.$executeRawUnsafe(`
-    UPDATE leasing_vehicle_transfers
-       SET tenant_id = (SELECT id FROM tenants WHERE COALESCE(is_active, TRUE) = TRUE ORDER BY created_at ASC NULLS LAST LIMIT 1)
-     WHERE tenant_id IS NULL
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_lvt_tenant ON leasing_vehicle_transfers(tenant_id)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_lvt_status ON leasing_vehicle_transfers(status)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_lvt_from_branch ON leasing_vehicle_transfers(from_branch_name)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_lvt_to_branch ON leasing_vehicle_transfers(to_branch_name)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_lvt_transfer_date ON leasing_vehicle_transfers(transfer_date)
-  `);
-}
-
 type TransferRow = {
   id: string;
   created_at: string;
@@ -166,7 +101,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const sp         = req.nextUrl.searchParams;
         const status     = sp.get('status')      ?? '';
         const fromBranch = sp.get('from_branch') ?? '';
@@ -249,7 +183,6 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
 
@@ -335,7 +268,6 @@ export async function PATCH(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const id = req.nextUrl.searchParams.get('id');
         if (!id) return NextResponse.json({ error: 'id query param required' }, { status: 400 });
 

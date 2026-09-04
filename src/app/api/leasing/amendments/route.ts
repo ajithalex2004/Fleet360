@@ -21,63 +21,6 @@ import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS leasing_amendments (
-      id                UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-      created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      deleted_at        TIMESTAMPTZ,
-      tenant_id         TEXT,
-      amendment_no      TEXT         UNIQUE NOT NULL,
-      contract_id       TEXT,
-      contract_no       TEXT,
-      lessee_name       TEXT         NOT NULL,
-      vehicle_no        TEXT,
-      vehicle_name      TEXT,
-      amendment_type    TEXT         NOT NULL,
-      description       TEXT         NOT NULL,
-      original_value    TEXT,
-      new_value         TEXT,
-      financial_impact  NUMERIC(12,2) NOT NULL DEFAULT 0,
-      vat_amount        NUMERIC(10,2) NOT NULL DEFAULT 0,
-      total_impact      NUMERIC(12,2) NOT NULL DEFAULT 0,
-      effective_date    DATE,
-      status            TEXT         NOT NULL DEFAULT 'DRAFT',
-      submitted_by      TEXT,
-      submitted_at      TIMESTAMPTZ,
-      approved_by       TEXT,
-      approved_at       TIMESTAMPTZ,
-      rejected_by       TEXT,
-      rejected_at       TIMESTAMPTZ,
-      rejection_reason  TEXT,
-      implemented_at    TIMESTAMPTZ,
-      notes             TEXT
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE leasing_amendments
-      ADD COLUMN IF NOT EXISTS tenant_id TEXT
-  `);
-  await prisma.$executeRawUnsafe(`
-    UPDATE leasing_amendments
-       SET tenant_id = (SELECT id FROM tenants WHERE COALESCE(is_active, TRUE) = TRUE ORDER BY created_at ASC NULLS LAST LIMIT 1)
-     WHERE tenant_id IS NULL
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_leasing_amendments_tenant ON leasing_amendments(tenant_id)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_leasing_amendments_status ON leasing_amendments(status)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_leasing_amendments_type ON leasing_amendments(amendment_type)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_leasing_amendments_contract ON leasing_amendments(contract_no)
-  `);
-}
-
 type AmendmentRow = {
   id: string;
   created_at: string;
@@ -159,7 +102,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const sp = req.nextUrl.searchParams;
         const status        = sp.get('status')         ?? '';
         const amendmentType = sp.get('amendment_type') ?? '';
@@ -253,7 +195,6 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
 
@@ -347,7 +288,6 @@ export async function PATCH(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const id = req.nextUrl.searchParams.get('id');
         if (!id) {
           return NextResponse.json({ error: 'id query param required' }, { status: 400 });

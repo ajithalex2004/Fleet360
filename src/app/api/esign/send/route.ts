@@ -13,42 +13,6 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
  * GET  /api/esign/send?contractId=X&contractType=Y — list signing requests for a contract
  */
 
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS esign_requests (
-      id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      signing_token    TEXT        UNIQUE NOT NULL,
-      contract_id      TEXT        NOT NULL,
-      contract_type    TEXT        NOT NULL,
-      contract_ref     TEXT        NOT NULL,
-      document_title   TEXT        NOT NULL,
-      signer_name      TEXT        NOT NULL,
-      signer_email     TEXT,
-      signer_phone     TEXT        NOT NULL,
-      otp_code         TEXT        NOT NULL,
-      otp_expires_at   TIMESTAMPTZ NOT NULL,
-      status           TEXT        NOT NULL DEFAULT 'PENDING',
-      signed_at        TIMESTAMPTZ,
-      signer_ip        TEXT,
-      signer_user_agent TEXT,
-      sent_via         TEXT        NOT NULL DEFAULT 'SMS',
-      resend_count     INT         NOT NULL DEFAULT 0,
-      notes            TEXT
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_esign_signing_token ON esign_requests(signing_token)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_esign_contract_id ON esign_requests(contract_id)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_esign_status ON esign_requests(status)
-  `);
-}
-
 // ── POST — create signing request ────────────────────────────────────────────
 export async function POST(req: NextRequest) {
 
@@ -60,8 +24,6 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
-
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {
@@ -101,16 +63,17 @@ export async function POST(req: NextRequest) {
         type InsertRow = { id: string };
         const rows = await tx.$queryRawUnsafe<InsertRow[]>(`
           INSERT INTO esign_requests (
-            signing_token, contract_id, contract_type, contract_ref,
+            tenant_id, signing_token, contract_id, contract_type, contract_ref,
             document_title, signer_name, signer_email, signer_phone,
             otp_code, otp_expires_at, status, sent_via, notes
           ) VALUES (
             $1, $2, $3, $4,
             $5, $6, $7, $8,
-            $9, NOW() + INTERVAL '30 minutes', 'PENDING', $10, $11
+            $9, $10, NOW() + INTERVAL '30 minutes', 'PENDING', $11, $12
           )
           RETURNING id
         `,
+          tenantId,
           signingToken,
           contractId,
           contractType,
@@ -155,8 +118,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
-
         const { searchParams } = new URL(req.url);
         const contractId   = searchParams.get('contractId')   ?? '';
         const contractType = searchParams.get('contractType') ?? '';

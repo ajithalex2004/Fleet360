@@ -18,68 +18,6 @@ import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS leasing_handovers (
-      id                 UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-      created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      tenant_id          TEXT,
-      handover_no        TEXT         UNIQUE NOT NULL,
-      contract_id        TEXT,
-      contract_no        TEXT,
-      lessee_name        TEXT         NOT NULL,
-      vehicle_id         TEXT,
-      vehicle_no         TEXT         NOT NULL,
-      vehicle_name       TEXT,
-      handover_type      TEXT         NOT NULL,
-      handover_date      TIMESTAMPTZ  NOT NULL,
-      location           TEXT,
-      fuel_level         INT          CHECK (fuel_level BETWEEN 0 AND 8),
-      odometer_reading   INT,
-      condition_score    INT          CHECK (condition_score BETWEEN 1 AND 5),
-      body_condition     TEXT,
-      interior_condition TEXT,
-      tyres_condition    TEXT,
-      keys_count         INT          NOT NULL DEFAULT 2,
-      spare_key          BOOLEAN      NOT NULL DEFAULT FALSE,
-      salik_tag          BOOLEAN      NOT NULL DEFAULT FALSE,
-      parking_card       BOOLEAN      NOT NULL DEFAULT FALSE,
-      service_book       BOOLEAN      NOT NULL DEFAULT FALSE,
-      accessories        JSONB        NOT NULL DEFAULT '[]',
-      checklist_items    JSONB        NOT NULL DEFAULT '[]',
-      damage_notes       TEXT,
-      notes              TEXT,
-      signed_by          TEXT,
-      signed_at          TIMESTAMPTZ,
-      witnessed_by       TEXT,
-      status             TEXT         NOT NULL DEFAULT 'SCHEDULED',
-      branch_id          TEXT
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE leasing_handovers
-      ADD COLUMN IF NOT EXISTS tenant_id TEXT
-  `);
-  await prisma.$executeRawUnsafe(`
-    UPDATE leasing_handovers
-       SET tenant_id = (SELECT id FROM tenants WHERE COALESCE(is_active, TRUE) = TRUE ORDER BY created_at ASC NULLS LAST LIMIT 1)
-     WHERE tenant_id IS NULL
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_leasing_handovers_tenant ON leasing_handovers(tenant_id)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_leasing_handovers_status ON leasing_handovers(status)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_leasing_handovers_type ON leasing_handovers(handover_type)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_leasing_handovers_date ON leasing_handovers(handover_date)
-  `);
-}
-
 type HandoverRow = {
   id: string;
   created_at: string;
@@ -170,7 +108,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const sp           = req.nextUrl.searchParams;
         const handoverType = sp.get('handover_type') ?? '';
         const status       = sp.get('status')        ?? '';
@@ -265,7 +202,6 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
 
@@ -371,7 +307,6 @@ export async function PATCH(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const id = req.nextUrl.searchParams.get('id');
         if (!id) {
           return NextResponse.json({ error: 'id query param required' }, { status: 400 });

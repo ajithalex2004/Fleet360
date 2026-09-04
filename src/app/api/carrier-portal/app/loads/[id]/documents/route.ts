@@ -36,30 +36,6 @@ async function requireAssignedShipment(req: NextRequest, shipmentOrderId: string
   return { device, shipment };
 }
 
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS logistics_shipment_documents (
-      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      tenant_id TEXT NOT NULL,
-      shipment_order_id TEXT NOT NULL,
-      doc_type TEXT NOT NULL,
-      doc_name TEXT NOT NULL,
-      file_url TEXT,
-      file_data TEXT,
-      mime_type TEXT,
-      file_size BIGINT,
-      uploaded_by TEXT,
-      notes TEXT,
-      metadata JSONB
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_logistics_shipment_docs_shipment
-      ON logistics_shipment_documents (tenant_id, shipment_order_id, created_at DESC)
-  `);
-}
-
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -89,7 +65,6 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
   try {
     return await withTenantRls(prisma, tenantId, async (tx) => {
-      await ensureTable();
       const rows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
         `INSERT INTO logistics_shipment_documents
            (tenant_id, shipment_order_id, doc_type, doc_name, file_url, file_data, mime_type, file_size, uploaded_by, notes, metadata)

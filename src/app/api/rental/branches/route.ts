@@ -14,36 +14,6 @@ import { prisma } from '@/lib/prisma';
  * PATCH /api/rental/branches  — update branch fields / status
  */
 
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS rental_branches (
-      id               UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
-      created_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-      updated_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-      deleted_at       TIMESTAMPTZ,
-      branch_code      TEXT          UNIQUE NOT NULL,
-      branch_name      TEXT          NOT NULL,
-      emirate          TEXT          NOT NULL,
-      address          TEXT,
-      phone            TEXT,
-      email            TEXT,
-      manager_name     TEXT,
-      operating_hours  TEXT          NOT NULL DEFAULT '8:00 AM - 8:00 PM',
-      vehicle_capacity INT           NOT NULL DEFAULT 0,
-      status           TEXT          NOT NULL DEFAULT 'ACTIVE',
-      latitude         NUMERIC(10,7),
-      longitude        NUMERIC(10,7),
-      notes            TEXT
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_rb_status ON rental_branches(status)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_rb_emirate ON rental_branches(emirate)
-  `);
-}
-
 const EMIRATE_PREFIX: Record<string, string> = {
   DUBAI:          'DXB',
   ABU_DHABI:      'AUH',
@@ -64,7 +34,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const { searchParams } = new URL(req.url);
         const status  = searchParams.get('status')  ?? '';
         const emirate = searchParams.get('emirate') ?? '';
@@ -181,7 +150,6 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {
@@ -207,10 +175,11 @@ export async function POST(req: NextRequest) {
         type NewBranch = { id: string; branch_code: string };
         const [branch] = await tx.$queryRawUnsafe<NewBranch[]>(
           `INSERT INTO rental_branches
-             (branch_code, branch_name, emirate, address, phone, email,
+             (tenant_id, branch_code, branch_name, emirate, address, phone, email,
               manager_name, operating_hours, vehicle_capacity, latitude, longitude, notes)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
            RETURNING id, branch_code`,
+          tenantId,
           branchCode,
           branchName.trim(),
           emirate.trim(),
@@ -244,7 +213,6 @@ export async function PATCH(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const { id, ...fields } = body;

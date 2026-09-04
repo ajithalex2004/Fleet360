@@ -14,44 +14,6 @@ import { prisma } from '@/lib/prisma';
  * PATCH /api/rental/documents        — verify or reject document
  */
 
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS rental_documents (
-      id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      deleted_at          TIMESTAMPTZ,
-      doc_ref             TEXT        UNIQUE NOT NULL,
-      customer_id         TEXT,
-      customer_name       TEXT        NOT NULL,
-      doc_type            TEXT        NOT NULL,
-      doc_number          TEXT,
-      issuing_authority   TEXT,
-      issue_date          DATE,
-      expiry_date         DATE,
-      nationality         TEXT,
-      status              TEXT        NOT NULL DEFAULT 'PENDING_VERIFICATION',
-      verified_by         TEXT,
-      verified_at         TIMESTAMPTZ,
-      rejection_reason    TEXT,
-      file_url            TEXT,
-      notes               TEXT
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_rdv_status ON rental_documents(status)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_rdv_doc_type ON rental_documents(doc_type)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_rdv_expiry ON rental_documents(expiry_date)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_rdv_customer ON rental_documents(customer_id)
-  `);
-}
-
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant(req);
@@ -62,7 +24,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const { searchParams } = new URL(req.url);
         const docType  = searchParams.get('doc_type')  ?? '';
         const status   = searchParams.get('status')    ?? '';
@@ -206,7 +167,6 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {
@@ -226,10 +186,11 @@ export async function POST(req: NextRequest) {
         type NewDoc = { id: string; doc_ref: string };
         const [doc] = await tx.$queryRawUnsafe<NewDoc[]>(
           `INSERT INTO rental_documents
-             (doc_ref, customer_id, customer_name, doc_type, doc_number, issuing_authority,
+             (tenant_id, doc_ref, customer_id, customer_name, doc_type, doc_number, issuing_authority,
               issue_date, expiry_date, nationality, file_url, notes)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
            RETURNING id, doc_ref`,
+          tenantId,
           docRef,
           customerId || null,
           customerName.trim(),
@@ -262,7 +223,6 @@ export async function PATCH(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const { id, action, ...fields } = body;

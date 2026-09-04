@@ -15,46 +15,6 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
  * POST /api/ambulance/calls  — log new emergency call
  */
 
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS ambulance_calls (
-      id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      call_no         TEXT        NOT NULL,
-      status          TEXT        NOT NULL DEFAULT 'CALL_RECEIVED',
-      priority        TEXT        NOT NULL DEFAULT 'MEDIUM',   -- LOW | MEDIUM | HIGH | CRITICAL
-      caller_name     TEXT,
-      caller_phone    TEXT,
-      patient_name    TEXT,
-      patient_age     INT,
-      patient_gender  TEXT,
-      chief_complaint TEXT,
-      pickup_location TEXT        NOT NULL,
-      destination     TEXT,
-      vehicle_id      UUID        REFERENCES vehicles(id) ON DELETE SET NULL,
-      driver_id       UUID,
-      paramedic_name  TEXT,
-      call_received_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      dispatched_at      TIMESTAMPTZ,
-      on_scene_at        TIMESTAMPTZ,
-      transport_start_at TIMESTAMPTZ,
-      at_hospital_at     TIMESTAMPTZ,
-      cleared_at         TIMESTAMPTZ,
-      response_time_min  INT,
-      scene_time_min     INT,
-      transport_time_min INT,
-      notes           TEXT,
-      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_amb_calls_status ON ambulance_calls(status)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_amb_calls_date ON ambulance_calls(call_received_at)
-  `);
-}
-
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -65,7 +25,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const { searchParams } = new URL(req.url);
         const status    = searchParams.get('status')    ?? '';
         const date      = searchParams.get('date')      ?? '';
@@ -166,7 +125,6 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {
@@ -187,11 +145,11 @@ export async function POST(req: NextRequest) {
         type NewCall = { id: string; call_no: string };
         const [call] = await tx.$queryRawUnsafe<NewCall[]>(
           `INSERT INTO ambulance_calls
-             (call_no, priority, caller_name, caller_phone, patient_name, patient_age, patient_gender,
+             (tenant_id, call_no, priority, caller_name, caller_phone, patient_name, patient_age, patient_gender,
               chief_complaint, pickup_location, destination, vehicle_id, driver_id, paramedic_name, notes)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
            RETURNING id, call_no`,
-          callNo, priority, callerName || null, callerPhone || null,
+          tenantId, callNo, priority, callerName || null, callerPhone || null,
           patientName || null, patientAge || null, patientGender || null,
           chiefComplaint || null, pickupLocation.trim(), destination || null,
           vehicleId || null, driverId || null, paramedicName || null, notes || null

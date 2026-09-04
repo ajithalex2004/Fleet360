@@ -13,22 +13,6 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
  * POST /api/incidents/[id]/notes       — add note
  */
 
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS incident_notes (
-      id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      incident_id UUID        NOT NULL,
-      note_type   TEXT        NOT NULL DEFAULT 'INVESTIGATION', -- INVESTIGATION | ESCALATION | UPDATE | RESOLUTION
-      content     TEXT        NOT NULL,
-      author      TEXT,
-      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_incident_notes_inc ON incident_notes(incident_id)
-  `);
-}
-
 export async function GET(_: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
 
@@ -40,7 +24,6 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         type NoteRow = { id: string; incident_id: string; note_type: string; content: string; author: string | null; created_at: string };
         const notes = await tx.$queryRawUnsafe<NoteRow[]>(
           `SELECT * FROM incident_notes WHERE incident_id = $1 ORDER BY created_at DESC`,
@@ -66,7 +49,6 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const bodyRaw = await req.json();
     const body = stripTenantOwnershipFields(bodyRaw);
     const { noteType = 'INVESTIGATION', content, author } = body;
@@ -74,9 +56,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
         type NoteRow = { id: string };
         const [note] = await tx.$queryRawUnsafe<NoteRow[]>(
-          `INSERT INTO incident_notes (incident_id, note_type, content, author)
-           VALUES ($1, $2, $3, $4) RETURNING id`,
-          params.id, noteType, content.trim(), author || 'System'
+          `INSERT INTO incident_notes (tenant_id, incident_id, note_type, content, author)
+           VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+          tenantId, params.id, noteType, content.trim(), author || 'System'
         );
         return NextResponse.json({ id: note.id }, { status: 201 });
         } catch (err) {
