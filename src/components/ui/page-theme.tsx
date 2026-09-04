@@ -54,7 +54,7 @@ export const ACCENTS: Record<string, { text: string; ring: string; bg: string; g
   emerald: { text: 'text-emerald-400',ring: 'ring-emerald-500/40', bg: 'bg-emerald-500/15', gradient: 'from-emerald-500 to-teal-600' },
   amber:   { text: 'text-amber-400',  ring: 'ring-amber-500/40',   bg: 'bg-amber-500/15',   gradient: 'from-amber-500 to-orange-600' },
   rose:    { text: 'text-rose-400',   ring: 'ring-rose-500/40',    bg: 'bg-rose-500/15',    gradient: 'from-rose-500 to-pink-600' },
-  slate:   { text: 'text-slate-300',  ring: 'ring-slate-500/40',   bg: 'bg-slate-500/15',   gradient: 'from-slate-600 to-slate-700' },
+  slate:   { text: 'text-[var(--text-muted)]',  ring: 'ring-slate-500/40',   bg: 'bg-slate-500/15',   gradient: 'from-slate-600 to-slate-700' },
   gold:    { text: 'text-amber-400',  ring: 'ring-amber-500/40',   bg: 'bg-amber-500/15',   gradient: 'from-amber-400 to-yellow-600' },
 };
 
@@ -74,7 +74,7 @@ interface PageHeaderProps {
 export function PageHeader({ title, subtitle, icon: Icon, accent = 'default', actions }: PageHeaderProps) {
   const a = ACCENTS[accent] ?? ACCENTS.default;
   return (
-    <div className="flex items-start justify-between flex-wrap gap-4 pb-5 border-b border-black/10 dark:border-white/10">
+    <div className="flex items-start justify-between flex-wrap gap-4 pb-5 border-b border-[var(--border-subtle)]">
       <div className="flex items-start gap-3.5 min-w-0">
         {Icon && (
           <div className={`shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br ${a.gradient} flex items-center justify-center shadow-md shadow-blue-500/15`}>
@@ -82,8 +82,8 @@ export function PageHeader({ title, subtitle, icon: Icon, accent = 'default', ac
           </div>
         )}
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-zinc-950 dark:text-zinc-50 tracking-tight">{title}</h1>
-          {subtitle && <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-3xl leading-relaxed">{subtitle}</p>}
+          <h1 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">{title}</h1>
+          {subtitle && <p className="text-xs text-[var(--text-muted)] mt-1 max-w-3xl leading-relaxed">{subtitle}</p>}
         </div>
       </div>
       {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
@@ -104,17 +104,17 @@ interface KpiCardProps {
 export function KpiCard({ label, value, sub, icon: Icon, accent = 'default' }: KpiCardProps) {
   const a = ACCENTS[accent] ?? ACCENTS.default;
   return (
-    <div className="rounded-xl bg-white dark:bg-zinc-900 border border-black/10 dark:border-white/10 p-4 shadow-sm hover:border-black/20 dark:hover:border-white/20 transition-all duration-150">
+    <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 shadow-sm hover:border-[var(--border-strong)] transition-all duration-150">
       <div className="flex items-start justify-between gap-2 mb-2.5">
-        <span className="text-[11px] uppercase tracking-wider text-zinc-500 dark:text-zinc-400 font-semibold">{label}</span>
+        <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-semibold">{label}</span>
         {Icon && (
           <div className={`w-7 h-7 rounded-lg ${a.bg} flex items-center justify-center`}>
             <Icon className={`w-3.5 h-3.5 ${a.text}`} strokeWidth={2} />
           </div>
         )}
       </div>
-      <div className="text-2xl font-bold font-mono text-zinc-950 dark:text-zinc-50 tracking-tight">{value}</div>
-      {sub && <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 font-medium">{sub}</div>}
+      <div className="text-2xl font-bold font-mono text-[var(--text-main)] tracking-tight">{value}</div>
+      {sub && <div className="text-xs text-[var(--text-muted)] mt-1 font-medium">{sub}</div>}
     </div>
   );
 }
@@ -134,9 +134,9 @@ interface PanelProps {
 export function Panel({ title, subtitle, icon: Icon, accent = 'default', actions, children, className = '' }: PanelProps) {
   const a = ACCENTS[accent] ?? ACCENTS.default;
   return (
-    <section className={`rounded-xl bg-white dark:bg-zinc-900 border border-black/10 dark:border-white/10 shadow-sm overflow-hidden ${className}`}>
+    <section className={`rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-sm overflow-hidden ${className}`}>
       {(title || actions) && (
-        <header className="flex items-start justify-between gap-3 px-5 py-3.5 border-b border-black/5 dark:border-white/5 bg-zinc-50/50 dark:bg-zinc-900/50">
+        <header className="flex items-start justify-between gap-3 px-5 py-3.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]">
           <div className="flex items-start gap-3 min-w-0">
             {Icon && (
               <div className={`shrink-0 w-8 h-8 rounded-lg ${a.bg} flex items-center justify-center`}>
@@ -144,8 +144,8 @@ export function Panel({ title, subtitle, icon: Icon, accent = 'default', actions
               </div>
             )}
             <div className="min-w-0">
-              {title && <h3 className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">{title}</h3>}
-              {subtitle && <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">{subtitle}</p>}
+              {title && <h3 className="text-sm font-semibold text-[var(--text-main)]">{title}</h3>}
+              {subtitle && <p className="text-xs text-[var(--text-muted)] mt-0.5">{subtitle}</p>}
             </div>
           </div>
           {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
@@ -160,7 +160,7 @@ export function Panel({ title, subtitle, icon: Icon, accent = 'default', actions
 
 const PILLS: Record<string, string> = {
   active:    'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-  completed: 'bg-slate-500/20 text-slate-300 border-slate-500/40',
+  completed: 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40',
   scheduled: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
   departed:  'bg-amber-500/20 text-amber-300 border-amber-500/40',
   in_transit:'bg-amber-500/20 text-amber-300 border-amber-500/40',
@@ -176,7 +176,7 @@ const PILLS: Record<string, string> = {
 
 export function StatusPill({ status, label }: { status?: string; label?: string }) {
   const key = (status ?? '').toLowerCase().replace(/[\s-]/g, '_');
-  const cls = PILLS[key] ?? 'bg-slate-700 text-slate-300 border-slate-600';
+  const cls = PILLS[key] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-strong)]';
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono border ${cls}`}>
       {label ?? (status ?? '—').toUpperCase()}
@@ -229,7 +229,7 @@ export function TabStrip({ tabs, activeId, onChange, accent = 'default', label }
       role="tablist"
       aria-label={label}
       onKeyDown={onKeyDown}
-      className="flex items-center gap-1.5 border-b border-white/10 dark:border-white/10 border-slate-200/90 -mb-px overflow-x-auto pb-1"
+      className="flex items-center gap-1.5 border-b border-[var(--border-subtle)] -mb-px overflow-x-auto pb-1"
     >
       {tabs.map(t => {
         const isActive = t.id === activeId;
@@ -249,11 +249,11 @@ export function TabStrip({ tabs, activeId, onChange, accent = 'default', label }
               'rounded-xl border transition-all',
               'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-0',
               isActive
-                ? `bg-gradient-to-r from-cyan-500/20 via-blue-500/20 to-indigo-500/20 border-cyan-400 text-cyan-300 dark:text-cyan-300 text-blue-700 shadow-md`
-                : 'text-slate-400 border-transparent hover:text-white dark:hover:text-white hover:text-slate-950 hover:bg-white/5',
+                ? `bg-gradient-to-r from-cyan-500/20 via-blue-500/20 to-indigo-500/20 border-cyan-400 text-cyan-500 shadow-md`
+                : 'text-[var(--text-muted)] border-transparent hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]',
             ].join(' ')}
           >
-            {Icon && <Icon className={`w-4 h-4 ${isActive ? 'text-cyan-400' : 'text-slate-400'}`} strokeWidth={2} />}
+            {Icon && <Icon className={`w-4 h-4 ${isActive ? 'text-cyan-400' : 'text-[var(--text-muted)]'}`} strokeWidth={2} />}
             {t.label}
             {t.badge && (
               <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">

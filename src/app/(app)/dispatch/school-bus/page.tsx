@@ -30,13 +30,13 @@ export default function DispatchSchoolBusRedirect() {
       </div>
 
       <div className="text-center space-y-2 max-w-md">
-        <h1 className="text-white text-2xl font-bold">School Bus has its own Dispatch Board</h1>
-        <p className="text-slate-400 text-sm">
+        <h1 className="text-[var(--text-main)] text-2xl font-bold">School Bus has its own Dispatch Board</h1>
+        <p className="text-[var(--text-muted)] text-sm">
           School Bus operations — route assignment, departure management, student attendance,
           and UAE compliance — are handled in the dedicated School Bus module, not the general
           Dispatch Command Centre.
         </p>
-        <p className="text-slate-500 text-xs mt-2">Redirecting in 1.5 seconds…</p>
+        <p className="text-[var(--text-faint)] text-xs mt-2">Redirecting in 1.5 seconds…</p>
       </div>
 
       {/* Why separated */}
@@ -47,9 +47,9 @@ export default function DispatchSchoolBusRedirect() {
           { icon:'🇦🇪', text:'UAE Ministry of Education compliance' },
           { icon:'📱', text:'Guardian notifications per stop' },
         ].map(r => (
-          <div key={r.text} className="flex items-start gap-2 bg-slate-900 border border-white/10 rounded-xl px-3 py-2.5">
+          <div key={r.text} className="flex items-start gap-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5">
             <span className="text-base flex-shrink-0">{r.icon}</span>
-            <p className="text-slate-400 text-xs leading-relaxed">{r.text}</p>
+            <p className="text-[var(--text-muted)] text-xs leading-relaxed">{r.text}</p>
           </div>
         ))}
       </div>
@@ -61,7 +61,7 @@ export default function DispatchSchoolBusRedirect() {
           🚦 Go to School Bus Dispatch
         </Link>
         <Link href="/school-bus"
-          className="flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-800 border border-white/10 text-slate-300 text-sm font-semibold hover:bg-slate-700 transition-all">
+          className="flex items-center gap-2 px-5 py-3 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm font-semibold hover:bg-[var(--bg-surface-elevated)] transition-all">
           🏫 School Bus Module →
         </Link>
       </div>

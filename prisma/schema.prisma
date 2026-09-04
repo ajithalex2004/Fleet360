@@ -3568,6 +3568,28 @@ model LeaseApprovalStep {
   @@schema("public")
 }
 
+model LeaseVehicleReturn {
+  id             String    @id @default(uuid())
+  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+  tenantId       String    @map("tenant_id")
+  // Free-text contract reference (e.g. "LC-001") rather than a hard FK —
+  // matches the existing return-intake form, which takes the contract
+  // number as plain text rather than a contract picker.
+  contractNumber String    @map("contract_number")
+  returnDate     DateTime  @map("return_date") @db.Timestamptz(6)
+  mileage        Int
+  condition      String    @default("Good") // Excellent|Good|Fair|Poor
+  damages        String?
+  finalCost      Decimal   @default(0) @map("final_cost") @db.Decimal
+  inspector      String
+
+  @@index([tenantId], map: "idx_lease_vehicle_returns_tenant_id")
+  @@map("lease_vehicle_returns")
+  @@schema("public")
+}
+
 // ============================================================
 // LEASING MODULE - GAP CLOSURE MODELS
 // ============================================================

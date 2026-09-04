@@ -4,6 +4,7 @@ import ToastProvider from "@/components/providers/ToastProvider";
 import ClientProviders from "@/components/ClientProviders";
 import GlobalDeferredWidgets from "@/components/GlobalDeferredWidgets";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import CommandPalette from "@/components/navigation/CommandPalette";
 
 export const metadata: Metadata = {
   title: "Fleet360",
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ClientProviders>
             <ToastProvider>
               {children}
+              <CommandPalette />
               <GlobalDeferredWidgets />
             </ToastProvider>
           </ClientProviders>

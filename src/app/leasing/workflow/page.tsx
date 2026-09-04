@@ -1,9 +1,11 @@
 'use client';
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 
 interface PendingAction {
   id: string;
   entityType: 'quotation' | 'contract';
+  entityId: string;
   entityNumber: string;
   currentStatus: string;
   actionNeeded: string;
@@ -42,140 +44,70 @@ export default function WorkflowPage() {
   const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
   const [approvalHistory, setApprovalHistory] = useState<ApprovalHistoryItem[]>([]);
   const [varianceAlerts, setVarianceAlerts] = useState<VarianceAlert[]>([]);
+  const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actingOn, setActingOn] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
 
-  const workflowSteps: WorkflowStep[] = [
-    { number: 1, label: 'Inquiry', count: 8 },
-    { number: 2, label: 'Quotation', count: 12 },
-    { number: 3, label: 'Internal Approval', count: 5 },
-    { number: 4, label: 'Sent to Customer', count: 10 },
-    { number: 5, label: 'Customer Approval', count: 3 },
-    { number: 6, label: 'Credit Approval', count: 2 },
-    { number: 7, label: 'PO Prepared', count: 4 },
-    { number: 8, label: 'Contract Generated', count: 6 },
-    { number: 9, label: 'Active', count: 24 },
-  ];
+  const fetchWorkflow = async () => {
+    try {
+      const [workflowRes, alertsRes] = await Promise.all([
+        fetch('/api/leasing/workflow'),
+        fetch('/api/leasing/alerts'),
+      ]);
+
+      if (workflowRes.ok) {
+        const data = await workflowRes.json();
+        setWorkflowSteps(data.workflowSteps ?? []);
+        setPendingActions(data.pendingActions ?? []);
+        setApprovalHistory(data.approvalHistory ?? []);
+      }
+
+      if (alertsRes.ok) {
+        const alerts = await alertsRes.json();
+        setVarianceAlerts(alerts.slice(0, 20).map((a: any) => ({
+          id: a.id,
+          reference: a.contract?.contractNumber ?? a.quotationId ?? '—',
+          message: a.message,
+          severity: a.severity ?? 'WARNING',
+          status: a.status === 'OPEN' ? 'Open' : a.status === 'ACKNOWLEDGED' ? 'Acknowledged' : 'Resolved',
+          created: a.createdAt,
+        })));
+      }
+    } catch (error) {
+      console.error('Error fetching workflow data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const mockPendingActions: PendingAction[] = [
-      {
-        id: '1',
-        entityType: 'quotation',
-        entityNumber: 'QT-2025-001',
-        currentStatus: 'Pending Internal Approval',
-        actionNeeded: 'Awaiting Internal Approval',
-        requestor: 'Ahmed Al-Mansouri',
-        createdDate: '2025-04-08',
-        timeElapsed: '4 days ago',
-      },
-      {
-        id: '2',
-        entityType: 'contract',
-        entityNumber: 'LC-V2-005',
-        currentStatus: 'Pending Customer Response',
-        actionNeeded: 'Awaiting Customer Approval',
-        requestor: 'Global Logistics LLC',
-        createdDate: '2025-04-06',
-        timeElapsed: '6 days ago',
-      },
-      {
-        id: '3',
-        entityType: 'quotation',
-        entityNumber: 'QT-2025-003',
-        currentStatus: 'Pending Credit Check',
-        actionNeeded: 'Awaiting Credit Approval',
-        requestor: 'Enterprise Corp',
-        createdDate: '2025-04-10',
-        timeElapsed: '2 days ago',
-      },
-      {
-        id: '4',
-        entityType: 'contract',
-        entityNumber: 'LC-V2-006',
-        currentStatus: 'Pending PO Submission',
-        actionNeeded: 'Awaiting PO Preparation',
-        requestor: 'Fatima Al-Nakhli',
-        createdDate: '2025-04-11',
-        timeElapsed: '1 day ago',
-      },
-    ];
-
-    const mockApprovalHistory: ApprovalHistoryItem[] = [
-      {
-        id: '1',
-        entityType: 'Quotation',
-        entityId: 'QT-2025-002',
-        stepName: 'Internal Approval',
-        approver: 'Hana Al-Mansouri',
-        status: 'Approved',
-        actionDate: '2025-04-09',
-        comments: 'Terms acceptable, approved for customer submission',
-      },
-      {
-        id: '2',
-        entityType: 'Contract',
-        entityId: 'LC-V2-004',
-        stepName: 'Credit Approval',
-        approver: 'Mohammed Al-Qasimi',
-        status: 'Approved',
-        actionDate: '2025-04-07',
-        comments: 'Credit check passed, approved for execution',
-      },
-      {
-        id: '3',
-        entityType: 'Quotation',
-        entityId: 'QT-2025-001',
-        stepName: 'Customer Approval',
-        approver: 'Customer',
-        status: 'Pending',
-        actionDate: '2025-04-05',
-        comments: 'Awaiting customer response',
-      },
-      {
-        id: '4',
-        entityType: 'Contract',
-        entityId: 'LC-V2-003',
-        stepName: 'Internal Approval',
-        approver: 'Layla Al-Nakhli',
-        status: 'Rejected',
-        actionDate: '2025-04-03',
-        comments: 'Mileage cap needs adjustment',
-      },
-    ];
-
-    const mockVarianceAlerts: VarianceAlert[] = [
-      {
-        id: '1',
-        reference: 'LC-V2-001',
-        message: 'Monthly rate exceeds standard rate by 15%',
-        severity: 'WARNING',
-        status: 'Open',
-        created: '2025-04-10',
-      },
-      {
-        id: '2',
-        reference: 'QT-2025-002',
-        message: 'Master contract variance detected - review pricing structure',
-        severity: 'ERROR',
-        status: 'Acknowledged',
-        created: '2025-04-08',
-      },
-      {
-        id: '3',
-        reference: 'LC-V2-002',
-        message: 'Security deposit below minimum threshold',
-        severity: 'WARNING',
-        status: 'Open',
-        created: '2025-04-11',
-      },
-    ];
-
-    setPendingActions(mockPendingActions);
-    setApprovalHistory(mockApprovalHistory);
-    setVarianceAlerts(mockVarianceAlerts);
-    setLoading(false);
+    fetchWorkflow();
   }, []);
+
+  const handleApprovalAction = async (action: PendingAction, decision: 'APPROVE' | 'REJECT') => {
+    let comments: string | undefined;
+    if (decision === 'REJECT') {
+      const reason = window.prompt('Reason for rejection (optional):') ?? '';
+      comments = reason || undefined;
+    }
+
+    setActingOn(action.id);
+    try {
+      const res = await fetch(`/api/leasing/quotations/${action.entityId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: decision, comments }),
+      });
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      await fetchWorkflow();
+    } catch (error) {
+      console.error('Failed to record approval decision:', error);
+      alert('Failed to record decision. Please try again.');
+    } finally {
+      setActingOn(null);
+    }
+  };
 
   const getStatusBadgeStyle = (status: string) => {
     switch (status) {
@@ -304,15 +236,37 @@ export default function WorkflowPage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <button className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 text-xs font-medium border border-emerald-500/30 transition-colors">
-                    Approve
-                  </button>
-                  <button className="px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 text-xs font-medium border border-red-500/30 transition-colors">
-                    Reject
-                  </button>
-                  <button className="px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 text-xs font-medium border border-blue-500/30 transition-colors">
-                    View
-                  </button>
+                  {action.entityType === 'quotation' ? (
+                    <>
+                      <button
+                        onClick={() => handleApprovalAction(action, 'APPROVE')}
+                        disabled={actingOn === action.id}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 text-xs font-medium border border-emerald-500/30 transition-colors disabled:opacity-50"
+                      >
+                        {actingOn === action.id ? 'Working...' : 'Approve'}
+                      </button>
+                      <button
+                        onClick={() => handleApprovalAction(action, 'REJECT')}
+                        disabled={actingOn === action.id}
+                        className="px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 text-xs font-medium border border-red-500/30 transition-colors disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
+                      <Link
+                        href={`/leasing/quotations/${action.entityId}`}
+                        className="px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 text-xs font-medium border border-blue-500/30 transition-colors"
+                      >
+                        View
+                      </Link>
+                    </>
+                  ) : (
+                    <Link
+                      href="/leasing/contracts-v2"
+                      className="px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 text-xs font-medium border border-blue-500/30 transition-colors"
+                    >
+                      View Contract
+                    </Link>
+                  )}
                 </div>
               </div>
             ))}

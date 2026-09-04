@@ -82,8 +82,8 @@ export default function ScheduledReportsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Scheduled Reports</h1>
-          <p className="text-slate-400">Manage automated report generation and delivery</p>
+          <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Scheduled Reports</h1>
+          <p className="text-[var(--text-muted)]">Manage automated report generation and delivery</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -94,35 +94,35 @@ export default function ScheduledReportsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
         <table className="w-full">
           <thead>
-            <tr className="bg-slate-800/50 border-b border-white/5">
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Report Name</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Type</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Frequency</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Recipients</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Format</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Last Run</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Next Run</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Status</th>
+            <tr className="bg-[var(--bg-surface-hover)] border-b border-[var(--border-subtle)]">
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Report Name</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Type</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Frequency</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Recipients</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Format</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Last Run</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Next Run</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Status</th>
             </tr>
           </thead>
           <tbody>
             {reports.length > 0 ? (
               reports.map((report) => (
-                <tr key={report.id} className="border-b border-white/5 hover:bg-white/5">
-                  <td className="px-6 py-4 text-sm text-white font-medium">{report.name}</td>
-                  <td className="px-6 py-4 text-sm text-white">{report.type}</td>
-                  <td className="px-6 py-4 text-sm text-white">{report.frequency}</td>
-                  <td className="px-6 py-4 text-sm text-slate-200 max-w-xs truncate">{report.recipients}</td>
-                  <td className="px-6 py-4 text-sm text-white">
-                    <span className="px-2 py-1 bg-slate-700/50 rounded text-xs font-medium">{report.format}</span>
+                <tr key={report.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
+                  <td className="px-6 py-4 text-sm text-[var(--text-main)] font-medium">{report.name}</td>
+                  <td className="px-6 py-4 text-sm text-[var(--text-main)]">{report.type}</td>
+                  <td className="px-6 py-4 text-sm text-[var(--text-main)]">{report.frequency}</td>
+                  <td className="px-6 py-4 text-sm text-[var(--text-muted)] max-w-xs truncate">{report.recipients}</td>
+                  <td className="px-6 py-4 text-sm text-[var(--text-main)]">
+                    <span className="px-2 py-1 bg-[var(--bg-surface-hover)] rounded text-xs font-medium">{report.format}</span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-200">
+                  <td className="px-6 py-4 text-sm text-[var(--text-muted)]">
                     {new Date(report.lastRun).toLocaleDateString()}
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-200">
+                  <td className="px-6 py-4 text-sm text-[var(--text-muted)]">
                     {new Date(report.nextRun).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 text-sm">
@@ -134,7 +134,7 @@ export default function ScheduledReportsPage() {
               ))
             ) : (
               <tr>
-                <td colSpan={8} className="px-6 py-8 text-center text-slate-200">
+                <td colSpan={8} className="px-6 py-8 text-center text-[var(--text-muted)]">
                   No scheduled reports found
                 </td>
               </tr>
@@ -146,26 +146,26 @@ export default function ScheduledReportsPage() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-2xl border border-white/10 p-8 w-full max-w-md">
-            <h2 className="text-2xl font-bold text-white mb-6">Schedule New Report</h2>
+          <div className="bg-[var(--bg-surface-elevated)] rounded-2xl border border-[var(--border-subtle)] p-8 w-full max-w-md">
+            <h2 className="text-2xl font-bold text-[var(--text-main)] mb-6">Schedule New Report</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Report Name</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Report Name</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] focus:outline-none focus:border-blue-500"
                   placeholder="e.g., Weekly Fleet Report"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Report Type</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Report Type</label>
                 <select
                   value={formData.type}
                   onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] focus:outline-none focus:border-blue-500"
                 >
                   <option value="Fleet Utilization">Fleet Utilization</option>
                   <option value="Revenue Analysis">Revenue Analysis</option>
@@ -174,11 +174,11 @@ export default function ScheduledReportsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Frequency</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Frequency</label>
                 <select
                   value={formData.frequency}
                   onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] focus:outline-none focus:border-blue-500"
                 >
                   <option value="Daily">Daily</option>
                   <option value="Weekly">Weekly</option>
@@ -186,22 +186,22 @@ export default function ScheduledReportsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Recipients (comma-separated)</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Recipients (comma-separated)</label>
                 <input
                   type="text"
                   value={formData.recipients}
                   onChange={(e) => setFormData({ ...formData, recipients: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] focus:outline-none focus:border-blue-500"
                   placeholder="email1@example.com, email2@example.com"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Format</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Format</label>
                 <select
                   value={formData.format}
                   onChange={(e) => setFormData({ ...formData, format: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] focus:outline-none focus:border-blue-500"
                 >
                   <option value="PDF">PDF</option>
                   <option value="Excel">Excel</option>
@@ -212,7 +212,7 @@ export default function ScheduledReportsPage() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 px-4 py-2 rounded-lg bg-slate-700 text-white font-medium hover:bg-slate-600 transition-all"
+                  className="flex-1 px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-medium hover:bg-[var(--bg-surface-elevated)] transition-all"
                 >
                   Cancel
                 </button>

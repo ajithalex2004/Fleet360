@@ -110,35 +110,35 @@ export default function ReportsDashboard() {
 
       {/* KPI Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-          <p className="text-slate-400 text-sm font-medium mb-2">Reports Generated</p>
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
+          <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Reports Generated</p>
           <p className="text-3xl font-bold text-blue-400">{stats.generated}</p>
-          <p className="text-slate-500 text-xs mt-2">This month</p>
+          <p className="text-[var(--text-faint)] text-xs mt-2">This month</p>
         </div>
 
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-          <p className="text-slate-400 text-sm font-medium mb-2">Data Records Analyzed</p>
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
+          <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Data Records Analyzed</p>
           <p className="text-3xl font-bold text-indigo-400">{stats.analyzed.toLocaleString()}</p>
-          <p className="text-slate-500 text-xs mt-2">Total records</p>
+          <p className="text-[var(--text-faint)] text-xs mt-2">Total records</p>
         </div>
 
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-          <p className="text-slate-400 text-sm font-medium mb-2">Scheduled Reports</p>
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
+          <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Scheduled Reports</p>
           <p className="text-3xl font-bold text-violet-400">{stats.scheduled}</p>
-          <p className="text-slate-500 text-xs mt-2">Active schedules</p>
+          <p className="text-[var(--text-faint)] text-xs mt-2">Active schedules</p>
         </div>
       </div>
 
       {/* Report Categories */}
       <div className="space-y-4">
-        <h2 className="text-2xl font-bold text-white">Available Reports</h2>
+        <h2 className="text-2xl font-bold text-[var(--text-main)]">Available Reports</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {reportCategories.map((category) => (
             <Link key={category.id} href={category.href}>
-              <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 hover:border-blue-500/50 hover:bg-slate-800/70 transition-all cursor-pointer h-full">
+              <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 hover:border-blue-500/50 hover:bg-[var(--bg-surface-hover)] transition-all cursor-pointer h-full">
                 <p className="text-4xl mb-3">{category.icon}</p>
-                <h3 className="text-white font-semibold mb-1">{category.name}</h3>
-                <p className="text-slate-400 text-sm mb-4">{category.description}</p>
+                <h3 className="text-[var(--text-main)] font-semibold mb-1">{category.name}</h3>
+                <p className="text-[var(--text-muted)] text-sm mb-4">{category.description}</p>
                 <button className="rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-3 py-1 text-xs font-medium text-white hover:opacity-90 transition-all">
                   Generate
                 </button>
@@ -150,27 +150,27 @@ export default function ReportsDashboard() {
 
       {/* Scheduled Reports */}
       <div className="space-y-4">
-        <h2 className="text-2xl font-bold text-white">Scheduled Reports</h2>
+        <h2 className="text-2xl font-bold text-[var(--text-main)]">Scheduled Reports</h2>
         {scheduledReports.length > 0 ? (
-          <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
             <table className="w-full">
               <thead>
-                <tr className="bg-slate-800/50 border-b border-white/5">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Report Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Frequency</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Last Run</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Next Run</th>
+                <tr className="bg-[var(--bg-surface-hover)] border-b border-[var(--border-subtle)]">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Report Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Frequency</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Last Run</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Next Run</th>
                 </tr>
               </thead>
               <tbody>
                 {scheduledReports.map((report) => (
-                  <tr key={report.id} className="border-b border-white/5 hover:bg-white/5">
-                    <td className="px-6 py-4 text-sm text-white font-medium">{report.name}</td>
-                    <td className="px-6 py-4 text-sm text-white">{report.frequency}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">
+                  <tr key={report.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
+                    <td className="px-6 py-4 text-sm text-[var(--text-main)] font-medium">{report.name}</td>
+                    <td className="px-6 py-4 text-sm text-[var(--text-main)]">{report.frequency}</td>
+                    <td className="px-6 py-4 text-sm text-[var(--text-muted)]">
                       {new Date(report.lastRun).toLocaleDateString()}
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-200">
+                    <td className="px-6 py-4 text-sm text-[var(--text-muted)]">
                       {new Date(report.nextRun).toLocaleDateString()}
                     </td>
                   </tr>
@@ -179,8 +179,8 @@ export default function ReportsDashboard() {
             </table>
           </div>
         ) : (
-          <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-8 text-center">
-            <p className="text-slate-400">No scheduled reports. Set up automated reports to stay informed.</p>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-8 text-center">
+            <p className="text-[var(--text-muted)]">No scheduled reports. Set up automated reports to stay informed.</p>
           </div>
         )}
       </div>

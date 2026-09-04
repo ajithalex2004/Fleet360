@@ -42,8 +42,7 @@ export async function POST(request: NextRequest) {
 
             const garage = await tx.garage.create({
                 data: {
-                    // TODO: read tenantId from request headers via getTenantContext()
-                    tenantId: '',
+                    tenantId,
                     name: body.name,
                     location: body.location,
                     contactPerson: body.contactPerson || body.contact_person,

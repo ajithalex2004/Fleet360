@@ -83,7 +83,7 @@ export default function DriverDocuments() {
     return (
       <div className="flex items-center justify-center h-full min-h-[200px]">
         <div className="animate-spin">
-          <div className="w-12 h-12 border-4 border-slate-700 border-t-cyan-500 rounded-full"></div>
+          <div className="w-12 h-12 border-4 border-[var(--border-strong)] border-t-cyan-500 rounded-full"></div>
         </div>
       </div>
     );
@@ -103,8 +103,8 @@ export default function DriverDocuments() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">Driver Documents</h1>
-          <p className="text-slate-400 mt-1">Manage driver licenses, visas, and permits</p>
+          <h1 className="text-3xl font-bold text-[var(--text-main)]">Driver Documents</h1>
+          <p className="text-[var(--text-muted)] mt-1">Manage driver licenses, visas, and permits</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -119,7 +119,7 @@ export default function DriverDocuments() {
         <select
           value={filterDriver}
           onChange={(e) => setFilterDriver(e.target.value)}
-          className="bg-slate-800/50 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+          className="bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
         >
           <option value="">All Drivers</option>
           {drivers.map((driver) => (
@@ -132,7 +132,7 @@ export default function DriverDocuments() {
         <select
           value={filterDocType}
           onChange={(e) => setFilterDocType(e.target.value)}
-          className="bg-slate-800/50 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+          className="bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
         >
           <option value="">All Document Types</option>
           {docTypes.map((type) => (
@@ -144,33 +144,33 @@ export default function DriverDocuments() {
       </div>
 
       {/* Documents Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 overflow-hidden">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 overflow-hidden">
         {filteredDocuments.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-4xl mb-3">📄</div>
-            <p className="text-slate-400">No documents found</p>
+            <p className="text-[var(--text-muted)]">No documents found</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-slate-800/50">
-                <tr className="border-b border-white/5">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Driver Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Document Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Document Number</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Expiry Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Days Until Expiry</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Actions</th>
+              <thead className="bg-[var(--bg-surface-hover)]">
+                <tr className="border-b border-[var(--border-subtle)]">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Driver Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Document Type</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Document Number</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Expiry Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Days Until Expiry</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredDocuments.map((doc) => (
-                  <tr key={doc.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td className="px-6 py-4 text-sm text-white font-medium">{doc.driverName}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{doc.docType}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200 font-mono">{doc.docNumber}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{new Date(doc.expiryDate).toLocaleDateString()}</td>
+                  <tr key={doc.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
+                    <td className="px-6 py-4 text-sm text-[var(--text-main)] font-medium">{doc.driverName}</td>
+                    <td className="px-6 py-4 text-sm text-[var(--text-muted)]">{doc.docType}</td>
+                    <td className="px-6 py-4 text-sm text-[var(--text-muted)] font-mono">{doc.docNumber}</td>
+                    <td className="px-6 py-4 text-sm text-[var(--text-muted)]">{new Date(doc.expiryDate).toLocaleDateString()}</td>
                     <td className="px-6 py-4 text-sm">
                       <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(doc.daysUntilExpiry)}`}>
                         {doc.daysUntilExpiry} days
@@ -201,8 +201,8 @@ export default function DriverDocuments() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-800 border border-white/10 rounded-2xl p-8 max-w-md w-full">
-            <h2 className="text-2xl font-bold text-white mb-6">Add Driver Document</h2>
+          <div className="bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] rounded-2xl p-8 max-w-md w-full">
+            <h2 className="text-2xl font-bold text-[var(--text-main)] mb-6">Add Driver Document</h2>
 
             <form onSubmit={handleAddDocument} className="space-y-4">
               <div>

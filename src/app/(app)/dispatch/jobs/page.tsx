@@ -26,19 +26,19 @@ const SERVICE_OPTS = ['ALL','PASSENGER','FREIGHT','DELIVERY','AMBULANCE','TECHNI
 const PRIORITY_OPTS = ['ALL','P1','P2','P3','EMERGENCY','URGENT','NORMAL','SCHEDULED'];
 
 const STATUS_COLOR: Record<string, string> = {
-  PENDING:'bg-slate-700 text-slate-300', SEARCHING:'bg-blue-500/20 text-blue-300',
+  PENDING:'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]', SEARCHING:'bg-blue-500/20 text-blue-300',
   OFFERED:'bg-yellow-500/20 text-yellow-300', ACCEPTED:'bg-green-500/20 text-green-300',
   IN_PROGRESS:'bg-cyan-500/20 text-cyan-300', COMPLETED:'bg-emerald-500/20 text-emerald-300',
   RETRYING:'bg-orange-500/20 text-orange-300', ESCALATED:'bg-red-500/20 text-red-300',
-  FAILED:'bg-red-700/20 text-red-400', CANCELLED:'bg-slate-800 text-slate-500',
+  FAILED:'bg-red-700/20 text-red-400', CANCELLED:'bg-[var(--bg-surface-hover)] text-[var(--text-faint)]',
 };
 const PRIORITY_COLOR: Record<string, string> = {
   P1:'bg-red-500/20 text-red-400 border border-red-500/30',
   P2:'bg-orange-500/20 text-orange-400',
   EMERGENCY:'bg-red-600/30 text-red-300 border border-red-600/40',
   URGENT:'bg-orange-500/20 text-orange-400',
-  NORMAL:'bg-slate-700 text-slate-400',
-  P3:'bg-slate-700 text-slate-400',
+  NORMAL:'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]',
+  P3:'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]',
   SCHEDULED:'bg-indigo-500/20 text-indigo-400',
 };
 const SVC_ICON: Record<string, string> = {
@@ -122,8 +122,8 @@ export default function DispatchJobsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">📋 Jobs Queue</h1>
-          <p className="text-slate-400 text-sm mt-0.5">{total.toLocaleString()} total jobs · page {page}/{totalPages || 1}</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">📋 Jobs Queue</h1>
+          <p className="text-[var(--text-muted)] text-sm mt-0.5">{total.toLocaleString()} total jobs · page {page}/{totalPages || 1}</p>
         </div>
         <div className="flex items-center gap-3">
           <Link href="/dispatch/command"
@@ -131,39 +131,39 @@ export default function DispatchJobsPage() {
             🚦 Command Centre
           </Link>
           <button onClick={load}
-            className="px-4 py-2 rounded-xl bg-slate-800 border border-white/10 text-slate-300 text-sm hover:bg-slate-700 transition-all">
+            className="px-4 py-2 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm hover:bg-[var(--bg-surface-elevated)] transition-all">
             ↻ Refresh
           </button>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 bg-slate-900 border border-white/10 rounded-2xl p-4">
+      <div className="flex flex-wrap gap-3 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-4">
         {/* Search */}
         <div className="flex-1 min-w-48">
           <input
             value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
             placeholder="Search address, job ID…"
-            className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
+            className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-blue-500/50"
           />
         </div>
         {/* Status */}
         <select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}
-          className="bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50">
+          className="bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-blue-500/50">
           {STATUS_OPTS.map(s => <option key={s}>{s}</option>)}
         </select>
         {/* Service */}
         <select value={service} onChange={e => { setService(e.target.value); setPage(1); }}
-          className="bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50">
+          className="bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-blue-500/50">
           {SERVICE_OPTS.map(s => <option key={s}>{s}</option>)}
         </select>
         {/* Priority */}
         <select value={priority} onChange={e => { setPriority(e.target.value); setPage(1); }}
-          className="bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50">
+          className="bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-blue-500/50">
           {PRIORITY_OPTS.map(p => <option key={p}>{p}</option>)}
         </select>
         <button onClick={() => { setSearch(''); setStatus('ALL'); setService('ALL'); setPriority('ALL'); setPage(1); }}
-          className="px-3 py-2 rounded-xl text-slate-400 hover:text-white text-sm border border-white/10 hover:bg-slate-800 transition-all">
+          className="px-3 py-2 rounded-xl text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-all">
           Clear
         </button>
       </div>
@@ -183,25 +183,25 @@ export default function DispatchJobsPage() {
             {actionLoading === 'cancel' ? '…' : '✕ Cancel'}
           </button>
           <button onClick={() => setSelected(new Set())}
-            className="ml-auto px-3 py-1.5 rounded-lg text-slate-400 text-xs hover:text-white transition-all">
+            className="ml-auto px-3 py-1.5 rounded-lg text-[var(--text-muted)] text-xs hover:text-[var(--text-main)] transition-all">
             Deselect all
           </button>
         </div>
       )}
 
       {/* Table */}
-      <div className="rounded-2xl bg-slate-900 border border-white/10 overflow-hidden">
+      <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center h-48 text-slate-500 text-sm">Loading jobs…</div>
+          <div className="flex items-center justify-center h-48 text-[var(--text-faint)] text-sm">Loading jobs…</div>
         ) : jobs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 gap-2">
             <span className="text-3xl">📋</span>
-            <p className="text-slate-500 text-sm">No jobs match the current filters</p>
+            <p className="text-[var(--text-faint)] text-sm">No jobs match the current filters</p>
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-slate-500 text-xs">
+              <tr className="border-b border-[var(--border-subtle)] text-[var(--text-faint)] text-xs">
                 <th className="px-4 py-3 text-left w-10">
                   <input type="checkbox" checked={selected.size === jobs.length && jobs.length > 0}
                     onChange={toggleAll} className="rounded accent-blue-500" />
@@ -217,48 +217,48 @@ export default function DispatchJobsPage() {
                 <th className="px-4 py-3 text-left">Age</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
+            <tbody className="divide-y divide-[var(--border-subtle)]">
               {jobs.map(j => (
                 <tr key={j.id}
-                  className={`hover:bg-white/[0.03] transition-colors ${selected.has(j.id) ? 'bg-blue-500/5' : ''}`}>
+                  className={`hover:bg-[var(--bg-surface-hover)] transition-colors ${selected.has(j.id) ? 'bg-blue-500/5' : ''}`}>
                   <td className="px-4 py-3">
                     <input type="checkbox" checked={selected.has(j.id)}
                       onChange={() => toggleSelect(j.id)} className="rounded accent-blue-500" />
                   </td>
                   <td className="px-4 py-3">
-                    <span className="font-mono text-xs text-slate-400 select-all">{j.id.slice(0,12)}…</span>
+                    <span className="font-mono text-xs text-[var(--text-muted)] select-all">{j.id.slice(0,12)}…</span>
                     {j.meta && (j.meta as any).multiStop && (
                       <span className="ml-1 px-1 py-0.5 rounded text-[9px] bg-violet-500/20 text-violet-400 font-bold">MERGED</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-slate-300">
+                  <td className="px-4 py-3 text-[var(--text-muted)]">
                     <span className="mr-1">{SVC_ICON[j.service_type] ?? '🚗'}</span>
                     {j.service_type}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${PRIORITY_COLOR[j.priority] ?? 'bg-slate-700 text-slate-400'}`}>
+                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${PRIORITY_COLOR[j.priority] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>
                       {j.priority}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${STATUS_COLOR[j.status] ?? 'bg-slate-700 text-slate-300'}`}>
+                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${STATUS_COLOR[j.status] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>
                       {j.status}
                     </span>
                   </td>
                   <td className="px-4 py-3 max-w-xs">
-                    <p className="text-slate-300 text-xs truncate">{j.origin_address ?? '—'}</p>
-                    <p className="text-slate-500 text-xs truncate">{j.destination_address ?? '—'}</p>
+                    <p className="text-[var(--text-muted)] text-xs truncate">{j.origin_address ?? '—'}</p>
+                    <p className="text-[var(--text-faint)] text-xs truncate">{j.destination_address ?? '—'}</p>
                   </td>
-                  <td className="px-4 py-3 text-slate-400 text-xs text-center">{j.passenger_count ?? 1}</td>
-                  <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">
+                  <td className="px-4 py-3 text-[var(--text-muted)] text-xs text-center">{j.passenger_count ?? 1}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)] text-xs whitespace-nowrap">
                     {j.scheduled_pickup ? fmtDate(j.scheduled_pickup) : 'ASAP'}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs font-semibold ${j.attempt_count >= 3 ? 'text-red-400' : j.attempt_count >= 2 ? 'text-orange-400' : 'text-slate-400'}`}>
+                    <span className={`text-xs font-semibold ${j.attempt_count >= 3 ? 'text-red-400' : j.attempt_count >= 2 ? 'text-orange-400' : 'text-[var(--text-muted)]'}`}>
                       {j.attempt_count}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-slate-500 text-xs">{fmtAge(j.created_at)}</td>
+                  <td className="px-4 py-3 text-[var(--text-faint)] text-xs">{fmtAge(j.created_at)}</td>
                 </tr>
               ))}
             </tbody>
@@ -269,12 +269,12 @@ export default function DispatchJobsPage() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
-          <p className="text-slate-500 text-xs">
+          <p className="text-[var(--text-faint)] text-xs">
             Showing {(page-1)*PER_PAGE + 1}–{Math.min(page*PER_PAGE, total)} of {total}
           </p>
           <div className="flex items-center gap-2">
             <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 border border-white/10 text-slate-300 text-xs hover:bg-slate-700 transition-all disabled:opacity-40">
+              className="px-3 py-1.5 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-xs hover:bg-[var(--bg-surface-elevated)] transition-all disabled:opacity-40">
               ← Prev
             </button>
             {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
@@ -282,12 +282,12 @@ export default function DispatchJobsPage() {
               return (
                 <button key={p} onClick={() => setPage(p)}
                   className={`w-8 h-8 rounded-xl text-xs font-semibold transition-all ${
-                    p === page ? 'bg-blue-600 text-white' : 'bg-slate-800 border border-white/10 text-slate-400 hover:bg-slate-700'
+                    p === page ? 'bg-blue-600 text-white' : 'bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-elevated)]'
                   }`}>{p}</button>
               );
             })}
             <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 border border-white/10 text-slate-300 text-xs hover:bg-slate-700 transition-all disabled:opacity-40">
+              className="px-3 py-1.5 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-xs hover:bg-[var(--bg-surface-elevated)] transition-all disabled:opacity-40">
               Next →
             </button>
           </div>

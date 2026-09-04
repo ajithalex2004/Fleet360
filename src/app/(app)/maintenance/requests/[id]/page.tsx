@@ -22,6 +22,7 @@ import {
     getGarages,
     updateMaintenanceRequest,
     createQuotation,
+    updateQuotation,
     createGarage,
     uploadFile
 } from '@/services/mockData';
@@ -849,6 +850,11 @@ export default function RequestDetailsPage() {
             if (finalMaintenanceJobs.length === 0 && selectedQuote.parts) {
                 finalMaintenanceJobs = selectedQuote.parts.map(p => p.name);
             }
+
+            // Persist the winning quotation's status (the parent PATCH below
+            // doesn't accept a nested `quotations` array — it has to be
+            // updated through its own endpoint or it silently never saves).
+            await updateQuotation(selectedQuote.id, { status: QuotationStatus.APPROVED });
 
             await updateMaintenanceRequest(request.id, {
                 status: MaintenanceStatus.UNDER_MAINTENANCE,

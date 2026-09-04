@@ -55,13 +55,13 @@ function DocCell({ status, date }: { status: string; date: string | null }) {
     valid:         { Icon: Check,    cls: 'text-emerald-400' },
     expiring_soon: { Icon: AlertTriangle, cls: 'text-amber-400' },
     expired:       { Icon: X,        cls: 'text-rose-400' },
-    missing:       { Icon: Minus,    cls: 'text-slate-500' },
+    missing:       { Icon: Minus,    cls: 'text-[var(--text-faint)]' },
   } as const;
   const { Icon, cls } = map[status as keyof typeof map] ?? map.missing;
   return (
     <td className="py-3 align-top">
       <Icon className={`w-4 h-4 ${cls}`} />
-      {date && <div className="text-[11px] text-slate-500 mt-1">{fmtDate(date)}</div>}
+      {date && <div className="text-[11px] text-[var(--text-faint)] mt-1">{fmtDate(date)}</div>}
     </td>
   );
 }
@@ -105,7 +105,7 @@ export default function DriverDashboard() {
         accent="cyan"
         actions={
           <>
-            <button onClick={load} className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 border border-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 transition-colors">
+            <button onClick={load} className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] px-3 py-2 text-xs text-[var(--text-muted)] hover:bg-[var(--bg-surface-elevated)] transition-colors">
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
             </button>
             <Link href="/driver-mgmt/profiles"
@@ -126,7 +126,7 @@ export default function DriverDashboard() {
         </div>
       ) : loading ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[...Array(4)].map((_,i) => <div key={i} className="h-28 bg-slate-800/60 rounded-2xl animate-pulse"/>)}
+          {[...Array(4)].map((_,i) => <div key={i} className="h-28 bg-[var(--bg-surface)] rounded-2xl animate-pulse"/>)}
         </div>
       ) : (
         <>
@@ -138,14 +138,14 @@ export default function DriverDashboard() {
           </div>
 
           <Panel title="Fleet compliance health" icon={Activity} accent="cyan"
-            actions={<span className="text-xs text-slate-400">{s.total} drivers</span>}>
-            <div className="h-2.5 rounded-full overflow-hidden flex bg-slate-800">
+            actions={<span className="text-xs text-[var(--text-muted)]">{s.total} drivers</span>}>
+            <div className="h-2.5 rounded-full overflow-hidden flex bg-[var(--bg-surface-hover)]">
               <div className="bg-emerald-500 h-full transition-all" style={{ width: `${okPct}%` }}    title={`OK: ${s.ok}`} />
               <div className="bg-amber-500   h-full transition-all" style={{ width: `${warnPct}%` }}  title={`Warning: ${s.warning}`} />
               <div className="bg-rose-500    h-full transition-all" style={{ width: `${critPct}%` }}  title={`Critical: ${s.critical}`} />
               <div className="bg-slate-600   h-full transition-all" style={{ width: `${incPct}%` }}   title={`Incomplete: ${s.incomplete}`} />
             </div>
-            <div className="flex items-center gap-5 mt-3 text-[11px] text-slate-400 flex-wrap">
+            <div className="flex items-center gap-5 mt-3 text-[11px] text-[var(--text-muted)] flex-wrap">
               <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" /> OK ({okPct}%)</span>
               <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500" /> Expiring ({warnPct}%)</span>
               <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-rose-500" /> Critical ({critPct}%)</span>
@@ -159,13 +159,13 @@ export default function DriverDashboard() {
               {criticalIssues.length === 0 ? (
                 <div className="text-center py-8">
                   <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
-                  <p className="text-slate-400 text-sm">No critical issues</p>
+                  <p className="text-[var(--text-muted)] text-sm">No critical issues</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-white/10 text-slate-500 text-[11px] uppercase tracking-wider">
+                      <tr className="border-b border-[var(--border-subtle)] text-[var(--text-faint)] text-[11px] uppercase tracking-wider">
                         <th className="text-left py-2 font-medium">Driver</th>
                         <th className="text-left py-2 font-medium">License</th>
                         <th className="text-left py-2 font-medium">Emirates ID</th>
@@ -173,12 +173,12 @@ export default function DriverDashboard() {
                         <th className="text-left py-2 font-medium">Visa</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5">
+                    <tbody className="divide-y divide-[var(--border-subtle)]">
                       {criticalIssues.slice(0, 10).map(d => (
-                        <tr key={d.id} className="hover:bg-white/[0.02]">
+                        <tr key={d.id} className="hover:bg-[var(--bg-surface-hover)]">
                           <td className="py-3 align-top">
-                            <div className="font-medium text-white">{d.name}</div>
-                            <div className="text-[11px] text-slate-500 font-mono">{d.licenseNumber}</div>
+                            <div className="font-medium text-[var(--text-main)]">{d.name}</div>
+                            <div className="text-[11px] text-[var(--text-faint)] font-mono">{d.licenseNumber}</div>
                           </td>
                           <DocCell status={d.compliance.license}    date={d.licenseExpiry} />
                           <DocCell status={d.compliance.emiratesId} date={d.emiratesIdExpiry} />
@@ -197,13 +197,13 @@ export default function DriverDashboard() {
               {warningIssues.length === 0 ? (
                 <div className="text-center py-8">
                   <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
-                  <p className="text-slate-400 text-sm">No expiring documents</p>
+                  <p className="text-[var(--text-muted)] text-sm">No expiring documents</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-white/10 text-slate-500 text-[11px] uppercase tracking-wider">
+                      <tr className="border-b border-[var(--border-subtle)] text-[var(--text-faint)] text-[11px] uppercase tracking-wider">
                         <th className="text-left py-2 font-medium">Driver</th>
                         <th className="text-left py-2 font-medium">License</th>
                         <th className="text-left py-2 font-medium">Emirates ID</th>
@@ -211,12 +211,12 @@ export default function DriverDashboard() {
                         <th className="text-left py-2 font-medium">Visa</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5">
+                    <tbody className="divide-y divide-[var(--border-subtle)]">
                       {warningIssues.slice(0, 10).map(d => (
-                        <tr key={d.id} className="hover:bg-white/[0.02]">
+                        <tr key={d.id} className="hover:bg-[var(--bg-surface-hover)]">
                           <td className="py-3 align-top">
-                            <div className="font-medium text-white">{d.name}</div>
-                            <div className="text-[11px] text-slate-500 font-mono">{d.licenseNumber}</div>
+                            <div className="font-medium text-[var(--text-main)]">{d.name}</div>
+                            <div className="text-[11px] text-[var(--text-faint)] font-mono">{d.licenseNumber}</div>
                           </td>
                           <DocCell status={d.compliance.license}    date={d.licenseExpiry} />
                           <DocCell status={d.compliance.emiratesId} date={d.emiratesIdExpiry} />
@@ -239,12 +239,12 @@ export default function DriverDashboard() {
               { label: 'Performance',          href: '/driver-mgmt/performance',             Icon: BarChart3,   desc: 'Driver performance metrics' },
             ].map(a => (
               <Link key={a.href} href={a.href}
-                className="rounded-2xl bg-slate-900/60 border border-white/10 hover:border-cyan-500/30 hover:bg-cyan-500/5 transition-all p-5 group block">
+                className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-cyan-500/30 hover:bg-cyan-500/5 transition-all p-5 group block">
                 <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center mb-3">
                   <a.Icon className="w-5 h-5 text-cyan-300" />
                 </div>
-                <p className="text-white font-semibold text-sm group-hover:text-cyan-300 transition-colors">{a.label}</p>
-                <p className="text-slate-500 text-xs mt-1">{a.desc}</p>
+                <p className="text-[var(--text-main)] font-semibold text-sm group-hover:text-cyan-300 transition-colors">{a.label}</p>
+                <p className="text-[var(--text-faint)] text-xs mt-1">{a.desc}</p>
               </Link>
             ))}
           </div>

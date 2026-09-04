@@ -6,7 +6,7 @@ export default function LanguageSwitcher() {
   return (
     <button
       onClick={() => setLanguage(language === 'en' ? 'ar' : 'en')}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-xs font-medium text-white border border-white/10"
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-elevated)] transition-colors text-xs font-medium text-[var(--text-main)] border border-[var(--border-subtle)]"
       title={language === 'en' ? 'Switch to Arabic' : 'التبديل إلى الإنجليزية'}
     >
       <span className="text-sm">{language === 'en' ? '🇦🇪' : '🇬🇧'}</span>

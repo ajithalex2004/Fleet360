@@ -131,16 +131,16 @@ function CtxMenu({ m, onSelect, onClose }:{
     return ()=>document.removeEventListener('mousedown',h);
   },[onClose]);
   return (
-    <div data-ctx="1" className="fixed z-[9999] w-56 bg-slate-800 border border-white/15 rounded-2xl shadow-2xl overflow-hidden"
+    <div data-ctx="1" className="fixed z-[9999] w-56 bg-[var(--bg-surface-elevated)] border border-[var(--border-strong)] rounded-2xl shadow-2xl overflow-hidden"
       style={{ left:Math.min(m.x,window.innerWidth-240), top:Math.min(m.y,window.innerHeight-items.length*40-20) }}>
-      <div className="px-4 py-2.5 bg-slate-700/60 border-b border-white/10">
-        <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
+      <div className="px-4 py-2.5 bg-[var(--bg-surface-hover)] border-b border-[var(--border-subtle)]">
+        <p className="text-xs text-[var(--text-muted)] font-semibold uppercase tracking-wider">
           {m.kind==='job'?`Job ${m.target?.id?.slice(0,8)}…`:m.kind==='vehicle'?m.target?.vehicle_reg??'Vehicle':m.kind==='driver'?m.target?.driver_name??'Driver':m.kind==='map'?'Map Actions':'Exception'}
         </p>
       </div>
       {items.map(item=>(
         <button key={item} onClick={()=>{ onSelect(item,m.target); onClose(); }}
-          className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-200 hover:bg-white/10 hover:text-white transition-colors">
+          className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)] transition-colors">
           <span className="text-base w-5 flex-shrink-0">{CTX_ICONS[item]??'•'}</span>
           {item}
         </button>
@@ -164,10 +164,10 @@ function MergeCard({ pair, targetJob, onAccept, onSkip }:{
         <div className="flex items-center gap-2">
           <span className="text-violet-400 text-base">🔀</span>
           <span className={`text-lg font-bold ${scoreColor}`}>{pair.mergeScore}</span>
-          <span className="text-slate-500 text-xs">/ 100</span>
+          <span className="text-[var(--text-faint)] text-xs">/ 100</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-surface-hover)] text-[var(--text-muted)]">
             {engineBadge[pair.routingSource] ?? pair.routingSource}
           </span>
           <span className="text-emerald-400 text-xs font-semibold">Save ~{pair.estimatedSavingKm} km</span>
@@ -180,12 +180,12 @@ function MergeCard({ pair, targetJob, onAccept, onSkip }:{
           { j: targetJob,         label: 'Job A (this)' },
           { j: pair.candidateJob, label: 'Job B (candidate)' },
         ].map(({ j, label }) => (
-          <div key={j.id} className="flex-1 rounded-lg bg-slate-800/80 border border-white/8 px-2.5 py-2">
-            <p className="text-[10px] text-slate-500 font-semibold mb-1">{label}</p>
-            <p className="text-white text-xs font-medium truncate">
+          <div key={j.id} className="flex-1 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] px-2.5 py-2">
+            <p className="text-[10px] text-[var(--text-faint)] font-semibold mb-1">{label}</p>
+            <p className="text-[var(--text-main)] text-xs font-medium truncate">
               {SVC_ICON[j.service_type as SvcType]} {j.origin_address ?? j.id.slice(0,10)+'…'}
             </p>
-            <p className="text-slate-400 text-[10px] truncate mt-0.5">
+            <p className="text-[var(--text-muted)] text-[10px] truncate mt-0.5">
               → {j.destination_address ?? 'Unknown'}
             </p>
           </div>
@@ -194,23 +194,23 @@ function MergeCard({ pair, targetJob, onAccept, onSkip }:{
 
       {/* Stats row */}
       <div className="flex gap-3 mb-3 text-xs">
-        <div className="flex-1 text-center rounded-lg bg-slate-800/60 py-1.5">
-          <p className="text-slate-500 text-[10px]">Road dist</p>
-          <p className="text-white font-semibold">{pair.pickupRoadDistKm} km</p>
+        <div className="flex-1 text-center rounded-lg bg-[var(--bg-surface-hover)] py-1.5">
+          <p className="text-[var(--text-faint)] text-[10px]">Road dist</p>
+          <p className="text-[var(--text-main)] font-semibold">{pair.pickupRoadDistKm} km</p>
         </div>
-        <div className="flex-1 text-center rounded-lg bg-slate-800/60 py-1.5">
-          <p className="text-slate-500 text-[10px]">Time gap</p>
-          <p className="text-white font-semibold">{pair.pickupTimeDiffMin} min</p>
+        <div className="flex-1 text-center rounded-lg bg-[var(--bg-surface-hover)] py-1.5">
+          <p className="text-[var(--text-faint)] text-[10px]">Time gap</p>
+          <p className="text-[var(--text-main)] font-semibold">{pair.pickupTimeDiffMin} min</p>
         </div>
-        <div className="flex-1 text-center rounded-lg bg-slate-800/60 py-1.5">
-          <p className="text-slate-500 text-[10px]">Savings</p>
+        <div className="flex-1 text-center rounded-lg bg-[var(--bg-surface-hover)] py-1.5">
+          <p className="text-[var(--text-faint)] text-[10px]">Savings</p>
           <p className="text-emerald-400 font-semibold">{pair.estimatedSavingKm} km</p>
         </div>
       </div>
 
       {/* Reasons */}
       {pair.mergeReasons.slice(0,2).map((r,i)=>(
-        <p key={i} className="text-[10px] text-slate-400 flex items-center gap-1 mb-0.5">
+        <p key={i} className="text-[10px] text-[var(--text-muted)] flex items-center gap-1 mb-0.5">
           <span className="text-emerald-400">✓</span> {r}
         </p>
       ))}
@@ -226,7 +226,7 @@ function MergeCard({ pair, targetJob, onAccept, onSkip }:{
           👁 Preview
         </button>
         <button onClick={onSkip}
-          className="flex-1 py-2 rounded-xl bg-slate-700 border border-white/10 text-slate-400 text-sm hover:bg-slate-600 transition-all">
+          className="flex-1 py-2 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm hover:bg-[var(--bg-surface-elevated)] transition-all">
           ❌ Skip
         </button>
       </div>
@@ -243,7 +243,7 @@ function JobCard({ job, selected, onClick, onCtx }:{
     <div onClick={onClick} onContextMenu={onCtx}
       className={`rounded-xl border p-3.5 cursor-pointer transition-all select-none ${
         selected ? 'border-blue-500 bg-blue-500/10'
-        : `border-white/10 bg-slate-800/50 hover:border-white/20 hover:bg-slate-800 ${
+        : `border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-hover)] ${
           sla.risk==='critical'?'border-red-500/50':sla.risk==='warn'?'border-amber-500/30':''
         }`
       }`}>
@@ -253,26 +253,26 @@ function JobCard({ job, selected, onClick, onCtx }:{
         <span className={`px-2 py-0.5 rounded text-xs font-bold ${PRI_BG[job.priority]}`}>{job.priority}</span>
         <div className="flex items-center gap-1.5 ml-auto">
           <span className={`w-2.5 h-2.5 rounded-full ${STATUS_DOT[job.status]}`}/>
-          <span className="text-xs text-slate-400">{STATUS_LBL[job.status]}</span>
+          <span className="text-xs text-[var(--text-muted)]">{STATUS_LBL[job.status]}</span>
         </div>
       </div>
       {/* Row 2: route */}
       <div className="text-sm space-y-1 mb-2.5">
         <div className="flex items-start gap-2">
           <span className="text-green-400 flex-shrink-0 mt-0.5">●</span>
-          <span className="text-slate-300 truncate">{job.origin_address??'Origin'}</span>
+          <span className="text-[var(--text-muted)] truncate">{job.origin_address??'Origin'}</span>
         </div>
         <div className="flex items-start gap-2">
           <span className="text-red-400 flex-shrink-0 mt-0.5">▼</span>
-          <span className="text-slate-300 truncate">{job.destination_address??'Destination'}</span>
+          <span className="text-[var(--text-muted)] truncate">{job.destination_address??'Destination'}</span>
         </div>
       </div>
       {/* Row 3: meta */}
-      <div className="flex items-center justify-between text-xs text-slate-500">
+      <div className="flex items-center justify-between text-xs text-[var(--text-faint)]">
         <span className="font-mono">{job.id.slice(0,8)}</span>
         <span>{job.attempt_count} att.</span>
         {sla.risk!=='none' ? (
-          <span className={`font-bold ${sla.risk==='critical'?'text-red-400 animate-pulse':sla.risk==='warn'?'text-amber-400':'text-slate-400'}`}>
+          <span className={`font-bold ${sla.risk==='critical'?'text-red-400 animate-pulse':sla.risk==='warn'?'text-amber-400':'text-[var(--text-muted)]'}`}>
             ⏱ {sla.text}
           </span>
         ) : <span>{ago(job.created_at)}</span>}
@@ -328,9 +328,9 @@ function MapPanel({ jobs, drivers, selectedJob, onJobClick, onMapCtx }:{
               {SVC_ICON[d.vehicle_type as SvcType]??'🚗'}
             </div>
             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 w-40 bg-slate-800 border border-white/15 rounded-xl px-3 py-2 text-sm shadow-2xl">
-              <p className="text-white font-semibold truncate">{d.driver_name}</p>
-              <p className="text-slate-400 text-xs">{d.vehicle_reg??'—'} · {d.status}</p>
-              <p className="text-slate-600 text-xs">{ago(d.last_ping)}</p>
+              <p className="text-[var(--text-main)] font-semibold truncate">{d.driver_name}</p>
+              <p className="text-[var(--text-muted)] text-xs">{d.vehicle_reg??'—'} · {d.status}</p>
+              <p className="text-[var(--text-faint)] text-xs">{ago(d.last_ping)}</p>
             </div>
           </div>
         );
@@ -346,39 +346,39 @@ function MapPanel({ jobs, drivers, selectedJob, onJobClick, onMapCtx }:{
             className="absolute -translate-x-1/2 -translate-y-full cursor-pointer group z-20"
             style={{left:`${p.x}%`,top:`${p.y}%`}}>
             <div className={`flex flex-col items-center transition-transform ${sel?'scale-125':'group-hover:scale-110'}`}>
-              <div className={`px-2 py-0.5 rounded text-xs font-bold bg-slate-900 border mb-0.5 ${sel?'border-blue-400 text-blue-300':'border-white/20 text-slate-300'}`}>
+              <div className={`px-2 py-0.5 rounded text-xs font-bold bg-slate-900 border mb-0.5 ${sel?'border-blue-400 text-blue-300':'border-white/20 text-[var(--text-muted)]'}`}>
                 {SVC_ICON[job.service_type]}
               </div>
               <div className="w-px h-4 bg-slate-500"/>
               <div className="w-2.5 h-2.5 rounded-full border border-slate-600" style={{backgroundColor:col}}/>
             </div>
             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-50 w-44 bg-slate-800 border border-white/15 rounded-xl px-3 py-2 text-sm shadow-2xl">
-              <p className="text-white font-semibold">{job.service_type} · {job.priority}</p>
-              <p className="text-slate-400 text-xs truncate">{job.origin_address??'Origin'}</p>
-              <p className="text-xs font-semibold text-slate-300 mt-0.5">{STATUS_LBL[job.status]}</p>
+              <p className="text-[var(--text-main)] font-semibold">{job.service_type} · {job.priority}</p>
+              <p className="text-[var(--text-muted)] text-xs truncate">{job.origin_address??'Origin'}</p>
+              <p className="text-xs font-semibold text-[var(--text-muted)] mt-0.5">{STATUS_LBL[job.status]}</p>
             </div>
           </div>
         );
       })}
       {/* Legend */}
-      <div className="absolute bottom-4 left-4 bg-slate-900/85 backdrop-blur-sm border border-white/10 rounded-2xl px-4 py-3 text-sm space-y-1.5">
-        <p className="text-slate-400 font-semibold text-xs mb-2 uppercase tracking-wider">Legend</p>
+      <div className="absolute bottom-4 left-4 bg-slate-900/85 backdrop-blur-sm border border-[var(--border-subtle)] rounded-2xl px-4 py-3 text-sm space-y-1.5">
+        <p className="text-[var(--text-muted)] font-semibold text-xs mb-2 uppercase tracking-wider">Legend</p>
         {[['bg-green-400','On track'],['bg-amber-400','Delay risk'],['bg-red-500','SLA breach'],['bg-green-500','Available driver'],['bg-yellow-500','Busy driver']].map(([dot,lbl])=>(
           <div key={lbl} className="flex items-center gap-2">
             <div className={`w-2.5 h-2.5 rounded-full ${dot}`}/>
-            <span className="text-slate-400 text-xs">{lbl}</span>
+            <span className="text-[var(--text-muted)] text-xs">{lbl}</span>
           </div>
         ))}
       </div>
       {/* Controls */}
       <div className="absolute top-4 right-4 flex flex-col gap-1.5">
         {['+','−','⌂'].map(c=>(
-          <button key={c} className="w-9 h-9 bg-slate-800/90 border border-white/10 rounded-xl text-slate-300 hover:text-white hover:bg-slate-700 text-sm font-bold transition-all">
+          <button key={c} className="w-9 h-9 bg-slate-800/90 border border-[var(--border-subtle)] rounded-xl text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-slate-700 text-sm font-bold transition-all">
             {c}
           </button>
         ))}
       </div>
-      <div className="absolute top-4 left-4 bg-slate-900/70 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-slate-500">
+      <div className="absolute top-4 left-4 bg-slate-900/70 border border-[var(--border-subtle)] rounded-xl px-3 py-1.5 text-xs text-[var(--text-faint)]">
         Right-click map for actions
       </div>
     </div>
@@ -395,49 +395,49 @@ function AssignDrawer({ job, candidates, loading, onAssign, onClose }:{
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose}/>
-      <div className="relative w-[420px] bg-slate-900 border-l border-white/10 flex flex-col h-full shadow-2xl">
-        <div className="p-5 border-b border-white/10 bg-slate-800/60">
+      <div className="relative w-[420px] bg-[var(--bg-surface)] border-l border-[var(--border-subtle)] flex flex-col h-full shadow-2xl">
+        <div className="p-5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-white font-bold text-lg">Assign Vehicle</h3>
-            <button onClick={onClose} className="text-slate-400 hover:text-white text-xl">✕</button>
+            <h3 className="text-[var(--text-main)] font-bold text-lg">Assign Vehicle</h3>
+            <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">✕</button>
           </div>
-          <div className="rounded-xl bg-slate-700/60 p-4 text-sm space-y-2">
-            <div className="flex justify-between"><span className="text-slate-400">Service</span><span className="text-white">{SVC_ICON[job.service_type]} {job.service_type}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">Priority</span><span className={`px-2 py-0.5 rounded text-xs font-bold ${PRI_BG[job.priority]}`}>{job.priority}</span></div>
-            {job.origin_address&&<div className="flex justify-between gap-4"><span className="text-slate-400 flex-shrink-0">From</span><span className="text-slate-300 text-xs text-right truncate">{job.origin_address}</span></div>}
+          <div className="rounded-xl bg-[var(--bg-surface-elevated)] p-4 text-sm space-y-2">
+            <div className="flex justify-between"><span className="text-[var(--text-muted)]">Service</span><span className="text-[var(--text-main)]">{SVC_ICON[job.service_type]} {job.service_type}</span></div>
+            <div className="flex justify-between"><span className="text-[var(--text-muted)]">Priority</span><span className={`px-2 py-0.5 rounded text-xs font-bold ${PRI_BG[job.priority]}`}>{job.priority}</span></div>
+            {job.origin_address&&<div className="flex justify-between gap-4"><span className="text-[var(--text-muted)] flex-shrink-0">From</span><span className="text-[var(--text-muted)] text-xs text-right truncate">{job.origin_address}</span></div>}
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
-          <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Ranked Candidates</p>
-          {loading ? <p className="text-slate-500 text-sm text-center py-10">Finding candidates…</p>
+          <p className="text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider">Ranked Candidates</p>
+          {loading ? <p className="text-[var(--text-faint)] text-sm text-center py-10">Finding candidates…</p>
             : candidates.length===0 ? (
-              <div className="text-center py-10"><p className="text-3xl mb-2">😔</p><p className="text-slate-400">No candidates available</p></div>
+              <div className="text-center py-10"><p className="text-3xl mb-2">😔</p><p className="text-[var(--text-muted)]">No candidates available</p></div>
             ) : candidates.map((c,i)=>(
               <button key={c.driver_id} onClick={()=>setSel(c)}
-                className={`w-full text-left rounded-xl border p-4 transition-all ${sel?.driver_id===c.driver_id?'border-blue-500 bg-blue-500/10':'border-white/10 bg-slate-800/60 hover:border-white/20'}`}>
+                className={`w-full text-left rounded-xl border p-4 transition-all ${sel?.driver_id===c.driver_id?'border-blue-500 bg-blue-500/10':'border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] hover:border-[var(--border-strong)]'}`}>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2.5">
                     <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${i===0?'bg-yellow-500 text-black':i===1?'bg-slate-400 text-black':'bg-amber-700 text-white'}`}>{i+1}</span>
-                    <span className="text-white font-semibold">{c.vehicle_reg??'Unknown'}</span>
+                    <span className="text-[var(--text-main)] font-semibold">{c.vehicle_reg??'Unknown'}</span>
                   </div>
                   <span className={`text-xl font-bold font-mono ${scoreCol(c.score)}`}>{c.score}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-400">{c.driver_name}</span>
+                  <span className="text-[var(--text-muted)]">{c.driver_name}</span>
                   <span className="text-cyan-400 font-bold">ETA {c.eta_minutes} min</span>
                 </div>
-                <div className="mt-2 h-1.5 rounded-full bg-slate-700">
+                <div className="mt-2 h-1.5 rounded-full bg-[var(--bg-surface-hover)]">
                   <div className={`h-1.5 rounded-full ${c.score>=90?'bg-green-500':c.score>=75?'bg-yellow-500':'bg-orange-500'}`} style={{width:`${c.score}%`}}/>
                 </div>
               </button>
             ))}
         </div>
-        <div className="p-5 border-t border-white/10 bg-slate-800/40">
+        <div className="p-5 border-t border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]">
           {sel&&<div className="mb-3 rounded-xl bg-blue-500/10 border border-blue-500/20 px-4 py-2.5 text-sm text-blue-300">
-            Selected: <strong className="text-white">{sel.vehicle_reg}</strong> — Score {sel.score} · ETA {sel.eta_minutes} min
+            Selected: <strong className="text-[var(--text-main)]">{sel.vehicle_reg}</strong> — Score {sel.score} · ETA {sel.eta_minutes} min
           </div>}
           <button disabled={!sel} onClick={()=>sel&&onAssign(sel)}
-            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-sm disabled:opacity-30 hover:opacity-90 transition-all">
+            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-[#ffffff] font-bold text-sm disabled:opacity-30 hover:opacity-90 transition-all">
             ✅ Confirm Assignment
           </button>
         </div>
@@ -667,37 +667,37 @@ export default function CommandCentre() {
   /* ═══ RENDER ═══ */
   return (
     <div
-      className={`flex flex-col bg-slate-950 overflow-hidden ${fullscreen?'fixed inset-0 z-[9990]':'h-screen'}`}
+      className={`flex flex-col bg-[var(--bg-canvas)] overflow-hidden ${fullscreen?'fixed inset-0 z-[9990]':'h-screen'}`}
       onClick={()=>setCtxMenu(null)}
     >
       {/* ════ TOP BAR ════ */}
-      <div className="flex-shrink-0 flex items-center gap-3 px-5 h-14 bg-slate-900 border-b border-white/10">
+      <div className="flex-shrink-0 flex items-center gap-3 px-5 h-14 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)]">
         {/* Back link (only when not fullscreen) */}
         {!fullscreen && (
-          <Link href="/dispatch" className="text-slate-400 hover:text-white text-sm flex items-center gap-1.5 flex-shrink-0">
+          <Link href="/dispatch" className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm flex items-center gap-1.5 flex-shrink-0">
             ← <span className="hidden md:inline">Dispatch</span>
           </Link>
         )}
-        <span className="text-white font-bold">🚦 Command Centre</span>
-        <div className="w-px h-6 bg-white/10 flex-shrink-0"/>
+        <span className="text-[var(--text-main)] font-bold">🚦 Command Centre</span>
+        <div className="w-px h-6 bg-[var(--border-subtle)] flex-shrink-0"/>
 
         {/* Search */}
         <div className="relative">
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search jobs, vehicles…"
-            className="bg-slate-800 border border-white/10 text-slate-300 text-sm rounded-xl pl-4 pr-8 py-2 w-52 focus:outline-none focus:border-blue-500"/>
-          {search&&<button onClick={()=>setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">✕</button>}
+            className="bg-[var(--input-bg)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm rounded-xl pl-4 pr-8 py-2 w-52 focus:outline-none focus:border-blue-500"/>
+          {search&&<button onClick={()=>setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)] hover:text-[var(--text-main)]">✕</button>}
         </div>
 
-        <div className="w-px h-6 bg-white/10 flex-shrink-0"/>
+        <div className="w-px h-6 bg-[var(--border-subtle)] flex-shrink-0"/>
 
         {/* Auto Dispatch Mode */}
-        <span className="text-slate-400 text-sm font-medium flex-shrink-0">Auto Dispatch:</span>
-        <div className="flex rounded-xl border border-white/10 overflow-hidden text-xs font-bold">
+        <span className="text-[var(--text-muted)] text-sm font-medium flex-shrink-0">Auto Dispatch:</span>
+        <div className="flex rounded-xl border border-[var(--border-subtle)] overflow-hidden text-xs font-bold">
           {(['OFF','SUGGESTION','AUTO'] as DispMode[]).map(m=>(
             <button key={m} onClick={()=>{setDispMode(m);addLog(`Mode → ${m}`,'info');}}
               className={`px-3 py-2 transition-all ${dispMode===m
-                ?m==='AUTO'?'bg-emerald-500 text-white':m==='SUGGESTION'?'bg-blue-500 text-white':'bg-slate-700 text-slate-300'
-                :'bg-slate-800 text-slate-500 hover:text-slate-300'}`}>
+                ?m==='AUTO'?'bg-emerald-500 text-white':m==='SUGGESTION'?'bg-blue-500 text-white':'bg-[var(--bg-surface-hover)] text-[var(--text-main)]'
+                :'bg-[var(--bg-surface)] text-[var(--text-faint)] hover:text-[var(--text-muted)]'}`}>
               {m==='OFF'?'⛔ OFF':m==='AUTO'?'⚡ AUTO':'💡 SUGGEST'}
             </button>
           ))}
@@ -719,18 +719,18 @@ export default function CommandCentre() {
               ⚠ {COUNTS.exceptions} Alert{COUNTS.exceptions>1?'s':''}
             </button>
           )}
-          <span className="text-slate-500">Pending: <strong className="text-yellow-400">{COUNTS.pending}</strong></span>
-          <span className="text-slate-500">Active: <strong className="text-cyan-400">{COUNTS.active}</strong></span>
-          <span className="text-slate-500">Online: <strong className="text-green-400">{onlineDrivers.length}</strong></span>
+          <span className="text-[var(--text-faint)]">Pending: <strong className="text-yellow-400">{COUNTS.pending}</strong></span>
+          <span className="text-[var(--text-faint)]">Active: <strong className="text-cyan-400">{COUNTS.active}</strong></span>
+          <span className="text-[var(--text-faint)]">Online: <strong className="text-green-400">{onlineDrivers.length}</strong></span>
         </div>
 
         {/* Full-screen toggle */}
         <button onClick={()=>setFullscreen(f=>!f)}
-          className="w-9 h-9 rounded-xl bg-slate-800 border border-white/10 text-slate-400 hover:text-white flex items-center justify-center text-base transition-all" title={fullscreen?'Exit fullscreen':'Enter fullscreen'}>
+          className="w-9 h-9 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] flex items-center justify-center text-base transition-all" title={fullscreen?'Exit fullscreen':'Enter fullscreen'}>
           {fullscreen?'⊠':'⛶'}
         </button>
         <button onClick={()=>{setLoading(true);fetchAll();}}
-          className="w-9 h-9 rounded-xl bg-slate-800 border border-white/10 text-slate-400 hover:text-white flex items-center justify-center transition-all">
+          className="w-9 h-9 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] flex items-center justify-center transition-all">
           ↻
         </button>
       </div>
@@ -739,9 +739,9 @@ export default function CommandCentre() {
       <div className="flex flex-1 min-h-0">
 
         {/* ── LEFT: Jobs + Merge ── */}
-        <div className="w-96 flex-shrink-0 border-r border-white/10 flex flex-col bg-slate-900/60">
+        <div className="w-96 flex-shrink-0 border-r border-[var(--border-subtle)] flex flex-col bg-[var(--bg-surface)]">
           {/* Tabs */}
-          <div className="flex border-b border-white/10 overflow-x-auto flex-shrink-0">
+          <div className="flex border-b border-[var(--border-subtle)] overflow-x-auto flex-shrink-0">
             {([
               ['pending',   'Pending'],
               ['assigned',  'Assigned'],
@@ -751,12 +751,12 @@ export default function CommandCentre() {
             ] as [typeof leftTab,string][]).map(([t,l])=>(
               <button key={t} onClick={()=>setLeftTab(t)}
                 className={`flex-shrink-0 px-3 py-3 text-xs font-bold border-b-2 -mb-px transition-all ${
-                  leftTab===t?'text-white border-blue-500':'text-slate-500 border-transparent hover:text-slate-300'
+                  leftTab===t?'text-[var(--text-main)] border-blue-500':'text-[var(--text-faint)] border-transparent hover:text-[var(--text-muted)]'
                 }`}>
                 {l}
                 {COUNTS[t]>0&&(
                   <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] ${
-                    t==='exceptions'?'bg-red-500 text-white':t==='merge'?'bg-violet-500 text-white':'bg-slate-700 text-slate-300'
+                    t==='exceptions'?'bg-red-500 text-white':t==='merge'?'bg-violet-500 text-white':'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'
                   }`}>{COUNTS[t]}</span>
                 )}
               </button>
@@ -765,16 +765,16 @@ export default function CommandCentre() {
 
           {/* List body */}
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            {loading&&<p className="text-slate-500 text-sm text-center py-6">Loading…</p>}
+            {loading&&<p className="text-[var(--text-faint)] text-sm text-center py-6">Loading…</p>}
 
             {/* Merge recommendations */}
             {leftTab==='merge'&&(
               mergePairs.length===0 ? (
                 <div className="text-center py-12">
                   <p className="text-3xl mb-2">🔀</p>
-                  <p className="text-slate-400 text-sm font-medium">No merge opportunities</p>
-                  <p className="text-slate-600 text-xs mt-1">Checked against your Trip Merging config</p>
-                  <p className="text-slate-600 text-xs mt-1">New suggestions appear when jobs are created</p>
+                  <p className="text-[var(--text-muted)] text-sm font-medium">No merge opportunities</p>
+                  <p className="text-[var(--text-faint)] text-xs mt-1">Checked against your Trip Merging config</p>
+                  <p className="text-[var(--text-faint)] text-xs mt-1">New suggestions appear when jobs are created</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -782,7 +782,7 @@ export default function CommandCentre() {
                     <p className="text-violet-400 text-xs font-bold uppercase tracking-wider">
                       {mergePairs.length} Merge Opportunit{mergePairs.length>1?'ies':'y'}
                     </p>
-                    <button onClick={fetchMerge} className="text-slate-500 text-xs hover:text-slate-300">↻ Refresh</button>
+                    <button onClick={fetchMerge} className="text-[var(--text-faint)] text-xs hover:text-[var(--text-muted)]">↻ Refresh</button>
                   </div>
                   {mergePairs.map(pair=>{
                     const tJob=jobs.find(j=>j.id===pair.targetJobId);
@@ -803,7 +803,7 @@ export default function CommandCentre() {
             {leftTab!=='merge'&&!loading&&filteredJobs.length===0&&(
               <div className="text-center py-12">
                 <p className="text-2xl mb-2">📭</p>
-                <p className="text-slate-500 text-sm">No jobs in this category</p>
+                <p className="text-[var(--text-faint)] text-sm">No jobs in this category</p>
               </div>
             )}
             {leftTab!=='merge'&&filteredJobs.map(job=>(
@@ -820,7 +820,7 @@ export default function CommandCentre() {
             )}
           </div>
 
-          <div className="flex-shrink-0 p-3 border-t border-white/10">
+          <div className="flex-shrink-0 p-3 border-t border-[var(--border-subtle)]">
             <button className="w-full py-2.5 rounded-xl bg-blue-600/20 border border-blue-600/30 text-blue-400 text-sm font-bold hover:bg-blue-600/30 transition-all">
               + Create New Job
             </button>
@@ -834,17 +834,17 @@ export default function CommandCentre() {
 
           {/* Suggestion overlay */}
           {dispMode==='SUGGESTION'&&suggJob&&(
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 w-96 bg-slate-900/95 backdrop-blur-sm border border-blue-500/40 rounded-2xl shadow-2xl overflow-hidden">
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 w-96 bg-[var(--bg-surface-elevated)] backdrop-blur-sm border border-blue-500/40 rounded-2xl shadow-2xl overflow-hidden">
               <div className="px-5 py-3 bg-blue-500/10 border-b border-blue-500/20 flex items-center gap-2">
                 <span className="text-blue-400 text-lg">💡</span>
                 <p className="text-blue-300 text-sm font-bold">System Recommendation</p>
               </div>
               <div className="px-5 py-4">
-                <p className="text-slate-300 text-sm mb-1">
-                  Recommended: <strong className="text-white">{suggJob.candidate.vehicle_reg??suggJob.candidate.driver_name}</strong>
+                <p className="text-[var(--text-muted)] text-sm mb-1">
+                  Recommended: <strong className="text-[var(--text-main)]">{suggJob.candidate.vehicle_reg??suggJob.candidate.driver_name}</strong>
                   {' '}· Score <strong className="text-green-400 text-lg">{suggJob.candidate.score}</strong>
                 </p>
-                <p className="text-slate-500 text-xs mb-4">
+                <p className="text-[var(--text-faint)] text-xs mb-4">
                   ETA {suggJob.candidate.eta_minutes} min · Job {suggJob.job.id.slice(0,8)} · {suggJob.job.service_type}
                 </p>
                 <div className="flex gap-2.5">
@@ -857,7 +857,7 @@ export default function CommandCentre() {
                     ❌ Reject
                   </button>
                   <button onClick={()=>{setSuggJob(null);setTimeout(fetchAll,500);}}
-                    className="flex-1 py-2.5 rounded-xl bg-slate-700 border border-white/10 text-slate-400 text-sm hover:bg-slate-600">
+                    className="flex-1 py-2.5 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm hover:bg-[var(--bg-surface-elevated)]">
                     🔄 Recalc
                   </button>
                 </div>
@@ -867,21 +867,21 @@ export default function CommandCentre() {
         </div>
 
         {/* ── RIGHT: Resource Pool ── */}
-        <div className="w-96 flex-shrink-0 border-l border-white/10 flex flex-col bg-slate-900/60">
-          <div className="flex border-b border-white/10 flex-shrink-0">
+        <div className="w-96 flex-shrink-0 border-l border-[var(--border-subtle)] flex flex-col bg-[var(--bg-surface)]">
+          <div className="flex border-b border-[var(--border-subtle)] flex-shrink-0">
             {(['vehicles','drivers'] as const).map(t=>(
               <button key={t} onClick={()=>setRightTab(t)}
-                className={`flex-1 py-3 text-sm font-bold border-b-2 -mb-px transition-all ${rightTab===t?'text-white border-blue-500':'text-slate-500 border-transparent hover:text-slate-300'}`}>
+                className={`flex-1 py-3 text-sm font-bold border-b-2 -mb-px transition-all ${rightTab===t?'text-[var(--text-main)] border-blue-500':'text-[var(--text-faint)] border-transparent hover:text-[var(--text-muted)]'}`}>
                 {t==='vehicles'?'🚗 Vehicles':'👤 Drivers'}
               </button>
             ))}
           </div>
 
           {/* Status pills */}
-          <div className="flex gap-1.5 px-3 py-2.5 flex-shrink-0 border-b border-white/5">
+          <div className="flex gap-1.5 px-3 py-2.5 flex-shrink-0 border-b border-[var(--border-subtle)]">
             {(['AVAILABLE','BUSY','BREAK','OFF_DUTY'] as DrvStatus[]).map(s=>{
               const n=drivers.filter(d=>d.status===s).length;
-              const col={AVAILABLE:'bg-green-500/10 border-green-500/20 text-green-400',BUSY:'bg-yellow-500/10 border-yellow-500/20 text-yellow-400',BREAK:'bg-blue-500/10 border-blue-500/20 text-blue-400',OFF_DUTY:'bg-slate-800 border-slate-700 text-slate-500'}[s];
+              const col={AVAILABLE:'bg-green-500/10 border-green-500/20 text-green-400',BUSY:'bg-yellow-500/10 border-yellow-500/20 text-yellow-400',BREAK:'bg-blue-500/10 border-blue-500/20 text-blue-400',OFF_DUTY:'bg-[var(--bg-surface-hover)] border-[var(--border-subtle)] text-[var(--text-faint)]'}[s];
               return (
                 <div key={s} className={`flex-1 text-center px-1 py-1.5 rounded-xl border ${col}`}>
                   <p className="text-lg font-bold leading-tight">{n}</p>
@@ -894,34 +894,34 @@ export default function CommandCentre() {
           <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5">
             {rightTab==='drivers'&&drivers.map(d=>(
               <div key={d.driver_id} onContextMenu={e=>openCtx(e,'driver',d)}
-                className="group rounded-xl border border-white/10 bg-slate-800/50 px-3.5 py-3 hover:border-white/20 hover:bg-slate-800 cursor-context-menu transition-all">
+                className="group rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3.5 py-3 hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-hover)] cursor-context-menu transition-all">
                 <div className="flex items-center gap-2.5 mb-1.5">
                   <div className={`w-3 h-3 rounded-full flex-shrink-0 ${DRVR_DOT[d.status]}`}/>
-                  <span className="text-white text-sm font-semibold truncate flex-1">{d.driver_name}</span>
-                  <span className="text-xs text-slate-500">{d.status.replace('_',' ')}</span>
+                  <span className="text-[var(--text-main)] text-sm font-semibold truncate flex-1">{d.driver_name}</span>
+                  <span className="text-xs text-[var(--text-faint)]">{d.status.replace('_',' ')}</span>
                 </div>
-                <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
+                <div className="flex items-center justify-between text-xs text-[var(--text-faint)] mb-1.5">
                   <span>{d.vehicle_reg??'No vehicle'} · {d.vehicle_type??''}</span>
                   {d.driver_rating&&<span>★ {Number(d.driver_rating).toFixed(1)}</span>}
                 </div>
                 {d.hours_worked_today!=null&&(
-                  <div className="h-1.5 rounded-full bg-slate-700 mb-1">
+                  <div className="h-1.5 rounded-full bg-[var(--bg-surface-hover)] mb-1">
                     <div className="h-1.5 rounded-full bg-blue-500 transition-all"
                       style={{width:`${Math.min(100,(Number(d.hours_worked_today)/12)*100)}%`}}/>
                   </div>
                 )}
-                <p className="text-[10px] text-slate-600 group-hover:text-slate-500">Right-click for actions</p>
+                <p className="text-[10px] text-[var(--text-faint)] group-hover:text-[var(--text-faint)]">Right-click for actions</p>
               </div>
             ))}
             {rightTab==='vehicles'&&drivers.map(d=>(
               <div key={d.driver_id} onContextMenu={e=>openCtx(e,'vehicle',d)}
-                className="group rounded-xl border border-white/10 bg-slate-800/50 px-3.5 py-3 hover:border-white/20 hover:bg-slate-800 cursor-context-menu transition-all">
+                className="group rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3.5 py-3 hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-hover)] cursor-context-menu transition-all">
                 <div className="flex items-center gap-2.5 mb-1.5">
                   <span className="text-lg">{SVC_ICON[d.vehicle_type as SvcType]??'🚗'}</span>
-                  <span className="text-white text-sm font-semibold">{d.vehicle_reg??'Unknown'}</span>
+                  <span className="text-[var(--text-main)] text-sm font-semibold">{d.vehicle_reg??'Unknown'}</span>
                   <div className={`ml-auto w-3 h-3 rounded-full ${DRVR_DOT[d.status]}`}/>
                 </div>
-                <div className="text-xs text-slate-500 space-y-0.5">
+                <div className="text-xs text-[var(--text-faint)] space-y-0.5">
                   <p>{d.vehicle_type??'Unknown'} · Cap {d.vehicle_capacity??'—'}</p>
                   <p>Driver: {d.driver_name}</p>
                   <p>Zone: {d.zone_id??'—'} · {ago(d.last_ping)}</p>
@@ -933,8 +933,8 @@ export default function CommandCentre() {
       </div>
 
       {/* ════ BOTTOM BAR ════ */}
-      <div className="flex-shrink-0 border-t border-white/10 bg-slate-900/80" style={{height:'260px'}}>
-        <div className="flex border-b border-white/10">
+      <div className="flex-shrink-0 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]" style={{height:'260px'}}>
+        <div className="flex border-b border-[var(--border-subtle)]">
           {([
             ['logs',      `Dispatch Logs (${logs.length})`],
             ['alerts',    `Alerts (${alertLogs.length})`],
@@ -942,7 +942,7 @@ export default function CommandCentre() {
             ['overrides', 'Manual Overrides'],
           ] as [typeof bottomTab,string][]).map(([t,l])=>(
             <button key={t} onClick={()=>setBottomTab(t)}
-              className={`px-5 py-3 text-sm font-semibold border-b-2 -mb-px transition-all ${bottomTab===t?'text-white border-blue-500':'text-slate-500 border-transparent hover:text-slate-300'}`}>
+              className={`px-5 py-3 text-sm font-semibold border-b-2 -mb-px transition-all ${bottomTab===t?'text-[var(--text-main)] border-blue-500':'text-[var(--text-faint)] border-transparent hover:text-[var(--text-muted)]'}`}>
               {l}
               {t==='alerts'&&alertLogs.length>0&&<span className="ml-1.5 w-2 h-2 rounded-full bg-red-500 inline-block animate-pulse"/>}
             </button>
@@ -951,51 +951,51 @@ export default function CommandCentre() {
         <div className="overflow-y-auto px-5 py-3" style={{height:'208px'}}>
           {bottomTab==='logs'&&(
             <div className="space-y-0.5 font-mono text-sm">
-              {logs.length===0&&<p className="text-slate-600 py-3">No activity yet</p>}
+              {logs.length===0&&<p className="text-[var(--text-faint)] py-3">No activity yet</p>}
               {logs.map((l,i)=>(
                 <div key={i} className="flex items-start gap-3">
-                  <span className="text-slate-600 flex-shrink-0 text-xs pt-0.5">{new Date(l.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span>
-                  <span className={`flex-shrink-0 text-xs pt-0.5 ${l.kind==='error'?'text-red-400':l.kind==='warn'?'text-amber-400':l.kind==='success'?'text-green-400':'text-slate-500'}`}>
+                  <span className="text-[var(--text-faint)] flex-shrink-0 text-xs pt-0.5">{new Date(l.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span>
+                  <span className={`flex-shrink-0 text-xs pt-0.5 ${l.kind==='error'?'text-red-400':l.kind==='warn'?'text-amber-400':l.kind==='success'?'text-green-400':'text-[var(--text-faint)]'}`}>
                     {l.kind==='error'?'✗':l.kind==='warn'?'⚠':l.kind==='success'?'✓':'·'}
                   </span>
-                  <span className="text-slate-300">{l.msg}</span>
+                  <span className="text-[var(--text-muted)]">{l.msg}</span>
                 </div>
               ))}
             </div>
           )}
           {bottomTab==='alerts'&&(
             <div className="space-y-1.5">
-              {alertLogs.length===0&&<p className="text-slate-600 text-sm py-3">No active alerts</p>}
+              {alertLogs.length===0&&<p className="text-[var(--text-faint)] text-sm py-3">No active alerts</p>}
               {alertLogs.map((l,i)=>(
                 <div key={i} onContextMenu={e=>openCtx(e,'exception',l)}
                   className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-red-500/20 bg-red-500/5 cursor-context-menu hover:bg-red-500/10 transition-colors">
                   <span className="text-base flex-shrink-0">{l.kind==='error'?'🚨':'⚠️'}</span>
-                  <span className="text-slate-300 text-sm flex-1">{l.msg}</span>
-                  <span className="text-slate-600 text-xs flex-shrink-0">{new Date(l.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
+                  <span className="text-[var(--text-muted)] text-sm flex-1">{l.msg}</span>
+                  <span className="text-[var(--text-faint)] text-xs flex-shrink-0">{new Date(l.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
                 </div>
               ))}
             </div>
           )}
           {bottomTab==='failed'&&(
             <div className="space-y-1.5">
-              {failedJobs.length===0&&<p className="text-slate-600 text-sm py-3">No failed dispatches</p>}
+              {failedJobs.length===0&&<p className="text-[var(--text-faint)] text-sm py-3">No failed dispatches</p>}
               {failedJobs.map(j=>(
                 <div key={j.id} onContextMenu={e=>openCtx(e,'exception',j)}
-                  className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-white/10 bg-slate-800/50 cursor-context-menu hover:bg-slate-800 transition-colors">
+                  className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-context-menu hover:bg-[var(--bg-surface-hover)] transition-colors">
                   <span className="text-xl">{SVC_ICON[j.service_type]}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-semibold">{j.service_type} · {j.priority}</p>
-                    <p className="text-slate-400 text-xs truncate">{j.origin_address??j.id.slice(0,14)}</p>
+                    <p className="text-[var(--text-main)] text-sm font-semibold">{j.service_type} · {j.priority}</p>
+                    <p className="text-[var(--text-muted)] text-xs truncate">{j.origin_address??j.id.slice(0,14)}</p>
                   </div>
                   <span className={`px-2 py-0.5 rounded text-xs font-bold ${j.status==='FAILED'?'bg-red-900/60 text-red-300':'bg-orange-900/60 text-orange-300'}`}>{j.status}</span>
-                  <span className="text-slate-600 text-xs">{j.attempt_count} att.</span>
+                  <span className="text-[var(--text-faint)] text-xs">{j.attempt_count} att.</span>
                 </div>
               ))}
             </div>
           )}
           {bottomTab==='overrides'&&(
             <div className="space-y-1.5">
-              <p className="text-slate-600 text-sm py-3">Manual overrides performed this session appear here.</p>
+              <p className="text-[var(--text-faint)] text-sm py-3">Manual overrides performed this session appear here.</p>
             </div>
           )}
         </div>

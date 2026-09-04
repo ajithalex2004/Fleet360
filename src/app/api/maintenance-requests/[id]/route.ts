@@ -68,6 +68,14 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     try {
             const body = await request.json();
 
+            const before = await tx.maintenanceRequest.findFirst({
+                where: { tenantId, id: params.id, deletedAt: null },
+                select: { status: true },
+            });
+            if (!before) {
+                return NextResponse.json({ error: 'Request not found' }, { status: 404 });
+            }
+
             const data: Record<string, unknown> = {};
             if (body.vehicleId !== undefined) data.vehicleId = body.vehicleId;
             if (body.vehicle_id !== undefined) data.vehicleId = body.vehicle_id;
@@ -85,6 +93,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
             if (body.garage_id !== undefined) data.garageId = body.garage_id;
             if (body.estimatedCost !== undefined) data.estimatedCost = body.estimatedCost;
             if (body.actualCost !== undefined) data.actualCost = body.actualCost;
+            if (body.actualPartsCost !== undefined) data.actualPartsCost = body.actualPartsCost;
+            if (body.actualLaborCost !== undefined) data.actualLaborCost = body.actualLaborCost;
+            if (body.actualOtherCost !== undefined) data.actualOtherCost = body.actualOtherCost;
             if (body.requestDate !== undefined) data.requestDate = body.requestDate ? new Date(body.requestDate) : null;
             if (body.expectedEndDate !== undefined) data.expectedEndDate = body.expectedEndDate ? new Date(body.expectedEndDate) : null;
             if (body.completionDate !== undefined) data.completionDate = body.completionDate ? new Date(body.completionDate) : null;
@@ -108,10 +119,61 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
                 },
             });
 
+            // ── Status-history audit trail ─────────────────────────────────────
+            // The frontend sends a `history` snapshot array with each status
+            // change, but MaintenanceRequest has no `history` column — persist
+            // the transition as a real StatusHistory row instead of dropping it.
+            if (typeof data.status === 'string' && data.status !== before.status) {
+                const lastEntry = Array.isArray(body.history) && body.history.length > 0
+                    ? body.history[body.history.length - 1]
+                    : undefined;
+                await tx.statusHistory.create({
+                    data: {
+                        tenantId,
+                        maintenanceRequestId: params.id,
+                        status: data.status,
+                        date: new Date(),
+                        note: (typeof body.historyNote === 'string' ? body.historyNote : lastEntry?.note) ?? null,
+                        actor: (typeof lastEntry?.actor === 'string' ? lastEntry.actor : null) ?? authz.userId ?? 'system',
+                    },
+                });
+            }
+
+            // ── Attachment reconciliation ──────────────────────────────────────
+            // The frontend sends the full desired attachment list; match by `url`
+            // (client-generated ids aren't real DB ids) and diff against what's
+            // already persisted so re-submitting the same list is a no-op.
+            if (Array.isArray(body.attachments)) {
+                const existingAttachments = await tx.attachment.findMany({
+                    where: { tenantId, maintenanceRequestId: params.id, deletedAt: null },
+                });
+                const incomingUrls = new Set(
+                    body.attachments.map((a: any) => a?.url).filter((u: unknown) => typeof u === 'string' && u.length > 0)
+                );
+                const existingUrls = new Set(existingAttachments.map(a => a.url).filter(Boolean));
+
+                const toRemove = existingAttachments.filter(a => a.url && !incomingUrls.has(a.url));
+                for (const att of toRemove) {
+                    await tx.attachment.update({ where: { id: att.id }, data: { deletedAt: new Date() } });
+                }
+
+                const toAdd = body.attachments.filter((a: any) => typeof a?.url === 'string' && a.url.length > 0 && !existingUrls.has(a.url));
+                for (const att of toAdd) {
+                    await tx.attachment.create({
+                        data: {
+                            tenantId,
+                            maintenanceRequestId: params.id,
+                            type: att.type ?? null,
+                            fileName: att.fileName ?? null,
+                            url: att.url,
+                        },
+                    });
+                }
+            }
+
             // ── Publish domain events via outbox (Phase D lifecycle) ──────────────
             const newStatus = (updated as any).status as string | undefined;
-            const tenantId  = (updated as any).tenantId as string | null;
-            if (tenantId && newStatus) {
+            if (newStatus) {
                 const req  = updated as any;
                 const now  = new Date().toISOString();
                 const base = {
@@ -229,10 +291,6 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
                         // No event for this status transition
                         break;
                 }
-            } else if (newStatus && ['APPROVED','REJECTED','QUOTATION_REQUESTED','QUOTATION_RECEIVED',
-                                      'ESTIMATION_APPROVED','WORK_ORDER_CREATED','IN_PROGRESS',
-                                      'REPAIR_COMPLETED','INVOICE_SUBMITTED','CLOSED'].includes(newStatus)) {
-                console.warn(`[maintenance] outbox publish skipped: tenantId missing on MR ${params.id}`);
             }
 
             return NextResponse.json(JSON.parse(JSON.stringify(updated)));

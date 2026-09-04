@@ -64,7 +64,7 @@ export default function WorkspaceTabs({ onTabsFull }: Props) {
   };
 
   return (
-    <div className="flex min-h-[38px] items-stretch gap-1 overflow-x-auto border-b border-white/10 dark:border-white/10 border-slate-200 bg-slate-900/80 dark:bg-slate-900/80 bg-slate-100/90 backdrop-blur-xl px-2">
+    <div className="flex min-h-[38px] items-stretch gap-1 overflow-x-auto border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] backdrop-blur-xl px-2">
       {tabs.map(t => {
         const isActive = t.key === activeKey;
         return (
@@ -75,8 +75,8 @@ export default function WorkspaceTabs({ onTabsFull }: Props) {
             onClick={() => handleClick(t.key)}
             className={`group flex max-w-[220px] cursor-pointer select-none items-center gap-2 rounded-t-lg px-3.5 py-1.5 text-[12px] transition-all ${
               isActive
-                ? 'border-t-2 border-t-cyan-400 bg-slate-950 dark:bg-slate-950 bg-white text-cyan-300 dark:text-cyan-300 text-slate-900 font-bold shadow-md'
-                : 'border-t-2 border-t-transparent text-slate-400 dark:text-slate-400 text-slate-600 hover:bg-white/5 hover:text-white dark:hover:text-white hover:text-slate-950'
+                ? 'border-t-2 border-t-cyan-400 bg-[var(--bg-canvas)] text-cyan-500 font-bold shadow-md'
+                : 'border-t-2 border-t-transparent text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'
             }`}
             title={t.label}
           >
@@ -85,7 +85,7 @@ export default function WorkspaceTabs({ onTabsFull }: Props) {
               type="button"
               onClick={(e) => handleClose(t.key, e)}
               aria-label={`Close ${t.label}`}
-              className="-mr-1 ml-1 rounded-md p-0.5 text-slate-500 hover:bg-white/10 hover:text-white dark:hover:text-white hover:text-slate-950 transition-colors"
+              className="-mr-1 ml-1 rounded-md p-0.5 text-[var(--text-faint)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)] transition-colors"
             >
               <X className="h-3 w-3" />
             </button>

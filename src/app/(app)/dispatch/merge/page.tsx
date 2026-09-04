@@ -37,7 +37,7 @@ function ScoreBar({ score, size = 'md' }: { score: number; size?: 'sm' | 'md' })
   const textColor = score >= 70 ? 'text-emerald-400' : score >= 50 ? 'text-amber-400' : 'text-red-400';
   return (
     <div className="flex items-center gap-2">
-      <div className={`flex-1 ${size === 'sm' ? 'h-1' : 'h-2'} bg-slate-800 rounded-full overflow-hidden`}>
+      <div className={`flex-1 ${size === 'sm' ? 'h-1' : 'h-2'} bg-[var(--bg-surface-hover)] rounded-full overflow-hidden`}>
         <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${score}%` }} />
       </div>
       <span className={`font-bold tabular-nums ${size === 'sm' ? 'text-xs w-8' : 'text-sm w-10'} ${textColor}`}>{score}</span>
@@ -60,7 +60,7 @@ function MergeCard({ pair, onMerge, onSkip, merging }: {
     <div className={`rounded-2xl border transition-all ${
       pair.mergeScore >= 70 ? 'bg-emerald-500/5 border-emerald-500/25' :
       pair.mergeScore >= 50 ? 'bg-amber-500/5 border-amber-500/20' :
-      'bg-slate-900 border-white/10'
+      'bg-[var(--bg-surface)] border-[var(--border-subtle)]'
     } ${merging ? 'opacity-60 pointer-events-none' : ''}`}>
       {/* Header */}
       <div className="p-5 space-y-4">
@@ -68,8 +68,8 @@ function MergeCard({ pair, onMerge, onSkip, merging }: {
           <div className="flex items-center gap-2">
             <span className="text-xl">{scoreBadge}</span>
             <div>
-              <p className="text-white font-semibold text-sm">Merge Score {pair.mergeScore}/100</p>
-              <p className="text-slate-500 text-xs">{SVC_ICON[pair.jobA.service_type]} {pair.jobA.service_type} · {pair.combinedPassengers ?? '?'} pax combined</p>
+              <p className="text-[var(--text-main)] font-semibold text-sm">Merge Score {pair.mergeScore}/100</p>
+              <p className="text-[var(--text-faint)] text-xs">{SVC_ICON[pair.jobA.service_type]} {pair.jobA.service_type} · {pair.combinedPassengers ?? '?'} pax combined</p>
             </div>
           </div>
           {pair.routingSource && (
@@ -77,7 +77,7 @@ function MergeCard({ pair, onMerge, onSkip, merging }: {
               pair.routingSource === 'GOOGLE_MAPS' ? 'bg-blue-500/20 border-blue-500/30 text-blue-400' :
               pair.routingSource === 'OSRM'        ? 'bg-green-500/20 border-green-500/30 text-green-400' :
               pair.routingSource === 'MAPBOX'      ? 'bg-violet-500/20 border-violet-500/30 text-violet-400' :
-              'bg-slate-700 border-white/10 text-slate-400'
+              'bg-[var(--bg-surface-hover)] border-[var(--border-subtle)] text-[var(--text-muted)]'
             }`}>{pair.routingSource}</span>
           )}
         </div>
@@ -88,21 +88,21 @@ function MergeCard({ pair, onMerge, onSkip, merging }: {
         {/* Stats row */}
         <div className="grid grid-cols-3 gap-3">
           {pair.pickupRoadKm !== undefined && (
-            <div className="bg-slate-800/60 rounded-xl p-2.5 text-center">
-              <p className="text-white font-bold text-sm">{pair.pickupRoadKm.toFixed(1)} km</p>
-              <p className="text-slate-500 text-[10px]">Pickup distance</p>
+            <div className="bg-[var(--bg-surface-hover)] rounded-xl p-2.5 text-center">
+              <p className="text-[var(--text-main)] font-bold text-sm">{pair.pickupRoadKm.toFixed(1)} km</p>
+              <p className="text-[var(--text-faint)] text-[10px]">Pickup distance</p>
             </div>
           )}
           {pair.pickupTimeDiffMin !== undefined && (
-            <div className="bg-slate-800/60 rounded-xl p-2.5 text-center">
-              <p className="text-white font-bold text-sm">{pair.pickupTimeDiffMin.toFixed(0)} min</p>
-              <p className="text-slate-500 text-[10px]">Time gap</p>
+            <div className="bg-[var(--bg-surface-hover)] rounded-xl p-2.5 text-center">
+              <p className="text-[var(--text-main)] font-bold text-sm">{pair.pickupTimeDiffMin.toFixed(0)} min</p>
+              <p className="text-[var(--text-faint)] text-[10px]">Time gap</p>
             </div>
           )}
           {pair.estimatedSavingKm !== undefined && (
-            <div className="bg-slate-800/60 rounded-xl p-2.5 text-center">
+            <div className="bg-[var(--bg-surface-hover)] rounded-xl p-2.5 text-center">
               <p className="text-emerald-400 font-bold text-sm">~{pair.estimatedSavingKm.toFixed(1)} km</p>
-              <p className="text-slate-500 text-[10px]">Est. saving</p>
+              <p className="text-[var(--text-faint)] text-[10px]">Est. saving</p>
             </div>
           )}
         </div>
@@ -110,16 +110,16 @@ function MergeCard({ pair, onMerge, onSkip, merging }: {
         {/* Jobs */}
         <div className="space-y-2">
           {[pair.jobA, pair.jobB].map((job, i) => (
-            <div key={job.id} className="flex items-start gap-3 bg-slate-800/40 rounded-xl px-3 py-2.5">
-              <span className="text-slate-500 text-xs font-bold mt-0.5 w-4">{i === 0 ? 'A' : 'B'}</span>
+            <div key={job.id} className="flex items-start gap-3 bg-[var(--bg-surface-hover)] rounded-xl px-3 py-2.5">
+              <span className="text-[var(--text-faint)] text-xs font-bold mt-0.5 w-4">{i === 0 ? 'A' : 'B'}</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
-                  <span className="font-mono text-[10px] text-slate-500">{job.id.slice(0,12)}…</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">{job.priority}</span>
-                  {job.passenger_count && <span className="text-[10px] text-slate-500">👥 {job.passenger_count}</span>}
+                  <span className="font-mono text-[10px] text-[var(--text-faint)]">{job.id.slice(0,12)}…</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-surface-hover)] text-[var(--text-muted)]">{job.priority}</span>
+                  {job.passenger_count && <span className="text-[10px] text-[var(--text-faint)]">👥 {job.passenger_count}</span>}
                 </div>
-                <p className="text-slate-300 text-xs truncate">{job.origin_address ?? '—'}</p>
-                <p className="text-slate-500 text-[10px] truncate">→ {job.destination_address ?? '—'}</p>
+                <p className="text-[var(--text-muted)] text-xs truncate">{job.origin_address ?? '—'}</p>
+                <p className="text-[var(--text-faint)] text-[10px] truncate">→ {job.destination_address ?? '—'}</p>
               </div>
             </div>
           ))}
@@ -138,13 +138,13 @@ function MergeCard({ pair, onMerge, onSkip, merging }: {
 
         {/* Expand for scoring breakdown */}
         <button onClick={() => setExpanded(e => !e)}
-          className="text-slate-500 text-xs hover:text-slate-300 transition-colors">
+          className="text-[var(--text-faint)] text-xs hover:text-[var(--text-muted)] transition-colors">
           {expanded ? '▲ Hide breakdown' : '▼ Score breakdown'}
         </button>
 
         {expanded && (
-          <div className="space-y-2 bg-slate-800/40 rounded-xl p-3">
-            <p className="text-slate-400 text-xs font-semibold mb-2">Scoring components</p>
+          <div className="space-y-2 bg-[var(--bg-surface-hover)] rounded-xl p-3">
+            <p className="text-[var(--text-muted)] text-xs font-semibold mb-2">Scoring components</p>
             {[
               { label:'Pickup proximity (40%)',    val: pair.pickupRoadKm != null    ? Math.round(Math.max(0, 1 - pair.pickupRoadKm / 5) * 40) : null },
               { label:'Time window (30%)',          val: pair.pickupTimeDiffMin != null ? Math.round(Math.max(0, 1 - pair.pickupTimeDiffMin / 30) * 30) : null },
@@ -152,7 +152,7 @@ function MergeCard({ pair, onMerge, onSkip, merging }: {
               { label:'Capacity headroom (10%)',   val: pair.combinedPassengers != null ? Math.round(Math.max(0, 1 - pair.combinedPassengers / 6) * 10) : null },
             ].map(comp => comp.val != null && (
               <div key={comp.label}>
-                <div className="flex justify-between text-[10px] text-slate-500 mb-0.5">
+                <div className="flex justify-between text-[10px] text-[var(--text-faint)] mb-0.5">
                   <span>{comp.label}</span><span>{comp.val} pts</span>
                 </div>
                 <ScoreBar score={comp.val * (100 / (comp.label.includes('40') ? 40 : comp.label.includes('30') ? 30 : comp.label.includes('20') ? 20 : 10))} size="sm" />
@@ -169,7 +169,7 @@ function MergeCard({ pair, onMerge, onSkip, merging }: {
           ✅ Merge Trips
         </button>
         <button onClick={() => onSkip(pair.jobA.id, pair.jobB.id)}
-          className="px-4 py-2.5 rounded-xl bg-slate-800 border border-white/10 text-slate-400 text-xs hover:text-white transition-all">
+          className="px-4 py-2.5 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-xs hover:text-[var(--text-main)] transition-all">
           Skip
         </button>
       </div>
@@ -194,7 +194,7 @@ export default function MergeOptimizerPage() {
   const load = useCallback(async () => {
     setScanning(true);
     try {
-      const r = await fetch('/api/dispatch/merge-candidates?scan=true&tenantId=default');
+      const r = await fetch('/api/dispatch/merge-candidates?scan=true');
       const d = await r.json();
       setPairs((d.pairs ?? []).filter((p: MergePair) => p.eligible));
       setConfig(d.config ?? null);
@@ -213,7 +213,7 @@ export default function MergeOptimizerPage() {
       const r = await fetch('/api/dispatch/merge-candidates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobIdA, jobIdB, tenantId: 'default' }),
+        body: JSON.stringify({ jobIdA, jobIdB }),
       });
       const d = await r.json();
       if (d.ok) {
@@ -251,8 +251,8 @@ export default function MergeOptimizerPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">🔀 Merge Optimizer</h1>
-          <p className="text-slate-400 text-sm mt-0.5">
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">🔀 Merge Optimizer</h1>
+          <p className="text-[var(--text-muted)] text-sm mt-0.5">
             Three-stage engine: Haversine pre-filter → Routing API road distance → Weighted scoring
           </p>
         </div>
@@ -267,21 +267,21 @@ export default function MergeOptimizerPage() {
 
       {/* Engine config banner */}
       {config && (
-        <div className="flex flex-wrap items-center gap-4 bg-slate-900 border border-white/10 rounded-2xl px-5 py-3">
+        <div className="flex flex-wrap items-center gap-4 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl px-5 py-3">
           <div className="flex items-center gap-2">
-            <span className="text-slate-500 text-xs">Routing Engine</span>
+            <span className="text-[var(--text-faint)] text-xs">Routing Engine</span>
             <span className={`px-2 py-0.5 rounded text-xs font-bold border ${
               config.engine === 'GOOGLE_MAPS' ? 'bg-blue-500/20 border-blue-500/30 text-blue-400' :
               config.engine === 'OSRM'        ? 'bg-green-500/20 border-green-500/30 text-green-400' :
               config.engine === 'MAPBOX'      ? 'bg-violet-500/20 border-violet-500/30 text-violet-400' :
-              'bg-slate-700 border-white/10 text-slate-400'
+              'bg-[var(--bg-surface-hover)] border-[var(--border-subtle)] text-[var(--text-muted)]'
             }`}>{config.engine}</span>
           </div>
-          <div className="flex items-center gap-1 text-xs"><span className="text-slate-500">Pickup ≤</span><span className="text-white font-semibold">{config.pickupDistanceKm} km</span></div>
-          <div className="flex items-center gap-1 text-xs"><span className="text-slate-500">Window ≤</span><span className="text-white font-semibold">{config.pickupWindowMin} min</span></div>
-          <div className="flex items-center gap-1 text-xs"><span className="text-slate-500">Max pax</span><span className="text-white font-semibold">{config.maxPassengers}</span></div>
-          {config.requireDropoff && <div className="flex items-center gap-1 text-xs"><span className="text-slate-500">Dropoff ≤</span><span className="text-white font-semibold">{config.dropoffDistanceKm} km</span></div>}
-          <Link href="/admin/tenants" className="ml-auto text-slate-500 text-xs hover:text-slate-300 transition-colors">⚙ Configure →</Link>
+          <div className="flex items-center gap-1 text-xs"><span className="text-[var(--text-faint)]">Pickup ≤</span><span className="text-[var(--text-main)] font-semibold">{config.pickupDistanceKm} km</span></div>
+          <div className="flex items-center gap-1 text-xs"><span className="text-[var(--text-faint)]">Window ≤</span><span className="text-[var(--text-main)] font-semibold">{config.pickupWindowMin} min</span></div>
+          <div className="flex items-center gap-1 text-xs"><span className="text-[var(--text-faint)]">Max pax</span><span className="text-[var(--text-main)] font-semibold">{config.maxPassengers}</span></div>
+          {config.requireDropoff && <div className="flex items-center gap-1 text-xs"><span className="text-[var(--text-faint)]">Dropoff ≤</span><span className="text-[var(--text-main)] font-semibold">{config.dropoffDistanceKm} km</span></div>}
+          <Link href="/admin/tenants" className="ml-auto text-[var(--text-faint)] text-xs hover:text-[var(--text-muted)] transition-colors">⚙ Configure →</Link>
         </div>
       )}
 
@@ -292,7 +292,7 @@ export default function MergeOptimizerPage() {
             <span className="text-emerald-400 text-2xl font-bold">{merged}</span>
             <div>
               <p className="text-emerald-300 text-xs font-semibold">Trips merged this session</p>
-              <p className="text-slate-500 text-[10px]">Combined into multi-stop jobs</p>
+              <p className="text-[var(--text-faint)] text-[10px]">Combined into multi-stop jobs</p>
             </div>
           </div>
           {saved > 0 && (
@@ -300,7 +300,7 @@ export default function MergeOptimizerPage() {
               <span className="text-blue-400 text-2xl font-bold">~{saved.toFixed(1)}</span>
               <div>
                 <p className="text-blue-300 text-xs font-semibold">km saved (estimated)</p>
-                <p className="text-slate-500 text-[10px]">Reduced fleet kilometres</p>
+                <p className="text-[var(--text-faint)] text-[10px]">Reduced fleet kilometres</p>
               </div>
             </div>
           )}
@@ -311,32 +311,32 @@ export default function MergeOptimizerPage() {
       {loading ? (
         <div className="flex flex-col items-center justify-center h-48 gap-3">
           <span className="text-3xl animate-spin">🔀</span>
-          <p className="text-slate-500 text-sm">Scanning pending jobs for merge opportunities…</p>
+          <p className="text-[var(--text-faint)] text-sm">Scanning pending jobs for merge opportunities…</p>
         </div>
       ) : visiblePairs.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl bg-slate-900 border border-white/10 h-64 gap-3">
+        <div className="flex flex-col items-center justify-center rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] h-64 gap-3">
           <span className="text-4xl">🔀</span>
-          <p className="text-white font-semibold text-sm">No merge opportunities found</p>
-          <p className="text-slate-500 text-xs text-center max-w-sm">
+          <p className="text-[var(--text-main)] font-semibold text-sm">No merge opportunities found</p>
+          <p className="text-[var(--text-faint)] text-xs text-center max-w-sm">
             No pending jobs within {config?.pickupDistanceKm ?? '—'} km and {config?.pickupWindowMin ?? '—'} min of each other.
             New opportunities appear as bookings come in.
           </p>
           <button onClick={load}
-            className="mt-2 px-4 py-2 rounded-xl bg-slate-800 border border-white/10 text-slate-300 text-sm hover:bg-slate-700 transition-all">
+            className="mt-2 px-4 py-2 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm hover:bg-[var(--bg-surface-elevated)] transition-all">
             ↻ Re-scan
           </button>
         </div>
       ) : (
         <>
           <div className="flex items-center gap-3">
-            <h2 className="text-white font-semibold">{visiblePairs.length} merge opportunities</h2>
+            <h2 className="text-[var(--text-main)] font-semibold">{visiblePairs.length} merge opportunities</h2>
             {highScore > 0 && (
               <span className="px-2 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-400 font-semibold">
                 🥇 {highScore} high-confidence (score ≥ 70)
               </span>
             )}
             {skipped.size > 0 && (
-              <button onClick={() => setSkipped(new Set())} className="ml-auto text-slate-500 text-xs hover:text-slate-300">
+              <button onClick={() => setSkipped(new Set())} className="ml-auto text-[var(--text-faint)] text-xs hover:text-[var(--text-muted)]">
                 Restore {skipped.size} skipped
               </button>
             )}
@@ -356,19 +356,19 @@ export default function MergeOptimizerPage() {
       )}
 
       {/* Methodology note */}
-      <div className="rounded-2xl bg-slate-900 border border-white/10 p-5 space-y-2">
-        <p className="text-slate-300 text-sm font-semibold">🧠 Three-Stage Merge Engine</p>
-        <div className="grid md:grid-cols-3 gap-4 text-xs text-slate-500">
+      <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-5 space-y-2">
+        <p className="text-[var(--text-muted)] text-sm font-semibold">🧠 Three-Stage Merge Engine</p>
+        <div className="grid md:grid-cols-3 gap-4 text-xs text-[var(--text-faint)]">
           <div>
-            <p className="text-slate-400 font-semibold mb-1">Stage 1 — Haversine Pre-filter</p>
+            <p className="text-[var(--text-muted)] font-semibold mb-1">Stage 1 — Haversine Pre-filter</p>
             <p>Fast great-circle distance check. Pairs farther than 2.5× the configured pickup distance are rejected immediately without API calls.</p>
           </div>
           <div>
-            <p className="text-slate-400 font-semibold mb-1">Stage 2 — Routing API Road Distance</p>
+            <p className="text-[var(--text-muted)] font-semibold mb-1">Stage 2 — Routing API Road Distance</p>
             <p>Actual road distance via {config?.engine ?? 'Routing API'} (accounts for UAE road network, no shortcuts through the desert). Cached for 1 hour.</p>
           </div>
           <div>
-            <p className="text-slate-400 font-semibold mb-1">Stage 3 — Weighted Score 0–100</p>
+            <p className="text-[var(--text-muted)] font-semibold mb-1">Stage 3 — Weighted Score 0–100</p>
             <p>40% pickup proximity · 30% time window · 20% dropoff proximity · 10% capacity headroom. Score ≥ 50 = eligible.</p>
           </div>
         </div>

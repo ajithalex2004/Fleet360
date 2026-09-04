@@ -22,14 +22,14 @@ export default function AmbulanceDispatchRedirect() {
     <div className="flex flex-col items-center justify-center h-full gap-6 text-center py-20">
       <span className="text-6xl">🚑</span>
       <div className="space-y-2">
-        <h2 className="text-xl font-bold text-white">Ambulance Dispatch has moved</h2>
-        <p className="text-slate-400 text-sm max-w-sm">
+        <h2 className="text-xl font-bold text-[var(--text-main)]">Ambulance Dispatch has moved</h2>
+        <p className="text-[var(--text-muted)] text-sm max-w-sm">
           Ambulance dispatch is now part of the{' '}
           <strong className="text-red-400">Incident & Ambulance Management</strong> module,
           where clinical records, compliance trails, and dispatch are co-located.
         </p>
       </div>
-      <div className="flex items-center gap-2 text-slate-500 text-sm">
+      <div className="flex items-center gap-2 text-[var(--text-faint)] text-sm">
         <span className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
         Redirecting…
       </div>

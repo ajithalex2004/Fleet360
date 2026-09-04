@@ -36,53 +36,32 @@ export default function ReturnsPage() {
     inspector: '',
   });
 
-  useEffect(() => {
+  const fetchReturns = async () => {
     setLoading(true);
-    const mockReturns: VehicleReturn[] = [
-      {
-        id: 'VR-001',
-        contractId: 'LC-001',
-        returnDate: '2024-01-15',
-        mileage: 145230,
-        condition: 'Good',
-        damages: 'None',
-        finalCost: 500,
-        inspector: 'Ali Al-Mansoori',
-      },
-      {
-        id: 'VR-002',
-        contractId: 'LC-002',
-        returnDate: '2024-02-20',
-        mileage: 98765,
-        condition: 'Fair',
-        damages: 'Rear bumper scratch',
-        finalCost: 2300,
-        inspector: 'Sara Al-Mazrouei',
-      },
-      {
-        id: 'VR-003',
-        contractId: 'LC-003',
-        returnDate: '2024-03-10',
-        mileage: 275400,
-        condition: 'Good',
-        damages: 'Minor tire wear',
-        finalCost: 1200,
-        inspector: 'Mohammed Al-Khaldi',
-      },
-      {
-        id: 'VR-004',
-        contractId: 'LC-005',
-        returnDate: '2024-01-05',
-        mileage: 156890,
-        condition: 'Excellent',
-        damages: 'None',
-        finalCost: 0,
-        inspector: 'Hana Al-Dosari',
-      },
-    ];
+    try {
+      const res = await fetch('/api/leasing/returns');
+      if (res.ok) {
+        const data = await res.json();
+        setReturns(data.map((r: any) => ({
+          id: r.id,
+          contractId: r.contractNumber,
+          returnDate: r.returnDate,
+          mileage: r.mileage,
+          condition: r.condition,
+          damages: r.damages ?? '',
+          finalCost: Number(r.finalCost),
+          inspector: r.inspector,
+        })));
+      }
+    } catch (error) {
+      console.error('Error fetching vehicle returns:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    setReturns(mockReturns);
-    setLoading(false);
+  useEffect(() => {
+    fetchReturns();
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -93,29 +72,39 @@ export default function ReturnsPage() {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newReturn: VehicleReturn = {
-      id: `VR-${String(returns.length + 1).padStart(3, '0')}`,
-      contractId: formData.contractId,
-      returnDate: formData.returnDate,
-      mileage: formData.mileage,
-      condition: formData.condition,
-      damages: formData.damages,
-      finalCost: formData.finalCost,
-      inspector: formData.inspector,
-    };
-    setReturns([...returns, newReturn]);
-    setFormData({
-      contractId: '',
-      returnDate: '',
-      mileage: 0,
-      condition: 'Good',
-      damages: '',
-      finalCost: 0,
-      inspector: '',
-    });
-    setShowModal(false);
+    try {
+      const res = await fetch('/api/leasing/returns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contractNumber: formData.contractId,
+          returnDate: formData.returnDate,
+          mileage: formData.mileage,
+          condition: formData.condition,
+          damages: formData.damages,
+          finalCost: formData.finalCost,
+          inspector: formData.inspector,
+        }),
+      });
+      if (!res.ok) throw new Error(`Failed to save return (${res.status})`);
+
+      await fetchReturns();
+      setFormData({
+        contractId: '',
+        returnDate: '',
+        mileage: 0,
+        condition: 'Good',
+        damages: '',
+        finalCost: 0,
+        inspector: '',
+      });
+      setShowModal(false);
+    } catch (error) {
+      console.error('Failed to record vehicle return:', error);
+      alert('Failed to record vehicle return. Please try again.');
+    }
   };
 
   const getConditionColor = (condition: string) => {

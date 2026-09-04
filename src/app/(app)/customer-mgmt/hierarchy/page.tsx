@@ -90,23 +90,23 @@ export default function HierarchyPage() {
     const cfg = LEVEL_CONFIG[level as keyof typeof LEVEL_CONFIG];
     return (
       <div onClick={onClick}
-        className={`border rounded-xl p-3 cursor-pointer transition-all hover:shadow-md ${isSelected ? `${cfg.bg} border-2` : 'bg-slate-800/50 border-white/10 hover:border-white/20'}`}>
+        className={`border rounded-xl p-3 cursor-pointer transition-all hover:shadow-md ${isSelected ? `${cfg.bg} border-2` : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'}`}>
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full ${node.isActive ? 'bg-emerald-400' : 'bg-slate-500'}`} />
-            <span className="text-sm font-medium text-white truncate">{node.name}</span>
+            <span className="text-sm font-medium text-[var(--text-main)] truncate">{node.name}</span>
           </div>
           <div className="flex gap-1" onClick={e => e.stopPropagation()}>
             {onAdd && (
               <button onClick={onAdd} title={`Add ${addLabel}`}
                 className="w-6 h-6 rounded bg-blue-500/20 text-blue-400 text-xs hover:bg-blue-500/30 flex items-center justify-center">+</button>
             )}
-            <button onClick={onEdit} className="w-6 h-6 rounded bg-slate-600 text-slate-300 text-xs hover:bg-slate-500 flex items-center justify-center">E</button>
+            <button onClick={onEdit} className="w-6 h-6 rounded bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-xs hover:bg-[var(--bg-surface-elevated)] flex items-center justify-center">E</button>
             <button onClick={onDel} className="w-6 h-6 rounded bg-rose-500/20 text-rose-400 text-xs hover:bg-rose-500/30 flex items-center justify-center">X</button>
           </div>
         </div>
-        {node.code && <div className="text-xs font-mono text-slate-500">{node.code}</div>}
-        {node.description && <div className="text-xs text-slate-400 mt-1 truncate">{node.description}</div>}
+        {node.code && <div className="text-xs font-mono text-[var(--text-faint)]">{node.code}</div>}
+        {node.description && <div className="text-xs text-[var(--text-muted)] mt-1 truncate">{node.description}</div>}
       </div>
     );
   };
@@ -115,8 +115,8 @@ export default function HierarchyPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">Hierarchy Setup</h1>
-          <p className="text-slate-400 text-sm mt-0.5">3-level customer hierarchy: Region &rarr; Department &rarr; Unit</p>
+          <h1 className="text-3xl font-bold text-[var(--text-main)]">Hierarchy Setup</h1>
+          <p className="text-[var(--text-muted)] text-sm mt-0.5">3-level customer hierarchy: Region &rarr; Department &rarr; Unit</p>
         </div>
       </div>
 
@@ -127,7 +127,7 @@ export default function HierarchyPage() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-blue-500" />
-              <h2 className="text-sm font-semibold text-white">Regions ({regions.length})</h2>
+              <h2 className="text-sm font-semibold text-[var(--text-main)]">Regions ({regions.length})</h2>
             </div>
             <button onClick={() => openAdd('REGION')}
               className="text-xs px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30">
@@ -136,7 +136,7 @@ export default function HierarchyPage() {
           </div>
           <div className="space-y-2 max-h-[calc(100vh-280px)] overflow-y-auto pr-1">
             {regions.length === 0 ? (
-              <div className="text-center text-slate-500 py-8 border border-dashed border-white/10 rounded-xl text-sm">
+              <div className="text-center text-[var(--text-faint)] py-8 border border-dashed border-[var(--border-subtle)] rounded-xl text-sm">
                 No regions yet. Click "+ Add Region" to start.
               </div>
             ) : regions.map(r => (
@@ -156,9 +156,9 @@ export default function HierarchyPage() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-violet-500" />
-              <h2 className="text-sm font-semibold text-white">
+              <h2 className="text-sm font-semibold text-[var(--text-main)]">
                 Departments ({depts.length})
-                {selRegion && <span className="ml-1 text-slate-500 font-normal text-xs">in {selRegion.name}</span>}
+                {selRegion && <span className="ml-1 text-[var(--text-faint)] font-normal text-xs">in {selRegion.name}</span>}
               </h2>
             </div>
             {selRegion && (
@@ -170,11 +170,11 @@ export default function HierarchyPage() {
           </div>
           <div className="space-y-2 max-h-[calc(100vh-280px)] overflow-y-auto pr-1">
             {!selRegion ? (
-              <div className="text-center text-slate-600 py-8 border border-dashed border-white/10 rounded-xl text-sm">
+              <div className="text-center text-[var(--text-faint)] py-8 border border-dashed border-[var(--border-subtle)] rounded-xl text-sm">
                 Select a Region to view departments
               </div>
             ) : depts.length === 0 ? (
-              <div className="text-center text-slate-500 py-8 border border-dashed border-white/10 rounded-xl text-sm">
+              <div className="text-center text-[var(--text-faint)] py-8 border border-dashed border-[var(--border-subtle)] rounded-xl text-sm">
                 No departments in {selRegion.name}
               </div>
             ) : depts.map(d => (
@@ -194,9 +194,9 @@ export default function HierarchyPage() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-emerald-500" />
-              <h2 className="text-sm font-semibold text-white">
+              <h2 className="text-sm font-semibold text-[var(--text-main)]">
                 Units ({units.length})
-                {selDept && <span className="ml-1 text-slate-500 font-normal text-xs">in {selDept.name}</span>}
+                {selDept && <span className="ml-1 text-[var(--text-faint)] font-normal text-xs">in {selDept.name}</span>}
               </h2>
             </div>
             {selDept && (
@@ -208,11 +208,11 @@ export default function HierarchyPage() {
           </div>
           <div className="space-y-2 max-h-[calc(100vh-280px)] overflow-y-auto pr-1">
             {!selDept ? (
-              <div className="text-center text-slate-600 py-8 border border-dashed border-white/10 rounded-xl text-sm">
+              <div className="text-center text-[var(--text-faint)] py-8 border border-dashed border-[var(--border-subtle)] rounded-xl text-sm">
                 Select a Department to view units
               </div>
             ) : units.length === 0 ? (
-              <div className="text-center text-slate-500 py-8 border border-dashed border-white/10 rounded-xl text-sm">
+              <div className="text-center text-[var(--text-faint)] py-8 border border-dashed border-[var(--border-subtle)] rounded-xl text-sm">
                 No units in {selDept.name}
               </div>
             ) : units.map(u => (
@@ -229,37 +229,37 @@ export default function HierarchyPage() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-slate-800 border border-white/10 rounded-2xl p-6">
+          <div className="w-full max-w-md bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] rounded-2xl p-6">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-bold text-white">
+              <h3 className="text-lg font-bold text-[var(--text-main)]">
                 {editNode ? 'Edit' : 'Add'} {LEVEL_CONFIG[modalLevel]?.label}
-                {modalParent && !editNode && <span className="text-slate-400 font-normal text-sm ml-2">under {modalParent.name}</span>}
+                {modalParent && !editNode && <span className="text-[var(--text-muted)] font-normal text-sm ml-2">under {modalParent.name}</span>}
               </h3>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white">X</button>
+              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">X</button>
             </div>
             {error && <div className="mb-4 px-3 py-2 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400 text-sm">{error}</div>}
             <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Name <span className="text-rose-400">*</span></label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Name <span className="text-rose-400">*</span></label>
                 <input type="text" value={form.name} onChange={e => setForm(p => ({...p, name: e.target.value}))} required
                   placeholder={`Enter ${LEVEL_CONFIG[modalLevel]?.label.toLowerCase()} name`}
-                  className="w-full px-3 py-2.5 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none" />
+                  className="w-full px-3 py-2.5 rounded-lg bg-[var(--input-bg)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-cyan-500 focus:outline-none" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Code</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Code</label>
                 <input type="text" value={form.code} onChange={e => setForm(p => ({...p, code: e.target.value}))}
                   placeholder="Short code (e.g. ABD, DXB)"
-                  className="w-full px-3 py-2.5 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none" />
+                  className="w-full px-3 py-2.5 rounded-lg bg-[var(--input-bg)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-cyan-500 focus:outline-none" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Description</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Description</label>
                 <textarea value={form.description} onChange={e => setForm(p => ({...p, description: e.target.value}))} rows={2}
                   placeholder="Optional description"
-                  className="w-full px-3 py-2.5 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none" />
+                  className="w-full px-3 py-2.5 rounded-lg bg-[var(--input-bg)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-cyan-500 focus:outline-none" />
               </div>
               <div className="flex gap-3 justify-end pt-2">
                 <button type="button" onClick={() => setShowModal(false)}
-                  className="px-5 py-2 rounded-lg border border-white/10 text-slate-300 hover:bg-white/5">Cancel</button>
+                  className="px-5 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
                 <button type="submit" disabled={saving}
                   className={`px-5 py-2 rounded-lg text-white font-medium hover:opacity-90 disabled:opacity-50 bg-gradient-to-r ${LEVEL_CONFIG[modalLevel]?.color}`}>
                   {saving ? 'Saving...' : editNode ? 'Update' : 'Create'}

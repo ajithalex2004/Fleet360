@@ -35,12 +35,7 @@ export async function GET(req: NextRequest) {
 
         const sp       = new URL(req.url).searchParams;
         const jobId    = sp.get('jobId')   ?? '';
-        const tenantId = sp.get('tenantId') ?? '';
         const scan     = sp.get('scan')    === 'true';
-
-        if (!tenantId) {
-          return NextResponse.json({ error: 'tenantId is required' }, { status: 400 });
-        }
 
         /* ── Scan mode: find ALL merge pairs across pending jobs ── */
         if (scan) {
@@ -153,9 +148,9 @@ export async function POST(req: NextRequest) {
 
         const bodyRaw = await req.json();
     const body = stripTenantOwnershipFields(bodyRaw);
-    const { jobIdA, jobIdB, tenantId, adminId } = body;
-        if (!jobIdA || !jobIdB || !tenantId) {
-          return NextResponse.json({ error: 'jobIdA, jobIdB, tenantId required' }, { status: 400 });
+    const { jobIdA, jobIdB, adminId } = body;
+        if (!jobIdA || !jobIdB) {
+          return NextResponse.json({ error: 'jobIdA, jobIdB required' }, { status: 400 });
         }
 
         // Mark both jobs as CANCELLED with merge reason, create a new combined job

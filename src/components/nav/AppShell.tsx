@@ -57,7 +57,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <Sidebar onTabsFull={showToast} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <WorkspaceTabs onTabsFull={showToast} />
-        <div className="relative flex-1 overflow-y-auto bg-slate-950">
+        <div className="relative flex-1 overflow-y-auto bg-[var(--bg-canvas)]">
           {children}
           {toast && (
             <div className="pointer-events-none absolute left-1/2 bottom-6 z-50 -translate-x-1/2">

@@ -97,18 +97,18 @@ export default function UserSwitcher() {
       {/* Trigger button */}
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2.5 pl-2 pr-3 py-1.5 rounded-full bg-slate-800 border border-white/10 hover:border-white/20 transition-all group"
+        className="flex items-center gap-2.5 pl-2 pr-3 py-1.5 rounded-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] transition-all group"
       >
         {/* Avatar */}
         <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
           {initials}
         </div>
         <div className="text-left hidden sm:block">
-          <div className="text-white text-xs font-medium leading-tight">{displayName}</div>
-          <div className="text-slate-400 text-xs leading-tight">{user.roleName}</div>
+          <div className="text-[var(--text-main)] text-xs font-medium leading-tight">{displayName}</div>
+          <div className="text-[var(--text-muted)] text-xs leading-tight">{user.roleName}</div>
         </div>
         {canSwitch && (
-          <svg className={`w-3.5 h-3.5 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className={`w-3.5 h-3.5 text-[var(--text-muted)] transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7" />
           </svg>
         )}
@@ -116,19 +116,19 @@ export default function UserSwitcher() {
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-72 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl shadow-black/40 overflow-hidden z-50">
+        <div className="absolute right-0 top-full mt-2 w-72 bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl shadow-black/40 overflow-hidden z-50">
           {/* Current user info */}
-          <div className="px-4 py-3 border-b border-white/10 bg-slate-800/50">
+          <div className="px-4 py-3 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold">
                 {initials}
               </div>
               <div className="min-w-0">
-                <div className="text-white font-medium text-sm truncate">{displayName}</div>
-                <div className="text-slate-400 text-xs truncate">{user.email ?? user.username}</div>
+                <div className="text-[var(--text-main)] font-medium text-sm truncate">{displayName}</div>
+                <div className="text-[var(--text-muted)] text-xs truncate">{user.email ?? user.username}</div>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">{user.roleName}</span>
-                  {tenant && <span className="text-xs text-slate-500 truncate">@ {tenant.name}</span>}
+                  {tenant && <span className="text-xs text-[var(--text-faint)] truncate">@ {tenant.name}</span>}
                 </div>
               </div>
             </div>
@@ -137,14 +137,14 @@ export default function UserSwitcher() {
           {/* Switch user section - only for admins */}
           {canSwitch && (
             <>
-              <div className="px-4 py-2 border-b border-white/10">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Switch User {loading && <span className="ml-1 text-slate-600">(loading...)</span>}
+              <div className="px-4 py-2 border-b border-[var(--border-subtle)]">
+                <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wider">
+                  Switch User {loading && <span className="ml-1 text-[var(--text-faint)]">(loading...)</span>}
                 </p>
               </div>
               <div className="max-h-56 overflow-y-auto">
                 {tenantUsers.length === 0 && !loading && (
-                  <div className="px-4 py-3 text-xs text-slate-500">No other users in this tenant</div>
+                  <div className="px-4 py-3 text-xs text-[var(--text-faint)]">No other users in this tenant</div>
                 )}
                 {tenantUsers.map(u => {
                   const isCurrent = u.id === user.id;
@@ -158,24 +158,24 @@ export default function UserSwitcher() {
                       className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors disabled:opacity-50 ${
                         isCurrent
                           ? 'bg-blue-500/10 cursor-default'
-                          : 'hover:bg-white/5 cursor-pointer'
+                          : 'hover:bg-[var(--bg-surface-hover)] cursor-pointer'
                       }`}
                     >
-                      <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold ${isCurrent ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white' : 'bg-slate-700 text-slate-300'}`}>
+                      <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold ${isCurrent ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white' : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>
                         {uInitials}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-medium text-white truncate">{uName}</span>
+                          <span className="text-sm font-medium text-[var(--text-main)] truncate">{uName}</span>
                           {isCurrent && <span className="text-xs text-blue-400 flex-shrink-0">(you)</span>}
-                          {!u.isActive && <span className="text-xs text-slate-600 flex-shrink-0">(inactive)</span>}
+                          {!u.isActive && <span className="text-xs text-[var(--text-faint)] flex-shrink-0">(inactive)</span>}
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs text-slate-400 truncate">{u.roleName ?? u.roleCode}</span>
+                          <span className="text-xs text-[var(--text-muted)] truncate">{u.roleName ?? u.roleCode}</span>
                         </div>
                       </div>
                       {switching && !isCurrent && (
-                        <div className="w-4 h-4 border border-slate-500 border-t-white rounded-full animate-spin flex-shrink-0" />
+                        <div className="w-4 h-4 border border-[var(--border-strong)] border-t-[var(--text-main)] rounded-full animate-spin flex-shrink-0" />
                       )}
                     </button>
                   );
@@ -185,7 +185,7 @@ export default function UserSwitcher() {
           )}
 
           {/* Actions */}
-          <div className="border-t border-white/10 p-2">
+          <div className="border-t border-[var(--border-subtle)] p-2">
             <button
               onClick={signOut}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-rose-400 hover:bg-rose-500/10 transition-colors"

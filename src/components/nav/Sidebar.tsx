@@ -34,6 +34,7 @@ import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Pin, Settings, 
 import { MODULES, moduleFromPathname, type ModuleDef, type SubPage } from '@/lib/nav/modules';
 import { openTab, WorkspaceTabsFullError } from './workspace-tabs-store';
 import { usePermissions } from '@/contexts/PermissionContext';
+import ThemeToggle from '@/components/ThemeToggle';
 
 const COLLAPSE_KEY = 'fleet360-sidebar-collapsed-v1';
 const PINNED_KEY = 'fleet360-sidebar-pinned-v1';
@@ -141,23 +142,23 @@ export default function Sidebar({ onTabsFull }: Props) {
 
   return (
     <aside
-      className={`relative flex flex-col flex-shrink-0 border-r border-white/10 bg-slate-900/80 transition-[width] duration-150 ${collapsed ? 'w-[60px]' : 'w-56'}`}
+      className={`relative flex flex-col flex-shrink-0 border-r border-[var(--border-subtle)] bg-[var(--bg-surface)] transition-[width] duration-150 ${collapsed ? 'w-[60px]' : 'w-56'}`}
       onMouseLeave={() => setFlyoutFor(null)}
     >
-      <div className="flex items-center gap-2 border-b border-white/10 px-3 py-3">
+      <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] px-3 py-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-fleet360.png" alt="FLEET360" className="h-7 w-7 flex-shrink-0 rounded-lg object-contain" />
         {!collapsed && (
           <div className="leading-tight">
-            <div className="text-sm font-semibold text-white">Fleet360</div>
-            <div className="text-[10px] uppercase tracking-wider text-slate-500">Mobility platform</div>
+            <div className="text-sm font-semibold text-[var(--text-main)]">Fleet360</div>
+            <div className="text-[10px] uppercase tracking-wider text-[var(--text-faint)]">Mobility platform</div>
           </div>
         )}
         <button
           type="button"
           onClick={togglePinned}
           title={pinned ? 'Unpin sidebar' : 'Pin sidebar (keep expanded)'}
-          className={`ml-auto rounded-md p-1 transition-colors ${pinned ? 'text-amber-400 bg-amber-500/10' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
+          className={`ml-auto rounded-md p-1 transition-colors ${pinned ? 'text-amber-400 bg-amber-500/10' : 'text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'}`}
         >
           <Pin className={`h-4 w-4 ${pinned ? 'fill-current' : ''}`} />
         </button>
@@ -165,7 +166,7 @@ export default function Sidebar({ onTabsFull }: Props) {
           type="button"
           onClick={toggleCollapsed}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="rounded-md p-1 text-slate-400 hover:bg-white/5 hover:text-white"
+          className="rounded-md p-1 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]"
         >
           {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
         </button>
@@ -194,7 +195,7 @@ export default function Sidebar({ onTabsFull }: Props) {
                   }}
                 />
                 {!collapsed && isActive && visibleSubPages(m.subPages)?.length ? (
-                  <ul className="mt-0.5 mb-1 space-y-0.5 pl-2 border-l border-white/5 ml-4">
+                  <ul className="mt-0.5 mb-1 space-y-0.5 pl-2 border-l border-[var(--border-subtle)] ml-4">
                     {visibleSubPages(m.subPages)!.map((sp, idx, arr) => {
                       // Emit a caption row before the first item of each new group.
                       // Undefined group = ungrouped (renders flush, no header).
@@ -203,7 +204,7 @@ export default function Sidebar({ onTabsFull }: Props) {
                       return (
                         <React.Fragment key={sp.href}>
                           {showHeader && (
-                            <li aria-hidden="true" className={`px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 ${idx > 0 ? 'pt-2' : ''}`}>
+                            <li aria-hidden="true" className={`px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)] ${idx > 0 ? 'pt-2' : ''}`}>
                               {sp.group}
                             </li>
                           )}
@@ -228,13 +229,16 @@ export default function Sidebar({ onTabsFull }: Props) {
         </ul>
       </nav>
 
-      {/* Settings panel - show/hide modules */}
+      {/* Settings panel - show/hide modules, theme */}
       {!collapsed && (
-        <div className="border-t border-white/10 p-2">
+        <div className="border-t border-[var(--border-subtle)] p-2 space-y-1.5">
+          <div className="px-2">
+            <ThemeToggle />
+          </div>
           <button
             type="button"
             onClick={() => setShowSettings(!showSettings)}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-slate-400 hover:bg-white/5 hover:text-white transition-colors"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)] transition-colors"
           >
             <Settings className="h-4 w-4" />
             <span className="text-[13px]">Menu Settings</span>
@@ -244,8 +248,8 @@ export default function Sidebar({ onTabsFull }: Props) {
 
       {/* Hidden modules panel */}
       {showSettings && !collapsed && hiddenModules.size > 0 && (
-        <div className="absolute bottom-14 left-2 right-2 max-h-64 overflow-y-auto rounded-xl border border-white/10 bg-slate-900 p-2 shadow-2xl">
-          <div className="border-b border-white/10 px-2 pb-2 mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+        <div className="absolute bottom-14 left-2 right-2 max-h-64 overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-2 shadow-2xl">
+          <div className="border-b border-[var(--border-subtle)] px-2 pb-2 mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-faint)]">
             Hidden Modules
           </div>
           <ul className="space-y-1">
@@ -256,9 +260,9 @@ export default function Sidebar({ onTabsFull }: Props) {
                   <button
                     type="button"
                     onClick={() => unhideModule(m.id)}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-slate-300 hover:bg-white/5 hover:text-white transition-colors"
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)] transition-colors"
                   >
-                    <Icon className="h-4 w-4 text-slate-400" />
+                    <Icon className="h-4 w-4 text-[var(--text-muted)]" />
                     <span className="flex-1 text-left text-[13px] truncate">{m.label}</span>
                     <Eye className="h-3.5 w-3.5 text-emerald-400" />
                   </button>
@@ -275,12 +279,12 @@ export default function Sidebar({ onTabsFull }: Props) {
         if (!m || !visible?.length) return null;
         return (
           <div
-            className="absolute left-[60px] z-50 min-w-[220px] rounded-xl border border-white/10 bg-slate-900 p-1.5 shadow-2xl"
+            className="absolute left-[60px] z-50 min-w-[220px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-1.5 shadow-2xl"
             style={{ top: Math.max(8, flyoutTop) + 'px' }}
             onMouseEnter={() => setFlyoutFor(m.id)}
             onMouseLeave={() => setFlyoutFor(null)}
           >
-            <div className="border-b border-white/10 px-2 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{m.label}</div>
+            <div className="border-b border-[var(--border-subtle)] px-2 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-faint)]">{m.label}</div>
             <ul className="mt-1 space-y-0.5">
               {visible.map((sp, idx, arr) => {
                 const ActiveIcon: LucideIcon = sp.icon ?? m.icon;
@@ -290,7 +294,7 @@ export default function Sidebar({ onTabsFull }: Props) {
                 return (
                   <React.Fragment key={sp.href}>
                     {showHeader && (
-                      <li aria-hidden="true" className={`px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 ${idx > 0 ? 'pt-2' : ''}`}>
+                      <li aria-hidden="true" className={`px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)] ${idx > 0 ? 'pt-2' : ''}`}>
                         {sp.group}
                       </li>
                     )}
@@ -301,10 +305,10 @@ export default function Sidebar({ onTabsFull }: Props) {
                         className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors ${
                           isActive
                             ? 'bg-cyan-500/15 text-cyan-300 font-bold border-l-2 border-cyan-400'
-                            : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                            : 'text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'
                         }`}
                       >
-                        <ActiveIcon className={`h-3.5 w-3.5 flex-shrink-0 ${isActive ? 'text-cyan-400' : 'text-slate-400'}`} />
+                        <ActiveIcon className={`h-3.5 w-3.5 flex-shrink-0 ${isActive ? 'text-cyan-400' : 'text-[var(--text-muted)]'}`} />
                         <span className="truncate">{sp.label}</span>
                       </button>
                     </li>
@@ -376,22 +380,22 @@ function NavRow({
         } ${
           active
             ? 'bg-cyan-500/15 text-cyan-300 font-bold border-l-2 border-cyan-400 shadow-sm shadow-cyan-500/10'
-            : 'text-slate-300 hover:bg-white/5 hover:text-white'
+            : 'text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'
         }`}
       >
-        <Icon className={`h-4 w-4 flex-shrink-0 ${active ? 'text-cyan-400' : 'text-slate-400'}`} />
+        <Icon className={`h-4 w-4 flex-shrink-0 ${active ? 'text-cyan-400' : 'text-[var(--text-muted)]'}`} />
         {!collapsed && <span className="flex-1 truncate text-[13px]">{m.label}</span>}
         {!collapsed && m.subPages && m.subPages.length > 0 && (
           active
             ? <ChevronLeft className="h-3.5 w-3.5 rotate-[-90deg] text-cyan-400" />
-            : <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
+            : <ChevronRight className="h-3.5 w-3.5 text-[var(--text-faint)]" />
         )}
       </Link>
 
       {/* Context menu */}
       {showContextMenu && (
         <div
-          className="fixed z-[100] min-w-[160px] rounded-xl border border-white/10 bg-slate-900/95 backdrop-blur-xl py-1 shadow-2xl"
+          className="fixed z-[100] min-w-[160px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] backdrop-blur-xl py-1 shadow-2xl"
           style={{ left: contextMenuPos.x, top: contextMenuPos.y }}
         >
           <button
@@ -400,9 +404,9 @@ function NavRow({
               onHide(m.id);
               setShowContextMenu(false);
             }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]"
           >
-            <EyeOff className="h-4 w-4 text-slate-400" />
+            <EyeOff className="h-4 w-4 text-[var(--text-muted)]" />
             <span>Hide from menu</span>
           </button>
         </div>
@@ -442,10 +446,10 @@ function SubRow({
       className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] transition-colors ${
         active
           ? 'bg-cyan-500/10 text-cyan-300 font-bold'
-          : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+          : 'text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'
       }`}
     >
-      <Icon className={`h-3 w-3 flex-shrink-0 ${active ? 'text-cyan-400' : 'text-slate-500'}`} />
+      <Icon className={`h-3 w-3 flex-shrink-0 ${active ? 'text-cyan-400' : 'text-[var(--text-faint)]'}`} />
       <span className="truncate">{page.label}</span>
     </Link>
   );

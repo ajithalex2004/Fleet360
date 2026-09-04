@@ -39,7 +39,7 @@ const DELIVERY_METHODS = ['EMAIL','PRINT','PORTAL','WHATSAPP'];
 const CHANNELS = ['EMAIL','SMS','WHATSAPP','APP','PORTAL'];
 
 const TYPE_COLORS: Record<string,string> = {
-  INTERNAL:   'bg-slate-500/20 text-slate-300 border-slate-500/30',
+  INTERNAL:   'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
   CORPORATE:  'bg-blue-500/20 text-blue-400 border-blue-500/30',
   INDIVIDUAL: 'bg-violet-500/20 text-violet-400 border-violet-500/30',
   WALK_IN:    'bg-amber-500/20 text-amber-400 border-amber-500/30',
@@ -60,10 +60,10 @@ const emptyForm = (): Partial<Customer> => ({
 });
 
 // Shared input styles matching app dark theme
-const inp = "w-full px-3 py-2.5 rounded-xl bg-slate-700/50 border border-white/10 text-white placeholder-slate-500 text-sm focus:border-cyan-500 focus:outline-none transition-colors";
-const sel = "w-full px-3 py-2.5 rounded-xl bg-slate-700/50 border border-white/10 text-white text-sm focus:border-cyan-500 focus:outline-none transition-colors";
-const lbl = "block text-sm font-medium text-slate-300 mb-1.5";
-const sublbl = "text-xs text-slate-500 mt-1";
+const inp = "w-full px-3 py-2.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-cyan-500 focus:outline-none transition-colors";
+const sel = "w-full px-3 py-2.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-cyan-500 focus:outline-none transition-colors";
+const lbl = "block text-sm font-medium text-[var(--text-muted)] mb-1.5";
+const sublbl = "text-xs text-[var(--text-faint)] mt-1";
 
 const Fld = ({ label, help, req, children }: { label:string; help?:string; req?:boolean; children:React.ReactNode }) => (
   <div>
@@ -75,10 +75,10 @@ const Fld = ({ label, help, req, children }: { label:string; help?:string; req?:
 
 const Section = ({ title, children }: { title:string; children:React.ReactNode }) => (
   <div className="space-y-4">
-    <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-      <span className="flex-1 h-px bg-white/10" />
+    <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-2">
+      <span className="flex-1 h-px bg-[var(--border-subtle)]" />
       {title}
-      <span className="flex-1 h-px bg-white/10" />
+      <span className="flex-1 h-px bg-[var(--border-subtle)]" />
     </h3>
     {children}
   </div>
@@ -86,7 +86,7 @@ const Section = ({ title, children }: { title:string; children:React.ReactNode }
 
 const Toggle = ({ checked, onChange }: { checked: boolean; onChange: (v:boolean)=>void }) => (
   <button type="button" onClick={() => onChange(!checked)}
-    className={`relative inline-flex h-5 w-9 rounded-full transition-colors flex-shrink-0 ${checked ? 'bg-cyan-600' : 'bg-slate-600'}`}>
+    className={`relative inline-flex h-5 w-9 rounded-full transition-colors flex-shrink-0 ${checked ? 'bg-cyan-600' : 'bg-[var(--border-strong)]'}`}>
     <span className={`inline-block h-3 w-3 mt-1 rounded-full bg-white transition-transform ${checked ? 'translate-x-5' : 'translate-x-1'}`} />
   </button>
 );
@@ -218,7 +218,7 @@ export default function CustomerPage() {
 
       {/* Stats */}
       <div>
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Customers Statistics</p>
+        <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wider mb-3">Customers Statistics</p>
         <div className="grid grid-cols-5 gap-3">
           {STAT_CARDS.map(s => (
             <button key={s.label} onClick={() => setTypeFilter(s.label === 'WALK-IN' ? 'WALK_IN' : s.label === 'TOTAL' || s.label === 'ACTIVE' || s.label === 'INACTIVE' ? '' : s.label)}
@@ -234,25 +234,25 @@ export default function CustomerPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden">
-        <div className="flex items-center gap-3 p-4 border-b border-white/10 flex-wrap">
-          <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+        <div className="flex items-center gap-3 p-4 border-b border-[var(--border-subtle)] flex-wrap">
+          <label className="flex items-center gap-2 text-sm text-[var(--text-muted)] cursor-pointer">
             <Toggle checked={showInactive} onChange={setShowInactive} />
             Show Inactive
           </label>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search customers..."
-            className="flex-1 min-w-48 px-3 py-1.5 rounded-lg bg-slate-700 border border-white/10 text-white text-sm placeholder-slate-500 focus:border-cyan-500 focus:outline-none" />
+            className="flex-1 min-w-48 px-3 py-1.5 rounded-lg bg-[var(--input-bg)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-cyan-500 focus:outline-none" />
           <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}
-            className="px-3 py-1.5 rounded-lg bg-slate-700 border border-white/10 text-white text-sm focus:outline-none">
+            className="px-3 py-1.5 rounded-lg bg-[var(--input-bg)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:outline-none">
             <option value="">All Types</option>
             {CUSTOMER_TYPES.map(t => <option key={t} value={t}>{(t || '').replace('_',' ')}</option>)}
           </select>
         </div>
 
         {loading ? (
-          <div className="text-center text-slate-400 py-16 animate-pulse">Loading customers...</div>
+          <div className="text-center text-[var(--text-muted)] py-16 animate-pulse">Loading customers...</div>
         ) : displayed.length === 0 ? (
-          <div className="text-center text-slate-500 py-16">
+          <div className="text-center text-[var(--text-faint)] py-16">
             <p className="text-lg mb-2">No customers found</p>
             <p className="text-sm">Click &quot;+ New Customer&quot; to add one, or run the Leasing seed data.</p>
           </div>
@@ -260,33 +260,33 @@ export default function CustomerPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[900px]">
               <thead>
-                <tr className="border-b border-white/5 bg-slate-800/50">
+                <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]">
                   <th className="px-4 py-3 text-left"><input type="checkbox" className="accent-cyan-500" /></th>
                   {['CODE','CUSTOMER NAME','TYPE','EMAIL','MOBILE','CONTACT PERSON','HIERARCHY','STATUS','ACTIONS'].map(h=>(
-                    <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-slate-400 whitespace-nowrap">{h}</th>
+                    <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-[var(--text-muted)] whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {displayed.map(c=>(
-                  <tr key={c.id} className="border-b border-white/5 hover:bg-white/3 transition-colors">
+                  <tr key={c.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
                     <td className="px-4 py-3"><input type="checkbox" className="accent-cyan-500" /></td>
                     <td className="px-3 py-3 text-xs font-mono text-cyan-400 whitespace-nowrap">{c.customerCode??'-'}</td>
-                    <td className="px-3 py-3 text-sm font-medium text-white whitespace-nowrap">{c.nameEn}</td>
+                    <td className="px-3 py-3 text-sm font-medium text-[var(--text-main)] whitespace-nowrap">{c.nameEn}</td>
                     <td className="px-3 py-3 whitespace-nowrap">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${TYPE_COLORS[c.customerType]??TYPE_COLORS.CORPORATE}`}>
                         {(c.customerType || '').replace('_',' ')}
                       </span>
                     </td>
-                    <td className="px-3 py-3 text-white max-w-[140px] truncate">{c.email??'-'}</td>
-                    <td className="px-3 py-3 text-white whitespace-nowrap">{c.mobileCountryCode} {c.mobileNumber??'-'}</td>
-                    <td className="px-3 py-3 text-slate-200">{c.contactPerson??'-'}</td>
+                    <td className="px-3 py-3 text-[var(--text-main)] max-w-[140px] truncate">{c.email??'-'}</td>
+                    <td className="px-3 py-3 text-[var(--text-main)] whitespace-nowrap">{c.mobileCountryCode} {c.mobileNumber??'-'}</td>
+                    <td className="px-3 py-3 text-[var(--text-muted)]">{c.contactPerson??'-'}</td>
                     <td className="px-3 py-3 text-xs">
-                      <div className="text-slate-200">{c.region?.name??'-'}</div>
-                      {c.department&&<div className="text-slate-500">{c.department.name}</div>}
+                      <div className="text-[var(--text-muted)]">{c.region?.name??'-'}</div>
+                      {c.department&&<div className="text-[var(--text-faint)]">{c.department.name}</div>}
                     </td>
                     <td className="px-3 py-3 whitespace-nowrap">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${c.status==='ACTIVE'?'bg-emerald-500/20 text-emerald-400':'bg-slate-600 text-slate-400'}`}>{c.status??'ACTIVE'}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${c.status==='ACTIVE'?'bg-emerald-500/20 text-emerald-400':'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>{c.status??'ACTIVE'}</span>
                     </td>
                     <td className="px-3 py-3 whitespace-nowrap">
                       <div className="flex gap-1.5">
@@ -301,7 +301,7 @@ export default function CustomerPage() {
           </div>
         )}
 
-        <div className="flex items-center justify-between px-4 py-3 border-t border-white/10 text-xs text-slate-500">
+        <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border-subtle)] text-xs text-[var(--text-faint)]">
           <span>Showing {displayed.length} of {customers.length} customers</span>
           <span>{stats.active} active  {stats.inactive} inactive</span>
         </div>
@@ -312,7 +312,7 @@ export default function CustomerPage() {
        */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-end bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 border-l border-white/10 w-full max-w-2xl h-full flex flex-col shadow-2xl">
+          <div className="bg-[var(--bg-surface)] border-l border-[var(--border-subtle)] w-full max-w-2xl h-full flex flex-col shadow-2xl">
 
             {/* Modal Header */}
             <div className={`flex items-center justify-between px-6 py-4 bg-gradient-to-r ${accent} flex-shrink-0`}>
@@ -326,10 +326,10 @@ export default function CustomerPage() {
             </div>
 
             {/* Tab Navigation */}
-            <div className="flex border-b border-white/10 bg-slate-800/80 flex-shrink-0 overflow-x-auto">
+            <div className="flex border-b border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] flex-shrink-0 overflow-x-auto">
               {TABS.map(t => (
                 <button key={t.id} type="button" onClick={()=>setActiveTab(t.id)}
-                  className={`flex items-center gap-1.5 px-4 py-3 text-xs font-medium border-b-2 whitespace-nowrap transition-all flex-shrink-0 ${activeTab===t.id?'border-cyan-500 text-cyan-400 bg-cyan-500/5':'border-transparent text-slate-400 hover:text-slate-300'}`}>
+                  className={`flex items-center gap-1.5 px-4 py-3 text-xs font-medium border-b-2 whitespace-nowrap transition-all flex-shrink-0 ${activeTab===t.id?'border-cyan-500 text-cyan-400 bg-cyan-500/5':'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
                   {t.label}
                   {activeTab===t.id&&<span className="w-1.5 h-1.5 rounded-full bg-cyan-400"/>}
                 </button>
@@ -401,7 +401,7 @@ export default function CustomerPage() {
                         </Fld>
                         <Fld label="Mobile Number" req>
                           <div className="flex gap-2">
-                            <select className="w-24 px-2 py-2.5 rounded-xl bg-slate-700/50 border border-white/10 text-white text-sm focus:outline-none" value={form.mobileCountryCode??'+971'} onChange={e=>set('mobileCountryCode',e.target.value)}>
+                            <select className="w-24 px-2 py-2.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:outline-none" value={form.mobileCountryCode??'+971'} onChange={e=>set('mobileCountryCode',e.target.value)}>
                               {['+971','+966','+965','+973','+968','+974','+91','+1','+44'].map(c=><option key={c} value={c}>{c}</option>)}
                             </select>
                             <input className={`${inp} flex-1`} value={form.mobileNumber??''} onChange={e=>set('mobileNumber',e.target.value)} placeholder="Phone number"/>
@@ -418,7 +418,7 @@ export default function CustomerPage() {
                     </Section>
 
                     <Section title="Localised Tenant Information">
-                      <p className="text-xs text-slate-500 -mt-2">Enter the customer name and description in all supported languages</p>
+                      <p className="text-xs text-[var(--text-faint)] -mt-2">Enter the customer name and description in all supported languages</p>
                       <div className="grid grid-cols-2 gap-4">
                         <Fld label="Customer Name (English)" req>
                           <input className={inp} value={form.nameEn??''} onChange={e=>set('nameEn',e.target.value)} required placeholder="Enter customer name (English)"/>
@@ -469,11 +469,11 @@ export default function CustomerPage() {
                         <div className="flex items-center gap-6 pt-6">
                           <label className="flex items-center gap-2 cursor-pointer">
                             <Toggle checked={form.taxApplicable??true} onChange={v=>set('taxApplicable',v)}/>
-                            <span className="text-sm text-slate-300">Tax Applicable</span>
+                            <span className="text-sm text-[var(--text-muted)]">Tax Applicable</span>
                           </label>
                           <label className="flex items-center gap-2 cursor-pointer">
                             <Toggle checked={form.tollExempt??false} onChange={v=>set('tollExempt',v)}/>
-                            <span className="text-sm text-slate-300">Toll Exempt</span>
+                            <span className="text-sm text-[var(--text-muted)]">Toll Exempt</span>
                           </label>
                         </div>
                       </div>
@@ -491,7 +491,7 @@ export default function CustomerPage() {
                     <Section title="Payment Settings">
                       <div className="grid grid-cols-2 gap-4">
                         <Fld label="Allowed Payment Methods" help="Click to select multiple">
-                          <div className="flex flex-wrap gap-2 p-3 rounded-xl bg-slate-700/50 border border-white/10 min-h-[48px]">
+                          <div className="flex flex-wrap gap-2 p-3 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] min-h-[48px]">
                             {PAYMENT_METHODS.map(m=>{
                               const cur=form.allowedPaymentMethods?JSON.parse(form.allowedPaymentMethods):[];
                               const sel=cur.includes(m);
@@ -538,7 +538,7 @@ export default function CustomerPage() {
                         </Fld>
                         <div className="flex items-center gap-3 pt-6">
                           <Toggle checked={form.autoInvoice??false} onChange={v=>set('autoInvoice',v)}/>
-                          <span className="text-sm text-slate-300">Auto Invoice</span>
+                          <span className="text-sm text-[var(--text-muted)]">Auto Invoice</span>
                         </div>
                       </div>
                     </Section>
@@ -562,7 +562,7 @@ export default function CustomerPage() {
                       </div>
                       <div className="flex items-center gap-3 mt-2">
                         <Toggle checked={form.skipApproval??false} onChange={v=>set('skipApproval',v)}/>
-                        <span className="text-sm text-slate-300">Skip Approval</span>
+                        <span className="text-sm text-[var(--text-muted)]">Skip Approval</span>
                       </div>
                     </Section>
                     <Section title="Communication Settings">
@@ -578,7 +578,7 @@ export default function CustomerPage() {
                         </Fld>
                         <Fld label="Notification SMS">
                           <div className="flex gap-2">
-                            <select className="w-24 px-2 py-2.5 rounded-xl bg-slate-700/50 border border-white/10 text-white text-sm focus:outline-none" value={form.notificationSmsCode??'+971'} onChange={e=>set('notificationSmsCode',e.target.value)}>
+                            <select className="w-24 px-2 py-2.5 rounded-xl bg-[var(--input-bg)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:outline-none" value={form.notificationSmsCode??'+971'} onChange={e=>set('notificationSmsCode',e.target.value)}>
                               {['+971','+966','+91','+1','+44'].map(c=><option key={c} value={c}>{c}</option>)}
                             </select>
                             <input className={`${inp} flex-1`} value={form.notificationSms??''} onChange={e=>set('notificationSms',e.target.value)} placeholder="Phone number"/>
@@ -588,11 +588,11 @@ export default function CustomerPage() {
                       <div className="flex items-center gap-6 mt-2">
                         <label className="flex items-center gap-2 cursor-pointer">
                           <Toggle checked={form.marketingCommunications??false} onChange={v=>set('marketingCommunications',v)}/>
-                          <span className="text-sm text-slate-300">Marketing Communications</span>
+                          <span className="text-sm text-[var(--text-muted)]">Marketing Communications</span>
                         </label>
                         <label className="flex items-center gap-2 cursor-pointer">
                           <Toggle checked={form.bookingNotifications??true} onChange={v=>set('bookingNotifications',v)}/>
-                          <span className="text-sm text-slate-300">Booking Notifications</span>
+                          <span className="text-sm text-[var(--text-muted)]">Booking Notifications</span>
                         </label>
                       </div>
                     </Section>
@@ -604,15 +604,15 @@ export default function CustomerPage() {
                   <div className="space-y-4">
                     <Section title="Attachments">
                       {!editCustomer?(
-                        <div className="flex flex-col items-center justify-center py-14 border-2 border-dashed border-white/10 rounded-2xl">
-                          <div className="w-12 h-12 rounded-full bg-slate-700 flex items-center justify-center text-2xl text-slate-500 mb-3">P</div>
-                          <p className="text-slate-400 text-sm">Attachments can be added after saving</p>
-                          <p className="text-slate-600 text-xs mt-1">Save the customer first, then upload files</p>
+                        <div className="flex flex-col items-center justify-center py-14 border-2 border-dashed border-[var(--border-subtle)] rounded-2xl">
+                          <div className="w-12 h-12 rounded-full bg-[var(--bg-surface-hover)] flex items-center justify-center text-2xl text-[var(--text-faint)] mb-3">P</div>
+                          <p className="text-[var(--text-muted)] text-sm">Attachments can be added after saving</p>
+                          <p className="text-[var(--text-faint)] text-xs mt-1">Save the customer first, then upload files</p>
                         </div>
                       ):(
-                        <div className="border-2 border-dashed border-white/10 rounded-2xl p-8 text-center hover:border-cyan-500/30 transition-colors cursor-pointer">
-                          <p className="text-slate-400 text-sm">Click to upload or drag and drop files here</p>
-                          <p className="text-slate-600 text-xs mt-1">PDF, PNG, JPG, DOCX up to 10MB</p>
+                        <div className="border-2 border-dashed border-[var(--border-subtle)] rounded-2xl p-8 text-center hover:border-cyan-500/30 transition-colors cursor-pointer">
+                          <p className="text-[var(--text-muted)] text-sm">Click to upload or drag and drop files here</p>
+                          <p className="text-[var(--text-faint)] text-xs mt-1">PDF, PNG, JPG, DOCX up to 10MB</p>
                         </div>
                       )}
                     </Section>
@@ -622,19 +622,19 @@ export default function CustomerPage() {
               </div>
 
               {/* Footer */}
-              <div className="px-6 py-4 border-t border-white/10 bg-slate-800/50 flex items-center justify-between flex-shrink-0">
+              <div className="px-6 py-4 border-t border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] flex items-center justify-between flex-shrink-0">
                 <div className="flex gap-2">
                   {TABS.map((t,i)=>(
                     <button key={t.id} type="button" onClick={()=>setActiveTab(t.id)}
-                      className={`w-2 h-2 rounded-full transition-all ${activeTab===t.id?'bg-cyan-500 w-6':'bg-slate-600'}`}/>
+                      className={`w-2 h-2 rounded-full transition-all ${activeTab===t.id?'bg-cyan-500 w-6':'bg-[var(--border-strong)]'}`}/>
                   ))}
                 </div>
                 <div className="flex gap-3">
                   <button type="button" onClick={()=>setShowModal(false)}
-                    className="px-5 py-2.5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 text-sm">Cancel</button>
+                    className="px-5 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] text-sm">Cancel</button>
                   {activeTab!=='attachments'&&TABS.findIndex(t=>t.id===activeTab)<TABS.length-2&&(
                     <button type="button" onClick={()=>setActiveTab(TABS[TABS.findIndex(t=>t.id===activeTab)+1].id)}
-                      className="px-5 py-2.5 rounded-xl bg-slate-700 text-white text-sm hover:bg-slate-600">Next &rarr;</button>
+                      className="px-5 py-2.5 rounded-xl bg-[var(--bg-surface-elevated)] text-[var(--text-main)] text-sm hover:bg-[var(--bg-surface-hover)]">Next &rarr;</button>
                   )}
                   <button type="submit" disabled={saving}
                     className={`px-6 py-2.5 rounded-xl bg-gradient-to-r ${accent} text-white font-medium text-sm hover:opacity-90 disabled:opacity-50`}>

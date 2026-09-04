@@ -92,8 +92,8 @@ export default function DispatchOverview() {
             <Siren className="w-5 h-5 text-rose-300" />
           </div>
           <div>
-            <p className="text-white font-semibold text-sm">Ambulance dispatch</p>
-            <p className="text-slate-500 text-xs mt-0.5">
+            <p className="text-[var(--text-main)] font-semibold text-sm">Ambulance dispatch</p>
+            <p className="text-[var(--text-faint)] text-xs mt-0.5">
               P1/P2/P3 SLA timers, fleet availability and MOHAP/DHA compliance — managed in Incident &amp; Ambulance.
             </p>
           </div>
@@ -110,8 +110,8 @@ export default function DispatchOverview() {
             <Bus className="w-5 h-5 text-amber-300" />
           </div>
           <div>
-            <p className="text-white font-semibold text-sm">School Bus transportation</p>
-            <p className="text-slate-500 text-xs mt-0.5">
+            <p className="text-[var(--text-main)] font-semibold text-sm">School Bus transportation</p>
+            <p className="text-[var(--text-faint)] text-xs mt-0.5">
               Routes, student manifests, departure management and UAE compliance — managed in the School Bus module.
             </p>
           </div>
@@ -126,13 +126,13 @@ export default function DispatchOverview() {
         <Panel title="Recent jobs" icon={ClipboardList} accent="blue" className="md:col-span-2"
           actions={<Link href="/dispatch/jobs" className="text-xs text-blue-400 hover:text-blue-300">View all →</Link>}>
           {loading ? (
-            <p className="text-slate-500 text-sm">Loading…</p>
+            <p className="text-[var(--text-faint)] text-sm">Loading…</p>
           ) : recentJobs.length === 0 ? (
-            <p className="text-slate-500 text-sm text-center py-4">No jobs yet</p>
+            <p className="text-[var(--text-faint)] text-sm text-center py-4">No jobs yet</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/5 text-slate-500 text-[11px] uppercase tracking-wider">
+                <tr className="border-b border-[var(--border-subtle)] text-[var(--text-faint)] text-[11px] uppercase tracking-wider">
                   <th className="text-left py-2 font-medium">Job</th>
                   <th className="text-left py-2 font-medium">Service</th>
                   <th className="text-left py-2 font-medium">Priority</th>
@@ -140,20 +140,20 @@ export default function DispatchOverview() {
                   <th className="text-left py-2 font-medium">Attempts</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-[var(--border-subtle)]">
                 {recentJobs.map(j => (
-                  <tr key={j.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="py-3 font-mono text-xs text-slate-400">{j.id.slice(0, 12)}…</td>
-                    <td className="py-3 text-slate-300">{SVC_LABEL[j.service_type] ?? j.service_type}</td>
+                  <tr key={j.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
+                    <td className="py-3 font-mono text-xs text-[var(--text-muted)]">{j.id.slice(0, 12)}…</td>
+                    <td className="py-3 text-[var(--text-muted)]">{SVC_LABEL[j.service_type] ?? j.service_type}</td>
                     <td className="py-3">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
                         j.priority === 'P1' || j.priority === 'EMERGENCY'  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
                         : j.priority === 'URGENT' || j.priority === 'P2'    ? 'bg-orange-500/20 text-orange-300 border-orange-500/40'
-                        : 'bg-slate-700 text-slate-300 border-slate-600'
+                        : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-strong)]'
                       }`}>{j.priority}</span>
                     </td>
                     <td className="py-3"><StatusPill status={j.status} /></td>
-                    <td className="py-3 text-slate-400 text-xs">{j.attempt_count}</td>
+                    <td className="py-3 text-[var(--text-muted)] text-xs">{j.attempt_count}</td>
                   </tr>
                 ))}
               </tbody>
@@ -163,26 +163,26 @@ export default function DispatchOverview() {
 
         <Panel title="Driver pool" icon={UserCheck} accent="emerald">
           {loading ? (
-            <p className="text-slate-500 text-sm">Loading…</p>
+            <p className="text-[var(--text-faint)] text-sm">Loading…</p>
           ) : (
             <div className="space-y-3">
               {(['AVAILABLE','BUSY','BREAK','OFF_DUTY'] as const).map(s => {
                 const n   = drivers.filter(d => d.status === s).length;
                 const pct = drivers.length > 0 ? (n / drivers.length) * 100 : 0;
-                const col = { AVAILABLE:'bg-emerald-500', BUSY:'bg-amber-500', BREAK:'bg-blue-500', OFF_DUTY:'bg-slate-600' }[s];
+                const col = { AVAILABLE:'bg-emerald-500', BUSY:'bg-amber-500', BREAK:'bg-blue-500', OFF_DUTY:'bg-[var(--border-strong)]' }[s];
                 return (
                   <div key={s}>
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="text-slate-400">{s.replace('_', ' ')}</span>
-                      <span className="text-white font-semibold tabular-nums">{n}</span>
+                      <span className="text-[var(--text-muted)]">{s.replace('_', ' ')}</span>
+                      <span className="text-[var(--text-main)] font-semibold tabular-nums">{n}</span>
                     </div>
-                    <div className="h-1.5 rounded-full bg-slate-800">
+                    <div className="h-1.5 rounded-full bg-[var(--bg-surface-hover)]">
                       <div className={`h-1.5 rounded-full ${col} transition-all`} style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                 );
               })}
-              <div className="pt-3 border-t border-white/10 text-[11px] text-slate-500">
+              <div className="pt-3 border-t border-[var(--border-subtle)] text-[11px] text-[var(--text-faint)]">
                 {drivers.length} total drivers tracked
               </div>
             </div>
@@ -205,15 +205,15 @@ interface ShortcutTileProps {
 function ShortcutTile({ href, title, desc, icon: Icon, accent }: ShortcutTileProps) {
   const tone = {
     blue:   { grad: 'from-blue-600/30 to-cyan-600/20',     icon: 'text-blue-300',   ring: 'border-blue-500/30 hover:border-blue-500/50' },
-    slate:  { grad: 'from-slate-700/40 to-slate-600/20',   icon: 'text-slate-300',  ring: 'border-white/10 hover:border-white/20' },
+    slate:  { grad: 'from-slate-700/40 to-slate-600/20',   icon: 'text-[var(--text-muted)]',  ring: 'border-[var(--border-subtle)] hover:border-[var(--border-strong)]' },
     violet: { grad: 'from-violet-600/30 to-purple-600/20', icon: 'text-violet-300', ring: 'border-violet-500/30 hover:border-violet-500/50' },
   }[accent];
   return (
     <Link href={href}
       className={`group rounded-2xl bg-gradient-to-br ${tone.grad} border ${tone.ring} p-4 transition-all hover:scale-[1.01]`}>
       <Icon className={`w-6 h-6 ${tone.icon} mb-3`} />
-      <p className="text-white font-semibold text-sm">{title}</p>
-      <p className="text-slate-400 text-xs mt-0.5">{desc}</p>
+      <p className="text-[var(--text-main)] font-semibold text-sm">{title}</p>
+      <p className="text-[var(--text-muted)] text-xs mt-0.5">{desc}</p>
     </Link>
   );
 }

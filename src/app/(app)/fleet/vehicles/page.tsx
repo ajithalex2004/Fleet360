@@ -1,6 +1,22 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import { lookupVehicle, KNOWN_MAKES, getModelsForMake, type VehicleKnowledge } from '@/lib/vehicle-knowledge-base';
+import SlideOverDrawer, { DrawerTab, DrawerAction } from '@/components/ui/SlideOverDrawer';
+import { 
+  Car, 
+  Cpu, 
+  FileText, 
+  Wrench, 
+  UserCheck, 
+  MapPin, 
+  Fuel, 
+  Gauge, 
+  Shield, 
+  Calendar,
+  Code,
+  Edit2,
+  Trash2
+} from 'lucide-react';
 
 interface Vehicle {
   id: string;
@@ -10,7 +26,6 @@ interface Vehicle {
   year: number;
   licensePlate: string;
   status: string;
-  // enhanced fields
   chassisNo: string;
   color: string;
   yearOfManufacture: number;
@@ -102,12 +117,12 @@ const segmentColor: Record<string, string> = {
 };
 
 const statusColor: Record<string, string> = {
-  AVAILABLE: 'bg-green-500/20 text-green-400',
-  RENTED: 'bg-blue-500/20 text-blue-400',
-  MAINTENANCE: 'bg-amber-500/20 text-amber-400',
-  RESERVED: 'bg-purple-500/20 text-purple-400',
-  INACTIVE: 'bg-slate-500/20 text-slate-400',
-  SOLD: 'bg-red-500/20 text-red-400',
+  AVAILABLE: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+  RENTED: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  MAINTENANCE: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+  RESERVED: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  INACTIVE: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  SOLD: 'bg-rose-500/20 text-rose-400 border-rose-500/30',
 };
 
 export default function VehiclesPage() {
@@ -129,6 +144,10 @@ export default function VehiclesPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const limit = 20;
+
+  // Slide-over drawer state
+  const [inspectingVehicle, setInspectingVehicle] = useState<Vehicle | null>(null);
+  const [drawerTab, setDrawerTab] = useState<string>('overview');
 
   // Smart auto-detection state
   const [detectedInfo, setDetectedInfo] = useState<VehicleKnowledge | null>(null);
@@ -160,8 +179,6 @@ export default function VehiclesPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Zones list is independent of vehicle filters — fetch once, not on
-  // every keystroke/filter change like fetchData does.
   useEffect(() => {
     fetch('/api/places?type=OPERATIONAL_ZONE')
       .then(r => r.json())
@@ -185,17 +202,29 @@ export default function VehiclesPage() {
 
   const applyDetection = () => {
     if (!detectedInfo) return;
-    setForm(p => ({ ...p, category: detectedInfo.segment }));
+    setForm(p => ({
+      ...p,
+      category: detectedInfo.segment,
+    }));
     setDetectedDismissed(true);
   };
 
   const openNew = () => {
-    setEditing(null); setForm(EMPTY_VEHICLE); setTab('basic'); setError('');
-    setDetectedInfo(null); setDetectedDismissed(false); setShowModal(true);
+    setEditing(null);
+    setForm(EMPTY_VEHICLE);
+    setTab('basic');
+    setDetectedInfo(null);
+    setDetectedDismissed(false);
+    setShowModal(true);
   };
+
   const openEdit = (v: Vehicle) => {
-    setEditing(v); setForm(v); setTab('basic'); setError('');
-    setDetectedInfo(null); setDetectedDismissed(false); setShowModal(true);
+    setEditing(v);
+    setForm({ ...v });
+    setTab('basic');
+    setDetectedInfo(null);
+    setDetectedDismissed(true);
+    setShowModal(true);
   };
 
   const handleSave = async () => {
@@ -206,7 +235,8 @@ export default function VehiclesPage() {
       const method = editing ? 'PUT' : 'POST';
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
       if (!res.ok) { const d = await res.json(); setError(d.error ?? 'Save failed'); return; }
-      setShowModal(false); fetchData();
+      setShowModal(false); 
+      fetchData();
     } catch { setError('Network error'); }
     finally { setSaving(false); }
   };
@@ -214,109 +244,144 @@ export default function VehiclesPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this vehicle?')) return;
     await fetch(`/api/fleet/vehicles/${id}`, { method: 'DELETE' });
+    if (inspectingVehicle?.id === id) setInspectingVehicle(null);
     fetchData();
   };
 
   const f = (k: keyof Vehicle, v: Vehicle[keyof Vehicle]) => setForm(p => ({ ...p, [k]: v }));
-
   const vtName = (id: string) => vehicleTypes.find(vt => vt.id === id)?.name ?? '—';
+
+  const DRAWER_TABS: DrawerTab[] = [
+    { id: 'overview', label: 'Overview', icon: <Car className="w-3.5 h-3.5" /> },
+    { id: 'telematics', label: 'Telematics & Driver', icon: <Cpu className="w-3.5 h-3.5" /> },
+    { id: 'documents', label: 'Documents & Expiry', icon: <FileText className="w-3.5 h-3.5" /> },
+    { id: 'json', label: 'Raw Payload', icon: <Code className="w-3.5 h-3.5" /> },
+  ];
+
+  const getDrawerActions = (v: Vehicle): DrawerAction[] => [
+    {
+      label: 'Edit Vehicle',
+      icon: <Edit2 className="w-3.5 h-3.5" />,
+      variant: 'primary',
+      onClick: () => {
+        setInspectingVehicle(null);
+        openEdit(v);
+      },
+    },
+    {
+      label: 'Delete',
+      icon: <Trash2 className="w-3.5 h-3.5" />,
+      variant: 'danger',
+      onClick: () => handleDelete(v.id),
+    },
+  ];
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Vehicle Master</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Manage fleet vehicles, registration, and lifecycle tracking</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Vehicle Master</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Manage fleet vehicles, registration, and lifecycle tracking</p>
         </div>
-        <button onClick={openNew} className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity flex items-center gap-2">
+        <button onClick={openNew} className="px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-semibold text-xs hover:opacity-90 transition-opacity flex items-center gap-2 shadow-sm">
           <span>+</span> Add Vehicle
         </button>
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3 flex-wrap">
+      <div className="flex gap-2.5 flex-wrap">
         <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
           placeholder="Search vehicle code, plate, make, model…"
-          className="flex-1 min-w-[220px] bg-slate-800/60 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-orange-500/50" />
+          className="flex-1 min-w-[220px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] text-xs placeholder-[var(--text-muted)] focus:outline-none focus:border-orange-500/50" />
         <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
-          className="bg-slate-800/60 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50">
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-xs focus:outline-none">
           <option value="">All Status</option>
           {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <select value={usageFilter} onChange={e => { setUsageFilter(e.target.value); setPage(1); }}
-          className="bg-slate-800/60 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50">
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-xs focus:outline-none">
           <option value="">All Usage</option>
           {USAGES.map(u => <option key={u} value={u}>{u.replace(/_/g, ' ')}</option>)}
         </select>
         <select value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setPage(1); }}
-          className="bg-slate-800/60 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50">
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-xs focus:outline-none">
           <option value="">All Segments</option>
           {VEHICLE_SEGMENTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
         <select value={zoneFilter} onChange={e => { setZoneFilter(e.target.value); setPage(1); }}
-          className="bg-slate-800/60 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50">
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-xs focus:outline-none">
           <option value="">All Zones</option>
           {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
         </select>
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/40 border border-white/10 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-800/60 border-b border-white/10">
+            <thead className="bg-[var(--bg-surface-hover)]/50 border-b border-[var(--border-subtle)]">
               <tr>
-                {['Vehicle Code', 'Make / Model', 'Segment', 'Plate No.', 'Type', 'Usage', 'Lifecycle', 'Status', 'Odometer', 'Fuel', ''].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                {['Vehicle Code', 'Make / Model', 'Segment', 'Plate No.', 'Type', 'Usage', 'Lifecycle', 'Status', 'Odometer', 'Fuel', 'Actions'].map(h => (
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
+            <tbody className="divide-y divide-[var(--border-subtle)]">
               {loading ? (
-                <tr><td colSpan={11} className="px-4 py-12 text-center text-slate-500">Loading…</td></tr>
+                <tr><td colSpan={11} className="px-4 py-12 text-center text-[var(--text-muted)] text-sm">Loading fleet inventory…</td></tr>
               ) : vehicles.length === 0 ? (
-                <tr><td colSpan={11} className="px-4 py-12 text-center text-slate-500">No vehicles found. Click &quot;Add Vehicle&quot; to get started.</td></tr>
+                <tr><td colSpan={11} className="px-4 py-12 text-center text-[var(--text-muted)] text-sm">No vehicles found. Click &quot;Add Vehicle&quot; to get started.</td></tr>
               ) : vehicles.map(v => (
-                <tr key={v.id} className="hover:bg-white/5 transition-colors">
+                <tr 
+                  key={v.id} 
+                  onClick={() => { setInspectingVehicle(v); setDrawerTab('overview'); }}
+                  className="hover:bg-[var(--bg-surface-hover)] transition-colors cursor-pointer group"
+                >
                   <td className="px-4 py-3">
-                    <span className="font-mono text-orange-400 font-semibold text-xs bg-orange-500/10 px-2 py-1 rounded">{v.vehicleCode || '—'}</span>
+                    <span className="font-mono text-orange-500 font-semibold text-xs bg-orange-500/10 border border-orange-500/20 px-2 py-0.5 rounded">{v.vehicleCode || '—'}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-white font-medium">{v.make} {v.model}</div>
-                    <div className="text-slate-500 text-xs">{v.yearOfManufacture || v.year || ''} • {v.color || ''}</div>
+                    <div className="text-[var(--text-main)] font-semibold text-xs">{v.make} {v.model}</div>
+                    <div className="text-[var(--text-muted)] text-[11px]">{v.yearOfManufacture || v.year || ''} • {v.color || ''}</div>
                   </td>
                   <td className="px-4 py-3">
                     {v.category ? (
-                      <span className={`px-2 py-1 rounded-lg text-xs font-semibold ${segmentColor[v.category] ?? 'bg-slate-700/60 text-slate-300'}`}>
+                      <span className={`px-2 py-0.5 rounded-md text-[11px] font-semibold ${segmentColor[v.category] ?? 'bg-slate-700/60 text-slate-300'}`}>
                         {VEHICLE_SEGMENTS.find(s => s.value === v.category)?.label ?? v.category}
                       </span>
-                    ) : <span className="text-slate-600 text-xs">—</span>}
+                    ) : <span className="text-[var(--text-muted)] text-xs">—</span>}
                   </td>
-                  <td className="px-4 py-3 font-mono text-slate-300 text-xs">{v.plateNumber || v.licensePlate || '—'}</td>
-                  <td className="px-4 py-3 text-slate-300 text-xs">{v.vehicleTypeId ? vtName(v.vehicleTypeId) : '—'}</td>
+                  <td className="px-4 py-3 font-mono text-[var(--text-main)] text-xs">{v.plateNumber || v.licensePlate || '—'}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{v.vehicleTypeId ? vtName(v.vehicleTypeId) : '—'}</td>
                   <td className="px-4 py-3">
-                    <span className="text-xs text-slate-400">{(v.vehicleUsage ?? '').replace(/_/g, ' ')}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="px-2 py-1 rounded-lg text-xs font-semibold bg-slate-700/60 text-slate-300">{v.lifecycleStage || '—'}</span>
+                    <span className="text-xs text-[var(--text-muted)]">{(v.vehicleUsage ?? '').replace(/_/g, ' ')}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded-lg text-xs font-semibold ${statusColor[v.status] ?? 'bg-slate-700 text-slate-300'}`}>{v.status}</span>
+                    <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)]">{v.lifecycleStage || '—'}</span>
                   </td>
-                  <td className="px-4 py-3 text-slate-300 text-xs text-right">{v.odometerReading?.toLocaleString() ?? 0} km</td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${statusColor[v.status] ?? 'bg-slate-700 text-slate-300'}`}>{v.status}</span>
+                  </td>
+                  <td className="px-4 py-3 text-[var(--text-main)] text-xs font-mono">{v.odometerReading?.toLocaleString() ?? 0} km</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                      <div className="w-14 h-1.5 bg-[var(--border-subtle)] rounded-full overflow-hidden">
                         <div className="h-full bg-orange-500 rounded-full" style={{ width: `${v.fuelLevel ?? 0}%` }} />
                       </div>
-                      <span className="text-xs text-slate-400">{v.fuelLevel ?? 0}%</span>
+                      <span className="text-[11px] text-[var(--text-muted)] font-mono">{v.fuelLevel ?? 0}%</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2 justify-end">
-                      <button onClick={() => openEdit(v)} className="px-3 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors">Edit</button>
-                      <button onClick={() => handleDelete(v.id)} className="px-3 py-1.5 text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors">Del</button>
+                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center gap-1.5 justify-end">
+                      <button 
+                        onClick={() => { setInspectingVehicle(v); setDrawerTab('overview'); }}
+                        className="px-2.5 py-1 text-xs bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] text-[var(--text-main)] rounded-lg transition-colors"
+                      >
+                        Inspect ↗
+                      </button>
+                      <button onClick={() => openEdit(v)} className="px-2.5 py-1 text-xs bg-slate-700/50 hover:bg-slate-700 text-white rounded-lg transition-colors">Edit</button>
+                      <button onClick={() => handleDelete(v.id)} className="px-2.5 py-1 text-xs bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg transition-colors">Del</button>
                     </div>
                   </td>
                 </tr>
@@ -325,92 +390,258 @@ export default function VehiclesPage() {
           </table>
         </div>
         {total > limit && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-white/10">
-            <span className="text-xs text-slate-400">Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}</span>
+          <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+            <span className="text-xs text-[var(--text-muted)]">Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}</span>
             <div className="flex gap-2">
-              <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 text-xs bg-slate-700 disabled:opacity-40 hover:bg-slate-600 text-white rounded-lg">Prev</button>
-              <button disabled={page * limit >= total} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 text-xs bg-slate-700 disabled:opacity-40 hover:bg-slate-600 text-white rounded-lg">Next</button>
+              <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 text-xs bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] disabled:opacity-40 text-[var(--text-main)] rounded-lg">Prev</button>
+              <button disabled={page * limit >= total} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 text-xs bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] disabled:opacity-40 text-[var(--text-main)] rounded-lg">Next</button>
             </div>
           </div>
         )}
       </div>
 
-      {/* Modal */}
+      {/* Slide-Over Inspector Drawer for Vehicle */}
+      {inspectingVehicle && (
+        <SlideOverDrawer
+          isOpen={!!inspectingVehicle}
+          onClose={() => setInspectingVehicle(null)}
+          title={`${inspectingVehicle.make} ${inspectingVehicle.model} (${inspectingVehicle.yearOfManufacture || inspectingVehicle.year || '—'})`}
+          subtitle={`Code: ${inspectingVehicle.vehicleCode || inspectingVehicle.id.slice(0, 8)} • Plate: ${inspectingVehicle.plateNumber || inspectingVehicle.licensePlate || 'N/A'}`}
+          badge={{
+            text: inspectingVehicle.status,
+            variant: (inspectingVehicle.status === 'AVAILABLE' ? 'emerald' : inspectingVehicle.status === 'RENTED' ? 'blue' : inspectingVehicle.status === 'MAINTENANCE' ? 'amber' : 'slate'),
+          }}
+          tabs={DRAWER_TABS}
+          activeTab={drawerTab}
+          onTabChange={setDrawerTab}
+          actions={getDrawerActions(inspectingVehicle)}
+          width="xl"
+        >
+          {drawerTab === 'overview' && (
+            <div className="space-y-6">
+              {/* Highlights cards */}
+              <div className="grid grid-cols-3 gap-3 p-4 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)]">
+                <div>
+                  <div className="text-[11px] text-[var(--text-muted)] uppercase font-semibold">Segment</div>
+                  <div className="text-sm font-bold text-orange-500 mt-0.5">
+                    {VEHICLE_SEGMENTS.find(s => s.value === inspectingVehicle.category)?.label ?? inspectingVehicle.category ?? '—'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-[var(--text-muted)] uppercase font-semibold">Odometer</div>
+                  <div className="text-sm font-bold text-[var(--text-main)] mt-0.5">
+                    {inspectingVehicle.odometerReading?.toLocaleString() ?? 0} km
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-[var(--text-muted)] uppercase font-semibold">Fuel Level</div>
+                  <div className="text-sm font-bold text-emerald-500 mt-0.5">
+                    {inspectingVehicle.fuelLevel ?? 0}%
+                  </div>
+                </div>
+              </div>
+
+              {/* Specs Grid */}
+              <div>
+                <h3 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Vehicle Details</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                    <div className="text-xs text-[var(--text-muted)]">Chassis No. (VIN)</div>
+                    <div className="text-xs font-mono font-bold text-[var(--text-main)] mt-1">{inspectingVehicle.chassisNo || 'Not specified'}</div>
+                  </div>
+                  <div className="p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                    <div className="text-xs text-[var(--text-muted)]">Color</div>
+                    <div className="text-xs font-bold text-[var(--text-main)] mt-1">{inspectingVehicle.color || 'Not specified'}</div>
+                  </div>
+                  <div className="p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                    <div className="text-xs text-[var(--text-muted)]">Acquisition Type</div>
+                    <div className="text-xs font-bold text-[var(--text-main)] mt-1">{inspectingVehicle.acquisitionType || 'PURCHASE'}</div>
+                  </div>
+                  <div className="p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                    <div className="text-xs text-[var(--text-muted)]">Purchase Price</div>
+                    <div className="text-xs font-bold text-[var(--text-main)] mt-1">
+                      {inspectingVehicle.purchasePrice ? `AED ${Number(inspectingVehicle.purchasePrice).toLocaleString()}` : '—'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Branch & Usage */}
+              <div>
+                <h3 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Branch & Allocation</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                    <div className="text-xs text-[var(--text-muted)]">Branch</div>
+                    <div className="text-xs font-bold text-[var(--text-main)] mt-1">{inspectingVehicle.branchName || 'Main Headquarters'}</div>
+                  </div>
+                  <div className="p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+                    <div className="text-xs text-[var(--text-muted)]">Usage Category</div>
+                    <div className="text-xs font-bold text-[var(--text-main)] mt-1">{inspectingVehicle.vehicleUsage || 'RENTAL'}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes */}
+              {inspectingVehicle.notes && (
+                <div>
+                  <h3 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">Notes</h3>
+                  <div className="p-3.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] text-xs text-[var(--text-main)] leading-relaxed">
+                    {inspectingVehicle.notes}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {drawerTab === 'telematics' && (
+            <div className="space-y-5">
+              <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-[var(--text-muted)] uppercase font-semibold">GPS Telematics Unit</div>
+                  <div className="text-sm font-mono font-bold text-[var(--text-main)] mt-0.5">
+                    {inspectingVehicle.deviceId || 'No Device Linked'}
+                  </div>
+                </div>
+                <div className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  {inspectingVehicle.deviceId ? 'Signal Active' : 'Offline'}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex justify-between items-center">
+                  <span className="text-xs text-[var(--text-muted)]">SIM Card No.</span>
+                  <span className="text-xs font-mono font-semibold text-[var(--text-main)]">{inspectingVehicle.simCardNo || '—'}</span>
+                </div>
+                <div className="p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex justify-between items-center">
+                  <span className="text-xs text-[var(--text-muted)]">Assigned Driver</span>
+                  <span className="text-xs font-semibold text-[var(--text-main)]">{inspectingVehicle.assignedDriverId || 'Unassigned / Customer Rented'}</span>
+                </div>
+                <div className="p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex justify-between items-center">
+                  <span className="text-xs text-[var(--text-muted)]">Operational Zone</span>
+                  <span className="text-xs font-semibold text-[var(--text-main)]">{inspectingVehicle.zoneName || 'All UAE Zones'}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {drawerTab === 'documents' && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">📋</span>
+                    <span className="text-xs font-bold text-[var(--text-main)]">Registration (Mulkiya)</span>
+                  </div>
+                  {inspectingVehicle.registrationExpiryDate && (
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${
+                      new Date(inspectingVehicle.registrationExpiryDate) < new Date() ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    }`}>
+                      {new Date(inspectingVehicle.registrationExpiryDate) < new Date() ? 'Expired' : 'Valid'}
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-[var(--text-muted)]">
+                  Expiry Date: <span className="font-semibold text-[var(--text-main)]">{inspectingVehicle.registrationExpiryDate ? new Date(inspectingVehicle.registrationExpiryDate).toLocaleDateString() : 'Not recorded'}</span>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🛡️</span>
+                    <span className="text-xs font-bold text-[var(--text-main)]">Insurance Policy</span>
+                  </div>
+                  {inspectingVehicle.insuranceExpiryDate && (
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${
+                      new Date(inspectingVehicle.insuranceExpiryDate) < new Date() ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    }`}>
+                      {new Date(inspectingVehicle.insuranceExpiryDate) < new Date() ? 'Expired' : 'Valid'}
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-[var(--text-muted)]">
+                  Expiry Date: <span className="font-semibold text-[var(--text-main)]">{inspectingVehicle.insuranceExpiryDate ? new Date(inspectingVehicle.insuranceExpiryDate).toLocaleDateString() : 'Not recorded'}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {drawerTab === 'json' && (
+            <div className="p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] font-mono text-[11px] text-[var(--text-muted)] overflow-x-auto">
+              <pre>{JSON.stringify(inspectingVehicle, null, 2)}</pre>
+            </div>
+          )}
+        </SlideOverDrawer>
+      )}
+
+      {/* Add / Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl">
             {/* Modal Header */}
-            <div className="px-6 py-5 border-b border-white/10 flex items-center justify-between flex-shrink-0">
+            <div className="px-6 py-5 border-b border-[var(--border-subtle)] flex items-center justify-between flex-shrink-0">
               <div>
-                <h2 className="text-lg font-semibold text-white">{editing ? `Edit Vehicle — ${editing.vehicleCode || editing.make}` : 'Add New Vehicle'}</h2>
-                <p className="text-xs text-slate-400 mt-0.5">Fill in the vehicle details across sections</p>
+                <h2 className="text-lg font-semibold text-[var(--text-main)]">{editing ? `Edit Vehicle — ${editing.vehicleCode || editing.make}` : 'Add New Vehicle'}</h2>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">Fill in the vehicle details across sections</p>
               </div>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white text-2xl leading-none">×</button>
+              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-2xl leading-none">×</button>
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b border-white/10 flex-shrink-0">
+            <div className="flex border-b border-[var(--border-subtle)] flex-shrink-0">
               {(['basic', 'fleet', 'documents'] as const).map(t => (
                 <button key={t} onClick={() => setTab(t)}
-                  className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${tab === t ? 'border-orange-500 text-orange-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}>
+                  className={`px-6 py-3 text-xs font-semibold transition-colors border-b-2 ${tab === t ? 'border-orange-500 text-orange-500' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
                   {t === 'basic' ? '📋 Basic Details' : t === 'fleet' ? '🚗 Fleet Assignment' : '📄 Documents & Dates'}
                 </button>
               ))}
             </div>
 
             {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-6">
-              {error && <div className="mb-4 bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm">{error}</div>}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {error && <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 px-4 py-3 rounded-xl text-xs">{error}</div>}
 
               {/* TAB: Basic Details */}
               {tab === 'basic' && (
                 <div className="space-y-6">
-                  {/* Vehicle Identification */}
                   <div>
-                    <h3 className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Vehicle Identification</h3>
-                    {/* Smart Detection Banner */}
+                    <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4">Vehicle Identification</h3>
                     {detectedInfo && !detectedDismissed && (
-                      <div className="mb-4 bg-gradient-to-r from-blue-600/20 to-cyan-600/20 border border-blue-500/30 rounded-xl p-4">
+                      <div className="mb-4 bg-gradient-to-r from-blue-600/15 to-cyan-600/15 border border-blue-500/30 rounded-xl p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-2">
                               <span className="text-blue-400 text-base">🤖</span>
-                              <span className="text-sm font-semibold text-blue-300">Smart Detection — Vehicle Identified</span>
+                              <span className="text-xs font-bold text-blue-300">Smart Detection — Vehicle Identified</span>
                             </div>
                             <div className="grid grid-cols-4 gap-3 mt-3">
-                              <div className="bg-slate-900/60 rounded-lg px-3 py-2">
-                                <div className="text-xs text-slate-500 mb-0.5">Segment</div>
-                                <div className="text-sm font-semibold text-white">
+                              <div className="bg-[var(--bg-surface)] rounded-lg px-3 py-2 border border-[var(--border-subtle)]">
+                                <div className="text-[10px] text-[var(--text-muted)] mb-0.5">Segment</div>
+                                <div className="text-xs font-bold text-[var(--text-main)]">
                                   {VEHICLE_SEGMENTS.find(s => s.value === detectedInfo.segment)?.label ?? detectedInfo.segment}
                                 </div>
                               </div>
-                              <div className="bg-slate-900/60 rounded-lg px-3 py-2">
-                                <div className="text-xs text-slate-500 mb-0.5">Group</div>
-                                <div className="text-sm font-semibold text-white">{detectedInfo.group.replace(/_/g, ' ')}</div>
+                              <div className="bg-[var(--bg-surface)] rounded-lg px-3 py-2 border border-[var(--border-subtle)]">
+                                <div className="text-[10px] text-[var(--text-muted)] mb-0.5">Group</div>
+                                <div className="text-xs font-bold text-[var(--text-main)]">{detectedInfo.group.replace(/_/g, ' ')}</div>
                               </div>
-                              <div className="bg-slate-900/60 rounded-lg px-3 py-2">
-                                <div className="text-xs text-slate-500 mb-0.5">Class</div>
-                                <div className="text-sm font-semibold text-white">{detectedInfo.vehicleClass.replace(/_/g, ' ')}</div>
+                              <div className="bg-[var(--bg-surface)] rounded-lg px-3 py-2 border border-[var(--border-subtle)]">
+                                <div className="text-[10px] text-[var(--text-muted)] mb-0.5">Class</div>
+                                <div className="text-xs font-bold text-[var(--text-main)]">{detectedInfo.vehicleClass.replace(/_/g, ' ')}</div>
                               </div>
-                              <div className="bg-slate-900/60 rounded-lg px-3 py-2">
-                                <div className="text-xs text-slate-500 mb-0.5">Suggested Type</div>
-                                <div className="text-sm font-semibold text-white">{detectedInfo.suggestedType}</div>
+                              <div className="bg-[var(--bg-surface)] rounded-lg px-3 py-2 border border-[var(--border-subtle)]">
+                                <div className="text-[10px] text-[var(--text-muted)] mb-0.5">Suggested Type</div>
+                                <div className="text-xs font-bold text-[var(--text-main)]">{detectedInfo.suggestedType}</div>
                               </div>
                             </div>
-                            {(detectedInfo.fuelType || detectedInfo.numPassengers) && (
-                              <div className="flex gap-4 mt-2">
-                                {detectedInfo.fuelType && <span className="text-xs text-slate-400">⛽ {detectedInfo.fuelType}</span>}
-                                {detectedInfo.numPassengers && <span className="text-xs text-slate-400">👤 {detectedInfo.numPassengers} passengers</span>}
-                              </div>
-                            )}
                           </div>
                           <div className="flex flex-col gap-2">
                             <button type="button" onClick={applyDetection}
-                              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap">
+                              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shadow-sm">
                               ✓ Apply
                             </button>
                             <button type="button" onClick={() => setDetectedDismissed(true)}
-                              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded-lg transition-colors whitespace-nowrap">
+                              className="px-3.5 py-1.5 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-xs rounded-lg transition-colors whitespace-nowrap">
                               Dismiss
                             </button>
                           </div>
@@ -420,148 +651,92 @@ export default function VehiclesPage() {
 
                     <div className="grid grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Vehicle Code</label>
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Vehicle Code</label>
                         <input value={form.vehicleCode ?? ''} onChange={e => f('vehicleCode', e.target.value.toUpperCase())}
                           placeholder="Auto-generated"
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-orange-500/50" />
+                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs font-mono focus:outline-none focus:border-orange-500/50" />
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Make <span className="text-red-400">*</span></label>
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Make <span className="text-rose-400">*</span></label>
                         <input
                           list="makes-list"
                           value={form.make ?? ''}
                           onChange={e => f('make', e.target.value)}
                           placeholder="e.g. Toyota"
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
+                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50" />
                         <datalist id="makes-list">
                           {KNOWN_MAKES.map(m => <option key={m} value={m} />)}
                         </datalist>
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Model <span className="text-red-400">*</span></label>
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Model <span className="text-rose-400">*</span></label>
                         <input
                           list="models-list"
                           value={form.model ?? ''}
                           onChange={e => f('model', e.target.value)}
                           placeholder="e.g. Camry"
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
+                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50" />
                         <datalist id="models-list">
                           {getModelsForMake(form.make ?? '').map(m => <option key={m} value={m} />)}
                         </datalist>
                       </div>
-                      <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Year of Manufacture</label>
-                        <input type="number" value={form.yearOfManufacture ?? new Date().getFullYear()} onChange={e => f('yearOfManufacture', Number(e.target.value))}
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Color</label>
-                        <input value={form.color ?? ''} onChange={e => f('color', e.target.value)}
-                          placeholder="e.g. White"
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Chassis No.</label>
-                        <input value={form.chassisNo ?? ''} onChange={e => f('chassisNo', e.target.value)}
-                          placeholder="VIN / Chassis number"
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-orange-500/50" />
-                      </div>
-                      {/* Segment — spans full width */}
-                      <div className="col-span-3">
-                        <label className="block text-xs text-slate-400 mb-2">
-                          Vehicle Segment
-                          <span className="ml-2 text-slate-500 normal-case font-normal">Used in RAC pricing rules and fleet reporting</span>
-                        </label>
-                        <div className="grid grid-cols-7 gap-2">
-                          {VEHICLE_SEGMENTS.map(seg => (
-                            <button
-                              key={seg.value}
-                              type="button"
-                              title={seg.desc}
-                              onClick={() => f('category', form.category === seg.value ? '' : seg.value)}
-                              className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all text-center ${
-                                form.category === seg.value
-                                  ? segmentColor[seg.value] + ' ring-1 ring-offset-1 ring-offset-slate-900 ring-orange-500'
-                                  : 'bg-slate-800/60 border-white/10 text-slate-400 hover:border-orange-500/30 hover:text-slate-300'
-                              }`}>
-                              {seg.label}
-                            </button>
-                          ))}
-                        </div>
-                        {form.category && (
-                          <p className="mt-2 text-xs text-slate-500">
-                            {VEHICLE_SEGMENTS.find(s => s.value === form.category)?.desc}
-                          </p>
-                        )}
-                      </div>
                     </div>
                   </div>
 
-                  {/* Registration */}
                   <div>
-                    <h3 className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Registration Details</h3>
-                    <div className="grid grid-cols-3 gap-4">
+                    <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4">Registration & Number Plate</h3>
+                    <div className="grid grid-cols-4 gap-4">
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Plate Number</label>
-                        <input value={form.plateNumber ?? ''} onChange={e => f('plateNumber', e.target.value)}
-                          placeholder="e.g. 12345"
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-orange-500/50" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Plate Code</label>
-                        <input value={form.plateCode ?? ''} onChange={e => f('plateCode', e.target.value)}
-                          placeholder="e.g. A, B, AA"
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-orange-500/50" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Emirate</label>
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Emirate</label>
                         <select value={form.emirate ?? 'DUBAI'} onChange={e => f('emirate', e.target.value)}
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50">
+                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50">
                           {EMIRATES.map(em => <option key={em} value={em}>{em.replace(/_/g, ' ')}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Plate Category</label>
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Plate Code</label>
+                        <input value={form.plateCode ?? ''} onChange={e => f('plateCode', e.target.value.toUpperCase())}
+                          placeholder="e.g. A, B, 1"
+                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs font-mono uppercase focus:outline-none focus:border-orange-500/50" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Plate Number</label>
+                        <input value={form.plateNumber ?? form.licensePlate ?? ''} onChange={e => { f('plateNumber', e.target.value); f('licensePlate', e.target.value); }}
+                          placeholder="e.g. 12345"
+                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs font-mono focus:outline-none focus:border-orange-500/50" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Plate Category</label>
                         <select value={form.plateCategory ?? 'PRIVATE'} onChange={e => f('plateCategory', e.target.value)}
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50">
-                          {PLATE_CATS.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Registration No.</label>
-                        <input value={form.registrationNo ?? ''} onChange={e => f('registrationNo', e.target.value)}
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-orange-500/50" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Status</label>
-                        <select value={form.status ?? 'AVAILABLE'} onChange={e => f('status', e.target.value)}
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50">
-                          {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50">
+                          {PLATE_CATS.map(pc => <option key={pc} value={pc}>{pc}</option>)}
                         </select>
                       </div>
                     </div>
                   </div>
 
-                  {/* Acquisition */}
                   <div>
-                    <h3 className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Acquisition Details</h3>
+                    <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4">Classification & Commercial Status</h3>
                     <div className="grid grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Acquisition Type</label>
-                        <select value={form.acquisitionType ?? 'PURCHASE'} onChange={e => f('acquisitionType', e.target.value)}
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50">
-                          {ACQUISITION_TYPES.map(a => <option key={a} value={a}>{a.replace(/_/g, ' ')}</option>)}
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Vehicle Segment</label>
+                        <select value={form.category ?? ''} onChange={e => f('category', e.target.value)}
+                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50">
+                          <option value="">— Select Segment —</option>
+                          {VEHICLE_SEGMENTS.map(s => <option key={s.value} value={s.value}>{s.label} ({s.desc})</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Purchase Date</label>
-                        <input type="date" value={form.purchaseDate ? form.purchaseDate.slice(0, 10) : ''} onChange={e => f('purchaseDate', e.target.value)}
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Color</label>
+                        <input value={form.color ?? ''} onChange={e => f('color', e.target.value)} placeholder="e.g. White"
+                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50" />
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Purchase Price (AED)</label>
-                        <input type="number" value={form.purchasePrice ?? 0} onChange={e => f('purchasePrice', Number(e.target.value))}
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Status</label>
+                        <select value={form.status ?? 'AVAILABLE'} onChange={e => f('status', e.target.value)}
+                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50">
+                          {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
                       </div>
                     </div>
                   </div>
@@ -572,101 +747,55 @@ export default function VehiclesPage() {
               {tab === 'fleet' && (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Fleet Configuration</h3>
+                    <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4">Fleet Configuration</h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Vehicle Type</label>
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Vehicle Type</label>
                         <select value={form.vehicleTypeId ?? ''} onChange={e => f('vehicleTypeId', e.target.value)}
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50">
+                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50">
                           <option value="">— Select Type —</option>
                           {vehicleTypes.map(vt => <option key={vt.id} value={vt.id}>{vt.name} ({vt.code})</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Vehicle Usage</label>
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Vehicle Usage</label>
                         <select value={form.vehicleUsage ?? 'RENTAL'} onChange={e => f('vehicleUsage', e.target.value)}
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50">
+                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50">
                           {USAGES.map(u => <option key={u} value={u}>{u.replace(/_/g, ' ')}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Lifecycle Stage</label>
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Lifecycle Stage</label>
                         <select value={form.lifecycleStage ?? 'ACTIVE'} onChange={e => f('lifecycleStage', e.target.value)}
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50">
+                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50">
                           {LIFECYCLE_STAGES.map(l => <option key={l} value={l}>{l.replace(/_/g, ' ')}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Branch / Location</label>
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Branch / Location</label>
                         <input value={form.branchName ?? ''} onChange={e => f('branchName', e.target.value)}
                           placeholder="e.g. Dubai Airport"
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Zone</label>
-                        <select value={form.zoneId ?? ''} onChange={e => f('zoneId', e.target.value)}
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50">
-                          <option value="">— unassigned —</option>
-                          {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
-                        </select>
-                        <p className="text-[11px] text-slate-500 mt-1">Used by Planning Core to prefer same-zone vehicles when assigning trips — not a hard restriction.</p>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Assigned Driver ID</label>
-                        <input value={form.assignedDriverId ?? ''} onChange={e => f('assignedDriverId', e.target.value)}
-                          placeholder="Driver reference"
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Hierarchy / Division</label>
-                        <input value={form.hierarchyName ?? ''} onChange={e => f('hierarchyName', e.target.value)}
-                          placeholder="e.g. Rental Division"
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
+                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50" />
                       </div>
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Telematics & Equipment</h3>
+                    <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4">Telematics & Hardware</h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Device ID / IMEI</label>
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Device ID / IMEI</label>
                         <input value={form.deviceId ?? ''} onChange={e => f('deviceId', e.target.value)}
                           placeholder="GPS/telematics device ID"
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-orange-500/50" />
+                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs font-mono focus:outline-none focus:border-orange-500/50" />
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">SIM Card No.</label>
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">SIM Card No.</label>
                         <input value={form.simCardNo ?? ''} onChange={e => f('simCardNo', e.target.value)}
                           placeholder="SIM number"
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-orange-500/50" />
+                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs font-mono focus:outline-none focus:border-orange-500/50" />
                       </div>
                     </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Current Readings</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Odometer Reading (km)</label>
-                        <input type="number" value={form.odometerReading ?? 0} onChange={e => f('odometerReading', Number(e.target.value))}
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Fuel Level (%)</label>
-                        <input type="number" min="0" max="100" value={form.fuelLevel ?? 100} onChange={e => f('fuelLevel', Number(e.target.value))}
-                          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
-                        <div className="mt-2 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                          <div className="h-full bg-orange-500 rounded-full transition-all" style={{ width: `${form.fuelLevel ?? 100}%` }} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1.5">Notes</label>
-                    <textarea value={form.notes ?? ''} onChange={e => f('notes', e.target.value)} rows={3}
-                      className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50 resize-none" />
                   </div>
                 </div>
               )}
@@ -675,62 +804,47 @@ export default function VehiclesPage() {
               {tab === 'documents' && (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Document Expiry Dates</h3>
+                    <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4">Document Expiry Dates</h3>
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-slate-800/40 border border-white/10 rounded-xl p-4">
+                      <div className="bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl p-4">
                         <div className="flex items-center gap-2 mb-3">
-                          <span className="text-lg">📋</span>
-                          <h4 className="text-sm font-medium text-white">Vehicle Registration</h4>
+                          <span className="text-base">📋</span>
+                          <h4 className="text-xs font-bold text-[var(--text-main)]">Vehicle Registration (Mulkiya)</h4>
                         </div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Expiry Date</label>
+                        <label className="block text-xs text-[var(--text-muted)] mb-1.5">Expiry Date</label>
                         <input type="date" value={form.registrationExpiryDate ? form.registrationExpiryDate.slice(0, 10) : ''}
                           onChange={e => f('registrationExpiryDate', e.target.value)}
-                          className="w-full bg-slate-700 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
-                        {form.registrationExpiryDate && (
-                          <p className={`text-xs mt-2 ${new Date(form.registrationExpiryDate) < new Date() ? 'text-red-400' : new Date(form.registrationExpiryDate) < new Date(Date.now() + 30 * 86400000) ? 'text-amber-400' : 'text-green-400'}`}>
-                            {new Date(form.registrationExpiryDate) < new Date() ? '⚠️ Expired' : new Date(form.registrationExpiryDate) < new Date(Date.now() + 30 * 86400000) ? '⚠️ Expiring soon' : '✓ Valid'}
-                          </p>
-                        )}
+                          className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50" />
                       </div>
-                      <div className="bg-slate-800/40 border border-white/10 rounded-xl p-4">
+                      <div className="bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl p-4">
                         <div className="flex items-center gap-2 mb-3">
-                          <span className="text-lg">🛡️</span>
-                          <h4 className="text-sm font-medium text-white">Insurance Policy</h4>
+                          <span className="text-base">🛡️</span>
+                          <h4 className="text-xs font-bold text-[var(--text-main)]">Insurance Policy</h4>
                         </div>
-                        <label className="block text-xs text-slate-400 mb-1.5">Expiry Date</label>
+                        <label className="block text-xs text-[var(--text-muted)] mb-1.5">Expiry Date</label>
                         <input type="date" value={form.insuranceExpiryDate ? form.insuranceExpiryDate.slice(0, 10) : ''}
                           onChange={e => f('insuranceExpiryDate', e.target.value)}
-                          className="w-full bg-slate-700 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
-                        {form.insuranceExpiryDate && (
-                          <p className={`text-xs mt-2 ${new Date(form.insuranceExpiryDate) < new Date() ? 'text-red-400' : new Date(form.insuranceExpiryDate) < new Date(Date.now() + 30 * 86400000) ? 'text-amber-400' : 'text-green-400'}`}>
-                            {new Date(form.insuranceExpiryDate) < new Date() ? '⚠️ Expired' : new Date(form.insuranceExpiryDate) < new Date(Date.now() + 30 * 86400000) ? '⚠️ Expiring soon' : '✓ Valid'}
-                          </p>
-                        )}
+                          className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50" />
                       </div>
                     </div>
-                  </div>
-
-                  <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
-                    <p className="text-amber-400 text-sm font-medium mb-1">📎 Document Attachments</p>
-                    <p className="text-amber-300/70 text-xs">Upload Mulkiya, insurance certificate, and other vehicle documents from the Documents section after saving this vehicle.</p>
                   </div>
                 </div>
               )}
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 py-4 border-t border-white/10 flex items-center justify-between flex-shrink-0 bg-slate-900">
+            <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex items-center justify-between flex-shrink-0 bg-[var(--bg-surface)]">
               <div className="flex gap-2">
                 {(['basic', 'fleet', 'documents'] as const).filter(t => t !== tab).map(t => (
-                  <button key={t} onClick={() => setTab(t)} className="px-4 py-2 text-xs text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors">
+                  <button key={t} onClick={() => setTab(t)} className="px-3.5 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-surface-hover)] rounded-lg transition-colors">
                     {t === 'basic' ? '← Basic Details' : t === 'fleet' ? '→ Fleet Assignment' : '→ Documents'}
                   </button>
                 ))}
               </div>
               <div className="flex gap-3">
-                <button onClick={() => setShowModal(false)} className="px-5 py-2.5 text-sm text-slate-400 hover:text-white transition-colors">Cancel</button>
+                <button onClick={() => setShowModal(false)} className="px-4 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors">Cancel</button>
                 <button onClick={handleSave} disabled={saving}
-                  className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-semibold text-sm hover:opacity-90 disabled:opacity-50 transition-opacity">
+                  className="px-5 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-semibold text-xs hover:opacity-90 disabled:opacity-50 transition-opacity shadow-sm">
                   {saving ? 'Saving…' : editing ? 'Update Vehicle' : 'Add Vehicle'}
                 </button>
               </div>
