@@ -22,6 +22,11 @@ async function getRouteOptimiserAgent(): Promise<AgentDefinition> {
   return ROUTE_OPTIMISER_AGENT;
 }
 
+async function getStaffTransportPlannerAgent(): Promise<AgentDefinition> {
+  const { STAFF_TRANSPORT_PLANNER_AGENT } = await import('./staff-transport-planner/agent');
+  return STAFF_TRANSPORT_PLANNER_AGENT;
+}
+
 async function getIncidentTriageAgent(): Promise<AgentDefinition> {
   const { INCIDENT_TRIAGE_AGENT } = await import('./incident-triage/agent');
   return INCIDENT_TRIAGE_AGENT;
@@ -60,18 +65,19 @@ async function getOpsAssistantAgent(): Promise<AgentDefinition> {
 
 const AGENT_LOADERS: Record<AgentId, () => Promise<AgentDefinition>> = {
   // ── Batch / Scan ────────────────────────────────────────────────────────────
-  'predictive-maintenance': getPMAgent,
-  'finance-anomaly':        getFinanceAnomalyAgent,
-  'route-optimiser':        getRouteOptimiserAgent,
-  'incident-triage':        getIncidentTriageAgent,
-  'dispatch-optimiser':     getDispatchOptimiserAgent,
-  'driver-coach':           getDriverCoachAgent,
-  'demand-forecasting':     getDemandForecastingAgent,
-  'document-intelligence':  async () => { throw new Error('Not yet implemented'); },
+  'predictive-maintenance':     getPMAgent,
+  'finance-anomaly':            getFinanceAnomalyAgent,
+  'route-optimiser':            getRouteOptimiserAgent,
+  'staff-transport-planner':    getStaffTransportPlannerAgent,
+  'incident-triage':            getIncidentTriageAgent,
+  'dispatch-optimiser':         getDispatchOptimiserAgent,
+  'driver-coach':               getDriverCoachAgent,
+  'demand-forecasting':         getDemandForecastingAgent,
+  'document-intelligence':      async () => { throw new Error('Not yet implemented'); },
   // ── Conversational (always-on, stats wrappers) ─────────────────────────────
-  'whatsapp-agent':         getWhatsAppAgent,
-  'chat-widget':            getChatWidgetAgent,
-  'ops-assistant':          getOpsAssistantAgent,
+  'whatsapp-agent':             getWhatsAppAgent,
+  'chat-widget':                getChatWidgetAgent,
+  'ops-assistant':              getOpsAssistantAgent,
 };
 
 export async function getAgent(id: AgentId): Promise<AgentDefinition> {
@@ -88,29 +94,39 @@ export const AGENT_CATALOGUE = [
   {
     id: 'predictive-maintenance' as AgentId,
     name: 'Predictive Maintenance Agent',
-    description: 'Scores every vehicle using 5 statistical factors and auto-creates work orders for critical-risk vehicles.',
-    version: '1.0.0',
+    description: 'Scores every vehicle using 9 failure factors, sensor telemetry, and failure RUL to auto-schedule maintenance for high-risk vehicles.',
+    version: '2.0.0',
     status: 'live',
-    model: 'Statistical (no LLM)',
-    module: 'Fleet',
+    model: 'Multi-Signal Sensor & Degradation Model',
+    module: 'Fleet / Maintenance',
   },
   {
     id: 'finance-anomaly' as AgentId,
     name: 'Finance Anomaly Detection Agent',
-    description: 'Detects duplicate invoices, amount outliers, round-number entries, and velocity spikes using Z-score and heuristic detectors.',
-    version: '1.0.0',
+    description: 'AI Financial Control Layer analyzing 8 transaction streams (Maintenance, Fuel, Invoices, Partners, Expenses, Tolls, Contracts, Procurement) to explain root cause and execute 1-click financial remediation.',
+    version: '2.0.0',
     status: 'live',
-    model: 'Statistical (no LLM)',
+    model: 'Expected vs Actual Intelligence',
     module: 'Finance',
   },
   {
     id: 'route-optimiser' as AgentId,
     name: 'Route Optimisation Agent',
-    description: 'Runs Nearest Neighbour + 2-opt TSP on every school bus route, saves distance, and auto-applies routes that exceed the savings threshold.',
+    description: 'Universal multi-route network consolidation engine that merges under-utilized routes, chains turnaround vehicles, and calculates fleet savings across Bus-Ops and School Bus.',
+    version: '2.0.0',
+    status: 'live',
+    model: 'Network Consolidation + 2-Opt TSP',
+    module: 'School Bus & Logistics',
+  },
+  {
+    id: 'staff-transport-planner' as AgentId,
+    name: 'Staff Transport Planning Agent',
+    description: 'Multi-shift optimization engine analyzing employee accommodations, worksites, and manifests to recommend optimal route clusters, vehicle sizing (14/30/50), departure times, and cross-shift vehicle reuse.',
     version: '1.0.0',
     status: 'live',
-    model: 'Statistical (no LLM)',
-    module: 'School Bus',
+    model: 'Multi-Shift Geoclustering + 2-Opt TSP',
+    module: 'Bus-Ops / Staff Transport',
+    agentType: 'BATCH',
   },
   {
     id: 'incident-triage' as AgentId,
@@ -124,10 +140,10 @@ export const AGENT_CATALOGUE = [
   {
     id: 'dispatch-optimiser' as AgentId,
     name: 'Smart Dispatch Optimiser Agent',
-    description: '15-factor statistical scoring model that ranks every available driver/vehicle against each pending dispatch job.',
-    version: '1.0.0',
+    description: '15-factor statistical scoring model that evaluates live HOS, compliance, deadhead, maintenance risk, and proximity to execute semi-autonomous dispatch.',
+    version: '2.0.0',
     status: 'live',
-    model: 'Statistical (no LLM)',
+    model: '15-Factor Semi-Autonomous Dispatch',
     module: 'Dispatch',
   },
   {

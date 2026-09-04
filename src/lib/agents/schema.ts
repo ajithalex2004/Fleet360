@@ -2,9 +2,10 @@
  * Agent Infrastructure Schema
  * ----------------------------
  * Tables that back the entire agent system:
- *   agent_runs           — immutable audit log of every agent execution
- *   fleet_risk_scores    — latest risk score per vehicle (upserted on each run)
- *   agent_anomaly_flags  — flagged financial records awaiting review / 1-click action
+ *   agent_runs                  — immutable audit log of every agent execution
+ *   fleet_risk_scores           — latest risk score per vehicle (upserted on each run)
+ *   agent_anomaly_flags         — flagged financial records awaiting review / 1-click action
+ *   bus_ops_plan_recommendations — AI staff transport plan recommendations
  */
 import { prisma } from '@/lib/prisma';
 
@@ -112,6 +113,33 @@ async function _doInit(): Promise<void> {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_anomaly_flags_open_dedup
         ON ai.agent_anomaly_flags(entity_id, detector_id)
         WHERE status = 'OPEN';
+
+      -- ── bus_ops_plan_recommendations ───────────────────────────────────────────
+      CREATE TABLE IF NOT EXISTS bus_ops_plan_recommendations (
+        id                         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id                  TEXT NOT NULL,
+        plan_name                  TEXT NOT NULL,
+        shift_coverage             JSONB NOT NULL DEFAULT '[]',
+        total_employees_covered    INT NOT NULL DEFAULT 0,
+        baseline_vehicles_needed   INT NOT NULL DEFAULT 0,
+        optimized_vehicles_needed  INT NOT NULL DEFAULT 0,
+        vehicles_saved             INT NOT NULL DEFAULT 0,
+        daily_distance_saved_km    NUMERIC(10,2) NOT NULL DEFAULT 0,
+        monthly_cost_saved_aed     NUMERIC(12,2) NOT NULL DEFAULT 0,
+        annual_cost_saved_aed      NUMERIC(14,2) NOT NULL DEFAULT 0,
+        routes                     JSONB NOT NULL DEFAULT '[]',
+        vehicle_reuse_chains       JSONB NOT NULL DEFAULT '[]',
+        status                     TEXT NOT NULL DEFAULT 'SUGGESTED',
+        applied_at                 TIMESTAMPTZ,
+        applied_by                 TEXT,
+        agent_run_id               UUID,
+        created_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_bus_ops_plan_rec_tenant     ON bus_ops_plan_recommendations(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_bus_ops_plan_rec_status     ON bus_ops_plan_recommendations(status);
+      CREATE INDEX IF NOT EXISTS idx_bus_ops_plan_rec_created_at ON bus_ops_plan_recommendations(created_at DESC);
 
       -- ── route_optimisation_results ─────────────────────────────────────────────
       CREATE TABLE IF NOT EXISTS route_optimisation_results (

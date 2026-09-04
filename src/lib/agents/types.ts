@@ -33,6 +33,9 @@ export type AgentEventType =
   | 'driver.week_end'         // trigger weekly coaching
   | 'booking.created'         // new booking (demand signal)
   | 'booking.completed'       // completed booking (demand history)
+  | 'bus_ops.shift_schedule_updated' // staff transport shift changed
+  | 'bus_ops.manifest_updated'       // employee accommodation manifest updated
+  | 'bus_ops.plan_requested'         // staff transport plan requested
   | 'whatsapp.message_received'  // inbound WhatsApp message
   | 'whatsapp.stats_requested'   // pull 7-day WhatsApp stats
   | 'chat.message_sent'          // user sent a chat widget message
@@ -58,6 +61,7 @@ export type AgentId =
   | 'predictive-maintenance'
   | 'finance-anomaly'
   | 'route-optimiser'
+  | 'staff-transport-planner'
   | 'incident-triage'
   | 'dispatch-optimiser'
   | 'driver-coach'
@@ -173,6 +177,77 @@ export interface RouteOptimiserOutput {
   networkDesign: NetworkDesignSummary;
   consolidations: ConsolidationRecommendationItem[];
   singleRouteResults: unknown[];
+}
+
+// ── Staff Transport Planning Agent Contracts ──────────────────────────────────
+export interface StaffTransportStop {
+  stopId: string;
+  stopName: string;
+  lat: number;
+  lng: number;
+  passengerCount: number;
+  estimatedPickupTime: string; // "06:15"
+  zone: string;
+}
+
+export interface StaffTransportRoutePlan {
+  routeId: string;
+  routeName: string;
+  direction: 'INBOUND' | 'OUTBOUND';
+  shiftName: string; // 'MORNING_0700' | 'AFTERNOON_1500' | 'NIGHT_2300'
+  targetArrivalTime: string; // "07:00"
+  calculatedDepartureTime: string; // "06:05"
+  totalDurationMin: number;
+  totalDistanceKm: number;
+  totalPassengers: number;
+  recommendedVehicleSize: 'VAN_14' | 'COASTER_30' | 'COACH_50';
+  recommendedCapacity: number;
+  seatUtilizationPct: number;
+  assignedVehicleId?: string;
+  assignedVehicleCode?: string;
+  stops: StaffTransportStop[];
+  destinationName: string;
+  destinationLat: number;
+  destinationLng: number;
+}
+
+export interface VehicleReuseChain {
+  vehicleId: string;
+  vehicleCode: string;
+  vehicleType: string;
+  capacity: number;
+  chainedRoutes: {
+    routeId: string;
+    routeName: string;
+    shiftName: string;
+    departureTime: string;
+    arrivalTime: string;
+    startLocation: string;
+    endLocation: string;
+    deadheadToNextKm: number;
+    turnaroundBufferMin: number;
+  }[];
+  totalDutyHours: number;
+  totalOperatingKm: number;
+  totalDeadheadKm: number;
+}
+
+export interface StaffTransportPlanRecommendation {
+  id: string;
+  tenantId: string;
+  planName: string;
+  shiftCoverage: string[];
+  totalEmployeesCovered: number;
+  baselineVehiclesNeeded: number;
+  optimizedVehiclesNeeded: number;
+  vehiclesSaved: number;
+  dailyDistanceSavedKm: number;
+  monthlyCostSavedAed: number;
+  annualCostSavedAed: number;
+  routes: StaffTransportRoutePlan[];
+  vehicleReuseChains: VehicleReuseChain[];
+  status: 'SUGGESTED' | 'APPLIED' | 'DISCARDED';
+  generatedAt: string;
 }
 
 // ── Finance Anomaly Output (8 Comprehensive Streams) ───────────────────────────

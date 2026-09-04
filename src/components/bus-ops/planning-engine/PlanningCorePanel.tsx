@@ -15,12 +15,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Sparkles, RefreshCw, Save, CheckCircle2, AlertTriangle, GitCompare,
-  Play, Plus, X, ChevronDown, ChevronUp, SlidersHorizontal,
+  Play, Plus, X, ChevronDown, ChevronUp, SlidersHorizontal, Bot,
 } from 'lucide-react';
 import { useFetchedData, fetchOnce } from '@/hooks/useFetchedData';
 import { cbaToWorkRules } from '@/lib/cba/engine';
 import type { CbaRules } from '@/lib/cba/types';
 import PceVerdictPanel, { type PceVerdictBody } from '@/components/bus-ops/PceVerdictPanel';
+import { StaffTransportAiDrawer } from './StaffTransportAiDrawer';
 
 /**
  * Success-payload PCE gate section. Present when the apply route ran
@@ -306,6 +307,7 @@ export function PlanningCorePanel({
   //                   result to render (not an error) so the operator sees
   //                   which trips failed and can fix rules / assignments.
   const [applying, setApplying] = useState(false);
+  const [isAiDrawerOpen, setIsAiDrawerOpen] = useState(false);
   const [applyResult, setApplyResult] = useState<{
     tripsAffected: number;
     driversAssigned: number;
@@ -516,6 +518,10 @@ export function PlanningCorePanel({
           drivers — what-if comparison included.
         </p>
         <div className="flex items-center gap-2 shrink-0">
+          <button onClick={() => setIsAiDrawerOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-violet-500/40 bg-violet-950/40 px-4 py-2.5 text-sm font-semibold text-violet-200 hover:bg-violet-900/50 shadow-sm transition">
+            <Bot className="w-4 h-4 text-violet-400" /> Staff Transport AI Planner
+          </button>
           {/* Only rendered when the caller passed a handler, which the shell
               does only if the user holds bus-ops:admin:planning-constraints.
               Showing it otherwise would walk them into a 403. */}
@@ -778,6 +784,14 @@ export function PlanningCorePanel({
         </div>
         {compareResult && <CompareDiff compareResult={compareResult} />}
       </div>
+
+      <StaffTransportAiDrawer
+        isOpen={isAiDrawerOpen}
+        onClose={() => setIsAiDrawerOpen(false)}
+        onPlanApplied={() => {
+          plansListRes.refresh();
+        }}
+      />
     </div>
   );
 }
