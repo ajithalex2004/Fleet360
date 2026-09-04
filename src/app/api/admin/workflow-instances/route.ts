@@ -1,10 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
 import { getAllWorkflowInstances, getAllPendingStepInstances } from '@/lib/workflow-db';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -19,11 +18,11 @@ export async function GET(req: NextRequest) {
     const module = searchParams.get('module') ?? undefined;
 
     if (view === 'pending') {
-      const rows = await getAllPendingStepInstances();
+      const rows = await getAllPendingStepInstances(tenantId);
       return NextResponse.json(rows);
     }
 
-    const rows = await getAllWorkflowInstances({ status, module, limit: 200 });
+    const rows = await getAllWorkflowInstances(tenantId, { status, module, limit: 200 });
     return NextResponse.json(rows);
   } catch (e) {
     return NextResponse.json({ error: e?.message }, { status: 500 });

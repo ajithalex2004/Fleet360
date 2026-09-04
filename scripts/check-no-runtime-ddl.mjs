@@ -62,20 +62,31 @@ import { exit } from 'node:process';
 // single-purpose tables) were migrated the same day into
 // prisma/migrations/20260910000023 through .../20260910000030.
 //
-// The remaining 6 are deliberately NOT migrated yet — each is either
-// security-critical (sso.ts holds encrypted OIDC client secrets), a large
-// interdependent engine (workflow-db.ts's approval engine; the 3-file
-// service-config engine with versioned, scope-inherited rules), or a
-// large foundational schema (logistics/domain.ts, which also contains a
-// second, unrelated ensureFinanceJournalPostingTables DDL function).
-// Left for a dedicated, more carefully-reviewed pass.
+// sso.ts and workflow-db.ts were migrated 2026-09-04 into
+// prisma/migrations/20260910000031 and .../20260910000032 respectively.
+// sso.ts got the full treatment (RLS added to tenant_sso_configs, plus a
+// fix to admin/tenants/[id]/sso/route.ts's domain-conflict check, which
+// used the bare prisma client instead of withPlatformAdmin and would have
+// silently stopped seeing any rows once FORCE ROW LEVEL SECURITY landed).
+// workflow-db.ts got DDL-only: every query in that file uses the bare
+// prisma client, never a tenant-scoped transaction, so RLS would make the
+// whole approval-workflow engine return zero rows. Its real tenant-
+// isolation gap (listWorkflows() returns every tenant's rows when no
+// tenantId filter is passed) is deliberately NOT fixed here — flagged as
+// its own planned effort, starting with a full caller inventory across
+// workflow-db.ts's ~19 exported functions before any signature changes.
+//
+// The remaining 4 are deliberately NOT migrated yet — each is either a
+// large interdependent engine (the 3-file service-config engine with
+// versioned, scope-inherited rules) or a large foundational schema
+// (logistics/domain.ts, which also contains a second, unrelated
+// ensureFinanceJournalPostingTables DDL function). Left for a dedicated,
+// more carefully-reviewed pass.
 const KNOWN_VIOLATIONS = new Set([
   'src/lib/logistics/domain.ts',
   'src/lib/service-config/rules-schema.ts',
   'src/lib/service-config/schema.ts',
   'src/lib/service-config/scopes-schema.ts',
-  'src/lib/sso.ts',
-  'src/lib/workflow-db.ts',
 ]);
 
 // ── Detection patterns ────────────────────────────────────────────────────────

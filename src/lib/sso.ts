@@ -14,33 +14,6 @@
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 
-let _ensured = false;
-
-export async function ensureSsoTable(): Promise<void> {
-  if (_ensured) return;
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS tenant_sso_configs (
-      id                       UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id                TEXT         NOT NULL UNIQUE,
-      provider                 TEXT         NOT NULL DEFAULT 'oidc',
-      issuer                   TEXT         NOT NULL,
-      client_id                TEXT         NOT NULL,
-      client_secret_encrypted  TEXT         NOT NULL,
-      allowed_email_domains    JSONB        NOT NULL DEFAULT '[]'::jsonb,
-      default_role_id          TEXT,
-      jit_enabled              BOOLEAN      NOT NULL DEFAULT TRUE,
-      is_active                BOOLEAN      NOT NULL DEFAULT TRUE,
-      created_by_user_id       TEXT,
-      created_at               TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      updated_at               TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-    )
-  `);
-  await prisma.$executeRawUnsafe(
-    `CREATE INDEX IF NOT EXISTS idx_tenant_sso_active ON tenant_sso_configs (is_active) WHERE is_active = TRUE`,
-  );
-  _ensured = true;
-}
-
 // ── Secret encryption ────────────────────────────────────────────────────────
 
 /**
@@ -119,7 +92,6 @@ function rowToConfig(r: SsoRow): TenantSsoConfig {
 }
 
 export async function findSsoConfigByTenant(tenantId: string): Promise<TenantSsoConfig | null> {
-  await ensureSsoTable();
   const rows = await prisma.$queryRawUnsafe<SsoRow[]>(
     `SELECT id::text, tenant_id, provider, issuer, client_id, client_secret_encrypted,
             allowed_email_domains, default_role_id, jit_enabled, is_active
@@ -139,7 +111,6 @@ export async function findSsoConfigByTenant(tenantId: string): Promise<TenantSso
 export async function findSsoConfigByEmail(email: string): Promise<TenantSsoConfig | null> {
   const domain = email.split('@')[1]?.toLowerCase().trim();
   if (!domain) return null;
-  await ensureSsoTable();
   // JSONB ?| array_text checks if the array contains any of the given keys.
   const rows = await prisma.$queryRawUnsafe<SsoRow[]>(
     `SELECT id::text, tenant_id, provider, issuer, client_id, client_secret_encrypted,
@@ -158,7 +129,6 @@ export async function findSsoConfigByEmail(email: string): Promise<TenantSsoConf
  * Never includes the decrypted secret.
  */
 export async function getSsoConfigPublic(tenantId: string): Promise<Omit<TenantSsoConfig, 'clientSecret'> & { clientSecretSet: boolean } | null> {
-  await ensureSsoTable();
   const rows = await prisma.$queryRawUnsafe<SsoRow[]>(
     `SELECT id::text, tenant_id, provider, issuer, client_id, client_secret_encrypted,
             allowed_email_domains, default_role_id, jit_enabled, is_active

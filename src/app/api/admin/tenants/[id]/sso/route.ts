@@ -15,9 +15,9 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, withPlatformAdmin } from '@/lib/rls';
 import {
-  ensureSsoTable, encryptSecret, getSsoConfigPublic,
+  encryptSecret, getSsoConfigPublic,
 } from '@/lib/sso';
 import { requirePlan } from '@/lib/plan-limits';
 import { logAudit } from '@/lib/audit';
@@ -118,12 +118,13 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     // detection only sees other tenants. With withTenantRls the policy
     // hides other tenants' rows, so we need to lift the check to a
     // platform-admin transaction. We do that as a separate tx.
-    await ensureSsoTable();
-    const conflicts = await prisma.$queryRawUnsafe<{ tenant_id: string }[]>(
-      `SELECT tenant_id FROM tenant_sso_configs
-       WHERE tenant_id != $1
-         AND allowed_email_domains ?| $2::text[]`,
-      tenantId, domains,
+    const conflicts = await withPlatformAdmin(prisma, (ptx) =>
+      ptx.$queryRawUnsafe<{ tenant_id: string }[]>(
+        `SELECT tenant_id FROM tenant_sso_configs
+         WHERE tenant_id != $1
+           AND allowed_email_domains ?| $2::text[]`,
+        tenantId, domains,
+      ),
     ).catch(() => []);
     if (conflicts.length > 0) {
       return NextResponse.json({
@@ -203,7 +204,6 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;
 
-  await ensureSsoTable();
   await withTenantRls(prisma, tenantId, (tx) =>
     tx.$executeRawUnsafe(`DELETE FROM tenant_sso_configs WHERE tenant_id = $1`, tenantId)
   );

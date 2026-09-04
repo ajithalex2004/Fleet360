@@ -1,185 +1,13 @@
 import { prisma } from '@/lib/prisma';
-import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 
-const _g = globalThis as { _workflowDbInit?: Promise<void> };
-
-function isInsufficientPrivilege(e: unknown): boolean {
-  return (
-    e instanceof Prisma.PrismaClientKnownRequestError &&
-    (e.meta as { code?: string } | undefined)?.code === '42501'
-  );
-}
-
-function _ensureWorkflowTablesOnce(): Promise<void> {
-  if (_g._workflowDbInit) return _g._workflowDbInit;
-  _g._workflowDbInit = _doInit().catch((e) => {
-    if (isInsufficientPrivilege(e)) {
-      // See the identical fix in src/lib/branding.ts / payment-schema.ts —
-      // a later hardening pass revoked the runtime role's CREATE privilege
-      // on the public schema, so this DDL bootstrap fails on every call
-      // regardless of whether the tables already exist. Found via E2E
-      // testing: the leasing quotation approval flow's workflow-trigger
-      // side effect was 500ing on every "Send for Credit Approval" /
-      // "Approve Credit" click because of this. Resolve instead of
-      // rethrowing so the cached promise sticks and callers stop retrying.
-      console.warn('[Workflow] DDL skipped: runtime role lacks CREATE privilege on public schema (assuming tables already exist)');
-      return;
-    }
-    delete _g._workflowDbInit;
-    throw e;
-  });
-  return _g._workflowDbInit;
-}
-
-async function _doInit(): Promise<void> {
-  await prisma.$executeRawUnsafe(`
-    DO $DDL$
-    BEGIN
-      CREATE TABLE IF NOT EXISTS "WorkflowDefinition" (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        module TEXT NOT NULL,
-        procedure TEXT NOT NULL,
-        description TEXT,
-        "isActive" BOOLEAN DEFAULT true,
-        "createdAt" TIMESTAMP DEFAULT NOW(),
-        "updatedAt" TIMESTAMP DEFAULT NOW()
-      );
-
-      -- ── Phase 2 of the Service-Configuration ↔ Workflow merge ─────────
-      -- Move workflows from the legacy (module, procedure) global keying
-      -- to a per-service-type, per-tenant model so:
-      --   • each WorkflowDefinition belongs to a specific ServiceType
-      --     (matches the L2 hierarchy admins already configure)
-      --   • workflows are tenant-scoped (multi-tenant correctness fix —
-      --     they were previously shared across every tenant)
-      --   • Phase 2E scope inheritance can override workflows at branch /
-      --     region / department level via the same scope chain that
-      --     resolves SLA + Approval rules.
-      -- Columns are nullable during transition; legacy rows resolve via
-      -- (module, procedure) fallback in triggerWorkflow().
-      ALTER TABLE "WorkflowDefinition" ADD COLUMN IF NOT EXISTS "serviceTypeId" TEXT;
-      ALTER TABLE "WorkflowDefinition" ADD COLUMN IF NOT EXISTS "tenantId"      TEXT;
-      ALTER TABLE "WorkflowDefinition" ADD COLUMN IF NOT EXISTS "scopeId"       UUID;
-
-      CREATE TABLE IF NOT EXISTS "WorkflowStep" (
-        id TEXT PRIMARY KEY,
-        "workflowId" TEXT NOT NULL,
-        "stepOrder" INTEGER NOT NULL,
-        "stepName" TEXT NOT NULL,
-        "stepType" TEXT NOT NULL DEFAULT 'APPROVAL',
-        "assigneeType" TEXT NOT NULL DEFAULT 'SPECIFIC_USER',
-        "assigneeEmail" TEXT,
-        "assigneeRoleCode" TEXT,
-        "multiApproverEmails" TEXT,
-        "requireAllApprovers" BOOLEAN DEFAULT false,
-        "emailSubject" TEXT,
-        "emailBody" TEXT,
-        "slaHours" INTEGER DEFAULT 24,
-        "escalationEmail" TEXT,
-        "escalationHours" INTEGER DEFAULT 48,
-        "conditionJson" TEXT,
-        "isOptional" BOOLEAN DEFAULT false,
-        "createdAt" TIMESTAMP DEFAULT NOW()
-      );
-
-      -- Migrate existing WorkflowStep tables (add new columns if not present)
-      ALTER TABLE "WorkflowStep" ADD COLUMN IF NOT EXISTS "multiApproverEmails" TEXT;
-      ALTER TABLE "WorkflowStep" ADD COLUMN IF NOT EXISTS "requireAllApprovers" BOOLEAN DEFAULT false;
-      ALTER TABLE "WorkflowStep" ADD COLUMN IF NOT EXISTS "escalationEmail" TEXT;
-      ALTER TABLE "WorkflowStep" ADD COLUMN IF NOT EXISTS "escalationHours" INTEGER DEFAULT 48;
-      ALTER TABLE "WorkflowStep" ADD COLUMN IF NOT EXISTS "conditionJson" TEXT;
-
-      -- WorkflowDefinition defaults
-      ALTER TABLE "WorkflowDefinition" ADD COLUMN IF NOT EXISTS "defaultAssigneeType" TEXT DEFAULT 'SPECIFIC_USER';
-      ALTER TABLE "WorkflowDefinition" ADD COLUMN IF NOT EXISTS "defaultAssigneeEmail" TEXT;
-      ALTER TABLE "WorkflowDefinition" ADD COLUMN IF NOT EXISTS "defaultAssigneeRoleCode" TEXT;
-      ALTER TABLE "WorkflowDefinition" ADD COLUMN IF NOT EXISTS "defaultEmailSubject" TEXT;
-      ALTER TABLE "WorkflowDefinition" ADD COLUMN IF NOT EXISTS "defaultEmailBody" TEXT;
-      ALTER TABLE "WorkflowDefinition" ADD COLUMN IF NOT EXISTS "defaultSlaHours" INTEGER DEFAULT 24;
-      ALTER TABLE "WorkflowDefinition" ADD COLUMN IF NOT EXISTS "defaultEscalationEmail" TEXT;
-      ALTER TABLE "WorkflowDefinition" ADD COLUMN IF NOT EXISTS "defaultEscalationHours" INTEGER DEFAULT 48;
-
-      -- Indexes for the new resolution paths.
-      CREATE INDEX IF NOT EXISTS idx_workflow_def_servicetype
-        ON "WorkflowDefinition" ("serviceTypeId") WHERE "serviceTypeId" IS NOT NULL;
-      CREATE INDEX IF NOT EXISTS idx_workflow_def_tenant
-        ON "WorkflowDefinition" ("tenantId") WHERE "tenantId" IS NOT NULL;
-      CREATE INDEX IF NOT EXISTS idx_workflow_def_scope
-        ON "WorkflowDefinition" ("scopeId") WHERE "scopeId" IS NOT NULL;
-
-      -- Idempotent backfill — only fills rows where serviceTypeId is still
-      -- NULL AND there is exactly one tenant with a service_type matching
-      -- the workflow procedure key. Ambiguous matches (same key under
-      -- multiple tenants) are left for manual reconciliation since cloning
-      -- one global workflow into N tenant copies would silently change
-      -- runtime behaviour. Guarded by the existence of service_types since
-      -- that table is created lazily by the service-config module.
-      IF EXISTS (
-        SELECT 1 FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_name = 'service_types'
-      ) THEN
-        WITH unique_matches AS (
-          SELECT st.key,
-                 MIN(st.id::text)    AS id,
-                 MIN(st.tenant_id)   AS tenant_id,
-                 COUNT(*)            AS n
-          FROM service_types st
-          WHERE st.deleted_at IS NULL
-          GROUP BY st.key
-          HAVING COUNT(*) = 1
-        )
-        UPDATE "WorkflowDefinition" wd
-        SET "serviceTypeId" = um.id,
-            "tenantId"      = um.tenant_id,
-            "updatedAt"     = NOW()
-        FROM unique_matches um
-        WHERE wd."serviceTypeId" IS NULL
-          AND wd.procedure = um.key;
-      END IF;
-
-      CREATE TABLE IF NOT EXISTS "WorkflowInstance" (
-        id TEXT PRIMARY KEY,
-        "workflowId" TEXT NOT NULL,
-        "referenceType" TEXT NOT NULL,
-        "referenceId" TEXT NOT NULL,
-        "referenceNumber" TEXT,
-        "currentStepOrder" INTEGER DEFAULT 1,
-        status TEXT DEFAULT 'IN_PROGRESS',
-        "initiatedByEmail" TEXT,
-        "initiatedByName" TEXT,
-        "initiatedAt" TIMESTAMP DEFAULT NOW(),
-        "completedAt" TIMESTAMP,
-        "createdAt" TIMESTAMP DEFAULT NOW(),
-        "updatedAt" TIMESTAMP DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS "WorkflowStepInstance" (
-        id TEXT PRIMARY KEY,
-        "workflowInstanceId" TEXT NOT NULL,
-        "stepId" TEXT NOT NULL,
-        "stepOrder" INTEGER NOT NULL,
-        "stepName" TEXT NOT NULL,
-        "assignedToEmail" TEXT,
-        "assignedToName" TEXT,
-        status TEXT DEFAULT 'PENDING',
-        comments TEXT,
-        "actionedAt" TIMESTAMP,
-        "actionedByEmail" TEXT,
-        "dueAt" TIMESTAMP,
-        "createdAt" TIMESTAMP DEFAULT NOW()
-      );
-    END
-    $DDL$
-  `);
-}
-
-//  Table Bootstrap
-export async function ensureWorkflowTables() {
-  await _ensureWorkflowTablesOnce();
-}
-
+/**
+ * WorkflowDefinition / WorkflowStep / WorkflowInstance / WorkflowStepInstance
+ * schema now lives in prisma/migrations/20260910000032_workflow_tables.
+ * ensureWorkflowTables() used to lazily bootstrap it here on every call
+ * (with a 42501 catch, since the runtime role has no CREATE privilege on
+ * public schema in every live environment); callers no longer call it.
+ */
 //  Workflow Definition CRUD
 /**
  * List workflows with optional filters. Backward-compatible signature —
@@ -191,7 +19,6 @@ export async function listWorkflows(filter?: string | {
   serviceTypeId?: string;
   tenantId?: string;
 }) {
-  await ensureWorkflowTables();
   const opts = typeof filter === 'string' ? { module: filter } : (filter ?? {});
   const where: string[] = [];
   const args: any[] = [];
@@ -239,7 +66,6 @@ export async function getActiveWorkflowForServiceType(args: {
    *  is found, or reaches the tenant root. */
   scopeId?: string | null;
 }): Promise<{ id: string; name: string; isActive: boolean } | null> {
-  await ensureWorkflowTables();
   const { serviceTypeId, tenantId, scopeId } = args;
 
   // Build the scope chain (leaf → root) so we resolve overrides correctly.
@@ -295,7 +121,6 @@ export async function getActiveWorkflowForServiceType(args: {
 }
 
 export async function getWorkflowWithSteps(id: string) {
-  await ensureWorkflowTables();
   const rows: any[] = await prisma.$queryRawUnsafe(
     `SELECT * FROM "WorkflowDefinition" WHERE id = $1`, id);
   if (!rows.length) return null;
@@ -312,7 +137,6 @@ export async function createWorkflow(data: {
   tenantId?:      string | null;
   scopeId?:       string | null;
 }) {
-  await ensureWorkflowTables();
   const id = randomUUID();
   await prisma.$executeRawUnsafe(
     `INSERT INTO "WorkflowDefinition"
@@ -330,7 +154,6 @@ export async function updateWorkflow(id: string, data: {
   defaultEmailSubject?: string; defaultEmailBody?: string;
   defaultSlaHours?: number; defaultEscalationEmail?: string; defaultEscalationHours?: number;
 }) {
-  await ensureWorkflowTables();
   await prisma.$executeRawUnsafe(
     `UPDATE "WorkflowDefinition"
      SET name=COALESCE($2,name),
@@ -357,7 +180,6 @@ export async function updateWorkflow(id: string, data: {
 }
 
 export async function deleteWorkflow(id: string) {
-  await ensureWorkflowTables();
   await prisma.$executeRawUnsafe(`DELETE FROM "WorkflowStep" WHERE "workflowId" = $1`, id);
   await prisma.$executeRawUnsafe(`DELETE FROM "WorkflowDefinition" WHERE id = $1`, id);
 }
@@ -389,7 +211,6 @@ export async function duplicateWorkflow(id: string) {
 
 //  Global Stats 
 export async function getWorkflowStats() {
-  await ensureWorkflowTables();
   const totals: any[] = await prisma.$queryRawUnsafe(
     `SELECT COUNT(*) as total,
             SUM(CASE WHEN "isActive" THEN 1 ELSE 0 END) as active
@@ -410,7 +231,6 @@ export async function getWorkflowStats() {
 
 //  Workflow Step CRUD 
 export async function listSteps(workflowId: string) {
-  await ensureWorkflowTables();
   return prisma.$queryRawUnsafe<any[]>(
     `SELECT * FROM "WorkflowStep" WHERE "workflowId" = $1 ORDER BY "stepOrder"`, workflowId);
 }
@@ -493,7 +313,6 @@ export async function triggerWorkflow(params: {
   contextData?: Record<string, any>;
   force?: boolean; // set true to re-trigger even if already in progress
 }) {
-  await ensureWorkflowTables();
 
   // Resolution order:
   //   1) (serviceTypeId, tenantId, scopeId) — Phase 2 canonical path
@@ -654,7 +473,6 @@ export async function advanceWorkflow(
 }
 
 export async function getMyPendingApprovals(email: string) {
-  await ensureWorkflowTables();
   return prisma.$queryRawUnsafe<any[]>(`
     SELECT
       wsi.id as "stepInstanceId",
@@ -680,7 +498,6 @@ export async function getMyPendingApprovals(email: string) {
 }
 
 export async function getWorkflowInstanceWithHistory(instanceId: string) {
-  await ensureWorkflowTables();
   const instances: any[] = await prisma.$queryRawUnsafe(`
     SELECT wi.*, wd.name as "workflowName", wd.module, wd.procedure
     FROM "WorkflowInstance" wi
@@ -695,7 +512,6 @@ export async function getWorkflowInstanceWithHistory(instanceId: string) {
 }
 
 export async function getInstancesForReference(referenceId: string) {
-  await ensureWorkflowTables();
   return prisma.$queryRawUnsafe<any[]>(`
     SELECT wi.*, wd.name as "workflowName", wd.procedure
     FROM "WorkflowInstance" wi
@@ -754,8 +570,16 @@ async function sendWorkflowEmail(params: {
 }
 
 // Returns ALL pending step instances (admin view - no email filter)
-export async function getAllPendingStepInstances() {
-  await ensureWorkflowTables();
+// tenantId is required — WorkflowInstance has no tenant column of its own,
+// so this joins to WorkflowDefinition.tenantId. That column is nullable
+// (legacy pre-Phase-2 rows, shared across every tenant before the module/
+// procedure -> per-tenant migration finished) — the IS NULL branch keeps
+// those still-shared legacy workflows visible to every tenant, exactly
+// like before, while a Phase-2 row tagged to a DIFFERENT tenant is now
+// excluded. That second half is the actual fix: this endpoint had no
+// tenant filter at all, so any authenticated user of any tenant could
+// read every tenant's pending approvals and workflow instances.
+export async function getAllPendingStepInstances(tenantId: string) {
   return prisma.$queryRawUnsafe<any[]>(`
     SELECT
       wsi.id as "stepInstanceId",
@@ -780,19 +604,22 @@ export async function getAllPendingStepInstances() {
     JOIN "WorkflowInstance" wi ON wi.id = wsi."workflowInstanceId"
     JOIN "WorkflowDefinition" wd ON wd.id = wi."workflowId"
     WHERE wsi.status = 'PENDING'
+      AND (wd."tenantId" = $1 OR wd."tenantId" IS NULL)
     ORDER BY wsi."createdAt" DESC
-  `);
+  `, tenantId);
 }
 
-// Returns all workflow instances (admin overview)
-export async function getAllWorkflowInstances(opts?: { status?: string; module?: string; limit?: number }) {
-  await ensureWorkflowTables();
-  const conditions: string[] = [];
-  const values: any[] = [];
-  let idx = 1;
+// Returns all workflow instances (admin overview). See tenantId note above.
+export async function getAllWorkflowInstances(
+  tenantId: string,
+  opts?: { status?: string; module?: string; limit?: number },
+) {
+  const conditions: string[] = ['(wd."tenantId" = $1 OR wd."tenantId" IS NULL)'];
+  const values: any[] = [tenantId];
+  let idx = 2;
   if (opts?.status) { conditions.push(`wi.status=$${idx++}`); values.push(opts.status); }
   if (opts?.module) { conditions.push(`wd.module=$${idx++}`); values.push(opts.module); }
-  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const where = `WHERE ${conditions.join(' AND ')}`;
   const limit = opts?.limit ?? 100;
   return prisma.$queryRawUnsafe<any[]>(`
     SELECT
