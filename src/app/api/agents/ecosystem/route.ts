@@ -13,20 +13,6 @@ import { prisma } from '@/lib/prisma';
 import { ensureAgentSchema } from '@/lib/agents/schema';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-const AGENT_CONFIGS_DDL = `
-  CREATE TABLE IF NOT EXISTS agent_configs (
-    id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    agent_id    TEXT        NOT NULL UNIQUE,
-    thresholds  JSONB       NOT NULL DEFAULT '{}',
-    schedule_cron TEXT,
-    updated_at  TIMESTAMPTZ DEFAULT NOW()
-  );
-`;
-
-async function ensureAgentConfigsTable() {
-  await prisma.$executeRawUnsafe(AGENT_CONFIGS_DDL).catch(() => {});
-}
-
 // ── Helpers ────────────────────────────────────────────────────────────────────
 async function agentLastRun(agentId: string) {
   const rows = await prisma.$queryRawUnsafe<{
@@ -195,7 +181,6 @@ export async function GET(req: NextRequest) {
 
   // Run DDL sequentially first to avoid pool pressure during init
   await ensureAgentSchema();
-  await ensureAgentConfigsTable();
 
   const BATCH_IDS = [
     'predictive-maintenance',
@@ -236,7 +221,7 @@ export async function GET(req: NextRequest) {
   const BATCH_META: Record<string, { name: string; module: string; model: string; resultsHref: string }> = {
     'predictive-maintenance': { name: 'Predictive Maintenance',  module: 'Fleet',           model: 'Statistical',       resultsHref: '/fleet/intelligence' },
     'finance-anomaly':        { name: 'Finance Anomaly',         module: 'Finance',         model: 'Z-Score / Heuristic', resultsHref: '/finance/anomalies' },
-    'route-optimiser':        { name: 'Route Optimisation',      module: 'School Bus',      model: 'TSP + 2-opt',       resultsHref: '/school-bus/intelligence' },
+    'route-optimiser':        { name: 'Route Optimisation',      module: 'Bus-Ops & Transport', model: 'Consolidation + 2-opt', resultsHref: '/school-bus/intelligence' },
     'incident-triage':        { name: 'Incident Auto-Triage',    module: 'Incidents',       model: 'Rules + GPT-4o',    resultsHref: '/incidents' },
     'dispatch-optimiser':     { name: 'Smart Dispatch Optimiser',module: 'Dispatch',        model: 'Statistical (15-factor)', resultsHref: '/dispatch/jobs' },
     'driver-coach':           { name: 'Driver Coaching',         module: 'Fleet / Driver',  model: 'GPT-4o',            resultsHref: '/fleet/intelligence' },
